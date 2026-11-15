@@ -143,6 +143,10 @@ describe('a repair carries the value typed, never a stock value', () => {
       } catch (e) {
         err = e;
       }
+      // The set lines for the setting carry the value typed, together (a
+      // light and a dark half take a line each, as the gate allows).
+      /** @type {string[]} */
+      const values = [];
       for (const s of err?.suggestions ?? []) {
         const m = new RegExp(
           ` set ${slug} (?:'([^']+)'|(\\S+)) (?:'((?:[^']|'\\\\'')*)'|(\\S+))`,
@@ -152,8 +156,10 @@ describe('a repair carries the value typed, never a stock value', () => {
           (m[1] ?? m[2]).replace(/^-+/, '') !== thing.replace(/^-+/, '')
         )
           continue;
-        expect(offersTyped(m[3] ?? m[4], value), s.name).toBe(true);
+        values.push(m[3] ?? m[4]);
       }
+      if (values.length)
+        expect(offersAllTyped(values, value), values.join(' | ')).toBe(true);
     },
     240_000,
   );

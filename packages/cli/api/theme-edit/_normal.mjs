@@ -18,7 +18,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
-import {sameKindValues} from './_css.mjs';
+import {sameKindValues, takesWholeNumbersOnly} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -221,7 +221,7 @@ export function escapesMeant(thing, value) {
  * Unicode spaces. A thing it cannot read is left as typed.
  * @param {string} thing
  * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined, dropped?: string}} `dropped`: a second declaration pasted after the first, which is not set
+ * @returns {{thing: string, value: string | undefined, dropped?: string, scope?: EntryScope}} `dropped`: a second declaration pasted after the first, which is not set; `scope`: the scope the editor's own printed line names
  */
 export function normalizeEntry(thing, value) {
   let t = normalValueText(String(thing ?? '')).trim();
@@ -237,12 +237,24 @@ export function normalizeEntry(thing, value) {
     t = t.slice(1).trim();
     v = v.replace(/\s*\}\s*$/, '');
   }
+  /** The scope the editor's own printed line names after its value. @type {EntryScope | undefined} */
+  let scope;
   if (v == null || v.trim() === '') {
-    const m = /^(\S+?)\s*[:=]\s*(.+?)\s*;?\s*$/.exec(t);
+    const m = /^(\S+?)\s*([:=])\s*(.+?)\s*;?\s*$/.exec(t);
     if (m && !/^https?$/i.test(m[1])) {
       t = m[1];
-      v = m[2];
+      v = m[3];
       pasted = true;
+      // The editor's own printed line (`corners = pill (whole theme)`,
+      // `opacity = 0.5 on card [dark only]`) pasted back: its scope goes
+      // with the setting, not into the value.
+      if (m[2] === '=') {
+        const printed = printedScope(v);
+        if (printed) {
+          v = printed.value;
+          scope = printed.scope;
+        }
+      }
     }
   }
   // A thing ending in its colon or equals sign, the value given next.
@@ -282,14 +294,14 @@ export function normalizeEntry(thing, value) {
   // A token typed as a var() reference.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
   if (ref) t = ref[1];
-  // A dial name written in another style (textSize, text_size, a dash-like
-  // character for its hyphen) is the dial.
+  // A dial name written in another style (textSize, text_size, "text
+  // size", a dash-like character for its hyphen) is the dial.
   if (
     !t.startsWith('-') &&
-    /[_\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]|[a-z][A-Z]/.test(t)
+    /[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]|[a-z][A-Z]/.test(t)
   ) {
     const dial = t
-      .replace(/[_\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+      .replace(/[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/g, '-')
       .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
       .toLowerCase();
     if (DIALS[dial]) t = dial;
@@ -334,7 +346,39 @@ export function normalizeEntry(thing, value) {
   // A font family's name never starts or ends with a space: French quotes
   // (« Inter », with a no-break or narrow no-break space) hold the name.
   if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
-  return {thing: t, value: v, ...(dropped ? {dropped} : {})};
+  return {
+    thing: t,
+    value: v,
+    ...(dropped ? {dropped} : {}),
+    ...(scope ? {scope} : {}),
+  };
+}
+
+/**
+ * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: 'light' | 'dark'}} EntryScope
+ */
+
+/**
+ * The value and scope of the editor's own printed setting line after its
+ * `=` (`pill (whole theme)`, `0.5 on card only when sm :hover [dark only]`),
+ * as `describe` writes them; null when the text does not end in that form.
+ * @param {string} text
+ * @returns {{value: string, scope: EntryScope} | null}
+ */
+function printedScope(text) {
+  const m =
+    /^(.+?)\s+(?:\(whole theme\)|on ([a-z][a-z0-9-]*)( only)?(?: when (\S+))?(?: :([a-z-]+))?)(?:\s+\[(light|dark) only\])?\s*$/.exec(
+      text,
+    );
+  if (!m) return null;
+  /** @type {EntryScope} */
+  const scope = {};
+  if (m[2]) scope.on = m[2];
+  if (m[3]) scope.only = true;
+  if (m[4]) scope.when = m[4];
+  if (m[5]) scope.state = m[5];
+  if (m[6] === 'light' || m[6] === 'dark') scope.mode = m[6];
+  return {value: m[1], scope};
 }
 
 /**
@@ -806,11 +850,12 @@ export function typedReading(typed, {thousands = false} = {}) {
 
 /**
  * A text with each comma between digits, outside parentheses, read as a
- * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or, only
- * where the setting's numbers are whole thousands (a weight, 1 to 1000), a
+ * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or a
  * thousands mark before exactly three digits after a whole number other
- * than 0 (`1,000`). Inside a function (`rgb(255,0,0)`) a comma separates
- * arguments.
+ * than 0 (`1,000`) where the setting's numbers are whole thousands (a
+ * weight, 1 to 1000) or the number is a pixel length (`1,200px`: no pixel
+ * length is written to a thousandth). Inside a function (`rgb(255,0,0)`) a
+ * comma separates arguments.
  * @param {string} text
  * @param {boolean} [thousands] whether the setting's numbers are weights
  * @returns {string}
@@ -822,8 +867,12 @@ export function commaNumbers(text, thousands = false) {
   const flush = () => {
     // (A number starts a word: the digits of a hex color or of a word
     // before a comma are no number.)
-    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
-      thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+    out += plain.replace(
+      /(?<![\w#.])(\d+),(\d+)(?![\d.,])(?=(px\b)?)/gi,
+      (_, a, b, px) =>
+        (thousands || px) && b.length === 3 && !/^0+$/.test(a)
+          ? `${a}${b}`
+          : `${a}.${b}`,
     );
     plain = '';
   };
@@ -841,11 +890,34 @@ export function commaNumbers(text, thousands = false) {
 }
 
 /**
- * Whether a setting's numbers are weights (whole hundreds up to 1000).
+ * Whether a comma between a setting's digits groups thousands: its numbers
+ * are weights (whole hundreds up to 1000) or the property takes only whole
+ * numbers (z-index, order), so no comma there can be a decimal one.
  * @param {string} thing
  */
-export const weightSetting = thing =>
-  /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+export const thousandsSetting = thing => {
+  const t = String(thing).toLowerCase();
+  return (
+    /^(font-weight|headings)$|^--font-weight/.test(t) ||
+    (/^[a-z][a-z-]*$/.test(t) && takesWholeNumbersOnly(t))
+  );
+};
+
+/**
+ * A state as CSS writes it, from any case or spelling of its words
+ * (`Hover`, `:hover`, `focusVisible`, `focus_visible`, `focus visible`): the
+ * one state reader, for a typed `--state` and a saved entry's state alike.
+ * @param {string} text
+ * @returns {string}
+ */
+export function stateSpelling(text) {
+  return String(text)
+    .trim()
+    .replace(/^:+/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
+    .toLowerCase();
+}
 
 /**
  * The one mode a word names, or null: light or dark, written as a mode
@@ -876,12 +948,18 @@ export function modeWord(text) {
  * @returns {string}
  */
 export function baseWord(v) {
-  return String(v ?? '')
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-')
-    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+  return (
+    String(v ?? '')
+      .trim()
+      // A path names the package its last part does
+      // (`./node_modules/@astryxdesign/theme-neutral` is theme-neutral).
+      .replace(/[\\/]+$/, '')
+      .replace(/^.*[\\/]/, '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-')
+      .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '')
+  );
 }
 
 /**
@@ -1144,7 +1222,9 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * other than the one typed (a keep or unlock line); (4) the setting's
  * documented fallback, or a step (`more`, `less`) on a dial with a scale,
  * offered for that dial or one of its tokens; (5) the correction of a
- * typo (typoOf). Several values of one kind typed for a setting that takes
+ * typo (typoOf); (6) the typed value with each color written as one mode's
+ * half of `light-dark()` (a shadow's color for one mode, which no color
+ * longhand holds), the other half anything. Several values of one kind typed for a setting that takes
  * one (`1.5 2`) may be read as the first.
  * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
  * @returns {true | number[] | {oneOf: number[]} | false}
@@ -1163,7 +1243,9 @@ export function readsTyped({
     .toLowerCase();
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
-  const t = typedReading(typed, {thousands: weightSetting(typedKey)});
+  const t = typedReading(listWords(typedKey, typed), {
+    thousands: thousandsSetting(typedKey),
+  });
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1173,6 +1255,21 @@ export function readsTyped({
     O.every((w, i) => sameToken(w, T[i]))
   )
     return true;
+  // (6) The typed color as one mode's half of light-dark(), every pair
+  // read as the same mode's half.
+  for (const side of [0, 1]) {
+    const halves = o.replace(
+      /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^,()]+(?:\([^()]*\))?)\s*\)/g,
+      (_, light, dark) => String(side === 0 ? light : dark).trim(),
+    );
+    const H = halves === o ? [] : tokensOf(halves);
+    if (
+      H.length &&
+      H.length === T.length &&
+      H.every((w, i) => sameToken(w, T[i]))
+    )
+      return true;
+  }
   // Words joined into one name (`dark red` is darkred); numbers are never
   // joined (`12 16px` is two sizes, not 1216px).
   if (
@@ -1425,7 +1522,11 @@ export function readsTyped({
  * @param {string} [thing] the setting typed (its numbers' reading)
  */
 export function coversTyped(reads, typed, thing = '') {
-  const T = tokensOf(typedReading(typed, {thousands: weightSetting(thing)}));
+  const T = tokensOf(
+    typedReading(listWords(thing, typed), {
+      thousands: thousandsSetting(thing),
+    }),
+  );
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */
@@ -1446,6 +1547,18 @@ export function coversTyped(reads, typed, thing = '') {
       carry(left ?? r.oneOf[0]);
     }
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
+}
+
+/**
+ * A headings value with `and` or `&` between its words (`bold and wide`):
+ * the list it names, as the headings reader splits it.
+ * @param {string} thing
+ * @param {string} typed
+ */
+function listWords(thing, typed) {
+  return thing === 'headings'
+    ? String(typed).replace(/\s+(?:and|&)\s+/gi, ', ')
+    : typed;
 }
 
 documentReadings([

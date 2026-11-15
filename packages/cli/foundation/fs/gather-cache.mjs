@@ -23,10 +23,13 @@
  *   discovery (foundation/discovery/theme-discovery.mjs) for each
  *   integration's themes,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
- *   its theme-wiring scan,
+ *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
+ *   the CLI's own docs tree, which `docs` and `search` read,
  *   in a run that records modules and variables to its end, and, through
- *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
- *   summaries of folder trees, each kept while every path it stamped is
+ *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
+ *   lookup commands' not-found hint's name index among them
+ *   (foundation/suggest/name-index.mjs), each kept while every path it
+ *   stamped but the CLI's own files (which its build id covers) is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
@@ -72,6 +75,8 @@ import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
+  PRESENT,
+  lookedUp,
   fileStamp,
   keepState,
   recordReads,
@@ -297,19 +302,9 @@ export async function recordRunFor(argv, fn) {
   }
   // The first recorded run on a machine (search, build, component, template,
   // theme, discover or docs) makes the folder and keeps its gathers at once.
-  const dir = cacheDirPath();
-  if (!withoutRecording(() => fs.existsSync(dir))) {
-    // Once the per-user cache folder exists doctor uses it; it never makes
-    // it, so a doctor alone changes nothing on the machine (nor its own
-    // cache row).
-    if (command === 'doctor') return fn();
-    try {
-      withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
-    } catch {
-      // A folder that cannot be made keeps no catalogs; nothing more.
-      return fn();
-    }
-  }
+  // Once the per-user cache folder exists doctor uses it; it never makes it,
+  // so a doctor alone changes nothing on the machine (nor its own cache row).
+  if (command !== 'doctor') makeGatherCacheDir();
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
@@ -317,6 +312,35 @@ export async function recordRunFor(argv, fn) {
   // its run records modules and variables to the end, not only during each
   // gather.
   return recordRun(fn, {armedThroughout: command === 'doctor'});
+}
+
+/**
+ * Make the kept catalogs' folder where this run could keep entries in it and
+ * it does not exist yet: an installed CLI with a build id, outside Yarn
+ * Plug'n'Play, on a system with user ids. Recorded runs make it at their
+ * start; the lookup commands' not-found hint makes it before it keeps its
+ * name index, so a project's first miss keeps what later misses read. A
+ * folder that cannot be made keeps nothing; nothing more.
+ * @returns {boolean} whether this run keeps summaries there
+ */
+export function makeGatherCacheDir() {
+  if (
+    runsUnderPnp() ||
+    currentUid() == null ||
+    withoutRecording(buildId) == null
+  ) {
+    return false;
+  }
+  const dir = cacheDirPath();
+  try {
+    withoutRecording(() => {
+      if (!fs.existsSync(dir))
+        fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+    });
+  } catch {
+    // A folder that cannot be made keeps no catalogs.
+  }
+  return withoutRecording(gatherCacheDir) != null;
 }
 
 /**
@@ -413,7 +437,8 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
           if (hooks && url.startsWith('file:')) {
             try {
               const file = fileURLToPath(url);
-              if (!reads.has(file)) reads.set(file, fileStamp(file));
+              // The load reads the module's content: its stamp.
+              keepState(reads, file, fileStamp, 'stamp');
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -472,7 +497,7 @@ function noteLookups(specifier, parentURL, reads) {
     for (;;) {
       if (path.basename(dir) !== 'node_modules') {
         const candidate = path.join(dir, 'node_modules', name);
-        if (!reads.has(candidate)) reads.set(candidate, lookupStamp(candidate));
+        keepState(reads, candidate, lookupStamp);
       }
       const up = path.dirname(dir);
       if (up === dir) break;
@@ -609,7 +634,9 @@ function staleReason(stamps, env) {
     }
   }
   for (const [file, state] of stamps) {
-    if (!stillInState(file, state)) return 'a file or folder it read changed';
+    if (!stillInState(file, state)) {
+      return 'a file or folder it read changed';
+    }
   }
   return null;
 }
@@ -761,8 +788,10 @@ function confirmedEntry(file, version, confirmed, reading) {
  * The kept entries a new entry builds on: those the run has read back or
  * stored whose every state the run read too, as it holds them, largest
  * first, each only when it holds a state the others do not. Never one that
- * builds on the new entry's own file. The new entry stores the rest of its
- * states itself.
+ * builds on the new entry's own file. An entry that only checked whether a
+ * path is there still holds where the run read more of that path (holdsIn);
+ * the new entry stores that fuller state, and the rest of its states,
+ * itself.
  * @param {string} file - the new entry's file
  * @param {[string, string][]} stamps - every state the run read
  * @param {Confirmed} confirmed
@@ -782,14 +811,31 @@ function chooseBase(file, stamps, confirmed) {
     .sort((a, b) => b.held.length - a.held.length);
   for (const {other, entry, held} of candidates) {
     if (held.length === 0) continue;
-    if (!held.every(([at, state]) => states.get(at) === state)) continue;
-    if (held.every(([at]) => covered.has(at))) continue;
+    if (!held.every(([at, state]) => holdsIn(states.get(at), state))) continue;
+    const same = held.filter(([at, state]) => states.get(at) === state);
+    if (same.every(([at]) => covered.has(at))) continue;
     deps.push([path.basename(other), entry.version]);
     under.add(other);
     for (const below of entry.under) under.add(below);
-    for (const [at] of held) covered.add(at);
+    for (const [at] of same) covered.add(at);
   }
   return {deps, own: stamps.filter(([at]) => !covered.has(at)), under};
+}
+
+/**
+ * Whether a state an entry holds agrees with the state the run read of the
+ * same path: the same state, or the entry holds only that the path is there,
+ * or what a real-path lookup of it gave (confirmed this run), and the run
+ * read it there.
+ * @param {string | undefined} read - the run's state of the path
+ * @param {string} held - the entry's state of it
+ * @returns {boolean}
+ */
+function holdsIn(read, held) {
+  return (
+    read === held ||
+    ((held === PRESENT || lookedUp(held)) && read !== undefined && read !== '-')
+  );
 }
 
 /**
@@ -918,6 +964,10 @@ async function gatherAt(key, load, codec, keep) {
   const value = await load();
   if (run && armed && keep(value)) {
     withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
+  } else {
+    // A value worked out from a gather that is not kept is not kept either.
+    // The code a gather inside this one recorded did not build this one.
+    gatherCode = null;
   }
   return value;
 }
@@ -1042,8 +1092,9 @@ function settled(stamps) {
 /**
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
- * `make` stamped has the stamp it was stored with, else the one `make` gives
- * now, which is stored unless a stamp is younger than
+ * `make` stamped has the stamp it was stored with (the CLI's own files are
+ * covered by the build id instead: inCliBuild), else the one
+ * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
  * rule, the 0600 rename write and the eviction are those of a kept gather;
  * anywhere a gather is not kept, or on any read or write error, `make` runs
@@ -1053,16 +1104,70 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
+ * @param {{accept?: (value: T) => boolean}} [options] - `accept`: whether a
+ *   stored value serves this call, else it is made again and stored over (a
+ *   summary that holds more only once a caller asks for it).
  * @returns {T}
  */
-export function persistedSummary(key, make) {
+export function persistedSummary(key, make, {accept = () => true} = {}) {
+  const at = summaryAt(key);
+  if (!at) return make().value;
+  const stored = storedSummary(at);
+  if (stored && accept(stored.value)) return stored.value;
+  const {value, stamps} = make();
+  storeSummary(at, value, stamps);
+  return value;
+}
+
+/**
+ * {@link persistedSummary} for a summary that `make` works out
+ * asynchronously.
+ * @template T
+ * @param {unknown[]} key
+ * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
+ * @param {{accept?: (value: T) => boolean}} [options] - As for
+ *   {@link persistedSummary}.
+ * @returns {Promise<T>}
+ */
+export async function persistedSummaryAsync(
+  key,
+  make,
+  {accept = () => true} = {},
+) {
+  const at = summaryAt(key);
+  if (!at) return (await make()).value;
+  const stored = storedSummary(at);
+  if (stored && accept(stored.value)) return stored.value;
+  const {value, stamps} = await make();
+  storeSummary(at, value, stamps);
+  return value;
+}
+
+/**
+ * Where the summary for `key` is kept, or null where none is kept.
+ * @param {unknown[]} key
+ * @returns {{dir: string, file: string, entry: string} | null}
+ */
+function summaryAt(key) {
   const id = withoutRecording(buildId);
   const dir =
     id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
-  if (id == null || dir == null) return make().value;
+  if (id == null || dir == null) return null;
   const summaryKey = ['summary', ...key];
-  const file = entryFile(dir, summaryKey, id);
-  const entry = entryKey(summaryKey, id);
+  return {
+    dir,
+    file: entryFile(dir, summaryKey, id),
+    entry: entryKey(summaryKey, id),
+  };
+}
+
+/**
+ * The kept summary at `at`, while every path it stamped has its stamp, else
+ * undefined.
+ * @param {{file: string, entry: string}} at
+ * @returns {{value: any} | undefined}
+ */
+function storedSummary({file, entry}) {
   try {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
@@ -1084,33 +1189,63 @@ export function persistedSummary(key, make) {
       } catch {
         // An entry that cannot be touched is evicted sooner; nothing more.
       }
-      return stored.value;
+      return {value: stored.value};
     }
   } catch {
-    // No usable entry: made below.
+    // No usable entry: made again.
   }
-  const {value, stamps} = make();
-  if (settled(stamps)) {
-    withoutRecording(() => {
-      try {
-        const text = JSON.stringify({
-          format: FORMAT,
-          summary: true,
-          key: entry,
-          stamps,
-          value,
-        });
-        if (!isDeepStrictEqual(JSON.parse(text).value, value)) return;
-        const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
-        fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
-        fs.renameSync(temp, file);
-        evictOldest(dir, isEntry);
-      } catch {
-        // A summary that cannot be stored is made again next time.
-      }
-    });
-  }
-  return value;
+  return undefined;
+}
+
+/**
+ * Whether `file` is one of the installed CLI's own files: under its folder,
+ * outside the node_modules folder inside it. A summary is kept only by an
+ * installed CLI, under its build id (summaryAt), which names the exact code
+ * of that build, so the build id covers its files; a package placed in that
+ * node_modules folder is not part of the build.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function inCliBuild(file) {
+  const root = CLI_ROOT + path.sep;
+  return (
+    file.startsWith(root) && !file.startsWith(root + 'node_modules' + path.sep)
+  );
+}
+
+/**
+ * Keep `value` at `at` with its stamps, unless a stamp is too young or the
+ * value does not read back the same. Silent on any failure. A file in jiti's
+ * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
+ * one of the CLI's own files: the build id in the summary's key covers them
+ * (inCliBuild), so a new build makes the summary again. Every other file,
+ * an installed package's included, keeps its own stamp: an edit in place
+ * makes the summary again.
+ * @param {{dir: string, file: string, entry: string}} at
+ * @param {unknown} value
+ * @param {[string, string][]} made the stamps the summary was made with
+ */
+function storeSummary({dir, file, entry}, value, made) {
+  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
+  if (!settled(stamps)) return;
+  withoutRecording(() => {
+    try {
+      const text = JSON.stringify({
+        format: FORMAT,
+        summary: true,
+        key: entry,
+        stamps,
+        value,
+      });
+      if (!isDeepStrictEqual(JSON.parse(text).value, value)) return;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evictOldest(dir, isEntry);
+    } catch {
+      // A summary that cannot be stored is made again next time.
+    }
+  });
 }
 
 /**

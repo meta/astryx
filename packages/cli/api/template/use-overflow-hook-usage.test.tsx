@@ -56,11 +56,12 @@ afterEach(() => {
   container.remove();
 });
 
-function renderExample(width: number): HTMLElement {
+// The hook measures in a microtask after the render, so the render awaits it.
+async function renderExample(width: number): Promise<HTMLElement> {
   rowWidth = width;
   container = document.createElement('div');
   document.body.appendChild(container);
-  act(() => {
+  await act(async () => {
     root = createRoot(container);
     root.render(<UseOverflowHookUsage />);
   });
@@ -78,8 +79,8 @@ function labels(row: HTMLElement): string[] {
 }
 
 describe('useOverflow example', () => {
-  it('shows every action and no More menu when the row is wide', () => {
-    const row = renderExample(1000);
+  it('shows every action and no More menu when the row is wide', async () => {
+    const row = await renderExample(1000);
     expect(labels(row)).toEqual([
       'Bold',
       'Italic',
@@ -94,7 +95,7 @@ describe('useOverflow example', () => {
 
   it('moves the actions that do not fit into More, and back on resize', async () => {
     // Three 100px actions, three 4px gaps and the 100px More button fit 450px.
-    const row = renderExample(450);
+    const row = await renderExample(450);
     expect(labels(row)).toEqual(['Bold', 'Italic', 'Underline', 'More']);
 
     rowWidth = 1000;
@@ -109,8 +110,8 @@ describe('useOverflow example', () => {
     expect(labels(row)).not.toContain('More');
   });
 
-  it('lists only the actions that do not fit in the More menu', () => {
-    const row = renderExample(450);
+  it('lists only the actions that do not fit in the More menu', async () => {
+    const row = await renderExample(450);
     const more = Array.from(row.querySelectorAll('button')).at(-1);
     act(() => {
       more?.focus();
@@ -130,8 +131,8 @@ describe('useOverflow example', () => {
     ]);
   });
 
-  it('measures every action and the marked More menu in a hidden copy', () => {
-    renderExample(450);
+  it('measures every action and the marked More menu in a hidden copy', async () => {
+    await renderExample(450);
     const measure = container.querySelector<HTMLElement>(
       '[aria-hidden="true"]',
     );

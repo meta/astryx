@@ -676,7 +676,7 @@ export default function KanbanBoardTemplate() {
                 </>
               }
               endContent={
-                <HStack gap={2}>
+                <HStack gap={2} wrap="wrap">
                   <Selector
                     label="Sprint"
                     width={200}
