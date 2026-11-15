@@ -6,7 +6,9 @@
  *
  * @input  the project folder, the template type, and the template id.
  * @output a project-relative POSIX path that does not exist yet.
- * @position foundation/discovery — read by the template copy's refusal.
+ * @position foundation/discovery — read by the template copy's refusal and
+ *   by build's start and alternatives, so every printed command names one
+ *   place.
  */
 
 import * as fs from 'node:fs';

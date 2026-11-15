@@ -1220,6 +1220,7 @@
     "packages/cli/test/packed-gather-cache.installed.test.mjs": 126.6,
     "packages/cli/test/packed-gather-cache.malformed.test.mjs": 142.1,
     "packages/cli/test/packed-gather-cache.nested.test.mjs": 231.6,
+    "packages/cli/test/packed-gather-cache.npm-packed.test.mjs": 103.8,
     "packages/cli/test/packed-gather-cache.records.test.mjs": 41.1,
     "packages/cli/test/packed-gather-cache.replacements.test.mjs": 57.3,
     "packages/cli/test/packed-help-imports.test.mjs": 2,

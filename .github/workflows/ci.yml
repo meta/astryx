@@ -1375,9 +1375,11 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       # A test file this change touches that now runs far past its recorded
-      # time fails here, naming both times, so the pull request that slows it
-      # updates the record before a later pull request's leg runs over its
-      # job limit. Files the change does not touch are not checked.
+      # time, or has none, gets a notice naming both times. It never fails the
+      # leg: after each full unit run of main, a job regenerates the record
+      # from that run's Node legs when an entry is missing or has drifted
+      # (node-record-refresh.yml). Files the change does not touch are not
+      # checked.
       - name: Check the recorded times of the test files this change touches
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
@@ -1596,7 +1598,7 @@ jobs:
           pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
       # As in test-node: a slice file this change touches that now runs far
-      # past its recorded time fails here, naming both times.
+      # past its recorded time gets a notice naming both times.
       - name: Check the recorded time of this slice
         if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1

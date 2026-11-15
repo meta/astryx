@@ -73,7 +73,7 @@ import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
-import {isShadowRoot} from '../utils/nodeType';
+import {isDialogShown, isShadowRoot, isShownAsPopover} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -847,16 +847,6 @@ function observeAnchorClearance(
   };
 }
 
-/** Whether `element` is shown as a popover (`:popover-open`). */
-function isShownAsPopover(element: HTMLElement): boolean {
-  try {
-    return element.matches(':popover-open');
-  } catch {
-    // An engine without the pseudo-class has no popovers to be shown as.
-    return false;
-  }
-}
-
 /**
  * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
  * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
@@ -877,7 +867,7 @@ function isAnchorReady(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog == null || dialog.open || isShownAsPopover(dialog);
+  return dialog == null || isDialogShown(dialog);
 }
 
 /**
@@ -891,7 +881,7 @@ function isInClosedDialog(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog != null && !dialog.open && !isShownAsPopover(dialog);
+  return dialog != null && !isDialogShown(dialog);
 }
 
 /**
