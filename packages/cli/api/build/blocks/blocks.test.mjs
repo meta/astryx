@@ -10,6 +10,7 @@
  * not know; and ties keep build's order.
  */
 
+import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {pickBlocks, stemOf, termsOf, wordsOf} from './blocks.mjs';
 
@@ -227,6 +228,20 @@ describe('pickBlocks', () => {
     pickBlocks('sales chart', s2, WEIGHTS);
     expect(JSON.stringify(s)).toBe(before);
     expect(JSON.stringify(s2)).toBe(before2);
+  });
+});
+
+describe('the shipped picker weights', () => {
+  it('count every block the doc matrix was fitted with as known', () => {
+    // A block outside `known` is ranked as one the matrices never saw. A
+    // block whose docs the doc matrix was fitted with is not such a block.
+    const shipped = JSON.parse(
+      fs.readFileSync(
+        new URL('./blocks.weights.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    expect(shipped.known).toContain('InfoTipShowcase');
   });
 });
 
