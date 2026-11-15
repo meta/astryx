@@ -754,7 +754,7 @@
     "packages/cli/api/theme-edit/theme-picture.test.mjs": 0.1,
     "packages/cli/api/theme-edit/theme-preview-importers.test.mjs": 12.6,
     "packages/cli/api/theme-edit/theme-preview-listeners.test.mjs": 17.9,
-    "packages/cli/api/theme-edit/theme-preview-safety.test.mjs": 312.7,
+    "packages/cli/api/theme-edit/theme-preview-safety.test.mjs": 479.3,
     "packages/cli/api/theme-edit/theme-preview.test.mjs": 109.5,
     "packages/cli/api/theme-edit/theme-proto-words.test.mjs": 22.9,
     "packages/cli/api/theme-edit/theme-real-bases.test.mjs": 27.5,
