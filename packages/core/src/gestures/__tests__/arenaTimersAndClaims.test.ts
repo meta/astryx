@@ -143,6 +143,60 @@ describe('a timer that fires late', () => {
     expect(log).toContain('press:began@500');
     arena.ended([{id: 1, x: 1, y: 0, time: 840}]);
   });
+
+  it('runs a deadline that came due during a wait just after it, with no second wait', () => {
+    const clock = new TaskClock();
+    const log: string[] = [];
+    const arena: GestureArena = new GestureArena({
+      clock,
+      onTransition: (recognizer, _from, to) =>
+        log.push(`${recognizer.name}:${to}@${arena.now()}`),
+    });
+    const first = new LongPressGestureRecognizer({
+      name: 'first',
+      minimumPressDuration: 500,
+    });
+    const second = new LongPressGestureRecognizer({
+      name: 'second',
+      minimumPressDuration: 600,
+    });
+    arena.began([
+      {
+        id: 1,
+        x: 0,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [first],
+        consumer: null,
+      },
+      {
+        id: 2,
+        x: 100,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [second],
+        consumer: null,
+      },
+    ]);
+    // Both deadlines ran late behind one block. The first waits 50 ms; the
+    // second comes due during that wait, so it runs as the wait ends.
+    clock.runTask(900);
+    clock.runTask(950);
+    clock.runTask(950);
+    clock.runTask(950);
+    expect(log).toContain('first:began@500');
+    expect(log).toContain('second:began@600');
+    arena.ended([
+      {id: 1, x: 0, y: 0, time: 970},
+      {id: 2, x: 100, y: 0, time: 970},
+    ]);
+  });
 });
 
 describe('a coalesced move whose samples straddle a deadline', () => {
