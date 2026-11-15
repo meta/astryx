@@ -662,6 +662,28 @@ const CASES = [
     },
   },
   {
+    // The removal of the last theme in an app whose one provider takes the
+    // theme (and names a mode prop the module never used): its receipt.
+    name: 'theme remove',
+    args: ['theme', 'remove', 'brand'],
+    cwd: '__TMP__',
+    dir: 'theme remove provider',
+    jsonFieldAllowlist: [
+      "default — '' once the last theme is removed: the text says the module was deleted",
+    ],
+    setup: dir => providerApp(dir, 'theme', {modeProp: 'themeMode'}),
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
+    // Each run removes the theme a fresh add put there.
+    beforeEachRun: async cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme', {modeProp: 'themeMode'});
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], {cwd});
+    },
+  },
+  {
     name: 'theme remove',
     args: ['theme', 'remove', 'does-not-exist'],
     errorExpected: true,

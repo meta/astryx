@@ -13,6 +13,7 @@ import {checkThemes, themeImportWiring} from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
 import {themeListAvailable} from '../theme/list/list.mjs';
 import {themeAdd} from '../theme/add/add.mjs';
+import {themeRemove} from '../theme/remove/remove.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
@@ -466,7 +467,7 @@ describe('theme add with an installed package that names its provider', () => {
     const again = await themeAdd('night', {cwd: dir, package: '@acme/ui'});
     expect(again.data.change.wireModes).toBe(true);
     expect(again.data.appProvider?.wire).toBe(
-      'The theme module now exports themeModes; AcmeThemeProvider, which takes the theme, takes no mode, so its wiring stays as it is.',
+      'The theme module now exports themeModes; AcmeThemeProvider (from @acme/ui/theme), which takes the theme as theme, takes no mode, so its wiring stays as it is.',
     );
     expect(again.data.appProvider?.line).toBeUndefined();
   });
@@ -482,6 +483,18 @@ describe('theme add with an installed package that names its provider', () => {
       '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>\n  <App />\n</AcmeThemeProvider>',
     );
     expect(text).not.toContain('<Theme ');
+  });
+
+  it('a removal from a module without themeModes leaves out the mode prop it does not pass', async () => {
+    const dir = withProps({modeProp: 'themeMode'});
+    await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    const r = await themeRemove('brand', {cwd: dir});
+    expect(r.data.appProvider?.wiredBy).toEqual([
+      {...PROVIDER, themeProp: 'theme'},
+    ]);
+    expect(r.data.appProvider?.line).toBe(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
+    );
   });
 
   it('with two installed providers, names both and their trade-offs above the Theme wiring', async () => {

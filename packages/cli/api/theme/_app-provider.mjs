@@ -106,7 +106,7 @@ export async function withAppProvider(result, cwd) {
   } else if (kind === 'modes')
     wire = modeProp
       ? `The theme module now exports themeModes. Pass the selected theme's mode to ${name} in the app root:`
-      : `The theme module now exports themeModes; ${name}, which takes the theme, takes no mode, so its wiring stays as it is.`;
+      : `The theme module now exports themeModes; ${name} (from ${taking?.provider.from}), which takes the theme as ${taking?.provider.themeProp}, takes no mode, so its wiring stays as it is.`;
   else
     wire = `Undo its wiring in the app root: delete the module's import and the props that pass its theme to ${name}, and keep ${name}, which may set up more than the theme:`;
   return {
@@ -114,7 +114,17 @@ export async function withAppProvider(result, cwd) {
     data: {
       ...result.data,
       appProvider: {
-        wiredBy: found.map(x => x.provider),
+        // A later receipt names only the props its wiring uses: a mode prop
+        // the line does not pass is left out, as the text leaves it out.
+        wiredBy: found.map(({provider}) =>
+          kind === 'first' || modeProp
+            ? provider
+            : {
+                export: provider.export,
+                from: provider.from,
+                ...(provider.themeProp ? {themeProp: provider.themeProp} : {}),
+              },
+        ),
         wire,
         ...(taking && line && (kind !== 'modes' || modeProp)
           ? {themeProp: String(taking.provider.themeProp), line}
