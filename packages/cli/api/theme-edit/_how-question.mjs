@@ -648,7 +648,7 @@ function shadowIn(c) {
 
 /** A length tied to a height word ("40px tall", "height 40px"). @param {string} c */
 const tallIn = c =>
-  /\b(\d+(?:px|rem))\s+(?:tall|high)\b|\b(?:height|tall)\s*:?\s*(\d+(?:px|rem))\b/
+  /(?<![\w.])(-?\d*\.?\d+(?:px|rem))\s+(?:tall|high)\b|\b(?:height|tall)\s*:?\s*(-?\d*\.?\d+(?:px|rem))\b/
     .exec(c)
     ?.slice(1)
     .find(Boolean) ?? null;
@@ -2124,6 +2124,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
  * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
+ * @property {{owner: string, child: string}} [possMiss] - a possessive owner's element it does not have ("the date picker's days")
  * @property {string} [colorRefWhen] - the reference's own status or variant ("the error banner": status:error; "?:error" for a word whose axis the part's values give)
  * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
  * @property {string} [groundRef] - a part the clause measures against ("input borders 3:1 against the page"): read, never changed
@@ -4500,6 +4501,13 @@ export function draftAnswer(ctx, env, question) {
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // The possessive reader: a part's possessive before a thing it has, or
+    // a list of such possessives before it ("the cards' and buttons'
+    // borders"), names the parts themselves, as "card and button borders".
+    .replace(
+      /\b([a-z]+?)(?:'s|’s|(s)'|(s)’)(?=(?:\s*,?\s*(?:and\s+)?(?:the\s+)?[a-z]+(?:'s|s'|’s|s’))*\s+(?:own\s+)?(?:borders?|backgrounds?|text|corners?|shadows?|padding|fills?|outlines?|colou?rs?|fonts?)\b)/gi,
+      (_m, w, s1, s2) => `${w}${s1 ?? s2 ?? ''}`,
+    )
     // "more muted", "pastel", "duller", "subdued": less vivid colors (free
     // words only: never inside a token name like --color-background-muted).
     .replace(
@@ -5845,38 +5853,80 @@ export function draftAnswer(ctx, env, question) {
     // first is the place, as "separators in menus" says it.
     const poss = /\b([a-z]+?)(?:'s|s'|’s|s’)\s/.exec(c.text);
     if (poss && c.parts.length >= 1) {
+      // (The words after the possessive, its states skipped: "the menu's
+      // hovered items" is the items, hovered.)
+      const after = c.text
+        .slice(poss.index + poss[0].length)
+        .split(/\s+/)
+        .filter(Boolean);
+      const child = after.find(w => stateWord(w) == null && w !== 'own');
+      // (A thing the parts have, "the cards' and buttons' borders": each
+      // possessive names the part itself, never a place.)
+      if (
+        child &&
+        aspectsOf(child).length &&
+        !lex.parts.some(([re]) => re.test(` ${child} `))
+      )
+        continue;
       // (The owner's words end at the possessive: "the dropdown menu's".)
       const possEnd = poss.index + poss[1].length;
+      /** @type {{index: number} | null} */
+      let ownerAt = null;
       const owner = c.parts.find(x =>
         lex.parts.some(([re, y]) => {
           if (y.on !== x.on) return false;
           const m = re.exec(c.text);
-          return (
+          const hit =
             m != null &&
             m.index <= poss.index &&
             m.index + m[0].length >= possEnd - 1 &&
-            m.index + m[0].length <= possEnd + 1
-          );
+            m.index + m[0].length <= possEnd + 1;
+          if (hit) ownerAt = {index: /** @type {RegExpExecArray} */ (m).index};
+          return hit;
         }),
       );
       const rest = c.parts.filter(x => x !== owner);
       // (The owner's own element named after it, "the dropdown menu's
-      // items": that catalog part, which draws its own look.)
-      {
-        const child = /^\s*([a-z]+)/.exec(
-          c.text.slice(poss.index + poss[0].length),
-        )?.[1];
-        const own = owner && child ? `${owner.on}-${singular(child)}` : null;
-        if (
-          own &&
-          C.MAP[own] &&
-          Object.keys(C.MAP[own].at ?? {}).some(k =>
+      // items", "the toggle group's buttons": that catalog part, named by
+      // the owner's part or its first word, when it draws its own look.)
+      // (The owner's first word, from the words said before the
+      // possessive when no part's name ends there: "the toggle group's".)
+      const saidFirst =
+        /(?:^|\b(?:the|my|our|a|an)\s+)((?:[a-z]+\s+){0,2})[a-z]+$/
+          .exec(c.text.slice(0, possEnd))?.[1]
+          ?.trim()
+          .split(/\s+/)[0] || undefined;
+      if (child && (owner || saidFirst)) {
+        const first = ownerAt
+          ? /^[a-z]+/.exec(
+              c.text.slice(/** @type {any} */ (ownerAt).index),
+            )?.[0]
+          : saidFirst;
+        const draws = (/** @type {string} */ k) =>
+          Boolean(C.MAP[k]) &&
+          Object.keys(C.MAP[k].at ?? {}).some(x =>
             /^(?:background(?:-color)?|color|border.*|font-size|padding.*)$/.test(
-              k,
+              x,
             ),
-          )
-        ) {
+          );
+        const own = [
+          ...(owner ? [`${owner.on}-${singular(child)}`] : []),
+          ...(first ? [`${first}-${singular(child)}`] : []),
+        ].find(draws);
+        if (own) {
           c.parts = [{on: own}];
+          continue;
+        }
+        // (An element the owner does not have, "the date picker's days":
+        // said, never the owner changed.)
+        const childPart =
+          !owner || rest.length
+            ? null
+            : !lex.parts.some(([re]) => re.test(` ${child} `)) &&
+              !aspectsOf(child).length &&
+              stateWord(child) == null;
+        if (childPart && owner) {
+          c.possMiss = {owner: owner.on, child: singular(child)};
           continue;
         }
       }
@@ -8395,6 +8445,14 @@ export function draftAnswer(ctx, env, question) {
           text: `no part is called "${slot.word}". Name one of them, or list the parts`,
           options: [],
           lookup: `${HOW} --list parts`,
+        });
+        continue;
+      }
+      if (c.possMiss) {
+        push({
+          text: `${c.possMiss.owner} has no ${c.possMiss.child} part that set can name: nothing is written (how ${c.possMiss.owner} lists what it reads)`,
+          options: [],
+          lookup: `${HOW} ${c.possMiss.owner}`,
         });
         continue;
       }
@@ -14941,6 +14999,8 @@ export function draftAnswer(ctx, env, question) {
           bReads.find(
             r =>
               r.props.includes('border-color') &&
+              // (A hover tint or press overlay is no resting border color.)
+              !/^--color-(?:tint|overlay)-/.test(r.token) &&
               r.when.some(w => !w.includes(':')),
           );
         const bwNowRaw =
@@ -16521,6 +16581,12 @@ export function draftAnswer(ctx, env, question) {
               r => /^--size-/.test(r.token) && r.props.includes('height'),
             ),
         );
+        // (A height is never below zero.)
+        if (tall && /^-/.test(tall))
+          return {
+            text: `a height cannot be ${tall}: give a height of 0 or more, or say shorter by an amount`,
+            options: [],
+          };
         if (tall)
           return {
             text: `the height${where}: min-height ${tall}${rowsSized && FAMILIES[on] ? ` (never one fixed height: ${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)` : ''}`,
