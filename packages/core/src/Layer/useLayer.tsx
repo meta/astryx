@@ -2635,16 +2635,9 @@ export function useLayer(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayer(
   options: ContextLayerOptions | FixedLayerOptions,
 ): ContextLayerReturn | FixedLayerReturn {
-  const internalLayer = useLayerImplementation(options);
-  return useMemo(() => {
-    const {
-      prepare: _prepare,
-      releasePrepared: _releasePrepared,
-      ...layer
-    } = internalLayer as (InternalContextLayerReturn | FixedLayerReturn) &
-      Partial<InternalContextLayerFields>;
-    return layer;
-  }, [internalLayer]);
+  // Only the type hides the internal members. Stripping them at runtime
+  // would cost every page that uses a layer.
+  return useLayerImplementation(options);
 }
 
 /**
