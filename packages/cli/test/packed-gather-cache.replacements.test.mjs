@@ -449,9 +449,9 @@ describe.skipIf(process.platform !== 'linux')(
               expect(base?.version).toBe(version);
               for (const [file, state] of base?.stamps ?? []) {
                 if (own.has(file)) {
-                  expect(
-                    state === 'present' || /^(?:real|in):/u.test(state),
-                  ).toBe(true);
+                  expect(state === 'present' || state.startsWith('real:')).toBe(
+                    true,
+                  );
                   expect(own.get(file)).not.toBe(state);
                 }
               }
