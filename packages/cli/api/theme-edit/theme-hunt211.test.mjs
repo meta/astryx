@@ -224,3 +224,39 @@ describe('an unknown subcommand followed by an option', () => {
     T,
   );
 });
+
+describe('a list value with one item misspelled', () => {
+  for (const typed of [
+    'blod tight',
+    'blod, tight',
+    'bold, tihgt',
+    'blod and tight',
+  ])
+    it(
+      `headings ${typed} gets one line per word, and each runs`,
+      async () => {
+        const r = await cli([...ED, 'set', 't', 'headings', typed]);
+        const lines = names(r).slice(0, 2);
+        expect(lines).toEqual([
+          expect.stringContaining('set t headings bold'),
+          expect.stringContaining('set t headings tight'),
+        ]);
+        for (const line of lines)
+          expect((await follow(line)).error).toBeUndefined();
+      },
+      T,
+    );
+});
+
+describe('three bare words after undo', () => {
+  it(
+    'are a setting and its value when not every word names a setting',
+    async () => {
+      await cli([...ED, 'set', 't', 'font', 'Inter Tight']);
+      const r = await cli([...ED, 'undo', 't', 'font', 'Inter', 'Tight']);
+      expect(String(r.error)).not.toContain('names 3 settings');
+      expect(String(r.error)).not.toContain('is not a dial');
+    },
+    T,
+  );
+});

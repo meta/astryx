@@ -4869,14 +4869,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           wider: 'wide',
           looser: 'wide',
         });
-        const words = String(v ?? '')
+        const known = (/** @type {string} */ w) =>
+          HEADING_WEIGHTS[w] !== undefined || HEADING_TRACKING[w] !== undefined;
+        const headingWords = [
+          ...Object.keys(HEADING_WEIGHTS),
+          ...Object.keys(HEADING_TRACKING),
+        ];
+        const typed = String(v ?? '')
           .trim()
           .toLowerCase()
           .split(/[\s,]+/)
           .filter(w => w && w !== 'and' && w !== '&')
           .map(w => MORE[w] ?? w);
-        const known = (/** @type {string} */ w) =>
-          HEADING_WEIGHTS[w] !== undefined || HEADING_TRACKING[w] !== undefined;
+        // In a pair, a word one typo from exactly one headings word (the
+        // one typo limit) is that word, as it is alone.
+        const words =
+          typed.length > 1
+            ? typed.map(w => {
+                if (known(w)) return w;
+                const hits = headingWords.filter(x => typoNear(w, x));
+                return hits.length === 1 ? hits[0] : w;
+              })
+            : typed;
         if (
           (words.length > 1 || MORE[String(v).trim().toLowerCase()]) &&
           words.every(known)

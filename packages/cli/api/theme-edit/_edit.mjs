@@ -133,6 +133,7 @@ import {
   editedThemes,
   entryFieldNames,
   entryProblem,
+  namesSetting,
   skips,
 } from './_settings.mjs';
 import {
@@ -8183,10 +8184,7 @@ export async function themeEditUndo(theme, options = {}) {
       };
       // A setting's name is never a theme to make or look at, nor a theme
       // name typed with a typo.
-      const settingName =
-        Object.hasOwn(DIALS, theme) ||
-        theme.startsWith('--') ||
-        cssProperties().has(theme);
+      const settingName = namesSetting(theme);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
       const near = (shows.length === 1 && !settingName ? shows : []).find(x => {

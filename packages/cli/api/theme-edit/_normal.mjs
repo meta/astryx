@@ -1555,6 +1555,13 @@ export function readsTyped({
       }
       if (at.length === part.length) return at;
     }
+  // One item of a list value, read through the one typo limit, offered as
+  // its own line: the setting's dial takes that word alone (`blod tight`
+  // for headings is the lines `bold` and `tight`).
+  if (O.length === 1 && T.length > 1 && dialWords(key).has(O[0])) {
+    const hits = T.flatMap((w, i) => (typoOf(w, O[0]) ? [i] : []));
+    if (hits.length === 1) return hits;
+  }
   // A family name the editor knows, typed with a typo, at the start of a
   // family with words after it (`georgia` for `Georiga Bold`): its tokens,
   // the words after carried by the refusal's other lines.
@@ -1620,6 +1627,22 @@ export function readsTyped({
   if (oneOf.length === 1) return oneOf;
   if (oneOf.length > 1) return {oneOf};
   return false;
+}
+
+/**
+ * The words a dial takes alone, as its `values` lists them (placeholders
+ * such as `<color>` aside); none for anything that is not a dial.
+ * @param {string} key the setting, lowercased
+ * @returns {Set<string>}
+ */
+function dialWords(key) {
+  const values = Object.hasOwn(DIALS, key) ? String(DIALS[key].values) : '';
+  return new Set(
+    values
+      .split('|')
+      .map(w => w.trim().toLowerCase())
+      .filter(w => /^[a-z][a-z-]*$/.test(w)),
+  );
 }
 
 /**

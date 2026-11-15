@@ -534,6 +534,18 @@ export function refuseThemesNotFolder(cwd) {
 }
 
 /**
+ * Whether a word names a setting: a dial, a token or a CSS property, in
+ * any letters. Such a word is never a theme's name to make or look at.
+ * @param {string} word
+ */
+export function namesSetting(word) {
+  const w = String(word).trim().toLowerCase();
+  return (
+    Object.hasOwn(DIALS, w) || w.startsWith('--') || cssProperties().has(w)
+  );
+}
+
+/**
  * The themes the editor made in the app (a settings file of its own), by
  * name, or with `changed` the one an editor command changed last first: the
  * undo history is written only by an editor command, so its time is the
@@ -1086,12 +1098,7 @@ export function loadTheme(
         const newName = usableNewName(cwd, cleaned || slug);
         // A setting's name (accent, corners, background-color) is never a
         // theme to make: each theme here is offered to look at instead.
-        if (
-          !same &&
-          (Object.hasOwn(DIALS, slug) ||
-            slug.startsWith('--') ||
-            cssProperties().has(slug))
-        )
+        if (!same && namesSetting(slug))
           return {
             didYouMean: [],
             run: have.slice(0, 3).map(h => `${P} show ${h}`),
