@@ -273,9 +273,9 @@ An exact-source audit at `067b176` found:
 - 53 page source/metadata pairs. All pass the current `parseTemplate()` boundary.
   Forty are ready, non-scaffold pages visible in the overview projection. One of
   those, `work-item-detail`, lacks a live-preview loader.
-- All forty overview-visible pages preserve the host-chrome boundary. The only
-  source-shape exception is the unfinished `messaging-shell`; `blank` is an
-  intentional minimal scaffold rather than a gallery page.
+- All forty overview-visible pages preserve the host-chrome boundary, and so does
+  the unready `messaging-shell`, whose `AppShell` owns its side navigation;
+  `blank` is an intentional minimal scaffold rather than a gallery page.
 - 644 block source/metadata pairs with no orphaned source or metadata files. Every
   block declares `type`, `name`, `displayName`, `isReady`, `exampleFor`, positive
   `aspectRatio`, and non-empty `componentsUsed`. The audit did not prove that every
