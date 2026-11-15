@@ -396,6 +396,33 @@ describe('BaseTypeahead option actions', () => {
       expect(activeElementOf(input)).toBe(row);
     });
 
+    it('gives the option cell back when the pointer highlights a row after the keys reached an action', async () => {
+      const onPin = vi.fn();
+      const onChange = vi.fn();
+      render(<Field source={officeSource(onPin)} onChange={onChange} />);
+      const {user, input} = await openFor('o');
+      await screen.findByRole('grid', {hidden: true});
+      await user.keyboard('{Home}{ArrowRight}');
+      expect(input.getAttribute('aria-activedescendant')).toMatch(/-action$/);
+
+      // The keyboard move holds the highlight until the pointer really
+      // moves; then the pointer goes to London and back to Boston's name.
+      const rows = screen.getAllByRole('row', {hidden: true});
+      fireEvent.pointerMove(document.body, {screenX: 10, screenY: 10});
+      fireEvent.pointerMove(document.body, {screenX: 20, screenY: 20});
+      fireEvent.mouseMove(rows[1]);
+      fireEvent.mouseMove(rows[0]);
+
+      const row = activeElementOf(input);
+      expect(row).toHaveAttribute('role', 'row');
+      expect(row).toHaveTextContent('Boston');
+      await user.keyboard('{Enter}');
+      expect(onPin).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({id: 'boston'}),
+      );
+    });
+
     it('puts no action control in the tab order of the input', async () => {
       render(<Field source={officeSource(() => {})} />);
       const {input} = await openFor('o');

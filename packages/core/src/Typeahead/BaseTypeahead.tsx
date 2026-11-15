@@ -2444,7 +2444,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 // pointer keeps its keyboard highlight, so Enter acts on
                 // the option the user was shown, not the one that
                 // happened to appear under the cursor.
-                onMouseMove={() => highlightOnHover(index)}
+                // The pointer lands on the option cell, so Enter picks the
+                // result under it, not the action the keys reached before.
+                onMouseMove={() =>
+                  highlightOnHover(index, () => setGridRow(-1))
+                }
                 {...stylex.props(
                   styles.item,
                   itemSizeStyles[size],
