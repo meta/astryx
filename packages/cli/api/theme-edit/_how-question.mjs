@@ -2076,6 +2076,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string[]} [quoted] - family names the clause writes in quotes
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
+ * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
+ * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
  * @property {string} [groundRef] - a part the clause measures against ("input borders 3:1 against the page"): read, never changed
  * @property {string} [groundWhen] - a word said before the ground ("on muted cards": muted): its variant when it has one by that name
  * @property {string} [groundToken] - a background token named as the ground ("on the muted background")
@@ -2608,6 +2610,8 @@ function clausesOf(q, partWords) {
     /** @type {string | undefined} */
     let colorRef;
     /** @type {string | undefined} */
+    let colorRefProp;
+    /** @type {string | undefined} */
     let groundRef;
     if (parts.length > 1) {
       // Where the clause first names a part, by any of its words.
@@ -2627,8 +2631,11 @@ function clausesOf(q, partWords) {
           // "the page color", "the page's colour"; "the color of the page";
           // and a color named like another part's, "grey like the
           // dialogs", "the same grey as the page".
+          // ("The card border color": the color of that paint of it.)
           ((/\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
-            /^(?:'s)?\s+colou?r\b/.test(text.slice(where.end))) ||
+            /^(?:'s)?\s+(?:(?:border|text|background|fill|line)\s+)?colou?r\b/.test(
+              text.slice(where.end),
+            )) ||
             /\bcolou?r of\s+(?:the\s+|my\s+)?$/.test(
               text.slice(0, where.index),
             ) ||
@@ -2640,6 +2647,17 @@ function clausesOf(q, partWords) {
       });
       if (ref) {
         colorRef = ref.on;
+        const paint =
+          /^(?:'s)?\s+(border|text|background|fill|line)\s+colou?r\b/.exec(
+            text.slice(/** @type {any} */ (at(ref)).end),
+          )?.[1];
+        if (paint)
+          colorRefProp =
+            paint === 'border' || paint === 'line'
+              ? 'border-color'
+              : paint === 'text'
+                ? 'color'
+                : 'background-color';
         parts.splice(parts.indexOf(ref), 1);
       }
     }
@@ -2932,6 +2950,7 @@ function clausesOf(q, partWords) {
       text,
       parts,
       ...(colorRef ? {colorRef} : {}),
+      ...(colorRefProp ? {colorRefProp} : {}),
       ...(groundRef ? {groundRef} : {}),
       ...(groundWhen ? {groundWhen} : {}),
       ...(groundToken ? {groundToken} : {}),
@@ -3347,6 +3366,24 @@ export function draftAnswer(ctx, env, question) {
         ),
         ' ',
       )
+      .trim();
+  // "never redder than #ff0000": a color bound by a way how cannot
+  // measure (only darker and lighter are held) is never read as a
+  // negation of the ask; it is taken out and the answer says it is not
+  // held.
+  const unheldBound =
+    /\s*,?\s*(?:\bbut\s+)?\b(?:no|not|never)\s+([a-z]+er)\s+than\s+(#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab)\([^)]*\)|[a-z]+)/i.exec(
+      question,
+    );
+  const unheld =
+    unheldBound &&
+    !/^(darker|lighter)$/i.test(unheldBound[1]) &&
+    parseColor(unheldBound[2])
+      ? unheldBound[0].trim().replace(/^,?\s*(?:but\s+)?/i, '')
+      : null;
+  if (unheld)
+    question = question
+      .replace(/** @type {RegExpExecArray} */ (unheldBound)[0], ' ')
       .trim();
   // The one keep reader: every way of keeping something as it is, in any
   // position ("…, but keep cards as they are", "keep the dialogs as they
@@ -5467,6 +5504,12 @@ export function draftAnswer(ctx, env, question) {
       c.lengths.length ||
       exactFactor(c.text) != null;
     if (!hasAsk) continue;
+    // (A clause whose subject is a word how knows as no part, "and the
+    // gizmo red", takes no part from the one before: it is said.)
+    if (!c.parts.length && unknownSlot(c.text, true)) {
+      c.unknownSubject = true;
+      continue;
+    }
     if (!c.parts.length) {
       const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
         c.text,
@@ -5644,10 +5687,11 @@ export function draftAnswer(ctx, env, question) {
       const holder = inPlace[0].on;
       const holds = C.MAP[holder]?.contains ?? [];
       // (The page, which holds every part, is never an element inside
-      // one: "the current page in pagination" names pagination's own.)
-      const strangers = c.state
-        ? c.parts.filter(x => x.on !== holder && /^(page|body)$/.test(x.on))
-        : [];
+      // one: "the current page in pagination" names pagination's own; the
+      // page's text "in cards", the cards' own text.)
+      const strangers = c.parts.filter(
+        x => x.on !== holder && /^(page|body)$/.test(x.on),
+      );
       if (strangers.length === c.parts.length) {
         // (The part inside it that takes the state named, if one does;
         // else the place itself.)
@@ -7774,23 +7818,37 @@ export function draftAnswer(ctx, env, question) {
     const kind = use === 'border' ? 'fill' : use;
     // "grey like the dialogs", "the same grey as the page": the part named
     // as the reference gives the color, read from it, never changed.
-    if (c.colorRef)
-      return c.colorRef === 'page'
-        ? kind === 'text'
+    // (The color the reference shows: what is asked of it, else the paint
+    // it does draw, its fill, its line, then its text, "the links' color"
+    // being their text color; the page only for a part that draws none.)
+    if (c.colorRef) {
+      if (c.colorRef === 'page')
+        return kind === 'text'
           ? 'var(--color-text-primary)'
-          : 'var(--color-background-body)'
-        : (partPropNow(
-            c.colorRef,
-            kind === 'text'
-              ? 'color'
-              : use === 'border'
-                ? 'border-color'
-                : 'background-color',
-            true,
-          ) ??
-            (kind === 'text' || !C.MAP[one(c.colorRef)]
-              ? null
-              : 'var(--color-background-body)'));
+          : 'var(--color-background-body)';
+      const asked =
+        c.colorRefProp ??
+        (kind === 'text'
+          ? 'color'
+          : use === 'border'
+            ? 'border-color'
+            : 'background-color');
+      // (Then the other paint it draws; for a part that is text, a link,
+      // its text color.)
+      for (const prop of [
+        asked,
+        ...['background-color', 'border-color'].filter(x => x !== asked),
+        ...(textOnlyPart(one(c.colorRef)) && asked !== 'color'
+          ? ['color']
+          : []),
+      ]) {
+        const v = partPropNow(c.colorRef, prop, true);
+        if (v) return v;
+      }
+      return kind === 'text' || !C.MAP[one(c.colorRef)]
+        ? null
+        : 'var(--color-background-body)';
+    }
     // "fails contrast on white", "labels on the accent color white": what
     // the text sits on (after "on") is never the text's own color.
     const ownText =
@@ -7916,7 +7974,9 @@ export function draftAnswer(ctx, env, question) {
     // theme or dropped; it says so.
     {
       const slot =
-        !c.parts.length && !c.except && c.text ? unknownSlot(c.text) : null;
+        (!c.parts.length || c.unknownSubject) && !c.except && c.text
+          ? unknownSlot(c.text, Boolean(c.unknownSubject))
+          : null;
       if (slot) {
         push({
           text: `no part is called "${slot.word}". Name one of them, or list the parts`,
@@ -9703,9 +9763,19 @@ export function draftAnswer(ctx, env, question) {
         (subjectProp || /colou?r/.test(cmp[0]))
       ) {
         const sp = subjectProp ?? 'background-color';
-        const rp =
-          colorProp(right) ?? (sp === 'color' ? 'color' : 'background-color');
         const [subjectOn, sourceOn] = ordered;
+        // ("the same color as the links", naming no property of theirs:
+        // the color they show, their fill, their line, then their text,
+        // as the one reference reader reads it.)
+        // (Only a part that is text, a link, shows its text as its color;
+        // any other with no fill shows the page beneath it.)
+        const named = colorProp(right);
+        const first = sp === 'color' ? 'color' : 'background-color';
+        const rp =
+          named ??
+          (textOnlyPart(one(sourceOn)) && !partPropNow(sourceOn, first, true)
+            ? 'color'
+            : first);
         // A part with no fill of its own shows the page color beneath it,
         // as a direction answer steps it from.
         const own = partPropNow(sourceOn, rp, true);
@@ -11797,6 +11867,16 @@ export function draftAnswer(ctx, env, question) {
     return borderless;
   }
   /**
+   * The text color tokens a clause asks of: the secondary text alone when
+   * it names it ("the secondary text on cards fainter"), else every one.
+   * @param {Clause} c @param {string[]} toks
+   * @returns {string[]}
+   */
+  function textOfRole(c, toks) {
+    const secondary = toks.filter(t => t === '--color-text-secondary');
+    return /\bsecondary\b/.test(c.text) && secondary.length ? secondary : toks;
+  }
+  /**
    * The commands for one part (or the whole theme) and one aspect.
    * @param {Clause} c
    * @param {{on: string, when?: string, role?: string, level?: string} | null} p
@@ -12661,11 +12741,19 @@ export function draftAnswer(ctx, env, question) {
         const w = /\b(thick|thin|width|wide)/.test(c.text)
           ? widthNow()
           : {len: null};
+        // (A token given itself, "the card border color" when the line
+        // reads it already, is that color now: left as it is.)
+        const toColor = tokens.filter(t => color !== `var(${t})`);
+        if (!toColor.length && !w.len)
+          return {
+            text: `the divider is drawn in ${color} already (${named}), so nothing changes`,
+            options: [],
+          };
         return {
-          text: `the divider color: ${named}, the color its line is drawn in, on the divider only${w.len ? `; its thickness: --border-width ${w.len}` : ''}`,
+          text: `the divider color: ${toColor.join(' and ')}, the color its line is drawn in, on the divider only${toColor.length < tokens.length ? ` (${tokens.filter(t => !toColor.includes(t)).join(', ')} is ${color} already)` : ''}${w.len ? `; its thickness: --border-width ${w.len}` : ''}`,
           options: [
             [
-              ...tokens.map(t => set(t, color, {...scope, ...modeOf(c)})),
+              ...toColor.map(t => set(t, color, {...scope, ...modeOf(c)})),
               ...(w.len ? [set('--border-width', w.len, scope)] : []),
             ],
           ],
@@ -14307,7 +14395,7 @@ export function draftAnswer(ctx, env, question) {
             };
           }
         }
-        if (!hasBorder && color && !width && !style && !side) {
+        if (!hasBorder && color && !style && !side) {
           const lineRead = (/** @type {{props: string[]}} */ r) =>
             r.props.some(x =>
               /^border(-(top|bottom|left|right))?(-color)?$/.test(x),
@@ -14341,9 +14429,12 @@ export function draftAnswer(ctx, env, question) {
               ),
             ),
           ];
+          // ("Thicker and blue": the color, and why the width is left: the
+          // children draw it at a width Core sets per render.)
+          const widthToo = Boolean(width || thicker || thinner);
           if (kids.length && tokens.length === 1)
             return {
-              text: `the lines${where}: ${on} draws no border of its own; ${kids.join(', ')} inside it draw${kids.length > 1 ? '' : 's'} its lines from ${tokens[0]}, so that color on ${on}`,
+              text: `the lines${where}: ${on} draws no border of its own; ${kids.join(', ')} inside it draw${kids.length > 1 ? '' : 's'} its lines from ${tokens[0]}, so that color on ${on}${widthToo ? `; their width is left as it is: ${kids.join(' and ')} draw it at a width Core sets per render, which the editor can't change without touching the borders of the controls inside ${on}` : ''}`,
               options: [[set(tokens[0], color, {...f, ...modeOf(c)})]],
             };
         }
@@ -15389,7 +15480,7 @@ export function draftAnswer(ctx, env, question) {
           if (relSubject === 'text') {
             // The text color tokens the part's own text reads (a card's
             // text is the parts inside it), else its own text color.
-            const inner = innerTextTokens(C, one(on), true);
+            const inner = textOfRole(c, innerTextTokens(C, one(on), true));
             const own = restRead(C.partReads(one(on), 'text'), f.when);
             const steps = (
               own || !inner.length
@@ -16308,7 +16399,7 @@ export function draftAnswer(ctx, env, question) {
         // A part holding parts whose text reads the text color tokens
         // itself (a top nav's heading and items), where a color property
         // never reaches that text: those tokens, on the part.
-        const inner = innerTextTokens(C, one(on), true);
+        const inner = textOfRole(c, innerTextTokens(C, one(on), true));
         if (
           inner.length &&
           !innerTextTokens(C, one(on)).length &&
@@ -17754,9 +17845,11 @@ export function draftAnswer(ctx, env, question) {
    * doc lists as a keyword, or a near catalog name, and asks for a shape
    * change. Gives the word and the parts of the components that list it.
    * @param {string} text
+   * @param {boolean} [subject] also the subject an elided clause starts
+   *   with ("and the gizmo red")
    * @returns {{word: string, parts: string[]} | null}
    */
-  function unknownSlot(text) {
+  function unknownSlot(text, subject = false) {
     // The part slot: the noun after "from", "on" or "to", the noun right
     // after the verb, or the noun before the thing changed ("the zorp
     // padding"). A word there that how knows as nothing (no part, group,
@@ -17773,6 +17866,11 @@ export function draftAnswer(ctx, env, question) {
         String.raw`^(?:please\s+)?(?:make|set|give|turn|change|remove|drop|add|round)\s+${DET}([a-z]{3,})\b`,
       ).exec(text)?.[1],
       new RegExp(String.raw`\b${DET}([a-z]{3,})\s+${THING}\b`).exec(text)?.[1],
+      // (The subject of an elided clause that starts with it, "… and the
+      // gizmo red".)
+      subject
+        ? new RegExp(String.raw`^${DET}([a-z]{3,})\b`).exec(text.trim())?.[1]
+        : undefined,
       // (A plural right after the verb or "from" needs no determiner:
       // "make widgets rounder", "from widgets".)
       /\b(?:from|on)\s+([a-z]{3,}s)\b(?!\s+(?:mode|theme)\b)/.exec(text)?.[1],
@@ -18192,6 +18290,10 @@ export function draftAnswer(ctx, env, question) {
           d.text = `${d.text} (${holds.join('; ')}: nothing to change there)`;
       }
   }
+  // (A bound by a way how cannot measure, read out above: said.)
+  if (unheld)
+    for (const d of result)
+      d.text = `${d.text} ("${unheld}" is not held: how holds a color bound only as darker or lighter than it)`;
   // "darker but not darker than #1e3a8a": every color an answer writes (a
   // token, a part's color, a color dial's seed) is held at the bound in
   // each mode it is for, by the brightness of its own ink, and the answer
@@ -19118,10 +19220,19 @@ export function draftAnswer(ctx, env, question) {
         return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
       }
     }
+    // (A value the theme set on the part itself is what it has now, before
+    // any token or variant it reads: "how round are the cards now?" after
+    // a card radius of 20px is 20px.)
+    const ownNow = () => {
+      if (!named || stateWord || vWord) return null;
+      const v = partValue(named, asked);
+      return v ? `${v}${qModeSaid} (set on ${named})` : null;
+    };
     const now =
       named && !unshown
         ? (pageNow() ??
           ringNow() ??
+          ownNow() ??
           conditionNow() ??
           mediaTextNow() ??
           (asked === 'box-shadow' && censusNow('box-shadow', null)
