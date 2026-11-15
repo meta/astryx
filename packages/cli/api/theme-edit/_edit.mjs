@@ -5385,7 +5385,7 @@ async function changeOnce(
         );
         // A word that is near a setting name (a typo, another case) is never
         // answered with a bare step back, which would undo another change;
-        // any other word (`all`) may mean the last step.
+        // only `all` or `last` asks for the last step.
         // A token or a property named (radius-element, padding) is a named
         // thing too: never answered with a step back.
         const namesThing =
@@ -5456,7 +5456,10 @@ async function changeOnce(
                   ? 'do this instead'
                   : `do this instead: ${describe({...x, value: '?'}).replace(' = ?', '')}`,
               }))
-            : steps && !nearSetting
+            : // A plain step back can take back another change than the
+              // one typed: it is offered only for `all` or `last`, which
+              // ask for the last step; any other word gets a look.
+              steps && !nearSetting && /^(all|last)$/.test(typed)
               ? [
                   {
                     name: `${P} undo ${slug}`,

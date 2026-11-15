@@ -182,21 +182,6 @@ describe('undo t <a value the theme holds>', () => {
     },
     T,
   );
-
-  it(
-    'a word naming nothing: the step back says which change it takes back, and a look follows',
-    async () => {
-      await setAll([
-        ['accent', 'red'],
-        ['corners', 'pill'],
-      ]);
-      const r = await cli([...ED, 'undo', 't', 'blue']);
-      expect(names(r)[0]).toMatch(/ undo t$/);
-      expect(r.suggestions[0].reason).toContain('corners = pill');
-      expect(names(r)[1]).toMatch(/ show t$/);
-    },
-    T,
-  );
 });
 
 describe('undo of a value with commas typed unquoted', () => {
