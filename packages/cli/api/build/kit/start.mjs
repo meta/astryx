@@ -12,7 +12,12 @@ import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
 import {isAppShell} from './words.mjs';
-import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {
+  blendOrder,
+  blendSummary,
+  sharesOwnWord,
+  weighStart,
+} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -87,7 +92,7 @@ const LIFT_AT = 0.3;
  * @param {string} idea
  * @returns {PageTemplate | null}
  */
-function liftFromShell(ranked, kind, catalog, idea) {
+function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
   const b = blendSummary(
     idea,
     ranked,
@@ -112,6 +117,7 @@ function liftFromShell(ranked, kind, catalog, idea) {
   ];
   const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
   if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  if (b.best === unsupported) return null;
   return catalog.find(t => t.name === b.best) ?? null;
 }
 
@@ -156,13 +162,24 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
   // scores, decide the start of a whole page, so it can differ from the
   // ranker's own pick, its head-noun family included. A part or an edit starts
   // where the ranker's placement rules put it (spec:AST-048/FR3).
-  const weighed =
+  const weighedPage =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
           weights: loadWeights(),
           newPage: asksForNewPage(idea, catalog),
         })
       : undefined;
+  // When the ranker proposes no page, a page the word weights lean to but
+  // whose own docs share no word with the idea is no start; the shell lift
+  // may not bring that same page back.
+  const unsupported =
+    weighedPage &&
+    !directMatch &&
+    !proposed &&
+    !sharesOwnWord(weighedPage, idea, catalog)
+      ? weighedPage
+      : null;
+  const weighed = unsupported ? null : weighedPage;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
   const pick =
@@ -178,7 +195,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
   // ready or not, keeps the start and reason it already has.
   const lifted =
     !direct && (!pick || pick.family === 'Shell')
-      ? liftFromShell(ranked, kind, catalog, idea)
+      ? liftFromShell(ranked, kind, catalog, idea, unsupported)
       : null;
   const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
   if (closest) {
