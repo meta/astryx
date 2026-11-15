@@ -52,16 +52,32 @@ export const MAIN_YIELD_MS = 15 * 60_000;
 export const AT_LIMIT_SPACING_MS = 10 * 60_000;
 // A wait this close to the longest wait counts as one that ran out.
 export const AT_LIMIT_SLACK_MS = 30_000;
+// ci.yml's `room` job runs a step of this name, which says how many jobs its
+// widening matrices add at full width: each `leg-widths` job's `full - tight`
+// (its Node leg count follows the recorded Node times).
+export const WIDEN_STEP = /^Hold (\d+) more jobs at full width$/;
+
+/**
+ * The jobs a run's widening matrices add at full width, read from its jobs,
+ * or 0 when it names none (a run that plans no widening matrix).
+ */
+export function widenOf(jobs) {
+  for (const step of jobs.flatMap(job => job.steps ?? [])) {
+    const match = WIDEN_STEP.exec(step.name ?? '');
+    if (match) return Number(match[1]);
+  }
+  return 0;
+}
 // The most jobs a run holds at once, by workflow: ci.yml's release-check and
 // Main's runs (a push's fast checks or a unit run) from their `peak`
 // (ci-admission.test.mjs), a pull-request ci.yml run from its measured most
-// at the leg width its admission picked: `peak` at tight width, plus each
-// `leg-widths` job's `full - tight` at full width or while undecided. Every
-// other workflow's run holds one or two slim jobs.
+// at the leg width its admission picked: `peak` at tight width, plus the jobs
+// its matrices add (`widenOf`) at full width or while undecided. Every other
+// workflow's run holds one or two slim jobs.
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 30),
+  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 21 + widenOf(jobs)),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,

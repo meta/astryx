@@ -49,6 +49,7 @@ import {
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
+import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
@@ -493,13 +494,17 @@ function acceptDeclaration(
  * declarations it means to emit.
  */
 function joinDeclarations(
-  entries: [string, string][],
+  entries: [string, unknown][],
   location: string,
   sink: DiagnosticSink,
   mapProp: (prop: string) => string = p => p,
 ): string {
   const lines: string[] = [];
   for (const [rawProp, rawValue] of entries) {
+    // An undefined value sets nothing, as a page token's does.
+    if (rawValue === undefined) {
+      continue;
+    }
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
     const value = stringifyTokenValue(rawValue);
@@ -578,6 +583,9 @@ function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);
@@ -1219,25 +1227,28 @@ export function generateThemeRules(
   }
 
   // 2. Component overrides: stable .astryx-* target classes combined with
-  // reflected data-* selectors for visual props and runtime states.
-  if (theme.components) {
-    generateComponentRules(theme.components, parts, {sink});
+  // reflected data-* selectors for visual props and runtime states. A rule
+  // source passed in directly can still hold undefined. Read it as every
+  // layer does: an undefined value is not set.
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {sink});
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
   generateProseRules(val, parts);
 
   // 4. Prop-level color overrides (for text/heading/link specificity)
-  generateColorOverrides(theme.components || {}, parts);
+  generateColorOverrides(components || {}, parts);
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(theme.components || {}, parts);
+  generateSizeOverrides(components || {}, parts);
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
   //    when a custom visual type declares its own default weight.
-  generateHeadingWeightOverrides(theme.components || {}, parts);
+  generateHeadingWeightOverrides(components || {}, parts);
 
   // (on-media rules are generated separately — see generateOnMediaCSS)
 
@@ -1419,7 +1430,7 @@ function generateComponentRules(
           const pseudoEntries = Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
-              pseudoEntries as [string, string][],
+              pseudoEntries,
               `${location}[${JSON.stringify(pseudo)}]`,
               sink,
               toKebabCase,

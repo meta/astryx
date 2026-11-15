@@ -1253,6 +1253,11 @@
   "theme": {
     "type": "docs.detail",
     "sections": [
+      "make-or-change",
+      "look-after-each-change",
+      "denser-or-roomier",
+      "one-kind-of-part",
+      "no-app-yet",
       "quick-start",
       "creating-a-custom-theme",
       "icon-sizes",

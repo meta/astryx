@@ -184,8 +184,10 @@ describe('part facts from Core', () => {
       ruleOf('n', '.astryx-checkbox-indicator[data-checked="indeterminate"]'),
     ).toMatch(/#16a34a/);
     const commands = await answer('green checkboxes');
-    expect(commands).toMatch(/--on checks --state checked/);
-    expect(commands).toMatch(/--on checks --when checked:indeterminate/);
+    expect(commands).toMatch(/--on checkbox-indicator --state checked/);
+    expect(commands).toMatch(
+      /--on checkbox-indicator --when checked:indeterminate/,
+    );
   }, 240_000);
 
   it('says which inner parts an inherited text property reaches', async ctx => {

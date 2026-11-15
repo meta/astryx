@@ -89,6 +89,7 @@ import {
   checkAppThemes,
   checkThemes,
   themeImportWiring,
+  withProviderWiring,
 } from './theme-checks.mjs';
 import {
   availableLine,
@@ -1996,7 +1997,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+        "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     };
   }
   if (
@@ -2324,7 +2325,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, the docs not-found hint's name summaries, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB and removes its oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written in the last day, or read in the last day where the file system records reads.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands' not-found hint's name summaries, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2565,7 +2566,10 @@ export async function runChecks(options = {}) {
         () => themeImportWiring(cwd),
         THEME_WIRING_CODEC,
       );
-      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
+      checks.push(
+        checkThemes(cwd, appThemeChecks, wiring),
+        ...withProviderWiring(appThemeChecks, wiring),
+      );
       checks.push(await checkConfig(ctx));
     }
   }

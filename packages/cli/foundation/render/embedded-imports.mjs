@@ -48,18 +48,38 @@ export function aliasOnly(spec) {
  * @returns {string[]}
  */
 export function cssImports(css) {
-  /** @type {string[]} */
-  const out = [];
+  return cssReferences(css)?.imports.map(each => each.url) ?? [];
+}
+
+/**
+ * Every file reference a stylesheet makes, each with its line: what its
+ * `@import` rules load (in any letter case), and each `url()` in a
+ * declaration. Null when it is not valid CSS.
+ * @param {string} css
+ * @returns {{imports: Array<{url: string, line?: number}>, urls: Array<{url: string, line?: number}>} | null}
+ */
+export function cssReferences(css) {
+  /** @type {Array<{url: string, line?: number}>} */
+  const imports = [];
+  /** @type {Array<{url: string, line?: number}>} */
+  const urls = [];
   try {
-    postcss.parse(css).walkAtRules(/^import$/i, rule => {
+    const root = postcss.parse(css);
+    root.walkAtRules(/^import$/i, rule => {
       const m = /^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)/.exec(rule.params);
       const url = m ? (m[2] ?? m[4]) : '';
-      if (url) out.push(url);
+      if (url) imports.push({url, line: rule.source?.start?.line});
+    });
+    root.walkDecls(decl => {
+      for (const m of decl.value.matchAll(/url\(\s*(['"]?)([^'")]*?)\1\s*\)/gi)) {
+        if (m[2]) urls.push({url: m[2], line: decl.source?.start?.line});
+      }
     });
   } catch {
     // Not valid CSS: it imports nothing a restore needs.
+    return null;
   }
-  return out;
+  return {imports, urls};
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
@@ -73,6 +93,19 @@ const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts'
  */
 export function importSpecifiers(source, file) {
   return scanModule(source, file).imports;
+}
+
+/**
+ * Each string specifier one module imports, with its line and whether it
+ * brings in types only (`import type`, `export type`, or named bindings that
+ * are each an inline `type`), which a bundler drops. Null when the module
+ * does not parse.
+ * @param {string} source
+ * @param {string} file for the parser's TypeScript/JSX choice
+ * @returns {Array<{specifier: string, line?: number, typeOnly: boolean}> | null}
+ */
+export function moduleImports(source, file) {
+  return scanModule(source, file).records;
 }
 
 /**
@@ -104,11 +137,27 @@ export function assetRefsOf(source, file) {
 }
 
 /**
+ * Whether an import or re-export brings in types only: `import type`,
+ * `export type`, or named bindings that are each an inline `type`.
+ * @param {any} node
+ */
+function typesOnly(node) {
+  if (node.importKind === 'type' || node.exportKind === 'type') return true;
+  const specifiers = node.specifiers ?? [];
+  return (
+    specifiers.length > 0 &&
+    specifiers.every((/** @type {any} */ each) => each.importKind === 'type' || each.exportKind === 'type')
+  );
+}
+
+/**
  * One module's imports, and the relative asset paths its strings name
- * (`<img src="./logo.png">`, `url(./bg.png)` in a style).
+ * (`<img src="./logo.png">`, `url(./bg.png)` in a style). `records` holds
+ * each import with its line and whether it is types only; null when the
+ * module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[]}}
+ * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean}> | null}}
  */
 function scanModule(source, file) {
   /** @type {string[]} */
@@ -123,10 +172,13 @@ function scanModule(source, file) {
       plugins: /\.(tsx?|mts|cts)$/.test(file) ? ['jsx', 'typescript'] : ['jsx'],
     });
   } catch {
-    return {imports: [], assets: []};
+    return {imports: [], assets: [], records: null};
   }
-  /** @type {string[]} */
-  const out = [];
+  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean}>} */
+  const records = [];
+  /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
+  const add = (specifier, node, typeOnly = false) =>
+    records.push({specifier, line: node.loc?.start?.line, typeOnly});
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
@@ -138,19 +190,19 @@ function scanModule(source, file) {
         node.type === 'ExportAllDeclaration') &&
       node.source?.type === 'StringLiteral'
     ) {
-      out.push(node.source.value);
+      add(node.source.value, node, typesOnly(node));
     } else if (
       node.type === 'ImportExpression' &&
       node.source?.type === 'StringLiteral'
     ) {
-      out.push(node.source.value);
+      add(node.source.value, node);
     } else if (
       node.type === 'CallExpression' &&
       node.arguments?.[0]?.type === 'StringLiteral' &&
       (node.callee?.type === 'Import' ||
         (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
     ) {
-      out.push(node.arguments[0].value);
+      add(node.arguments[0].value, node);
     }
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra') continue;
@@ -160,7 +212,7 @@ function scanModule(source, file) {
     }
   };
   visit(ast.program);
-  return {imports: out, assets};
+  return {imports: records.map(each => each.specifier), assets, records};
 }
 
 /**

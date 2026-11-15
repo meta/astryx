@@ -6,7 +6,6 @@
  * as theme input), with a note; the theme then compiles clean.
  */
 
-import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -17,6 +16,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -59,17 +59,9 @@ describe('corners in a state', () => {
       import.meta.dirname,
       '../../clients/cli/bin/astryx.mjs',
     );
-    const compiled = spawnSync(
-      process.execPath,
-      [
-        bin,
-        'experimental',
-        'theme',
-        'compile',
-        'themes/s/s.theme.ts',
-        '--json',
-      ],
-      {cwd, encoding: 'utf8'},
+    const compiled = await runCli(
+      ['experimental', 'theme', 'compile', 'themes/s/s.theme.ts', '--json'],
+      cwd,
     );
     expect(compiled.status, compiled.stdout + compiled.stderr).toBe(0);
   }, 240_000);

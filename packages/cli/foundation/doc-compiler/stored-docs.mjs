@@ -6,7 +6,8 @@
  *   store is read. ./import.mjs reads the stored exports and
  *   foundation/discovery/template-adapter.mjs the stored template component
  *   lists; scripts/generate-stored-docs.mjs and
- *   scripts/generate-template-components.mjs write them.
+ *   scripts/generate-template-components.mjs write them. Also where the
+ *   CLI's docs routes are stored (scripts/generate-docs-routes.mjs).
  */
 
 import {createHash} from 'node:crypto';
@@ -27,6 +28,18 @@ export const STORED_DOCS_FILE = path.join(
   CLI_ROOT,
   'assets',
   'docs.generated.json',
+);
+
+/**
+ * Where every route of the CLI's own docs tree is stored, with the state of
+ * every file and folder the tree read (scripts/generate-docs-routes.mjs), so
+ * the lookup commands' not-found hint names a route without building the
+ * tree (api/docs/_entry-names.mjs).
+ */
+export const DOCS_ROUTES_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'docs-routes.generated.json',
 );
 
 /**
