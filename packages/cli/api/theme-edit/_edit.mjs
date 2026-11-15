@@ -6065,7 +6065,7 @@ export async function themeEditShow(theme, options = {}) {
       // Every problem the theme has now, its text, border and color
       // contrast, each with the command that fixes it when one does.
       openProblems: [
-        ...problemLines(open),
+        ...problemLines(shownChecks),
         ...colorProblems.map(problem => ({problem, fix: null})),
       ],
       preview,
