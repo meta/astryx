@@ -11,6 +11,7 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -107,26 +108,32 @@ export function useSelectorPresentation({
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
+  // Whether the last press while the list is open landed inside the list. A
+  // press inside the list, such as a pick, moves focus to the list's nearest
+  // focusable container, such as a dialog's content box. That focus is no
+  // choice of the person.
+  const isLastPressInListRef = useRef(false);
+  const stopPressWatchRef = useRef<(() => void) | null>(null);
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
     const trigger = triggerRef.current;
-    // A light dismiss by a press on another control has already moved focus
+    const isPressInList = isLastPressInListRef.current;
+    stopPressWatchRef.current?.();
+    stopPressWatchRef.current = null;
+    // A light dismiss by a press on another Tab stop has already moved focus
     // there. Taking it back would send the next key to this closed Selector.
-    // Escape, a pick in the list, or a press on nothing focusable returns
-    // focus to the trigger. A press inside the list, or on a focusable
-    // container around it, moves focus to that container, such as a dialog's
-    // content box. A container of the list is no other control, so that
-    // focus returns too.
+    // Escape, a press inside the list, or a press that lands on no Tab stop
+    // returns focus to the trigger.
     const active = document.activeElement;
-    const list = popoverContentRef.current?.current ?? null;
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
+      !isPressInList &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      list?.contains(active) !== true &&
-      !active.contains(list);
+      popoverContentRef.current?.current?.contains(active) !== true &&
+      active.tabIndex >= 0;
     if (focusLandedElsewhere) {
       return;
     }
@@ -136,8 +143,30 @@ export function useSelectorPresentation({
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
+    isLastPressInListRef.current = false;
+    stopPressWatchRef.current?.();
+    const doc = triggerRef.current?.ownerDocument ?? document;
+    const onPress = (event: PointerEvent) => {
+      isLastPressInListRef.current =
+        popoverContentRef.current?.current?.contains(event.target as Node) ===
+        true;
+    };
+    doc.addEventListener('pointerdown', onPress, {
+      capture: true,
+      passive: true,
+    });
+    stopPressWatchRef.current = () => {
+      doc.removeEventListener('pointerdown', onPress, {capture: true});
+    };
     onShowRef.current();
-  }, [onShowRef, resetFocusReturn]);
+  }, [onShowRef, resetFocusReturn, triggerRef]);
+  // Effect: removes the press watch's document listener on unmount.
+  useEffect(
+    () => () => {
+      stopPressWatchRef.current?.();
+    },
+    [],
+  );
   const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,
