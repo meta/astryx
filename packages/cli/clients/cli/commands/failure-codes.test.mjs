@@ -9,7 +9,8 @@
  * init that refuses its agent-docs path all exit 1 after their output. Each
  * run's debug event names that failure with the code the output carries
  * (the code `--json` reports for the same run), never an exit that bypassed
- * the error path.
+ * the error path. The code is recorded once the answer is printed, so an
+ * error that stops the answer first keeps its own code.
  *
  * @input real command runs: in this repo, and in temporary projects
  * @output the outcome, exit code and error code each run records
@@ -24,6 +25,7 @@ import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
+import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 import {
   begin,
   finish,
@@ -129,6 +131,98 @@ describe('a run that exits 1 after its output records the code it carries', () =
     SLOW,
   );
 
+  describe('component: a batch beside a recorded theme that does not load', () => {
+    /**
+     * A project with Core and one recorded theme, from an integration, whose
+     * built module throws when it loads.
+     */
+    function projectWithBrokenTheme() {
+      const dir = folderWith({
+        'package.json': JSON.stringify({
+          name: 'app',
+          type: 'module',
+          dependencies: {'@acme/themes': '1.0.0', '@astryxdesign/core': '*'},
+        }),
+        'astryx.config.mjs':
+          "export default {integrations: ['@acme/themes']};\n",
+        'node_modules/@acme/themes/package.json': JSON.stringify({
+          name: '@acme/themes',
+          version: '1.0.0',
+          type: 'module',
+          exports: {'./themes/ocean': './dist/ocean.js'},
+        }),
+        'node_modules/@acme/themes/astryx.integration.mjs':
+          "export default {themes: './themes'};\n",
+        'node_modules/@acme/themes/themes/ocean/oceanTheme.ts':
+          "export const oceanTheme = {name: 'ocean', tokens: {}};\n",
+        'node_modules/@acme/themes/themes/ocean/oceanTheme.doc.mjs':
+          "export default {type: 'theme', name: 'ocean', displayName: 'ocean', description: 'ocean theme', maintained: true};\n",
+        'node_modules/@acme/themes/dist/ocean.js':
+          "throw new Error('ocean does not load');\n",
+        'src/astryx-themes.ts': renderThemeModule(
+          [
+            {
+              slug: 'ocean',
+              owner: '@acme/themes',
+              exportName: 'oceanTheme',
+              module: '@acme/themes/themes/ocean',
+              stylesheet: '@acme/themes/themes/ocean.css',
+              source: 'package',
+            },
+          ],
+          'ocean',
+          true,
+        ),
+      });
+      const scope = path.join(dir, 'node_modules', '@astryxdesign');
+      fs.mkdirSync(scope, {recursive: true});
+      fs.symlinkSync(
+        path.join(REPO, 'packages', 'core'),
+        path.join(scope, 'core'),
+      );
+      return dir;
+    }
+
+    const BATCH = ['component', 'Button', 'NoSuchWidgetAnywhere'];
+
+    it(
+      'records the theme failure that stopped the text answer',
+      async () => {
+        const {run, event} = await runWithDebug(
+          BATCH,
+          projectWithBrokenTheme(),
+        );
+        expect(run.status).toBe(1);
+        expect(run.stderr).toContain('Could not load the recorded theme');
+        expect(run.stdout).not.toContain('NoSuchWidgetAnywhere');
+        expect(failure(event)).toEqual({
+          outcome: 'error',
+          exitCode: 1,
+          code: 'ERR_THEME_LOAD',
+        });
+      },
+      SLOW,
+    );
+
+    it(
+      'records the unresolved row of the JSON receipt, which needs no theme',
+      async () => {
+        const {run, event} = await runWithDebug(
+          ['--json', ...BATCH],
+          projectWithBrokenTheme(),
+        );
+        expect(run.status).toBe(1);
+        expect(JSON.parse(run.stdout).type).toBe('component.batch');
+        expect(failure(event)).toEqual({
+          outcome: 'error',
+          exitCode: 1,
+          code: 'ERR_UNKNOWN_COMPONENT',
+        });
+      },
+      SLOW,
+    );
+  });
+
   describe('theme build --check', () => {
     beforeAll(() => {
       ensureCoreBuilt();
@@ -194,9 +288,9 @@ describe('a run that exits 1 after its output records the code it carries', () =
       'records nothing when the outputs are current',
       async () => {
         const dir = folderWith(THEMES);
-        expect((await runCli(['theme', 'build', 'alpha.mjs'], dir)).status).toBe(
-          0,
-        );
+        expect(
+          (await runCli(['theme', 'build', 'alpha.mjs'], dir)).status,
+        ).toBe(0);
         const {run, event} = await runWithDebug(
           ['theme', 'build', 'alpha.mjs', '--check'],
           dir,
@@ -229,7 +323,11 @@ describe('a run that exits 1 after its output records the code it carries', () =
 
     /** @type {Array<[string, () => string, string[]]>} */
     const cases = [
-      ['--list beside --from', () => project(), ['upgrade', '--from', '0.6.8', '--list']],
+      [
+        '--list beside --from',
+        () => project(),
+        ['upgrade', '--from', '0.6.8', '--list'],
+      ],
       ['no --from', () => project(), ['upgrade', '--apply']],
       [
         'a --path outside the project',
@@ -273,10 +371,15 @@ describe('a run that exits 1 after its output records the code it carries', () =
     it.each(cases)(
       '%s',
       async (_name, makeProject, args) => {
-        const json = await runCli(['--json', ...args], makeProject());
-        expect(json.status).toBe(1);
-        const code = jsonCode(json.stdout);
+        const json = await runWithDebug(['--json', ...args], makeProject());
+        expect(json.run.status).toBe(1);
+        const code = jsonCode(json.run.stdout);
         expect(code).toMatch(/^ERR_/);
+        expect(failure(json.event)).toEqual({
+          outcome: 'error',
+          exitCode: 1,
+          code,
+        });
 
         const {run, event} = await runWithDebug(args, makeProject());
         expect(run.status).toBe(1);

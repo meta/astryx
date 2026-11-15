@@ -30,7 +30,9 @@ import {doc as initFn} from '../../../api/init/init.doc.mjs';
 export function registerInit(program) {
   defineCommand(program, initCommand, {
     fn: initFn,
-    action: async (/** @type {import('../../../api/init/init.mjs').InitOptions} */ options) => {
+    action: async (
+      /** @type {import('../../../api/init/init.mjs').InitOptions} */ options,
+    ) => {
       const json = program.opts().json || false;
       // Silence the progress logger under --json so stdout carries only the
       // envelope. In human mode it writes log → stdout via humanLog and
@@ -38,15 +40,20 @@ export function registerInit(program) {
       logger.setSilent(json);
       try {
         const receipt = await init(options, {cwd: process.cwd()});
+        if (json) jsonOut(receipt);
         // A path-safety failure already printed its error but the run
         // continued; reflect it in the exit code (historical soft-error policy).
         // The receipt still reports it as `data.docsError` either way.
-        if (receipt.type === 'init.run' && receipt.data.docsError?.kind === 'path-safety') {
+        if (
+          receipt.type === 'init.run' &&
+          receipt.data.docsError?.kind === 'path-safety'
+        ) {
           failAfterOutput(ERROR_CODES.ERR_PATH_TRAVERSAL);
         }
-        if (json) jsonOut(receipt);
       } catch (err) {
-        const e = /** @type {import('../../../api/error.mjs').AstryxError} */ (err);
+        const e = /** @type {import('../../../api/error.mjs').AstryxError} */ (
+          err
+        );
         return cliError(e.message, {suggestions: e.suggestions, code: e.code});
       }
       // Setup writes files; there is nothing to look up. The receipt says what
