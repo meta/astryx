@@ -1085,7 +1085,7 @@ export class GestureArena {
     return clamped;
   }
 
-  /** Notes a finger's or pen's input that reaches the page late. */
+  /** Only a finger's or pen's late input keeps a late deadline waiting. */
   private noteArrival(time: number, isFingerOrPenInput: boolean): void {
     const arrivedAt = this.clock.now();
     if (isFingerOrPenInput && arrivedAt - time > LATE_INPUT_MS) {
@@ -1093,7 +1093,6 @@ export class GestureArena {
     }
   }
 
-  /** Whether the contact with this id is a finger or a pen. */
   private isFingerOrPenContact(id: number): boolean {
     return isFingerOrPen(this.records.get(id)?.touch.pointerType);
   }
@@ -1326,7 +1325,6 @@ export class GestureArena {
   }
 }
 
-/** Whether a contact of this kind is a finger or a pen. */
 function isFingerOrPen(pointerType: PointerKind | undefined): boolean {
   return pointerType === 'touch' || pointerType === 'pen';
 }

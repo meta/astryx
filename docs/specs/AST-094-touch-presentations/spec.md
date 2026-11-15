@@ -516,9 +516,9 @@ a measured, sourced difference exists.
   taps) MUST be deadlines on that clock, so a blocked main thread delays the
   report and never the moment reported. While the latest contact is a finger
   or a pen, a deadline behind a blocked page waits for input still queued
-  before it. It waits 50 ms when its timer runs more than 17 ms late. For every
-  recognizer, a finger's or pen's deadline whose timer runs more than 17 ms
-  late waits those 50 ms, even with nothing queued. Each finger's or pen's
+  before it. It waits 50 ms when its timer runs more than 17 ms late. While the
+  latest contact is a finger or a pen, every recognizer's late deadline waits
+  those 50 ms, even with nothing queued. Each finger's or pen's
   input from before it that reaches the page more than 33 ms late keeps it
   waiting 50 ms more. An input stamped at or past the deadline ends the wait.
   A deadline that comes due during the wait runs as it ends. A deadline among
