@@ -9,7 +9,9 @@
  * load-precedence order. Generated theme artifacts also use a dedicated jiti
  * path that resolves extensionless JSX/TSX registry imports. On Node 22.15 and
  * later, a theme module load, of a built artifact or of theme source, loads
- * the stylesheets its modules import as empty modules. These helpers
+ * the stylesheets its modules import as empty modules, and the assets they
+ * import (an icon's .svg, a picture, a font) as modules whose default export
+ * is the file's URL, as a bundler gives it. These helpers
  * centralize that behavior so callers stay in lockstep. A module's stdout
  * writes go to stderr while it loads, so project code that prints cannot
  * corrupt a `--json` envelope.
@@ -156,8 +158,23 @@ function isStylesheetUrl(url) {
 }
 
 /**
+ * Files an app's bundler emits and gives a module its URL for (an icon's
+ * .svg, a picture, a font): a theme module may import one, and Node cannot
+ * load it.
+ */
+const ASSET_FILE =
+  /\.(?:svg|png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot)$/i;
+
+/** @param {string} url */
+function isAssetUrl(url) {
+  return url.startsWith('file:') && ASSET_FILE.test(new URL(url).pathname);
+}
+
+/**
  * In a theme module load, a module that Node resolves to a `.css` file loads
- * as an empty module. Any other module loads unchanged.
+ * as an empty module, and one that resolves to an asset loads as a module
+ * whose default export is the file's URL (what a bundler gives the import).
+ * Any other module loads unchanged.
  * @param {string} url
  * @param {any} context
  * @param {(url: string, context: any) => any} next
@@ -165,6 +182,13 @@ function isStylesheetUrl(url) {
 function loadStylesheetAsEmptyModule(url, context, next) {
   if (themeModuleLoad.getStore() && isStylesheetUrl(url)) {
     return {format: 'module', source: '', shortCircuit: true};
+  }
+  if (themeModuleLoad.getStore() && isAssetUrl(url)) {
+    return {
+      format: 'module',
+      source: `export default ${JSON.stringify(url)};`,
+      shortCircuit: true,
+    };
   }
   return next(url, context);
 }
@@ -181,7 +205,8 @@ function removeStylesheetHooks() {
 
 /**
  * Run a theme module load with every stylesheet that the theme's modules
- * import, at any depth, loaded as an empty module. A theme module can import
+ * import, at any depth, loaded as an empty module, and every asset they
+ * import (an .svg, a picture, a font) as its URL. A theme module can import
  * a stylesheet so that the app's bundler emits it, and Node cannot load a
  * stylesheet. Node resolves each import from the module that writes it, so a
  * missing stylesheet fails like any missing import, and an import that ends

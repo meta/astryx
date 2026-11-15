@@ -33,6 +33,7 @@
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
 import {
+  blankOptionProblem,
   buildInputProblem,
   buildSuggestion,
   realLocation,
@@ -1094,6 +1095,32 @@ export async function editorCompileProblem(
 ) {
   const cwdRoot = projectRoot(cwd);
   const COMPILE = {group: 'experimental theme', build: 'compile'};
+  // An empty or blank --out or --icons-specifier names nothing: refused
+  // before anything is built, with the compile without it.
+  const blank =
+    blankOptionProblem(
+      '--out',
+      out,
+      'name a file or folder, or leave out --out to write beside the source',
+      buildSuggestion(
+        files.length === 1 ? files[0] : files,
+        {check, iconsSpecifier},
+        cwd,
+        COMPILE,
+      ),
+    ) ??
+    blankOptionProblem(
+      '--icons-specifier',
+      iconsSpecifier,
+      "name the registry module, or leave out --icons-specifier to keep the theme source's own import",
+      buildSuggestion(
+        files.length === 1 ? files[0] : files,
+        {check, out},
+        cwd,
+        COMPILE,
+      ),
+    );
+  if (blank) return blank;
   /**
    * The compile of `source` (from `from`) with the caller's mode: a check
    * stays a check, and --out names the same file from there.
