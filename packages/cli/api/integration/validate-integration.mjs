@@ -96,7 +96,7 @@ import {
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
-import {withOnePackList} from '../../foundation/integrations/pack-state.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -910,10 +910,10 @@ async function docTargetNotes(integration) {
  * @param {{cwd?: string}} [options]
  * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
  */
-export function validateIntegration(pkg, options = {}) {
-  // Its checks read the package and change none of its files, so npm is
-  // asked once what the package packs.
-  return withOnePackList(() => validateIntegrationOnce(pkg, options));
+export async function validateIntegration(pkg, options = {}) {
+  // Its checks read the package and change none of its files: one listing
+  // of each folder, and one answer from npm on what the package packs.
+  return withListingCache(() => validateIntegrationOnce(pkg, options));
 }
 
 /**

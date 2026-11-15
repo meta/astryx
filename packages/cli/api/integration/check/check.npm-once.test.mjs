@@ -4,7 +4,8 @@
  * One `integration check` asks npm once what a package's own folder packs:
  * its validation's template-asset, logo and shipped-import checks share one
  * answer, and its authoring checks, which never read the shipped-import
- * notes, do not run that check (pack-state.mjs `withOnePackList`).
+ * notes, do not run that check (pack-state.mjs `npmPackedPaths`, inside
+ * `withListingCache`).
  */
 
 import * as fs from 'node:fs';
