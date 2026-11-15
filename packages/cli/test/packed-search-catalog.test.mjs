@@ -10,6 +10,7 @@
 
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import * as nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -26,6 +27,13 @@ import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
 ).version;
+
+// The CLI keeps a gather through module.registerHooks, which Node has from
+// 22.15 and 23.5. On an older Node the CLI supports (its oldest is 22.13), it
+// keeps none and gathers fresh each run, so the case that reads a kept entry
+// skips there; packed-gather-cache.records.test.mjs proves the fresh gather.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 /** @type {string} */
 let work;
@@ -248,23 +256,27 @@ describe('the stored search catalog', () => {
     }
   }, 300_000);
 
-  it('keeps a reference to the store, not a copy, and reads it back byte for byte', () => {
-    // Only a copy installed in a node_modules folder keeps gathers.
-    const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
-    const cache = fs.mkdtempSync(path.join(work, 'cache-'));
-    const env = {XDG_CACHE_HOME: cache};
-    const ask = ['search', 'button', '--json'];
-    const first = run(installed, ask, env);
-    expect(first.status, first.stderr).toBe(0);
-    const kept = path.join(cache, 'astryx', 'catalogs');
-    const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
-    expect(entries).toHaveLength(1);
-    const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
-    // No candidate is copied into the kept entry.
-    expect(entry).not.toContain('"domain":"component"');
-    expect(run(installed, ask, env)).toEqual(first);
-    expect(first).toEqual(run(CLI_ROOT, ask));
-  }, 120_000);
+  it.skipIf(!hasModuleHooks)(
+    'keeps a reference to the store, not a copy, and reads it back byte for byte',
+    () => {
+      // Only a copy installed in a node_modules folder keeps gathers.
+      const installed = packPublishedCli(fs.mkdtempSync(path.join(work, 'i-')));
+      const cache = fs.mkdtempSync(path.join(work, 'cache-'));
+      const env = {XDG_CACHE_HOME: cache};
+      const ask = ['search', 'button', '--json'];
+      const first = run(installed, ask, env);
+      expect(first.status, first.stderr).toBe(0);
+      const kept = path.join(cache, 'astryx', 'catalogs');
+      const entries = fs.readdirSync(kept).filter(n => n.startsWith('gather-'));
+      expect(entries).toHaveLength(1);
+      const entry = fs.readFileSync(path.join(kept, entries[0]), 'utf8');
+      // No candidate is copied into the kept entry.
+      expect(entry).not.toContain('"domain":"component"');
+      expect(run(installed, ask, env)).toEqual(first);
+      expect(first).toEqual(run(CLI_ROOT, ask));
+    },
+    120_000,
+  );
 
   it('is not used where the project adds to a catalog', () => {
     const config = path.join(project, 'astryx.config.mjs');
