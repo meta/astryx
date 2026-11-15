@@ -70,16 +70,16 @@ describe('FINAL-42', () => {
     "make the menus' separators thicker",
     'make the menu separators thicker',
   ])(
-    '%s: the divider, never the menu painted or a refusal',
+    "%s: the menu's own divider, never the menu painted nor every divider",
     async (q, test) => {
       needsBases(test);
       const r = await answer(q);
-      expect(r.first.length, q).toBeGreaterThan(0);
-      // (The menu's own divider, which draws the line: its separators only.)
-      for (const c of r.first)
-        expect(c, q).toMatch(/--on (?:dropdown-menu-)?divider\b/);
-      for (const c of r.all)
-        expect(c, q).not.toMatch(/--on dropdown-menu(?![\w-])/);
+      // (The menu's own divider when the census records its line; until
+      // then it cannot be kept apart, and nothing is written.)
+      if (r.all.length)
+        for (const c of r.all)
+          expect(c, q).toMatch(/--on dropdown-menu-divider\b/);
+      else expect(r.text, q).toMatch(/cannot be kept apart/);
       expect(r.text, q).not.toMatch(/couldn't work out/);
     },
     T,

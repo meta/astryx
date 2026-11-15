@@ -2129,6 +2129,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
  * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
+ * @property {{holder: string, part: string}} [placeStrict] - an element named in a place it cannot be kept to: answered only when the answer holds there (a token on the place)
  * @property {{owner: string, child: string}} [possMiss] - a possessive owner's element it does not have ("the date picker's days")
  * @property {string} [colorRefWhen] - the reference's own status or variant ("the error banner": status:error; "?:error" for a word whose axis the part's values give)
  * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
@@ -6253,10 +6254,7 @@ export function draftAnswer(ctx, env, question) {
         c.parts.splice(at, 1, {on: 'divider'});
         if (C.MAP[holder] && !c.parts.some(x => x.on === holder)) {
           c.container = holder;
-          placeNotes.push({
-            c,
-            text: `the editor themes divider everywhere: it cannot keep ${holder} apart, so this applies to every divider (${holder} is not changed)`,
-          });
+          c.placeStrict = {holder, part: 'divider'};
           continue;
         }
       }
@@ -6361,12 +6359,25 @@ export function draftAnswer(ctx, env, question) {
       }
       if (c.parts.length < 2) continue;
       if (owner && rest.length && rest.every(y => C.MAP[y.on])) {
+        // (The owner's own element of that part, "the menus' separators"
+        // as the menu's divider, when the census records its look.)
+        const ownEl = rest.length === 1 ? `${owner.on}-${rest[0].on}` : null;
+        if (
+          ownEl &&
+          C.MAP[ownEl] &&
+          Object.keys(C.MAP[ownEl].at ?? {}).some(k =>
+            /^(?:background(?:-color)?|color|border.*)$/.test(k),
+          )
+        ) {
+          c.parts = [{on: ownEl}];
+          continue;
+        }
         c.parts = rest;
         c.container = owner.on;
-        placeNotes.push({
-          c,
-          text: `the editor themes ${rest.map(x => x.on).join(', ')} everywhere: it cannot keep ${owner.on} apart, so this applies to every ${rest.map(x => x.on).join(', ')} (${owner.on} is not changed)`,
-        });
+        c.placeStrict = {
+          holder: owner.on,
+          part: rest.map(x => x.on).join(', '),
+        };
         continue;
       }
     }
@@ -8833,6 +8844,51 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} ${c.container ?? c.parts[0]?.on ?? ''}`.trim(),
       });
       continue;
+    }
+    // "the controls 40px tall", "all controls taller by 4px": the control
+    // heights every button, input and selector reads, each size moved by
+    // the same amount, for the whole theme.
+    if (
+      !c.parts.length &&
+      !c.except &&
+      /\bcontrols?\b/.test(c.text) &&
+      /\b(?:tall|high|height|taller|shorter)\b/.test(c.text)
+    ) {
+      const toks = Object.keys(TOKENS)
+        .filter(t => /^--size-element-[a-z]+$/.test(t))
+        .sort();
+      const pxOf = (/** @type {string} */ t) =>
+        lengthPx(String(resolvedValue(t) || current(t) || ''));
+      const to = tallIn(c.text);
+      const by = /\bby\s+(\d*\.?\d+)px\b/.exec(c.text)?.[1];
+      const mainPx = pxOf('--size-element-md');
+      const toPx = to ? lengthPx(to) : null;
+      const delta =
+        toPx != null && mainPx != null
+          ? toPx - mainPx
+          : (by ? Number(by) : 4) * (/\bshorter\b/.test(c.text) ? -1 : 1);
+      if (toPx != null && toPx < 0) {
+        push({text: `a height cannot be ${to}`, options: []});
+        continue;
+      }
+      const steps = toks
+        .map(t => {
+          const px = pxOf(t);
+          if (px == null) return null;
+          const next = Math.max(0, Math.round((px + delta) * 100) / 100);
+          return next === px ? null : set(t, `${next}px`);
+        })
+        .filter(st => st != null);
+      if (steps.length) {
+        const d = {
+          text: `the control heights (${toks.join(', ')}), ${toPx != null ? `the main size at ${to} and ` : ''}each size ${delta < 0 ? 'down' : 'up'} by ${Math.abs(delta)}px${by || toPx != null ? '' : ' (one step, 4px)'}: every button, input and selector reads them`,
+          options: [/** @type {Step[]} */ (steps)],
+          sequence: steps.length > 1,
+        };
+        push(d);
+        recordTop(c, d.options[0]);
+        continue;
+      }
     }
     // The unknown-part guard: a clause whose part slot holds a word how
     // knows as no part ("from widgets") is never answered for the whole
@@ -11985,6 +12041,14 @@ export function draftAnswer(ctx, env, question) {
             d.text += ` (on ${c.container} only: the token is set on ${c.container}, which the parts inside it read; elsewhere it is as it was)`;
             keptInPlace.add(c);
           }
+        }
+        // (An element named in a place that cannot be kept to it, "the
+        // dialog's buttons", "the menu separators": a write that reaches
+        // every such part is never offered; it is said.)
+        if (d && c.placeStrict && !keptInPlace.has(c) && d.options.length) {
+          d.options = [];
+          d.text = `${c.placeStrict.part} in ${c.placeStrict.holder} cannot be kept apart from every other ${c.placeStrict.part}: nothing is written (${d.text})`;
+          d.lookup = `${HOW} ${c.placeStrict.holder}`;
         }
         if (d && p && d.options.length) {
           d.text += readsNote(p.on, a);

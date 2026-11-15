@@ -77,11 +77,11 @@ describe('chaos43', () => {
     async (q, test) => {
       needsBases(test);
       const r = await answer(q);
-      expect(r.first.length).toBeGreaterThan(0);
-      // (The menu's own divider is no menu fill.)
+      // (The menu's own divider when the census records its line; until
+      // then nothing, said: never the menu, never every divider.)
       for (const c of r.all)
-        expect(c, q).not.toMatch(/--on dropdown-menu(?![\w-])/);
-      for (const c of r.all) expect(c, q).not.toMatch(/^background/);
+        expect(c, q).toMatch(/--on dropdown-menu-divider\b/);
+      if (!r.all.length) expect(r.text, q).toMatch(/cannot be kept apart/);
     },
     T,
   );
