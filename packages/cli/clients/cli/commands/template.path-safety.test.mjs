@@ -303,6 +303,36 @@ describe('template path text output', () => {
     );
   }, 60_000);
 
+  it('names the file when an absolute file path has a ./ segment', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const given = `${path.join(cwd, 'app', 'app')}${path.sep}.${path.sep}other.tsx`;
+    const result = await runCli(['template', 'blank', given], cwd);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `${given} is inside the project, so it was written as its relative path, ${path.join('app', 'app', 'other.tsx')}.`,
+    );
+  }, 60_000);
+
+  it('names the file when an absolute file path normalises a ../ segment', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const given = `${path.join(cwd, 'app', 'tmp')}${path.sep}..${path.sep}home.tsx`;
+    const result = await runCli(['template', 'blank', given], cwd);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `${given} is inside the project, so it was written as its relative path, ${path.join('app', 'home.tsx')}.`,
+    );
+  }, 60_000);
+
+  it('names the folder when an absolute folder path has a ./ segment', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const given = `${path.join(cwd, 'src')}${path.sep}.${path.sep}dash`;
+    const result = await runCli(['template', 'blank', given], cwd);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `${given} is inside the project, so it was written as its relative path, ${path.join('src', 'dash')}.`,
+    );
+  }, 60_000);
+
   it('names the commands that work when the path is outside the project', async () => {
     const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
     const scratch = path.join(tmpDir, 'astryx_dash');

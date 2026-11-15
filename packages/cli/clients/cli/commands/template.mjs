@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
+import {isFilePathArg} from '../../../foundation/fs/path-safety.mjs';
 import {
   emit,
   section,
@@ -323,12 +324,9 @@ export function registerTemplate(program) {
               givenPath,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
-            const writtenFile = path.join(outputDir, fileName);
-            const givenRelative =
-              givenPath !== undefined &&
-              givenPath.endsWith(`${path.sep}${writtenFile}`)
-                ? writtenFile
-                : outputDir;
+            const givenRelative = isFilePathArg(givenPath)
+              ? path.join(outputDir, fileName)
+              : outputDir;
             const iconText = iconLines(icons);
             emit(
               text(`Copied template to ${file}`),
