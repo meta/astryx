@@ -25,6 +25,7 @@ import {Avatar} from '@astryxdesign/core/Avatar';
 import {AvatarGroup} from '@astryxdesign/core/AvatarGroup';
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {Link} from '@astryxdesign/core/Link';
@@ -628,6 +629,7 @@ function ActivitySection({
   onCommentChange: (value: string) => void;
 }) {
   const commentFieldRef = useRef<HTMLTextAreaElement>(null);
+  const showToast = useToast();
 
   const focusCommentField = () => {
     const field = commentFieldRef.current;
@@ -701,11 +703,23 @@ function ActivitySection({
             rows={5}
           />
           <HStack gap={2} hAlign="end">
-            <Button label="Cancel" variant="ghost" />
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onClick={() => onCommentChange('')}
+            />
             <Button
               label="Comment"
               variant="primary"
               isDisabled={comment.trim().length === 0}
+              onClick={() => {
+                // Demo only: replace this toast with the call that posts the comment.
+                showToast({
+                  body: 'Demo: the comment would be posted here',
+                  uniqueID: 'comment',
+                });
+                onCommentChange('');
+              }}
             />
           </HStack>
         </VStack>
