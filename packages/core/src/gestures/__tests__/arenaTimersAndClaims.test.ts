@@ -96,12 +96,131 @@ describe('a timer that fires late', () => {
     arena.ended([{id: 1, x: 40, y: 0, time: 820}]);
   });
 
-  it('still fires on its deadline when nothing was queued', () => {
+  it('still fires on its deadline when nothing was queued, once the wait for queued input ends', () => {
+    const {clock, arena, log} = pressArena();
+    // 300 ms late: the deadline waits 50 ms for input still queued.
+    clock.runTask(800);
+    clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(850);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 870}]);
+  });
+
+  it('waits more than one task for input queued behind the block: a drift that comes after the next task still fails the press', () => {
+    const {clock, arena, log} = pressArena();
+    // The timer task runs at 800, and so does the next task. The finger's
+    // drift from 300 ms reaches the page at 816, as Chromium sends touch
+    // moves with the next frame.
+    clock.runTask(800);
+    clock.runTask(800);
+    clock.time = 816;
+    arena.moved([{id: 1, x: 40, y: 0, time: 300}]);
+    clock.runTask(850);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    expect(log).toContain('press:failed@300');
+    arena.ended([{id: 1, x: 40, y: 0, time: 870}]);
+  });
+
+  it('keeps an on-time deadline waiting while input from before it still comes late', () => {
+    const {clock, arena, log} = pressArena();
+    // A move from 400 ms reaches the page at 470, 70 ms late, inside the
+    // press's tolerance. The deadline at 500 waits 50 ms past that move.
+    clock.time = 470;
+    arena.moved([{id: 1, x: 2, y: 0, time: 400}]);
+    clock.runTask(500);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(550);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 2, y: 0, time: 570}]);
+  });
+
+  it('ends the wait at the first input stamped at or past the deadline', () => {
     const {clock, arena, log} = pressArena();
     clock.runTask(800);
-    clock.runTask(800);
+    clock.time = 820;
+    arena.moved([{id: 1, x: 1, y: 0, time: 820}]);
     expect(log).toContain('press:began@500');
-    arena.ended([{id: 1, x: 0, y: 0, time: 820}]);
+    arena.ended([{id: 1, x: 1, y: 0, time: 840}]);
+  });
+
+  it('runs a deadline that came due during a wait just after it, with no second wait', () => {
+    const clock = new TaskClock();
+    const log: string[] = [];
+    const arena: GestureArena = new GestureArena({
+      clock,
+      onTransition: (recognizer, _from, to) =>
+        log.push(`${recognizer.name}:${to}@${arena.now()}`),
+    });
+    const first = new LongPressGestureRecognizer({
+      name: 'first',
+      minimumPressDuration: 500,
+    });
+    const second = new LongPressGestureRecognizer({
+      name: 'second',
+      minimumPressDuration: 600,
+    });
+    arena.began([
+      {
+        id: 1,
+        x: 0,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [first],
+        consumer: null,
+      },
+      {
+        id: 2,
+        x: 100,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [second],
+        consumer: null,
+      },
+    ]);
+    // Both deadlines ran late behind one block. The first waits 50 ms; the
+    // second comes due during that wait, so it runs as the wait ends.
+    clock.runTask(900);
+    clock.runTask(950);
+    clock.runTask(950);
+    clock.runTask(950);
+    expect(log).toContain('first:began@500');
+    expect(log).toContain('second:began@600');
+    arena.ended([
+      {id: 1, x: 0, y: 0, time: 970},
+      {id: 2, x: 100, y: 0, time: 970},
+    ]);
+  });
+});
+
+describe('a coalesced move whose samples straddle a deadline', () => {
+  it('delivers the samples stamped before the deadline first: a drift among them fails the press', () => {
+    const {clock, arena, log} = pressArena();
+    // One move reaches the page at 520 with the sample it coalesced: the
+    // finger drifted 40 px at 480, before the press's deadline at 500.
+    clock.time = 520;
+    arena.moved([
+      {id: 1, x: 40, y: 0, time: 520, history: [{x: 40, y: 0, time: 480}]},
+    ]);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    expect(log).toContain('press:failed@480');
+    arena.ended([{id: 1, x: 40, y: 0, time: 540}]);
+  });
+
+  it('runs the deadline before the samples stamped at or after it', () => {
+    const {clock, arena, log} = pressArena();
+    clock.time = 520;
+    arena.moved([
+      {id: 1, x: 1, y: 0, time: 520, history: [{x: 1, y: 0, time: 480}]},
+    ]);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 1, y: 0, time: 540}]);
   });
 });
 

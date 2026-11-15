@@ -3081,21 +3081,42 @@ export class GestureHost {
   };
 
   /**
-   * Begins, now, the fingers of a `touchstart` this host did not hear. A
+   * Begins, now, the fingers of a `touchstart` this host did not track. A
    * recognizer that attaches while a finger is down on its element hands
    * over that finger's own touchstart. The caller passes only a touchstart
-   * whose fingers are still down.
+   * whose fingers are still down. A finger the host heard but left untracked
+   * begins too; a finger it tracks stays as it is. `pointerId` is the
+   * finger's own pointer, whose `pointerdown` came before the host listened.
    */
-  beginLateTouches(event: TouchEvent): void {
-    this.beginTouches(event, this.arena.pageTime());
+  beginLateTouches(event: TouchEvent, pointerId: number | null = null): void {
+    const [first] = touchesOf(event.changedTouches);
+    if (pointerId != null && first != null) {
+      // The finger's touchstart pairs with this pointer as it begins.
+      this.pendingPointers.set(pointerId, {
+        x: first.clientX,
+        y: first.clientY,
+        target: isNode(first.target)
+          ? landedOn(event, first.target)
+          : landedOn(event),
+      });
+    }
+    this.beginTouches(event, this.arena.pageTime(), true);
+    if (pointerId != null) {
+      // A finger that did not begin leaves no pointer waiting for it.
+      this.pendingPointers.delete(pointerId);
+    }
   }
 
-  private beginTouches(event: TouchEvent, time: number): void {
+  private beginTouches(event: TouchEvent, time: number, isLate = false): void {
+    // A late touchstart the host heard is old news: its fingers are noted.
+    const isHeard = this.processed.has(event);
     this.endWheel(time);
-    this.noteFingersDown(event);
+    if (!isLate || !isHeard) {
+      this.noteFingersDown(event);
+    }
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
-    if (!this.usesTouchEvents || !this.takeEvent(event)) {
+    if (!this.usesTouchEvents || (!this.takeEvent(event) && !isLate)) {
       return;
     }
     if (this.fingerTargets.length > 1) {
@@ -3112,6 +3133,10 @@ export class GestureHost {
     }[] = [];
     for (const touch of touchesOf(event.changedTouches)) {
       if ((touch as StylusTouch).touchType === 'stylus') {
+        continue;
+      }
+      if (isLate && this.touchIds.has(touch.identifier)) {
+        // Already tracked: the touchstart began it when the host heard it.
         continue;
       }
       // A finger number still tracked here began again: the touch it named

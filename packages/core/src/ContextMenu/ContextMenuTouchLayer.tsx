@@ -40,6 +40,13 @@ export interface ContextMenuTouchHandle {
   isTracking(): boolean;
 }
 
+/** A finger that landed before the touch layer loaded and is still down. */
+export interface LateTouch {
+  readonly touchStart: TouchEvent;
+  /** The finger's own pointer, when its `pointerdown` reached the trigger. */
+  readonly pointerId: number | null;
+}
+
 export interface ContextMenuTouchLayerProps {
   triggerRef: RefObject<HTMLElement | null>;
   /** The trigger's own visual, which the press feedback grows. */
@@ -58,10 +65,10 @@ export interface ContextMenuTouchLayerProps {
   /** The press ended with no menu: what mounted at the commit can go. */
   onCancel?: () => void;
   /**
-   * The `touchstart` of a finger that landed before this layer loaded and is
-   * still down, else null. Read once, as the layer mounts.
+   * A finger that landed before this layer loaded and is still down, else
+   * null. Read once, as the layer mounts.
    */
-  takeLateTouch?: () => TouchEvent | null;
+  takeLateTouch?: () => LateTouch | null;
 }
 
 /**
@@ -183,10 +190,13 @@ export function ContextMenuTouchLayer({
   // host. It runs after the recognizer attaches, so the host begins that
   // finger now and the hold starts at this mount.
   useEffect(() => {
-    const touchStart = takeLateTouch?.() ?? null;
+    const late = takeLateTouch?.() ?? null;
     const trigger = triggerRef.current;
-    if (touchStart != null && trigger != null) {
-      getGestureHost(trigger.ownerDocument).beginLateTouches(touchStart);
+    if (late != null && trigger != null) {
+      getGestureHost(trigger.ownerDocument).beginLateTouches(
+        late.touchStart,
+        late.pointerId,
+      );
     }
   }, [takeLateTouch, triggerRef]);
 

@@ -6,7 +6,8 @@
  * @file contextMenuTouchLoader.ts
  * @input No props: ContextMenu calls `useContextMenuTouchLayer` while its
  *   touch model applies
- * @output The touch layer after the page loads it; `null` until then
+ * @output The touch layer after the page loads it, `null` until then, and
+ *   whether its latest load failed; a new load after a failure
  * @position Between ContextMenu and its touch layer: loads the layer after
  *   first paint
  *
@@ -14,6 +15,7 @@
  */
 
 import {useEffect, useSyncExternalStore} from 'react';
+import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {ContextMenuTouchLayer as TouchLayer} from './ContextMenuTouchLayer';
 
@@ -30,7 +32,18 @@ import type {ContextMenuTouchLayer as TouchLayer} from './ContextMenuTouchLayer'
  */
 export const LOAD_CAP_MS = 2000;
 
-let layer: typeof TouchLayer | null = null;
+/** What a ContextMenu reads of the page's touch layer. */
+export interface ContextMenuTouchLayerState {
+  /** The touch layer once it has loaded, else `null`. */
+  readonly layer: typeof TouchLayer | null;
+  /** Whether the latest load failed. The next touch on a trigger asks again. */
+  readonly hasFailed: boolean;
+}
+
+const NOT_LOADED: ContextMenuTouchLayerState = {layer: null, hasFailed: false};
+
+let state: ContextMenuTouchLayerState = NOT_LOADED;
+/** Whether a load is scheduled or running. */
 let isScheduled = false;
 const listeners = new Set<() => void>();
 
@@ -38,8 +51,12 @@ const layerModule = createModuleLoader(
   async () => import('./ContextMenuTouchLayer'),
 );
 
-function getLayer(): typeof TouchLayer | null {
-  return layer;
+function getState(): ContextMenuTouchLayerState {
+  return state;
+}
+
+function getServerState(): ContextMenuTouchLayerState {
+  return NOT_LOADED;
 }
 
 function subscribe(listener: () => void): () => void {
@@ -49,8 +66,8 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function publish(loaded: typeof TouchLayer | null): void {
-  layer = loaded;
+function publish(next: ContextMenuTouchLayerState): void {
+  state = next;
   for (const listener of [...listeners]) {
     listener();
   }
@@ -58,9 +75,20 @@ function publish(loaded: typeof TouchLayer | null): void {
 
 function load(): void {
   layerModule.load().then(
-    loaded => publish(loaded.ContextMenuTouchLayer),
-    // If the chunk fails, the menu still opens from right clicks and keys.
-    () => {},
+    loaded => {
+      publish({layer: loaded.ContextMenuTouchLayer, hasFailed: false});
+    },
+    (error: unknown) => {
+      // Nothing is scheduled now, so the next touch on a trigger asks again.
+      isScheduled = false;
+      publish({layer: null, hasFailed: true});
+      warnOnce(
+        'ContextMenu:touch-layer-load',
+        'ContextMenu',
+        'the touch layer failed to load. Until a later touch loads it, a held finger opens the menu after 500 ms.',
+        error,
+      );
+    },
   );
 }
 
@@ -85,15 +113,27 @@ function scheduleLoad(): void {
 }
 
 /**
- * The touch layer after the page loads it, `null` until then. The first
- * ContextMenu that wants it asks for the load, and later ones share it. It is
- * `null` on the server and while hydrating, so both renders produce the same
- * markup.
+ * Loads the touch layer again after a failed load. A touch on a trigger calls
+ * it: that touch is the intent that asks.
+ */
+export function retryContextMenuTouchLayer(): void {
+  if (!state.hasFailed || isScheduled) {
+    return;
+  }
+  isScheduled = true;
+  load();
+}
+
+/**
+ * The touch layer after the page loads it, `null` until then, and whether its
+ * latest load failed. The first ContextMenu that wants it asks for the load,
+ * and later ones share it. It is `null` on the server and while hydrating, so
+ * both renders produce the same markup.
  */
 export function useContextMenuTouchLayer(
   isWanted: boolean,
-): typeof TouchLayer | null {
-  const current = useSyncExternalStore(subscribe, getLayer, () => null);
+): ContextMenuTouchLayerState {
+  const current = useSyncExternalStore(subscribe, getState, getServerState);
   // Syncs with the browser's frame and idle timers, which decide when the
   // touch layer loads.
   useEffect(() => {
@@ -101,7 +141,7 @@ export function useContextMenuTouchLayer(
       scheduleLoad();
     }
   }, [isWanted]);
-  return isWanted ? current : null;
+  return isWanted ? current : NOT_LOADED;
 }
 
 /**
@@ -109,12 +149,13 @@ export function useContextMenuTouchLayer(
  * it.
  */
 export async function __loadContextMenuTouchLayerForTest(): Promise<void> {
-  publish((await layerModule.load()).ContextMenuTouchLayer);
+  const loaded = await layerModule.load();
+  publish({layer: loaded.ContextMenuTouchLayer, hasFailed: false});
   isScheduled = true;
 }
 
 /** Test only: drops the loaded layer and clears the scheduled load. */
 export function __resetContextMenuTouchLayerForTest(): void {
   isScheduled = false;
-  publish(null);
+  publish(NOT_LOADED);
 }
