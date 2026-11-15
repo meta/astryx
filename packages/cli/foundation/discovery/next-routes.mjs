@@ -30,10 +30,10 @@ export function nextAppAt(dir) {
 }
 
 /**
- * The folders a Next app reads its routes from, as Next resolves them,
- * relative to the app folder: `app` and `pages` at the root, or `src/app`
- * and `src/pages` when the root has neither (Next ignores the `src/` ones
- * beside a root `app/` or `pages/`). Null for a router the app does not use.
+ * The folders a Next app reads its routes from, relative to the app folder,
+ * found as Next finds them: each of `app` and `pages` at the root, else in
+ * `src/`. Null for a router the app does not use. Next refuses to build an
+ * app whose `app` and `pages` folders are in different folders.
  * @param {string} dir the app folder
  * @returns {{app: 'app' | 'src/app' | null, pages: 'pages' | 'src/pages' | null}}
  */
@@ -46,23 +46,17 @@ export function nextRouteFolders(dir) {
       return false;
     }
   };
-  const inRoot = isDirectory('app') || isDirectory('pages');
-  return {
-    app: inRoot
-      ? isDirectory('app')
-        ? 'app'
-        : null
-      : isDirectory('src/app')
-        ? 'src/app'
-        : null,
-    pages: inRoot
-      ? isDirectory('pages')
-        ? 'pages'
-        : null
-      : isDirectory('src/pages')
-        ? 'src/pages'
-        : null,
-  };
+  const app = isDirectory('app')
+    ? 'app'
+    : isDirectory('src/app')
+      ? 'src/app'
+      : null;
+  const pages = isDirectory('pages')
+    ? 'pages'
+    : isDirectory('src/pages')
+      ? 'src/pages'
+      : null;
+  return {app, pages};
 }
 
 /**

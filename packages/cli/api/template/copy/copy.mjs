@@ -24,6 +24,7 @@ import {
 } from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
 import {templateDestination} from '../../../foundation/discovery/template-destination.mjs';
+import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
 import {
   NO_ICON_SETS,
   mapTemplateIcons,
@@ -92,7 +93,7 @@ export function templateCopy(
           'The template is written only inside the project. Give a path inside it, or print the source.',
         [
           {
-            name: `${command} ${folder}`,
+            name: `${command} ${quoteCommandArgument(folder)}`,
             reason: `write the ${match.type} inside the project`,
           },
           {name: command, reason: 'print the source and write nothing'},

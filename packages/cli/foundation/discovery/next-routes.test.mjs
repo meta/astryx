@@ -29,13 +29,14 @@ const write = rel => {
 };
 
 describe('nextRouteFolders', () => {
-  it('reads the root folders, and src/ only when the root has neither', () => {
+  it('finds each routes folder at the root, else in src/, as Next finds it', () => {
     expect(nextRouteFolders(dir)).toEqual({app: null, pages: null});
     mkdir('src/app');
     mkdir('src/pages');
     expect(nextRouteFolders(dir)).toEqual({app: 'src/app', pages: 'src/pages'});
+    // Next refuses to build this one: its app and pages folders are apart.
     mkdir('pages');
-    expect(nextRouteFolders(dir)).toEqual({app: null, pages: 'pages'});
+    expect(nextRouteFolders(dir)).toEqual({app: 'src/app', pages: 'pages'});
     mkdir('app');
     expect(nextRouteFolders(dir)).toEqual({app: 'app', pages: 'pages'});
   });

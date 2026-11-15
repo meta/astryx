@@ -27,6 +27,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
   nestedRootLayouts,
   nextAppAt,
+  nextRouteFolders,
   sameUrlPage,
   urlSegments,
 } from '../../foundation/discovery/next-routes.mjs';
@@ -824,9 +825,8 @@ function checkPlacement(cwd, dir, where, retry) {
     return checkPlacement(owner, dir, where, p =>
       retry(p == null ? null : shown(cwd, path.resolve(owner, p))),
     );
-  const served = [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(
-    r => fs.existsSync(r) && fs.statSync(r).isDirectory(),
-  );
+  const routesFolder = nextRouteFolders(cwd).app;
+  const served = routesFolder ? path.join(cwd, routesFolder) : undefined;
   const fallback = retry(
     served
       ? shown(cwd, path.join(served, 'theme-preview'))
@@ -1190,8 +1190,8 @@ function previewDir(cwd, where, opts = {}) {
       return {dir: older, app: null};
     }
   }
-  // The routes folder Next serves: app/ when both app/ and src/app/ are there.
-  const served = routes[0];
+  const servedFolder = nextRouteFolders(cwd).app;
+  const served = servedFolder ? path.join(cwd, servedFolder) : undefined;
   const nested =
     served && !known ? (nestedRootLayouts(served)[0] ?? null) : null;
   const dir = known ?? (served && path.join(nested ?? served, 'theme-preview'));
@@ -1435,20 +1435,19 @@ export function appWiring(ctx, slug, data) {
 }
 
 /**
- * The routes folder of a Next app in `dir` (app/, else src/app/, with a
- * root layout), when its package.json depends on `next`; else null.
+ * The App Router folder of a Next app in `dir`, when its package.json
+ * depends on `next` and that folder holds a root layout; else null.
  * @param {string} dir
  * @returns {string | null}
  */
 function nextRoutesOf(dir) {
   if (!nextAppAt(dir)) return null;
-  return (
-    [path.join(dir, 'app'), path.join(dir, 'src', 'app')].find(
-      r =>
-        fs.existsSync(r) &&
-        fs.readdirSync(r).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)),
-    ) ?? null
-  );
+  const folder = nextRouteFolders(dir).app;
+  if (!folder) return null;
+  const routes = path.join(dir, folder);
+  return fs.readdirSync(routes).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+    ? routes
+    : null;
 }
 
 /**

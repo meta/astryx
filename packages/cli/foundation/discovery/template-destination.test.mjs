@@ -73,14 +73,13 @@ describe('templateDestination', () => {
     expect(templateDestination(dir, 'page', 'login')).toBe('pages/login-2.tsx');
   });
 
-  it('uses src/pages only when the root has neither app/ nor pages/, as Next does', () => {
+  it('reads the Pages Router folder at the root, else in src/, as Next finds it', () => {
     nextApp();
     mkdir('src/pages');
     expect(templateDestination(dir, 'page', 'login')).toBe(
       'src/pages/login.tsx',
     );
     mkdir('pages');
-    mkdir('src/app');
     expect(templateDestination(dir, 'page', 'login')).toBe('pages/login.tsx');
   });
 
