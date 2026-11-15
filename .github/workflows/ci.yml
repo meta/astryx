@@ -1450,6 +1450,16 @@ jobs:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
 
+      # render.charts.browser.test.mjs shows a rendered page's charts at a
+      # phone's, a tablet's and a desktop's width. The Node legs run without
+      # a browser and skip it; with ASTRYX_RENDER_CHART_BROWSER set, a
+      # missing browser fails it.
+      - name: Render chart browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_CHART_BROWSER: '1'
+        run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -5162,7 +5172,7 @@ jobs:
           STORIES: ${{ steps.touched.outputs.changed_stories }}
         run: |
           if [ "$WIDE" = true ]; then
-            echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
+            echo "Wide change ($COUNT components): each label runs only its own full suite: ci:run-visual for Visual, ci:run-a11y for Accessibility, ci:run-rtl for RTL."
           else
             echo "No component changed; no component audit."
           fi

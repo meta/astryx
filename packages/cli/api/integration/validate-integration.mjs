@@ -89,6 +89,11 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
+import {
+  filesOnDisk,
+  shippedFiles,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -129,6 +134,8 @@ export {validateLoadedIntegration, isListedIssue};
  *   Which definitions each icon set leaves unmapped (spec:AST-084 FR15).
  * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
+ * @property {Array<{file: string, specifier: string, reason: string}>} [shippedImports]
+ *   the relative imports whose files npm could not be asked about
  *   what the public-import check could not judge
  * @property {import('../../foundation/discovery/template-icon-notes.mjs').TemplateIconUnchecked[]} [templateIconsUnchecked]
  *   the template icon imports the undeclared-icon check could not judge
@@ -318,8 +325,11 @@ async function findUnreachableContributionIssues(
  * Shared core for the local and installed entry points.
  * @param {string} packageDir
  * @param {{name: string, version?: string}} identity
- * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean}} [options]
+ * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean, shippedImports?: boolean}} [options]
  *   `own`: the package is the one being authored in the current folder;
+ *   `shippedImports`: check the relative imports of the modules the package
+ *   ships (default true; `integration verify` checks them in the packed
+ *   tree instead, which holds exactly what npm packs);
  *   `cwd`: the folder whose package manager an install command names;
  *   `iconSets`: read the experimental `experimental.iconSets` root (default
  *   true). Off, the root is not resolved or checked and `iconSets` is not
@@ -334,6 +344,7 @@ async function validateAtPackageDir(
     own = false,
     cwd = packageDir,
     iconSets = true,
+    shippedImports = true,
   } = {},
 ) {
   /** @type {Issue[]} */
@@ -541,6 +552,24 @@ async function validateAtPackageDir(
       ...publicImports.notes.map(note => ({...note, next: true})),
     );
   result.publicImports = publicImports.report;
+  // Each relative import of the modules the package ships, resolved as an
+  // app's bundler resolves it against the files the package ships: what npm
+  // packs for the package's own folder, and the files on disk for an
+  // installed or packed one, which are exactly what npm packed. Each one no
+  // shipped file answers is a `next` note until the next minor release makes
+  // it a warning (architecture:cli-surface INV35).
+  if (shippedImports) {
+    const shipped = shippedImportFindings(packageDir, {
+      files: own ? shippedFiles(packageDir) : filesOnDisk(packageDir),
+      manifestFile: loaded.__manifestFile,
+    });
+    (result.listed ??= []).push(
+      ...shipped.findings.map(finding => listed(finding.code, finding.message)),
+    );
+    if (shipped.unchecked.length > 0) {
+      result.shippedImports = shipped.unchecked;
+    }
+  }
   if (scanUnreachable) {
     issues.push(
       ...(await findUnreachableContributionIssues(
@@ -588,9 +617,14 @@ async function validateAtPackageDir(
  * + a single sibling astryx.integration.{ts,mjs,js}. A missing manifest yields
  * `found: false` (guidance, not an error) so callers stay exit-0.
  * @param {string} [cwd]
+ * @param {{shippedImports?: boolean}} [options] `shippedImports: false`
+ *   skips the shipped-import check, for a caller that checks the packed tree
  * @returns {Promise<ValidateResult>}
  */
-export async function validateLocalIntegration(cwd = process.cwd()) {
+export async function validateLocalIntegration(
+  cwd = process.cwd(),
+  {shippedImports = true} = {},
+) {
   const pkgJsonPath = findNearestPackageJson(cwd);
   if (!pkgJsonPath) {
     return {found: false, reason: 'no_package_json', issues: []};
@@ -633,7 +667,7 @@ export async function validateLocalIntegration(cwd = process.cwd()) {
   const result = await validateAtPackageDir(
     packageDir,
     {name, version: pkg.version},
-    {scanUnreachable: true, own: true},
+    {scanUnreachable: true, own: true, shippedImports},
   );
   (result.listed ??= []).unshift(
     ...fields,
@@ -1002,6 +1036,17 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Relative imports whose files npm could not be asked about, when
+      // there are any: listed, never failed on.
+      ...(result.found && result.shippedImports
+        ? {
+            shippedImports: {
+              status: 'checked',
+              findings: [],
+              unchecked: result.shippedImports,
+            },
+          }
         : {}),
       // Examples whose names could not be judged, when there are any.
       ...(exampleCode && exampleCode.unchecked.length > 0

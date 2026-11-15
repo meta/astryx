@@ -103,6 +103,33 @@ const SYSTEM_FAMILIES = new Set([
   'liberation serif',
   'dejavu sans',
   'dejavu sans mono',
+  // The interface and text fonts the systems ship for Chinese, Japanese and
+  // Korean, which CJK stylesheets name.
+  'pingfang sc',
+  'pingfang tc',
+  'pingfang hk',
+  'hiragino sans',
+  'hiragino sans gb',
+  'hiragino kaku gothic pron',
+  'hiragino mincho pron',
+  'apple sd gothic neo',
+  'microsoft yahei',
+  'microsoft yahei ui',
+  'microsoft jhenghei',
+  'microsoft jhenghei ui',
+  'simsun',
+  'simhei',
+  'nsimsun',
+  'meiryo',
+  'yu gothic',
+  'yu mincho',
+  'ms gothic',
+  'ms mincho',
+  'malgun gothic',
+  // The same Windows fonts by their Chinese names.
+  '微软雅黑',
+  '宋体',
+  '黑体',
 ]);
 
 /**
