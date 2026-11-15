@@ -18,13 +18,21 @@ afterEach(() => {
 /** @param {string} rel */
 const mkdir = rel => fs.mkdirSync(path.join(dir, rel), {recursive: true});
 
+/** @param {Record<string, unknown>} pkg */
+const writePackage = pkg =>
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+
+const nextApp = () => writePackage({dependencies: {next: '^16.0.0'}});
+
 describe('templateDestination', () => {
-  it('puts a page in the root App Router folder, where Next serves it', () => {
+  it('puts a page in the root App Router folder of a Next app, where Next serves it', () => {
+    nextApp();
     mkdir('app');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe('app/dashboard');
   });
 
   it('puts a page in src/app when that is the App Router folder', () => {
+    writePackage({devDependencies: {next: '16.4.0'}});
     mkdir('src/app');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
       'src/app/dashboard',
@@ -32,12 +40,14 @@ describe('templateDestination', () => {
   });
 
   it('prefers the root app/ folder when both exist, as Next does', () => {
+    nextApp();
     mkdir('app');
     mkdir('src/app');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe('app/dashboard');
   });
 
-  it('never names src/pages beside an app/ folder, which Next refuses to build', () => {
+  it('never names src/pages beside the app/ folder of a Next app, which Next refuses to build', () => {
+    nextApp();
     mkdir('app');
     mkdir('src/pages');
     expect(templateDestination(dir, 'page', 'login')).toBe('app/login');
@@ -47,13 +57,24 @@ describe('templateDestination', () => {
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
       'src/pages/dashboard',
     );
+    nextApp();
     mkdir('pages');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
       'src/pages/dashboard',
     );
   });
 
+  it('keeps src/pages in a project that is not a Next app, whatever its folders are called', () => {
+    writePackage({dependencies: {vite: '^8.0.0'}});
+    mkdir('app');
+    mkdir('src/app');
+    expect(templateDestination(dir, 'page', 'dashboard')).toBe(
+      'src/pages/dashboard',
+    );
+  });
+
   it('does not count a file named app as the App Router folder', () => {
+    nextApp();
     fs.writeFileSync(path.join(dir, 'app'), '');
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
       'src/pages/dashboard',
@@ -61,6 +82,7 @@ describe('templateDestination', () => {
   });
 
   it('puts a block in src/components in every project', () => {
+    nextApp();
     mkdir('app');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
       'src/components/ButtonShowcase',
@@ -68,6 +90,7 @@ describe('templateDestination', () => {
   });
 
   it('skips a folder that already exists, so the command runs as printed', () => {
+    nextApp();
     mkdir('app/settings');
     mkdir('app/settings-2');
     fs.writeFileSync(path.join(dir, 'app', 'settings-3'), '');

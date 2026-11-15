@@ -82,13 +82,17 @@ describe('template path safety', () => {
     ]);
   });
 
-  it('names the App Router folder in an app that has one, and the named command writes there', async () => {
+  it('names the App Router folder in a Next app that has one, and the named command writes there', async () => {
     for (const [router, expected] of [
       ['app', 'app/blank'],
       ['src/app', 'src/app/blank'],
     ]) {
       const cwd = path.join(tmpDir, `project-${router.replace('/', '-')}`);
       fs.mkdirSync(path.join(cwd, router), {recursive: true});
+      fs.writeFileSync(
+        path.join(cwd, 'package.json'),
+        JSON.stringify({dependencies: {next: '^16.0.0'}}),
+      );
 
       const err = await templateApi('blank', {
         targetPath: path.join(tmpDir, 'scratch'),
@@ -109,6 +113,10 @@ describe('template path safety', () => {
   it('names a fresh folder when the app already has one for that id', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(path.join(cwd, 'app', 'blank'), {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({dependencies: {next: '^16.0.0'}}),
+    );
     fs.writeFileSync(path.join(cwd, 'app', 'blank', 'page.tsx'), 'mine\n');
 
     const err = await templateApi('blank', {
