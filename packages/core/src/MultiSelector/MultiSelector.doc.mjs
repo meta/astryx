@@ -242,6 +242,7 @@ export const docs = {
           name: 'hasSelectAll',
           type: 'boolean',
           description: 'Whether to show a select-all checkbox.',
+          default: 'false',
         },
         {
           name: 'selectAllLabel',
@@ -254,6 +255,7 @@ export const docs = {
           type: 'boolean',
           description:
             'Whether to show a search input for filtering options. As the user types, the match count (or "No results found") is announced to screen readers via a polite live region. The search field has built-in affordances: a leading magnifier icon and, once a query is typed, a trailing clear (✕) button that resets the query and returns focus to the input.',
+          default: 'false',
         },
         {
           name: 'searchPlaceholder',
@@ -286,6 +288,7 @@ export const docs = {
           name: 'isDisabled',
           type: 'boolean',
           description: 'Disables the selector.',
+          default: 'false',
         },
         {
           name: 'isReadOnly',
@@ -310,6 +313,7 @@ export const docs = {
           name: 'isLabelHidden',
           type: 'boolean',
           description: 'Visually hides the label while keeping it accessible.',
+          default: 'false',
         },
         {
           name: 'description',
@@ -317,19 +321,28 @@ export const docs = {
           description: 'Helper text displayed below the label.',
         },
         {
+          name: 'labelTooltip',
+          type: 'string',
+          description:
+            'Tooltip text shown by an info icon at the end of the label.',
+        },
+        {
           name: 'isOptional',
           type: 'boolean',
           description: 'Marks the field as optional.',
+          default: 'false',
         },
         {
           name: 'isRequired',
           type: 'boolean',
           description: 'Marks the field as required.',
+          default: 'false',
         },
         {
           name: 'isLoading',
           type: 'boolean',
           description: 'Shows a loading spinner in the trigger.',
+          default: 'false',
         },
         {
           name: 'status',
@@ -424,6 +437,12 @@ export const docs = {
             'Key handler on the trigger button. Runs after the built-in keyboard model and is skipped for keys it handles and cancels.',
         },
         {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description:
+            "Ref to the trigger: the button that carries the combobox role, the accessible name, and the value. With renderTrigger, the caller's control.",
+        },
+        {
           name: 'containerXstyle',
           type: 'StyleXStyles',
           description:
@@ -501,6 +520,11 @@ export const docs = {
           'Use presentation="adaptive" when the multi-selector should become a bottom sheet on compact touch screens.',
       },
       {
+        guidance: true,
+        description:
+          'MultiSelector implements the WAI-ARIA APG Combobox pattern (https://www.w3.org/WAI/ARIA/apg/patterns/combobox/) with a multi-select listbox, or a grid once an option carries an action. ArrowDown on the trigger opens the list, the arrows move the highlight, Enter toggles an option and keeps the list open, and Escape closes it and returns focus to the trigger. Give it a label even when isLabelHidden hides it.',
+      },
+      {
         guidance: false,
         description: 'Use for single-value selection; use Selector instead.',
       },
@@ -533,6 +557,8 @@ export const docsZh = {
         changeAction: '变化时的异步操作，在 onChange 之后触发。',
         placeholder: '未选择值时显示的占位文本。',
         size: '选择器的尺寸变体。',
+        variant:
+          '触发器的视觉样式：input 为表单使用的带边框输入样式；secondary 与当前主题的次要按钮一致（默认无边框、中性填充），用于导航和工具栏；ghost 无边框、透明，与幽灵按钮一致，用于工具栏。',
         triggerDisplay: '在触发器中显示选中项的方式。',
         formatValue:
           '格式化 triggerDisplay="count" 或 "labels" 时的触发器文本。接收选中项（value 及解析后的 label），数量为 items.length。triggerDisplay="badges" 不使用此属性。',
@@ -558,6 +584,14 @@ export const docsZh = {
         isOptional: '将字段标记为可选。',
         isRequired: '将字段标记为必填。',
         isLoading: '在触发器中显示加载旋转器。',
+        labelTooltip: '标签末尾信息图标显示的工具提示文本。',
+        indicatorPosition:
+          '复选框位于选项行的哪一侧。end 将其推到行的远端，全选行也一样。',
+        width:
+          '字段宽度（数字为像素，字符串按原样使用，例如 "100%"）。作用于整个字段（标签、控件和状态），使它们保持对齐。',
+        startIcon: '显示在选择器触发器开头的图标。',
+        hasClear: '有选中值时显示清除按钮。',
+        isDefaultOpen: '下拉面板是否在挂载时打开。',
         status: '带可选消息的验证状态。',
         statusVariant:
           '状态消息的放置方式：attached 直接叠加在输入框下方；detached 作为独立元素浮于下方并留有间距。',
@@ -573,6 +607,7 @@ export const docsZh = {
         onFocus: '触发器的焦点处理函数，在选择器自身的焦点处理之前运行。',
         onKeyDown:
           '触发器的按键处理函数，在内置键盘模型之后运行；该模型处理并取消的按键不会传给它。',
+        ref: '指向触发器的 ref：承载 combobox 角色、无障碍名称和值的按钮；使用 renderTrigger 时为调用方的控件。',
         containerXstyle:
           '字段容器（标签、控件和状态整体）的 StyleX 样式。在 InputGroup 内或 `horizontal-labels` FormLayout 中无效。不接受根级 xstyle、className 和 style。',
         containerClassName: '字段容器的类名，作用目标同 containerXstyle。',
@@ -607,6 +642,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Enable select-all when most users will want all or nearly all options selected.',
+      },
+      {
+        guidance: true,
+        description:
+          'MultiSelector implements the WAI-ARIA APG Combobox pattern (https://www.w3.org/WAI/ARIA/apg/patterns/combobox/) with a multi-select listbox, or a grid once an option carries an action. ArrowDown on the trigger opens the list, the arrows move the highlight, Enter toggles an option and keeps the list open, and Escape closes it and returns focus to the trigger. Give it a label even when isLabelHidden hides it.',
       },
       {
         guidance: false,
@@ -664,6 +704,11 @@ export const docsDense = {
           'Use variant="secondary" beside secondary buttons or segmented controls and variant="ghost" beside ghost buttons; prefer statusVariant="tooltip" for compact validation status.',
       },
       {
+        guidance: true,
+        description:
+          'Implements APG Combobox w/ multi-select listbox (grid once an option has an action): ArrowDown opens, arrows move, Enter toggles and keeps it open, Escape closes and returns focus. Always set label, even with isLabelHidden.',
+      },
+      {
         guidance: false,
         description: 'Use for single-value selection; use Selector instead.',
       },
@@ -717,6 +762,12 @@ export const docsDense = {
         isOptional: 'marks optional',
         isRequired: 'marks required',
         isLoading: 'spinner in trigger',
+        labelTooltip: 'info-icon tooltip at end of label',
+        indicatorPosition: 'checkbox edge of option row: start or end',
+        width: 'field width (number = px); sizes label, control, status',
+        startIcon: 'icon at start of trigger',
+        hasClear: 'clear button when values selected',
+        isDefaultOpen: 'starts open on mount',
         status: 'validation status w/ optional message',
         statusVariant:
           'status message placement; secondary and ghost detach attached by default; use tooltip for compact toolbars.',
@@ -731,7 +782,9 @@ export const docsDense = {
         onClick:
           'trigger click; runs after the built-in toggle, cannot cancel it',
         onFocus: 'trigger focus; runs before built-in focus handling',
-        onKeyDown: 'trigger keys; runs after the built-in keyboard model',
+        onKeyDown:
+          'trigger keys; runs after the built-in keyboard model, skipped for keys it handles and cancels',
+        ref: "trigger element; with renderTrigger, the caller's control",
         containerXstyle:
           'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
         containerClassName: 'Class name for the field container.',
