@@ -3561,9 +3561,6 @@ describe('review fixes', () => {
     // A mouse waits out UIKit's catch delay, even on a goTo move.
     expect(f.pager.isSettling).toBe(true);
     await advance(120, f.clock);
-    // The catch's deadline ran late: it waits 50 ms for queued input.
-    f.clock.runDue(now);
-    await advance(50, f.clock);
     f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(false);
     expect(refuses()).toBe(false);

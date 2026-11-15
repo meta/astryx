@@ -36,9 +36,10 @@
  * timestamp runs first, at its own deadline. A long press therefore begins at
  * exactly touch-down + 500 ms even when the main thread was blocked and the
  * timer callback came late, and a test drives the whole machine with explicit
- * timestamps and no real time at all. A deadline whose timer runs late waits
- * while input from before it still reaches the page late. A deadline among a
- * coalesced move's samples runs between them.
+ * timestamps and no real time at all. While the latest contact is a finger or
+ * a pen, a deadline whose timer runs late waits while input from before it
+ * still reaches the page late. A deadline among a coalesced move's samples
+ * runs between them.
  *
  * SYNC: When modified, update GestureRecognizer.ts and
  * __tests__/arena.test.ts.
@@ -54,6 +55,7 @@ import type {
   GestureEventContext,
   GestureState,
   GestureTouch,
+  PointerKind,
   TouchBeganInput,
   TouchConsumer,
   TouchInput,
@@ -185,6 +187,11 @@ export class GestureArena {
   /** The latest input that reached the page late: its own time, and when. */
   private lateInput: {time: number; arrivedAt: number} | null = null;
   /**
+   * Whether the latest contact is a finger or a pen. Only then does a late
+   * deadline wait for queued input; a mouse keeps the one-task yield.
+   */
+  private isLatestContactFingerOrPen = false;
+  /**
    * When the latest wait for queued input ended with none still coming late.
    * A deadline that came due during that wait is not late on its own.
    */
@@ -257,7 +264,13 @@ export class GestureArena {
     if (inputs.length === 0) {
       return;
     }
-    this.noteArrival(inputs[0].time);
+    this.isLatestContactFingerOrPen = isFingerOrPen(
+      inputs[inputs.length - 1].pointerType,
+    );
+    this.noteArrival(
+      inputs[0].time,
+      inputs.some(input => isFingerOrPen(input.pointerType)),
+    );
     this.run(inputs[0].time, () => {
       const newTouches = new Map<GestureRecognizer, GestureTouch[]>();
       const created: TouchRecord[] = [];
@@ -356,7 +369,8 @@ export class GestureArena {
    * gesture hear of it, as of any touch off their hit path.
    */
   untrackedBegan(input: TouchBeganInput): void {
-    this.noteArrival(input.time);
+    this.isLatestContactFingerOrPen = isFingerOrPen(input.pointerType);
+    this.noteArrival(input.time, this.isLatestContactFingerOrPen);
     if (!this.active.some(recognizer => recognizer.numberOfTouches > 0)) {
       return;
     }
@@ -392,7 +406,10 @@ export class GestureArena {
     if (inputs.length === 0) {
       return;
     }
-    this.noteArrival(inputs[0].time);
+    this.noteArrival(
+      inputs[0].time,
+      inputs.some(input => this.isFingerOrPenContact(input.id)),
+    );
     // A coalesced move carries the samples since the previous one. A deadline
     // among them runs between them: the samples stamped before it come first.
     let rest = inputs;
@@ -447,7 +464,10 @@ export class GestureArena {
     if (inputs.length === 0) {
       return dispositions;
     }
-    this.noteArrival(inputs[0].time);
+    this.noteArrival(
+      inputs[0].time,
+      inputs.some(input => this.isFingerOrPenContact(input.id)),
+    );
     this.run(inputs[0].time, () => {
       const changed = this.update(inputs, 'ended');
       const context = this.context();
@@ -472,7 +492,10 @@ export class GestureArena {
 
   /** The system took these contacts (`touchcancel`, a mouse `pointercancel`). */
   cancelled(ids: ReadonlyArray<number>, time: number): void {
-    this.noteArrival(time);
+    this.noteArrival(
+      time,
+      ids.some(id => this.isFingerOrPenContact(id)),
+    );
     this.run(time, () => {
       const touches = this.liveTouches(ids);
       for (const touch of touches) {
@@ -503,7 +526,10 @@ export class GestureArena {
    * browser took stays the browser's (FR14).
    */
   browserTookOver(ids: ReadonlyArray<number>, time: number): void {
-    this.noteArrival(time);
+    this.noteArrival(
+      time,
+      ids.some(id => this.isFingerOrPenContact(id)),
+    );
     this.run(time, () => {
       const touches = this.liveTouches(ids).filter(
         touch => !touch.takenByBrowser,
@@ -1076,12 +1102,17 @@ export class GestureArena {
     return clamped;
   }
 
-  /** Notes an input that reaches the page late, against its own time. */
-  private noteArrival(time: number): void {
+  /** Notes a finger's or pen's input that reaches the page late. */
+  private noteArrival(time: number, isFingerOrPenInput: boolean): void {
     const arrivedAt = this.clock.now();
-    if (arrivedAt - time > LATE_INPUT_MS) {
+    if (isFingerOrPenInput && arrivedAt - time > LATE_INPUT_MS) {
       this.lateInput = {time, arrivedAt};
     }
+  }
+
+  /** Whether the contact with this id is a finger or a pen. */
+  private isFingerOrPenContact(id: number): boolean {
+    return isFingerOrPen(this.records.get(id)?.touch.pointerType);
   }
 
   /**
@@ -1270,9 +1301,13 @@ export class GestureArena {
       const now = this.clock.now();
       // A deadline that came due during a quiet wait is late only past it.
       const lateBy = now - Math.max(dueAt, this.quietSince);
+      // Only the deadline's own timer counts as late. Only input from before
+      // the deadline extends a wait, so a wait ends.
+      const isLateTimer = after === 'deadline' && lateBy > LATE_TIMER_MS;
       if (
+        this.isLatestContactFingerOrPen &&
         after !== 'yield' &&
-        (lateBy > LATE_TIMER_MS || this.hasLateInputBefore(earliest, now))
+        (isLateTimer || this.hasLateInputBefore(earliest, now))
       ) {
         // Behind a blocked page, input from before the deadline can still be
         // queued. A touch move can also reach the page a frame after other
@@ -1306,6 +1341,11 @@ export class GestureArena {
       delay,
     );
   }
+}
+
+/** Whether a contact of this kind is a finger or a pen. */
+function isFingerOrPen(pointerType: PointerKind | undefined): boolean {
+  return pointerType === 'touch' || pointerType === 'pen';
 }
 
 /** Each input cut to its samples stamped before `time`; inputs with none go. */
