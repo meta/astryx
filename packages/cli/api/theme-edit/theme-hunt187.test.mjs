@@ -67,7 +67,7 @@ const restore = async () => {
 
 describe('an icon registry in a module of the theme folder', () => {
   it(
-    "loads in the editor's checks, and the app copy carries the module",
+    "loads in the editor's checks, and the app copy carries the compiled module",
     async () => {
       fs.writeFileSync(
         path.join(dir, 'icons.ts'),
@@ -87,10 +87,15 @@ describe('an icon registry in a module of the theme folder', () => {
         );
         expect(set.data.notChecked).toBeNull();
         await themeEditShow('t', {cwd});
-        const copy = path.join(cwd, 'src/themes/t/icons.ts');
-        expect(fs.readFileSync(copy, 'utf8')).toContain(
-          'export const icons = {check: MyCheck};',
-        );
+        // The build compiles the registry beside its module, and the app
+        // copy carries the compiled module the copied build imports.
+        expect(
+          fs.readFileSync(path.join(cwd, 'src/themes/t/t.js'), 'utf8'),
+        ).toContain("from './t.modules/icons.ts.js'");
+        const copy = path.join(cwd, 'src/themes/t/t.modules/icons.ts.js');
+        const carried = fs.readFileSync(copy, 'utf8');
+        expect(carried).toContain('export const icons = {');
+        expect(carried).toContain('check: MyCheck');
         const check = await runCli(
           [...COMPILE, 'themes/t/t.theme.ts', '--check'],
           cwd,
