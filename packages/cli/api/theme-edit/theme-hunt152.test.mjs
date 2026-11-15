@@ -159,11 +159,19 @@ describe('values', () => {
   );
 
   it(
-    'a typo of a system font is refused with the family',
+    'a family near a system font is kept as typed, with the line that sets the system font',
     async () => {
+      // The editor cannot tell a typo of a system font from a real family
+      // it does not know (Corben is no Corbel): it keeps it, and says.
       const r = await cli([...ED, 'set', 't', 'font', 'arail']);
-      expect(names(r)[0]).toMatch(/ set t font arial$/);
-      expect((await follow(names(r)[0])).error).toBeUndefined();
+      expect(r.error).toBeUndefined();
+      expect(r.data.setting.value).toBe('arail');
+      const line =
+        /\S+ (?:\S+ )*?experimental theme editor set t font arial/.exec(
+          r.data.notes.join('\n'),
+        )?.[0];
+      expect(line).toBeDefined();
+      expect((await follow(String(line))).error).toBeUndefined();
     },
     T,
   );

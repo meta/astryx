@@ -1046,9 +1046,12 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
+ * @param {Array<{name: string, near: string}>} [notes] filled with each family kept as
+ *   typed that is near a font a system ships (a family the editor does not
+ *   know may be a real one: Corben is no typo of Corbel)
  * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
-function fontListProblem(value, ctx, presets = false) {
+function fontListProblem(value, ctx, presets = false, notes = []) {
   // Copy debris (a trailing `;`, `!important`, a comment) is read away
   // first, as it is for any value.
   const pieces = familyPieces(withoutCopyDebris(pastedFont(value) ?? value));
@@ -1192,18 +1195,36 @@ function fontListProblem(value, ctx, presets = false) {
         ...(presets && pieces.length === 1 ? PRESETS : []),
         ...systemFontFamilies(),
       ];
-      const preset =
-        !generic && !isSystemFamily(cssUnescape(name))
-          ? (() => {
-              const hits = known.filter(k => typoNear(bare(name), bare(k)));
-              return hits.length === 1 ? hits[0] : null;
-            })()
-          : null;
-      if (generic || preset) {
+      /** The one name a typo is near, a name listed twice counted once. @param {string[]} names */
+      const oneNear = names => {
+        const hits = [
+          ...new Set(
+            names
+              .filter(k => typoNear(bare(name), bare(k)))
+              .map(k => k.toLowerCase()),
+          ),
+        ];
+        return hits.length === 1 ? hits[0] : null;
+      };
+      const unknown = !generic && !isSystemFamily(cssUnescape(name));
+      const preset = unknown ? oneNear(known) : null;
+      // Only a generic or a preset the editor offers is read as a typo: a
+      // family it does not know near a font a system ships may be a real
+      // family (Corben, Gabriela), so it is kept as typed, with a note.
+      const editorWord =
+        preset != null &&
+        (GENERIC_FAMILIES.includes(preset) ||
+          (presets &&
+            pieces.length === 1 &&
+            PRESETS.some(p => p.toLowerCase() === preset)));
+      if (generic || editorWord) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
         asTyped.set(kept.length - 1, JSON.stringify(name));
-      } else kept.push(name);
+      } else {
+        if (preset) notes.push({name, near: preset});
+        kept.push(name);
+      }
       continue;
     }
     // Words only (no number or size): part of the name unless the whole
@@ -3202,6 +3223,27 @@ export function checkSetting(
   if (!unset && typeof value === 'string' && !s.note) {
     const typo = fallbackVarTypo(value, ctx.project.core.tokenDefaults ?? {});
     if (typo) s.note = typo;
+  }
+  // A family kept as typed that is near a font a system ships: noted, as
+  // the family may be a real one the editor does not know.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    !s.note &&
+    (thing === 'font' ||
+      thing === 'font-family' ||
+      thing.startsWith('--font-family'))
+  ) {
+    /** @type {Array<{name: string, near: string}>} */
+    const near = [];
+    fontListProblem(value, ctx, thing === 'font', near);
+    if (near.length)
+      s.note = near
+        .map(
+          n =>
+            `"${n.name}" is kept as typed: the editor does not know that family, and a font a system ships is spelled near it; if that was meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}`,
+        )
+        .join('; ');
   }
   return s;
 }
