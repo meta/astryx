@@ -1258,7 +1258,7 @@ export class GestureArena {
         (lateBy > LATE_TIMER_MS || this.hasLateInputBefore(earliest, now))
       ) {
         // Behind a blocked page, input from before the deadline can still be
-        // queued, and a touch move can reach the page a frame after other
+        // queued. A touch move can also reach the page a frame after other
         // input. Wait while that input still comes. An input stamped at or
         // past the deadline runs the deadline first, which ends the wait.
         this.realTimerDeadline = earliest;
