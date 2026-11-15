@@ -1729,10 +1729,11 @@ const QUESTIONS_3 = [
     },
   ],
   [
-    'Can you please make the context menu darker? Thanks!',
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    'Can you please make the trigger menu darker? Thanks!',
     // A part Core draws only once a press opens it has no fill read: the
     // answer asks for a color.
-    {top: null, text: /has not read the fill of context-menu/},
+    {top: null, text: /has not read the fill of trigger-menu/},
   ],
   [
     'make inputs taller (44px)',
@@ -4325,13 +4326,14 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('context-menu', {cwd, theme: 'q'});
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    const {data} = await themeEditHow('trigger-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
     expect(data.unrecorded.reason).toMatch(
-      /what context-menu reads is unknown/,
+      /what trigger-menu reads is unknown/,
     );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on context-menu",
+      "set q background-color '#f3f4f6' --on trigger-menu",
     );
   });
 

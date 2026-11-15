@@ -182,12 +182,9 @@ export function desktopMatches(query) {
  * is kept once, as it was when it opened.
  * @param {any} host the element the page was drawn in
  * @param {(fn: () => void) => void} flushSync
- * @param {{rightClick?: boolean}} [opts] `rightClick: false`: no right
- *   click (a drawing of many parts at once, each drawn in turn, whose
- *   presses alone say what it opens)
  * @returns {Promise<string[]>}
  */
-export async function openLayerMarkup(host, flushSync, opts = {}) {
+export async function openLayerMarkup(host, flushSync) {
   const g = /** @type {any} */ (globalThis);
   const tick = settled;
   /** @type {Set<string>} */
@@ -291,12 +288,7 @@ export async function openLayerMarkup(host, flushSync, opts = {}) {
   // event passes every element around it, as a person's right click does.
   let target = host.firstElementChild;
   while (target?.firstElementChild) target = target.firstElementChild;
-  if (
-    opts.rightClick !== false &&
-    !out.length &&
-    target &&
-    host.querySelector('template')
-  ) {
+  if (!out.length && target && host.querySelector('template')) {
     send(target, 'contextmenu', {button: 2, clientX: 1, clientY: 1});
     await tick();
     keep();

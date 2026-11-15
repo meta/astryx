@@ -600,9 +600,9 @@ async function drawOpenLayers(elements, React) {
     const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
     try {
       flushSync(() => root.render(createElement(Alone, null, element)));
-      // (What presses open, as when the parts were drawn together: a right
-      // click is for a part drawn in its own place, the sheet's.)
-      layers.push(...(await openLayerMarkup(host, flushSync, {rightClick: false})));
+      // (A part that opens nothing on a press and holds a layer, a context
+      // menu's area, is right-clicked, as one drawn in its own place is.)
+      layers.push(...(await openLayerMarkup(host, flushSync)));
     } catch {
       // A part that cannot be drawn there adds no overlays.
     }
