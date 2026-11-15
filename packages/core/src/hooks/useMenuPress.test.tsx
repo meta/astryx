@@ -285,7 +285,7 @@ describe('useMenuPress — an input hold over the menu', () => {
   });
 });
 
-describe('useMenuPressInternal — rowSelector', () => {
+describe('useMenuPressInternal — wholeRowSelector', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'elementFromPoint');
   });
@@ -298,16 +298,16 @@ describe('useMenuPressInternal — rowSelector', () => {
    */
   function RowList({
     onSelect,
-    rowSelector,
+    wholeRowSelector,
     isPublic = false,
   }: {
     onSelect: (label: string) => void;
-    rowSelector?: string;
+    wholeRowSelector?: string;
     isPublic?: boolean;
   }) {
     const menuRef = useRef<HTMLUListElement>(null);
     const usePress = isPublic ? useMenuPress : useMenuPressInternal;
-    const press = usePress({menuRef, itemSelector: ACTION, rowSelector});
+    const press = usePress({menuRef, itemSelector: ACTION, wholeRowSelector});
     const actionRow = (label: string, isDisabled = false) => (
       <li key={label} data-testid={`row-${label}`}>
         <span data-testid={`icon-${label}`}>*</span>
@@ -351,7 +351,7 @@ describe('useMenuPressInternal — rowSelector', () => {
 
   it('a press on the rest of a row picks that row’s own item', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} rowSelector="li" />);
+    render(<RowList onSelect={onSelect} wholeRowSelector="li" />);
     press(screen.getByTestId('icon-B'));
     expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
     onSelect.mockClear();
@@ -363,7 +363,7 @@ describe('useMenuPressInternal — rowSelector', () => {
   });
 
   it('a finger that moves onto the rest of a row highlights the row’s item', () => {
-    render(<RowList onSelect={() => {}} rowSelector="li" />);
+    render(<RowList onSelect={() => {}} wholeRowSelector="li" />);
     const a = screen.getByRole('button', {name: 'A'});
     Object.defineProperty(document, 'elementFromPoint', {
       configurable: true,
@@ -381,7 +381,7 @@ describe('useMenuPressInternal — rowSelector', () => {
 
   it('picks nothing for a row with no enabled item, even with a control in its content, a row around other rows, or content outside every row', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} rowSelector="li" />);
+    render(<RowList onSelect={onSelect} wholeRowSelector="li" />);
     press(screen.getByTestId('icon-Off'));
     press(screen.getByTestId('row-Off'));
     press(screen.getByRole('heading', {name: 'Section'}));
@@ -391,7 +391,7 @@ describe('useMenuPressInternal — rowSelector', () => {
 
   it('the public useMenuPress takes no row lookup, even from an untyped caller', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} rowSelector="li" isPublic />);
+    render(<RowList onSelect={onSelect} wholeRowSelector="li" isPublic />);
     press(screen.getByTestId('icon-B'));
     expect(onSelect).not.toHaveBeenCalled();
   });

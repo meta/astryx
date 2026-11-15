@@ -82,7 +82,7 @@ export function MenuBottomSheetActionList({
   const menuPress = useMenuPressInternal({
     menuRef: listRef,
     itemSelector: SHEET_ROW_SELECTOR,
-    rowSelector: SHEET_WHOLE_ROW_SELECTOR,
+    wholeRowSelector: SHEET_WHOLE_ROW_SELECTOR,
   });
 
   const renderItem = (

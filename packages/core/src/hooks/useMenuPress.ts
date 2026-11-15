@@ -152,20 +152,21 @@ const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 let isModelActivation = false;
 
 /**
- * The item of the row that holds `element`: a direct child of that row. A
- * control inside the row's content is not its item, and a row that holds
- * other rows (a section around its rows) has no item of its own.
+ * The item that `element`'s whole row acts through: the direct child of that
+ * row that matches `itemSelector`. A control inside the row's content is not
+ * that item, and a row that holds other rows (a section around its rows) has
+ * no item of its own.
  */
-function findRowItem(
+function findRowAction(
   element: Element,
   itemSelector: string,
-  rowSelector: string,
+  wholeRowSelector: string,
 ): HTMLElement | null {
-  const row = element.closest(rowSelector);
-  if (row == null) {
+  const wholeRow = element.closest(wholeRowSelector);
+  if (wholeRow == null) {
     return null;
   }
-  for (const child of row.children) {
+  for (const child of wholeRow.children) {
     if (child.matches(itemSelector)) {
       return child as HTMLElement;
     }
@@ -276,7 +277,7 @@ export interface UseMenuPressInternalOptions extends UseMenuPressOptions {
    * then picks the row's item: the direct child of the row that matches
    * `itemSelector`. If no direct child matches, the pointer picks no item.
    */
-  rowSelector?: string;
+  wholeRowSelector?: string;
 }
 
 export interface UseMenuPressReturn {
@@ -429,9 +430,9 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
-  // The row lookup is internal: an untyped caller's `rowSelector` does not
+  // The row lookup is internal: an untyped caller's `wholeRowSelector` does not
   // reach the model.
-  const {rowSelector: _rowSelector, ...options} =
+  const {wholeRowSelector: _wholeRowSelector, ...options} =
     input as UseMenuPressInternalOptions;
   return useMenuPressInternal(options);
 }
@@ -515,7 +516,7 @@ export function useMenuPressInternal(
 
   const resolvePoint = useCallback(
     (event: PointerEvent): ResolvedPoint => {
-      const {menuRef, triggerRef, itemSelector, rowSelector, hitTest} =
+      const {menuRef, triggerRef, itemSelector, wholeRowSelector, hitTest} =
         optionsRef.current;
       const menu = menuRef.current;
       const doc = getDocument();
@@ -557,8 +558,8 @@ export function useMenuPressInternal(
       let row: HTMLElement | null = null;
       if (isInMenu && element != null) {
         row = element.closest<HTMLElement>(itemSelector);
-        if (row == null && rowSelector != null) {
-          row = findRowItem(element, itemSelector, rowSelector);
+        if (row == null && wholeRowSelector != null) {
+          row = findRowAction(element, itemSelector, wholeRowSelector);
         }
         if (row != null && !isInMenuTree(row, root)) {
           row = null;
