@@ -1866,9 +1866,11 @@ function clausesOf(q, partWords) {
   // a list of the part's variants or states before its noun names the part
   // once for each ("primary buttons and secondary buttons …"), so every
   // reader below sees each one.
+  // The ask said after the noun ("… buttons blue and cards red") goes with
+  // each item, so a list followed by another ask is still one ask per item.
   const named = q.replace(
-    /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\s+([a-z][a-z-]*)\b/gi,
-    (m, list, noun) => {
+    /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\s+([a-z][a-z-]*)\b([^,;.]*?)(?=\s+(?:and|but|or|then|plus)\s+|[,;.]|$)/gi,
+    (m, list, noun, tail) => {
       const words = String(list)
         .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
         .map(w => w.trim().toLowerCase())
@@ -1878,7 +1880,7 @@ function clausesOf(q, partWords) {
         stateWord(w) != null ||
         partWords.some(([re, x]) => x.when && re.test(` ${w} ${noun} `));
       return isNoun && words.length > 1 && words.every(modifies)
-        ? words.map(w => `${w} ${noun}`).join(' and ')
+        ? words.map(w => `${w} ${noun}${tail}`).join(' and ')
         : m;
     },
   );
@@ -3067,6 +3069,8 @@ export function draftAnswer(ctx, env, question) {
     // the thing a "them" or "it" there stands for.
     /** @type {string[]} */
     const kept = [];
+    /** Excepts said before any ask, for the ask after them. @type {string[]} */
+    const pendingExcept = [];
     let carry = '';
     let carryPart = '';
     for (const x of segments) {
@@ -3078,8 +3082,11 @@ export function draftAnswer(ctx, env, question) {
           .map(([re]) => re.exec(x.toLowerCase())?.[0])
           .find(Boolean);
         const state = stateWord(x.toLowerCase());
-        if (kept.length && (named || state))
-          kept.push(named ? `except ${named}` : `except on ${state}`);
+        // (One said before the ask is the ask's except all the same.)
+        if (named || state)
+          (kept.length ? kept : pendingExcept).push(
+            named ? `except ${named}` : `except on ${state}`,
+          );
         carry = '';
         carryPart = '';
         continue;
@@ -3107,6 +3114,7 @@ export function draftAnswer(ctx, env, question) {
       carryPart = '';
     }
     if (carryPart) kept.push(carryPart);
+    if (kept.length) kept.push(...pendingExcept);
     question = kept.filter(Boolean).join(', ');
   }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */

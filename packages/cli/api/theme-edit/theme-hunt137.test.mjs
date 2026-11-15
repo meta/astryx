@@ -97,6 +97,29 @@ describe('lists and excepts', () => {
     T,
   );
   it(
+    'a list followed by another ask still names each item',
+    async test => {
+      needsBases(test);
+      expect(
+        (await answer('make primary and ghost buttons blue and cards red'))
+          .first,
+      ).toEqual([
+        "set n background-color '#2563eb' --on button --when variant:primary",
+        "set n background-color '#2563eb' --on button --when variant:ghost",
+        "set n background-color '#dc2626' --on card",
+      ]);
+      expect(
+        (await answer('make hovered and pressed buttons orange and cards red'))
+          .first,
+      ).toEqual([
+        "set n background-color '#f97316' --on button --state hover",
+        "set n background-color '#f97316' --on button --state active",
+        "set n background-color '#dc2626' --on card",
+      ]);
+    },
+    T,
+  );
+  it(
     'an except of states pins each state',
     async test => {
       needsBases(test);
@@ -131,6 +154,12 @@ describe('lists and excepts', () => {
       const r = await answer('never round the inputs; make everything rounder');
       expect(r.first[0]).toBe('set n corners more');
       expect(r.first.join('\n')).toMatch(/--on text-input/);
+      // ("don't make …" before the ask is read the same.)
+      const dont = await answer(
+        "don't make cards rounder, make everything rounder",
+      );
+      expect(dont.first[0]).toBe('set n corners more');
+      expect(dont.first.join('\n')).toMatch(/--on card/);
     },
     T,
   );
