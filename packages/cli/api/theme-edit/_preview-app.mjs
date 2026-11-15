@@ -3715,8 +3715,13 @@ async function rankedPages(
   // build itself starts from the app shell ("checkout"). Otherwise a page is
   // added only when build is sure of its start: never from the app shell,
   // nor from a page its page pick gives less than a clear fit.
+  // Only a start the page pick chose is judged by its fit: a direct match
+  // stands on search's own match ("a login page").
   const loose =
-    !!start && typeof start.fit === 'number' && start.fit < CLEAR_FIT;
+    !!start &&
+    start.basis === 'closest' &&
+    typeof start.fit === 'number' &&
+    start.fit < CLEAR_FIT;
   const unrelated =
     !named &&
     !exact &&
@@ -3742,7 +3747,9 @@ async function rankedPages(
         ? `No page template relates to "${cut.typed}". ${cut.why}: put the words that name the page first, or name a page to add it anyway.`
         : loose
           ? `No page template is a clear fit for "${words}": build's closest, ${start.name}, is a loose fit. Name a page to add it anyway.`
-          : `No page template relates to "${words}". Name a page to add it anyway.`,
+          : start && start.basis === 'fallback' && pages.length
+            ? `No page template is a clear fit for "${words}": build starts this idea from the app shell. Name a page to add it anyway.`
+            : `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: [
           ...suggest(offered),

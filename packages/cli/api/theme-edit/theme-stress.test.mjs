@@ -323,7 +323,9 @@ describe('preview picker refusals', () => {
       themeEditPreviewAdd('a weather widget', {cwd, theme: 's'}),
     );
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.message).toContain('No page template relates');
+    expect(r.message).toContain(
+      'No page template is a clear fit for "a weather widget": build starts this idea from the app shell.',
+    );
     expect(r.run[0]).toMatch(/preview add --template \S+ --theme s$/);
     expect(
       fs.readFileSync(

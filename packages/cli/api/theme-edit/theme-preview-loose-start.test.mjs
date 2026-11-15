@@ -112,7 +112,9 @@ describe('a page from a description', () => {
       themeEditPreviewAdd(CONCERT, {cwd, theme: 't'}),
     );
     expect(e.code).toBe('ERR_NOT_FOUND');
-    expect(e.message).toContain(`No page template relates to "${CONCERT}"`);
+    expect(e.message).toContain(
+      `No page template is a clear fit for "${CONCERT}": build starts this idea from the app shell.`,
+    );
     expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
     // The first line offered names a page, and it adds that page.
     const line = /** @type {string} */ (e.run[0]);
@@ -201,5 +203,21 @@ describe('a page from a description', () => {
       `No page template is a clear fit for "${words}"`,
     );
     expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
+  }, 240_000);
+
+  it('is added for an idea build matches directly, whatever its fit', async () => {
+    const r = await themeEditPreviewAdd('a login page', {cwd, theme: 't'});
+    expect(r.data.added.length).toBe(1);
+  }, 240_000);
+
+  it('is never refused as a loose fit from a direct match', async () => {
+    startOverride.next = s => ({
+      ...s,
+      name: 'dashboard',
+      basis: 'direct',
+      fit: CLEAR_FIT / 2,
+    });
+    const r = await themeEditPreviewAdd(CONCERT, {cwd, theme: 't'});
+    expect(r.data.added.length).toBe(1);
   }, 240_000);
 });
