@@ -76,22 +76,39 @@ export function useTruncationTooltipInterest(
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once. Text that measures on
-  // interest loads it after the page paints as well, before any measurement.
+  // interest has measured nothing yet, so it starts the load after the page's
+  // next paint (a frame, then a task): the page shows first, and the first
+  // hover usually finds the module loaded.
   useEffect(() => {
     if ((!isEnabled && measure == null) || tooltip != null) {
       return;
     }
     let isCurrent = true;
-    tooltipModule.load().then(
-      loaded => {
-        if (isCurrent) {
-          setTooltip(() => loaded.Tooltip);
-        }
-      },
-      () => {},
-    );
+    const load = () => {
+      tooltipModule.load().then(
+        loaded => {
+          if (isCurrent) {
+            setTooltip(() => loaded.Tooltip);
+          }
+        },
+        () => {},
+      );
+    };
+    let frame: number | undefined;
+    let task: ReturnType<typeof setTimeout> | undefined;
+    if (isEnabled) {
+      load();
+    } else {
+      frame = requestAnimationFrame(() => {
+        task = setTimeout(load, 0);
+      });
+    }
     return () => {
       isCurrent = false;
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
+      clearTimeout(task);
     };
   }, [isEnabled, measure, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({

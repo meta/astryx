@@ -1460,6 +1460,8 @@ describe('Table', () => {
     render(
       <FreshTable data={users} columns={columns} textOverflow="truncate" />,
     );
+    // The load waits for the next paint, so the commit starts none.
+    expect(loads.count).toBe(0);
     await waitFor(() => {
       expect(loads.count).toBe(1);
     });
