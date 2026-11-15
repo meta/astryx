@@ -150,7 +150,7 @@ export default function TechnicalDocumentationPage() {
               </Heading>
               <List density="compact" listStyle="disc">
                 <ListItem label="Node.js 18+" />
-                <ListItem label="React 18 or 19" />
+                <ListItem label="React 19 or later" />
                 <ListItem label="A package manager (npm, yarn, or pnpm)" />
               </List>
             </VStack>
