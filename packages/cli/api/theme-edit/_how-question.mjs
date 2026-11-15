@@ -2566,10 +2566,13 @@ function clausesOf(q, partWords) {
     // goes with the amount of the thing named, never a size change too.
     // "more transparent", "less opaque": the part's opacity, never its
     // background made transparent too.
+    // (A ring's see-through is its color's alpha, read with the ring.)
     const seeThrough =
       /\b(more|less) (transparent|translucent|see-through|opaque)\b/.test(
         text,
-      ) && parts.length > 0;
+      ) &&
+      parts.length > 0 &&
+      !/\b(focus )?rings?\b/.test(text);
     const aspects = seeThrough
       ? ['opacity']
       : exactFactor(text) != null && aspects0.length > 1
@@ -5436,6 +5439,22 @@ export function draftAnswer(ctx, env, question) {
       if (side && p.on === 'top-nav-item') p.on = 'side-nav-item';
       if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
     }
+  // "table row dividers", "the lines between table rows": the lines a
+  // table draws between its rows (its cells' borders), never the Divider
+  // part; their color is the row's border color.
+  for (const c of clauses)
+    if (
+      c.parts.some(p => p.on === 'divider') &&
+      c.parts.some(p => /^table(-|$)/.test(p.on))
+    ) {
+      c.parts = c.parts.filter(p => p.on !== 'divider');
+      c.aspects = [
+        ...new Set([
+          ...c.aspects.filter(a => a !== 'background' && a !== 'text'),
+          'border',
+        ]),
+      ];
+    }
   // A clause with no part takes the part of the clause before it ("a dark
   // card with white text"); one with values but no aspect takes the aspect
   // of a neighbor ("cards: 8px radius; buttons: 4px").
@@ -7260,6 +7279,8 @@ export function draftAnswer(ctx, env, question) {
       /** @type {string[]} */
       const said = [];
       let cannotKeep = false;
+      /** Parts whose keep needs two states at once, already said. */
+      const twoStates = new Set();
       for (const p of excepted) {
         seenPart(p.on);
         const name = `${p.on}${p.when ? ` (${p.when.replace(':', ' ')})` : ''}${p.state ? ` when ${p.state}` : ''}`;
@@ -7420,6 +7441,19 @@ export function draftAnswer(ctx, env, question) {
               own.includes(String(p.state)) &&
               !/^--/.test(prop)
             ) {
+              // Both at once takes the other state as a --when (a checkbox
+              // marks it checked=checked); a part that has it only as a state
+              // (a switch) cannot name the two together, and that is the
+              // reason given.
+              if (!C.variantValues(one(p.on))[st.state]?.length) {
+                if (!cannotKeep)
+                  said.push(
+                    `it cannot be kept apart: keeping ${name} means ${p.on} ${st.state} and ${p.state} at once, and set names one --state at a time (${st.state} is a state of ${p.on}, not a --when)`,
+                  );
+                cannotKeep = true;
+                twoStates.add(p);
+                return [null];
+              }
               const at = C.MAP[one(p.on)]?.at?.[prop] ?? {};
               const both = Object.entries(at).find(([key]) => {
                 const [attrs, ...rest] = key.split(' ');
@@ -7630,6 +7664,7 @@ export function draftAnswer(ctx, env, question) {
           continue;
         }
         if (keep.every(k => k === UNTOUCHED || k == null)) {
+          if (twoStates.has(p)) continue;
           said.push(
             perLevel && /^level:/.test(p.when ?? '')
               ? `${name} keeps its own size: its own token is left out`
@@ -10690,71 +10725,172 @@ export function draftAnswer(ctx, env, question) {
         ) {
           const nowW = Number(m[1]);
           const nowColor = m[2].trim();
-          const color = colorFor(c, 'fill');
-          const remove = c.neg || /\b(remove|hide|get rid of)\b/.test(c.text);
-          const widthAsk =
-            /\b(thick|thin|width|wide|strength|stronger|weaker|bolder|subtler)/.test(
-              c.text,
-            ) ||
-            (!color && c.lengths.length > 0);
-          const px = c.lengths[0]
-            ? /^(\d*\.?\d+)px$/.exec(c.lengths[0])?.[1]
+          // A question about the ring ("how is the focus ring on inputs
+          // drawn"): what it is, nothing written.
+          if (
+            /^\s*(how|what|which|where|why|is|are|does|do)\b/i.test(q) ||
+            /\?\s*$/.test(q)
+          )
+            return {
+              text: `${scope} shows focus with a ring in its box-shadow while focused (${ringNow}); it draws no outline`,
+              options: [],
+              lookup: `${HOW} ${scope}`,
+            };
+          // A status said with the part ("error inputs"): that status's
+          // fields only, from what Core draws for them while focused.
+          const statusWhen = c.parts.find(x => x.on === scope)?.when;
+          const status = /^status:([\w-]+)$/.exec(
+            String(statusWhen ?? ''),
+          )?.[1];
+          const statusNow = status
+            ? (Object.entries(shadows).find(
+                ([k]) =>
+                  new RegExp(`\\bstatus=${status}\\b`).test(k) &&
+                  /\s:focus-within(?![\w-])/.test(k),
+              )?.[1] ?? 'none')
             : null;
-          const exact = exactFactor(c.text);
-          const w = px
-            ? Number(px)
-            : widthAsk
-              ? Math.max(
-                  1,
-                  exact != null
-                    ? Math.round(nowW * exact)
-                    : c.dir === 'less' || /\b(thin|weaker|subtler)/.test(c.text)
-                      ? nowW - 1
-                      : nowW + 1,
-                )
-              : nowW;
-          const strength = /\bstrength\b/.test(c.text) && !px;
+          /** What a clause asks of the ring. @param {Clause} x */
+          const specOf = x => {
+            const color = colorFor(x, 'fill');
+            const ra = RELATIVE_ALPHA.exec(x.text);
+            // "50% more transparent", "fainter": the ring's color at that
+            // share less of its alpha.
+            const fainter = ra
+              ? (ra[2] === 'more') === (ra[3] !== 'opaque')
+                ? Number(ra[1])
+                : 0
+              : /\b(more transparent|less opaque|fainter)\b/.test(x.text)
+                ? 50
+                : 0;
+            const px = x.lengths[0]
+              ? /^(\d*\.?\d+)px$/.exec(x.lengths[0])?.[1]
+              : null;
+            const widthAsk =
+              !fainter &&
+              (/\b(thick|thin|width|wide|strength|stronger|weaker|bolder|subtler)/.test(
+                x.text,
+              ) ||
+                (!color && !!px));
+            const exact = exactFactor(x.text);
+            const w = px
+              ? Number(px)
+              : widthAsk
+                ? Math.max(
+                    1,
+                    exact != null
+                      ? Math.round(nowW * exact)
+                      : x.dir === 'less' ||
+                          /\b(thin|weaker|subtler)/.test(x.text)
+                        ? nowW - 1
+                        : nowW + 1,
+                  )
+                : nowW;
+            const base = color ?? nowColor;
+            return {
+              color,
+              w,
+              fainter,
+              changed: !!color || widthAsk || fainter > 0,
+              strength: /\bstrength\b/.test(x.text) && !px,
+              paint: fainter
+                ? `color-mix(in srgb, ${base} ${Math.max(0, 100 - fainter)}%, transparent)`
+                : base,
+            };
+          };
+          const remove = c.neg || /\b(remove|hide|get rid of)\b/.test(c.text);
+          if (remove && status && /^\s*none\s*$/.test(String(statusNow)))
+            return {
+              text: `${status} fields on ${scope} draw no focus ring now: Core shows none for them while focused, so there is nothing to remove`,
+              options: [],
+              lookup: `${HOW} ${scope}`,
+            };
           if (remove)
             return {
-              text: `no focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that box-shadow none while focused. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
+              text: `no focus ring on ${scope}${status ? ` (${status} fields)` : ''}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that box-shadow none while focused. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
               options: [
                 [
                   set('box-shadow', 'none', {
                     on: scope,
+                    ...(statusWhen ? {when: statusWhen} : {}),
                     state: 'focus-within',
                   }),
                 ],
               ],
             };
-          if (color || widthAsk) {
-            const paint = color ?? nowColor;
-            const value = !c.mode
-              ? paint
+          const mine = specOf(c);
+          if (mine.changed) {
+            // One mode: the other keeps its ring, or takes what the
+            // clause for that mode asks ("blue in light mode and red in
+            // dark mode": one ring for both). A width that differs by mode
+            // is a layer per mode, the other mode's one see-through.
+            const partner = c.mode
+              ? clauses.find(
+                  x =>
+                    x !== c &&
+                    x.mode &&
+                    x.mode !== c.mode &&
+                    x.parts.some(pp => pp.on === 'focus-ring'),
+                )
+              : null;
+            const other = partner ? specOf(partner) : null;
+            // The other mode's clause is answered here, in the one ring:
+            // it asks nothing more (its color is no border of its own).
+            if (partner) {
+              partner.text = '';
+              partner.colors = [];
+              partner.lengths = [];
+              partner.aspects = [];
+              partner.parts = [];
+            }
+            const keep = {w: nowW, paint: nowColor};
+            const L = !c.mode
+              ? mine
+              : c.mode === 'light'
+                ? mine
+                : (other ?? keep);
+            const D = !c.mode
+              ? mine
               : c.mode === 'dark'
-                ? `light-dark(${nowColor}, ${paint})`
-                : `light-dark(${paint}, ${nowColor})`;
-            // The statuses that draw no ring while focused: each kept so.
-            const statuses = [
-              ...new Set(
-                Object.keys(shadows)
-                  .map(k => /\bstatus=([\w-]+)/.exec(k)?.[1])
-                  .filter(Boolean),
-              ),
-            ].filter(
-              st =>
-                !Object.entries(shadows).some(
-                  ([k, x]) =>
-                    new RegExp(`\\bstatus=${st}\\b`).test(k) &&
-                    /\s:focus-within(?![\w-])/.test(k) &&
-                    !/^\s*none\s*$/.test(String(x)),
-                ),
-            );
+                ? mine
+                : (other ?? keep);
+            const value = !c.mode
+              ? `inset 0 0 0 ${mine.w}px ${mine.paint}`
+              : L.w === D.w
+                ? `inset 0 0 0 ${L.w}px light-dark(${L.paint}, ${D.paint})`
+                : `inset 0 0 0 ${L.w}px light-dark(${L.paint}, transparent), inset 0 0 0 ${D.w}px light-dark(transparent, ${D.paint})`;
+            // The statuses that draw no ring while focused: each kept so
+            // (a status the question names is the one written).
+            const statuses = status
+              ? []
+              : [
+                  ...new Set(
+                    Object.keys(shadows)
+                      .map(k => /\bstatus=([\w-]+)/.exec(k)?.[1])
+                      .filter(Boolean),
+                  ),
+                ].filter(
+                  st =>
+                    !Object.entries(shadows).some(
+                      ([k, x]) =>
+                        new RegExp(`\\bstatus=${st}\\b`).test(k) &&
+                        /\s:focus-within(?![\w-])/.test(k) &&
+                        !/^\s*none\s*$/.test(String(x)),
+                    ),
+                );
+            const said = [
+              mine.color ? `in ${mine.color}` : '',
+              mine.w !== nowW ? `${mine.w}px wide (now ${nowW}px)` : '',
+              mine.fainter ? `${mine.fainter}% more transparent` : '',
+            ]
+              .filter(Boolean)
+              .join(' and ');
             return {
-              text: `the focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that ring ${color ? `in ${color}` : ''}${color && w !== nowW ? ' and ' : ''}${w !== nowW ? `${w}px wide (now ${nowW}px)` : ''} while focused${strength ? '; "strength" read as the width of the ring' : ''}${c.mode ? ` in ${c.mode} mode` : ''}${statuses.length ? `; ${statuses.join(', ')} fields draw no ring while focused and keep none` : ''}`,
+              text: `the focus ring on ${scope}${status ? ` (${status} fields)` : ''}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that ring ${said} while focused${mine.strength ? '; "strength" read as the width of the ring' : ''}${c.mode ? ` in ${c.mode} mode${partner ? ` and as asked in ${partner.mode} mode` : ', the other mode kept'}` : ''}${statuses.length ? `; ${statuses.join(', ')} fields draw no ring while focused and keep none` : ''}`,
               options: [
                 [
-                  set('box-shadow', `inset 0 0 0 ${w}px ${value}`, {
+                  set('box-shadow', value, {
                     on: scope,
+                    ...(statusWhen ? {when: statusWhen} : {}),
                     state: 'focus-within',
                   }),
                   ...statuses.map(st =>
@@ -12407,6 +12543,45 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         const color = colorFor(c, 'fill');
+        // "outline buttons", "the danger buttons outline only": the outline
+        // look, never a border added over the fill. All buttons: the
+        // buttons dial's outline rung; one variant: its fill cleared, and
+        // its own fill color (what Core paints it) as its border and text.
+        if (
+          one(on) === 'button' &&
+          /\boutlined?\b/.test(c.text) &&
+          !/\bfocus\b/.test(c.text) &&
+          !c.neg &&
+          !c.lengths[0] &&
+          !color
+        ) {
+          const variant = /^variant:([\w-]+)$/.exec(String(f.when ?? ''))?.[1];
+          if (!f.when && !f.state)
+            return {
+              text: 'outline buttons: the buttons dial, outline (the main button an accent outline with accent text)',
+              options: [[set('buttons', 'outline')]],
+            };
+          const paint = variant
+            ? Object.entries(C.MAP.button?.at?.['background-color'] ?? {}).find(
+                ([k, x]) =>
+                  !k.includes(' ') &&
+                  k.split(',').includes(`variant=${variant}`) &&
+                  !/^\s*(transparent|none)\s*$/.test(String(x)),
+              )?.[1]
+            : null;
+          if (paint)
+            return {
+              text: `${variant} buttons outlined: no fill, and ${paint} (its fill now) as its border and text`,
+              options: [
+                [
+                  set('background-color', 'transparent', f),
+                  set('border', `var(--border-width) solid ${paint}`, f),
+                  set('color', String(paint), f),
+                ],
+              ],
+              sequence: true,
+            };
+        }
         const borderWay = themeColorWay(
           c,
           color,
@@ -12518,6 +12693,32 @@ export function draftAnswer(ctx, env, question) {
         const prop = side ? `border-${side}` : 'border';
         const own = C.MAP[one(on)]?.own ?? {};
         const hasBorder = 'border-style' in own || 'border-width' in own;
+        // A part with no border of its own whose lines are drawn by the
+        // parts inside it (a table row's dividers are its cells' borders):
+        // the color those borders read, on this part, so they take it.
+        if (!hasBorder && color && !width && !style && !side) {
+          const lineRead = (/** @type {{props: string[]}} */ r) =>
+            r.props.some(x =>
+              /^border(-(top|bottom|left|right))?(-color)?$/.test(x),
+            );
+          const kids = (C.MAP[one(on)]?.contains ?? []).filter(k =>
+            C.partReads(k, 'border').some(lineRead),
+          );
+          const tokens = [
+            ...new Set(
+              kids.flatMap(k =>
+                C.partReads(k, 'border')
+                  .filter(r => lineRead(r) && /^--color-/.test(r.token))
+                  .map(r => r.token),
+              ),
+            ),
+          ];
+          if (kids.length && tokens.length === 1)
+            return {
+              text: `the lines${where}: ${on} draws no border of its own; ${kids.join(', ')} inside it draw${kids.length > 1 ? '' : 's'} its lines from ${tokens[0]}, so that color on ${on}`,
+              options: [[set(tokens[0], color, {...f, ...modeOf(c)})]],
+            };
+        }
         if (hasBorder && !side) {
           /** @type {Step[][]} */
           const opts = [];

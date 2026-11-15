@@ -5448,6 +5448,23 @@ export function compileTheme(ctx, data, base) {
       mb[prop] = v;
     } else b[prop] = v;
     if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
+    // A hover or press shadow on a ringed part: Core draws its hover ring
+    // only while the part is not focused, so a focused part keeps its
+    // focus ring under the mouse. The focus look, written after the
+    // theme's hover rule, wins while both hold (a resting shadow of the
+    // theme's composes it already).
+    else if (
+      kebab(prop) === 'box-shadow' &&
+      /^(hover|active)$/.test(String(s.state)) &&
+      !data.settings.some(
+        y =>
+          y.source === 'property' &&
+          kebab(y.thing) === 'box-shadow' &&
+          !y.state &&
+          partsOf(ctx, y).includes(target),
+      )
+    )
+      withRingStates({...s, state: undefined}, target, null);
   };
   /**
    * A resting shadow on a part that draws rings in its box-shadow in some
@@ -5461,11 +5478,14 @@ export function compileTheme(ctx, data, base) {
    * reach it. A write for one set (`--when status:error`) composes that set
    * only. States are written hover first, so a focus rule after it wins
    * while both hold, as Core's own order does. A state the theme sets a
-   * shadow of its own (for the whole part, or that set) keeps that.
-   * @param {Setting} s @param {string} target @param {string} v
+   * shadow of its own (for the whole part, or that set) keeps that. With
+   * no shadow (null), each set's focus look as Core draws it, alone: what
+   * a hover setting must not hide.
+   * @param {Setting} s @param {string} target @param {string | null} v
    */
   const withRingStates = (s, target, v) => {
     const none = /^\s*none\s*$/i.test(String(v));
+    const focusOnly = v == null;
     const tg = ctx.project.target.get(target);
     const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
     const ORDER = ['hover', 'active', 'focus', 'focus-visible', 'focus-within'];
@@ -5553,9 +5573,17 @@ export function compileTheme(ctx, data, base) {
       if (!asked.every(p => set.pairs.includes(p))) continue;
       const parent = parentOf(set);
       for (const state of ORDER.filter(x => ringed.has(x))) {
+        if (focusOnly && !/^focus/.test(state)) continue;
         if (ownState(state, set.pairs)) continue;
         const core = coreOf(set, state);
         if (core == null) continue;
+        if (focusOnly) {
+          block(
+            {...s, state, when: set.pairs.join('+') || undefined},
+            target,
+          ).boxShadow = core;
+          continue;
+        }
         const coreNone = /^\s*none\s*$/i.test(core);
         if (none && coreNone) {
           // Only where the ring of the set it refines, written back, would
