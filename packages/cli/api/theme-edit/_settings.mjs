@@ -1594,6 +1594,38 @@ export function dialWordOf(thing, value) {
   return lower && read.every(w => words.has(w)) ? lower : null;
 }
 
+/** The fields of a saved or typed entry, as the editor writes them. */
+const ENTRY_FIELDS = [
+  'thing',
+  'value',
+  'setting',
+  'source',
+  'axis',
+  'on',
+  'when',
+  'state',
+  'mode',
+  'only',
+];
+
+/**
+ * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
+ * read as those fields, as setting names are read in any case; a field
+ * already written the editor's way keeps its key. Anything else as it is.
+ * The one reader for a typed entry and a saved one.
+ * @param {any} entry
+ * @returns {any}
+ */
+export function entryFieldNames(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  return Object.fromEntries(
+    Object.entries(entry).map(([k, x]) => {
+      const field = ENTRY_FIELDS.find(f => f === k.trim().toLowerCase());
+      return [field && !(field in entry) ? field : k, x];
+    }),
+  );
+}
+
 /**
  * An entry that names its thing under `setting`, as the editor's own
  * results print it (`{"setting": "accent", "value": "red"}`), as the entry
@@ -1627,12 +1659,18 @@ export function printedEntry(entry) {
 function readTypedEntries(data, notes) {
   if (!Array.isArray(data?.settings)) return;
   data.settings = data.settings.map((/** @type {any} */ saved) => {
-    // An entry that names its thing under `setting`, as the editor's own
-    // results print it, is that entry (the reader set uses for one typed).
-    const s = printedEntry(saved);
-    if (s !== saved)
+    // Its fields in other letters (`Thing`, `Value`) are those fields, and
+    // an entry that names its thing under `setting`, as the editor's own
+    // results print it, is that entry (the readers set uses for one typed).
+    const fields = entryFieldNames(saved);
+    if (JSON.stringify(fields) !== JSON.stringify(saved))
       notes.push(
-        `${JSON.stringify(saved)} names its thing under "setting", read as ${s.thing}`,
+        `${JSON.stringify(saved)} writes its field names in other letters, read as ${JSON.stringify(fields)}`,
+      );
+    const s = printedEntry(fields);
+    if (s !== fields)
+      notes.push(
+        `${JSON.stringify(fields)} names its thing under "setting", read as ${s.thing}`,
       );
     const keys =
       s && typeof s === 'object' && !Array.isArray(s) ? Object.keys(s) : [];
@@ -1641,7 +1679,9 @@ function readTypedEntries(data, notes) {
         ? (/^\s*(\S+?)\s*[:=]?\s+(.+?)\s*$/.exec(s) ??
           /^\s*(\S+?)\s*[:=]\s*(.+?)\s*$/.exec(s))
         : keys.length === 1 &&
-            !('thing' in s) &&
+            // A lone field of an entry (`{"value": "pill"}`) names no
+            // setting.
+            !ENTRY_FIELDS.includes(keys[0]) &&
             (typeof s[keys[0]] === 'string' || typeof s[keys[0]] === 'number')
           ? [null, keys[0], String(s[keys[0]])]
           : null;

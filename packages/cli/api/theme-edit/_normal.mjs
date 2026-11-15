@@ -807,11 +807,13 @@ export const DENSITY_WORDS = wordTable(
  * comments), and the axes of a Google Fonts family spec (`Inter:wght@400`
  * is the family Inter).
  * @param {string} typed
- * @param {{thousands?: boolean}} [opts] `thousands` for a setting whose
- *   numbers are weights (see commaNumbers)
+ * @param {{thousands?: boolean, fallback?: boolean}} [opts] `thousands` for
+ *   a setting whose numbers are weights (see commaNumbers); `fallback`
+ *   (default true) reads an app's own variable with a fallback as the
+ *   fallback, false keeps the variable as typed
  * @returns {string}
  */
-export function typedReading(typed, {thousands = false} = {}) {
+export function typedReading(typed, {thousands = false, fallback = true} = {}) {
   let t = String(typed ?? '')
     .replace(/\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi, (_, u, x) =>
       String.fromCodePoint(parseInt(u ?? x, 16)),
@@ -877,9 +879,8 @@ export function typedReading(typed, {thousands = false} = {}) {
     .toLowerCase();
   // An app's own variable with a fallback (`var(--brand, #e11d48)`) is the
   // fallback; Tailwind's arbitrary value (`rounded-[12px]`) is the value.
-  t = t
-    .replace(/^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/, '$1')
-    .replace(/^[a-z]+(?:-[a-z]+)?-\[(.+)\]$/, '$1');
+  if (fallback) t = t.replace(/^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/, '$1');
+  t = t.replace(/^[a-z]+(?:-[a-z]+)?-\[(.+)\]$/, '$1');
   // A light and a dark color typed as a pair (`light: red; dark: blue`,
   // `red / blue`) is that light-dark() pair.
   // Both halves colors: `Inter, 600` is a family list, no pair.
@@ -1289,11 +1290,20 @@ export function readsTyped({
   });
   const T = tokensOf(t);
   const O = tokensOf(o);
-  // (1) The value typed.
+  // (1) The value typed: a variable with a fallback as typed too, since
+  // the fallback reading is for an app's own variable, never in place of a
+  // design token typed with one.
+  const asTyped = tokensOf(
+    typedReading(listWords(typedKey, typed), {
+      thousands: thousandsSetting(typedKey),
+      fallback: false,
+    }),
+  );
   if (
     O.length &&
-    O.length === T.length &&
-    O.every((w, i) => sameToken(w, T[i]))
+    [T, asTyped].some(
+      R => O.length === R.length && O.every((w, i) => sameToken(w, R[i])),
+    )
   )
     return true;
   // (6) The typed color as one mode's half of light-dark(), every pair

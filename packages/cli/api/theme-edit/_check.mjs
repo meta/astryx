@@ -121,6 +121,7 @@ import {
   dialWordOf,
   paddedParts,
   onBuiltInSteps,
+  setArgs,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -6904,6 +6905,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         ),
       },
     );
+  // A dial or property name a letter or two off (accnt, cornrs,
+  // backgrund-color): the one name the typo limit reads it as, as the set
+  // line with the value and scope kept.
+  const nearNames = hint
+    ? []
+    : [...Object.keys(DIALS), ...cssProperties()].filter(n =>
+        typoNear(prop, n),
+      );
+  const typoLine =
+    !unset && nearNames.length === 1 && v.trim()
+      ? `${P} set ${slug} ${setArgs({...s, thing: nearNames[0]}, v)}`
+      : null;
   return refuse(
     E.ERR_THEME_UNKNOWN_THING,
     `"${thing}" is not a dial, a token, or a CSS property.`,
@@ -6930,7 +6943,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
               .replace(/"([^"]*)"/g, (_, q) => quoteCommandArgument(q)),
           )
         : // A list that answers, not a question the parser may not match.
-          [`${HOW} --list properties`, `${HOW} --list dials`],
+          [
+            ...(typoLine ? [typoLine] : []),
+            `${HOW} --list properties`,
+            `${HOW} --list dials`,
+          ],
       didYouMean: hint
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...cssProperties()]),

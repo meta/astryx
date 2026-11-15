@@ -129,6 +129,8 @@ import {
   holdAfterBuild,
   cornersPlain,
   setArgs,
+  editedThemes,
+  entryFieldNames,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -4165,7 +4167,16 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
  */
 async function followChangeLine(sub, slug, line, cwd, skip) {
   const loaded = await loadedForCheck(cwd, slug, skip);
-  if (!loaded) return {line, why: null};
+  // A line for a theme this command never made cannot run; a theme whose
+  // file does not read is checked by the command itself.
+  if (!loaded)
+    return {
+      line,
+      why:
+        slugOk(slug) && fs.existsSync(themeFiles(cwd, slug).settings)
+          ? null
+          : `there is no theme "${slug}" made by this command`,
+    };
   const {data, ctx} = loaded;
   return followLine(
     line,
@@ -4378,25 +4389,7 @@ async function change(sub, slug, thing, value, options) {
     }
     // An entry's own fields in other letters (`Thing`, `VALUE`, `On`) are
     // those fields, as setting names are read in any case.
-    const FIELDS = [
-      'thing',
-      'value',
-      'setting',
-      'source',
-      'axis',
-      'on',
-      'when',
-      'state',
-      'mode',
-      'only',
-    ];
-    if (obj && typeof obj === 'object' && !Array.isArray(obj))
-      obj = Object.fromEntries(
-        Object.entries(obj).map(([k, x]) => {
-          const field = FIELDS.find(f => f === k.trim().toLowerCase());
-          return [field && !(field in obj) ? field : k, x];
-        }),
-      );
+    obj = entryFieldNames(obj);
     // An entry that names its thing under `setting`, as the editor's own
     // results print it, is that entry.
     obj = printedEntry(obj);
@@ -5092,10 +5085,33 @@ async function changeOnce(
   let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
+  // A value is compared as `set` reads it: case, spacing around commas,
+  // slashes and parentheses, and the quote style are not part of it.
+  const norm = (/** @type {string} */ x) =>
+    x
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/\s*([,()/])\s*/g, '$1')
+      .replace(/'/g, '"')
+      .replace(/^"|"$/g, '');
+  // A color is compared as the color it names: a short hex, another letter
+  // case or its name is the saved color.
+  const sameColor = (/** @type {string} */ a, /** @type {string} */ b) => {
+    const ca = parseColor(String(a).trim());
+    const cb = parseColor(String(b).trim());
+    return Boolean(ca && cb && hex(ca) === hex(cb));
+  };
+  /** Whether a saved entry holds the typed value. @param {import('./_settings.mjs').Setting} held @param {string} typed */
+  const holds = (held, typed) =>
+    norm(String(held.value)) === norm(typed) ||
+    norm(String(held.value)) === norm(String(s.value ?? '')) ||
+    sameColor(String(held.value), typed);
   if (sub === 'undo' && !prev && !s.mode) {
     // An undo with no --mode of a setting saved for one mode only: that
     // entry, named with its mode (before its value is checked, so a value
-    // it does not hold is refused); saved for each mode, one undo each.
+    // it does not hold is refused). Saved for each mode, a typed value
+    // picks the entry that holds it; with none typed, one undo each.
     const modal = data.settings.filter(
       x =>
         x.thing === s.thing &&
@@ -5105,12 +5121,28 @@ async function changeOnce(
         (x.state ?? null) === (s.state ?? null) &&
         Boolean(x.only) === Boolean(s.only),
     );
-    if (modal.length === 1) {
-      s.mode = modal[0].mode;
+    const typed = value != null && value !== '' ? value : null;
+    const picked =
+      typed != null && modal.length > 1
+        ? modal.filter(x => holds(x, typed))
+        : modal;
+    if (picked.length === 1) {
+      s.mode = picked[0].mode;
       k = keyOf(s);
-      prevIdx = data.settings.indexOf(modal[0]);
-      prev = modal[0];
-    } else if (modal.length > 1)
+      prevIdx = data.settings.indexOf(picked[0]);
+      prev = picked[0];
+    } else if (modal.length > 1 && typed != null && picked.length === 0)
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${slug} sets ${describe({...s, value: '?'})
+          .replace(' = ?', '')
+          .replace(
+            / \(whole theme\)$/,
+            '',
+          )} for each mode on its own (${modal.map(x => `${x.mode}: ${x.value}`).join('; ')}), not ${typed}.`,
+        {run: modal.map(x => `${P} undo ${slug} ${undoArgs(x)}`)},
+      );
+    else if (modal.length > 1)
       refuse(
         E.ERR_THEME_NOT_SET,
         `${slug} sets ${describe({...s, value: '?'})
@@ -5135,18 +5167,7 @@ async function changeOnce(
         {run: [`${P} undo ${slug} ${undoArgs(onPart)}`]},
       );
     const held = data.settings.find(x => keyOf(x) === keyOf(s));
-    // `headings weight|tracking` names a half, not a value; a value is
-    // compared as `set` reads it (case, spacing and quotes aside).
-    const norm = (/** @type {string} */ x) =>
-      x
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        // Spacing around commas, slashes and parentheses, and the quote
-        // style, are not part of a value.
-        .replace(/\s*([,()/])\s*/g, '$1')
-        .replace(/'/g, '"')
-        .replace(/^"|"$/g, '');
+    // `headings weight|tracking` names a half, not a value.
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
     // A headings word typed with a typo (wdie): the half its reading names
@@ -5186,20 +5207,7 @@ async function changeOnce(
         );
       }
     }
-    // A color is compared as the color it names: a short hex, another
-    // letter case or its name is the saved color.
-    const sameColor = (/** @type {string} */ a, /** @type {string} */ b) => {
-      const ca = parseColor(String(a).trim());
-      const cb = parseColor(String(b).trim());
-      return Boolean(ca && cb && hex(ca) === hex(cb));
-    };
-    if (
-      held &&
-      !half &&
-      norm(held.value) !== norm(value) &&
-      norm(held.value) !== norm(s.value ?? '') &&
-      !sameColor(String(held.value), value)
-    ) {
+    if (held && !half && !holds(held, value)) {
       // A value word that names another saved setting (`undo t corners
       // padding`): one undo for each setting named.
       if (namesSaved(value)) undoList(`${thing} ${value}`, E.ERR_THEME_NOT_SET);
@@ -6878,6 +6886,33 @@ function dialWrites(ctx, data, dial, base) {
 }
 
 /**
+ * What applies once `removed` is gone, in each mode it applied in: a
+ * setting of the same thing saved for one mode applies in that mode only,
+ * so a theme with two modes can have a different answer for each.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} removed
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {string}
+ */
+function nowApplies(ctx, data, removed, base) {
+  const modes = removed.mode ? [] : modesOf(data);
+  if (modes.length < 2) return nowAppliesIn(ctx, data, removed, base);
+  const each = modes.map(m => ({
+    m,
+    now: nowAppliesIn(
+      ctx,
+      data,
+      /** @type {import('./_settings.mjs').Setting} */ ({...removed, mode: m}),
+      base,
+    ),
+  }));
+  return each.every(x => x.now === each[0].now)
+    ? nowAppliesIn(ctx, data, removed, base)
+    : each.map(x => `${x.now} in ${x.m} mode`).join(' and ');
+}
+
+/**
  * What applies once `removed` is gone: a whole-theme setting of the same
  * thing for a part setting, a dial that still writes the token, or the
  * base theme's value.
@@ -6887,7 +6922,7 @@ function dialWrites(ctx, data, dial, base) {
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @returns {string}
  */
-function nowApplies(ctx, data, removed, base) {
+function nowAppliesIn(ctx, data, removed, base) {
   // Vibrancy has no base theme value: the colors are made again at the
   // default.
   if (removed.source === 'dial' && removed.thing === 'vibrancy')
@@ -8066,6 +8101,25 @@ export async function themeEditUndo(theme, options = {}) {
               },
           ...(e.suggestions ?? []).filter(x => x !== near),
         ];
+      } else {
+        // A word that is no theme here but a setting a theme here holds
+        // (`undo accent`, `undo background-color --on card`): that theme's
+        // undo of it, never a new theme or a look named after the setting.
+        const held = await heldSettingUndos(cwd, theme, options);
+        // A setting's name is never a theme to make or look at.
+        const settingName =
+          Object.hasOwn(DIALS, theme) ||
+          theme.startsWith('--') ||
+          cssProperties().has(theme);
+        if (held.length || settingName)
+          e.suggestions = [
+            ...held,
+            ...(e.suggestions ?? []).filter(
+              x =>
+                !x.name.startsWith(`${P} new `) &&
+                x.name !== `${P} show ${theme}`,
+            ),
+          ];
       }
     }
     // Then the theme typed after the setting (`undo corners t`).
@@ -8076,6 +8130,62 @@ export async function themeEditUndo(theme, options = {}) {
       options,
     );
   }
+}
+
+/**
+ * The undo lines for a setting named where a theme was expected: each theme
+ * here that holds a setting of that thing, in the typed scope, gets the
+ * undo of it, followed before it is offered.
+ * @param {string} cwd
+ * @param {string} word the word typed as the theme
+ * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} options
+ * @returns {Promise<import('../../foundation/response/base').Suggestion[]>}
+ */
+async function heldSettingUndos(cwd, word, options) {
+  /** @type {import('../../foundation/response/base').Suggestion[]} */
+  const out = [];
+  /** @type {string[]} */
+  let slugs;
+  try {
+    slugs = editedThemes(cwd);
+  } catch {
+    return out;
+  }
+  const scope = /** @type {const} */ (['on', 'when', 'state', 'mode']);
+  for (const slug of slugs) {
+    /** @type {import('./_settings.mjs').Setting[]} */
+    let settings;
+    try {
+      settings = loadTheme(cwd, slug).settings;
+    } catch {
+      continue;
+    }
+    for (const x of settings) {
+      if (x.thing.toLowerCase() !== word.toLowerCase()) continue;
+      // A setting for both modes applies in the mode named too.
+      if (
+        scope.some(
+          k =>
+            options[k] != null &&
+            !(k === 'mode' && x.mode == null) &&
+            String(/** @type {any} */ (x)[k] ?? '') !== String(options[k]),
+        )
+      )
+        continue;
+      const followed = await followChangeLine(
+        'undo',
+        slug,
+        `${P} undo ${slug} ${undoArgs(x)}`,
+        cwd,
+      );
+      if (followed.why == null)
+        out.push({
+          name: followed.line,
+          reason: `do this instead: ${word} is a setting ${slug} holds (${describe(x)})`,
+        });
+    }
+  }
+  return out;
 }
 
 /**
@@ -8184,6 +8294,12 @@ async function undoTheme(theme, options) {
   const scoped = /** @type {const} */ (['on', 'when', 'state', 'mode']).find(
     k => options[k] != null,
   );
+  // A theme that does not exist is named as such first.
+  if (
+    (scoped || options.only) &&
+    !fs.existsSync(themeFiles(cwd, theme).settings)
+  )
+    loadTheme(cwd, theme);
   if (scoped || options.only)
     refuse(
       E.ERR_MISSING_ARGUMENT,
