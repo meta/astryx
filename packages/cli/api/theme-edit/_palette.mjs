@@ -17,7 +17,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {readRegularFile} from '../../foundation/fs/regular-file.mjs';
+import {
+  irregularFileKind,
+  readRegularFile,
+} from '../../foundation/fs/regular-file.mjs';
 import {isAlive} from '../../foundation/release/cache.mjs';
 import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
@@ -89,6 +92,18 @@ export function writeWhole(file, text) {
       ],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
+  // A pipe, a device or a socket there is not the editor's: the rename
+  // below would replace it, so it is refused and left as it is.
+  const kind = irregularFileKind(file);
+  if (kind && kind !== 'a folder')
+    throw new AstryxError(
+      `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is ${kind}, not a file, so the editor writes nothing over it. Move it, then run the command again.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  // The same bytes already there are not written again: a refused command
+  // that puts back what it built leaves the file as it was, time included.
+  if (sameBytes(file, text)) return;
   sweepTemps(path.dirname(file));
   refuseIfLockLost();
   const tmp = tempFor(file);
@@ -97,6 +112,23 @@ export function writeWhole(file, text) {
     fs.renameSync(tmp, file);
   } finally {
     fs.rmSync(tmp, {force: true});
+  }
+}
+
+/**
+ * Whether a regular file (never a link) at `file` holds exactly `text`.
+ * @param {string} file
+ * @param {string | Buffer} text
+ */
+function sameBytes(file, text) {
+  const st = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!st?.isFile()) return false;
+  const want = Buffer.isBuffer(text) ? text : Buffer.from(text);
+  if (st.size !== want.length) return false;
+  try {
+    return readRegularFile(file).equals(want);
+  } catch {
+    return false;
   }
 }
 
@@ -398,9 +430,10 @@ const officialStops = token =>
   );
 
 /**
- * The tokens the neutral color sets at the official theme's stops. The page
- * background, `--color-background-body`, stays the base theme's, so a
- * tinted gray never tints the page. The inverted surface (tooltips,
+ * The tokens the neutral color sets at the official theme's stops, the
+ * page background (`--color-background-body`) with the surfaces on it, so
+ * a warm or cool gray reaches the page as it reaches the cards. The
+ * inverted surface (tooltips,
  * toasts), which the official theme leaves to Core, is the card surface of
  * the other mode, as Core makes it from a neutral scale, inside the ramp
  * (Core's tones 10 and 99: never the white or black end every ramp shares)
@@ -412,6 +445,7 @@ const NEUTRAL_STOPS = wordTable(
   /** @type {Record<string, [number, number]>} */ ({
     ...Object.fromEntries(
       [
+        '--color-background-body',
         '--color-background-surface',
         '--color-background-card',
         '--color-background-popover',
@@ -924,16 +958,17 @@ function tools(
   const rawOf = (token, m) => colorIn(settingOf(token, m), m);
   /**
    * Which column of a `[light, dark]` mapping a mode takes: the light one
-   * on a light page and the dark one on a dark page, by the page the theme
-   * keeps (its exact page color, else the base theme's). A base whose
-   * light page is dark, such as Gothic, gets dark-page shades in light.
+   * on a light page and the dark one on a dark page, by the base theme's
+   * page, the one its surfaces were made for. A base whose light page is
+   * dark, such as Gothic, gets dark-page shades in light. A page color the
+   * theme writes is that one color: it never moves every other surface to
+   * the other column (a teal page keeps white cards and popovers), and the
+   * colors that must read on it are held to it where they are picked.
    * @param {Mode} m
    * @returns {0 | 1}
    */
   const side = m => {
-    const page =
-      rawOf('--color-background-body', m) ??
-      base?.[m]?.['--color-background-body'];
+    const page = base?.[m]?.['--color-background-body'];
     const rgb = page ? parseColor(page) : null;
     if (!rgb || alphaOf(page) < 1) return m === 'light' ? 0 : 1;
     return ratio(rgb, [255, 255, 255]) > ratio(rgb, [0, 0, 0]) ? 1 : 0;
@@ -2560,7 +2595,6 @@ export function paletteDialOf(token) {
 /** Every token a color dial can point at a generated shade. */
 export const PALETTE_TOKENS = new Set([
   ...Object.keys(NEUTRAL_STOPS),
-  '--color-background-body',
   ...Object.keys(NEUTRAL_TINTS),
   '--color-accent',
   '--color-on-accent',
@@ -2596,7 +2630,6 @@ export function mappingRows(dial) {
         ([t, [[l, la], [d, da]]]) =>
           `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
-      "--color-background-body: the base theme's page color, so a tinted gray never tints the page",
       ...Object.values(LIFT_GROUNDS).map(
         g =>
           `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,

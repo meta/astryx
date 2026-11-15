@@ -65,12 +65,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme-edit/_css.mjs': {
-    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: [
-      'require(@csstools/css-syntax-patches-for-csstree)',
-      'require(css-tree)',
-      'require(mdn-data/css/properties.json)',
-    ],
+    runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
+    sites: ['require(<computed>)'],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
@@ -85,14 +81,15 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
-      '.import()',
-      'createJiti ×5',
+      '.import() ×2',
+      'createJiti ×7',
       'import(<computed>) ×2',
       'require(<computed>)',
-      'withEmptyStylesheets ×5',
+      'require.cache',
+      'withEmptyStylesheets ×6',
     ],
   },
   'api/theme/build/core-interception.mjs': {
@@ -433,9 +430,9 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from",
     sites: [
-      '.import() ×10',
+      '.import() ×11',
       'createJiti ×2',
       'globalThis[<computed>]',
       'module',
@@ -468,7 +465,7 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module',
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
       '.import() ×3',
       'importUrl ×2',
@@ -516,6 +513,14 @@ const RUNNERS = {
   'foundation/release/handoff.mjs': {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
+  },
+  'foundation/runtime/css-tree.mjs': {
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    sites: [
+      'require(<computed>)',
+      'require(mdn-data/css/properties.json)',
+      'require(mdn-data/css/selectors.json)',
+    ],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
     runs: 'Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',

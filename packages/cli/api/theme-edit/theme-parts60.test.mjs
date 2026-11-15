@@ -130,7 +130,8 @@ describe('shadows', () => {
       on: 'file-input',
     });
     expect(fs.readFileSync(path.join(cwd, 'themes/f/f.css'), 'utf8')).toMatch(
-      /\.astryx-file-input:hover[^{]*\{\s*box-shadow: 0 2px 6px #0000004d, inset 0 0 0 2px /,
+      // (Per render it draws the ring for: its input and dropzone modes.)
+      /\.astryx-file-input(\[[^\]]*\])*:hover[^{]*\{\s*box-shadow: 0 2px 6px #0000004d, inset 0 0 0 2px /,
     );
   }, 240_000);
 });

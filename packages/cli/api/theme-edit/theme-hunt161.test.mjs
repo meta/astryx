@@ -351,7 +351,8 @@ describe('preview options as typed', () => {
       const both = await ask(['add', '--template', 'dashboard', 'extra']);
       for (const s of both.suggestions ?? [])
         expect(s.name).not.toMatch(/--template dashboard/);
-      expect(first(both)).toMatch(/ preview add extra$/);
+      // Nor is a description no page relates to: the default pages instead.
+      expect(first(both)).toMatch(/ preview add$/);
       const empty = await ask(['app', 'q11', '--theme=']);
       expect(first(empty)).toMatch(/ preview app q11 --theme t$/);
       for (const s of empty.suggestions ?? [])

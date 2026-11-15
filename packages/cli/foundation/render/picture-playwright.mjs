@@ -36,7 +36,10 @@ try {
         route.abort('blockedbyclient'),
     );
     await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-    await page.screenshot({path: png, fullPage: true});
+    // An overlay drawn open plays its opening animation (a fade-in) as the
+    // page loads: the picture is taken with each animation that ends run
+    // to its end, so it shows the overlay as it looks open.
+    await page.screenshot({path: png, fullPage: true, animations: 'disabled'});
   } finally {
     await browser.close();
   }
