@@ -544,6 +544,17 @@ function flagValues(name) {
 }
 
 /**
+ * The other values an undo removed with the one named, for a setting listed
+ * more than once by hand (` and red, listed twice`), or nothing.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeData} d
+ */
+function alsoRemovedText(d) {
+  const also = d.alsoRemoved ?? [];
+  if (!also.length) return '';
+  return ` and ${also.map(x => JSON.stringify(x.value)).join(', ')} (it was listed ${also.length === 1 ? 'twice' : `${also.length + 1} times`})`;
+}
+
+/**
  * The receipt of a change: a status line, then the change data.
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} r
  */
@@ -566,7 +577,7 @@ function changeBlocks(r) {
   const done =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that

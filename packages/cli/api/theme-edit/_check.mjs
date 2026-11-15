@@ -6341,7 +6341,18 @@ function checkOne(
         .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
         .replace(/[_\s]+/g, '-')
         .toLowerCase()}`;
-      const near = nearest(thing, Object.keys(TOKENS));
+      // A word of the name that is itself a word the editor knows (a part
+      // or group, `link`) is no typo of another token's word (`pink`): the
+      // name near by spelling is then no reading of it.
+      const knownWord = (/** @type {string} */ w) =>
+        TARGET.has(w) || Boolean(FAMILIES[w]) || partWords().has(w);
+      const typedWords = thing.toLowerCase().replace(/^-+/, '').split('-');
+      const near = nearest(thing, Object.keys(TOKENS)).filter(n => {
+        const nearWords = n.replace(/^-+/, '').split('-');
+        return !typedWords.some(
+          (w, i) => w !== nearWords[i] && knownWord(w.replace(/s$/, '')),
+        );
+      });
       const meant =
         aliased ??
         (styled !== thing && styled in TOKENS

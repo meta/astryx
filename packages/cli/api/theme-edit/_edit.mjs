@@ -5579,7 +5579,11 @@ async function changeOnce(
         `${value.trim()} is a part: ${describe(onPart)} is set; name the part with --on.`,
         {run: [`${P} undo ${slug} ${undoArgs(onPart)}`]},
       );
-    const held = data.settings.find(x => keyOf(x) === keyOf(s));
+    // A setting listed twice by hand holds each of its values: the one
+    // named is accepted, and the refusal names the last, which the build
+    // reads and undo removes with the others.
+    const heldAll = data.settings.filter(x => keyOf(x) === keyOf(s));
+    const held = heldAll.at(-1);
     // `headings weight|tracking` names a half, not a value.
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
@@ -5620,7 +5624,7 @@ async function changeOnce(
         );
       }
     }
-    if (held && !half && !holds(held, value)) {
+    if (held && !half && !heldAll.some(x => holds(x, value))) {
       // A value word that names another saved setting (`undo t corners
       // padding`): one undo for each setting named.
       if (namesSaved(value)) undoList(`${thing} ${value}`, E.ERR_THEME_NOT_SET);
@@ -6630,7 +6634,13 @@ async function changeOnce(
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
-        ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
+        ? {
+            removed: prev,
+            now: nowApplies(ctx, data, prev, base),
+            // The other entries of a setting listed twice by hand, removed
+            // with it.
+            ...(alsoReplaced.length ? {alsoRemoved: alsoReplaced} : {}),
+          }
         : {}),
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
@@ -7173,6 +7183,10 @@ export async function themeEditShow(theme, options = {}) {
           });
       })(),
       notes: [
+        // What the settings file holds in a form read differently from its
+        // text (a field written twice, a name in other letters), as a
+        // change says it.
+        ...entryNotes(data),
         ...rebuiltNotes,
         ...(png ? [] : leftWords),
         ...sheet.notes,
