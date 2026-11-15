@@ -215,6 +215,10 @@ export type TemplateCategory =
   | 'Gallery - Mixed'
   | 'Gallery - Side'
   | 'Gallery - Product'
+  // Status
+  | 'Status - Not Found'
+  | 'Status - Access Denied'
+  | 'Status - Error'
   // Shell
   | 'Shell - Left Sidebar'
   | 'Shell - Top Nav'
