@@ -54,9 +54,11 @@ const ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/u;
 /**
  * What a kept answer depends on besides the files it is stamped by, or null
  * where none is kept: off Linux, where ICU reads system settings; with a TZ
- * that is a path or a POSIX rule; and where no TZ names the zone and the
- * localtime file is not a link into a zoneinfo folder, as ICU then searches
- * the zone files for one that matches.
+ * that is a path or a POSIX rule; and where the localtime file is not a link
+ * into a zoneinfo folder, as ICU then searches the zone files for one that
+ * matches. ICU reads that link even with a TZ set, when the TZ is not a zone
+ * it knows, and names the zone after the link's own text, so the text is
+ * part of the key: two names can link to one zone file.
  * @param {IntlHost} [host]
  * @returns {unknown[] | null}
  */
@@ -72,15 +74,13 @@ export function intlKey({
   if (platform !== 'linux') return null;
   const tz = env.TZ;
   if (tz !== undefined && !ZONE_NAME.test(tz)) return null;
-  if (tz === undefined) {
-    let link;
-    try {
-      link = withoutRecording(() => fs.readlinkSync(localtime));
-    } catch {
-      return null;
-    }
-    if (!link.includes('/zoneinfo/')) return null;
+  let link;
+  try {
+    link = withoutRecording(() => fs.readlinkSync(localtime));
+  } catch {
+    return null;
   }
+  if (!link.includes('/zoneinfo/')) return null;
   const icuFlags = [
     ...execArgv,
     ...(env.NODE_OPTIONS ?? '').split(/\s+/u),
@@ -96,6 +96,7 @@ export function intlKey({
     ENV_NAMES.map(name => env[name] ?? null),
     icuFlags,
     localtime,
+    link,
     timezoneFile,
   ];
 }

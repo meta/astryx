@@ -58,16 +58,30 @@ const host = (/** @type {Record<string, string>} */ env = {}) => ({
   timezoneFile: TIMEZONE_FILE,
 });
 
-/** The kept answer's entry file and inode, or null. */
+/**
+ * The kept answer the last call used or stored: the newest entry, as a read
+ * back touches its entry. Its file and inode name it, so a new key or a new
+ * write shows as a new name.
+ */
 const kept = () => {
+  /** @type {{ino: string, value: unknown, at: number} | null} */
+  let newest = null;
   for (const name of fs.readdirSync(STORE)) {
     const file = path.join(STORE, name);
     const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (stored.summary && String(stored.key).includes('intl-defaults')) {
-      return {ino: fs.statSync(file).ino, value: stored.value};
+    if (!stored.summary || !String(stored.key).includes('intl-defaults')) {
+      continue;
+    }
+    const stat = fs.statSync(file);
+    if (newest == null || stat.mtimeMs > newest.at) {
+      newest = {
+        ino: `${name}:${stat.ino}`,
+        value: stored.value,
+        at: stat.mtimeMs,
+      };
     }
   }
-  return null;
+  return newest;
 };
 
 /** @param {string} zone */
@@ -111,6 +125,9 @@ describe('intlDefaults', () => {
     // made now, so the file's own stamp is settled before the link moves.
     fs.mkdirSync(path.join(ZONES, 'US'), {recursive: true});
     fs.linkSync(zoneFile('America/New_York'), path.join(ZONES, 'US/Eastern'));
+    // And a zone that is a link to another zone's file, as tzdata builds
+    // some: the same file either way, under another name.
+    fs.symlinkSync(zoneFile('Europe/Berlin'), path.join(ZONES, 'Europe/Oslo'));
     await sleep(SETTLE_WAIT_MS);
     expect(intl.intlDefaults(host())).toEqual(live());
     const first = kept();
@@ -130,9 +147,17 @@ describe('intlDefaults', () => {
         () => pointLocaltime(path.join(ZONES, 'US/Eastern')),
       ],
       [
+        'the link pointed at a zone that is itself a link to the same file',
+        () => pointLocaltime(path.join(ZONES, 'Europe/Oslo')),
+      ],
+      [
+        'the link pointed back at the file that zone links to',
+        () => pointLocaltime(path.join(ZONES, 'Europe/Berlin')),
+      ],
+      [
         'the zone file it reaches rewritten',
         () => {
-          const file = path.join(ZONES, 'America/New_York');
+          const file = path.join(ZONES, 'Europe/Berlin');
           fs.writeFileSync(`${file}.new`, 'TZif changed\n');
           fs.renameSync(`${file}.new`, file);
         },
@@ -208,6 +233,9 @@ describe('intlDefaults', () => {
     fs.rmSync(LOCALTIME);
     fs.writeFileSync(LOCALTIME, 'TZif copy\n');
     expect(intl.intlKey(host())).toBeNull();
+    // So does ICU for a TZ that is not a zone it knows, though it looks like
+    // one: the link is checked whatever TZ holds.
+    expect(intl.intlKey(host({TZ: 'CET-1CEST'}))).toBeNull();
     pointLocaltime(path.join(TEMP_ROOT, 'elsewhere'));
     expect(intl.intlKey(host())).toBeNull();
     // Each still answers as Intl does.
