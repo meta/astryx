@@ -35,6 +35,7 @@ import {ContextMenu} from './ContextMenu';
 import {
   __loadContextMenuTouchLayerForTest,
   __resetContextMenuTouchLayerForTest,
+  useContextMenuTouchLayer,
 } from './contextMenuTouchLoader';
 import {ContextMenuGroup} from './index';
 import {
@@ -3015,6 +3016,65 @@ describe('ContextMenu outside dismissal', () => {
         frameNow.mockRestore();
         vi.unstubAllGlobals();
         vi.useRealTimers();
+      }
+    });
+
+    it('schedules the touch layer’s load on the trigger’s own window', async () => {
+      __resetContextMenuTouchLayerForTest();
+      const view = secondDocument.defaultView as Window & typeof globalThis;
+      // The page paints no frame, as when its tab is hidden, while the
+      // second window paints.
+      const pageFrames = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation(() => 0);
+      const frameFrames = vi.fn((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+      Object.defineProperty(view, 'requestAnimationFrame', {
+        value: frameFrames,
+        configurable: true,
+      });
+      const coarse = vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }));
+      vi.stubGlobal('matchMedia', coarse);
+      Object.defineProperty(view, 'matchMedia', {
+        value: coarse,
+        configurable: true,
+      });
+      // Reads the page's one touch layer, as every ContextMenu does.
+      function LayerProbe() {
+        const {layer} = useContextMenuTouchLayer(true);
+        return (
+          <output data-testid="probe">
+            {layer == null ? 'waiting' : 'loaded'}
+          </output>
+        );
+      }
+      try {
+        render(
+          <>
+            <LayerProbe />
+            {createPortal(
+              <ContextMenu items={[{label: 'Cut'}]} data-testid="ctx">
+                <div>Long-press me</div>
+              </ContextMenu>,
+              secondDocument.body,
+            )}
+          </>,
+        );
+        expect(frameFrames).toHaveBeenCalled();
+        await vi.waitFor(() => {
+          expect(screen.getByTestId('probe')).toHaveTextContent('loaded');
+        });
+      } finally {
+        pageFrames.mockRestore();
+        vi.unstubAllGlobals();
+        await __loadContextMenuTouchLayerForTest();
       }
     });
   });

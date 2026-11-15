@@ -14,17 +14,18 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-import {useEffect, useSyncExternalStore} from 'react';
+import {useEffect, useSyncExternalStore, type RefObject} from 'react';
 import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {ContextMenuTouchLayer as TouchLayer} from './ContextMenuTouchLayer';
 
 // The touch layer imports the long-press recognizer, which brings the arena
 // and the gesture host. These modules stay out of the page's first load. The
-// first ContextMenu under the touch model asks for them once. The request
-// waits until the next frame has painted, then for an idle moment, capped at
-// LOAD_CAP_MS. Touches, clicks and keys do not change when the load starts.
-// As the layer mounts, it takes a finger that landed before the load.
+// first ContextMenu under the touch model in each window asks for them, and
+// the page loads them once. The request waits until that window's next frame
+// has painted, then for an idle moment, capped at LOAD_CAP_MS. Touches, clicks
+// and keys do not change when the load starts. As the layer mounts, it takes
+// a finger that landed before the load.
 
 /**
  * How long the load waits for an idle main thread after that paint, in ms.
@@ -43,8 +44,10 @@ export interface ContextMenuTouchLayerState {
 const NOT_LOADED: ContextMenuTouchLayerState = {layer: null, hasFailed: false};
 
 let state: ContextMenuTouchLayerState = NOT_LOADED;
-/** Whether a load is scheduled or running. */
-let isScheduled = false;
+// The windows whose triggers scheduled the load. Each schedules its own, so a
+// window that paints no frame (a hidden tab, a closed frame) stalls no other.
+let scheduledViews = new WeakSet<Window>();
+let pendingLoad: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 const layerModule = createModuleLoader(
@@ -74,13 +77,16 @@ function publish(next: ContextMenuTouchLayerState): void {
 }
 
 function load(): void {
-  layerModule.load().then(
+  pendingLoad ??= layerModule.load().then(
     loaded => {
+      pendingLoad = null;
       publish({layer: loaded.ContextMenuTouchLayer, hasFailed: false});
     },
     (error: unknown) => {
-      // Nothing is scheduled now, so the next touch on a trigger asks again.
-      isScheduled = false;
+      pendingLoad = null;
+      // No window has a load scheduled now. The next touch on a trigger, or
+      // the next trigger that mounts, asks again.
+      scheduledViews = new WeakSet();
       publish({layer: null, hasFailed: true});
       warnOnce(
         'ContextMenu:touch-layer-load',
@@ -92,13 +98,12 @@ function load(): void {
   );
 }
 
-function scheduleLoad(): void {
-  if (isScheduled) {
+function scheduleLoad(view: Window): void {
+  if (state.layer != null || scheduledViews.has(view)) {
     return;
   }
-  isScheduled = true;
-  // Timers from this window stop when its document goes away.
-  const view = window;
+  scheduledViews.add(view);
+  // The timers belong to the trigger's window, so they end with its document.
   // The frame callback runs just before that frame paints, so the timeout it
   // sets runs just after the paint.
   view.requestAnimationFrame(() => {
@@ -106,7 +111,7 @@ function scheduleLoad(): void {
       if (typeof view.requestIdleCallback === 'function') {
         view.requestIdleCallback(load, {timeout: LOAD_CAP_MS});
       } else {
-        load();
+        view.setTimeout(load, 0);
       }
     }, 0);
   });
@@ -117,10 +122,9 @@ function scheduleLoad(): void {
  * it: that touch is the intent that asks.
  */
 export function retryContextMenuTouchLayer(): void {
-  if (!state.hasFailed || isScheduled) {
+  if (!state.hasFailed || pendingLoad != null) {
     return;
   }
-  isScheduled = true;
   load();
 }
 
@@ -128,19 +132,21 @@ export function retryContextMenuTouchLayer(): void {
  * The touch layer after the page loads it, `null` until then, and whether its
  * latest load failed. The first ContextMenu that wants it asks for the load,
  * and later ones share it. It is `null` on the server and while hydrating, so
- * both renders produce the same markup.
+ * both renders produce the same markup. `triggerRef` names the window whose
+ * frame and idle time start the load; the page's own window by default.
  */
 export function useContextMenuTouchLayer(
   isWanted: boolean,
+  triggerRef?: RefObject<Element | null>,
 ): ContextMenuTouchLayerState {
   const current = useSyncExternalStore(subscribe, getState, getServerState);
-  // Syncs with the browser's frame and idle timers, which decide when the
-  // touch layer loads.
+  // Syncs with the trigger window's frame and idle timers, which decide when
+  // the touch layer loads.
   useEffect(() => {
     if (isWanted) {
-      scheduleLoad();
+      scheduleLoad(triggerRef?.current?.ownerDocument.defaultView ?? window);
     }
-  }, [isWanted]);
+  }, [isWanted, triggerRef]);
   return isWanted ? current : NOT_LOADED;
 }
 
@@ -151,11 +157,11 @@ export function useContextMenuTouchLayer(
 export async function __loadContextMenuTouchLayerForTest(): Promise<void> {
   const loaded = await layerModule.load();
   publish({layer: loaded.ContextMenuTouchLayer, hasFailed: false});
-  isScheduled = true;
 }
 
-/** Test only: drops the loaded layer and clears the scheduled load. */
+/** Test only: drops the loaded layer and clears the scheduled loads. */
 export function __resetContextMenuTouchLayerForTest(): void {
-  isScheduled = false;
+  scheduledViews = new WeakSet();
+  pendingLoad = null;
   publish(NOT_LOADED);
 }
