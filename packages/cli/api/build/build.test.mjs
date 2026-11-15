@@ -590,6 +590,7 @@ describe('build kit — every page starts from a template', () => {
       ['a kanban board page', ['a KanbanBoard page', 'a kanbanBoard page', 'a knaban board page']],
       ['a checkout wizard page', ['a CheckoutWizard page']],
       ['a theme showcase page', ['a ThemeShowcase page']],
+      ['a library for a book club', ['a lbirary for a book club']],
     ]) {
       const spaced = await build(spacedIdea, {cwd: REPO});
       for (const idea of others) {
