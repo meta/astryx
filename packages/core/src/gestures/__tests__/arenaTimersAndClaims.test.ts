@@ -96,12 +96,52 @@ describe('a timer that fires late', () => {
     arena.ended([{id: 1, x: 40, y: 0, time: 820}]);
   });
 
-  it('still fires on its deadline when nothing was queued', () => {
+  it('still fires on its deadline when nothing was queued, once the wait for queued input ends', () => {
+    const {clock, arena, log} = pressArena();
+    // 300 ms late: the deadline waits 50 ms for input still queued.
+    clock.runTask(800);
+    clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(850);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 870}]);
+  });
+
+  it('waits more than one task for input queued behind the block: a drift that comes after the next task still fails the press', () => {
+    const {clock, arena, log} = pressArena();
+    // The timer task runs at 800, and so does the next task. The finger's
+    // drift from 300 ms reaches the page at 816, as Chromium sends touch
+    // moves with the next frame.
+    clock.runTask(800);
+    clock.runTask(800);
+    clock.time = 816;
+    arena.moved([{id: 1, x: 40, y: 0, time: 300}]);
+    clock.runTask(850);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    expect(log).toContain('press:failed@300');
+    arena.ended([{id: 1, x: 40, y: 0, time: 870}]);
+  });
+
+  it('keeps an on-time deadline waiting while input from before it still comes late', () => {
+    const {clock, arena, log} = pressArena();
+    // A move from 400 ms reaches the page at 470, 70 ms late, inside the
+    // press's tolerance. The deadline at 500 waits 50 ms past that move.
+    clock.time = 470;
+    arena.moved([{id: 1, x: 2, y: 0, time: 400}]);
+    clock.runTask(500);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(550);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 2, y: 0, time: 570}]);
+  });
+
+  it('ends the wait at the first input stamped at or past the deadline', () => {
     const {clock, arena, log} = pressArena();
     clock.runTask(800);
-    clock.runTask(800);
+    clock.time = 820;
+    arena.moved([{id: 1, x: 1, y: 0, time: 820}]);
     expect(log).toContain('press:began@500');
-    arena.ended([{id: 1, x: 0, y: 0, time: 820}]);
+    arena.ended([{id: 1, x: 1, y: 0, time: 840}]);
   });
 });
 
