@@ -8,7 +8,13 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {layerDocument, openLayerMarkup} from './layers.mjs';
+import {
+  countQueuedImmediates,
+  layerDocument,
+  openLayerMarkup,
+} from './layers.mjs';
+
+countQueuedImmediates();
 
 describe('openLayerMarkup', () => {
   it('reads a layer as its last update leaves it, however many tasks the update takes', async () => {

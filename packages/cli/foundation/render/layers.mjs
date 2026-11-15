@@ -20,6 +20,7 @@
  *   theme editor writes (_catalog.mjs)
  */
 
+import {promisify} from 'node:util';
 import {chartDocument} from './charts.mjs';
 
 /**
@@ -119,25 +120,14 @@ export async function openLayerMarkup(host, flushSync) {
   const g = /** @type {any} */ (globalThis);
   // React finishes an update in tasks of its own: a layer opens in one,
   // then reads its anchor and renders again in the next. A timer alone can
-  // fire before them on a busy machine, and the markup then holds a state
-  // between two renders. So each read waits until the document, and which
-  // layers are open, stay the same for two turns in a row.
-  const state = () =>
-    g.document.body.innerHTML +
-    [...g.document.querySelectorAll('[data-astryx-layer-root]')]
-      .map((/** @type {any} */ l) => (l.__astryxPopoverOpen ? '1' : '0'))
-      .join('');
-  const turn = () =>
-    new Promise(resolve => setTimeout(() => setImmediate(resolve), 0));
+  // fire before them on a busy machine, and a read then holds a layer
+  // between two renders. So after a timer each read waits, one immediate at
+  // a time, until no immediate is left queued (React queues its tasks so),
+  // which costs nothing on a settled page.
   const tick = async () => {
-    let last = state();
-    let same = 0;
-    for (let i = 0; i < SETTLE_TURNS && same < 2; i++) {
-      await turn();
-      const now = state();
-      same = now === last ? same + 1 : 0;
-      last = now;
-    }
+    await new Promise(resolve => setTimeout(resolve, 0));
+    for (let i = 0; i < SETTLE_TURNS && queued > 0; i++)
+      await new Promise(resolve => nativeImmediate(resolve));
   };
   /** @type {Set<string>} */
   const seen = new Set();
@@ -204,8 +194,49 @@ export async function openLayerMarkup(host, flushSync) {
   return out;
 }
 
-/** The most turns a read waits for the document to stop changing. */
+/** The most turns a read waits for the queued immediates to run. */
 const SETTLE_TURNS = 50;
+
+/** The immediates queued in this thread and not yet run, a read's own left out. */
+let queued = 0;
+const nativeImmediate = globalThis.setImmediate;
+const nativeClearImmediate = globalThis.clearImmediate;
+const COUNTED = Symbol.for('astryx.render.counted-immediate');
+
+/**
+ * Count each immediate queued in this thread from now on, so a read knows
+ * when React has no task left: call it before React loads, which keeps the
+ * setImmediate it finds.
+ */
+export function countQueuedImmediates() {
+  const g = /** @type {any} */ (globalThis);
+  if (g.setImmediate[COUNTED]) return;
+  /** @param {(...args: any[]) => void} fn @param {...any} args */
+  const counted = (fn, ...args) => {
+    queued++;
+    let ran = false;
+    const settle = () => {
+      if (!ran) {
+        ran = true;
+        queued--;
+      }
+    };
+    const handle = nativeImmediate(() => {
+      settle();
+      fn(...args);
+    });
+    /** @type {any} */ (handle)[COUNTED] = settle;
+    return handle;
+  };
+  counted[COUNTED] = true;
+  const custom = /** @type {any} */ (nativeImmediate)[promisify.custom];
+  if (custom) /** @type {any} */ (counted)[promisify.custom] = custom;
+  g.setImmediate = counted;
+  g.clearImmediate = (/** @type {any} */ handle) => {
+    handle?.[COUNTED]?.();
+    return nativeClearImmediate(handle);
+  };
+}
 
 /** The global the render worker installs for parts a page shows open in place. SYNC: page-worker.mjs assigns it by this name. */
 export const LAYER_GLOBAL = '__astryxRenderLayer';

@@ -14,8 +14,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {partKeyProblem, pseudoKeyNotes} from '../theme/build/style-keys.mjs';
 import {
@@ -26,13 +25,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 const T = 240_000;
 
 beforeAll(() => {
@@ -44,13 +48,10 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+// The real program, in process: no Node start per command.
 /** @param {string[]} args */
-const json = args => {
-  const r = spawnSync(process.execPath, [BIN, '--json', ...args], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
+const json = async args => {
+  const r = await runCli(['--json', ...args], {cwd});
   return {status: r.status, env: JSON.parse(r.stdout)};
 };
 /** @param {string} file @param {string[]} [more] */
@@ -79,7 +80,7 @@ const compileOwn = slug => compile(`themes/${slug}/${slug}.theme.ts`);
 describe('a value the theme a child extends writes', () => {
   it(
     "is named at that theme's file and line in the child's own build",
-    () => {
+    async () => {
       write(
         'fam/ocean.ts',
         "import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': null} as any, components: {card: {base: {':HOVER': {color: 'red'}}}}});\n",
@@ -88,7 +89,7 @@ describe('a value the theme a child extends writes', () => {
         'fam/ocean-calm.ts',
         "import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean';\nexport default defineTheme({extends: ocean, name: 'ocean-calm'});\n",
       );
-      const r = json(['theme', 'build', 'fam/ocean-calm.ts']);
+      const r = await json(['theme', 'build', 'fam/ocean-calm.ts']);
       expect(r.status).toBe(0);
       const warnings = JSON.stringify(r.env.data.warnings);
       expect(warnings).toContain(
@@ -135,14 +136,14 @@ describe('custom properties that read each other', () => {
         ],
       ]) {
         plain(String(fields));
-        const p = json(['theme', 'build', 'plain/p.ts']);
+        const p = await json(['theme', 'build', 'plain/p.ts']);
         expect(p.status, String(fields)).toBe(0);
         expect(JSON.stringify(p.env.data.warnings), String(fields)).toContain(
           JSON.stringify(why).slice(1, -1),
         );
         if (editor) {
           own('k3', String(fields));
-          expect(compileOwn('k3').status, String(fields)).toBe(1);
+          expect((await compileOwn('k3')).status, String(fields)).toBe(1);
         }
       }
       plain(
@@ -150,7 +151,7 @@ describe('custom properties that read each other', () => {
       );
       expect(
         JSON.stringify(
-          json(['theme', 'build', 'plain/p.ts']).env.data.warnings,
+          (await json(['theme', 'build', 'plain/p.ts'])).env.data.warnings,
         ),
       ).toBe('[]');
     },
@@ -199,20 +200,20 @@ describe('pseudo-elements', () => {
       for (const key of ['::nopey', '::scroll-button(*)', '::column']) {
         const fields = `components: {button: {base: {${JSON.stringify(key)}: {color: 'red'}}}}`;
         plain(fields);
-        const p = json(['theme', 'build', 'plain/p.ts']);
+        const p = await json(['theme', 'build', 'plain/p.ts']);
         expect(p.status, key).toBe(0);
         expect(JSON.stringify(p.env.data.warnings), key).toContain(
           "is not in the CLI's selector data: it may be newer than this CLI, or a typo",
         );
         own('k37', fields);
-        const e = compileOwn('k37');
+        const e = await compileOwn('k37');
         expect(e.status, key).toBe(0);
         expect(JSON.stringify(e.env.data.warnings), key).toContain(
           "is not in the CLI's selector data",
         );
       }
       own('k37', "components: {button: {base: {'::befor': {color: 'red'}}}}");
-      expect(compileOwn('k37').status).toBe(1);
+      expect((await compileOwn('k37')).status).toBe(1);
     },
     T,
   );
@@ -229,7 +230,7 @@ describe('a misspelled vendor property', () => {
         ["'-webkit-nope': 'x'", 'is no vendor property a browser knows'],
       ]) {
         own('k8', `components: {button: {base: {${key}}}}`);
-        const r = compileOwn('k8');
+        const r = await compileOwn('k8');
         expect(r.status, key).toBe(1);
         expect(r.env.error, key).toContain(near);
       }
@@ -237,7 +238,7 @@ describe('a misspelled vendor property', () => {
         'k8',
         "components: {button: {base: {'-webkit-line-clamp': '2', WebkitAppearance: 'none'}}}",
       );
-      expect(compileOwn('k8').status).toBe(0);
+      expect((await compileOwn('k8')).status).toBe(0);
     },
     T,
   );
@@ -267,7 +268,7 @@ describe('values read from another file through array and nested destructuring',
       ]) {
         write('themes/k9/shared.ts', shared);
         own('k9', fields, imports);
-        const r = compileOwn('k9');
+        const r = await compileOwn('k9');
         expect(r.status, fields).toBe(1);
         expect(r.env.error, fields).toContain(
           '(in themes/k9/shared.ts, line 1)',
@@ -281,7 +282,7 @@ describe('values read from another file through array and nested destructuring',
 describe('token names and values that set no token', () => {
   it(
     'are warned at their line by theme build, which writes what it wrote before',
-    () => {
+    async () => {
       for (const [fields, why] of [
         ["tokens: {'-color-accent': 'red'}", '-color-accent is no token name'],
         [
@@ -294,7 +295,7 @@ describe('token names and values that set no token', () => {
         ],
       ]) {
         plain(fields);
-        const p = json(['theme', 'build', 'plain/p.ts']);
+        const p = await json(['theme', 'build', 'plain/p.ts']);
         expect(p.status, fields).toBe(0);
         expect(JSON.stringify(p.env.data.warnings), fields).toContain(why);
       }

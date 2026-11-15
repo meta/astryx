@@ -46,12 +46,15 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
-import {LAYER_GLOBAL, LAYER_PLACEHOLDER, layerDocument, layerPlaceholder, openLayerMarkup} from './layers.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
 /** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
 const {entry, root, scope} = workerData;
+
+// Before React loads: a read of the overlays waits for React's queued tasks.
+countQueuedImmediates();
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.

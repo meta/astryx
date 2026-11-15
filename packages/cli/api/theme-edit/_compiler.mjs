@@ -186,6 +186,32 @@ export function makeCompiler(project, parts) {
    * @returns {Read[]}
    */
   function partReads(target, group) {
+    // The part data never changes while the compiler lives, and the checks
+    // ask for the same part many times in one command: each answer is made
+    // once, and handed out frozen so no caller can change it for the next.
+    const key = `${target}\0${group ?? ''}`;
+    const known = readsOf.get(key);
+    if (known) return known;
+    const reads = freshReads(target, group);
+    for (const r of reads) {
+      Object.freeze(r.props);
+      Object.freeze(r.when);
+      Object.freeze(r);
+    }
+    Object.freeze(reads);
+    readsOf.set(key, reads);
+    return reads;
+  }
+  /** @type {Map<string, Read[]>} */
+  const readsOf = new Map();
+
+  /**
+   * {@link partReads}, made anew.
+   * @param {string} target
+   * @param {string | null} group
+   * @returns {Read[]}
+   */
+  function freshReads(target, group) {
     const own = MAP[target]?.own ?? {};
     /** @type {Map<string, {token: string, props: Set<string>, when: Set<string>}>} */
     const out = new Map();
