@@ -6,9 +6,9 @@
  *
  * @input An operation run inside `recordReads(seen, fn)`.
  * @output `seen` gets every file whose content the operation read through fs
- *   (synchronously or with promises.readFile) or imported as a doc module
- *   (`recordContentRead`), and every folder it
- *   listed or probed, each with its state when first read;
+ *   or imported as a doc module (`recordContentRead`), and every folder it
+ *   listed or probed, each with its state when first read; an exact run
+ *   records each probed path by what the call returned instead.
  *   `unchangedSince(seen)` says whether all are still in that state.
  * @position Used by search's adapter to reuse a gathered catalog only while
  *   it is exact, by the docs adapter to rebuild the CLI's own docs tree after
