@@ -9,7 +9,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {useState} from 'react';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, renderHook, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FormLayout} from '../../../FormLayout/FormLayout';
 import {Table} from '../../Table';
@@ -21,6 +21,8 @@ import type {
 } from './useTableFiltering';
 import type {PowerSearchConfig} from '../../../PowerSearch/types';
 import type {TableColumn} from '../../types';
+import {registerFixedHeightColumn} from '../../utils';
+import {isFixedHeightColumn} from '../../tableColumnAdmission';
 
 // =============================================================================
 // Test Data
@@ -354,6 +356,32 @@ describe('useTableFiltering', () => {
       expect(() =>
         render(<FilterTable columns={noFilterColumns} />),
       ).not.toThrow();
+    });
+
+    it('preserves fixed-height admission when inline filtering adds a width', () => {
+      const column: TableColumn<TestRow> = {
+        key: 'name',
+        header: 'Name',
+        filter: 'name',
+        renderCell: row => row.name,
+      };
+      registerFixedHeightColumn(column);
+
+      const {result} = renderHook(() =>
+        useTableFiltering<TestRow>({
+          filters: {},
+          onFilterChange: () => {},
+          variant: 'inline',
+          searchConfig,
+        }),
+      );
+      const transformed = result.current.transformColumns?.([column]);
+
+      expect(transformed).toHaveLength(1);
+      expect(transformed?.[0]).not.toBe(column);
+      expect(
+        isFixedHeightColumn(transformed?.[0] as TableColumn<TestRow>),
+      ).toBe(true);
     });
   });
 });

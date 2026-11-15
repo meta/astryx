@@ -1,7 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import {describe, expect, it} from 'vitest';
 import {registerFixedHeightColumn} from './utils';
-import {withLogicalPositionWidths} from './tableColumnAdmission';
+import {
+  copyFixedHeightColumnRegistration,
+  getLogicalPositionRenderer,
+  isFixedHeightColumn,
+  registerFixedHeightColumnInternal,
+  withLogicalPositionWidths,
+} from './tableColumnAdmission';
 import type {TableColumn} from './types';
 
 type Row = {id: string};
@@ -13,7 +19,7 @@ function numbered(): TableColumn<Row> {
     width: {type: 'pixel', value: 48},
     renderCell: () => null,
   };
-  registerFixedHeightColumn(column, true, index => index + 1);
+  registerFixedHeightColumnInternal(column, true, index => index + 1);
   return column;
 }
 
@@ -35,6 +41,8 @@ describe('logical-position column widths', () => {
       key: 'number',
       width: {type: 'pixel', value: 61},
     });
+    expect(isFixedHeightColumn(sized[0])).toBe(true);
+    expect(getLogicalPositionRenderer(sized[0])?.(3)).toBe(4);
   });
 
   it('leaves columns that render no logical position unchanged', () => {
@@ -44,5 +52,14 @@ describe('logical-position column widths', () => {
     expect(withLogicalPositionWidths(columns, new Map([[0, 200]]))).toBe(
       columns,
     );
+  });
+
+  it('preserves admission when a transform copies a column', () => {
+    const source = numbered();
+    const copy = {...source, width: {type: 'pixel' as const, value: 72}};
+    copyFixedHeightColumnRegistration(source, copy);
+
+    expect(isFixedHeightColumn(copy)).toBe(true);
+    expect(getLogicalPositionRenderer(copy)?.(3)).toBe(4);
   });
 });

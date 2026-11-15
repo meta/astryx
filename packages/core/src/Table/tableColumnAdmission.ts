@@ -6,12 +6,29 @@
  * @position Shared Table protocol, with actual pitch validated after mount.
  */
 import type {ReactNode} from 'react';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 import type {TableColumn} from './types';
-const heightSafe = new WeakMap<object, boolean>();
-const logicalRenderers = new WeakMap<
-  object,
-  (logicalIndex: number) => ReactNode
->();
+
+type LogicalPositionRenderer = (logicalIndex: number) => ReactNode;
+type FixedHeightColumnRegistration = {
+  isCompatible: boolean;
+  renderLogicalPosition?: LogicalPositionRenderer;
+};
+
+// A swizzled Table and the package copy must see the same admission. Keep the
+// registration in the shared realm, just like the virtualization capability.
+const registrations = realmValue(
+  sharedKey('table/fixed-height-columns', 1),
+  () => new WeakMap<object, FixedHeightColumnRegistration>(),
+);
+
+function registerFixedHeightColumnInternal<T extends Record<string, unknown>>(
+  column: TableColumn<T>,
+  isCompatible: boolean,
+  renderLogicalPosition?: LogicalPositionRenderer,
+): void {
+  registrations.set(column, {isCompatible, renderLogicalPosition});
+}
 /**
  * Admits a custom-rendered column to fixed-height row windowing.
  *
@@ -19,12 +36,20 @@ const logicalRenderers = new WeakMap<
  */
 export function registerFixedHeightColumn<T extends Record<string, unknown>>(
   column: TableColumn<T>,
-  isCompatible = true,
-  renderLogicalPosition?: (logicalIndex: number) => ReactNode,
 ): void {
-  heightSafe.set(column, isCompatible);
-  if (renderLogicalPosition != null) {
-    logicalRenderers.set(column, renderLogicalPosition);
+  registerFixedHeightColumnInternal(column, true);
+}
+
+/** Internal admission for first-party columns with logical-position output. */
+export {registerFixedHeightColumnInternal};
+
+/** Preserve admission when a first-party transform creates a column copy. */
+export function copyFixedHeightColumnRegistration<
+  T extends Record<string, unknown>,
+>(source: TableColumn<T>, copy: TableColumn<T>): void {
+  const registration = registrations.get(source);
+  if (registration != null) {
+    registrations.set(copy, registration);
   }
 }
 
@@ -45,13 +70,15 @@ export function withLogicalPositionWidths<T extends Record<string, unknown>>(
     const width = widths.get(index);
     if (
       width === undefined ||
-      logicalRenderers.get(column) == null ||
+      registrations.get(column)?.renderLogicalPosition == null ||
       (column.width?.type === 'pixel' && width <= column.width.value)
     ) {
       return column;
     }
     isChanged = true;
-    return {...column, width: {type: 'pixel' as const, value: width}};
+    const copy = {...column, width: {type: 'pixel' as const, value: width}};
+    copyFixedHeightColumnRegistration(column, copy);
+    return copy;
   });
   return isChanged ? next : columns;
 }
@@ -64,11 +91,14 @@ export function getLogicalPositionExtraVar(index: number): string {
 }
 export function getLogicalPositionRenderer<T extends Record<string, unknown>>(
   column: TableColumn<T>,
-): ((logicalIndex: number) => ReactNode) | undefined {
-  return logicalRenderers.get(column);
+): LogicalPositionRenderer | undefined {
+  return registrations.get(column)?.renderLogicalPosition;
 }
 export function isFixedHeightColumn<T extends Record<string, unknown>>(
   column: TableColumn<T>,
 ): boolean {
-  return column.renderCell == null || heightSafe.get(column) === true;
+  return (
+    column.renderCell == null ||
+    registrations.get(column)?.isCompatible === true
+  );
 }

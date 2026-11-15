@@ -69,6 +69,7 @@ import {
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/filtering/useTableFiltering.generated';
 import {createSharedContext} from '../../../utils/sharedContext';
+import {copyFixedHeightColumnRegistration} from '../../tableColumnAdmission';
 
 registerEnglishFallback(english);
 
@@ -1190,7 +1191,9 @@ export function useTableFiltering<T extends Record<string, unknown>>(
           ? (columns: TableColumn<T>[]) =>
               columns.map(col => {
                 if (col.filter != null && col.width == null) {
-                  return {...col, width: proportional(1)};
+                  const copy = {...col, width: proportional(1)};
+                  copyFixedHeightColumnRegistration(col, copy);
+                  return copy;
                 }
                 return col;
               })
