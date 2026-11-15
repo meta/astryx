@@ -88,7 +88,12 @@ export const OVERRIDES = [
   ],
   // A checkbox is the box itself; the checks group (checkbox and radio)
   // goes by its own name.
-  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checkbox-indicator'}],
+  // A check mark is the mark drawn inside the box, never the box.
+  [
+    /\b(?:checkbox(?:es)?\s+)?(?:check ?marks?|ticks?)\b/,
+    {on: 'checkbox-indicator-check'},
+  ],
+  [/\b(checkbox(es)?)\b/, {on: 'checkbox-indicator'}],
   // A switch's or toggle's thumb, knob or handle: the thumb, never the
   // track.
   [
