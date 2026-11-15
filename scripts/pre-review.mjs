@@ -25,6 +25,7 @@ import {
   changesetFindings,
   effectFindings,
   mergeFindings,
+  provenanceBaselineCheck,
   recordGapFindings,
   sharedOwnerFindings,
   sizeAdvice,
@@ -274,6 +275,70 @@ function changedFiles(fork, head) {
   return [...tracked, ...untracked];
 }
 
+/**
+ * Every changed path, with both paths of a rename, as the lint job lists
+ * them for the comment-provenance scope helper.
+ */
+function changedPathsWithRenames(fork, head) {
+  const tracked = git([
+    'diff',
+    '--name-only',
+    '--no-renames',
+    fork,
+    ...(head ? [head] : []),
+  ]).split('\n');
+  const untracked = head
+    ? []
+    : git(['ls-files', '--others', '--exclude-standard']).split('\n');
+  return [...new Set([...tracked, ...untracked].filter(Boolean))];
+}
+
+/**
+ * The comment-provenance baseline check, run in the working tree. With
+ * `--head` the working tree is not the head, so the check is not run there.
+ */
+function provenanceBaseline(fork, head, readHead) {
+  const changed = changedPathsWithRenames(fork, head);
+  let baseline;
+  try {
+    baseline = JSON.parse(
+      readHead(
+        'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      ),
+    );
+  } catch {
+    baseline = {};
+  }
+  return provenanceBaselineCheck({
+    changed,
+    baseline,
+    runCheck: () => {
+      if (head) return null;
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            path.join(
+              ROOT,
+              'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
+            ),
+            '--check',
+          ],
+          {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+            env: {...process.env, NODE_OPTIONS: '--max-old-space-size=4096'},
+          },
+        );
+        return {ok: true, output: ''};
+      } catch (error) {
+        return {ok: false, output: String(error.stderr ?? error.message)};
+      }
+    },
+  });
+}
+
 /** Global baseline claims at the merge base, for the records' own triggers. */
 function globalBaselines(fork, headSha, triggers) {
   const args = [
@@ -314,6 +379,12 @@ export function reviewSizeAdvice(changedCountByFile, isGenerated) {
       file => isGenerated(file) || TEMPLATES.test(file),
     ),
   );
+}
+
+/** The checklist items, each once: the first reason given for it stays. */
+function withoutRepeats(checks) {
+  const seen = new Set();
+  return checks.filter(item => !seen.has(item.id) && seen.add(item.id));
 }
 
 /** Each checklist item that has findings, with its count. */
@@ -383,6 +454,7 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
       ...files.filter(file => classes[file].specRecord && present.has(file)),
     ]),
   ];
+  const provenance = provenanceBaseline(fork, head, readHead);
   const findings = [
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
@@ -395,6 +467,7 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
       readHead,
     }),
     ...mergeFindings(merge.conflicts ?? [], base),
+    ...provenance.findings,
   ];
   return {
     base,
@@ -404,12 +477,16 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
     authoredLines,
     sizeAdvice: reviewSizeAdvice(changedCountByFile, isGenerated),
     merge,
+    provenanceBaseline: provenance.status,
     findings,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
     records: [...records].map(([id, recordPath]) => ({id, path: recordPath})),
     claims: [...claims].sort(),
     baselines: globalBaselines(fork, headSha, [...triggers].sort()),
-    checks: [...applicableChecks(files, diff), ...findingChecks(findings)],
+    checks: withoutRepeats([
+      ...applicableChecks(files, diff),
+      ...findingChecks(findings),
+    ]),
     checklist: CHECKLIST_LINK,
   };
 }
@@ -452,6 +529,11 @@ export function formatReport(report) {
     report.merge.error
       ? `Merge into ${report.base}: not checked: ${report.merge.error}`
       : `Merge into ${report.base}: ${report.merge.conflicts.length ? `${report.merge.conflicts.length} conflicting files` : 'clean'}`,
+    ...(report.provenanceBaseline
+      ? [
+          `Comment-provenance baseline: ${PROVENANCE_STATUS[report.provenanceBaseline] ?? report.provenanceBaseline}`,
+        ]
+      : []),
     '',
     `Findings in this change (${report.findings.length}):`,
     ...(report.findings.length
@@ -467,6 +549,14 @@ export function formatReport(report) {
   ];
   return lines.join('\n');
 }
+
+const PROVENANCE_STATUS = {
+  skipped:
+    'not checked: the change touches no file it lists, the baseline, the rule or its tooling',
+  passed: 'up to date',
+  failed: 'out of date (see the findings)',
+  'not-run': 'not checked: run without --head to check the working tree',
+};
 
 export function formatFinding({item, file, line, rule, fix}) {
   const where = file ? `${file}${line ? `:${line}` : ''}  ` : '';

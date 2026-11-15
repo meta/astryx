@@ -128,8 +128,12 @@ The report reads only the local repository. It prints:
   read at the merge base;
 - the authored line count, with advice when the lines outside templates are
   over the size guideline, and whether the change merges into the base;
-- the findings for items i to l, each with its file and line, the rule, and
-  the fix;
+- whether the comment-provenance baseline is up to date, checked as the lint
+  job checks it when the change touches a file the baseline lists, the
+  baseline, the rule or its tooling (in the working tree only, not with
+  `--head`);
+- the findings for items f and i to l, each with its file and line, the rule,
+  and the fix;
 - the checklist items that apply to this change, each with its reason.
 
 The report is a lookup. The records decide acceptance, not the report. A

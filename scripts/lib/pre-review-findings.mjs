@@ -12,6 +12,7 @@
 import path from 'node:path';
 import {createRequire} from 'node:module';
 import {parseFrontmatter} from '../check-changesets.mjs';
+import {canSkipBaselineCheck} from '../../.github/scripts/provenance-baseline-scope.mjs';
 
 const require = createRequire(import.meta.url);
 const {parseEntry} = require('../changeset-entry-format.cjs');
@@ -620,6 +621,40 @@ export function recordGapFindings({
     });
   }
   return findings;
+}
+
+/** The command that rewrites the comment-provenance baseline. */
+export const PROVENANCE_BASELINE_FIX =
+  'node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs';
+
+/**
+ * Item f. Runs the comment-provenance baseline check, as the lint job does,
+ * unless the scope helper says the change cannot make the baseline stale.
+ * `changed` lists both paths of a rename. `runCheck` returns whether the
+ * check passed and its output, or null when it cannot run here.
+ * @param {{changed: string[], baseline: Record<string, unknown>, runCheck: () => ({ok: boolean, output: string} | null)}} options
+ */
+export function provenanceBaselineCheck({changed, baseline, runCheck}) {
+  if (canSkipBaselineCheck(changed, baseline)) {
+    return {status: 'skipped', findings: []};
+  }
+  const result = runCheck();
+  if (result == null) return {status: 'not-run', findings: []};
+  const {ok, output} = result;
+  if (ok) return {status: 'passed', findings: []};
+  return {
+    status: 'failed',
+    output,
+    findings: [
+      {
+        item: 'f',
+        file: 'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+        line: null,
+        rule: 'The comment-provenance baseline is out of date for the changed comments',
+        fix: `Run \`${PROVENANCE_BASELINE_FIX}\` and commit the baseline it writes.`,
+      },
+    ],
+  };
 }
 
 const MAX_CONFLICTS = 10;
