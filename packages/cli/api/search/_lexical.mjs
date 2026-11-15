@@ -129,6 +129,18 @@ export function namesWhole(candidate, term) {
 }
 
 /**
+ * Whether a one-identifier query is read as its words when all it matches,
+ * read whole, is text that mentions it: when it is written as an entry's
+ * name is written (PascalCase: a component, a type, an icon), never as a
+ * prop's (camelCase). The scope of that reading, in one place.
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function readsMentionAsWords(query) {
+  return COMPONENT_NAME_RE.test(query.trim());
+}
+
+/**
  * Today's lexical ranking of a gathered catalog: the search response
  * `searchCore` returns.
  *
@@ -153,29 +165,33 @@ export function rankLexical(query, options, catalog) {
   const exact = all.some(candidate => namesWhole(candidate, term));
   // One identifier is read as its words when, read whole, it matches
   // nothing: a prop or hook name (camelCase) a doc already mentions keeps
-  // the entries that mention it. An identifier written as entries are
-  // named (PascalCase, a component's name) is read as its words also when
-  // all it matches is text that mentions it: that text keeps its entry,
-  // and the words find the entries it names.
-  /** The entries the identifier, read whole, matches. @type {Set<Candidate>} */
+  // the entries that mention it. An identifier written as an entry's name
+  // (see readsMentionAsWords) is read as its words also when all it matches
+  // is text that mentions it: that text keeps its entry, and the words find
+  // the entries they name. The whole identifier is scored against the
+  // catalog only for a query these rules can split.
+  const oneIdentifier = !exact && !/\s/.test(term) && spelled !== term;
+  const mentionsSplit = oneIdentifier && readsMentionAsWords(String(query));
+  /** The entries the identifier, read whole, mentions. @type {Set<Candidate>} */
   const mentioned = new Set();
-  let onlyMentions = true;
-  for (const candidate of all) {
-    const hit = scoreCandidate(term, candidate);
-    if (!hit) continue;
-    mentioned.add(candidate);
-    if (!hit.inText) onlyMentions = false;
-  }
-  const split =
-    !exact &&
-    !/\s/.test(term) &&
-    spelled !== term &&
-    (mentioned.size === 0 ||
-      (COMPONENT_NAME_RE.test(String(query).trim()) && onlyMentions));
+  let wholeHit = false;
+  let otherHit = false;
+  if (oneIdentifier)
+    for (const candidate of all) {
+      const hit = scoreCandidate(term, candidate);
+      if (!hit) continue;
+      wholeHit = true;
+      if (!mentionsSplit || !hit.inText) {
+        otherHit = true;
+        break;
+      }
+      mentioned.add(candidate);
+    }
+  const split = oneIdentifier && (!wholeHit || (mentionsSplit && !otherHit));
   // Read as its words, the identifier still answers the text that mentions
   // it whole: that entry keeps the better of the two readings.
-  const wholeTokens = split ? tokenizeQuery(term) : null;
-  const wholeWords = split ? phraseWords(term) : null;
+  const wholeTokens = split && mentioned.size ? tokenizeQuery(term) : null;
+  const wholeWords = split && mentioned.size ? phraseWords(term) : null;
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact
@@ -352,6 +368,19 @@ export function rankLexical(query, options, catalog) {
       (other != null &&
         ((other.priority && !doc.priority) || byScore(other, doc) < 0));
     scored.push(otherFirst ? others[i++].result : docs[j++].result);
+  }
+  // Read as its words, an identifier text mentions keeps that text ahead of
+  // every entry its words only match: a mention of the whole identifier is
+  // the stronger hit. An entry the words name outright (its whole name is
+  // one of them, or a run of them joined, as `named` reads it) keeps its
+  // place among them. Each side keeps its order and its scores.
+  if (mentioned.size) {
+    const ahead = new Set(
+      ranked
+        .filter(r => mentioned.has(r.candidate) || r.span != null || r.word)
+        .map(r => r.result),
+    );
+    scored.sort((a, b) => Number(ahead.has(b)) - Number(ahead.has(a)));
   }
 
   // `results` is bounded by `limit` so a caller (and the recorded run that

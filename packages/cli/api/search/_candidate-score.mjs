@@ -136,10 +136,35 @@ function mentionPattern(term, t) {
  * the catalog does. A candidate's name, aliases, keywords, description, prose
  * and guidance must not change after its first score, as no catalog changes
  * them: an edited candidate, including one in a stored index passed to
- * `rankSearchIndex()` again, would still be scored on its first text.
- * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
+ * `rankSearchIndex()` again, would still be scored on its first text. A
+ * keyword's `mention` marks one its text mentions (see mentionKeyword).
+ * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string, mention: boolean}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
  */
 const prepared = new WeakMap();
+
+/**
+ * Whether a doc's keyword is a word its text mentions rather than one it is
+ * named or declared by: a code term or a table cell its keywords gather
+ * (`issuesUrl`), not the author's declared keywords, its title or headings,
+ * or its name. Another domain's keywords are all its own.
+ * @param {any} candidate
+ * @param {string} lower the keyword, lowercased
+ */
+function mentionKeyword(candidate, lower) {
+  if (candidate.domain !== 'doc') return false;
+  const own = [
+    ...(candidate._declared ?? []),
+    ...(candidate.titles ?? []),
+    candidate.name,
+    String(candidate.name ?? '').slice(
+      String(candidate.name ?? '').lastIndexOf('/') + 1,
+    ),
+    String(candidate._topic ?? '').slice(
+      String(candidate._topic ?? '').lastIndexOf('/') + 1,
+    ),
+  ];
+  return !own.some(x => x != null && String(x).toLowerCase() === lower);
+}
 
 /** @param {any} candidate */
 function prepare(candidate) {
@@ -153,7 +178,8 @@ function prepare(candidate) {
       }),
       keywords: keywords.map((/** @type {string} */ kw) => {
         const text = String(kw);
-        return {kw, text, lower: text.toLowerCase()};
+        const lower = text.toLowerCase();
+        return {kw, text, lower, mention: mentionKeyword(candidate, lower)};
       }),
       description: undefined,
       prose: [],
@@ -346,29 +372,35 @@ export function scoreCandidate(
 
   // ── Keyword signals ─────────────────────────────────────────────
   const termJoined = joined(term);
-  for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
+  for (const {kw, text: kwText, lower: kwLower, mention} of p.keywords) {
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
     // capitalized one names another entry (a block's `componentsUsed`). A
     // doc's keywords include code terms, matched as written.
     if (kwLower === term) {
-      consider(90, `keyword "${kw}"`);
+      consider(90, `keyword "${kw}"`, false, mention);
       continue;
     }
     if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
-      consider(90, `keyword "${kw}"`, 'keyword');
+      consider(90, `keyword "${kw}"`, 'keyword', mention);
       continue;
     }
     if (sameTermWord(t, kwLower)) {
-      consider(88, `keyword "${kw}"`);
+      consider(88, `keyword "${kw}"`, false, mention);
       continue;
     }
-    if (startsATermWordOf(t, kw)) consider(70, `keyword "${kw}"`);
+    if (startsATermWordOf(t, kw))
+      consider(70, `keyword "${kw}"`, false, mention);
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
       if (dist != null && dist <= 2) {
-        consider(dist === 1 ? 70 : 30, `keyword "${kw}" (distance ${dist})`);
+        consider(
+          dist === 1 ? 70 : 30,
+          `keyword "${kw}" (distance ${dist})`,
+          false,
+          mention,
+        );
       }
     }
   }
