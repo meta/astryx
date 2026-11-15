@@ -259,13 +259,14 @@
         "denser-or-roomier",
         "one-kind-of-part",
         "no-app-yet",
+        "share-with-other-teams",
         "quick-start",
         "creating-a-custom-theme",
         "icon-sizes",
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "cc0657ba26c59c5f44f2daea1e21a53f1e8faeeb36e6dea6a75f5ed6237549aa",
+      "skeleton": "0265677164b16d22adfd3e60e3a7238e4c89b1f27f1a2aab9fcd0ad9bc4042ef",
       "mentions": []
     },
     "use-a-theme": {

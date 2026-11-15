@@ -32,7 +32,7 @@ import {
 import {cliError} from '../../lib/cli-error.mjs';
 import {
   editorMissingArgument,
-  setEditorFreeName,
+  setFreeArgument,
   setEditorThemeList,
   setUnknownOptionReader,
 } from '../../lib/json-shim.mjs';
@@ -52,6 +52,7 @@ import {
 import {
   builtInThemes,
   dialValueFits,
+  modeDialValue,
   newFlagList,
   editorCheckedLine,
   editorCheckedNewLines,
@@ -62,6 +63,8 @@ import {
   editorFollowCompile,
   editorThemesAt,
   editorFreeName,
+  editorNameOk,
+  editorFreeAppFolder,
   typoNear,
   typoOf,
   editorAfterBuild,
@@ -76,6 +79,8 @@ import {
   editorMissingSource,
   editorThemeTemplate,
   showSections,
+  describe,
+  namesSetting,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -349,14 +354,6 @@ async function run(program, call, render, answer) {
   return answered;
 }
 
-/** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditSetting} s */
-function describe(s) {
-  const where = s.on
-    ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
-    : ' (whole theme)';
-  return `${s.thing} = ${s.value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
-}
-
 /**
  * The flags of a change, from Commander's options.
  * @param {any} o
@@ -411,8 +408,17 @@ function newSettings(o, themeName = '<theme>') {
     const all = flagValues(flag);
     if (flag === 'headings' && all.length > 1) out[flag] = all;
     else if (new Set(all).size > 1) {
+      // Each value as the dial reads it (`--mode light` is light-only); a
+      // light and a dark mode together are both modes, the default.
+      const read = all.map(v =>
+        dialValueFits(flag, v) ? v : flag === 'mode' ? modeDialValue(v) : null,
+      );
+      const bothModes =
+        flag === 'mode' &&
+        read.includes('light-only') &&
+        read.includes('dark-only');
       // The suggestion keeps the first value the dial takes, or drops it.
-      const fits = all.find(v => dialValueFits(flag, v));
+      const fits = bothModes ? undefined : (read.find(Boolean) ?? undefined);
       throw new AstryxError(
         `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
         [
@@ -420,9 +426,11 @@ function newSettings(o, themeName = '<theme>') {
             name: cmd(
               `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
             ),
-            reason: fits
-              ? 'do this instead: the first value it takes'
-              : `do this instead: none of them is a value --${flag} takes`,
+            reason: bothModes
+              ? 'do this instead: a light and a dark mode together are both modes, the default'
+              : fits
+                ? 'do this instead: the first value it takes'
+                : `do this instead: none of them is a value --${flag} takes`,
           },
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
@@ -473,7 +481,7 @@ function newFlagLine(o) {
  * the command as meant. Commander reads a word that starts with a typed
  * dash as a word of the command, so it is read here. Null when every
  * option is written as the command takes it.
- * @param {string} command `add` under preview
+ * @param {string} command `add` or `app` under preview
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {null}
  */
@@ -544,12 +552,16 @@ function changeBlocks(r) {
   // The status line names the value as saved, with a quote or space mark
   // the text output would fold written as its CSS escape (\201C), so the
   // text and the JSON name the same value.
+  // A value saved as no text (none at all) is named by describe as such.
   const s = {
     ...d.setting,
-    value: String(d.setting.value).replace(
-      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
-      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
-    ),
+    value:
+      typeof d.setting.value !== 'string'
+        ? d.setting.value
+        : d.setting.value.replace(
+            /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+            c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+          ),
   };
   const done =
     d.was != null
@@ -557,7 +569,14 @@ function changeBlocks(r) {
       : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
-  const {newProblems = [], ...rest} = /** @type {any} */ (d);
+  // What a whole-theme change leaves out comes next, with the lines that
+  // reach it, before the rest a head-cut output drops.
+  const {
+    newProblems = [],
+    leftOut = [],
+    missed = 0,
+    ...rest
+  } = /** @type {any} */ (d);
   const status = newProblems.length
     ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
     : done;
@@ -566,6 +585,25 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    ...(leftOut.length
+      ? [
+          list(
+            leftOut.map((/** @type {{note: string, run: string[]}} */ x) => [
+              x.note,
+              ...x.run,
+            ]),
+          ),
+        ]
+      : []),
+    // The parts the theme's own changes still do not reach, counted near
+    // the top, so a head of the output keeps it; show lists each.
+    ...(missed
+      ? [
+          record({
+            missed: `${missed} part${missed > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+          }),
+        ]
+      : []),
     ...changeFields(rest),
   ];
 }
@@ -624,13 +662,19 @@ function showBlocks(d) {
     colorNotes,
     colorFiles,
     unreached,
+    missed = [],
     // Every problem is in the open problems at the end, with its fix.
     problems: _problems,
     openProblems = [],
+    // The pictures to open: the first line and the last, so a head or a
+    // tail of the output keeps it.
+    look,
     ...rest
   } = d;
   const [head, ...others] = project(/** @type {any} */ (rest));
+  const lookLine = look ? record({look}) : [];
   return [
+    lookLine,
     head,
     // Each setting as named fields: its whole scope, the parts it reaches,
     // and what a stronger setting hides of it.
@@ -638,15 +682,6 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
-    // The parts the look leaves as the base has them, on one line: the
-    // most visible ten, and how many more (the JSON lists them all).
-    ...(unreached?.length
-      ? [
-          record({
-            unreached: `${unreached.slice(0, 10).join(', ')}${unreached.length > 10 ? `, and ${unreached.length - 10} more (show --json)` : ''} (their fill or text color is still the base's, and no setting is on them)`,
-          }),
-        ]
-      : []),
     ...(colors.length
       ? [
           section('colors:'),
@@ -657,6 +692,49 @@ function showBlocks(d) {
         ]
       : []),
     ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
+    // What the theme's own changes did not reach, counted, six with the
+    // line that reaches each; the other parts on the base's look are
+    // counted, and listed in the JSON. Just before the generated files
+    // (which stay last, before the closing look line), so a tail of the
+    // output keeps them.
+    ...(missed.length
+      ? [
+          section(
+            `missed (${missed.length} part${missed.length > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
+          ),
+          // Each part and why, then the line that reaches it.
+          missed
+            .slice(0, 6)
+            .map(
+              m =>
+                `- ${m.part}${m.state ? ` (${m.state})` : ''}: ${m.why}\n  line: ${cmd(m.line)}`,
+            )
+            .join('\n'),
+        ]
+      : []),
+    ...(() => {
+      // The rest, each said for what it is: a part whose fill or text
+      // color is still the base's (unreached), and a missed part beyond
+      // the six shown (a pill, a borderless surface, a state).
+      const shown = new Set(missed.slice(0, 6).map(m => m.part));
+      const still = (unreached ?? []).filter(p => !shown.has(p)).length;
+      const others = missed
+        .slice(6)
+        .filter(m => !(unreached ?? []).includes(m.part)).length;
+      const said = [
+        still
+          ? `${still} more part${still > 1 ? 's' : ''} whose fill or text color is still the base's`
+          : '',
+        others ? `${others} more missed part${others > 1 ? 's' : ''}` : '',
+      ].filter(Boolean);
+      return said.length
+        ? [
+            record({
+              unreached: `${said.join(', and ')} (show --json lists each)`,
+            }),
+          ]
+        : [];
+    })(),
     colorFiles
       ? [section('colorFiles:'), record(colorFiles)]
       : record({colorFiles: 'none'}),
@@ -670,6 +748,7 @@ function showBlocks(d) {
           ...problemList(openProblems),
         ]
       : [],
+    lookLine,
   ].flat();
 }
 
@@ -926,6 +1005,11 @@ function optionsAsWritten(
     const near = all.filter(o => typoNear(w, o.slice(2)));
     return near.length === 1 ? near[0] : null;
   };
+  // Any run of up to three hyphens and dash-like characters (an en or em
+  // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
+  // option's dashes, as normalizeEntry reads a token's.
+  const optionShape =
+    /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/;
   const argv = process.argv;
   const at = argv.indexOf(command, argv.indexOf(where.group) + 1);
   if (at < 0) return null;
@@ -940,13 +1024,7 @@ function optionsAsWritten(
       words.push(...argv.slice(i));
       break;
     }
-    // Any run of up to three hyphens and dash-like characters (an en or em
-    // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
-    // option's dashes, as normalizeEntry reads a token's.
-    const m =
-      /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(
-        a,
-      );
+    const m = optionShape.exec(a);
     const flag = m ? meant(m[2]) : null;
     if (!m || !flag) {
       if (a !== '--json') words.push(a);
@@ -984,13 +1062,31 @@ function optionsAsWritten(
       }
       continue;
     }
-    // An option that takes a value, given none, is left out of the line.
-    if (m[3] == null && (next == null || /^-/.test(next))) {
-      if (valued.includes(flag)) why ??= `${flag} was given no value`;
+    // An option that takes a value, given none, is left out of the line. A
+    // next word that starts with a dash is its value unless it names an
+    // option the command takes (`--font -apple-system`, `--text-size -1`).
+    // A word written as a long option (`--path`, `--color-accent`) is never
+    // a value either: no value an option takes starts with two dashes.
+    const opt = next == null ? null : optionShape.exec(next);
+    const nextIsOption =
+      next === '--' ||
+      /^--[A-Za-z]/.test(next ?? '') ||
+      Boolean(opt && meant(opt[2]));
+    if (m[3] == null && (next == null || nextIsOption)) {
+      if (valued.includes(flag)) {
+        why ??= `${flag} was given no value`;
+        // Leaving out an option that narrows what the command acts on
+        // would widen it: that line is never offered.
+        if (NARROWING_OPTIONS.includes(flag.slice(2))) unread = true;
+      }
       continue;
     }
     words.push(flag);
     if (m[3] != null) words.push(m[3]);
+    else if (/^-/.test(next)) {
+      words.push(next);
+      i += 1;
+    }
   }
   if (!why) return null;
   return {
@@ -1490,7 +1586,19 @@ function heldStop() {}
 export function registerExperimentalTheme(group, program) {
   // A command run with no theme names the app's only theme.
   setEditorThemeList(editorThemesAt);
-  setEditorFreeName(editorFreeName);
+  setFreeArgument((cwd, words) =>
+    words === 'experimental theme editor new'
+      ? {
+          word: editorFreeName(cwd, 'my-theme'),
+          reason: 'a name for the new theme',
+        }
+      : words === 'experimental theme preview app'
+        ? {
+            word: quoteCommandArgument(editorFreeAppFolder(cwd)),
+            reason: 'a folder for the new app, free here',
+          }
+        : null,
+  );
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
@@ -1547,21 +1655,25 @@ export function registerExperimentalTheme(group, program) {
               // Thrown, as every refusal inside run is: run prints it once
               // (a refusal printed here and then caught again by run would
               // print twice where exit does not end the process).
+              // The line with --like is checked as new checks it (an
+              // install first, other flags' repairs folded in), as the
+              // option reader's lines are.
+              const lines = value
+                ? await checkedOptionLines(
+                    'editor',
+                    'new',
+                    `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
+                  )
+                : [];
               throw new AstryxError(
                 `new takes the base theme as --like, not --base.`,
-                value
-                  ? [
-                      {
-                        name: `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                        reason: 'do this instead',
-                      },
-                    ]
-                  : [
-                      {
-                        name: `${EDITOR} new --help`,
-                        reason: 'every option it takes',
-                      },
-                    ],
+                [
+                  ...lines,
+                  {
+                    name: `${EDITOR} new --help`,
+                    reason: 'every option it takes',
+                  },
+                ],
                 ERROR_CODES.ERR_INVALID_OPTION,
               );
             }
@@ -1578,6 +1690,51 @@ export function registerExperimentalTheme(group, program) {
               );
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
+            // The only word given straight after a dial's value (`new --font
+            // Open Sans`) is more of that value, and no name was given: the
+            // value whole, with a free name, checked as new checks it.
+            {
+              const argv = process.argv;
+              const from = argv.indexOf('new', argv.indexOf('editor') + 1);
+              const at = argv.indexOf(String(name), from + 1);
+              const before = argv[at - 2];
+              const dial = (newDoc.options ?? []).find(
+                opt =>
+                  opt.param === 'options.settings' &&
+                  String(opt.flag).split(' ')[0] === before,
+              );
+              const key = String(before ?? '')
+                .slice(2)
+                .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+              // Read so only when the word cannot be the name, or the value
+              // alone is no value of the dial (`--accent dark blue`).
+              if (
+                !extra.length &&
+                from >= 0 &&
+                at > from + 2 &&
+                dial &&
+                !argv.slice(from + 1, at).includes('--') &&
+                (!editorNameOk(String(name)) ||
+                  !dialValueFits(before.slice(2), String(o[key])))
+              ) {
+                const given = {...o, [key]: `${o[key]} ${name}`};
+                const free = editorFreeName(process.cwd(), 'my-theme');
+                throw new AstryxError(
+                  `new takes <theme>, and was given none: "${name}" is more of ${before}'s value. A value of more than one word goes in quotes. Nothing was changed.`,
+                  await editorCheckedNewLines(
+                    `${EDITOR} new ${free}${newFlagLine(given)}`,
+                    free,
+                    {
+                      cwd: process.cwd(),
+                      like: given.like,
+                      png: given.png ?? false,
+                      settings: newSettingsGiven(given),
+                    },
+                  ),
+                  ERROR_CODES.ERR_MISSING_ARGUMENT,
+                );
+              }
+            }
             if (extra.length) {
               // Words after `--` that are `--<option> <value>` pairs new
               // takes become options; the other words were most likely
@@ -1854,11 +2011,16 @@ export function registerExperimentalTheme(group, program) {
           const words = [thing, which, ...(c?.args ?? []).slice(3)].filter(
             w => typeof w === 'string',
           );
+          // Three or more bare words that each name a setting are a list
+          // too (`undo t accent corners spacing`); a setting with a value of
+          // several words (`font Inter Tight`) is not.
           const listed =
             words.length > 1 &&
-            words.some(
+            (words.some(
               (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
-            ) &&
+            ) ||
+              (words.length > 2 &&
+                words.every(w => namesSetting(String(w))))) &&
             !words.some(w => String(w).startsWith('-'));
           const list = listed ? words.join(' ') : null;
           return (
@@ -1975,6 +2137,7 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('app', ['theme']) ??
+            previewOptionsRead('app', previewAppDoc) ??
             resultStands(
               themeEditPreviewApp(dir, {
                 cwd: process.cwd(),
@@ -2046,9 +2209,17 @@ export function registerExperimentalTheme(group, program) {
               themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
             ),
           r => [
-            r.data.pages.length
-              ? `[ok] removed ${page} from the theme preview`
-              : `[ok] removed the theme preview in ${r.data.folder}`,
+            // The headline says what happened: a page still listed, or a
+            // preview nothing was removed from, was not removed.
+            r.data.pages.some(
+              p => p.toLowerCase() === String(page ?? '').toLowerCase(),
+            )
+              ? `[ok] nothing was removed: ${page} stays in the theme preview`
+              : r.data.pages.length
+                ? `[ok] removed ${page} from the theme preview`
+                : r.data.removed.length
+                  ? `[ok] removed the theme preview in ${r.data.folder}`
+                  : `[ok] nothing was removed: the theme preview in ${r.data.folder} stays`,
             ...project(/** @type {any} */ (r.data)),
           ],
         ),

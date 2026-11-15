@@ -29,7 +29,6 @@ import {buildManifest, storedManifest} from './lib/manifest.mjs';
 import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
 import {markReportsResult} from './lib/define-command.mjs';
 // The light modules, not agent-docs.mjs: that one loads discovery and the
@@ -623,29 +622,20 @@ export async function createProgram({argv} = {}) {
       'Output as typed JSON. Success envelope: { apiVersion, type, package?, data, meta? }. Error envelope: { apiVersion, error, code, suggestions? }.',
     )
     .addHelpCommand('help', 'Show all commands')
-    .action((options, cmd) => {
+    .action(async (options, cmd) => {
       // If Commander handed us a positional that didn't match any subcommand,
       // treat it as "unknown command" — exit 1 with a helpful suggestion.
       // This is the bare-invocation handler; if cmd.args has content here,
       // none of the registered subcommands matched.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
+        const {findEntry, unknownCommandAnswer} = await import('./lib/unknown-command.mjs');
+        const answer = await unknownCommandAnswer(program, process.argv.slice(2), {findEntry});
         const unknown = String(extras[0]);
-        const known = (program.commands || [])
-          .filter((c) => !(/** @type {any} */ (c)._hidden) && c.name() !== 'help')
-          .map((c) => c.name());
-        const close = known
-          .map((name) => ({name, distance: levenshteinDistance(unknown.toLowerCase(), name.toLowerCase())}))
-          .filter((s) => s.distance <= 3)
-          .sort((a, b) => a.distance - b.distance)
-          .slice(0, 3)
-          .map((s) => ({name: s.name, reason: 'did you mean this?'}));
-        // If we have close matches, surface those. Otherwise list all known commands
-        // so callers (including AI agents) can see what's available.
-        const suggestions = close.length > 0
-          ? close
-          : known.map((name) => ({name, reason: 'available command'}));
-        cliError(`unknown command '${unknown}'`, {suggestions, code: ERROR_CODES.ERR_UNKNOWN_COMMAND});
+        cliError(answer?.message ?? `unknown command '${unknown}'`, {
+          suggestions: answer?.suggestions,
+          code: ERROR_CODES.ERR_UNKNOWN_COMMAND,
+        });
         return;
       }
 
@@ -971,7 +961,7 @@ export async function createProgram({argv} = {}) {
   // extends the --json contract to cover Commander's parse-time short
   // circuits (parse errors, unknown options, --help, unknown commands).
   // See packages/cli/lib/json-shim.mjs for the rationale.
-  installJsonShim(program);
+  installJsonShim(program, {jsonSupported: name => JSON_SUPPORTED.has(name)});
 
   return program;
 }

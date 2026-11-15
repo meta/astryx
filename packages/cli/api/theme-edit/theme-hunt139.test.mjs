@@ -9,7 +9,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {fontsourcePackageOf, fontsourceSuggestion} from './_settings.mjs';
@@ -21,13 +20,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt139-', FIXTURE_PACKAGES);
@@ -41,8 +38,10 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
+const cli = async args => {
+  const r = await runCli(args, {cwd});
+  return {status: r.status, stdout: r.stdout, stderr: r.stderr};
+};
 
 /**
  * A stand-in Fontsource package as Fontsource ships one: its index
@@ -69,7 +68,7 @@ const installFont = (name, family, weights) => {
 };
 
 describe("a family's Fontsource package", () => {
-  it('is named as Fontsource names it', () => {
+  it('is named as Fontsource names it', async () => {
     expect(fontsourcePackageOf('Inter Variable')).toBe(
       '@fontsource-variable/inter',
     );
@@ -82,7 +81,7 @@ describe("a family's Fontsource package", () => {
     expect(fontsourcePackageOf('微软雅黑')).toBe(null);
   });
 
-  it('is never suggested for a font a system ships', () => {
+  it('is never suggested for a font a system ships', async () => {
     for (const family of [
       'Microsoft YaHei',
       'PingFang SC',
@@ -165,7 +164,7 @@ describe('compile --check of an editor theme', () => {
   it('names a missing output in its check result', async () => {
     await themeEditNew('v9', {cwd});
     fs.rmSync(path.join(cwd, 'themes/v9/v9.d.ts'));
-    const r = cli([
+    const r = await cli([
       '--json',
       'experimental',
       'theme',

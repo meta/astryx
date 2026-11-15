@@ -106,7 +106,18 @@ export function pagesRouterPage(cwd, url) {
  * @param {string} dir
  */
 export function sameUrlPage(cwd, app, dir) {
-  const url = urlSegments(app, dir).join('/');
+  const target = urlSegments(app, dir);
+  const url = target.join('/');
+  // A folder whose URL is not the start of this one holds no page served at
+  // it, so the walk does not go into it: in a large app most folders are cut.
+  /** @param {string} folder */
+  const onTheWay = folder => {
+    const segs = urlSegments(app, folder);
+    const head = CATCH_ALL.test(segs.at(-1) ?? '') ? segs.slice(0, -1) : segs;
+    return (
+      head.length <= target.length && head.every((s, i) => s === target[i])
+    );
+  };
   /** @param {string} folder @returns {string | null} */
   const walk = folder => {
     /** @type {fs.Dirent[]} */
@@ -119,7 +130,12 @@ export function sameUrlPage(cwd, app, dir) {
     for (const e of entries) {
       const full = path.join(folder, e.name);
       if (e.isDirectory()) {
-        if (/^[_@]/.test(e.name) || e.name === 'node_modules' || full === dir)
+        if (
+          /^[_@]/.test(e.name) ||
+          e.name === 'node_modules' ||
+          full === dir ||
+          !onTheWay(full)
+        )
           continue;
         const hit = walk(full);
         if (hit) return hit;

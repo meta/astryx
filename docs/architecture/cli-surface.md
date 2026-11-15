@@ -42,6 +42,7 @@ verified_by:
     api/theme/integration-themes.test.mjs,
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
+    api/build/build.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -282,7 +283,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands'
-  not-found hint's name summaries, the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create.
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -550,6 +551,17 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `astryx search` meet it first.
   A link between docs names its target by doc identity and is resolved on
   every read; Doctor warns on one that names no doc.
+- **INV38 — A printed command runs as printed, and a value can take a
+  placeholder's place.** A command that the CLI prints runs as printed. A
+  command that it carries as a string in its JSON (such as `astryx build`'s
+  `start.command`) runs once the caller puts its own invocation in place of the
+  `astryx` prefix, or in front of a bare subcommand. In both, the one other
+  exception is an argument shown as a `<placeholder>`, which the CLI prints
+  only where it knows no value. When a release knows the value, it prints the
+  value in the placeholder's place, and that is a compatible `[fix]`
+  (`spec:AST-017` FR54): the field stays a string and the command does the same
+  work. A program that fills a placeholder by replacing its text depends on
+  text that no release keeps, so it is not a released victim.
 - **INV28 — Every result names the package each artifact comes from.** A
   `--json` result about one artifact (a component, doc, template, or hook)
   carries `package` in its envelope, directly after `type`. A result

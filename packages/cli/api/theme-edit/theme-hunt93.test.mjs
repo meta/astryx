@@ -202,8 +202,16 @@ describe('an entry mode written in other words', () => {
       ]);
       expect(r.error).toContain('--color-accent has mode "purple"');
       expect(r.suggestions[0].name).toMatch(/ editor undo m --color-accent$/);
-      expect(r.suggestions[1].name).toMatch(/ editor undo m$/);
-      expect(r.suggestions[1].reason).toContain('the last change is then lost');
+      // Set's reading of the mode as typed (none near, so both modes) is
+      // the keep line once the undo has removed the entry.
+      expect(r.suggestions[1].name).toMatch(
+        / editor set m --color-accent '#224466'$/,
+      );
+      expect(r.suggestions[1].reason).toContain(
+        'once the undo above has removed that setting',
+      );
+      expect(r.suggestions[2].name).toMatch(/ editor undo m$/);
+      expect(r.suggestions[2].reason).toContain('the last change is then lost');
       expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       const left = settings('m').filter(
         (/** @type {any} */ x) => x.thing === '--color-accent',

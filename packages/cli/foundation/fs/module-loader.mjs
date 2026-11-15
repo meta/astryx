@@ -9,7 +9,11 @@
  * load-precedence order. Generated theme artifacts also use a dedicated jiti
  * path that resolves extensionless JSX/TSX registry imports. On Node 22.15 and
  * later, a theme module load, of a built artifact or of theme source, loads
- * the stylesheets its modules import as empty modules. These helpers
+ * the stylesheets its modules import (CSS, Sass, Less, Stylus, PostCSS) as
+ * empty modules, and the assets they
+ * import (an icon's .svg, a picture, a font) as modules whose default export
+ * is the file's URL, as a bundler gives it; while it loads, a timer it
+ * starts never holds the process open and an exit it calls refuses the load. These helpers
  * centralize that behavior so callers stay in lockstep. A module's stdout
  * writes go to stderr while it loads, so project code that prints cannot
  * corrupt a `--json` envelope.
@@ -24,6 +28,7 @@ import * as path from 'node:path';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import nodeModule, {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
+import {promisify} from 'node:util';
 import * as fs from 'node:fs';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
@@ -122,7 +127,7 @@ const THEME_ARTIFACT_EXTENSIONS = [
  * @returns {specifier is string}
  */
 function isStylesheetSpecifier(specifier) {
-  return typeof specifier === 'string' && specifier.endsWith('.css');
+  return typeof specifier === 'string' && STYLESHEET_FILE.test(specifier);
 }
 
 /**
@@ -133,7 +138,7 @@ function isStylesheetSpecifier(specifier) {
  */
 function resolvesToStylesheet(specifier, from) {
   try {
-    return createRequire(from).resolve(specifier).endsWith('.css');
+    return STYLESHEET_FILE.test(createRequire(from).resolve(specifier));
   } catch {
     return false;
   }
@@ -150,14 +155,35 @@ let themeModuleLoadsInFlight = 0;
 /** @type {{deregister: () => void} | null} */
 let stylesheetHooks = null;
 
+/**
+ * A stylesheet an app's bundler compiles (CSS, or Sass, Less, Stylus or
+ * PostCSS source): Node cannot load one, and a theme module may import it.
+ */
+const STYLESHEET_FILE = /\.(?:css|scss|sass|less|styl|pcss)$/i;
+
 /** @param {string} url */
 function isStylesheetUrl(url) {
-  return url.startsWith('file:') && new URL(url).pathname.endsWith('.css');
+  return url.startsWith('file:') && STYLESHEET_FILE.test(new URL(url).pathname);
+}
+
+/**
+ * Files an app's bundler emits and gives a module its URL for (an icon's
+ * .svg, a picture, a font): a theme module may import one, and Node cannot
+ * load it.
+ */
+const ASSET_FILE =
+  /\.(?:svg|png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot)$/i;
+
+/** @param {string} url */
+function isAssetUrl(url) {
+  return url.startsWith('file:') && ASSET_FILE.test(new URL(url).pathname);
 }
 
 /**
  * In a theme module load, a module that Node resolves to a `.css` file loads
- * as an empty module. Any other module loads unchanged.
+ * as an empty module, and one that resolves to an asset loads as a module
+ * whose default export is the file's URL (what a bundler gives the import).
+ * Any other module loads unchanged.
  * @param {string} url
  * @param {any} context
  * @param {(url: string, context: any) => any} next
@@ -165,6 +191,13 @@ function isStylesheetUrl(url) {
 function loadStylesheetAsEmptyModule(url, context, next) {
   if (themeModuleLoad.getStore() && isStylesheetUrl(url)) {
     return {format: 'module', source: '', shortCircuit: true};
+  }
+  if (themeModuleLoad.getStore() && isAssetUrl(url)) {
+    return {
+      format: 'module',
+      source: `export default ${JSON.stringify(url)};`,
+      shortCircuit: true,
+    };
   }
   return next(url, context);
 }
@@ -181,7 +214,8 @@ function removeStylesheetHooks() {
 
 /**
  * Run a theme module load with every stylesheet that the theme's modules
- * import, at any depth, loaded as an empty module. A theme module can import
+ * import, at any depth, loaded as an empty module, and every asset they
+ * import (an .svg, a picture, a font) as its URL. A theme module can import
  * a stylesheet so that the app's bundler emits it, and Node cannot load a
  * stylesheet. Node resolves each import from the module that writes it, so a
  * missing stylesheet fails like any missing import, and an import that ends
@@ -194,13 +228,109 @@ function removeStylesheetHooks() {
  * @returns {Promise<T>}
  */
 export async function withEmptyStylesheets(load) {
-  if (typeof registerHooks !== 'function') return await load();
+  // A theme module is read for its export, in the CLI's own process: what it
+  // prints goes to stderr (never into a --json envelope), a timer it leaves
+  // running never keeps the command from exiting, and an exit it calls
+  // while loading is a refused load, never the command's own exit.
+  const guarded = () => withStdoutOnStderr(() => withThemeModuleGuards(load));
+  if (typeof registerHooks !== 'function') return await guarded();
   stylesheetHooks ??= registerHooks({load: loadStylesheetAsEmptyModule});
   themeModuleLoadsInFlight++;
   try {
-    return await themeModuleLoad.run(true, load);
+    return await themeModuleLoad.run(true, guarded);
   } finally {
     if (--themeModuleLoadsInFlight === 0) removeStylesheetHooks();
+  }
+}
+
+/**
+ * Set in the async context of a guarded theme module load: the timers it
+ * starts while loading, and whether the load is done.
+ * @type {AsyncLocalStorage<{done: boolean, timers: Array<{unref?: () => void}>}>}
+ */
+const guardedLoad = new AsyncLocalStorage();
+let guardedLoadsInFlight = 0;
+/** @type {typeof process.exit | null} */
+let realExit = null;
+let timersWrapped = false;
+
+/**
+ * A theme module that called `process.exit` while it loaded: the load is
+ * refused with it, and the command goes on to say so.
+ */
+export class ThemeModuleExitError extends Error {
+  /** @param {unknown} code */
+  constructor(code) {
+    super(
+      `the module called process.exit(${code ?? ''}) while it loaded; a theme file only exports its theme, so remove the exit (or move it into a script of its own)`,
+    );
+    this.name = 'ThemeModuleExitError';
+  }
+}
+
+/**
+ * Wrap the timer functions, once, so a timer a theme module starts is let go
+ * when its load is done: one still pending then (an interval, a watcher's
+ * poll), or started later from the module's own callbacks, never holds the
+ * process open. Timers outside a theme module load are untouched, and one
+ * the load waits on keeps the process up while it loads.
+ */
+function wrapTimers() {
+  if (timersWrapped) return;
+  timersWrapped = true;
+  /** @param {Function} real */
+  const letGo = real => {
+    const wrapped = /** @type {any} */ (
+      function (/** @type {any[]} */ ...args) {
+        const handle = real.apply(globalThis, args);
+        const load = guardedLoad.getStore();
+        if (load?.done) handle?.unref?.();
+        else if (load) load.timers.push(handle);
+        return handle;
+      }
+    );
+    // `promisify(setTimeout)` still gives the promise form it gives Node's.
+    const custom = /** @type {any} */ (real)[promisify.custom];
+    if (custom) wrapped[promisify.custom] = custom;
+    return wrapped;
+  };
+  globalThis.setTimeout = letGo(globalThis.setTimeout);
+  globalThis.setInterval = letGo(globalThis.setInterval);
+  globalThis.setImmediate = letGo(globalThis.setImmediate);
+}
+
+/**
+ * Run a theme module load with `process.exit` refusing the load (while it
+ * loads, in its async context only) and its timers let go once it is done
+ * ({@link wrapTimers}).
+ * @template T
+ * @param {() => Promise<T>} load
+ * @returns {Promise<T>}
+ */
+async function withThemeModuleGuards(load) {
+  wrapTimers();
+  if (guardedLoadsInFlight++ === 0) {
+    const exit = process.exit;
+    realExit = exit;
+    process.exit = /** @type {any} */ (
+      function (/** @type {any} */ code) {
+        const store = guardedLoad.getStore();
+        if (store && !store.done) throw new ThemeModuleExitError(code);
+        return exit.call(process, code);
+      }
+    );
+  }
+  /** @type {{done: boolean, timers: Array<{unref?: () => void}>}} */
+  const store = {done: false, timers: []};
+  try {
+    return await guardedLoad.run(store, load);
+  } finally {
+    store.done = true;
+    for (const timer of store.timers.splice(0)) timer?.unref?.();
+    if (--guardedLoadsInFlight === 0 && realExit) {
+      process.exit = realExit;
+      realExit = null;
+    }
   }
 }
 

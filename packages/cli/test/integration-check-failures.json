@@ -23,6 +23,7 @@
     "ambiguous_component_replacement",
     "ambiguous_template_replacement",
     "block_components_skipped",
+    "built_module_imports_typescript",
     "codemod_outside_version",
     "component_name_conflict",
     "component_without_example",

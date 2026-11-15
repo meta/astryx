@@ -174,8 +174,10 @@ describe('theme names', () => {
         themeEditUndo(typed, {cwd, thing: 'corners'}),
       );
       expect(r.run[0]).toBe('undo h corners');
+      // A step back with nothing to go back to (h was just made) is no line
+      // to offer: h's show is.
       const bare = await refusal(() => themeEditUndo(typed, {cwd}));
-      expect(bare.run[0]).toBe('undo h');
+      expect(bare.run[0]).toBe('show h');
     },
     T,
   );

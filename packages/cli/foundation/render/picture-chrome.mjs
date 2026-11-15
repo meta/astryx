@@ -166,6 +166,18 @@ try {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
+  // An overlay drawn open plays its opening animation (a fade-in) as the
+  // page loads: each animation that ends is run to its end before the
+  // picture, so the picture shows the overlay as it looks open, as
+  // Playwright's animations: 'disabled' does. A looping one (a spinner)
+  // stays as it is.
+  await send(
+    'Runtime.evaluate',
+    {
+      expression: `for (const a of document.getAnimations()) { if (a.effect?.getComputedTiming().iterations !== Infinity) a.finish(); }`,
+    },
+    sessionId,
+  );
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
   const {data} = await send(

@@ -1051,6 +1051,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
         // is the public SelectorOption content primitive, not this row.
         themeProps('selector-option-row', {
           size,
+          highlighted: isHighlighted ? 'highlighted' : null,
           selected: isSelected ? 'selected' : null,
           disabled: item.disabled ? 'disabled' : null,
         }),
