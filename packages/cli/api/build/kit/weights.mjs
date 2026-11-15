@@ -229,16 +229,22 @@ const round4 = x => Math.round(x * 1e4) / 1e4;
 /**
  * The ranker's scores as a blend member: every non-shell template's rank
  * score, the ranker's own start lifted above the rest, and the app shell above
- * them all when the ranker would start from it.
+ * them all when the ranker would start from it. The lifts are measured from
+ * the top score among the templates the weights list, so a template they do
+ * not list never moves the shell's or the start's value.
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {Map<string, number>} position the weights' candidates, by index
  */
-function rankerScores(ranked, pick) {
+function rankerScores(ranked, pick, position) {
   /** @type {Map<string, number>} */
   const out = new Map();
   for (const r of ranked)
     if (r.family !== SHELL_FAMILY) out.set(r.name, r.score);
-  const top = Math.max(0, ...out.values());
+  const top = Math.max(
+    0,
+    ...[...out].filter(([name]) => position.has(name)).map(([, x]) => x),
+  );
   const pageStart = pick && pick.family !== SHELL_FAMILY ? pick.name : null;
   out.set(SHELL, pageStart ? -1 : top + 1);
   if (pageStart) out.set(pageStart, top + 2);
@@ -247,10 +253,16 @@ function rankerScores(ranked, pick) {
 
 /**
  * Per-candidate features of one member's scores: z-score, 1/(rank+1), is-top.
+ * The mean, spread and ranks come from the candidates the blend was fit on
+ * (`fitted`), so a candidate the weights do not list gets its features
+ * against that population and never moves another candidate's features.
  * @param {(number | undefined)[]} v a score per candidate (undefined: none)
+ * @param {boolean[]} fitted per candidate: one the weights list
  */
-function memberFeatures(v) {
-  const finite = /** @type {number[]} */ (v.filter(x => x !== undefined));
+function memberFeatures(v, fitted) {
+  const finite = /** @type {number[]} */ (
+    v.filter((x, i) => fitted[i] && x !== undefined)
+  );
   const mean = finite.reduce((a, b) => a + b, 0) / Math.max(1, finite.length);
   const sd =
     Math.sqrt(
@@ -258,15 +270,18 @@ function memberFeatures(v) {
         Math.max(1, finite.length),
     ) || 1;
   const val = v.map(x => (x === undefined ? -1e9 : x));
+  const population = val.filter((_, i) => fitted[i]);
   // Equal values share the average of the ranks they span. That is the mean
   // rank an arbitrary order gives them, which is what the blend numbers were
   // fit on, and the candidates' order in the weights file never decides. Two
   // or more candidates tied at a member's top share a rank above 0, so none
-  // of them gets the is-top feature.
-  const rank = val.map(
-    x =>
-      val.filter(y => y > x).length + (val.filter(y => y === x).length - 1) / 2,
-  );
+  // of them gets the is-top feature. A candidate outside the population ranks
+  // as if it were added to it alone.
+  const rank = val.map((x, i) => {
+    const above = population.filter(y => y > x).length;
+    const equal = population.filter(y => y === x).length - (fitted[i] ? 1 : 0);
+    return above + equal / 2;
+  });
   return v.map((x, i) => [
     x === undefined ? -4 : Math.max(-4, Math.min(4, (x - mean) / sd)),
     1 / (rank[i] + 1),
@@ -398,14 +413,15 @@ function blend(idea, ranked, pick, catalog, weights) {
       return i === undefined ? undefined : round4(s[i]);
     });
   });
-  const fromRanker = rankerScores(ranked, pick);
+  const fromRanker = rankerScores(ranked, pick, position);
   const rankerMember = cands.map(c => {
     const x = fromRanker.get(c);
     return x === undefined ? undefined : round4(x);
   });
   // The ranker is the blend's second member, after the first table.
   members.splice(1, 0, rankerMember);
-  const feats = members.map(memberFeatures);
+  const fitted = cands.map(c => position.has(c));
+  const feats = members.map(v => memberFeatures(v, fitted));
   const scores = cands.map((c, i) => {
     let s = 0;
     let j = 0;

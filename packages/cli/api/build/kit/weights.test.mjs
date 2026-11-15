@@ -237,6 +237,32 @@ describe('weighStart', () => {
     expect(start).toBe('fresh');
   });
 
+  it('weighs the listed templates the same when the project adds one the tables do not list', () => {
+    const ranked = [
+      page('charts', 3, 'Charts'),
+      page('grid', 0.5, 'Grid'),
+      page('board', 2, 'Board'),
+      page('top-nav', 0, 'Shell'),
+    ];
+    const before = blendOrder(
+      'charts and cards',
+      ranked,
+      null,
+      CATALOG,
+      WEIGHTS,
+    );
+    for (const score of [0, 5, 10, 20]) {
+      const after = blendOrder(
+        'charts and cards',
+        [...ranked, page('fresh', score, 'Fresh')],
+        null,
+        [...CATALOG, {name: 'fresh'}],
+        WEIGHTS,
+      );
+      expect(after?.filter(name => name !== 'fresh')).toEqual(before);
+    }
+  });
+
   describe('an exact tie among templates the tables do not list', () => {
     // Two made-up templates of one family that the ranker scores the same.
     // Only their own descriptors tell them apart.
