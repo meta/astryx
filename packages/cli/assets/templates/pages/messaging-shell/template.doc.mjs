@@ -17,11 +17,11 @@ export const doc = {
     'conversation workspace',
   ],
   // Before marking ready: the 'Shell - Messaging' category puts this template
-  // in the Shell family, so build's default-shell choice must keep returning
-  // the default shell for parts and edits that name no shell (see the test
-  // "the default app shell with a ready Shell variant in the catalog" in
-  // packages/cli/api/build/kit/start.test.mjs), and build's page-pick model
-  // must be retrained to include this template.
+  // in the Shell family, so build may start a part or an edit from it. Build
+  // must keep the default shell for parts and edits whose words this template
+  // does not use (see "the default app shell with the messaging shell ready"
+  // in packages/cli/api/build/kit/start.test.mjs, which reads this doc), and
+  // build's page-pick model must be retrained to include this template.
   isReady: false,
   category: 'Shell - Messaging',
   icons: {
