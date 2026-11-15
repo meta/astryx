@@ -1953,6 +1953,68 @@ describe('Dialog', () => {
       expect(dialog).not.toHaveAttribute('aria-labelledby');
     });
 
+    it('is named by a DialogHeader that mounts after the dialog opens, until it unmounts', () => {
+      function RenameDialog({hasHeader}: {hasHeader: boolean}) {
+        return (
+          <Dialog isOpen={true} onOpenChange={() => {}}>
+            {hasHeader && <DialogHeader title="Rename capture" />}
+          </Dialog>
+        );
+      }
+      const {rerender} = render(<RenameDialog hasHeader={false} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      rerender(<RenameDialog hasHeader={true} />);
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<RenameDialog hasHeader={false} />);
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+    });
+
+    it('keeps a consumer aria-labelledby when a DialogHeader mounts after the dialog opens', () => {
+      function Named({hasHeader}: {hasHeader: boolean}) {
+        return (
+          <>
+            <span id="external-name">Share capture</span>
+            <Dialog
+              isOpen={true}
+              onOpenChange={() => {}}
+              aria-labelledby="external-name">
+              {hasHeader && <DialogHeader title="Rename capture" />}
+            </Dialog>
+          </>
+        );
+      }
+      const {rerender} = render(<Named hasHeader={false} />);
+      rerender(<Named hasHeader={true} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-labelledby', 'external-name');
+      expect(dialog).toHaveAccessibleName('Share capture');
+      rerender(<Named hasHeader={false} />);
+      expect(dialog).toHaveAttribute('aria-labelledby', 'external-name');
+    });
+
+    it('keeps a consumer aria-labelledby that arrives while a DialogHeader is mounted', () => {
+      function Late({isNamed}: {isNamed: boolean}) {
+        return (
+          <>
+            <span id="later-name">Share capture</span>
+            <Dialog
+              isOpen={true}
+              onOpenChange={() => {}}
+              aria-labelledby={isNamed ? 'later-name' : undefined}>
+              <DialogHeader title="Rename capture" />
+            </Dialog>
+          </>
+        );
+      }
+      const {rerender} = render(<Late isNamed={false} />);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAccessibleName('Rename capture');
+      rerender(<Late isNamed={true} />);
+      expect(dialog).toHaveAttribute('aria-labelledby', 'later-name');
+      expect(dialog).toHaveAccessibleName('Share capture');
+    });
+
     it('prefers a consumer-provided aria-label over the header title', () => {
       render(
         <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Custom name">

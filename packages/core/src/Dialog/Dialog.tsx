@@ -590,13 +590,27 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  // A composed header whose title renders after the dialog mounted asks the
-  // dialog to look for the title again.
-  const syncDefaultName = useCallback(() => {
-    if (dialogRef.current != null) {
-      attachDialog(dialogRef.current);
-    }
-  }, [attachDialog]);
+  // A header title that mounts or unmounts after the dialog mounted reports
+  // it, so the default name follows the title. A composed header with no
+  // report asks the dialog to look for the title again.
+  const syncDefaultName = useCallback(
+    (isTitleMounted?: boolean) => {
+      const node = dialogRef.current;
+      if (node == null || hasConsumerName) {
+        return;
+      }
+      if (isTitleMounted === undefined) {
+        attachDialog(node);
+      } else if (isTitleMounted) {
+        node.setAttribute('aria-labelledby', titleId);
+      } else if (node.getAttribute('aria-labelledby') === titleId) {
+        // Only the default name goes. A report from a header that rendered
+        // before a caller name arrived leaves that name.
+        node.removeAttribute('aria-labelledby');
+      }
+    },
+    [attachDialog, hasConsumerName, titleId],
+  );
 
   const dialogContextValue = useMemo(
     () => ({isInline, titleId, syncDefaultName}),
