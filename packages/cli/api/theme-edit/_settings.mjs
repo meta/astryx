@@ -10006,13 +10006,30 @@ export async function commitTheme(
       notes,
       unchanged: true,
     };
+  // A change over a build that does not match the saved settings (a hand
+  // edit, a command stopped part way) is measured against a build of the
+  // saved settings, never the stale one, and said, as show and a no-op
+  // change say it.
+  /** @type {ThemeData | null} */
+  let saved = null;
+  if (!noop && snapBefore && fs.existsSync(f.js))
+    try {
+      saved = loadTheme(cwd, slug);
+    } catch {
+      saved = null;
+    }
+  const staleBefore = saved ? staleBuild(cwd, slug, saved) : null;
+  if (staleBefore)
+    notes.push(
+      `the build was not current (${staleBefore}), so the change is measured against the saved settings, built again`,
+    );
   // With no last build (deleted, never committed), nothing is compared.
   if (snapBefore && !fs.existsSync(f.js))
     notes.push(
       `there was no last build (${path.basename(f.js)} is missing), so the token changes are not listed; the theme is built again`,
     );
-  const resBefore =
-    snapBefore && fs.existsSync(f.js)
+  let resBefore =
+    snapBefore && fs.existsSync(f.js) && !staleBefore
       ? await resolvedTokens(ctx, slug).catch(() => {
           // The last build is damaged: the change still stands, and the
           // result says why it lists no token changes.
@@ -10048,9 +10065,10 @@ export async function commitTheme(
     });
   // A module edited by hand (it says "do not edit") keeps nothing: it is
   // built over from the settings, as its header says.
-  const moduleNow = fs.existsSync(f.settingsTs)
-    ? fs.readFileSync(f.settingsTs, 'utf8')
-    : null;
+  const moduleNow =
+    !staleBefore && fs.existsSync(f.settingsTs)
+      ? fs.readFileSync(f.settingsTs, 'utf8')
+      : null;
   ctx.keepStops =
     before &&
     colorKey(before) === colorKey(data) &&
@@ -10071,6 +10089,7 @@ export async function commitTheme(
         x => x.source === 'token' && /^--radius-/.test(x.thing),
       ),
     });
+  // A stale build keeps neither: the change is built from the settings.
   const radiiNow =
     moduleNow && moduleUnedited(moduleNow) !== false
       ? radiiIn(moduleNow)
@@ -10097,6 +10116,17 @@ export async function commitTheme(
   afterSave.add(ctx);
   try {
     refuseIfLockLost();
+    // The saved settings built first (inside the rollback), so the change
+    // is measured against what they show.
+    if (staleBefore && saved) {
+      await buildTheme(ctx, slug, saved);
+      resBefore = await resolvedTokens(ctx, slug).catch(() => {
+        notes.push(
+          `the last build (${path.basename(f.js)}) could not be read, so the token changes are not listed; the theme is built again`,
+        );
+        return null;
+      });
+    }
     try {
       built = await buildTheme(ctx, slug, data);
     } finally {

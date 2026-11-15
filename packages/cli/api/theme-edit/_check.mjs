@@ -7134,9 +7134,15 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
     // A fallback always gives a value: never "reads nothing" (a likely
     // typo is noted when the setting is made).
     if (comma) continue;
-    const near = nearest(name, Object.keys(TOKENS)).filter(n =>
-      typoNear(name, n),
+    // A name that differs from a token only in case is that token (as the
+    // setting reader reads `--Spacing-4`): an exact reading, never one typo
+    // among the family's siblings.
+    const folded = Object.keys(TOKENS).find(
+      k => k.toLowerCase() === name.toLowerCase(),
     );
+    const near = folded
+      ? [folded]
+      : nearest(name, Object.keys(TOKENS)).filter(n => typoNear(name, n));
     // One token within the one typo limit is that token misspelled: the
     // value with it repaired.
     if (near.length)

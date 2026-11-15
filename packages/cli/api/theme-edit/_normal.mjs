@@ -246,14 +246,16 @@ export function normalizeEntry(thing, value) {
   // A mode label after the thing (`(light)`, `(Dark)`, `(dark mode)`,
   // `[dark only]`) goes with the scope, read later by the one --mode reader
   // as a typed --mode is (a typo refused with its line), never into the
-  // old value.
+  // old value. A line with a label may name no old value (`--color-accent
+  // [light only] -> #7c3aed`): the label is still the scope, never taken
+  // as the old value.
   const changed =
-    /^(\S+?)(?:\s*[([]([^)\]]*)[)\]])?\s*:?\s+(\S.*?)\s*->\s*(\S.*?)\s*$/.exec(
+    /^(\S+?)(?:\s*[([]([^)\]]*)[)\]](?:\s*:?\s+(\S.*?))?|\s*:?\s+(\S.*?))\s*->\s*(\S.*?)\s*$/.exec(
       v == null || v.trim() === '' ? t : `${t} ${v}`,
     );
   if (changed) {
     t = changed[1];
-    v = changed[4];
+    v = changed[5];
     pasted = true;
     const printed = printedScope(v);
     if (printed) {

@@ -214,6 +214,10 @@ const E = ERROR_CODES;
 /**
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
+/**
+ * A setting's scope as set's flags give it.
+ * @typedef {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} ScopeFlags
+ */
 /** The marker a `new` writes first and removes last. */
 
 /**
@@ -1906,6 +1910,26 @@ export async function themeEditSet(theme, thing, value, options = {}) {
  * @returns {Promise<unknown>}
  */
 async function swappedThingValue(e, slug, thing, value, options) {
+  // A pasted one-argument form (`'pill: corners'`, `'red = background-color
+  // on card'`, `'{"red": "background-color"}'`) is checked as the setting,
+  // value and scope the one entry reader reads from it, as a typed pair is.
+  const typedThing = thing;
+  if (value == null || String(value).trim() === '') {
+    const entry = normalizeEntry(String(thing ?? ''), value);
+    if (entry.pasted || entry.thing !== String(thing ?? '').trim()) {
+      thing = entry.thing;
+      value = entry.value;
+      const s = entry.scope ?? {};
+      options = {
+        ...options,
+        ...(s.on && !options.on ? {on: s.on} : {}),
+        ...(s.only && !options.only ? {only: true} : {}),
+        ...(s.when && !options.when ? {when: s.when} : {}),
+        ...(s.state && !options.state ? {state: s.state} : {}),
+        ...(s.mode && !options.mode ? {mode: s.mode} : {}),
+      };
+    }
+  }
   // The thing named no setting, or the value names one itself (`neutral
   // base`: a color dial given the base dial's name).
   if (
@@ -1923,11 +1947,13 @@ async function swappedThingValue(e, slug, thing, value, options) {
   const swapped = await swappedLines(slug, thing, value, options);
   if (!swapped) return e;
   // How for the value typed as the setting answers nothing: left out.
-  const howTyped = `${P} how ${quoteCommandArgument(String(thing))}`;
+  const howTyped = [thing, typedThing].map(
+    w => `${P} how ${quoteCommandArgument(String(w))}`,
+  );
   e.suggestions = [
     ...swapped,
     ...(e.suggestions ?? []).filter(
-      x => !swapped.some(y => y.name === x.name) && x.name !== howTyped,
+      x => !swapped.some(y => y.name === x.name) && !howTyped.includes(x.name),
     ),
   ];
   return e;
@@ -4055,30 +4081,44 @@ async function vetLoadRefusal(e, cwd, slug) {
  * how for the thing (or the command's help when there is no one thing).
  * @param {'set' | 'undo'} sub
  * @param {string} slug
- * @param {Array<string | [string, string] | [string, string, string]>} lines
+ * @param {Array<string | [string, string] | [string, string, string] | [string, string, string, ScopeFlags]>} lines
  *   each line, or each line with the typed text it carries (and, for an
- *   entry of a pasted object, its setting)
+ *   entry of a pasted object, its setting, and the scope it was pasted
+ *   with: a set line refused is then checked with the setting and value in
+ *   the other order, as a typed pair is: swappedLines)
  * @param {string} cwd
  * @param {string} typed
  * @param {string} thing
- * @returns {Promise<string[]>}
+ * @returns {Promise<Array<string | {name: string, reason: string}>>}
  */
 async function workingLines(sub, slug, lines, cwd, typed, thing) {
-  /** @type {string[]} */
+  /** @type {Array<string | {name: string, reason: string}>} */
   const out = [];
   for (const item of lines) {
-    const [line, own, subject] = Array.isArray(item)
+    const [line, own, subject, scope] = Array.isArray(item)
       ? item
-      : [item, typed, undefined];
-    // A line left out points to how for its own setting, when it names one
-    // (an entry of a pasted object).
-    const left = () => {
-      if (subject) out.push(`${P} how ${quoteCommandArgument(subject)}`);
+      : [item, typed, undefined, undefined];
+    // A line left out is checked swapped (an entry pasted with its setting
+    // and value in the other order); else it points to how for its own
+    // setting, when it names one (an entry of a pasted object).
+    const left = async () => {
+      const swapped =
+        sub === 'set' && scope && subject && own
+          ? await swappedLines(slug, subject, own, {...scope, cwd})
+          : null;
+      if (swapped)
+        out.push(
+          ...swapped.map(x => ({
+            name: x.name,
+            reason: x.reason ?? 'do this instead',
+          })),
+        );
+      else if (subject) out.push(`${P} how ${quoteCommandArgument(subject)}`);
     };
     // The line as set takes it (a repair set offers for it folded in).
     const followed = await followChangeLine(sub, slug, line, cwd);
     if (followed.why) {
-      left();
+      await left();
       continue;
     }
     const read = readSetLine(followed.line, slug);
@@ -4092,13 +4132,15 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
         mode: String(read.flags?.mode ?? ''),
       })
     ) {
-      left();
+      await left();
       continue;
     }
     out.push(followed.line);
   }
+  /** @param {string | {name: string}} x */
+  const name = x => (typeof x === 'string' ? x : x.name);
   return out.length
-    ? [...new Set(out)]
+    ? out.filter((x, i) => out.findIndex(y => name(y) === name(x)) === i)
     : [
         thing
           ? `${P} how ${quoteCommandArgument(thing)}`
@@ -4253,6 +4295,40 @@ async function change(sub, slug, thing, value, options) {
   // carries the entry's value, and how names its setting.
   let oneEntry = false;
   if (objectText != null) {
+    // The scope keys an entry may carry, as set's flags name them.
+    const SCOPE = /** @type {const} */ ([
+      'on',
+      'when',
+      'state',
+      'mode',
+      'only',
+    ]);
+    /** An entry's own scope. @param {any} x @returns {any} */
+    const scopeOf = x =>
+      Object.fromEntries(SCOPE.filter(k => k in x).map(k => [k, x[k]]));
+    // The scope typed as flags beside the paste (`--on card`) is the scope
+    // of every setting it holds, over the scope the paste names.
+    /** @type {ScopeFlags} */
+    const typedScope = scopeOf(
+      Object.fromEntries(
+        SCOPE.filter(k => options[k]).map(k => [k, options[k]]),
+      ),
+    );
+    // A scope's `only` read by the one yes/no reader (`"no"`, `"0"` say
+    // no); one that says neither is refused, never read as yes.
+    /** @param {any} scope @param {string} what */
+    const readOnly = (scope, what) => {
+      if (!('only' in scope) || typeof scope.only === 'boolean') return;
+      const yes = booleanWord(scope.only);
+      if (yes == null)
+        refuse(
+          E.ERR_INVALID_ARGUMENT,
+          `${what}, and its "only" is ${JSON.stringify(scope.only)}, which reads as neither yes nor no: give it true to set only that part, or leave it out.`,
+          {run: []},
+        );
+      if (yes) scope.only = true;
+      else delete scope.only;
+    };
     /** @type {any} */
     let obj = null;
     try {
@@ -4279,12 +4355,17 @@ async function change(sub, slug, thing, value, options) {
               slug,
               entries.slice(0, 6).map(x => {
                 const entry = /** @type {import('./_settings.mjs').Setting} */ (
-                  withoutOutputKeys({...x, value: String(x.value ?? '')})
+                  withoutOutputKeys({
+                    ...x,
+                    ...typedScope,
+                    value: String(x.value ?? ''),
+                  })
                 );
-                return /** @type {[string, string, string]} */ ([
+                return /** @type {[string, string, string, ScopeFlags]} */ ([
                   `${P} ${sub} ${slug} ${sub === 'set' ? setArgs(entry, entry.value) : undoArgs(entry)}`,
                   entry.value,
                   entry.thing,
+                  scopeOf(entry),
                 ]);
               }),
               options.cwd ?? process.cwd(),
@@ -4337,10 +4418,9 @@ async function change(sub, slug, thing, value, options) {
     // One setting with its scope: the editor's own saved form (`{"thing",
     // "value", "on", …}`), or one setting beside scope keys (`{"color":
     // "red", "on": "card"}`): its thing and value, its scope as flags.
-    const SCOPE = ['on', 'when', 'state', 'mode', 'only'];
     const rest =
       obj && typeof obj === 'object'
-        ? Object.keys(obj).filter(k => !SCOPE.includes(k))
+        ? Object.keys(obj).filter(k => !SCOPE.includes(/** @type {any} */ (k)))
         : [];
     // The saved form is read by its thing and value; a key beside them the
     // editor does not write (`comment`, `id`) is left out, and said.
@@ -4350,7 +4430,7 @@ async function change(sub, slug, thing, value, options) {
     const scoped =
       !savedForm &&
       rest.length === 1 &&
-      Object.keys(obj).some(k => SCOPE.includes(k));
+      Object.keys(obj).some(k => SCOPE.includes(/** @type {any} */ (k)));
     if (savedForm || scoped) {
       /** @type {any} */
       const entry = savedForm
@@ -4358,28 +4438,19 @@ async function change(sub, slug, thing, value, options) {
             ...Object.fromEntries(
               Object.entries(obj).filter(([k]) => !unread.includes(k)),
             ),
+            ...typedScope,
             value: String(obj.value ?? ''),
           }
         : {
-            ...Object.fromEntries(
-              SCOPE.filter(k => k in obj).map(k => [k, obj[k]]),
-            ),
+            ...scopeOf(obj),
+            ...typedScope,
             thing: rest[0],
             value: String(obj[rest[0]] ?? ''),
           };
-      // Its `only` read by the one yes/no reader (`"no"`, `"0"` say no);
-      // one that says neither is refused, never read as yes.
-      if ('only' in entry && typeof entry.only !== 'boolean') {
-        const yes = booleanWord(entry.only);
-        if (yes == null)
-          refuse(
-            E.ERR_INVALID_ARGUMENT,
-            `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}, and its "only" is ${JSON.stringify(entry.only)}, which reads as neither yes nor no: give it true to set only that part, or leave it out.`,
-            {run: []},
-          );
-        if (yes) entry.only = true;
-        else delete entry.only;
-      }
+      readOnly(
+        entry,
+        `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}`,
+      );
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}; ${sub} takes its thing${sub === 'set' ? ' and value' : ''}, with its scope as flags.${unread.length ? ` ${unread.map(k => JSON.stringify(k)).join(', ')} ${unread.length === 1 ? 'is no field' : 'are no fields'} the editor reads, so ${unread.length === 1 ? 'it is' : 'they are'} left out.` : ''}`,
@@ -4392,6 +4463,7 @@ async function change(sub, slug, thing, value, options) {
                 `${P} ${sub} ${slug} ${sub === 'set' ? setArgs(entry, entry.value) : undoArgs(entry)}`,
                 entry.value,
                 entry.thing,
+                scopeOf(entry),
               ],
             ],
             options.cwd ?? process.cwd(),
@@ -4410,29 +4482,42 @@ async function change(sub, slug, thing, value, options) {
       thing = k;
       value = entryText(x);
     }
-    if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
+    if (obj && typeof obj === 'object' && Object.keys(obj).length > 1) {
+      // Scope keys beside several settings (`"on": "card"`) are the scope
+      // of each, with the scope typed as flags; never settings of their own.
+      const settings = rest.length ? rest : Object.keys(obj);
+      /** @type {any} */
+      const scope = {...(rest.length ? scopeOf(obj) : {}), ...typedScope};
+      readOnly(
+        scope,
+        `This holds ${settings.length} settings with their scope`,
+      );
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `This holds ${Object.keys(obj).length} settings; ${sub} changes one at a time.`,
+        `This holds ${settings.length} settings; ${sub} changes one at a time.`,
         {
-          // Each entry as its own line, a nested value (`{"$value": …}`, a
-          // light and dark pair) written back as typed; each line checked,
-          // and one set refuses is left out.
+          // Each entry as its own line with the scope, a nested value
+          // (`{"$value": …}`, a light and dark pair) written back as typed;
+          // each line checked, and one set refuses is left out.
           run: await workingLines(
             sub,
             slug,
-            Object.entries(obj)
-              .slice(0, 6)
-              .map(([k, x]) => {
-                const entry = entryText(x);
-                const read = String(normalizeEntry(k, entry).value ?? '');
-                // Each line with the entry it carries, as typed.
-                return /** @type {[string, string, string]} */ ([
-                  `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(read)}` : ''}`,
-                  read,
-                  k,
-                ]);
-              }),
+            settings.slice(0, 6).map(k => {
+              const entry = entryText(obj[k]);
+              const read = String(normalizeEntry(k, entry).value ?? '');
+              const x = /** @type {import('./_settings.mjs').Setting} */ ({
+                ...scope,
+                thing: k,
+                value: read,
+              });
+              // Each line with the entry it carries, as typed.
+              return /** @type {[string, string, string, ScopeFlags]} */ ([
+                `${P} ${sub} ${slug} ${sub === 'set' ? setArgs(x, read) : undoArgs(x)}`,
+                read,
+                k,
+                scope,
+              ]);
+            }),
             options.cwd ?? process.cwd(),
             objectText,
             // No one setting: each entry left out points to how for its
@@ -4441,6 +4526,7 @@ async function change(sub, slug, thing, value, options) {
           ),
         },
       );
+    }
   }
   // A flag typed inside the value (`'red --mode dark'`, `'4px --state
   // hover'`, `'pill --on button'`): the same command with the flag lifted
@@ -4560,7 +4646,7 @@ async function change(sub, slug, thing, value, options) {
         : [];
       /** @type {any} */ (r.data).notes = [
         ...(r.data.notes ?? []),
-        `the pasted text also held "${dropped}", which this did not set${line && / set /.test(line) ? `: ${line} sets it` : ''}`,
+        `the pasted text also held "${dropped}", which this did not set${typeof line === 'string' && / set /.test(line) ? `: ${line} sets it` : ''}`,
       ];
     }
     // A mode or base entry in the settings list does nothing: said after
