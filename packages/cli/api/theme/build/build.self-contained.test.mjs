@@ -230,6 +230,90 @@ describe('a theme family whose member’s registry is TypeScript', () => {
   });
 });
 
+describe('a family whose members each keep ./icons.ts in their own folder', () => {
+  it('compiles each to its own file, and the family module loads both', async () => {
+    write(
+      'fam/ocean/icons.ts',
+      `export const oceanIcons = {close: 'ocean-close'};\n`,
+    );
+    write(
+      'fam/calm/icons.ts',
+      `export const calmIcons = {close: 'calm-close'};\n`,
+    );
+    write(
+      'fam/ocean/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanIcons} from './icons';\nexport const ocean = defineTheme({name: 'ocean', icons: oceanIcons, tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/calm/calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from '../ocean/ocean';\nimport {calmIcons} from './icons';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+    await quiet(() =>
+      themeBuildFamily(
+        ['fam/ocean/ocean.ts', 'fam/calm/calm.ts'],
+        {familyKey: 'ocean-family'},
+        {cwd: dir},
+      ),
+    );
+    const js = read('fam/ocean/ocean-family.js');
+    expect(js).toContain('"./ocean/icons.js"');
+    expect(js).toContain('"./calm/icons.js"');
+    expect(read('fam/ocean/ocean/icons.js')).toContain('ocean-close');
+    expect(read('fam/ocean/calm/icons.js')).toContain('calm-close');
+    const loaded = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const m = await import(${JSON.stringify(path.join(dir, 'fam/ocean/ocean-family.js'))}); console.log(m.oceanTheme.icons.close, m.oceanCalmTheme.icons.close);`,
+      ],
+      {cwd: dir, encoding: 'utf8', timeout: 60_000},
+    );
+    expect(loaded.status, loaded.stderr).toBe(0);
+    expect(loaded.stdout.trim()).toBe('ocean-close calm-close');
+  });
+});
+
+describe('a helper outside the theme folder', () => {
+  const layout = () => {
+    write('shared/size.ts', `export const size: number = 20;\n`);
+    write(
+      'themes/w98/icons.tsx',
+      `import * as React from 'react';\nimport {size} from '../../shared/size';\nexport const w98Icons = {close: <svg width={size} height={size} />};\n`,
+    );
+    write('themes/w98/w98Theme.ts', THEME);
+  };
+
+  it('is compiled under the output folder at its relative place, never in the source tree', async () => {
+    layout();
+    await quiet(() =>
+      themeBuild('themes/w98/w98Theme.ts', {out: 'dist/w98.css'}, {cwd: dir}),
+    );
+    // Placed as under the folder that holds the theme and the helper.
+    expect(read('dist/w98.js')).toContain("from './themes/w98/icons.js'");
+    expect(exists('dist/themes/w98/icons.js')).toBe(true);
+    expect(exists('dist/shared/size.js')).toBe(true);
+    expect(exists('shared/size.js')).toBe(false);
+    const loaded = plainImport('dist/w98.js');
+    expect(loaded.status, loaded.stderr).toBe(0);
+    expect(JSON.parse(loaded.stdout).size).toBe(20);
+  });
+
+  it('builds from the theme’s own folder, where the helper is outside the working directory', async () => {
+    layout();
+    const result = await quiet(() =>
+      themeBuild('w98Theme.ts', {}, {cwd: path.join(dir, 'themes/w98')}),
+    );
+    expect(result?.type).toBe('theme.build');
+    expect(exists('shared/size.js')).toBe(false);
+    expect(exists('themes/w98/shared/size.js')).toBe(true);
+    expect(exists('themes/w98/themes/w98/icons.js')).toBe(true);
+    const loaded = plainImport('themes/w98/w98.js');
+    expect(loaded.status, loaded.stderr).toBe(0);
+    expect(JSON.parse(loaded.stdout).size).toBe(20);
+  });
+});
+
 describe('a package whose built theme module imports TypeScript source', () => {
   it('is named by the shipped-imports check, and passes once built self-contained', async () => {
     write(

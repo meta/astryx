@@ -79,7 +79,7 @@ import {
 } from '../../../foundation/fs/paths.mjs';
 import {isGlobalCopy} from '../../../foundation/release/choose.mjs';
 import {isInReleaseCache} from '../../../foundation/release/cache.mjs';
-import {fetchCarriedThemeCoreDir} from '../_adapter.mjs';
+import {fetchCarriedThemeCoreDir, localModuleFiles} from '../_adapter.mjs';
 import {
   assertWithin,
   sanitizeName,
@@ -3468,13 +3468,16 @@ function componentIconViewExpression(valuesName, viewName) {
 function selfContainedInfos(iconInfo, componentIconInfo, options) {
   const icons = iconInfo?.imports ?? [];
   const slots = componentIconInfo?.imports ?? [];
-  const {bindings, renamed, writes} = selfContainedImports(
-    [...icons, ...slots],
+  const {
+    entries: [{bindings, renamed}],
+    writes,
+  } = selfContainedImports(
+    [{sourceFile: options.sourceFile, bindings: [...icons, ...slots]}],
     {
-      sourceFile: options.sourceFile,
       outDir: options.outDir,
       header: options.header,
       marker: GENERATED_MARKER,
+      files: localModuleFiles,
       keep: binding =>
         options.iconsSpecifier !== undefined &&
         binding.importPath === iconInfo?.iconsSpecifierImportPath &&
@@ -5465,7 +5468,7 @@ function allocateFamilyBindings(members) {
  * function, so its static values are written as JSON alone.
  * @param {any} member
  * @param {any} parent - The member's parent in the family, if any.
- * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => string | null}} context
+ * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined, compileLocal?: (importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null}} context
  * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string, mergeName?: string} | null}
  */
 function familyComponentIcons(member, parent, context) {
@@ -5533,14 +5536,14 @@ function familyComponentIcons(member, parent, context) {
   const expression = context.expression(own, inherited);
   return expression ? {imports, expression} : null;
 }
-/** Rebase a scraped relative registry import to the aggregate module; a TypeScript or JSX module is compiled beside it (`compileLocal`), and the module imports the compiled file. @param {any} info @param {string} filePath @param {string} outDir @param {string | undefined} override @param {(importPath: string, filePath: string) => string | null} [compileLocal] @returns {{info: any, specifier: string | undefined, validate?: string}} `validate`: the source module's import, for the registry graph check */
+/** Rebase a scraped relative registry import to the aggregate module; a TypeScript or JSX module is compiled under the output folder (`compileLocal`), and the module imports the compiled file. @param {any} info @param {string} filePath @param {string} outDir @param {string | undefined} override @param {(importPath: string, filePath: string) => {specifier: string, sourceFile: string} | null} [compileLocal] @returns {{info: any, specifier: string | undefined, validate?: string}} `validate`: the source module's own file, from the aggregate, for the registry graph check (the compiled file is written after it) */
 // prettier-ignore
 function familyRegistryInput(info, filePath, outDir, override, compileLocal) {
   if (!info || override !== undefined) return {info, specifier: override};
   const source = info.importPath;
   if (!source.startsWith('./') && !source.startsWith('../')) return {info, specifier: undefined};
   const compiled = compileLocal?.(source, filePath);
-  if (compiled) { let validate = path.relative(outDir, path.resolve(path.dirname(filePath), source)).split(path.sep).join('/'); if (!validate.startsWith('./') && !validate.startsWith('../')) validate = `./${validate}`; return {info, specifier: compiled, validate}; }
+  if (compiled) { let validate = path.relative(outDir, compiled.sourceFile).split(path.sep).join('/'); if (!validate.startsWith('./') && !validate.startsWith('../')) validate = `./${validate}`; return {info, specifier: compiled.specifier, validate}; }
   const absolute = path.resolve(path.dirname(filePath), source);
   let specifier = path.relative(outDir, absolute).split(path.sep).join('/');
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) specifier = `./${specifier}`;
@@ -5729,29 +5732,48 @@ export async function themeBuildFamily(
   const css = generateFamilyCSS(members);
   /** @type {Array<{specifier: string, exportName: string}>} */
   const registryImports = [];
-  // A member's local TypeScript or JSX registry module is compiled beside the
-  // family's outputs, once, and the family module imports the compiled file.
+  // Each member's local TypeScript or JSX registry module is compiled under
+  // the family's output folder, all in one plan, so two members' modules of
+  // one name never share a compiled file; the family module imports the
+  // compiled files.
+  /** @type {Array<{sourceFile: string, bindings: Array<{importPath: string, importedName: string, localName: string}>}>} */
+  const localEntries = members.map(member => ({
+    sourceFile: member.filePath,
+    bindings: [member.iconInfo, member.indicatorInfo, member.componentIconInfo]
+      .filter(info => info && typeof info.importPath === 'string')
+      .filter(
+        info =>
+          info !== member.iconInfo || options.iconsSpecifier === undefined,
+      )
+      .map(info => ({
+        importPath: info.importPath,
+        importedName: 'default',
+        localName: 'local',
+      })),
+  }));
+  const localPlan = selfContainedImports(localEntries, {
+    outDir,
+    header: file =>
+      generatedHeader(
+        headerPath(headerBase, file),
+        'js',
+        buildCommand,
+        root.versions,
+      ),
+    marker: GENERATED_MARKER,
+    files: localModuleFiles,
+  });
   /** @type {Map<string, {dest: string, content: string}>} */
-  const localWrites = new Map();
+  const localWrites = new Map(
+    localPlan.writes.map(write => [write.dest, write]),
+  );
   /** @param {string} importPath @param {string} memberFile */
   const compileLocal = (importPath, memberFile) => {
-    const local = selfContainedImports(
-      [{importPath, importedName: 'default', localName: 'local'}],
-      {
-        sourceFile: memberFile,
-        outDir,
-        header: file =>
-          generatedHeader(
-            headerPath(headerBase, file),
-            'js',
-            buildCommand,
-            root.versions,
-          ),
-        marker: GENERATED_MARKER,
-      },
-    );
-    for (const write of local.writes) localWrites.set(write.dest, write);
-    return local.compiled.has(importPath) ? local.bindings[0].importPath : null;
+    const at = members.findIndex(member => member.filePath === memberFile);
+    const planned = localPlan.entries[at];
+    const sourceFile = planned?.compiled.get(importPath);
+    const specifier = planned?.renamed.get(importPath);
+    return sourceFile && specifier ? {specifier, sourceFile} : null;
   };
   const js = members
     .map(member => {
