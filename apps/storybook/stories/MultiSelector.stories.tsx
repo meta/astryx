@@ -965,7 +965,10 @@ export const RowActionsRtl: Story = {
   },
 };
 
-/** A Notes field and a MultiSelector inside a container that takes focus. */
+/**
+ * A Notes field, a button that is no Tab stop, as an unselected tab in a
+ * roving group is, and a MultiSelector, inside a container that takes focus.
+ */
 function MultiSelectorInContainer({tabIndex}: {tabIndex: number}) {
   const [value, setValue] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
@@ -976,6 +979,9 @@ function MultiSelectorInContainer({tabIndex}: {tabIndex: number}) {
       style={{padding: 32}}>
       <VStack gap={4}>
         <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
         <MultiSelector
           label="Fruits"
           options={['Apple', 'Banana', 'Cherry']}

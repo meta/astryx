@@ -1726,7 +1726,10 @@ export const SearchableRequired: Story = {
   },
 };
 
-/** A Notes field and a Selector inside a container that takes focus. */
+/**
+ * A Notes field, a button that is no Tab stop, as an unselected tab in a
+ * roving group is, and a Selector, inside a container that takes focus.
+ */
 function SelectorInContainer({tabIndex}: {tabIndex: number}) {
   const [value, setValue] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState('');
@@ -1737,6 +1740,9 @@ function SelectorInContainer({tabIndex}: {tabIndex: number}) {
       style={{padding: 32}}>
       <VStack gap={4}>
         <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
         <Selector
           label="Fruit"
           options={['Apple', 'Banana', 'Cherry']}

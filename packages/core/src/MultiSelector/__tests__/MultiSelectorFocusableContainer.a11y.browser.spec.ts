@@ -159,6 +159,21 @@ for (const input of ['mouse', 'finger'] as const) {
       await expect(notes).toBeFocused();
     });
 
+    test('a press on a control outside the list that is no Tab stop leaves focus there', async ({
+      page,
+    }) => {
+      const {combobox, listbox} = await openStory(page);
+      await press(combobox);
+      await expect(listbox).toBeVisible();
+      const closed = await watchClose(page);
+      const nextTab = page.getByRole('button', {name: 'Next tab'});
+      await press(nextTab);
+
+      await closed();
+      await expect(listbox).toBeHidden();
+      await expect(nextTab).toBeFocused();
+    });
+
     test('a press on a Tab-stop container leaves focus there', async ({
       page,
     }) => {

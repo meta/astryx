@@ -3964,6 +3964,41 @@ describe('MultiSelector light dismiss focus', () => {
     expect(container).toHaveFocus();
   });
 
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(nextTab).toHaveFocus();
+  });
+
   it('returns focus to the trigger when the list closes after a pick inside a Tab-stop container', async () => {
     const user = userEvent.setup();
     render(

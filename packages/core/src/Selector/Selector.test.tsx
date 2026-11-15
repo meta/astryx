@@ -4693,6 +4693,34 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     expect(container).toHaveFocus();
   });
 
+  it('leaves focus on a control outside the list that is no Tab stop, as an unselected tab is', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <button type="button" tabIndex={-1}>
+          Next tab
+        </button>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const nextTab = screen.getByRole('button', {
+      name: 'Next tab',
+      hidden: true,
+    });
+    await user.click(nextTab);
+    closeByLightDismiss();
+
+    expect(nextTab).toHaveFocus();
+  });
+
   it('returns focus to the trigger after a pick inside a Tab-stop container', async () => {
     const user = userEvent.setup();
     let focusAtPick: Element | null = null;
