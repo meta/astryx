@@ -355,7 +355,9 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.directMatch).toBe(true);
     expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
     expect(r.data.start?.name).not.toBe('incident-console');
-    expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready yet/);
+    expect(r.data.start?.reason).toBe(
+      `\`incident-console\` isn't ready yet, so build started from \`${r.data.start?.name}\`.`,
+    );
   });
 
   it('does not start from a page that matched one incidental word', async () => {
@@ -568,10 +570,11 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('names an unready direct match instead of lifting the start', async () => {
+  it('never names a template that is not ready when the idea does not name it', async () => {
     const r = await build('a list of incidents with severity and owners', {cwd: REPO});
     if (r.type !== 'build.kit') throw new Error(r.type);
-    expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready/);
+    expect(r.data.start?.name).not.toBe('incident-console');
+    expect(JSON.stringify(r.data)).not.toContain('incident-console');
   });
 
   it('starts a page the words describe from its template', async () => {
