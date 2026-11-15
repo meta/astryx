@@ -183,6 +183,25 @@ describe('ContextMenu under a finger when its touch layer fails to load', () => 
     press.up();
   });
 
+  it('lets the browser’s own long-press menu open it for a finger held through the failed load', async () => {
+    const trigger = renderMenu();
+    // The finger lands while the load runs, and that load fails.
+    const press = finger(trigger);
+    press.down();
+    await settleLoad();
+    fireEvent(
+      trigger,
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+      }),
+    );
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    press.up();
+  });
+
   // Last: once the layer has loaded, the page keeps it.
   it('loads the layer again at the next touch, and a later finger gets the hold', async () => {
     const trigger = renderMenu();
