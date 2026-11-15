@@ -3,7 +3,7 @@
 /**
  * @file LayerDismissal.stories.tsx
  * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
- *   BottomSheet, TextInput, Button, Layout from @astryxdesign/core
+ *   BottomSheet, DropdownMenu, TextInput, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -33,6 +33,7 @@ import {
   VStack,
 } from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import type {Meta, StoryObj} from '@storybook/react-vite';
@@ -1392,4 +1393,96 @@ function PinnedPopoverInHiddenClosedDialogExample() {
 
 export const PinnedPopoverInHiddenClosedDialog: Story = {
   render: () => <PinnedPopoverInHiddenClosedDialogExample />,
+};
+
+/**
+ * Fields for the focus stories below. The first sits in a closed `<dialog>`
+ * that the page does not display, so it is no Tab stop.
+ */
+function DetailsFields() {
+  const [hiddenValue, setHiddenValue] = useState('');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  return (
+    <VStack gap={2}>
+      <dialog>
+        <TextInput
+          label="Hidden field"
+          value={hiddenValue}
+          onChange={setHiddenValue}
+        />
+      </dialog>
+      <TextInput label="Name" value={name} onChange={setName} />
+      <TextInput label="Note" value={note} onChange={setNote} />
+    </VStack>
+  );
+}
+
+/**
+ * The closed `<dialog>` that the page displays in flow, with a Popover that
+ * holds two fields and a DropdownMenu with a header and a footer. Tab moves
+ * through each layer and wraps at its edges, as it does for the same Popover
+ * in an open Dialog.
+ */
+function FocusInClosedInFlowDialogExample() {
+  const [query, setQuery] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  return (
+    <VStack gap={4}>
+      <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+        <Popover content={<DetailsFields />}>
+          <Button label="Edit details" variant="secondary" />
+        </Popover>
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={
+            <TextInput
+              label="Filter labels"
+              isLabelHidden
+              placeholder="Filter labels"
+              value={query}
+              onChange={setQuery}
+            />
+          }
+          footer={
+            <Button label="Create label" variant="ghost" onClick={() => {}} />
+          }>
+          <DropdownMenuItem label="Bug" onClick={() => {}} />
+          <DropdownMenuItem label="Design" onClick={() => {}} />
+        </DropdownMenu>
+      </dialog>
+      <Button
+        label="Open dialog"
+        variant="secondary"
+        onClick={() => setIsDialogOpen(true)}
+      />
+      <Dialog
+        isOpen={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        width={520}
+        aria-label="Dialog with a popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Dialog with a popover"
+              onOpenChange={setIsDialogOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover content={<DetailsFields />}>
+                <Button label="Edit in dialog" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </VStack>
+  );
+}
+
+export const FocusInClosedInFlowDialog: Story = {
+  render: () => <FocusInClosedInFlowDialogExample />,
 };
