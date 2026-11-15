@@ -174,6 +174,16 @@ describe('suggestions for an unknown component name', () => {
   );
 
   it(
+    'lead with the Core components that declare the typed name, not a folded hook hint',
+    async () => {
+      const names = await suggested('Combobox');
+      expect(names[0]).toBe('Typeahead');
+      expect(names).not.toContain('astryx hook useCombobox');
+    },
+    SLOW,
+  );
+
+  it(
     'keep the Core component first for a typo of a Core name',
     async () => {
       expect((await suggested('Buton'))[0]).toBe('Button');
