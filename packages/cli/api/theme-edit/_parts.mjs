@@ -588,6 +588,28 @@ export async function renderGenerated(
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
+ * Part data read from a cache file, by file, with the file's identity, size
+ * and time when it was read. Shared by every command in the process, so it
+ * is frozen.
+ * @type {Map<string, {stamp: string, data: PartData}>}
+ */
+const readParts = new Map();
+
+/**
+ * Freeze a parsed value and everything in it.
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
+
+/**
  * The part data for the installed Core, from the cache or built now.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
@@ -595,7 +617,15 @@ const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 export async function partData(project) {
   const file = path.join(project.cacheDir, 'parts.json');
   try {
-    const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // The file is read again only when it changed: every command reads it,
+    // and parsing it costs more than the rest of a small command.
+    const st = fs.statSync(file);
+    const stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    const kept = readParts.get(file);
+    const cached =
+      kept?.stamp === stamp
+        ? kept.data
+        : deepFreeze(JSON.parse(fs.readFileSync(file, 'utf8')));
     // A file that parses but has the wrong shape (a hand edit, a cut-off
     // write) is built again, as a file that does not parse is.
     if (
@@ -604,8 +634,10 @@ export async function partData(project) {
       isRecord(cached.map) &&
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
-    )
+    ) {
+      readParts.set(file, {stamp, data: cached});
       return cached;
+    }
   } catch {
     // Not built yet, or unreadable: build it.
   }
