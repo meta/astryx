@@ -31,16 +31,17 @@ const FALLBACK_STARTS = ['shell-top-nav', 'blank'];
 
 /**
  * A page template as the kit names it: the command that selects exactly that
- * template, scaffolding into `<path>`, a placeholder for the file or folder to
- * write it to.
+ * template and scaffolds it to `to`, or to the `<path>` placeholder when no
+ * path is known.
  * @param {PageTemplate} t
+ * @param {string | null} [to] the path, quoted for a shell
  */
-export const asTemplate = t => ({
+export const asTemplate = (t, to = null) => ({
   name: t.name,
   package: t.package,
   displayName: t.displayName,
   description: t.description,
-  command: `${t.command} <path>`,
+  command: `${t.command} ${to ?? '<path>'}`,
 });
 
 /**
@@ -132,9 +133,19 @@ function liftFromShell(ranked, kind, catalog, idea) {
  * @param {boolean} directMatch
  * @param {PageTemplate[]} catalog
  * @param {string} idea
+ * @param {(t: PageTemplate) => string | null} [placeOf] the path a template
+ *   is scaffolded to, quoted for a shell; null when none is known
  * @returns {Omit<BuildStart, 'alternatives'> | null}
  */
-export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
+export function chooseStart(
+  ranked,
+  kind,
+  pages,
+  directMatch,
+  catalog,
+  idea,
+  placeOf = () => null,
+) {
   const direct = directMatch ? pages[0].name : null;
   const unready =
     direct && !catalog.some(t => t.name === direct) ? direct : null;
@@ -186,7 +197,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     const place =
       lifted || !pick ? null : placement(kind, pick.base && pick.familyNamed);
     return {
-      ...asTemplate(closest),
+      ...asTemplate(closest, placeOf(closest)),
       basis: agrees ? 'direct' : 'closest',
       reason: unready
         ? `\`${unready}\` matches but is not ready yet; this is the closest ready template.`
@@ -209,7 +220,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
         (weighed === null && !!proposed && proposed.family !== 'Shell');
       const place = placement(kind, false);
       return {
-        ...asTemplate(shell),
+        ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
           ? `\`${unready}\` matches but is not ready yet, so start from the app shell.`
