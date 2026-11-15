@@ -5846,8 +5846,8 @@ export async function themeEditShow(theme, options = {}) {
   const ownMasked = ownOverNotes.map(n => n.slice(0, n.indexOf(': ')));
   const checked = await contrastProblems(ctx, data, res);
   // What cannot be measured is a note, not a problem.
-  const open = checked.filter(x => !x.text.startsWith('not checked'));
-  const problems = open.map(x => x.text);
+  const shownChecks = checked.filter(x => !x.text.startsWith('not checked'));
+  const problems = shownChecks.map(x => x.text);
   const pal = paletteMapping(
     cwd,
     theme,
