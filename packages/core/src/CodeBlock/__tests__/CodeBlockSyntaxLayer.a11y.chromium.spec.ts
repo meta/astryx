@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/CodeBlock core/theme
+// @pr-a11y scope core/CodeBlock ^packages/core/src/theme/
 
 /**
  * @file CodeBlockSyntaxLayer.a11y.chromium.spec.ts
