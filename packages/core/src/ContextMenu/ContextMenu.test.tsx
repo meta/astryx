@@ -995,6 +995,66 @@ describe.each([
         expect(onCopy).not.toHaveBeenCalled();
       });
 
+      it('lets a finger whose pointerdown follows its touchstart, held through the load, slide onto an item', async () => {
+        const onCopy = vi.fn();
+        const onShare = vi.fn();
+        render(
+          <ContextMenu
+            items={[
+              {label: 'Copy', onClick: onCopy},
+              {label: 'Share', onClick: onShare},
+            ]}
+            data-testid="ctx">
+            <div>Long-press me</div>
+          </ContextMenu>,
+        );
+        const trigger = screen.getByTestId('ctx');
+        const contact = {id: 1, x: 20, y: 20};
+        // The touch reaches the trigger first, then the finger's pointer, both
+        // before the layer loads.
+        dispatchTouch('touchstart', trigger, [contact], [contact]);
+        dispatchPointer('pointerdown', trigger, {
+          pointerId: 7,
+          x: 20,
+          y: 20,
+          isPrimary: true,
+        });
+        advance(300);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        const share = screen.getByRole('menuitem', {
+          hidden: true,
+          name: 'Share',
+        });
+        for (const y of [30, 45]) {
+          dispatchPointer('pointermove', share, {
+            pointerId: 7,
+            x: 20,
+            y,
+            isPrimary: true,
+          });
+          dispatchTouch(
+            'touchmove',
+            trigger,
+            [{...contact, y}],
+            [{...contact, y}],
+          );
+        }
+        expect(share).toHaveFocus();
+        act(() => {
+          dispatchPointer('pointerup', share, {
+            pointerId: 7,
+            x: 20,
+            y: 45,
+            isPrimary: true,
+          });
+          dispatchTouch('touchend', trigger, [{...contact, y: 45}], []);
+        });
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onCopy).not.toHaveBeenCalled();
+      });
+
       it('opens nothing for a finger lifted before the load', async () => {
         const trigger = renderMenu();
         const press = finger(trigger);
