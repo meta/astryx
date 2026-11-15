@@ -137,7 +137,7 @@ describe('a plain theme that gives null', () => {
           "tokens: {'--color-accent': null} as any",
           'tokens.--color-accent',
           '--color-accent: null;',
-          "a browser keeps that as the token's value, so what reads --color-accent gets no usable value",
+          "a browser keeps that as the token's value, not the base theme's, so a property that reads --color-accent acts as if it were not set",
         ],
       ]) {
         plain(fields);

@@ -51,13 +51,12 @@ const written = key =>
 
 /**
  * What a null token builds, and the fix. A custom property takes any text,
- * so a browser keeps `--token: null` as the token's value: what reads it gets
- * no usable value (a background reading it is transparent), not the base
- * theme's value.
+ * so a browser keeps `--token: null` as the token's value, not the base
+ * theme's: a property reading it is invalid there, so it acts as if unset.
  * @param {string} key
  */
 const writtenToken = key =>
-  `${key} holds null; the build writes it as it is (${key}: null), and a browser keeps that as the token's value, so what reads ${key} gets no usable value (a color reading it is transparent), not the base theme's value: to keep the base theme's value, leave it undefined; to set it, give it a CSS value`;
+  `${key} holds null; the build writes it as it is (${key}: null), and a browser keeps that as the token's value, not the base theme's, so a property that reads ${key} acts as if it were not set (an inherited one, such as a text color, takes the surrounding value; another takes its initial one: a background goes transparent, a border takes the text color): to keep the base theme's value, leave it undefined; to set it, give it a CSS value`;
 
 /**
  * Every place a theme gives null where the build reads a part, a style key's
