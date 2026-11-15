@@ -251,8 +251,9 @@ export function useContextMenuPressFeedback(
   // Grow from the onset, 150 ms after a finger or a pen lands. The recognizer
   // reports the landing as it takes the contact. The press machine's mark is
   // not waited for: inside a scroll view it comes late, and never for a press
-  // that travels past 10 px first. Only the recognizer ends the growth
-  // (`end`).
+  // that travels past 10 px first. The press machine never ends the growth
+  // either: the recognizer ends it (`end`), and the menu holds it (`hold`)
+  // and returns it as it closes (`release`).
   useAttachment(
     triggerRef,
     element => {
