@@ -10,7 +10,6 @@ import type {BaseSequencer} from 'vitest/node';
 
 export declare const DURATIONS: string;
 export declare function durationsFile(): string;
-export declare const PER_FILE_SECONDS: number;
 export declare function partitionByDuration(
   files: string[],
   count: number,

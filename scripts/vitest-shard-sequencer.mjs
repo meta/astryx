@@ -38,11 +38,10 @@ import {
 import {
   DURATIONS,
   nodeFileCost,
-  PER_FILE_SECONDS,
   readDurations as readRecord,
 } from './vitest-node-legs.mjs';
 
-export {DURATIONS, PER_FILE_SECONDS};
+export {DURATIONS};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
