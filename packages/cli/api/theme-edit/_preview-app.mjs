@@ -84,6 +84,7 @@ import {
   requireProject,
   context,
   familiesNothingLoads,
+  lookAtPictures,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -3506,7 +3507,7 @@ function pageUrls(cwd, at, ids) {
  * @param {'colors' | 'components' | 'overview'} focus
  * @param {{code: string, cause: string} | null} [notChecked] why the change
  *   could not be rendered
- * @param {{pictureProblem?: string | null, stale?: string[]}} [extra] this
+ * @param {{pictureProblem?: string | null, stale?: string[], pictures?: string[]}} [extra] this
  *   result's picture problem (what kept --png from taking pictures) and its
  *   previewStale entries (an in-app preview changed by hand)
  * @returns {string}
@@ -3579,11 +3580,15 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const pngNote = extra.pictureProblem
     ? `--png took no pictures: ${extra.pictureProblem}`
     : `${EDITOR} show ${slug} --png takes pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+  // Pictures this run took: the two to open, by name.
+  const look = lookAtPictures(extra.pictures ?? []);
   const own = notChecked
     ? /could not be written/.test(notChecked.cause)
       ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
       : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
-    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
+    : look
+      ? `look without changing your app: ${look}`
+      : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
   const edited = handEdited.length
     ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ ${stale.some(f => /could not be written/.test(f)) && !stale.some(f => /changed by hand/.test(f)) ? 'could not be written' : 'was changed by hand'}, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
     : '';

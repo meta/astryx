@@ -987,6 +987,33 @@ export function styledChanges(before, after, base) {
 }
 
 /**
+ * The line that says which pictures to open after a run that took them:
+ * the sample page's and the open states' (every menu, tooltip, popover and
+ * list drawn open), of the mode shown first (light when the theme has
+ * both). Null when this run took neither.
+ * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
+ * @returns {string | null}
+ */
+export function lookAtPictures(files) {
+  /** @param {string} name */
+  const one = name =>
+    files.find(f => path.basename(f) === `${name}.png`) ??
+    files.find(f => path.basename(f) === `${name}-dark.png`);
+  const preview = one('preview');
+  const open = one(`sheet-${OPEN_SECTION}`);
+  if (!preview && !open) return null;
+  const dark =
+    files.some(f => /-dark\.png$/.test(f)) &&
+    files.some(f => /(?<!-dark)\.png$/.test(f));
+  return `open ${[
+    ...(preview ? [`${preview} (the sample page)`] : []),
+    ...(open
+      ? [`${open} (every menu, tooltip, popover and list, drawn open)`]
+      : []),
+  ].join(' and ')}${dark ? '; the -dark pictures show the dark mode' : ''}`;
+}
+
+/**
  * The page of the theme's open states (every menu, tooltip, popover and
  * list drawn open: the overlays section of the sheet), made and stamped
  * with the build it shows, and where its picture goes. The sample page

@@ -639,10 +639,15 @@ function showBlocks(d) {
     // Every problem is in the open problems at the end, with its fix.
     problems: _problems,
     openProblems = [],
+    // The pictures to open: the first line and the last, so a head or a
+    // tail of the output keeps it.
+    look,
     ...rest
   } = d;
   const [head, ...others] = project(/** @type {any} */ (rest));
+  const lookLine = look ? record({look}) : [];
   return [
+    lookLine,
     head,
     // Each setting as named fields: its whole scope, the parts it reaches,
     // and what a stronger setting hides of it.
@@ -682,6 +687,7 @@ function showBlocks(d) {
           ...problemList(openProblems),
         ]
       : [],
+    lookLine,
   ].flat();
 }
 

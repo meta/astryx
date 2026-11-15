@@ -190,6 +190,7 @@ import {
   previewAfter,
   checkSection,
   stampSheet,
+  lookAtPictures,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {readThemeState} from '../../foundation/config/theme-state.mjs';
@@ -1624,6 +1625,7 @@ async function previewAndRoute(
         // were taken (why an earlier browser did not) is not a failure.
         pictureProblem:
           png && !(p.pictures ?? []).length ? p.pictureProblem : null,
+        pictures: p.pictures ?? [],
         stale: previewStale,
       },
     ),
@@ -6064,6 +6066,7 @@ export async function themeEditShow(theme, options = {}) {
           }
         })
       : null;
+  /** @type {{files: string[], problem: string | null}} */
   const shots =
     png && !noPages
       ? await pictures(
@@ -6090,6 +6093,7 @@ export async function themeEditShow(theme, options = {}) {
               : 'no picture was taken: React is not installed here, so the pages the pictures are taken of could not be made; install react and react-dom, then run show --png again'
             : null,
         };
+  const look = lookAtPictures(shots.files);
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
   if (!readOnly)
@@ -6218,6 +6222,8 @@ export async function themeEditShow(theme, options = {}) {
       skipped: sheet.skipped,
       pictures: shots.files,
       pictureProblem: shots.problem,
+      // The pictures to open, by name: the text puts it first and last.
+      ...(look ? {look} : {}),
       // How to use the theme in this app: theme add <theme> for its app copy.
       wiring: appWiring(ctx, theme, data),
       ...(() => {

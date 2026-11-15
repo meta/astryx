@@ -186,7 +186,8 @@ describe('the in-app preview', () => {
       const stale = r.data.previewStale.join('\n');
       expect(stale).toContain(path.join(cwd, 'src/app/theme-preview'));
       expect(stale).not.toMatch(/(^|[\s(,])src\/app\//);
-      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.html'));
+      // With pictures taken, see names them, by the same full path.
+      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.png'));
     } finally {
       fs.chmodSync(dir, 0o755);
       fs.chmodSync(page, 0o644);
