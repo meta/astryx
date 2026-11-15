@@ -94,8 +94,11 @@ import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
 import {usePresentation} from '../utils/presentation';
 import {contextMenu} from '../motion/uikit/contextMenu';
-import type {ContextMenuTouchHandle} from './ContextMenuTouchLayer';
-import {useContextMenuTouchLayer} from './contextMenuTouchLoader';
+import type {ContextMenuTouchHandle, LateTouch} from './ContextMenuTouchLayer';
+import {
+  retryContextMenuTouchLayer,
+  useContextMenuTouchLayer,
+} from './contextMenuTouchLoader';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
@@ -406,6 +409,7 @@ export function ContextMenu({
   onTouchEnd: onTouchEndProp,
   onTouchCancel: onTouchCancelProp,
   onPointerMove: onPointerMoveProp,
+  onPointerDown: onPointerDownProp,
   'data-testid': testId,
   ...rest
 }: ContextMenuProps) {
@@ -476,14 +480,18 @@ export function ContextMenu({
   const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
   // The touch layer loads after the page's first paint, and only while the
   // touch model applies.
-  const TouchLayer = useContextMenuTouchLayer(touchModes && !isDisabled);
-  // A finger that lands before the touch layer has loaded. The layer begins
-  // it as it mounts, if the finger is still down.
-  const lateTouchRef = useRef<TouchEvent | null>(null);
+  const {layer: TouchLayer, hasFailed: hasTouchLayerFailed} =
+    useContextMenuTouchLayer(touchModes && !isDisabled);
+  // A finger that lands before the touch layer has loaded, with its pointer.
+  // The layer begins it as it mounts, if the finger is still down.
+  const lateTouchRef = useRef<LateTouch | null>(null);
+  // The latest touch pointer to go down on the trigger. Chromium sends a
+  // finger's pointerdown before its touchstart.
+  const touchPointerIdRef = useRef<number | null>(null);
   const takeLateTouch = useCallback(() => {
-    const touchStart = lateTouchRef.current;
+    const late = lateTouchRef.current;
     lateTouchRef.current = null;
-    return touchStart;
+    return late;
   }, []);
 
   const updateOpenState = useCallback(
@@ -832,7 +840,8 @@ export function ContextMenu({
     onTouchEnd: handleLongPressTouchEnd,
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
-    disabled: isDisabled || touchModes,
+    // After a failed touch-layer load, a finger gets today's 500 ms long press.
+    disabled: isDisabled || (touchModes && !hasTouchLayerFailed),
     onLongPress: useCallback(
       (point: {x: number; y: number}) => {
         const rect = getAnchorBaseRect();
@@ -852,9 +861,19 @@ export function ContextMenu({
     (event: React.TouchEvent<HTMLElement>) => {
       handleLongPressTouchStart(event);
       if (touchModes && !isDisabled && TouchLayer == null) {
-        // Kept while the touch layer loads: one finger, until it lifts.
-        lateTouchRef.current =
-          event.touches.length === 1 ? event.nativeEvent : null;
+        if (hasTouchLayerFailed) {
+          // After a failed load, a touch is the intent that loads it again.
+          retryContextMenuTouchLayer();
+        } else {
+          // Kept while the touch layer loads: one finger, until it lifts.
+          lateTouchRef.current =
+            event.touches.length === 1
+              ? {
+                  touchStart: event.nativeEvent,
+                  pointerId: touchPointerIdRef.current,
+                }
+              : null;
+        }
       }
       onTouchStartProp?.(event);
     },
@@ -864,15 +883,16 @@ export function ContextMenu({
       touchModes,
       isDisabled,
       TouchLayer,
+      hasTouchLayerFailed,
     ],
   );
   const handleTriggerTouchMove = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      const touchStart = lateTouchRef.current;
+      const late = lateTouchRef.current;
       if (
-        touchStart != null &&
+        late != null &&
         Array.from(event.nativeEvent.changedTouches).some(touch =>
-          driftsPastTolerance(touchStart, touch, touch.identifier),
+          driftsPastTolerance(late.touchStart, touch, touch.identifier),
         )
       ) {
         // A finger that drifts too far before the layer loads gets no menu.
@@ -886,6 +906,7 @@ export function ContextMenu({
   const handleTriggerTouchEnd = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
       lateTouchRef.current = null;
+      touchPointerIdRef.current = null;
       handleLongPressTouchEnd(event);
       onTouchEndProp?.(event);
     },
@@ -894,21 +915,36 @@ export function ContextMenu({
   const handleTriggerTouchCancel = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
       lateTouchRef.current = null;
+      touchPointerIdRef.current = null;
       handleLongPressTouchCancel(event);
       onTouchCancelProp?.(event);
     },
     [handleLongPressTouchCancel, onTouchCancelProp],
   );
+  const handleTriggerPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      if (event.pointerType === 'touch' && event.isPrimary) {
+        touchPointerIdRef.current = event.pointerId;
+        // A finger whose pointerdown follows its touchstart, as in WebKit.
+        const late = lateTouchRef.current;
+        if (late != null && late.pointerId == null) {
+          lateTouchRef.current = {...late, pointerId: event.pointerId};
+        }
+      }
+      onPointerDownProp?.(event);
+    },
+    [onPointerDownProp],
+  );
   const handleTriggerPointerMove = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
-      const touchStart = lateTouchRef.current;
+      const late = lateTouchRef.current;
       // Before the touch layer loads, Chromium sends a small drift's
       // pointermove but not its touchmove.
       if (
-        touchStart != null &&
+        late != null &&
         event.pointerType === 'touch' &&
         event.isPrimary &&
-        driftsPastTolerance(touchStart, event)
+        driftsPastTolerance(late.touchStart, event)
       ) {
         lateTouchRef.current = null;
       }
@@ -1083,6 +1119,7 @@ export function ContextMenu({
         onTouchEnd={handleTriggerTouchEnd}
         onTouchCancel={handleTriggerTouchCancel}
         onPointerMove={handleTriggerPointerMove}
+        onPointerDown={handleTriggerPointerDown}
         data-testid={testId}
         {...stylex.props(
           styles.trigger,
