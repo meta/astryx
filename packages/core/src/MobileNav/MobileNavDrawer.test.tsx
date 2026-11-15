@@ -74,6 +74,26 @@ afterEach(() => {
 // case compiles the drawer's modules.
 const LOAD = {timeout: 15_000};
 
+/**
+ * Makes the drawer's load fail when the case says so. `started` resolves once
+ * the load has begun, so a case fails it only while it is pending.
+ */
+function holdFailingLoad() {
+  let fail = () => {};
+  let markStarted = () => {};
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+  vi.doMock('./MobileNav', async () => {
+    markStarted();
+    await new Promise<void>(resolve => {
+      fail = resolve;
+    });
+    throw new Error('offline');
+  });
+  return {started, fail: () => fail()};
+}
+
 async function renderShell() {
   const {AppShell} = await import('../AppShell/AppShell');
   const {SideNav, SideNavItem} = await import('../SideNav');
@@ -140,6 +160,74 @@ describe('the AppShell drawer before it has loaded', () => {
     }, LOAD);
     expect(screen.getByText('Home')).toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('reports a failed load once when the handler changes while it loads', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const load = holdFailingLoad();
+    const {AppShell} = await import('../AppShell/AppShell');
+    const {SideNav, SideNavItem} = await import('../SideNav');
+    const onOpenChange = vi.fn();
+    function Shell({isOpen}: {isOpen: boolean}) {
+      return (
+        <AppShell
+          sideNav={
+            <SideNav>
+              <SideNavItem label="Home" href="/" />
+            </SideNav>
+          }
+          // A new handler on every render re-runs the open's load.
+          mobileNav={{
+            breakpoint: 'md',
+            isOpen,
+            onOpenChange: (open: boolean) => {
+              onOpenChange(open);
+            },
+          }}>
+          <div>Content</div>
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell isOpen />);
+    rerender(<Shell isOpen />);
+    await load.started;
+    await act(async () => {
+      load.fail();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    }, LOAD);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close a drawer that closed before its load failed', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const load = holdFailingLoad();
+    const {AppShell} = await import('../AppShell/AppShell');
+    const {SideNav, SideNavItem} = await import('../SideNav');
+    const onOpenChange = vi.fn();
+    function Shell({isOpen}: {isOpen: boolean}) {
+      return (
+        <AppShell
+          sideNav={
+            <SideNav>
+              <SideNavItem label="Home" href="/" />
+            </SideNav>
+          }
+          mobileNav={{breakpoint: 'md', isOpen, onOpenChange}}>
+          <div>Content</div>
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell isOpen />);
+    rerender(<Shell isOpen={false} />);
+    await load.started;
+    await act(async () => {
+      load.fail();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('drops the open and keeps the toggle working when the load fails', async () => {

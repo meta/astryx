@@ -150,16 +150,22 @@ export function MobileNavDrawer(props: MobileNavProps) {
   const isOpen = props.isOpen ?? isMobileNavOpen;
   // Syncs the drawer module with an open request, controlled or not. A
   // failed load drops the open, so the toggle does not report a drawer that
-  // never shows.
+  // never shows. A result that arrives after this run ended (the drawer
+  // closed, or the handler changed) is ignored, so a closed drawer is never
+  // closed again.
   useEffect(() => {
     if (!isOpen || Drawer != null) {
       return;
     }
+    let isCurrent = true;
     void loadMobileNavDrawer().then(isLoaded => {
-      if (!isLoaded) {
+      if (isCurrent && !isLoaded) {
         (props.onOpenChange ?? closeMobileNav)(false);
       }
     });
+    return () => {
+      isCurrent = false;
+    };
   }, [isOpen, Drawer, props.onOpenChange, closeMobileNav]);
   if (Drawer != null) {
     return <Drawer {...props} />;
