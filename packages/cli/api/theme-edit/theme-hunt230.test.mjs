@@ -142,7 +142,7 @@ describe('a null token', () => {
       const p = json(['theme', 'build', 'plain/p.ts']);
       expect(p.status).toBe(0);
       const warnings = JSON.stringify(p.env.data.warnings);
-      expect(warnings).toContain('acts as if it were not set');
+      expect(warnings).toContain('act as if they were not set');
       expect(warnings).not.toContain('a color reading it is transparent');
     },
     T,
