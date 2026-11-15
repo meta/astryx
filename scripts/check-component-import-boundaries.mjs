@@ -19,6 +19,7 @@
  *   `pnpm check:component-import-boundaries`
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import path from 'node:path';
