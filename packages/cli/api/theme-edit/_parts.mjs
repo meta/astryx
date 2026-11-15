@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 19;
+const PART_DATA_VERSION = 20;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -1059,8 +1059,8 @@ function resolvePrivate(v, env, tokens, depth = 0) {
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
   /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
-  const stack = [{env: {}, target: null, fg: null, bg: null}];
+  /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
+  const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
   /**
@@ -1072,6 +1072,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
     pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
   };
+  /** The parts whose paint is a line inside them. @type {Set<string>} */
+  const lined = new Set();
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -1128,10 +1130,37 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     );
     const target = named[0]?.slice(7) ?? parent.target;
     const ownsTarget = named.length > 0;
+    // An empty element with no target of its own inside a part that paints
+    // nothing at rest (a divider's line): what it paints is the part's own
+    // paint, under the part's conditions, so the readers find it as the
+    // part's (its fill, its line color and its thickness).
+    const empty =
+      Boolean(selfClose) ||
+      VOID.has(tag.toLowerCase()) ||
+      html.startsWith(`</${tag}>`, (m.index ?? 0) + m[0].length);
+    const paints = (
+      /** @type {{prop: string, value: string, cond: string}} */ d,
+    ) =>
+      !d.cond &&
+      /^(background(-color)?|border(-[a-z-]+)?-color)$/.test(d.prop) &&
+      expand(d.value, env, tokens).size > 0;
+    const lineOf =
+      !ownsTarget &&
+      empty &&
+      parent.target != null &&
+      own.some(paints) &&
+      (lined.has(parent.target) ||
+        !Object.keys(map[parent.target]?.own ?? {}).some(p =>
+          /^background(-color)?$/.test(p),
+        ))
+        ? parent.target
+        : null;
+    if (lineOf) lined.add(lineOf);
     // An element can carry several targets (a shell's side nav region is a
     // layout panel too): its declarations are each one's own.
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
       if (!t) continue;
+      const asOwn = ownsTarget || t === lineOf;
       const T = (map[t] ??= {
         own: {},
         at: {},
@@ -1154,17 +1183,29 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const t of ['--color-on-dark', '--color-on-light'])
           if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
       }
-      const cond0 = [
-        ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
-        ...context,
-      ].join(',');
+      const cond0 = ownsTarget
+        ? [
+            ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+            ...context,
+          ].join(',')
+        : parent.cond;
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
         // (An inherited background paints nothing of its own: it reads no
         // token, and what shows is its parent's.)
         const toks = expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
-        if (ownsTarget) {
+        // A line's paint and its thickness (a size read from the border
+        // width) are the part's; its layout is not.
+        const lineProp =
+          t === lineOf &&
+          (paints(d) ||
+            /^border(-[a-z-]+)?-(width|style)$/.test(d.prop) ||
+            (/^(height|width|block-size|inline-size)$/.test(d.prop) &&
+              toks.has('--border-width')));
+        if (!ownsTarget)
+          for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
+        if (asOwn && (ownsTarget || lineProp)) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
           (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
             d.value,
@@ -1176,7 +1217,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           );
           for (const t of toks)
             (P.tokens[t] ??= new Set()).add(cond || 'always');
-        } else for (const t of toks) (T.inside[t] ??= new Set()).add(d.prop);
+        }
       }
     }
     let fg = parent.fg;
@@ -1239,8 +1280,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
               if (/^--radius-/.test(tok))
                 map[parent.target].innerCorners.add(tok);
     }
+    // (The conditions a part's own element is drawn under go to what it
+    // holds.)
+    const condHere = ownsTarget
+      ? [
+          ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+          ...context,
+        ].join(',')
+      : parent.cond;
     if (!selfClose && !VOID.has(tag.toLowerCase()))
-      stack.push({env, target, fg, bg});
+      stack.push({env, target, fg, bg, cond: condHere});
   }
   /** @type {Record<string, PartRecord>} */
   const out = {};

@@ -11809,16 +11809,31 @@ export function draftAnswer(ctx, env, question) {
             sequence: steps.length > 1,
           };
       }
+      // Thinner or thicker steps from the thickness its line shows now
+      // (the border width it reads), as a border's width does: never a
+      // stock width that may be the width already.
+      const nowRaw =
+        partValue(on, '--border-width') ?? current('--border-width');
+      const nm = /^(\d*\.?\d+)(px|rem)$/.exec(String(nowRaw ?? ''));
+      const nowPx = nm ? Number(nm[1]) * (nm[2] === 'rem' ? 16 : 1) : null;
+      const thinner = c.dir === 'less' || /\bthin/.test(c.text);
+      const thicker = !thinner && (c.dir === 'more' || /\bthick/.test(c.text));
       const len =
         c.lengths[0] ??
-        (c.dir === 'less'
-          ? '1px'
-          : c.dir || /\bthick/.test(c.text)
-            ? '2px'
-            : null);
+        (nowPx == null
+          ? thinner
+            ? '1px'
+            : thicker
+              ? '2px'
+              : null
+          : thinner
+            ? `${Math.max(0.5, nowPx <= 1 ? nowPx / 2 : nowPx - 1)}px`
+            : thicker
+              ? `${nowPx + 1}px`
+              : null);
       return len
         ? {
-            text: 'the divider thickness: --border-width, on the divider only',
+            text: `the divider thickness: --border-width, on the divider only${nowPx != null && !c.lengths[0] ? ` (now ${nowPx}px)` : ''}`,
             options: [[set('--border-width', len, {on})]],
           }
         : null;
