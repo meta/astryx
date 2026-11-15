@@ -57,10 +57,6 @@ import {
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
-  circleMarks,
-  indicatorLines,
-  pillParts,
-  selectedBoxes,
   dividerParts,
   drawsLine,
   inheritedReach,
@@ -7584,7 +7580,7 @@ export function draftAnswer(ctx, env, question) {
         });
         const pills =
           r.dial === 'corners' && !c.parts.length ? pillsSquare(r.value) : null;
-        if (pills) steps.push(...pills.steps);
+        if (pills) steps.push(pills.step);
         const d = {
           text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it${pills ? `, ${pills.said}` : ''}`,
           options: [steps],
@@ -9795,15 +9791,14 @@ export function draftAnswer(ctx, env, question) {
    * that token goes square too, and the answer names those parts. Null
    * unless the value is square and the question asks for it everywhere or
    * names a pill part.
-   * A selection mark drawn as a circle (a radio) keeps its circle: the
-   * token is pinned on it at Core's value.
    * @param {string} value
-   * @returns {{steps: Step[], said: string} | null}
+   * @returns {{step: Step, said: string} | null}
    */
   function pillsSquare(value) {
     if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
-    const pills = pillParts(C);
-    const marks = circleMarks(C);
+    const pills = Object.keys(C.MAP).filter(p =>
+      partReadsToken(p, '--radius-full'),
+    );
     if (
       !pills.length ||
       !(
@@ -9816,13 +9811,9 @@ export function draftAnswer(ctx, env, question) {
       )
     )
       return null;
-    const round = String(TOKENS['--radius-full'] ?? '9999px');
     return {
-      steps: [
-        set('--radius-full', '0px'),
-        ...marks.map(m => set('--radius-full', round, {on: m})),
-      ],
-      said: `and --radius-full 0px for the parts drawn as pills (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})${marks.length ? `; the radio marks keep their circle (${marks.join(', ')})` : ''}`,
+      step: set('--radius-full', '0px'),
+      said: `and --radius-full 0px for the parts drawn as pills (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})`,
     };
   }
   /**
@@ -11417,7 +11408,7 @@ export function draftAnswer(ctx, env, question) {
           if (pills)
             return {
               text: `no rounding anywhere: the corners dial square, ${pills.said}`,
-              options: [[set('corners', dial), ...pills.steps]],
+              options: [[set('corners', dial), pills.step]],
               sequence: true,
             };
           return {
@@ -11900,11 +11891,6 @@ export function draftAnswer(ctx, env, question) {
             const dividers = wide
               ? dividerParts(C).filter(pt => !borderless.includes(pt))
               : [];
-            // Everywhere also reaches the parts that draw a box only when
-            // selected (a nav item, a segment), on that state, and the
-            // indicator lines (a tab's underline), at the border width.
-            const selectedOnly = everywhere ? selectedBoxes(C) : [];
-            const lines = everywhere && wide ? indicatorLines(C) : [];
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
@@ -11918,20 +11904,10 @@ export function draftAnswer(ctx, env, question) {
                     }),
                   )
                 : []),
-              ...selectedOnly.map(pt =>
-                set('border', `${wide ?? bwNow0} solid ${color}`, {
-                  on: pt,
-                  state: 'selected',
-                  ...modeOf(c),
-                }),
-              ),
-              ...lines.map(x =>
-                set(x.side, /** @type {string} */ (wide), {on: x.part}),
-              ),
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };

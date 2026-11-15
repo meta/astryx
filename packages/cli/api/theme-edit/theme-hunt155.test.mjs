@@ -64,15 +64,11 @@ describe('answers that hold together', () => {
     async test => {
       needsBases(test);
       const r = await answer('no rounding anywhere, badges and switches too');
-      // The radio marks keep their circle: a radio is no pill.
       expect(r.first).toEqual([
         'set n corners square',
         'set n --radius-full 0px',
-        'set n --radius-full 9999px --on radio-indicator --only',
-        'set n --radius-full 9999px --on dropdown-menu-radio',
       ]);
       expect(r.text).toMatch(/badge/);
-      expect(r.text).toMatch(/radio marks keep their circle/);
       expect((await answer('corners square')).first).toEqual([
         'set n corners square',
       ]);
