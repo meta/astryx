@@ -546,7 +546,13 @@ export function makeCompiler(project, parts) {
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
+    // A census pair the caller measures again per variant (`replaces`) is
+    // measured only as those.
+    const replaced = new Set(
+      extra.map((/** @type {any} */ x) => x.replaces).filter(Boolean),
+    );
     for (const p of [...parts.pairs, ...extra]) {
+      if (replaced.has(p)) continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&

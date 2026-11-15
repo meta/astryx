@@ -8337,6 +8337,10 @@ export async function contrastProblems(ctx, data, res) {
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const ofBase = (p, side, m) => {
+    // The ground's own variant for the ground side (text on a header
+    // variant), else the pair's variant.
+    const pw = /** @type {any} */ (p);
+    const w = side === 'bg' ? (pw.groundWhen ?? pw.when) : pw.when;
     const target = p[side].target;
     if (!target) return null;
     // A pair drawn in a state: the base's own rule for that state (butter
@@ -8350,11 +8354,11 @@ export async function contrastProblems(ctx, data, res) {
             ctx,
             target,
             side === 'fg' ? 'color' : 'backgroundColor',
-            {when: /** @type {any} */ (p).when, state},
+            {when: w, state},
           ) ??
           (side === 'bg'
             ? baseComponent(base, ctx, target, 'background', {
-                when: /** @type {any} */ (p).when,
+                when: w,
                 state,
               })
             : null))
@@ -8367,12 +8371,12 @@ export async function contrastProblems(ctx, data, res) {
         target,
         side === 'fg' ? 'color' : 'backgroundColor',
         {
-          when: /** @type {any} */ (p).when,
+          when: w,
         },
       ) ??
       (side === 'bg'
         ? baseComponent(base, ctx, target, 'background', {
-            when: /** @type {any} */ (p).when,
+            when: w,
           })
         : null);
     if (!own) return null;
@@ -8446,14 +8450,14 @@ export async function contrastProblems(ctx, data, res) {
    */
   const drawnBy = (p, m) => {
     const when = pairVariant(p);
-    /** @param {(x: Setting) => boolean} test */
-    const latest = test =>
+    /** @param {(x: Setting) => boolean} test @param {string | null} [w] the variant a setting must name, if any */
+    const latest = (test, w = when) =>
       [...data.settings]
         .reverse()
         .find(
           x =>
             !x.state &&
-            (!x.when || x.when === when) &&
+            (!x.when || x.when === w) &&
             (!x.mode || x.mode === m) &&
             test(x),
         ) ?? null;
@@ -8462,16 +8466,22 @@ export async function contrastProblems(ctx, data, res) {
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
     const tokens = textTokens(p, m, value);
-    return (
+    const mine =
       latest(
         x => x.source === 'property' && x.thing === 'color' && on(x, own),
       ) ??
       latest(
         x => x.source === 'token' && tokens.includes(x.thing) && on(x, own),
-      ) ??
-      latest(
-        x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
-      )
+      );
+    if (mine) return mine;
+    // The base theme's own color on the text's part (butter's nav item)
+    // wins over a token set on the part around it.
+    if (ofBase(p, 'fg', m) != null) return null;
+    // (On the part around it, a setting for that part's variant the text
+    // sits on counts.)
+    return latest(
+      x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
+      /** @type {any} */ (p).groundWhen ?? when,
     );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
@@ -8482,7 +8492,12 @@ export async function contrastProblems(ctx, data, res) {
       inMode(
         side === 'fg'
           ? drawnBy(p, m)?.value
-          : override(s, side, m, /** @type {any} */ (p).when),
+          : override(
+              s,
+              side,
+              m,
+              /** @type {any} */ (p).groundWhen ?? /** @type {any} */ (p).when,
+            ),
         m,
       ) ??
       // The base theme's own part style (neutral's destructive button),
@@ -8540,6 +8555,60 @@ export async function contrastProblems(ctx, data, res) {
         }),
       );
     }
+  }
+  // Text that sits on another part (a heading on the app's header) whose
+  // variants draw different grounds (the header's surface, wash and
+  // elevated variants) is measured on each variant's ground, each scoped
+  // to that variant, so a fix for one leaves the others as they are. Only
+  // variants set can name.
+  /** The grounds each settable variant of a part draws, per part. @type {Map<string, Map<string, string>>} */
+  const groundsByPart = new Map();
+  /** @param {string} g */
+  const variantGrounds = g => {
+    const known = groundsByPart.get(g);
+    if (known) return known;
+    const settable = /** @type {string[]} */ (
+      ctx.C.variantValues(g)?.variant ?? []
+    );
+    /** @type {Map<string, string>} */
+    const out = new Map();
+    if (settable.length)
+      for (const r of ctx.C.partReads(g, 'background'))
+        for (const w of r.when) {
+          const v = /^variant=([\w-]+)$/.exec(w)?.[1];
+          if (v && settable.includes(v) && !out.has(v)) out.set(v, r.token);
+        }
+    groundsByPart.set(g, out);
+    return out;
+  };
+  for (const p of /** @type {any} */ (ctx).parts.pairs) {
+    const g = p.bg.target;
+    if (!g || g === p.fg.target) continue;
+    const grounds = variantGrounds(g);
+    if (new Set(grounds.values()).size < 2) continue;
+    const split = [...grounds].map(
+      ([v, tok]) =>
+        /** @type {any} */ ({
+          ...p,
+          text: `${p.text} (on ${g}, variant ${v})`,
+          // The ground part's variant (the text's own part keeps its own).
+          groundWhen: `variant:${v}`,
+          bg: {...p.bg, tokens: [tok]},
+          replaces: p,
+        }),
+    );
+    // Only grounds that need different text as the theme draws them now
+    // (a fill set on the whole part makes them alike) are told apart.
+    const differ = modesOf(data).some(
+      m =>
+        new Set(
+          split.map(q => {
+            const c = parseColor(value(q, 'bg', m));
+            return c ? plainOn(c) : '';
+          }),
+        ).size > 1,
+    );
+    if (differ) variantPairs.push(...split);
   }
   // Text of a part that sits in the app's top bar (one the census saw inside
   // the header region, or one the preview's own top bar draws) is measured
@@ -8635,31 +8704,112 @@ export async function contrastProblems(ctx, data, res) {
     ...problems.map(x => ({
       // What the problem is, whatever its ratio: the text, the token or
       // property that draws it, what it sits on, its variant and mode.
-      key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
+      key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
       text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
       // The fix sets what draws the text: the setting that wins in CSS,
       // where one does, else the text token where the text sits.
       fix: (() => {
         const color = `'${plainOn(x.ground)}'`;
         const pair = /** @type {TextPair} */ (x.pair);
+        // Text in the top bar sits over each of the bar's grounds (its
+        // variants): when they need opposite text, one color set on the
+        // text's part turns it the wrong way on the others, so no line
+        // fixes this alone.
+        const over = /** @type {any} */ (pair).over;
+        if (over) {
+          const own = value(pair, 'bg', x.mode);
+          const sides = new Set(
+            grounds.map(g => {
+              const under = parseColor(value({...pair, bg: g}, 'bg', x.mode));
+              const top = parseColor(own);
+              const a = alphaOf(own);
+              const rgb =
+                top && under
+                  ? a >= 1
+                    ? top
+                    : compositeOver(top, a, under)
+                  : under;
+              return rgb ? plainOn(rgb) : null;
+            }),
+          );
+          if (sides.size > 1) return null;
+        }
         const drawn = drawnBy(pair, x.mode);
         // Scoped to the variant the text is drawn in, so the fix leaves the
         // part's other variants, on other grounds, as they are.
         const variant = pairVariant(pair);
         const when = (/** @type {string | null | undefined} */ w) =>
           w ? ` --when ${w}` : '';
+        // A part the theme scopes to itself alone (a setting on it with
+        // --only) is fixed alone too: --on it would reach its whole group.
+        const only = (/** @type {string | null | undefined} */ part) =>
+          part && data.settings.some(s => s.on === part && s.only)
+            ? ' --only'
+            : '';
         if (drawn) {
           const onText =
             drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
           return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
         }
+        // The base theme colors the text on its own part: only a color
+        // there changes what is drawn.
+        // (Text on a ground part's variants that need opposite text: a color
+        // on the text's part turns it the wrong way on the others.)
+        const was = /** @type {any} */ (pair).replaces;
+        const sidesOver = was
+          ? new Set(
+              variantPairs
+                .filter(q => /** @type {any} */ (q).replaces === was)
+                .map(q => {
+                  const g = parseColor(value(q, 'bg', x.mode));
+                  return g ? plainOn(g) : null;
+                }),
+            ).size
+          : 1;
+        if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
+          return sidesOver > 1
+            ? null
+            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
         const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
+        // A ground part that draws several grounds the theme cannot tell
+        // apart (variants set cannot name): a token set on it would turn
+        // the text on its other grounds the other way. The text's own part
+        // is fixed instead, when its text sits on one ground only; else no
+        // line can fix this alone.
+        const groundsOf = (/** @type {(q: TextPair) => boolean} */ test) =>
+          new Set(
+            /** @type {any} */ (ctx).parts.pairs
+              .filter(
+                (/** @type {TextPair} */ q) =>
+                  q.bg.target === x.bgPart && test(q),
+              )
+              // The text each ground needs now (black or white), as the
+              // theme draws it: grounds a setting made alike are one.
+              .map((/** @type {TextPair} */ q) => {
+                const g = parseColor(value(q, 'bg', x.mode));
+                return g ? plainOn(g) : '';
+              }),
+          ).size;
+        const mixed =
+          token &&
+          x.bgPart &&
+          x.bgPart !== x.textPart &&
+          !x.when &&
+          !(/** @type {any} */ (pair).groundWhen) &&
+          groundsOf(() => true) > 1;
+        if (mixed)
+          return x.textPart &&
+            groundsOf(
+              (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
+            ) === 1
+            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`
+            : null;
         if (token)
           return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${when(x.when)}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}` : ''}${when(variant)}${modeFlag(x.mode)}`;
+            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${only(x.bgPart)}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${modeFlag(x.mode)}`;
         return x.textPart
-          ? `${P} set ${slug} color ${color} --on ${x.textPart}${when(x.when)}${modeFlag(x.mode)}`
+          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${modeFlag(x.mode)}`
           : null;
       })(),
     })),
@@ -8885,7 +9035,7 @@ function borderContrastProblems(ctx, data, res, base) {
             `border|${x.thing}|${t}|${mode}`,
             `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
             color
-              ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${modeFlag(mode)}`
+              ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${x.only && x.on === t ? ' --only' : ''}${modeFlag(mode)}`
               : null,
           );
           break;

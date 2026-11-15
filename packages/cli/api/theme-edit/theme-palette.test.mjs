@@ -2783,7 +2783,8 @@ describe('parts24', () => {
       JSON.stringify((await themeEditShow('p', {cwd})).data),
     ).not.toContain('padding-top');
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'button'});
-  });
+    // (Twenty-six edits, each with its checks.)
+  }, 120_000);
 
   it('keeps a background on variants when a blend mode comes later', async () => {
     const {findOverrides} = await import('./_settings.mjs');

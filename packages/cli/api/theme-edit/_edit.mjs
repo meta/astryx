@@ -7982,6 +7982,13 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
         ...(C.MAP[p]?.attrs?.variant ?? []),
       ]);
       const scoped = variants.length && all.some(v => !variants.includes(v));
+      // Scoped to variants set can name (the part's own variant prop); a
+      // part whose filled variants set cannot name is left out: one frame
+      // for all of them would frame the ones that draw no box.
+      const settable = /** @type {string[]} */ (
+        C.variantValues(p)?.variant ?? []
+      );
+      if (scoped && !variants.every(v => settable.includes(v))) continue;
       found.push({
         kind: 5,
         part: p,
@@ -8039,14 +8046,14 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
       if (followed.why) refused = true;
       else lines.push(followed.line);
     }
+    // Only a line set takes: a part none reaches is left out, never given
+    // a question that changes nothing.
+    if (refused || !x.steps.length) continue;
     out.push({
       part: x.part,
       ...(x.state ? {state: x.state} : {}),
       why: x.why,
-      line:
-        refused || !x.steps.length
-          ? `${P} how ${quoteCommandArgument(`${x.part}${x.state ? ` ${x.state}` : ''} ${x.aspect}`)}`
-          : lines.join(' && '),
+      line: lines.join(' && '),
     });
   }
   return out;

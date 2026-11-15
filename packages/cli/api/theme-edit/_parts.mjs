@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 18;
+const PART_DATA_VERSION = 19;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -1063,6 +1063,15 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
+  /**
+   * Text drawn by a part with its paint: one pair per part, text and
+   * ground.
+   * @param {string} target @param {PaintSide} fg @param {PaintSide} bg @param {string} sample
+   */
+  const addPair = (target, fg, bg, sample) => {
+    const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
+    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+  };
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -1070,15 +1079,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     if (text !== undefined) {
       const top = stack[stack.length - 1];
       const t = text.trim();
-      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t)) {
-        const k = `${top.target}|${top.fg.target}:${top.fg.tokens.join('+') || top.fg.raw}|${top.bg.target}:${top.bg.tokens.join('+') || top.bg.raw}`;
-        pairs.set(k, {
-          text: top.target,
-          fg: top.fg,
-          bg: top.bg,
-          sample: t.slice(0, 30),
-        });
-      }
+      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
+        addPair(top.target, top.fg, top.bg, t);
       continue;
     }
     if (close) {
@@ -1192,6 +1194,34 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         const t = [...expand(d.value, env, tokens)];
         if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
+      }
+    }
+    // An input's text is its value, and its placeholder where it has none:
+    // attributes, not text nodes, drawn in the input's text color (the
+    // placeholder in its own ::placeholder color) on the ground it sits on.
+    if (tag.toLowerCase() === 'input' && target && fg && bg) {
+      const attr = (/** @type {string} */ n) =>
+        new RegExp(`\\b${n}="([^"]*)"`).exec(attrs)?.[1]?.trim() ?? '';
+      const type = attr('type') || 'text';
+      if (
+        !/^(checkbox|radio|hidden|range|color|file|submit|button|reset|image)$/.test(
+          type,
+        )
+      ) {
+        if (attr('value')) addPair(target, fg, bg, attr('value'));
+        const ph = own.find(
+          d => d.prop === 'color' && /placeholder/.test(d.cond ?? ''),
+        );
+        if (attr('placeholder') && ph) {
+          const t = [...expand(ph.value, env, tokens)];
+          addPair(
+            target,
+            {target, tokens: t, raw: t.length ? null : ph.value},
+            bg,
+            attr('placeholder'),
+          );
+        } else if (attr('placeholder') && !attr('value'))
+          addPair(target, fg, bg, attr('placeholder'));
       }
     }
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
