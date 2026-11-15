@@ -24,6 +24,7 @@ verified_by:
     packages/core/src/BottomSheet/__tests__/BottomSheetKeyboard.a11y.browser.spec.ts,
     packages/core/src/BottomSheet/__tests__/BottomSheetDrag.a11y.chromium.spec.ts,
     packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts,
+    packages/core/src/BottomSheet/__tests__/BottomSheetScrollPadding.interaction.browser.spec.ts,
     apps/storybook/stories/BottomSheet.stories.tsx,
     scripts/check-knowledge.mjs,
   ]

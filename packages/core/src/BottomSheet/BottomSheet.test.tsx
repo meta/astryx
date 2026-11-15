@@ -368,9 +368,6 @@ function fireTimedPointer(
   return fireEvent(target, event);
 }
 
-// The room the keyboard takes at the end of a Tall sheet's body, CSS px, or 0
-// when the sheet lays out none. The functional style on the body's content box sets
-// it as its `::after` box's height.
 // The body's scroll padding: StyleX sets its value on the body itself.
 function scrollPaddingOf(body: HTMLElement): number {
   const match = /--[\w-]+:\s*(-?[\d.]+)px/.exec(
@@ -379,6 +376,9 @@ function scrollPaddingOf(body: HTMLElement): number {
   return match == null ? 0 : Number(match[1]);
 }
 
+// The room the keyboard takes at the end of a Tall sheet's body, CSS px, or 0
+// when the sheet lays out none. The functional style on the body's content box sets
+// it as its `::after` box's height.
 function keyboardInsetOf(body: HTMLElement): number {
   const content = body.firstElementChild;
   const match = /--[\w-]+:\s*(-?[\d.]+)px/.exec(
