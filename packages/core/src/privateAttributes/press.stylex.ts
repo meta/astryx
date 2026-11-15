@@ -380,12 +380,17 @@ export const controlPressLayerStyles = stylex.create({
    * scale runs as a transition: the browser makes a layer for it and drops
    * that layer at its end, which repaints the button. Under a coarse primary
    * pointer, a layer kept from the touch to the end of the release keeps the
-   * release free of Paint. With any other pointer nothing here applies.
+   * release free of Paint. A caller can make the control static, with no
+   * transform, so that its `::after` covers an ancestor. A transform hint
+   * would make the control that pseudo-element's containing block. It would
+   * then shrink to the control, and a tap on the ancestor would miss. So the
+   * hint names opacity, which keeps the layer and makes no containing block.
+   * With any other pointer nothing here applies.
    */
   control: {
     willChange: {
       default: null,
-      [COARSE]: {default: null, [PRESSED_ANY]: 'transform'},
+      [COARSE]: {default: null, [PRESSED_ANY]: 'opacity'},
     },
   },
 });
