@@ -676,6 +676,31 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     }
   });
 
+  it("refers to the root's alias of a theme token the surface cannot re-declare", () => {
+    const chained = defineTheme({
+      name: 'media-scheme-replay-chain',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        // Refers to the surface's own accent, which the theme leaves unset, so
+        // the surface does not re-declare it.
+        '--color-border-emphasized':
+          'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-accent))',
+        '--color-border': 'var(--color-border-emphasized)',
+      },
+    });
+    const css = generateOnMediaCSS(chained);
+    expect(css).toContain(
+      '--_theme-root-color-border-emphasized: var(--color-border-emphasized);',
+    );
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(css, surface);
+      expect(declared).not.toHaveProperty('--color-border-emphasized');
+      expect(declared['--color-border']).toBe(
+        'var(--_theme-root-color-border-emphasized)',
+      );
+    }
+  });
+
   it("keeps a reference's fallback on the root alias", () => {
     const withFallback = defineTheme({
       name: 'media-scheme-replay-alias-fallback',
