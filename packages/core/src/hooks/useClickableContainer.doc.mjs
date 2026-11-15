@@ -73,6 +73,7 @@ export const docs = {
     bestPractices: [
       { guidance: true, description: 'Attach onClick, onMouseUp and onPointerDown to the container element: full click handling including middle-click, and no touch pressed state for a press on a nested control.' },
       { guidance: true, description: 'Use inside ClickableCard or SelectableCard for the standard card interaction pattern.' },
+      { guidance: true, description: 'For a pressable surface without Card chrome, such as a quoted message that jumps on press, compose it yourself: this hook on the surface; `usePressFeedback()` and `interactionOverlayStyles.backgroundColor` (from `@astryxdesign/core/utils`) on the same element for the hover tint and touch press; a native `<button>` (or an `<a>` for a destination) inside `VisuallyHidden` as the named control and interactiveRef; and `focusOutlineStyles.focusWithin` (from `@astryxdesign/core/utils`) on the surface for the shared focus ring, the one ClickableCard draws. The `Core/Hooks/useClickableContainer` story has the full recipe.' },
       { guidance: false, description: 'Use when the entire container is a single interactive element; just use a <button> or <a> directly.' },
     ],
   },
@@ -106,6 +107,7 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Attach onClick + onMouseUp + onPointerDown to container element: full click handling incl. middle-click, no touch pressed state for press on nested control.' },
       { guidance: true, description: 'Use inside ClickableCard / SelectableCard for standard card interaction pattern.' },
+      { guidance: true, description: 'Pressable surface w/o Card chrome (e.g. quoted message jumping on press): this hook on surface; usePressFeedback() + interactionOverlayStyles.backgroundColor on same element; native <button> (or <a> for destination) inside VisuallyHidden as named control + interactiveRef; focusOutlineStyles.focusWithin on surface for shared focus ring (the one ClickableCard draws). Full recipe: Core/Hooks/useClickableContainer story.' },
       { guidance: false, description: 'Use when entire container is single interactive element; just use <button> / <a> directly.' },
     ],
   },

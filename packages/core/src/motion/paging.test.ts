@@ -353,6 +353,38 @@ describe("solvePaging: UIKit's paging settle, frame by frame", () => {
     expect(curve.at(0.1)).toBe(804);
   });
 
+  it.each([0.75, 1.5, 3])(
+    'at tempo %s, a settle from rest keeps its shape and takes tempo times as long',
+    tempo => {
+      const measured = solvePaging({from: 633.33, velocity: 0, to: 804});
+      const paced = solvePaging({from: 633.33, velocity: 0, to: 804, tempo});
+      expect(paced.steps).toBe(measured.steps);
+      expect(paced.duration).toBeCloseTo(measured.duration * tempo, 9);
+      for (let t = 0; t <= measured.duration; t += 0.01) {
+        expect(paced.at(t * tempo)).toBeCloseTo(measured.at(t), 6);
+      }
+      expect(paced.at(paced.duration)).toBe(804);
+    },
+  );
+
+  it("at any tempo, a release starts at UIKit's step velocity", () => {
+    for (const tempo of [0.75, 1.5, 3]) {
+      const curve = solvePaging({from: 500, velocity: 1000, to: 804, tempo});
+      expect(curve.velocity(0)).toBeCloseTo(960, 6);
+      expect(curve.at(curve.duration)).toBe(804);
+    }
+  });
+
+  it('at tempo 1, the settle is the measured one', () => {
+    const measured = solvePaging({from: 450, velocity: 600, to: 804});
+    const atOne = solvePaging({from: 450, velocity: 600, to: 804, tempo: 1});
+    expect(atOne.steps).toBe(measured.steps);
+    expect(atOne.duration).toBe(measured.duration);
+    for (let t = 0; t <= measured.duration; t += 0.004) {
+      expect(atOne.at(t)).toBe(measured.at(t));
+    }
+  });
+
   it('runs the documented integrator', () => {
     const {springPull, friction} = paging.integrator;
     const curve = solvePaging({from: 0, velocity: 0, to: 100});

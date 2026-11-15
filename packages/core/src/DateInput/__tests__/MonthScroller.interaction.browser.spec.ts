@@ -50,6 +50,12 @@ async function openCalendar(
   const viewport = page.locator('[data-scroller="months"]');
   await expect(viewport).toBeVisible();
   // The sheet's own entrance, and the scroller's first snap, settle first.
+  await waitForRest(viewport);
+  return viewport;
+}
+
+/** Resolves once the scroller has held still for ten frames. */
+async function waitForRest(viewport: Locator): Promise<void> {
   await viewport.evaluate(
     async element =>
       new Promise<void>(resolve => {
@@ -68,7 +74,6 @@ async function openCalendar(
         requestAnimationFrame(check);
       }),
   );
-  return viewport;
 }
 
 test.describe('with a mouse', () => {
@@ -112,6 +117,43 @@ test.describe('with a mouse', () => {
       ),
       `the offsets each frame showed: ${offsets.join(', ')}`,
     ).not.toHaveLength(0);
+  });
+
+  test('Tab right after an arrow across a month edge leaves the focused day on screen', async ({
+    page,
+  }) => {
+    const viewport = await openCalendar(page, 'mouse', 'no-preference');
+    const title = page.locator('[data-title="month-year"]');
+    const shown = (await title.textContent())?.trim() ?? '';
+    // ArrowRight on the shown month's last day crosses into the next month
+    // and scrolls there. Tab, during that scroll, moves focus to the Tab stop
+    // of the month after, and the browser scrolls it in.
+    await viewport
+      .locator(
+        `[role="grid"][data-month="${shown}"] button[data-date]:not([data-outside])`,
+      )
+      .last()
+      .focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Tab');
+    await waitForRest(viewport);
+    const focused = await page.evaluate(() => {
+      const scroller = document.querySelector('[data-scroller="months"]');
+      const day = document.activeElement;
+      if (scroller == null || !(day instanceof HTMLElement)) {
+        return {month: '', isOnScreen: false};
+      }
+      const view = scroller.getBoundingClientRect();
+      const box = day.getBoundingClientRect();
+      return {
+        month: day.closest('[role="grid"]')?.getAttribute('data-month') ?? '',
+        isOnScreen: box.left >= view.left - 1 && box.right <= view.right + 1,
+      };
+    });
+    expect(focused.month).not.toBe('');
+    expect(focused.month).not.toBe(shown);
+    expect(focused.isOnScreen).toBe(true);
+    await expect(title).toHaveText(focused.month);
   });
 
   test('under Reduced Motion an arrow changes the month at once', async ({

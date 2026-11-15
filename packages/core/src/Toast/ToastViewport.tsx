@@ -4,10 +4,12 @@
 
 /**
  * @file ToastViewport.tsx
- * @input Uses React state/effects, ToastContext, content-provider boundary, useAnnounce, viewport tokens,
- *   shared layer text reset, the active modal outlet, the layer toast host
- *   registry, and placement-derived motion variables
- * @output Exports the ToastViewport provider, stack, live announcement dispatch,
+ * @input Uses React state and effects, ToastContext, the content-provider
+ *   boundary, useAnnounce and viewport tokens. It also uses the shared layer
+ *   text reset, the active modal outlet, the layer toast host registry and
+ *   placement-derived motion variables
+ * @output Exports the ToastViewport provider, stack, live announcement dispatch
+ *   (an open modal's containers when hosted in one, else the shared channel),
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()
  *
@@ -16,14 +18,15 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
@@ -36,7 +39,13 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  announceInModal,
+  enclosingModalDialog,
+  useAnnounce,
+  type AnnounceFn,
+  type AnnouncePoliteness,
+} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -63,7 +72,13 @@ registerEnglishFallback(english);
 const SAFE_AREA_INLINE_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-left, 0px))`;
 const SAFE_AREA_INLINE_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-right, 0px))`;
 const SAFE_AREA_BLOCK_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-top, 0px))`;
-const SAFE_AREA_BLOCK_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-bottom, 0px))`;
+// On an iPhone, a downward swipe that starts in the bottom inset can pull the
+// whole screen down. Keep the toast clear of that inset.
+const SAFE_AREA_BLOCK_END = `calc(${spacingVars['--spacing-4']} + env(safe-area-inset-bottom, 0px))`;
+// Safari reports the inset only to a page with `viewport-fit=cover`. Under a
+// coarse pointer the gutter clears 34 px anyway: a Face ID iPhone's bottom
+// inset in portrait.
+const SAFE_AREA_BLOCK_END_TOUCH = `calc(${spacingVars['--spacing-4']} + max(env(safe-area-inset-bottom, 0px), 34px))`;
 const TOAST_EDGE_DRIFT = spacingVars['--spacing-2'];
 const TOAST_EDGE_DRIFT_NEGATIVE = `calc(-1 * ${TOAST_EDGE_DRIFT})`;
 
@@ -78,7 +93,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     paddingBlockStart: SAFE_AREA_BLOCK_START,
-    paddingBlockEnd: SAFE_AREA_BLOCK_END,
+    paddingBlockEnd: {
+      default: SAFE_AREA_BLOCK_END,
+      '@media (pointer: coarse)': SAFE_AREA_BLOCK_END_TOUCH,
+    },
     paddingInlineStart: {
       default: SAFE_AREA_INLINE_START,
       ':is([dir="rtl"] *)': SAFE_AREA_INLINE_END,
@@ -107,6 +125,13 @@ const styles = stylex.create({
     borderStyle: 'none',
     backgroundColor: 'transparent',
     overflow: 'visible',
+  },
+  // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
+  // toast that a swipe sends through that edge gives the viewport its color.
+  // Safari keeps that color while the viewport has a box, so an empty
+  // viewport has none.
+  viewportEmpty: {
+    display: 'none',
   },
   // The viewport sits at the inset the app declared on LayerProvider for a
   // bar floating over that edge (spec:AST-059 FR6); unset, each reads 0px.
@@ -189,12 +214,6 @@ const styles = stylex.create({
   toastWrapperInnerSettled: {
     overflow: 'visible',
   },
-  // The card's starting style reads these. Once the entrance starts, a move
-  // renders the card at rest.
-  toastWrapperInnerEntered: {
-    '--_toast-start-opacity': 1,
-    '--_toast-start-slide': '0px',
-  },
 });
 
 export interface ToastViewportProps {
@@ -242,6 +261,7 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
+  announce: AnnounceFn;
   /** Whether the card carries its own live region (see ToastViewport). */
   isLiveRegion: boolean;
 }
@@ -266,6 +286,7 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
+  announce,
   isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
@@ -273,8 +294,8 @@ function ToastRow({
   const isAutoHide = o.isAutoHide ?? (type === 'error' ? false : true);
   const dur = o.autoHideDuration ?? 5000;
   const [isSettled, setIsSettled] = useState(false);
-  // Each move between modal outlets renders the row again. Its starting style
-  // must not apply then.
+  // Each move between modal outlets renders the row and its card again. Their
+  // starting styles must not apply then.
   const [hasEntryStarted, setHasEntryStarted] = useState(false);
   // React's transition run and cancel events have no propertyName field.
   const watchEntry = useCallback((row: HTMLDivElement | null) => {
@@ -335,7 +356,6 @@ function ToastRow({
         {...stylex.props(
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
-          hasEntryStarted && styles.toastWrapperInnerEntered,
         )}>
         <ToastSurface
           type={type}
@@ -349,6 +369,11 @@ function ToastRow({
           renderContent={o.renderContent}
           timerKey={entry.id}
           isLiveRegion={isLiveRegion}
+          announce={announce}
+          isRenderedBodyAnnouncement={
+            o.renderContent == null && getNodeText(o.body) === ''
+          }
+          hasEntryStarted={hasEntryStarted}
         />
       </div>
     </div>
@@ -356,8 +381,20 @@ function ToastRow({
 }
 ToastRow.displayName = 'ToastRow';
 
-const hasActiveModalOutlet = (): boolean => getActiveModalOutlet() != null;
-const hasNoModalOutlet = (): boolean => false;
+/**
+ * ToastViewport renders ToastRefSync, which writes through useCommittedRefInto,
+ * before its children, so a child's layout cleanup reads the committed list.
+ */
+function ToastRefSync<T>({
+  targetRef,
+  value,
+}: {
+  targetRef: {current: T};
+  value: T;
+}): null {
+  useCommittedRefInto(targetRef, value);
+  return null;
+}
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -382,13 +419,20 @@ export function ToastViewport({
   const t = useComponentTranslator();
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
+  // The handlers' list. addToast and removeToast move it ahead of the
+  // committed toasts within a batch, and each render resets it. It stays
+  // written during render on purpose. A reset at commit would drop a toast a
+  // handler raised while that render was in progress, as concurrent rendering
+  // allows.
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
-  // The list as last rendered: addToast moves toastsRef ahead of it within
-  // a batch, so this tells a rendered toast from one raised since.
+  // The list as last committed, so a handler tells a rendered toast from one
+  // raised since. `ToastRefSync` writes it.
   const renderedToastsRef = useRef(toasts);
-  renderedToastsRef.current = toasts;
-  // Read by removeToast, which keeps one identity across renders.
+  // Read by removeToast, which keeps one identity across renders. It stays
+  // written during render on purpose. A dismissal reads the limit of the
+  // latest render. A toast that a pending lower limit hides leaves at once, so
+  // that commit cannot cut its exit.
   const maxVisibleRef = useRef(maxVisible);
   maxVisibleRef.current = maxVisible;
   // Rendered entries a repeat has replaced in this batch: still found by a
@@ -457,24 +501,30 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
-  // dispatch path invoked once per useToast() call from an event handler,
-  // never from render — so each toast is announced exactly once by
-  // construction, independent of the React render lifecycle (StrictMode
-  // double-render/double-effect, viewport remounts, and unrelated list
-  // re-renders never re-announce). It is client-only (addToast never runs
-  // during SSR), so it is SSR-safe.
-  const announce = useAnnounce();
-  // An open native modal hides the body-level channel above from assistive
-  // technology, so while the viewport is hosted in one, each card announces
-  // itself through its own live region instead. Outside a modal the cards
-  // carry none, so a card updated in place is announced once.
-  const hasModalOutlet = useSyncExternalStore(
-    subscribeModalOutlets,
-    hasActiveModalOutlet,
-    hasNoModalOutlet,
+  // (see useAnnounce.ts). Plain React text is announced in addToast — the
+  // event-driven dispatch path. ToastSurface reads a component body or a
+  // custom layout after commit. getNodeText cannot see what a component
+  // renders. Both paths use this modal-aware writer.
+  // The viewport is each toast's only announcement owner; the card carries no
+  // live role. A top-layer viewport's host moves into the latest open native
+  // modal, where the page's shared channel is not exposed, so it writes
+  // through the containers of the modal its host sits in. A
+  // viewport rendered in place uses `useAnnounce`, which finds an enclosing
+  // modal through its context.
+  const announceShared = useAnnounce();
+  // The top-layer host (below), read at write time for the modal it sits in.
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const announce = useCallback(
+    (text: string, politeness: AnnouncePoliteness = 'polite') => {
+      const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
+      if (modal != null) {
+        announceInModal(modal, text, politeness);
+        return;
+      }
+      announceShared(text, politeness);
+    },
+    [announceShared, isTopLayer],
   );
-  const isModalHosted = isTopLayer && hasModalOutlet;
 
   const addToast = useCallback(
     (entry: ToastEntry) => {
@@ -495,7 +545,7 @@ export function ToastViewport({
       }
       // Only text is announced; interactive endContent is reachable via F6.
       const text = getNodeText(entry.options.body);
-      if (text) {
+      if (text && entry.options.renderContent == null) {
         // Error toasts map to the assertive region (role="alert"); everything
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
@@ -789,10 +839,12 @@ export function ToastViewport({
     }
     const element = document.createElement('div');
     element.style.display = 'contents';
+    hostRef.current = element;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- the host exists only on the client, so server and hydration markup carry no portal
     setHost(element);
     return () => {
       element.remove();
+      hostRef.current = null;
       setHost(null);
     };
   }, [isTopLayer]);
@@ -947,6 +999,7 @@ export function ToastViewport({
           styles.viewport,
           styles.viewportInlineSpan,
           posStyle,
+          !hasToasts && styles.viewportEmpty,
         ),
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
@@ -963,7 +1016,8 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
-            isLiveRegion={isModalHosted}
+            announce={announce}
+            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>
@@ -972,7 +1026,9 @@ export function ToastViewport({
 
   return (
     <ToastContext value={contextValue}>
-      {children}
+      <ToastRefSync targetRef={renderedToastsRef} value={toasts} />
+      {/* Its own fiber, so a child it unmounts is unmounted after the sync. */}
+      <Fragment>{children}</Fragment>
       {isTopLayer ? (
         <>
           <div ref={rootOutletRef} {...stylex.props(styles.rootOutlet)} />

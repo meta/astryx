@@ -14,9 +14,9 @@
  * UIControl semantics, event for event:
  *
  * - `touchDown` when the finger lands; the highlight comes on in the same
- *   frame, unless the control sits in a scroller, where it waits
- *   `contentTouchDelay` (UIScrollView.delaysContentTouches) so a flick
- *   paints nothing.
+ *   frame, unless the control sits in a scroller. There it waits
+ *   `contentTouchDelay` (UIScrollView.delaysContentTouches) from the touch's
+ *   own time, so a flick paints nothing.
  * - `touchDragInside` / `touchDragOutside` on every move, `touchDragExit` /
  *   `touchDragEnter` when the finger crosses the control's bounds EXPANDED
  *   by `trackingExpansion` (a fingertip dragged a little off a button is
@@ -49,6 +49,7 @@
 import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
 // Importing the whole table bundles its curves into each press-tracking control.
 import {press as pressClocks} from '../motion/uikit/timing';
+import {msSinceInput} from '../utils/inputAge';
 import {travel} from './geometry';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {TapGestureRecognizer} from './TapGestureRecognizer';
@@ -345,12 +346,20 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
         (delay === 'always' ||
           (delay === 'inScrollers' && touch.scroll?.isInsideScroller === true));
       if (delays) {
+        // The delay counts from the touch, so the time a busy main thread
+        // took to deliver it comes off the wait. The touch's time is on the
+        // clock of its own window, which can be an iframe's.
+        const wait = Math.max(
+          0,
+          PRESS.contentTouchDelay.value -
+            msSinceInput(touch.time, touch.target),
+        );
         highlightTimer = setTimeout(() => {
           highlightTimer = null;
           if (state.isTouchInside) {
             setHighlighted(true);
           }
-        }, PRESS.contentTouchDelay.value);
+        }, wait);
       } else {
         setHighlighted(true);
       }

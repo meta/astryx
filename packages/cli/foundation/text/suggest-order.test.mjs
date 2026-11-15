@@ -2,12 +2,59 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  matchWholeName,
   nameWords,
   orderByAffinity,
   orderRouteSuggestions,
   rankComponentSuggestions,
   synonymMatches,
 } from './suggest-order.mjs';
+
+describe('matchWholeName', () => {
+  const names = ['kanban-board', 'dashboard', 'detail-page', 'ide', 'editor'];
+
+  it('reads a name in any case or separator as that name', () => {
+    expect(matchWholeName('KanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanban_board', names)).toBe('kanban-board');
+    expect(matchWholeName('Kanban Boards', names)).toBe('kanban-board');
+  });
+
+  it('reads one slip in a long name as that name', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('kanban bord', names)).toBe('kanban-board');
+  });
+
+  it('allows no slip in a short name', () => {
+    expect(matchWholeName('ida', names)).toBeNull();
+    expect(matchWholeName('edito', names)).toBeNull();
+  });
+
+  it('reads a separator, a plural or a singular as the same words', () => {
+    expect(matchWholeName('kanban-board', names)).toBe('kanban-board');
+    expect(matchWholeName('detail pages', names)).toBe('detail-page');
+    expect(matchWholeName('setting', ['settings'])).toBe('settings');
+  });
+
+  it('counts a swap, a missing letter and a wrong letter as one slip', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('dashoard', names)).toBe('dashboard');
+    expect(matchWholeName('dashbeard', names)).toBe('dashboard');
+    expect(matchWholeName('dshbaord', names)).toBeNull();
+  });
+
+  it('answers null when two names share the exact words', () => {
+    expect(
+      matchWholeName('data table', ['data-table', 'DataTable']),
+    ).toBeNull();
+  });
+
+  it('answers null when more than one name is that close', () => {
+    expect(
+      matchWholeName('detail pane', ['detail-page', 'detail-pine']),
+    ).toBeNull();
+  });
+});
 
 describe('nameWords', () => {
   it('reads every spelling of a name as the same words', () => {
@@ -140,6 +187,85 @@ describe('rankComponentSuggestions', () => {
     'SideRailItem',
     'Sheet',
   ];
+
+  it('ranks a name that is a typed word above a keyword-only match of it', () => {
+    // `Widgetry` is the first typed word; `RoundPanel` matched it only through
+    // a keyword, and carries the other typed word in its name.
+    // `Widgetry` covers more of the typed letters than `Panel`.
+    const names = ['Widgetry', 'RoundPanel', 'Panel'];
+    const results = [
+      {
+        name: 'RoundPanel',
+        score: 70,
+        reason: 'keyword "widgetry"',
+        keywordAt: 2,
+      },
+      {name: 'Widgetry', score: 60, reason: 'name contains "widgetry"'},
+    ];
+    expect(
+      rankComponentSuggestions('WidgetryPanel', results, names).map(
+        r => r.name,
+      ),
+    ).toEqual(['Widgetry', 'Panel', 'RoundPanel']);
+  });
+
+  it('adds a name that is a typed word even when nothing scored it', () => {
+    const names = ['Fizz', 'LiveCanvasHolder'];
+    const results = [
+      {
+        name: 'LiveCanvasHolder',
+        score: 70,
+        reason: 'keyword "holder"',
+        keywordAt: 0,
+      },
+    ];
+    expect(
+      rankComponentSuggestions('FizzHolder', results, names).map(r => r.name),
+    ).toEqual(['Fizz', 'LiveCanvasHolder']);
+  });
+
+  it('adds no name part when no keyword matched', () => {
+    const names = ['Fizz', 'FizzHold'];
+    const results = [
+      {name: 'FizzHold', score: 80, reason: 'similar name (distance 1)'},
+    ];
+    expect(
+      rankComponentSuggestions('FizzHolder', results, names).map(r => r.name),
+    ).toEqual(['FizzHold']);
+  });
+
+  it('keeps a one-letter typo of a name above a name that is a typed word', () => {
+    const names = ['Gizmo', 'GizmoPanel'];
+    const results = [
+      {name: 'GizmoPanel', score: 80, reason: 'similar name (distance 1)'},
+      {name: 'Thing', score: 70, reason: 'keyword "panel"', keywordAt: 0},
+    ];
+    expect(
+      rankComponentSuggestions('Gizmo Panl', results, names).map(r => r.name),
+    ).toEqual(['GizmoPanel', 'Gizmo', 'Thing']);
+  });
+
+  it('breaks a tie by the name with the fewest words beyond the typed ones', () => {
+    const names = ['XyBeaconBadge', 'BeaconDot'];
+    const results = [
+      {name: 'XyBeaconBadge', score: 90, reason: 'keyword', keywordAt: 0},
+      {name: 'BeaconDot', score: 90, reason: 'keyword', keywordAt: 3},
+    ];
+    expect(
+      rankComponentSuggestions('Beacon', results, names).map(r => r.name),
+    ).toEqual(['BeaconDot', 'XyBeaconBadge']);
+  });
+
+  it('leaves the order of a typo alone when no name carries the typed word', () => {
+    const names = ['VPile', 'Pile'];
+    const results = [
+      {name: 'Pile', score: 80, reason: 'similar name (distance 1)'},
+      {name: 'VPile', score: 80, reason: 'similar name (distance 1)'},
+    ];
+    expect(
+      rankComponentSuggestions('Vile', results, names).map(r => r.name),
+    ).toEqual(['VPile', 'Pile']);
+  });
 
   it('breaks a tie by where the typed name sits in the keywords', () => {
     const results = [
@@ -308,5 +434,45 @@ describe('orderRouteSuggestions', () => {
     expect(names(orderRouteSuggestions('theme/quick-start', roots))[0]).toBe(
       'theme',
     );
+  });
+});
+
+describe('orderByAffinity with typos', () => {
+  const items = [
+    {name: 'AvatarGroup'},
+    {name: 'AvatarGroupShowcase'},
+    {name: 'ButtonGroup'},
+    {name: 'HStackShowcase'},
+    {name: 'VStackShowcase'},
+    {name: 'Badge'},
+  ];
+  /** @param {{name: string}[]} list */
+  const names = list => list.map(i => i.name);
+  /** @param {string} typed @param {boolean} typos */
+  const order = (typed, typos) =>
+    names(orderByAffinity(typed, items, i => [i.name], {closest: true, typos}));
+
+  it('puts a name one slip away first', () => {
+    expect(order('ButonGroup', false)[0]).toBe('AvatarGroup');
+    expect(order('ButonGroup', true)[0]).toBe('ButtonGroup');
+  });
+
+  it('counts two swapped letters as one slip', () => {
+    // Five letters allow one slip, so `Bagde` is a near name of Badge only
+    // when the swap counts as one edit rather than two.
+    expect(order('Bagde', false)[0]).not.toBe('Badge');
+    expect(order('Bagde', true)[0]).toBe('Badge');
+  });
+
+  it('puts the name with fewer slips first', () => {
+    expect(order('VStxckShowcase', true)[0]).toBe('VStackShowcase');
+  });
+
+  it('never lists more than without typos', () => {
+    for (const typed of ['ButonGroup', 'VStxckShowcase', 'Group', 'zzz']) {
+      expect(order(typed, true).length).toBeLessThanOrEqual(
+        order(typed, false).length,
+      );
+    }
   });
 });

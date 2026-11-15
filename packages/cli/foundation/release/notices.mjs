@@ -82,6 +82,12 @@ const FORGET_AFTER_MS = 30 * 24 * 60 * 60_000;
 const LATEST = '@astryxdesign/cli@latest';
 
 /**
+ * The key prefix of the once-a-day setup reminder. It is no update notice, so
+ * no skip is recorded for it and doctor's update line never names it.
+ */
+export const SETUP_REMINDER_KEY = 'setup:';
+
+/**
  * Whether notice `key` may print now; when it may, its time is recorded
  * first, and a time that cannot be recorded keeps it from printing.
  * @param {string} key
@@ -104,7 +110,9 @@ export function takeNotice(
     const shown = state.notifiedAt ?? {};
     const last = shown[key];
     if (typeof last === 'number' && now - last < NOTICE_INTERVAL_MS) {
-      const skips = withSkip(state.noticeSkips, key, 'already-shown', now);
+      const skips = key.startsWith(SETUP_REMINDER_KEY)
+        ? null
+        : withSkip(state.noticeSkips, key, 'already-shown', now);
       if (skips) writeGlobalState({...state, noticeSkips: skips}, stateDir);
       return /** @type {const} */ ('already-shown');
     }
@@ -198,6 +206,7 @@ export function lastNoticeSkip({stateDir = userConfigDir()} = {}) {
     readGlobalState(stateDir).noticeSkips ?? {},
   )) {
     if (
+      !key.startsWith(SETUP_REMINDER_KEY) &&
       skip &&
       typeof skip.at === 'number' &&
       (!newest || skip.at > newest.at)
@@ -460,6 +469,19 @@ export const RUN_FROM_PROJECT =
   "Run this from the Astryx project's folder, or declare an Astryx package in this folder's package.json to make it a project of its own.";
 
 /**
+ * The release of the project at `dir`, for a command that runs in its folder
+ * from a folder below it: its own CLI's version when it installs one, else
+ * the Core it records; null when it records neither.
+ * @param {string} dir
+ * @returns {{version: string, own: boolean} | null}
+ */
+export function projectRelease(dir) {
+  const facts = readReleaseFacts(dir);
+  const version = facts.cli?.version ?? coreVersionOf(facts);
+  return version ? {version, own: Boolean(facts.cli)} : null;
+}
+
+/**
  * The command that adds the CLI at Core's version, for a run in `cwd` whose
  * Core is `core`, with the project's package manager in the project root.
  * `command` is null in a folder inside the project whose package.json is not
@@ -534,11 +556,10 @@ export function projectLag({cwd, current: given, stateDir = userConfigDir()}) {
   const target = installFolder(cwd);
   if (target == null) return null;
   const root = target.moved ? target.dir : (projectRootOf(facts) ?? cwd);
-  // From a folder inside the project, the project's own release: its CLI's,
-  // else its Core's, so the project gets one notice and one --from.
-  const projectFacts = target.moved ? readReleaseFacts(root) : null;
-  const current = projectFacts
-    ? (projectFacts.cli?.version ?? coreVersionOf(projectFacts) ?? given)
+  // From a folder inside the project, the project's own release, as the
+  // setup reminder names it, so the project gets one notice and one --from.
+  const current = target.moved
+    ? (projectRelease(root)?.version ?? given)
     : given;
   if (!isBehind(current, latest.version)) return null;
   const newest = latest.version;

@@ -57,12 +57,8 @@ import {
 } from './validate-integration.mjs';
 import {rootProblem} from '../../foundation/integrations/validate-contributions.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-
-/** @param {string} value */
-export function shellArg(value) {
-  if (/^[A-Za-z0-9@/._-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /**
  * The provider ID a package without a name is checked under: a valid bare
@@ -89,9 +85,12 @@ function unnamedShown(message) {
  * @param {string} cwd
  */
 async function resolveIntegration(pkg, cwd) {
+  // The checks read the integration and its issues, never the notes the
+  // shipped-import check adds, so it is left out: it parses every module the
+  // package ships and may ask npm what it packs.
   const resolved = pkg
-    ? await validateInstalledIntegration(pkg, cwd)
-    : await validateLocalIntegration(cwd);
+    ? await validateInstalledIntegration(pkg, cwd, {shippedImports: false})
+    : await validateLocalIntegration(cwd, {shippedImports: false});
   const integration = resolved.found ? resolved.integration : undefined;
   if (!integration) return resolved;
   // A root that is not a readable folder is reported in the issues; the
@@ -220,7 +219,7 @@ async function templateConflicts(pkg, options) {
   }
   for (const matches of coreById.values()) {
     matches.sort((a, b) =>
-      `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`),
+      compareText(`${a.type}:${a.name}`, `${b.type}:${b.name}`),
     );
   }
 
@@ -284,7 +283,8 @@ async function templateConflicts(pkg, options) {
     }
   }
   conflicts.sort((a, b) =>
-    `${a.id}:${'relationship' in a ? a.relationship : ''}`.localeCompare(
+    compareText(
+      `${a.id}:${'relationship' in a ? a.relationship : ''}`,
       `${b.id}:${'relationship' in b ? b.relationship : ''}`,
     ),
   );
@@ -393,7 +393,7 @@ async function componentConflicts(pkg, options) {
         'If you keep it, always select it with --package.',
       command: `${run} component ${shellArg(component.name)} --package ${shellArg(name)}`,
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   return {
     type: 'integration.component-conflicts',
@@ -566,9 +566,7 @@ async function docConflicts(pkg, options) {
     }
   }
   findings.sort((a, b) =>
-    `${a.topic}:${a.relationship}`.localeCompare(
-      `${b.topic}:${b.relationship}`,
-    ),
+    compareText(`${a.topic}:${a.relationship}`, `${b.topic}:${b.relationship}`),
   );
 
   // The same graph checks `astryx doctor` runs in a project: the namespaces

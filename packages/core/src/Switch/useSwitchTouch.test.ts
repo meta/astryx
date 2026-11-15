@@ -239,6 +239,30 @@ describe('the colour layer when the value changes', () => {
   });
 });
 
+describe('the thumb when the value changes', () => {
+  it('rebases toward the new rest, so a spring already heading there moves whole, then sends it there', () => {
+    const {controller, track} = mount();
+    const element = track.firstElementChild;
+    const thumb = animators.find(
+      animator =>
+        animator.element === element && animator.pseudoElement == null,
+    );
+    if (thumb == null) {
+      throw new Error('no thumb animator');
+    }
+    thumb.calls.length = 0;
+    render(controller, track, true);
+    // The CSS rest moved by the travel. The shift names the rest the spring
+    // heads for after it. The animator moves a spring whole only when its
+    // target lands there, and otherwise rebases as before.
+    const travel = switchTouchGeometry(40, 24).travel;
+    const rebase = thumb.calls.find(call => call.name === 'rebase');
+    expect(rebase?.args).toEqual([{x: -travel}, {towards: {x: 0}}]);
+    const animates = thumb.calls.filter(call => call.name === 'animate');
+    expect(animates.at(-1)?.args[0]).toEqual({x: 0});
+  });
+});
+
 describe("the press's lift and settle at the theme's tempo", () => {
   /** The release curve's length when the thumb's theme plays at `tempo`. */
   function settleSeconds(tempo: number): number {

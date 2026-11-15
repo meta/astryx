@@ -18,6 +18,7 @@ export const docs = {
   title: 'Make your integration work globally',
   category: 'guide',
   keywords: [
+    'authoring',
     'global integration',
     'global mode',
     'npm i -g',

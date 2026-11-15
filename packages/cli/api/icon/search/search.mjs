@@ -9,13 +9,14 @@
  * @position api/icon/search — dispatched by ../icon.mjs
  */
 
-import {AstryxError} from '../../error.mjs';
-import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {loadIconSets} from '../_adapter.mjs';
-import {rankIcons, setsNamed, unusableSet} from '../_records.mjs';
-
-/** The lowest score of a whole-word or word-start match. */
-const WORD_SCORE = 60;
+import {
+  answeringMatches,
+  oneNamedSet,
+  rankIcons,
+  setsNamed,
+  unusableSet,
+} from '../_records.mjs';
 
 /**
  * Every icon of one set, by id: `--set <name> --all-icons`, so an author can read
@@ -25,19 +26,7 @@ const WORD_SCORE = 60;
  */
 export async function iconSetIcons({cwd, set}) {
   const {sets, withdrawn} = await loadIconSets(cwd);
-  const named = setsNamed(sets, set);
-  if (named.length === 0) throw unusableSet(sets, withdrawn, set);
-  if (named.length > 1) {
-    throw new AstryxError(
-      `"${set}" names ${named.length} sets; name one as <package>/<set>`,
-      named.map(each => ({
-        name: `${each.package}/${each.name}`,
-        reason: 'name the package',
-      })),
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const [only] = named;
+  const only = oneNamedSet(sets, withdrawn, set);
   /** @type {Map<string, string[]>} */
   const drawn = new Map();
   for (const [definition, id] of Object.entries(only.data.map ?? {})) {
@@ -75,11 +64,10 @@ export async function iconSearch(query, {cwd, set, limit}) {
     if (searched.length === 0) throw unusableSet(sets, withdrawn, set);
   }
   const ranked = rankIcons(searched, query);
-  // A partial match (`pin` inside `shopping`) answers only when nothing
-  // matches a whole word or a word start.
-  const matches = ranked.some(each => each.score >= WORD_SCORE)
-    ? ranked.filter(each => each.score >= WORD_SCORE)
-    : ranked;
+  // A word start (`start` for `star`) answers only when nothing matches a
+  // whole word, and a partial match (`pin` inside `shopping`) only when
+  // nothing matches a whole word or a word start.
+  const matches = answeringMatches(ranked);
   return {
     type: 'icon.search',
     data: {

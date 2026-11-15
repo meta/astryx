@@ -59,7 +59,11 @@ describe('native Swift routing', () => {
     expect(runner.steps.find(s => s.id === 'scope').uses).toBe(
       './.test-scope/.github/actions/test-scope',
     );
-    expect(swift.needs).toEqual(['heavy-ci', 'native-swift-runner']);
+    expect(swift.needs).toEqual([
+      'admission',
+      'heavy-ci',
+      'native-swift-runner',
+    ]);
     expect(swift['runs-on']).toBe(
       `\${{ ${applies} && 'macos-15' || 'ubuntu-slim' }}`,
     );
@@ -72,11 +76,12 @@ describe('native Swift routing', () => {
 
   it('fails closed when the runner cannot be decided', () => {
     expect(step(swift, 'Require a decided Swift runner').if).toBe(
-      "needs.native-swift-runner.result != 'success'",
+      "needs.admission.result != 'failure' && needs.admission.result != 'skipped' && needs.native-swift-runner.result != 'success'",
     );
     for (const candidate of swift.steps) {
       if (
         [
+          'Stop when CI admission refused the run',
           'Require a decided Swift runner',
           'Skip Swift work outside its scope',
         ].includes(candidate.name)
@@ -85,6 +90,50 @@ describe('native Swift routing', () => {
       }
       expect(candidate.if, candidate.name ?? candidate.uses).toBe(applies);
     }
+  });
+
+  it('fails a run CI admission turned away with that reason, not as a Swift failure', () => {
+    const refused = step(swift, 'Stop when CI admission refused the run');
+    expect(swift.steps[0]).toBe(refused);
+    // Admission fails at its own stop, and skips when room stopped the run.
+    expect(refused.if).toBe(
+      "needs.admission.result == 'failure' || needs.admission.result == 'skipped'",
+    );
+    expect(ci.jobs.room.steps.at(-1).name).toBe('Stop when CI is full');
+    expect(refused.run).toContain(
+      'CI admission refused this run (CI full); re-run all jobs.',
+    );
+    expect(refused.run).toContain('exit 1');
+    // Admission's own stop is the failure this step reads.
+    expect(
+      ci.jobs.admission.steps.filter(s =>
+        /Stop when CI is full/.test(s.name ?? ''),
+      ),
+    ).toHaveLength(2);
+    // Each runs alone: a refused run gets one message, and a decided run
+    // never gets the admission one.
+    const evaluate = (condition, admission, runner) =>
+      Function(
+        'needs',
+        `return (${condition});`,
+      )({
+        admission: {result: admission},
+        'native-swift-runner': {result: runner},
+      });
+    const decided = step(swift, 'Require a decided Swift runner');
+    const asJs = condition =>
+      condition.replace(
+        /needs\.native-swift-runner/g,
+        "needs['native-swift-runner']",
+      );
+    expect(evaluate(asJs(refused.if), 'failure', 'skipped')).toBe(true);
+    expect(evaluate(asJs(decided.if), 'failure', 'skipped')).toBe(false);
+    // Room stopped the run, so admission skipped.
+    expect(evaluate(asJs(refused.if), 'skipped', 'skipped')).toBe(true);
+    expect(evaluate(asJs(decided.if), 'skipped', 'skipped')).toBe(false);
+    expect(evaluate(asJs(refused.if), 'success', 'failure')).toBe(false);
+    expect(evaluate(asJs(decided.if), 'success', 'failure')).toBe(true);
+    expect(evaluate(asJs(decided.if), 'success', 'success')).toBe(false);
   });
 
   it('keeps its own steps in scope, so changing them runs them', () => {

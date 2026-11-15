@@ -31,6 +31,8 @@ import {
   legacyExternalKeeps,
   resolveCoreSourcePath,
   resolveUnscopedDoc,
+  withExampleBlockPointer,
+  withOtherCommandHint,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
@@ -623,7 +625,25 @@ async function componentRead(name, options = {}) {
     });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+    loadedIntegrations,
+  }).catch(async error => {
+    const pointed = await withExampleBlockPointer(error, dirName, {
+      coreDir,
+      cwd,
+    });
+    // A block's pointer already names `astryx template`.
+    throw pointed === error
+      ? await withOtherCommandHint(error, dirName, {
+          coreDir,
+          cwd,
+          loadedIntegrations,
+        })
+      : pointed;
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────

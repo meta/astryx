@@ -111,8 +111,8 @@ export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
   /**
    * When the remove button is visible.
    * - `'hover'` — the button is revealed on hover, and on keyboard focus so
-   *   it stays reachable. On any touch-capable device it stays visible.
-   *   This is the default.
+   *   it stays reachable. Under a coarse primary pointer (a phone or tablet)
+   *   it stays visible. This is the default.
    * - `'always'` — the button is always shown.
    *
    * Only has an effect when `onRemove` is set.

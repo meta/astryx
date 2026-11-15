@@ -41,7 +41,7 @@ export const docs = {
           name: 'hasBackdrop',
           type: 'boolean',
           description:
-            'Dim the page around the active step as a spotlight cutout: the target stays lit while everything else darkens. Use for modal-style steps that demand focus; leave off for a lightweight coachmark that only rings the target.',
+            'Dim the page around the active step as a spotlight cutout: the target stays lit while everything else darkens. While the page is dimmed, a press anywhere outside the callout, the target included, ends the tour with "backdrop". Use for modal-style steps that demand focus; leave off for a lightweight coachmark that only rings the target, or for a step whose target the user should press.',
           default: 'false',
         },
         {
@@ -56,13 +56,13 @@ export const docs = {
       name: 'TourStep',
       displayName: 'Tour Step',
       description:
-        'A single spotlight step. Highlights a target element with a ring drawn as a separate overlay (the target is never restyled) and renders a callout anchored to it (via the core Popover), with a heading, body, optional step progress, and back / next / close controls. Registers with the parent Tour on mount and renders its callout only while active.',
+        'A single spotlight step. Highlights a target element with a ring drawn as a separate overlay (the target is never restyled) and renders a non-modal callout anchored to it, with a heading, body, optional step progress, and back / next / close controls. The callout is a region named by its heading. Focus moves to it when the step starts, and Tab can leave it for the page, so a step can introduce a control the user then operates. Without a backdrop, pressing the target or the page leaves the tour running; Escape ends it. Registers with the parent Tour on mount and renders its callout only while active.',
       props: [
         {
           name: 'targetRef',
           type: 'RefObject<HTMLElement>',
           description:
-            "Ref to the element this step points at. The callout anchors to it like a Popover trigger; it must be a <button> or [role=\"button\"] element (Popover's anchorRef contract).",
+            'Ref to the element this step points at: any element, such as a button, a card, a table cell or a chart region. The callout sits beside it. The target keeps its own behavior: without a backdrop, pressing it does not end the tour, and keyboard focus can reach it while the step shows. Under the backdrop of the Tour, a press on the target ends the tour with "backdrop".',
           required: true,
         },
         {
@@ -94,7 +94,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Use a Tour to introduce a feature or onboard a user through a few key parts of the UI. Compose it from TourStep children, each pointing at an element via targetRef; the Tour advances through them with Next/Back and ends on Done. It is controlled: keep isActive in your own state and persist "has seen this tour" yourself (the component only reports dismissal via onDismiss). Built on the existing Popover/Layer anchoring and overlay tokens rather than a bespoke positioning engine.',
+      'Use a Tour to introduce a feature or onboard a user through a few key parts of the UI. Compose it from TourStep children, each pointing at an element via targetRef; the Tour advances through them with Next/Back and ends on Done. It is controlled: keep isActive in your own state and persist "has seen this tour" yourself (the component only reports dismissal via onDismiss). Built on the existing layer anchoring and overlay tokens rather than a bespoke positioning engine.',
     bestPractices: [
       { guidance: true, description: 'Keep tours short: a few high-value steps. Long tours get skipped.' },
       { guidance: true, description: 'Persist completion yourself (from onDismiss) so a user does not see the same tour on every visit.' },

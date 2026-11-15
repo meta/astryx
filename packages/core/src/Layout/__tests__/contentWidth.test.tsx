@@ -189,7 +189,7 @@ describe('Layout contentWidth', () => {
         getComputedStyle(nestedInner).getPropertyValue(
           '--layout-content-width',
         ),
-      ).toBe('100cqi');
+      ).toBe('initial');
       expect(container).toHaveTextContent('Nested');
     });
 

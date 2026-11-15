@@ -39,6 +39,11 @@ content = content.replaceAll(
   'resolve(__dirname, "babel.js")',
   'resolve(__dirname, "../src/babel.js")',
 );
+// The marker reader also lives in src/, beside babel.js.
+content = content.replaceAll(
+  'resolve(__dirname, "swizzle-marker.js")',
+  'resolve(__dirname, "../src/swizzle-marker.js")',
+);
 writeFileSync('dist/vite.mjs', content);
 
 console.log('Built dist/vite.mjs');

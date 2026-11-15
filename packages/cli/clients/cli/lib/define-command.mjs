@@ -137,6 +137,9 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
     const base = cmd.description() || '';
     cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);
   }
+  if (doc.replaces?.length) {
+    cmd.addHelpText('before', `Will replace: ${doc.replaces.map(name => `astryx ${name}`).join(', ')}\n`);
+  }
 
   const paramDesc = (/** @type {string | undefined} */ name) =>
     (fn?.params ?? []).find(p => p.name === name)?.description ?? '';

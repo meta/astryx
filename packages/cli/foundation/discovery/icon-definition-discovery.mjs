@@ -15,11 +15,12 @@
  *   surface reads
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/parse.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} IconDefinitionDoc */
 
@@ -53,14 +54,14 @@ export function readDefinitionsDir(dir, owner) {
   const definitions = [];
   /** @type {Array<{file: string, message: string}>} */
   const errors = [];
-  /** @type {fs.Dirent[]} */
+  /** @type {import('node:fs').Dirent[]} */
   let entries;
   try {
-    entries = fs.readdirSync(dir, {withFileTypes: true});
+    entries = listDirEntries(dir);
   } catch {
     return {definitions, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (!entry.name.endsWith('.doc.mjs')) continue;
     const file = path.join(dir, entry.name);
     const label = `Icon definition ${entry.name} in ${owner}`;

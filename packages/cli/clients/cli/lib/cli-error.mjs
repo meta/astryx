@@ -50,10 +50,23 @@
  * NEVER add ad-hoc fields. NEVER vary the shape. Consumers depend on it.
  */
 
-import {isJsonMode, jsonError as _jsonError, humanWarn} from '../../../foundation/response/json.mjs';
+import {
+  isJsonMode,
+  jsonError as _jsonError,
+  humanWarn,
+  outputCaptured,
+  writeAllSync,
+} from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
-import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  getCliInvocation,
+} from '../../../foundation/env/package-manager.mjs';
+import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
+import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
+import {doc as experimentalPreviewDoc} from '../commands/experimental-theme-preview.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -119,16 +132,22 @@ export function cliError(message, options = {}) {
   // Human mode: prefix "Error:" and print suggestions on subsequent lines.
   // Use console.error directly — we always want stderr for errors regardless
   // of the JSON-mode flag (we already handled JSON above).
-  console.error(`Error: ${message}`);
+  const lines = [`Error: ${message}`];
   if (suggestions?.length) {
-    console.error('');
+    lines.push('');
     for (const s of suggestions) {
       // A suggested command stays bare in JSON and is prefixed here.
-      const name = /^astryx(\s|$)/.test(s.name) ? formatCliCommand(s.name) : s.name;
+      const name = /^astryx(\s|$)/.test(s.name)
+        ? formatCliCommand(s.name)
+        : s.name;
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
-      console.error(tag);
+      lines.push(tag);
     }
   }
+  // Written whole before a hard exit: output still queued for a slow pipe
+  // would be cut at 64 KiB. A soft exit lets the stream drain on its own.
+  if (hard && !outputCaptured(2)) writeAllSync(2, `${lines.join('\n')}\n`);
+  else for (const line of lines) console.error(line);
 
   if (hard) {
     process.exit(exitCode);
@@ -189,3 +208,106 @@ export function assertOrExit(condition, message, options) {
 // Re-export humanWarn for callers that want a non-fatal warning channel.
 // Warnings should NOT change the exit code.
 export {humanWarn};
+
+/**
+ * Runnable suggestions for an unknown subcommand of a group: each of the
+ * group's subcommands as a whole command, closest to the typed word first.
+ * `elsewhere` lists other groups' subcommands with the same name (`theme
+ * editor` is `experimental theme editor`); they come first, as the likely
+ * meaning.
+ * @param {string} here the group's command, such as `npx @astryxdesign/cli experimental`
+ * @param {string} word the unknown word
+ * @param {string[]} names the group's subcommand names
+ * @param {Array<{name: string, reason: string}>} [elsewhere]
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function unknownSubcommandSuggestions(
+  here,
+  word,
+  names,
+  elsewhere = [],
+) {
+  const typed = word.toLowerCase();
+  const ranked = [...names].sort(
+    (a, b) =>
+      levenshteinDistance(typed, a) - levenshteinDistance(typed, b) ||
+      compareText(a, b),
+  );
+  return [
+    ...elsewhere,
+    ...ranked.map(name => ({
+      name: `${here} ${name}`,
+      reason: 'available subcommand',
+    })),
+  ];
+}
+
+/**
+ * The pointer for a word that is a command only under `experimental theme`
+ * (`theme editor` is `experimental theme editor`), read from those commands'
+ * docs so it needs no other command loaded. Empty for any other word.
+ * @param {string} invocation how to run the CLI
+ * @param {string} word
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function experimentalThemePointer(invocation, word) {
+  const only = [experimentalEditorDoc.name, experimentalPreviewDoc.name];
+  const command = only.find(name => name.split(' ').at(-1) === word);
+  return command
+    ? [
+        {
+          name: `${invocation} ${command}`,
+          reason: `${word} is in the experimental theme commands`,
+        },
+      ]
+    : [];
+}
+
+/**
+ * The pointer for a word under `experimental` that is a command of
+ * `experimental theme` (`experimental editor` is `experimental theme
+ * editor`). Empty for any other word.
+ * @param {string} invocation how to run the CLI
+ * @param {string} word
+ * @param {import('commander').Command | undefined} experimental the loaded
+ *   `experimental` group
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function experimentalSubcommandPointer(invocation, word, experimental) {
+  const theme = experimental?.commands.find(c => c.name() === 'theme');
+  return theme?.commands.some(c => c.name() === word)
+    ? [
+        {
+          name: `${invocation} experimental theme ${word}`,
+          reason: `${word} is a theme subcommand`,
+        },
+      ]
+    : [];
+}
+
+/**
+ * The refusal of an unknown subcommand of `theme` or `experimental`: its
+ * message, and whole commands to run, closest first, led by the
+ * `experimental theme` command the word names when it names one.
+ * @param {'theme' | 'experimental'} group
+ * @param {string} word the unknown word
+ * @param {string[]} names the group's subcommand names
+ * @param {import('commander').Command | undefined} loaded the loaded group
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>}}
+ */
+export function themeGroupUnknownSubcommand(group, word, names, loaded) {
+  const invocation = getCliInvocation(process.cwd());
+  const moved =
+    group === 'theme'
+      ? experimentalThemePointer(invocation, word)
+      : experimentalSubcommandPointer(invocation, word, loaded);
+  return {
+    message: `unknown subcommand '${group} ${word}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
+    suggestions: unknownSubcommandSuggestions(
+      `${invocation} ${group}`,
+      word,
+      names,
+      moved,
+    ),
+  };
+}

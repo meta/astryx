@@ -308,3 +308,81 @@ export const LargeTitle: Story = {
   name: 'Large title',
   render: () => <LargeTitleStack />,
 };
+
+// =============================================================================
+// Scrolling — content passing under the bar
+// =============================================================================
+
+const MESSAGES = Array.from({length: 40}, (_, index) => `Message ${index + 1}`);
+
+function MessageRows() {
+  const nav = useNavigationStack<string>();
+  return (
+    <List>
+      {MESSAGES.map(message => (
+        <ListItem
+          key={message}
+          label={message}
+          description="Tap to open; scroll the list under the bar."
+          endContent={
+            <Icon
+              icon="chevronRight"
+              color="secondary"
+              xstyle={rtlStyles.mirror}
+            />
+          }
+          onClick={() => nav.push(message)}
+        />
+      ))}
+    </List>
+  );
+}
+
+function MessageBody({title}: {title: string}) {
+  return (
+    <List>
+      {Array.from({length: 30}, (_, index) => (
+        <ListItem
+          key={index}
+          label={`${title}, line ${index + 1}`}
+          description="Long content scrolls under the bar."
+        />
+      ))}
+    </List>
+  );
+}
+
+function ScrollingStack() {
+  const [path, setPath] = useState<string[]>([]);
+  return (
+    <div style={{height: '100vh'}}>
+      <NavigationStack
+        label="Mail"
+        root={
+          <NavigationScreen title="Inbox">
+            <MessageRows />
+          </NavigationScreen>
+        }
+        path={path}
+        onPathChange={setPath}
+        getKey={entry => entry}
+        renderScreen={entry => (
+          <NavigationScreen title={entry}>
+            <MessageBody title={entry} />
+          </NavigationScreen>
+        )}
+        data-testid="navigation-stack"
+      />
+    </div>
+  );
+}
+
+/**
+ * Screens long enough to scroll under the bar. On a touch screen the bar
+ * paints no background. Once a screen's content has moved 10px under it, a
+ * veil of the body colour fades in, as iOS 26's scroll edge effect does.
+ * Each screen keeps its own veil through a push, a pop or a back swipe.
+ */
+export const Scrolling: Story = {
+  render: () => <ScrollingStack />,
+};

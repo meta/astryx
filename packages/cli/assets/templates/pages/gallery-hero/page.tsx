@@ -9,6 +9,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Grid} from '@astryxdesign/core/Grid';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {ArrowRightIcon} from '@heroicons/react/20/solid';
 
 const IMAGES = [
@@ -70,7 +71,12 @@ export default function GalleryHero() {
                   label="Get started"
                   variant="primary"
                   endContent={
-                    <Icon icon={ArrowRightIcon} size="sm" color="inherit" />
+                    <Icon
+                      icon={ArrowRightIcon}
+                      size="sm"
+                      color="inherit"
+                      xstyle={rtlStyles.mirror}
+                    />
                   }
                 />
                 <Button label="Learn more" variant="secondary" />
@@ -79,7 +85,7 @@ export default function GalleryHero() {
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>
               {IMAGES.map(image => (
                 <AspectRatio
-                  key={image.src}
+                  key={image.alt}
                   ratio={4 / 5}
                   style={galleryImageClip}>
                   <img style={galleryImage} src={image.src} alt={image.alt} />

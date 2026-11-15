@@ -6,6 +6,7 @@
  * correct, consistently ordered CSS for both runtime and build paths.
  */
 
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {describe, it, expect, vi} from 'vitest';
 import {
   defineTheme,
@@ -90,9 +91,17 @@ describe('generateThemeRules', () => {
   it('includes :scope token block with type scale tokens', () => {
     const scopeRule = rules.find(r => r.includes(':scope'));
     expect(scopeRule).toBeDefined();
-    // Raw size tokens are rem values
-    expect(scopeRule).toContain('--font-size-base: 0.875rem');
-    expect(scopeRule).toContain('--font-size-2xl: 1.5rem');
+    // Raw size tokens are rem values, scaled by the reader's text size where
+    // the root Theme gives the page one (spec:AST-102 FR3; 1 elsewhere)
+    expect(scopeRule).toContain(
+      '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg))',
+    );
+    expect(scopeRule).toContain(
+      '--font-size-base: var(--_scaled-font-size-base)',
+    );
+    expect(scopeRule).toContain(
+      '--_scaled-font-size-2xl: min(calc(1.5rem * var(--_dynamic-type-title1, 1)), var(--_scaled-font-size-3xl))',
+    );
     // Semantic tokens are var() refs
     expect(scopeRule).toContain('--text-heading-1-size: var(--font-size-2xl)');
     expect(scopeRule).toContain('--text-heading-4-size: var(--font-size-base)');
@@ -117,9 +126,16 @@ describe('generateThemeRules', () => {
       '--font-size-4xl',
     ];
     for (const token of rawSizeTokens) {
-      const match = scopeRule.match(new RegExp(`${token}: ([^;]+)`));
+      const match = scopeRule.match(new RegExp(`\\s${token}: ([^;]+)`));
       expect(match).not.toBeNull();
-      expect(match![1]).toMatch(/rem$/);
+      // The step reads its private scaled size: the theme's own rem value,
+      // times the reader's scale for its step.
+      const scaled = `--_scaled-${token.slice(2)}`;
+      expect(match![1]).toBe(`var(${scaled})`);
+      const own = scopeRule.match(new RegExp(`${scaled}: ([^;]+)`));
+      expect(own![1]).toMatch(
+        /^min\(calc\([\d.]+rem \* var\(--_dynamic-type-[a-z0-9-]+, 1\)\), var\(--_scaled-font-size-[a-z0-9]+\)\)$/,
+      );
     }
   });
 
@@ -174,12 +190,261 @@ describe('generateThemeRules', () => {
     }
   });
 
+  it('writes nothing for a part or surface value left undefined, as for a page token', () => {
+    const theme = defineTheme({
+      name: 'unset-values',
+      tokens: {'--radius-element': undefined},
+      components: {
+        button: {
+          base: {
+            '--radius-element': undefined as unknown as string,
+            padding: undefined as unknown as string,
+            ':hover': {color: undefined as unknown as string},
+          },
+        },
+      },
+      onDark: {
+        tokens: {'--color-accent': undefined},
+        components: {
+          button: {base: {padding: undefined as unknown as string}},
+          card: undefined as unknown as Record<string, Record<string, string>>,
+        },
+      },
+    });
+    const warnings: string[] = [];
+    const css = [
+      ...generateThemeRules(theme, warnings),
+      generateOnMediaCSS(theme, warnings),
+    ].join('\n');
+    expect(css).not.toMatch(/:\s*undefined;/);
+    expect(css).not.toContain('.astryx-card');
+    // A block left with no value writes no empty rule.
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps an inherited part value a child leaves undefined, in a style key and a color-mode block', () => {
+    const base = defineTheme({
+      name: 'unset-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'unset-child',
+      components: {
+        button: {
+          base: {
+            padding: undefined as unknown as string,
+            '@dark': {color: undefined as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBe('8px');
+    expect(merged['@dark']).toEqual({color: 'white'});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: 8px;/);
+    expect(css).toMatch(/color: white;/);
+    expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('writes nothing for a component or style key a rule source leaves undefined', () => {
+    const plain = generateThemeRules({
+      tokens: {},
+      components: {link: {base: {color: 'red'}}},
+    });
+    const unset = generateThemeRules({
+      tokens: {},
+      components: {
+        link: {base: {color: 'red'}},
+        card: {base: undefined as unknown as Record<string, string>},
+        text: undefined as unknown as Record<string, Record<string, string>>,
+      },
+    });
+    expect(unset).toEqual(plain);
+  });
+
+  it('writes no Text, Heading or Link override for a component whose every value is left undefined', () => {
+    const plain = generateThemeRules({tokens: {}});
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {base: undefined as unknown as Record<string, string>},
+          link: {
+            base: {color: undefined as unknown as string},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    const defined = defineTheme({
+      name: 'unset-text',
+      components: {
+        text: {base: undefined as unknown as Record<string, string>},
+      },
+    });
+    expect(defined.components?.text).toBeUndefined();
+    // A color-mode block whose every value is undefined is not set either,
+    // so its component writes no override rules.
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          heading: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          link: {
+            base: {'@light': {color: undefined as unknown as string}},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    // A pseudo-class block whose every value is undefined stays, empty: it
+    // is restated, so its component is themed and writes exactly what a
+    // component given an empty style key writes (its prop override rules),
+    // and the block itself writes nothing.
+    const hover = generateThemeRules({
+      tokens: {},
+      components: {
+        text: {base: {':hover': {color: undefined as unknown as string}}},
+        heading: {base: {':hover': {color: undefined as unknown as string}}},
+        link: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    const themed = generateThemeRules({
+      tokens: {},
+      components: {text: {base: {}}, heading: {base: {}}, link: {base: {}}},
+    });
+    expect(hover).toEqual(themed);
+    expect(themed).not.toEqual(plain);
+  });
+
+  it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
+    const base = defineTheme({
+      name: 'hover-base',
+      components: {
+        button: {base: {':hover': {color: 'red', borderColor: 'blue'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'hover-child',
+      components: {
+        button: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    expect(child.components?.button?.base?.[':hover']).toStrictEqual({});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).not.toMatch(/border-color: blue/);
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+  });
+
+  it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
+    const base = defineTheme({
+      name: 'null-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'null-child',
+      components: {
+        button: {
+          base: {
+            padding: null as unknown as string,
+            '@dark': {color: null as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBeNull();
+    expect(merged['@dark']).toEqual({color: null});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: null;/);
+    expect(css).not.toMatch(/padding: 8px;/);
+  });
+
   it('includes explicit component overrides', () => {
     const buttonRule = rules.find(r =>
       r.includes('.astryx-button[data-variant="secondary"]'),
     );
     expect(buttonRule).toBeDefined();
     expect(buttonRule).toContain('light-dark(rgba(5, 54, 89, 0.1)');
+  });
+
+  // A themed press follows the touch press model: `:active` stays for a fine
+  // pointer, and under a coarse pointer the press controller's attribute
+  // takes its place, so a finger paints the theme's press only when the
+  // press is believed, never on the touch or through a scroll.
+  it('emits a themed :active as the press model does: :active for a fine pointer, the press attribute under a coarse one', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual',
+      components: {
+        button: {
+          base: {
+            ':active': {backgroundColor: 'rebeccapurple'},
+          },
+        },
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    const fine = css.match(
+      /@media not all and \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(fine?.[1]).toContain('.astryx-button:active');
+    expect(fine?.[2]).toContain('background-color: rebeccapurple');
+    const coarse = css.match(
+      /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(coarse?.[1]).toContain(`.astryx-button${PRESS_BELIEVED_SELECTOR}`);
+    expect(coarse?.[1]).not.toContain(':active');
+    expect(coarse?.[2]).toContain('background-color: rebeccapurple');
+    // No bare :active rule a finger would match on the touch.
+    const outsideFineArm = css.replace(
+      /@media not all and \(pointer: coarse\) \{[^{}]*\{[^}]*\}\s*\}/g,
+      '',
+    );
+    expect(outsideFineArm).not.toContain('.astryx-button:active');
+  });
+
+  // The press controller marks Switch's row, which wraps the themed
+  // `astryx-switch`, so the coarse arm reaches a mark around the element.
+  it('reaches a press marked on a wrapper or inside the themed element under a coarse pointer', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual-switch',
+      components: {
+        switch: {base: {':active': {backgroundColor: 'rebeccapurple'}}},
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    const coarse = css.match(
+      /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(coarse?.[1]).toContain(`.astryx-switch${PRESS_BELIEVED_SELECTOR}`);
+  });
+
+  it('keeps the rest of a selector around a themed :active in both arms', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual-compound',
+      components: {
+        button: {
+          'variant:primary': {
+            ':active:not(:focus-visible)': {color: 'white'},
+          },
+        },
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    expect(css).toContain(':active:not(:focus-visible)');
+    expect(css).toContain(`${PRESS_BELIEVED_SELECTOR}:not(:focus-visible)`);
   });
 
   it('applies pseudo-class suffixes to the canonical selector', () => {
@@ -337,6 +602,44 @@ describe('generateThemeRules', () => {
           r.includes('color: inherit'),
       ),
     ).toBe(true);
+  });
+
+  it("keeps a link's hover tint of its color prop when a theme styles the link", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-pins',
+        components: {link: {base: {textDecoration: 'underline'}}},
+      }),
+    );
+    const pins = linkRules.join('\n');
+    // At rest the prop's color; on hover Core's tint of it, for the colors
+    // Core tints.
+    for (const name of ['primary', 'secondary', 'accent']) {
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"] { color: var(--color-text-${name}); }`,
+      );
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(in srgb, var(--color-text-${name}), var(--color-tint-hover) 15%); }`,
+      );
+    }
+    expect(pins).not.toContain('[data-color="disabled"]:where(:hover)');
+  });
+
+  it("lets a theme's hover color on a link color key win over the hover pin", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-hover',
+        components: {link: {'color:accent': {':hover': {color: '#0000ff'}}}},
+      }),
+    ).join('\n');
+    // The theme's rule carries :hover itself; the pin's :hover sits in
+    // :where(), so the theme's rule is the heavier one.
+    expect(linkRules).toMatch(
+      /\.astryx-link\[data-color="accent"\]:hover[^{]*\{\s*color: #0000ff;/,
+    );
+    expect(linkRules).toContain(
+      '.astryx-link[data-color="accent"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(',
+    );
   });
 
   // --- Size-prop overrides (so `size` beats a themed `type`) ---
@@ -991,18 +1294,20 @@ describe('derived var expansion', () => {
     expect(spaciousRule).toContain('--_item-inset-inline: var(--spacing-4)');
   });
 
-  it('emits internal vars for chat composer', () => {
+  it('emits internal vars for the chat-composer target', () => {
     const theme = defineTheme({
-      name: 'test-derived-chat',
+      name: 'test-derived-chat-composer',
       components: {
-        chat: {
+        'chat-composer': {
           base: {borderRadius: '24px', padding: '12px'},
         },
       },
     });
     const rules = generateThemeRules(theme);
-    const rule = rules.find(r => r.includes('.astryx-chat'));
+    const rule = rules.find(r => r.includes('.astryx-chat-composer'));
     expect(rule).toBeDefined();
+    expect(rule).toMatch(/^\s*border-radius: 24px;/m);
+    expect(rule).toMatch(/^\s*padding: 12px;/m);
     expect(rule).toContain('--_chat-composer-radius: 24px');
     expect(rule).toContain('--_chat-composer-padding: 12px');
   });
@@ -1098,6 +1403,94 @@ describe('derived var expansion', () => {
     expect(rule).toBeDefined();
     // Container expansion emits --astryx-card-padding token
     expect(rule).toContain('--astryx-card-padding: 20px');
+  });
+
+  it.each([
+    [
+      'padding',
+      'clamp(8px, 2vw, 16px)',
+      ['--astryx-card-padding: clamp(8px, 2vw, 16px);'],
+    ],
+    ['padding', 'max(8px, 2vw)', ['--astryx-card-padding: max(8px, 2vw);']],
+    [
+      'padding',
+      'calc(1px + 2px) min(4px, 1vw)',
+      [
+        '--astryx-card-padding-block-start: calc(1px + 2px);',
+        '--astryx-card-padding-block-end: calc(1px + 2px);',
+        '--astryx-card-padding-inline: min(4px, 1vw);',
+      ],
+    ],
+    [
+      'paddingBlock',
+      'var(--x, 1px 2px)',
+      [
+        '--astryx-card-padding-block-start: var(--x, 1px 2px);',
+        '--astryx-card-padding-block-end: var(--x, 1px 2px);',
+      ],
+    ],
+    [
+      'paddingInline',
+      'calc(1px + 2px) 4px',
+      [
+        '--astryx-card-padding-inline-start: calc(1px + 2px);',
+        '--astryx-card-padding-inline-end: 4px;',
+      ],
+    ],
+  ])(
+    'keeps each %s component whole when it holds spaces: %s',
+    (prop, value, declarations) => {
+      const theme = defineTheme({
+        name: 'test-padding-functions',
+        components: {card: {base: {[prop]: value}}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      for (const declaration of declarations) {
+        expect(rule).toContain(declaration);
+      }
+    },
+  );
+
+  it.each([
+    [
+      {paddingInlineStart: '4px', paddingInline: ''},
+      '--astryx-card-padding-inline-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', paddingBlock: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', padding: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+  ])(
+    'keeps the longhands before an empty shorthand: %j',
+    (base, declaration) => {
+      const theme = defineTheme({
+        name: 'test-padding-empty-shorthand',
+        components: {card: {base}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      expect(rule).toContain(declaration);
+    },
+  );
+
+  it('emits no padding token for an empty padding value', () => {
+    // An empty value has no components, so there is nothing to emit; a
+    // `--astryx-card-padding: ;` declaration would be invalid CSS.
+    const theme = defineTheme({
+      name: 'test-padding-empty',
+      components: {card: {base: {padding: ''}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes('.astryx-card'),
+    );
+    expect(rule ?? '').not.toContain('--astryx-card-padding');
   });
 
   it('handles variant-specific derived vars', () => {

@@ -8,15 +8,26 @@
  *   spring keeps its shape and takes tempo times as long in each of its
  *   forms. A duration scales. A curve, a part that follows a finger and a
  *   busy loop stay as measured. A role resolves to one object per tempo and
- *   is never scaled twice. The animator plays the slowed spring
+ *   is never scaled twice. The animator plays the slowed spring. A CSS part
+ *   timed from a spring lasts the resolved spring's settling duration, or
+ *   as long as the animator plays one move on it
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
  *   browser proof: themeTempo.interaction.browser.spec.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createMotionEngine} from './animator';
-import {resolveMotion} from './resolveMotion';
-import {solveSpring, toSpring} from './spring';
+import {createMotionEngine, SETTLE_THRESHOLD} from './animator';
+import {
+  resolveMotion,
+  resolveMoveTiming,
+  resolveSettleMs,
+} from './resolveMotion';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
 import {
   progressBar,
   registerProgressBarTable,
@@ -158,6 +169,139 @@ describe("resolveMotion at the theme's tempo (spec:AST-108 FR3)", () => {
     expect(resolveMotion(document.body, timing.press, 'scrollBrakeMs')).toBe(
       timing.press.scrollBrakeMs,
     );
+  });
+});
+
+describe('a CSS part timed from its spring', () => {
+  const settleMs = (spring: SpringDescription) =>
+    settlingDuration(toSpring(spring)) * 1000;
+
+  it("lasts the role's settling duration where no theme sets a tempo", () => {
+    const target = element();
+    expect(resolveSettleMs(target, springs.settle)).toBe(
+      settleMs(springs.settle),
+    );
+    // SwiftUI's smooth spring (0.5 s, no bounce) settles in about 0.6 s.
+    expect(resolveSettleMs(target, springs.settle)).toBeGreaterThan(400);
+    expect(resolveSettleMs(target, springs.settle)).toBeLessThan(900);
+  });
+
+  it('takes tempo times as long with the spring it plays with', () => {
+    const target = element();
+    const plain = resolveSettleMs(target, springs.settle);
+    tempo = '1.5';
+    expect(resolveSettleMs(target, springs.settle)).toBeCloseTo(plain * 1.5, 6);
+    expect(resolveSettleMs(target, springs.settle)).toBe(
+      settleMs(resolveMotion(target, springs.settle)),
+    );
+  });
+
+  it('stays as measured for a finger-following role, and for a spring that is not a role', () => {
+    tempo = '1.5';
+    const target = element();
+    expect(resolveSettleMs(target, springs.fingerTracking)).toBe(
+      settleMs(springs.fingerTracking),
+    );
+    const inline = {response: 0.4, dampingRatio: 0.9};
+    expect(resolveSettleMs(target, inline)).toBe(settleMs(inline));
+  });
+
+  it('lasts as long as the animator plays one move on the spring', () => {
+    tempo = '1.5';
+    const target = element();
+    const animator = createMotionEngine(target, {now: () => 0});
+    const close = animator.animate(
+      {y: 400},
+      {spring: springs.sheetDismissSwipe, velocity: {y: 3000}},
+      {at: 0},
+    );
+    const move = {
+      from: 0,
+      to: 400,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const curveMs = (close.curve('y')?.duration ?? Number.NaN) * 1000;
+    expect(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    ).toBeCloseTo(curveMs, 6);
+    // A long, fast move settles later than a unit move from rest.
+    expect(curveMs).toBeGreaterThan(
+      resolveSettleMs(target, springs.sheetDismissSwipe),
+    );
+    animator.dispose();
+  });
+
+  it("follows one move's progress on the spring, as linear() easing over its settle", () => {
+    tempo = '1.5';
+    const target = element();
+    const animator = createMotionEngine(target, {now: () => 0});
+    const close = animator.animate(
+      {y: 400},
+      {spring: springs.sheetDismissSwipe, velocity: {y: 3000}},
+      {at: 0},
+    );
+    const move = {
+      from: 0,
+      to: 400,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const {durationMs, easing} = resolveMoveTiming(
+      target,
+      springs.sheetDismissSwipe,
+      move,
+    );
+    expect(durationMs).toBe(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    );
+    const stops = /^linear\((.*)\)$/.exec(easing)![1].split(',').map(Number);
+    expect(stops[0]).toBe(0);
+    expect(stops.at(-1)).toBeCloseTo(1, 2);
+    // Each stop is the share of the move the animator's curve has played.
+    const curve = close.curve('y')!;
+    for (const i of [1, Math.floor(stops.length / 4), stops.length - 2]) {
+      const t = (i / (stops.length - 1)) * curve.duration;
+      expect(stops[i]).toBeCloseTo(curve.at(t) / 400, 3);
+    }
+    animator.dispose();
+  });
+
+  it('reaches the end of its easing where the move gets to doneAt, and stays there', () => {
+    const target = element();
+    const move = {
+      from: 0,
+      to: 700,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const doneAt = 400;
+    const {durationMs, easing} = resolveMoveTiming(
+      target,
+      springs.sheetDismissSwipe,
+      move,
+      doneAt,
+    );
+    expect(durationMs).toBe(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    );
+    const stops = /^linear\((.*)\)$/.exec(easing)![1].split(',').map(Number);
+    const curve = solveSpring(
+      toSpring(resolveMotion(target, springs.sheetDismissSwipe)),
+      move,
+    );
+    const atStop = (i: number) =>
+      curve.value(((i / (stops.length - 1)) * durationMs) / 1000);
+    const reached = stops.findIndex(stop => stop === 1);
+    expect(reached).toBeGreaterThan(0);
+    // Before the move gets to doneAt, each stop is its share of the way there.
+    for (let i = 1; i < reached; i++) {
+      expect(stops[i]).toBeCloseTo(atStop(i) / doneAt, 3);
+      expect(atStop(i)).toBeLessThan(doneAt);
+    }
+    // From there on, the easing holds at its end.
+    expect(atStop(reached)).toBeGreaterThanOrEqual(doneAt - 1);
+    expect(stops.slice(reached).every(stop => stop === 1)).toBe(true);
   });
 });
 

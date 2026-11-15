@@ -15,6 +15,7 @@
 import {routeKit} from '../../foundation/route/route.mjs';
 import {rank, signals} from './_features.mjs';
 import {entryTable} from './_entries.mjs';
+import {FIT_PLACES, withFitOrder, withLimit} from './_fit-order.mjs';
 import {orderMatches} from './_order.mjs';
 import {routeProbs} from './_query-words.mjs';
 import {namesWhole, rankLexical} from './_lexical.mjs';
@@ -94,13 +95,22 @@ export function rankWith(request, catalog, weights) {
   );
   const route = routeProbs(catalog.data.router, query);
   const rows = signals(table, query, lexical.data.results, route);
-  return orderMatches(
-    table,
-    rank(table, rows, weights),
-    lexical,
+  const limit = options.limit ?? 20;
+  // The fit pass reads the first FIT_PLACES results at every limit, so a
+  // smaller limit shows the top of that order.
+  const ordered = withFitOrder(
+    orderMatches(
+      table,
+      rank(table, rows, weights),
+      lexical,
+      query,
+      Math.max(limit, FIT_PLACES),
+    ),
+    catalog.all,
     query,
-    options.limit ?? 20,
+    () => catalog.data.picker,
   );
+  return withLimit(ordered, limit);
 }
 
 /** @type {import('./tree.mjs').SearchKit} */

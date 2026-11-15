@@ -7,8 +7,8 @@
  * @input The radiogroup element, the selection motion controller and whether
  *   the control is enabled
  * @output useSegmentedTouchTracking (a press of any pointer, landing to
- *   lift, and its ClickWait), and segmentTargetAt, measureSegments and
- *   liftTargetAt, the segment a pointer counts for
+ *   lift, and its ClickWait), and segmentTargetAt, measureSegments,
+ *   measureLiftArea and liftTargetAt, the segment a pointer counts for
  * @position Internal to SegmentedControl; drives useSegmentedSelectionMotion.ts
  *
  * SYNC: When modified, update:
@@ -28,6 +28,9 @@ import {
 import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
+import {HIT_INSET_PROPERTIES, type HitInsets} from '../utils/hitArea';
+import {armClickGuard} from '../utils/clickGuard';
+import {cancelPress} from '../utils/pressFeedback';
 import {
   SEGMENT_SELECTOR,
   type SegmentedSelectionMotion,
@@ -71,6 +74,14 @@ export function measureSegments(track: HTMLElement): SegmentSpan[] {
   );
 }
 
+/**
+ * Whether no segment has a width: the control has no layout, as in a unit
+ * test's DOM. A single collapsed segment does not count.
+ */
+function hasNoLayout(segments: ReadonlyArray<SegmentSpan>): boolean {
+  return segments.every(({left, right}) => right - left <= 0);
+}
+
 function isDisabled(element: HTMLElement): boolean {
   return (
     element.hasAttribute('disabled') ||
@@ -101,29 +112,58 @@ export function segmentTargetAt(
 }
 
 /**
- * The segment a lift at viewport (`x`, `y`) commits: inside the control's
- * `bounds`, the one `segmentTargetAt` counts it for; outside them, none. A
- * press that slides off cancels, because the control selects rather than
- * toggles: a second press would not undo it.
+ * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
+ * control's lift `area`, the one `segmentTargetAt` counts it for; outside
+ * them, none. The tracker counts a held pointer on the control's center line,
+ * so a press never lands outside.
  */
 export function liftTargetAt(
   x: number,
   y: number,
-  bounds: ControlBounds,
+  area: ReadonlyArray<ControlBounds>,
   segments: ReadonlyArray<SegmentSpan>,
 ): HTMLElement | null {
-  if (
-    x < bounds.left ||
-    x > bounds.right ||
-    y < bounds.top ||
-    y > bounds.bottom
-  ) {
-    return null;
-  }
-  return segmentTargetAt(x, segments);
+  const isInside = area.some(
+    box => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
+  );
+  return isInside ? segmentTargetAt(x, segments) : null;
 }
 
-const NO_BOUNDS: ControlBounds = {left: 0, top: 0, right: -1, bottom: -1};
+const NO_AREA: ReadonlyArray<ControlBounds> = [];
+
+/** A measured hit inset on `element`, px (0 when none is written). */
+function hitInset(element: HTMLElement, side: keyof HitInsets): number {
+  const value = Number.parseFloat(
+    element.style.getPropertyValue(HIT_INSET_PROPERTIES[side]),
+  );
+  return Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * The boxes a lift may commit in: the control's own box, and each segment's
+ * box grown by its own touch hit band (utils/hitArea), so a tap on a band
+ * selects its segment. Each band is kept apart: a band a neighbor clamped
+ * stays clamped, though another segment's band reaches further. Under a fine
+ * pointer no band is written, and the segments sit inside the control's box.
+ */
+export function measureLiftArea(
+  track: HTMLElement,
+  segments: ReadonlyArray<SegmentSpan>,
+): ReadonlyArray<ControlBounds> {
+  const {left, top, right, bottom} = track.getBoundingClientRect();
+  return [
+    {left, top, right, bottom},
+    ...segments.map(({element}) => {
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left - hitInset(element, 'left'),
+        top: box.top - hitInset(element, 'top'),
+        right: box.right + hitInset(element, 'right'),
+        bottom: box.bottom + hitInset(element, 'bottom'),
+      };
+    }),
+  ];
+}
 
 /**
  * Tracks a press on the control as UIKit's segmented control does. The press
@@ -132,9 +172,11 @@ const NO_BOUNDS: ControlBounds = {left: 0, top: 0, right: -1, bottom: -1};
  * carries the lens. It claims the pointer only past its slop, and the lift
  * still ends the press.
  *
- * The lift decides the segment, wherever the press began. Inside the control,
- * the segment under the pointer counts, else the nearest one. Outside the
- * control, nothing counts.
+ * The lift decides the segment, wherever the press began. The pointer counts
+ * on the control's center line, clamped to its ends, so a drift off the
+ * control keeps choosing by its horizontal position. Only a cancel commits
+ * nothing: the browser takes the pointer, or Escape. The highlight then
+ * returns to the selected segment at once.
  *
  * A tap gets the browser's own click. A drag gets no click from the browser,
  * so the tracker clicks the segment at the lift. Either way the item's
@@ -148,24 +190,40 @@ export function useSegmentedTouchTracking(
 ): ClickWait {
   /** The horizontal pan began for this touch: it is a drag, not a tap. */
   const isDraggingRef = useRef(false);
+  /** The press began on the selected segment, so the lens shows it. */
+  const isLensPressRef = useRef(false);
+  /** Escape cancelled this press: the rest of it changes nothing. */
+  const isCancelledRef = useRef(false);
   /** The segments as the finger found them (disabled ones too). */
   const segmentsRef = useRef<SegmentSpan[]>([]);
-  /** The control's box as the finger found it: a lift outside it cancels. */
-  const boundsRef = useRef<ControlBounds>(NO_BOUNDS);
+  /** The lift area as the finger found it. */
+  const areaRef = useRef<ReadonlyArray<ControlBounds>>(NO_AREA);
   const trackerRef = useRef<ActionGroupTracker | null>(null);
   const tracker = (trackerRef.current ??= createActionGroupTracker(() => ({
     roots: () => [trackRef.current],
     itemSelector: SEGMENT_SELECTOR,
     highlightExpansion: 0,
-    // The press controller writes the shared press paint on the touched
-    // segment, as everywhere under a finger. The tracker paints nothing of its
-    // own. A held lens shows the selected face.
-    paintsHighlight: false,
+    tracksAlong: 'x',
+    // The press controller paints the touched segment, as everywhere under a
+    // finger. Once a press from another segment drags, the tracker paints the
+    // segment it would commit. A held lens shows the selected face instead.
+    paintsHighlight: item =>
+      isDraggingRef.current &&
+      !isLensPressRef.current &&
+      item.getAttribute('aria-checked') !== 'true',
+    onCancel: () => {
+      isCancelledRef.current = true;
+      clickWait.end();
+      for (const {element} of segmentsRef.current) {
+        cancelPress(element);
+      }
+      motion.cancel();
+    },
     resolveTarget: (
       x: number,
       y: number,
       _targets: ReadonlyArray<ActionGroupTarget>,
-    ) => liftTargetAt(x, y, boundsRef.current, segmentsRef.current),
+    ) => liftTargetAt(x, y, areaRef.current, segmentsRef.current),
     onActivated: (item, cancelled) => {
       const track = trackRef.current;
       const value = item.dataset.value;
@@ -205,6 +263,11 @@ export function useSegmentedTouchTracking(
   const attachRef = isEnabled ? trackRef : DETACHED;
   usePressTracker(attachRef, {
     isEnabled: () => isEnabled,
+    onHighlightChange: isHighlighted => {
+      if (isHighlighted) {
+        motion.highlighted();
+      }
+    },
     onControlEvent: (event, touch) => {
       const track = trackRef.current;
       if (track == null) {
@@ -214,22 +277,31 @@ export function useSegmentedTouchTracking(
         case 'touchDown': {
           clickWait.end();
           isDraggingRef.current = false;
+          isCancelledRef.current = false;
           segmentsRef.current = measureSegments(track);
-          const rect = track.getBoundingClientRect();
-          boundsRef.current = {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-          };
+          areaRef.current = measureLiftArea(track, segmentsRef.current);
           tracker.begin(touch.x, touch.y);
+          isLensPressRef.current =
+            tracker.beganOn?.getAttribute('aria-checked') === 'true';
           motion.begin(track, tracker.beganOn, touch.pointerType === 'touch');
           break;
         }
         case 'touchUpInside':
         case 'touchUpOutside': {
-          // The lift decides, wherever the press began. A lift outside the
-          // control commits nothing.
+          if (isCancelledRef.current) {
+            // The browser's own click for this lift still comes when it ends
+            // on the segment the press began on. The guard takes it.
+            armClickGuard(track.ownerDocument);
+            break;
+          }
+          if (hasNoLayout(segmentsRef.current)) {
+            // Without layout the lift names no segment. The click on the
+            // segment the press reached selects it, as under a fine pointer.
+            tracker.cancel();
+            motion.cancel();
+            break;
+          }
+          // The lift decides, wherever the press began.
           tracker.move(touch.x, touch.y);
           const lifted = tracker.highlighted;
           const isTap =
@@ -292,6 +364,9 @@ export function useSegmentedTouchTracking(
         selectionLock: lockSelection,
       }),
     recognizer => {
+      if (isCancelledRef.current) {
+        return;
+      }
       if (recognizer.state === 'began') {
         isDraggingRef.current = true;
       }

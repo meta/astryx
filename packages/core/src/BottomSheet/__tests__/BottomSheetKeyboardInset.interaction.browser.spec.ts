@@ -27,11 +27,13 @@ import {
   curveOf,
   holdAnimations,
   type HeldAnimation,
+  installPageFreeze,
+  installTimerGate,
   openStory,
   releaseAnimations,
   sampleCurve,
+  thawPage,
   timeline,
-  waitForAnimation,
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -242,25 +244,44 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     'Chrome\u2019s keyboard profile needs the VirtualKeyboard API',
   );
 
-  // Reports the keyboard's cover and returns the report's time.
-  const reportAt = async (page: Page, cover: number) =>
-    page.evaluate(c => {
-      let at = 0;
-      const view = window.visualViewport as unknown as EventTarget;
-      view.addEventListener(
-        'resize',
-        event => {
-          at = event.timeStamp;
-        },
-        {once: true},
-      );
-      (window as unknown as {__keyboard: (c: number) => void}).__keyboard(c);
-      return at;
-    }, cover);
+  // Reports the keyboard's cover and returns the report's time. With `freeze`,
+  // the scene freezes in the report's own task, before the page hears the
+  // report. What the report starts is then held where it stands at the
+  // report, on the scene's own clock, however slowly the runner runs. Thaw
+  // with `thawPage`.
+  const reportAt = async (page: Page, cover: number, {freeze = false} = {}) =>
+    page.evaluate(
+      ({c, freezes}) => {
+        if (freezes) {
+          const w = window as unknown as {
+            __harnessFreeze: {freeze(): void};
+            __harnessTimerGate: {freeze(isClockStopped: boolean): void};
+          };
+          w.__harnessFreeze.freeze();
+          w.__harnessTimerGate.freeze(true);
+        }
+        let at = 0;
+        const view = window.visualViewport as unknown as EventTarget;
+        view.addEventListener(
+          'resize',
+          event => {
+            at = event.timeStamp;
+          },
+          {once: true},
+        );
+        (window as unknown as {__keyboard: (c: number) => void}).__keyboard(c);
+        return at;
+      },
+      {c: cover, freezes: freeze},
+    );
 
   // Opens the sheet with its body scrolled to the end, so the last field's
-  // reveal scrolls into the keyboard room.
-  async function openAtLastField(page: Page) {
+  // reveal scrolls into the keyboard room. `freezable` installs the page clock
+  // and the timer gate that a freeze at the report needs.
+  async function openAtLastField(page: Page, {freezable = false} = {}) {
+    if (freezable) {
+      await installPageFreeze(page);
+    }
     await installAndroidKeyboard(page);
     await openStory(page, storybook(), 'core-bottomsheet--mobile-keyboard');
     await page.getByRole('button', {name: 'Add a comment'}).click();
@@ -281,22 +302,29 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     });
     const content = page.locator('[data-sheet-content]');
     const keyboardTop = await page.evaluate(c => window.innerHeight - c, COVER);
+    if (freezable) {
+      await installTimerGate(page);
+    }
     return {field, content, keyboardTop};
   }
 
   test('the last field clears the keyboard\u2019s top in the report\u2019s own commit, then rides the rest on Gboard\u2019s show, dated back to Gboard\u2019s start', async ({
     page,
   }) => {
-    const {field, content, keyboardTop} = await openAtLastField(page);
+    const {field, content, keyboardTop} = await openAtLastField(page, {
+      freezable: true,
+    });
     await field.focus();
     const before = await readBody(field);
-    const reported = await reportAt(page, COVER);
+    // The ride lasts the rest of Gboard's slide, under 200 ms. A hold sent
+    // after the report can come after it ends on a loaded runner, so the
+    // scene freezes before the page hears the report.
+    const reported = await reportAt(page, COVER, {freeze: true});
     // The body lands at once in the report's event. The content starts 4 px
     // above the keyboard's top and rides the rest of Gboard's slide up.
     const landed = await readBody(field);
     const distance = landed.scrollTop - before.scrollTop;
     expect(distance).toBeGreaterThan(100);
-    await waitForAnimation(content);
     const start = await content.evaluate(el =>
       Math.max(
         ...el.getAnimations().map(a => Number(a.startTime ?? -Infinity)),
@@ -305,12 +333,17 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.showReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, content));
+    const ride = rideOf(
+      await holdAnimations(page, content, {
+        judges: {target: content, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(content, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
     );
     await releaseAnimations(page);
+    await thawPage(page);
     // At rest: no translate is left, the body did not scroll again, and the
     // field rests above the keyboard.
     await waitForRest(content);
@@ -385,7 +418,7 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
   test('through Gboard\u2019s hide the room stays while the content rides down by the scroll its drop takes back, and both clear in one commit at rest', async ({
     page,
   }) => {
-    const {field, content} = await openAtLastField(page);
+    const {field, content} = await openAtLastField(page, {freezable: true});
     await field.focus();
     await reportAt(page, COVER);
     await waitForRest(content);
@@ -398,12 +431,13 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(intoRoom).toBeGreaterThan(100);
 
     // Back: Chrome reports the keyboard gone while the field keeps focus.
-    // The guide dates the hide back by the lag measured on blurs.
-    const reported = await reportAt(page, 0);
+    // The guide dates the hide back by the lag measured on blurs. The scene
+    // freezes before the page hears the report, so the ride is held where it
+    // stands at the report, however late this process reacts.
+    const reported = await reportAt(page, 0, {freeze: true});
     const held = await readBody(field);
     expect(held.room).toBe(shown.room);
     expect(held.scrollTop).toBe(shown.scrollTop);
-    await waitForAnimation(content);
     const start = await content.evaluate(el =>
       Math.max(
         ...el.getAnimations().map(a => Number(a.startTime ?? -Infinity)),
@@ -412,12 +446,17 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.hideReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, content));
+    const ride = rideOf(
+      await holdAnimations(page, content, {
+        judges: {target: content, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(content, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
     );
     await releaseAnimations(page);
+    await thawPage(page);
     const ease = cubicBezier(ANDROID_KEYBOARD.hideCurve);
     const result = compareCurve(
       samples,
@@ -447,8 +486,12 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     expect(rest.fieldBottom).toBeCloseTo(shown.fieldBottom + intoRoom, 0);
   });
 
-  // The field's drawn bottom, the content box's opacity and the room, on every
-  // animation frame for `ms` after the test reports `cover`.
+  // The field's drawn bottom, the content box's opacity and the room. Each is
+  // read before the test reports `cover`, in the report's own task, and on
+  // every animation frame for `ms` after it. The scene is frozen from before
+  // the page hears the report until that read. So the read sees what the
+  // report started as it stands at the report, however slowly the runner
+  // runs. Open the sheet with `freezable`.
   const sampleAfterReport = async (field: Locator, cover: number, ms: number) =>
     field.evaluate(
       async (element, {c, until}) => {
@@ -465,7 +508,21 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
               getComputedStyle(content as Element, '::after').blockSize,
             ) || 0,
         });
+        const {__harnessFreeze: scene, __harnessTimerGate: gate} =
+          window as unknown as {
+            __harnessFreeze: {freeze(): void; thaw(): void};
+            __harnessTimerGate: {
+              freeze(isClockStopped: boolean): void;
+              thaw(): void;
+            };
+          };
         const out = [read()];
+        scene.freeze();
+        gate.freeze(true);
+        (window as unknown as {__keyboard: (c: number) => void}).__keyboard(c);
+        const atReport = read();
+        scene.thaw();
+        gate.thaw();
         const end = performance.now() + until;
         await new Promise<void>(resolve => {
           const sample = () => {
@@ -477,26 +534,36 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
             }
           };
           requestAnimationFrame(sample);
-          (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
-            c,
-          );
         });
-        return out;
+        return {atReport, frames: out};
       },
       {c: cover, until: ms},
     );
 
   // Chrome on the Android emulator pans the visual viewport to the focused
-  // field a few frames after the report, while the content still rides. This
-  // reports the keyboard, then moves the stand-in viewport down by 30 px on
-  // each of `frames` frames. It returns each frame the hook put the pan back
-  // in, with the content's ride offset at that moment.
+  // field a few frames after the report, while the content still rides. The
+  // page gets no frame until that pan ends. This freezes the scene and then
+  // reports the keyboard, in one task. The ride then stands where it is at
+  // the report, on the scene's own clock, however slowly the runner runs.
+  // Then it moves the stand-in viewport down by 30 px on each of `frames`
+  // real frames, and thaws the scene. It returns each frame the hook put the
+  // pan back in, with the content's ride offset at that moment. Open the
+  // sheet with `freezable`.
   const panAfterReport = async (page: Page, cover: number, frames: number) =>
     page.evaluate(
       async ([c, n]) => {
         const viewport = window.visualViewport as unknown as EventTarget & {
           offsetTop: number;
         };
+        const {__harnessFreeze: scene, __harnessTimerGate: gate} =
+          window as unknown as {
+            __harnessFreeze: {freeze(): void; thaw(): void};
+            __harnessTimerGate: {
+              freeze(isClockStopped: boolean): void;
+              thaw(): void;
+              frame: typeof requestAnimationFrame;
+            };
+          };
         const content = document.querySelector(
           '[data-sheet-content]',
         ) as HTMLElement;
@@ -517,11 +584,12 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
           }
           scrollIntoView.call(this, options);
         };
+        // The page's real frames: the gate holds the page's own callbacks.
         const nextFrame = async () => {
-          await new Promise<void>(resolve =>
-            requestAnimationFrame(() => resolve()),
-          );
+          await new Promise<void>(resolve => gate.frame(() => resolve()));
         };
+        scene.freeze();
+        gate.freeze(true);
         (window as unknown as {__keyboard: (c: number) => void}).__keyboard(c);
         await nextFrame();
         for (frame = 0; frame < n; frame += 1) {
@@ -530,6 +598,8 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
           await nextFrame();
         }
         Element.prototype.scrollIntoView = scrollIntoView;
+        scene.thaw();
+        gate.thaw();
         return putBacks;
       },
       [cover, frames] as const,
@@ -538,7 +608,7 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
   test('puts the browser\u2019s reveal pan back in its first frame, while the content still rides', async ({
     page,
   }) => {
-    const {field} = await openAtLastField(page);
+    const {field} = await openAtLastField(page, {freezable: true});
     await field.focus();
     const putBacks = await panAfterReport(page, COVER, 6);
     expect(putBacks.length, JSON.stringify(putBacks)).toBeGreaterThan(0);
@@ -550,7 +620,7 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
-    const {field} = await openAtLastField(page);
+    const {field} = await openAtLastField(page, {freezable: true});
     await field.focus();
     const putBacks = await panAfterReport(page, COVER, 6);
     expect(putBacks.length, JSON.stringify(putBacks)).toBeGreaterThan(0);
@@ -561,9 +631,9 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
-    const {field} = await openAtLastField(page);
+    const {field} = await openAtLastField(page, {freezable: true});
     await field.focus();
-    const show = await sampleAfterReport(field, COVER, 900);
+    const {atReport, frames: show} = await sampleAfterReport(field, COVER, 900);
     const shown = show.at(-1) as (typeof show)[number];
     // The field rests from the report's first frame, so Chrome has nothing to
     // pan to, and only the fade changes.
@@ -582,10 +652,12 @@ test.describe('Chrome on Android, on Gboard\u2019s slides (spec:AST-099 FR8)', (
         JSON.stringify(show.map(f => Math.round(f.bottom))),
       ).toBe(true);
     }
-    expect(Math.min(...show.map(f => f.opacity))).toBeLessThan(1);
+    // The fade is under way at the report. A frame on a loaded runner can come
+    // after it has ended.
+    expect(atReport.opacity).toBeLessThan(1);
     expect(shown.opacity).toBe(1);
 
-    const hide = await sampleAfterReport(field, 0, 900);
+    const {frames: hide} = await sampleAfterReport(field, 0, 900);
     const rest = hide.at(-1) as (typeof hide)[number];
     for (const frame of hide) {
       expect(

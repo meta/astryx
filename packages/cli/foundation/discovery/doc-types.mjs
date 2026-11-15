@@ -27,7 +27,8 @@
  *   none), and a `<topic>.doc.<lang>.mjs` overlay against
  *   `ReferenceTranslationDoc`;
  * - themes root: `ThemeDoc`;
- * - iconSets root: `IconSetDoc`.
+ * - iconSets root: `IconSetDoc`, and a set's own definition (stamped
+ *   `type: 'icon-definition'`) `IconDefinitionDoc`.
  * Every finding is a warning, names the field, and says how to fix it.
  *
  * @input Doc files with the root each was found in, the package root, and the
@@ -46,6 +47,7 @@ import {
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
 import {keepSourceFiles} from './source-file-cache.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
@@ -312,7 +314,13 @@ function expectedType(ts, root, exportName, node, core = false) {
     return {typeExpr: authoring('ThemeDoc'), typeName: 'ThemeDoc'};
   }
   if (root === 'icon-sets') {
-    return {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
+    // A set's own definitions live in its folder too.
+    return shape?.stamp === 'icon-definition'
+      ? {
+          typeExpr: authoring('IconDefinitionDoc'),
+          typeName: 'IconDefinitionDoc',
+        }
+      : {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
   }
   if (translation) {
     return {
@@ -1206,11 +1214,11 @@ export async function checkDocTypes(files, options) {
   }
   findings.sort(
     (a, b) =>
-      a.doc.localeCompare(b.doc) ||
+      compareText(a.doc, b.doc) ||
       a.line - b.line ||
-      a.field.localeCompare(b.field),
+      compareText(a.field, b.field),
   );
-  unchecked.sort((a, b) => a.doc.localeCompare(b.doc));
+  unchecked.sort((a, b) => compareText(a.doc, b.doc));
   return {
     status: 'checked',
     typescript: version,

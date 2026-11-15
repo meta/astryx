@@ -14,6 +14,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const templateImports = vi.hoisted(() => ({count: 0}));
 
@@ -44,7 +45,7 @@ beforeEach(async () => {
   originalCwd = process.cwd();
   // Repo-local, because Vite blocks the dynamic import of modules under /tmp.
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-project-issues-test-'),
+    path.join(REPO_ROOT, '.astryx-project-issues-test-'),
   );
   process.chdir(tmpDir);
   fs.writeFileSync(

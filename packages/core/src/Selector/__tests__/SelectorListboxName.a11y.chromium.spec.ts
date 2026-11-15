@@ -7,7 +7,9 @@
  *   value selected
  * @output Chromium's own accessibility tree names the open listbox by the
  *   field's label, never by the trigger's value, in the popover and the
- *   bottom sheet.
+ *   bottom sheet, names the closed searchable trigger by the label and the
+ *   selected value, and announces a required searchable trigger as required
+ *   without aria-required on the button.
  * @position Real-browser check: a modal sheet and the trigger reference
  *   behave differently in jsdom.
  */
@@ -55,6 +57,57 @@ async function listboxNames(
     .filter(node => node.role?.value === 'listbox')
     .map(node => node.name?.value ?? '');
 }
+
+test('the closed searchable trigger is named by the label and the selected value', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--searchable&viewMode=story&args=presentation:popover;value:Banana`,
+    {waitUntil: 'load'},
+  );
+  const trigger = page.locator('button[aria-haspopup]').first();
+  await expect(trigger).toContainText('Banana');
+  const cdp = await page.context().newCDPSession(page);
+  const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+    nodes: {role?: {value?: string}; name?: {value?: string}}[];
+  };
+  const names = nodes
+    .filter(node => node.role?.value === 'button')
+    .map(node => node.name?.value ?? '');
+  expect(names).toContain('Fruit Banana');
+});
+
+test('a required closed searchable trigger announces required, without aria-required on the button', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--searchable-required&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  const triggers = page.locator('button[aria-haspopup]');
+  await expect(triggers).toHaveCount(4);
+  for (const trigger of await triggers.all()) {
+    await expect(trigger).not.toHaveAttribute('aria-required');
+  }
+  const cdp = await page.context().newCDPSession(page);
+  const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+    nodes: {
+      role?: {value?: string};
+      name?: {value?: string};
+      description?: {value?: string};
+    }[];
+  };
+  const announced = nodes
+    .filter(node => node.role?.value === 'button')
+    .map(node => `${node.name?.value ?? ''} | ${node.description?.value ?? ''}`)
+    .filter(text => /Fruit|Vegetable|Pick an herb|Nut/.test(text));
+  // The label with its marker, a form default that hides the marker, a
+  // caller aria-label, and an InputGroup.
+  expect(announced).toHaveLength(4);
+  for (const text of announced) {
+    expect(text).toMatch(/Required/);
+  }
+});
 
 test('the popover listbox is named by the field label, not the selected value', async ({
   page,

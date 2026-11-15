@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "product-filter",
+  "source": "dd-3",
+  "title": "Product grid with category and search filters",
+  "prompt": "Show a grid of eight products, each with a name and a category: Notebook (Stationery), Pen set (Stationery), Desk lamp (Home), Throw blanket (Home), Headphones (Electronics), Phone stand (Electronics), Water bottle (Outdoor) and Trail map (Outdoor). Above the grid, a select field labelled \"Category\" offers \"All\", \"Stationery\", \"Home\", \"Electronics\" and \"Outdoor\", starting at All, and a text field labelled \"Search\" filters by product name, ignoring case. Both filters apply together. Show \"N products\" for the current results (for example \"8 products\"), and \"No products match\" when there are none."
+}

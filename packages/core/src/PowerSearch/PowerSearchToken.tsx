@@ -20,6 +20,8 @@ import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import {formatTokenLabel} from './formatTokenValue';
+import {pickDataAttributes} from '../utils/themeProps';
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -44,6 +46,7 @@ export function PowerSearchToken({
   onRemove,
   isDisabled,
   timezoneID,
+  ...rest
 }: PowerSearchTokenProps) {
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
@@ -52,10 +55,7 @@ export function PowerSearchToken({
 
   const fieldLabel = field.label;
   const resolvedOperatorLabel = resolveOperatorLabel(operator, t);
-  const operatorLabel = resolvedOperatorLabel
-    ? `: ${resolvedOperatorLabel}`
-    : '';
-  const tokenLabel = `${fieldLabel}${operatorLabel}`;
+  const tokenLabel = formatTokenLabel(t, fieldLabel, resolvedOperatorLabel);
 
   const adjustedMaxLength = Math.max(
     maxLength - fieldLabel.length - resolvedOperatorLabel.length,
@@ -79,6 +79,7 @@ export function PowerSearchToken({
 
   return (
     <Token
+      {...pickDataAttributes(rest)}
       label={tokenLabel}
       endContent={valueContent}
       onClick={

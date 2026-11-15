@@ -53,6 +53,7 @@ A tree expansion button identifies the row it controls at every depth. This reco
 - Released default preserved: yes; an omitted callback keeps generic localized expansion names.
 - Compatibility class: optional additive API with no tree-data, row-key, expansion-state or interaction change.
 - Migration decision: DEC-1. Consumer usage belongs in `useTableTreeData.doc.mjs`.
+- Known validation exception: body rows carry no `aria-expanded` (the expansion button carries it, AR1), but they keep `aria-level` outside a treegrid. Chromium exposes it as the row's depth, leaves included. Accessibility checkers report it, and it goes away when tree tables gain treegrid semantics.
 
 ## Ownership boundary
 

@@ -15,7 +15,6 @@
 
 import {useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {layerAnimations} from '@astryxdesign/core/Layer';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {
   focusOutlineStyles,
@@ -463,7 +462,6 @@ function ScheduleMonthlyView({
         placement: 'below',
         alignment: 'start',
         offset: spacingVars['--spacing-1'],
-        xstyle: layerAnimations.below,
       })}
     </ScheduleFrame>
   );

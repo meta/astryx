@@ -15,7 +15,7 @@ import {iconMap} from './map/map.mjs';
 import {iconAdd} from './add/add.mjs';
 import {iconNewDefinition} from './new-definition/new-definition.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
-import {rankIcons, scoreIcon} from './_records.mjs';
+import {answeringMatches, rankIcons, scoreIcon} from './_records.mjs';
 import {
   glyphsData,
   writeIconPackage,
@@ -502,5 +502,93 @@ describe('partial matches answer only when nothing better does (FR6)', () => {
     // `ouse` starts no word; it is inside `house`.
     const found = await ids('ouse');
     expect(found).toEqual([['home', 40]]);
+  });
+});
+
+describe('a word matches whole words (FR6)', () => {
+  /** @param {Array<{id: string, words?: string[]}>} icons @param {Record<string, string>} [map] */
+  const setOf = (icons, map = {}) =>
+    /** @type {any} */ ({
+      name: 'brand',
+      package: '@acme/brand-icons',
+      data: {
+        schemaVersion: 1,
+        module: '@acme/brand-icons',
+        icons: icons.map(each => ({
+          export: `${each.id.replace(/(^|-)(\w)/gu, (_, __, c) => c.toUpperCase())}Icon`,
+          words: each.id.split('-'),
+          ...each,
+        })),
+        map,
+      },
+    });
+  /** @param {any} set @param {string} query */
+  const answer = (set, query) =>
+    answeringMatches(rankIcons([set], query)).map(each => each.id);
+
+  it('never offers a longer word that only starts with the query beside a whole-word answer', () => {
+    const set = setOf([
+      {id: 'star'},
+      {id: 'chevron-left-stack', words: ['chevron', 'start']},
+      {id: 'house', words: ['house', 'home', 'start']},
+    ]);
+    expect(answer(set, 'star')).toEqual(['star']);
+    // With no whole-word answer, a word start still answers.
+    expect(answer(setOf([{id: 'house', words: ['start']}]), 'star')).toEqual([
+      'house',
+    ]);
+  });
+
+  it('ranks the whole id first when the query is its plural', () => {
+    const set = setOf([{id: 'ai-stars'}, {id: 'star'}, {id: 'stars-shine'}]);
+    const ranked = rankIcons([set], 'stars');
+    expect(ranked[0]).toMatchObject({id: 'star', score: 90});
+    expect(answer(set, 'stars')).toEqual(['star', 'ai-stars', 'stars-shine']);
+    expect(
+      rankIcons([setOf([{id: 'stars'}, {id: 'star-off'}])], 'star')[0].id,
+    ).toBe('stars');
+  });
+
+  it('meets a plural and its singular as the same word', () => {
+    const set = setOf([{id: 'ai-stars'}, {id: 'start-flag'}]);
+    expect(answer(set, 'star')).toEqual(['ai-stars']);
+    expect(answer(setOf([{id: 'star'}]), 'stars')).toEqual(['star']);
+  });
+
+  it('leaves out the words that only phrase a query', () => {
+    const set = setOf([{id: 'house'}, {id: 'arrow-right'}], {home: 'house'});
+    expect(answer(set, 'go home')).toEqual(['house']);
+    expect(answer(set, 'the home icon')).toEqual(['house']);
+    // A query of filler words alone is read as written.
+    expect(answer(set, 'go')).toEqual([]);
+  });
+
+  it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
+    const set = setOf([
+      {id: 'arrow-up-to-line'},
+      {id: 'arrow-up'},
+      {id: 'line'},
+      {id: 'a-arrow-down'},
+      {id: 'arrow-down'},
+      {id: 'house'},
+    ]);
+    const top = (/** @type {string} */ query) => rankIcons([set], query)[0];
+    expect(top('arrow up to line')).toMatchObject({
+      id: 'arrow-up-to-line',
+      score: 90,
+    });
+    expect(answer(set, 'arrow up to line')).toEqual(['arrow-up-to-line']);
+    expect(top('a arrow down')).toMatchObject({id: 'a-arrow-down', score: 90});
+    expect(answer(set, 'a arrow down')).toEqual(['a-arrow-down']);
+    // With no exact answer as typed, the filler words still drop.
+    expect(answer(set, 'go house')).toEqual(['house']);
+  });
+
+  it('never matches a letter or two inside a word', () => {
+    const set = setOf([{id: 'box'}, {id: 'text'}, {id: 'next-page'}]);
+    expect(answer(set, 'x')).toEqual([]);
+    expect(answer(set, 'ex')).toEqual([]);
+    // Three letters still find a part of a word.
+    expect(answer(set, 'ext')).toEqual(['next-page', 'text']);
   });
 });

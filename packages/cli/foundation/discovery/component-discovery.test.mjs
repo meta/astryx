@@ -28,6 +28,7 @@ import {
   findIntegrationComponentSource,
   discoverOwnedComponents,
 } from './component-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 // packages/cli/foundation/discovery/ -> up 4 = repo root (has packages/core).
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -57,7 +58,7 @@ describe('discoverComponents (real core)', () => {
       expect(members.length).toBeGreaterThan(0);
       expect([...members].sort()).toEqual(members);
     }
-    expect([...keys].sort((a, b) => a.localeCompare(b))).toEqual(keys);
+    expect([...keys].sort((a, b) => compareText(a, b))).toEqual(keys);
     expect(keys).toContain('Button');
     expect(comps.Button).toContain('Button');
     expect(comps.Button).toContain('IconButton');
@@ -121,6 +122,25 @@ describe('discoverComponents (real core)', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(path.join(dir, 'XDSNaked.tsx'), 'x');
     expect(discoverComponents(core)).toEqual({});
+  });
+
+  it('reads the docs once per operation and fresh outside one', () => {
+    const core = mkTmp('as-cd-once-');
+    const dir = path.join(core, 'src', 'Foo');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'XDSFoo.tsx'), 'x');
+    const doc = path.join(dir, 'Foo.doc.mjs');
+    fs.writeFileSync(doc, 'export default {};\n');
+    withListingCache(() => {
+      const first = discoverComponents(core);
+      expect(first).toEqual({Foo: ['Foo']});
+      first.Foo.push('Bar');
+      fs.writeFileSync(doc, "export default {\n  group: 'Widgets',\n};\n");
+      // The operation read the doc once, so the edit does not reach it. A
+      // change to one caller's result does not reach the next caller.
+      expect(discoverComponents(core)).toEqual({Foo: ['Foo']});
+    });
+    expect(discoverComponents(core)).toEqual({Widgets: ['Foo']});
   });
 
   it('lists HStack, VStack and Heading, whose docs live in their family folders', () => {
@@ -400,7 +420,7 @@ describe('integration component discovery (ownership-aware)', () => {
   }
 
   it('records owner package, issuesUrl, group, and source presence; drops hidden', () => {
-    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => a.name.localeCompare(b.name));
+    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => compareText(a.name, b.name));
     expect(recs.map(r => r.name)).toEqual(['MetaAppShell', 'MetaDiff']);
     const shell = recs.find(r => r.name === 'MetaAppShell');
     expect(shell.package).toBe('@acme/astryx-meta');

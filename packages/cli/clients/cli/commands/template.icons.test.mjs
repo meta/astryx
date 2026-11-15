@@ -11,7 +11,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
+import {
+  glyphsData,
+  writeIconSetProject,
+} from '../../../test-utils/icon-set-fixture.mjs';
 
 /** @type {string} */
 let tmp;
@@ -38,12 +41,17 @@ describe('template icon mapping', () => {
     expect(res.stderr).toContain(
       'icons: mapped XMarkIcon (@heroicons/react/24/outline) -> XIcon (@acme/glyphs) by definition',
     );
-    expect(res.stderr).toMatch(
-      /icons: kept \w+ \(@heroicons\/react\/24\/outline\)/,
+    // Nothing in the list has share: the local placeholder, and both fixes.
+    expect(res.stdout).toContain('MissingIcon /* missing icon: share */');
+    expect(res.stdout).toContain('function MissingIcon(');
+    expect(res.stdout).not.toContain('@heroicons/react');
+    expect(res.stdout).not.toContain('MissingIcon_experimental');
+    expect(res.stderr).toContain(
+      'icons: placeholder ShareIcon (@heroicons/react/24/outline) -> MissingIcon: no set in your list has "share", so the file draws a placeholder it declares. Fix: add a backup set that has it, `astryx experimental icon use glyphs --backup <set>`; or, if you author your main set, map it there, `astryx experimental icon map share <icon> --set glyphs`.',
     );
   });
 
-  it('the JSON and the copy receipt report mapped and kept icons; kept libraries stay needed', async () => {
+  it('the JSON and the copy receipt report mapped and placeholder icons; the library is no longer needed', async () => {
     const cwd = writeIconSetProject(tmp, {
       config: {experimental: {iconSet: 'glyphs'}},
     });
@@ -63,10 +71,56 @@ describe('template icon mapping', () => {
       target: {set: 'glyphs', id: 'x', export: 'XIcon'},
       by: 'definition',
     });
-    expect(copied.data.icons.kept.length).toBeGreaterThan(0);
-    expect(copied.data.missingPackages).toContain('@heroicons/react');
+    expect(copied.data.icons.kept).toEqual([]);
+    expect(
+      copied.data.icons.placeholder.map(
+        (/** @type {any} */ each) => each.definitions[0],
+      ),
+    ).toEqual(
+      expect.arrayContaining(['mention', 'share', 'attach', 'document']),
+    );
+    expect(copied.data.icons.sets).toEqual([
+      {set: '@acme/glyphs/glyphs', license: 'MIT', icons: 1},
+    ]);
+    expect(copied.data.missingPackages ?? []).not.toContain('@heroicons/react');
     const written = fs.readFileSync(path.join(cwd, 'out', 'page.tsx'), 'utf-8');
     expect(written).toBe(shown.data.source);
+  });
+
+  it('a main set with a backup: each icon comes from the first set that has it', async () => {
+    const cwd = writeIconSetProject(tmp, {
+      packages: [
+        {},
+        {
+          name: '@acme/lines',
+          data: {
+            ...glyphsData(),
+            module: '@acme/lines',
+            map: {close: 'x', share: 'home'},
+          },
+        },
+      ],
+      config: {experimental: {iconSet: ['glyphs', 'lines']}},
+    });
+    const res = await runCli(['template', TEMPLATE, '--json'], cwd);
+    const icons = JSON.parse(res.stdout).data.icons;
+    expect(icons.order).toEqual(['@acme/glyphs/glyphs', '@acme/lines/lines']);
+    const from = Object.fromEntries(
+      icons.mapped.map((/** @type {any} */ each) => [
+        each.source.export,
+        `${each.target.package}/${each.target.set}`,
+      ]),
+    );
+    // Both sets have close: the main set wins. Only the backup has share.
+    expect(from).toEqual({
+      XMarkIcon: '@acme/glyphs/glyphs',
+      ShareIcon: '@acme/lines/lines',
+    });
+    expect(
+      icons.placeholder.map((/** @type {any} */ each) => each.source.export),
+    ).not.toContain('ShareIcon');
+    const text = await runCli(['template', TEMPLATE], cwd);
+    expect(text.stdout).toContain("import {HomeIcon} from '@acme/lines';");
   });
 
   it('experimental.iconSet that two packages ship: source unchanged, status ambiguous', async () => {

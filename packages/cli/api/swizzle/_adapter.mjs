@@ -9,7 +9,8 @@
  * for its "component not found" suggestions. Resolving core + listing lives
  * here once so neither leaf re-walks the filesystem. Throws AstryxError
  * (ERR_CORE_NOT_FOUND) when core can't be located. The copy receipt's `gh`
- * lookup is here too, on the shared search-path walk.
+ * lookup is here too, on the shared search-path walk, and so is the copy's
+ * module graph (_moduleGraph.mjs), which reads the owner package's source.
  */
 
 import {executablesOnSearchPath} from '../../foundation/env/search-path.mjs';
@@ -17,6 +18,8 @@ import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs'
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
+
+export {planCopy, relativeSpecifierBetween, renderFile} from './_moduleGraph.mjs';
 
 /**
  * Whether an executable `gh` is on `PATH` (with a `PATHEXT` extension on

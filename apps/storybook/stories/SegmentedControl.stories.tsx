@@ -291,6 +291,46 @@ export const Disabled: Story = {
   },
 };
 
+export const BelowAButton: Story = {
+  name: 'Below a button',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A large segmented control 8 px below a button. Under a coarse pointer each segment’s invisible hit area grows toward 44 px tall, but stops halfway to the button, so a tap on the button stays the button’s and nothing changes size.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('month');
+    const [refreshes, setRefreshes] = useState(0);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'start',
+          gap: 8,
+        }}>
+        <Button
+          label="Refresh"
+          onClick={() => setRefreshes(count => count + 1)}
+        />
+        <SegmentedControl
+          value={value}
+          onChange={setValue}
+          label="Range"
+          size="lg">
+          <SegmentedControlItem value="day" label="Day" />
+          <SegmentedControlItem value="week" label="Week" />
+          <SegmentedControlItem value="month" label="Month" />
+        </SegmentedControl>
+        <Text type="supporting">Refreshed {refreshes} times</Text>
+      </div>
+    );
+  },
+};
+
 export const DisabledItem: Story = {
   render: () => {
     const [value, setValue] = useState('hourly');

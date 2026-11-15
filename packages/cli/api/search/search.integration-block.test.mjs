@@ -13,8 +13,13 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {search} from './search.mjs';
-import {build} from '../build/build.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./search.mjs')} */
+const {search} = require('./search.mjs');
+/** @type {typeof import('../build/build.mjs')} */
+const {build} = require('../build/build.mjs');
 
 const SLOW = 60_000;
 const packages = path.resolve(

@@ -4,14 +4,18 @@
  * @file inputStream.ts
  * @input A window, and subscribers to its input events (the press feedback
  *   controller, the gesture host)
- * @output subscribeInput, and getLastPointerType: the type of the latest
- *   pointer event the stream delivered
+ * @output subscribeInput, getLastPointerType, getLastMousePoint and
+ *   getDownPresses: the type of the latest pointer event the stream
+ *   delivered, where the latest mouse one was, and where each finger and pen
+ *   press that is down was last
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
  *
  * SYNC: When modified, update inputStream.test.ts.
  */
+
+import {realmValue, sharedKey} from './sharedRealm';
 
 // The window's capture phase runs before document listeners, so an app's
 // `stopPropagation` there does not hide input from press feedback or the
@@ -65,9 +69,27 @@ export interface InputSubscriptionOptions {
 /** The events a window's capture phase sees: its own, and the document's. */
 export type InputEventMap = WindowEventMap & DocumentEventMap;
 
-const streams = new WeakMap<Window, Map<string, Channel>>();
-/** The type of the latest pointer event each window's stream delivered. */
-const lastPointerTypes = new WeakMap<Window, string>();
+/**
+ * Registered, so a swizzled copy's subscribers join the package's window
+ * listeners.
+ */
+const inputState = realmValue(sharedKey('input-stream', 1), () => ({
+  streams: new WeakMap<Window, Map<string, Channel>>(),
+  /** The type of the latest pointer event each window's stream delivered. */
+  lastPointerTypes: new WeakMap<Window, string>(),
+  /** Where the latest mouse pointer event each window's stream delivered was. */
+  lastMousePoints: new WeakMap<Window, MousePoint>(),
+  /** Each window's finger and pen presses that are down, by pointer id. */
+  downPresses: new WeakMap<Window, Map<number, MousePoint>>(),
+}));
+const {streams, lastPointerTypes, lastMousePoints, downPresses} = inputState;
+const NO_PRESSES: ReadonlyMap<number, MousePoint> = new Map();
+
+/** A point in the viewport, in CSS pixels. */
+export interface MousePoint {
+  readonly x: number;
+  readonly y: number;
+}
 
 /**
  * The type of the latest pointer event `view`'s stream delivered: `mouse`,
@@ -77,6 +99,26 @@ const lastPointerTypes = new WeakMap<Window, string>();
  */
 export function getLastPointerType(view: Window): string | null {
   return lastPointerTypes.get(view) ?? null;
+}
+
+/**
+ * Where the latest mouse pointer event `view`'s stream delivered was, in
+ * viewport coordinates, or `null` before any. A mouse that has not moved
+ * since rests there. Reading it adds no listener.
+ */
+export function getLastMousePoint(view: Window): MousePoint | null {
+  return lastMousePoints.get(view) ?? null;
+}
+
+/**
+ * The finger and pen presses that are down in `view`, by pointer id, each at
+ * the point where the stream last heard it. The stream hears them only while
+ * subscribers listen to `pointerdown`, `pointerup` and `pointercancel` (and
+ * `pointermove` for a moving press), as press feedback and the gesture host
+ * do. Reading it adds no listener.
+ */
+export function getDownPresses(view: Window): ReadonlyMap<number, MousePoint> {
+  return downPresses.get(view) ?? NO_PRESSES;
 }
 
 /**
@@ -130,6 +172,11 @@ export function subscribeInput<K extends keyof InputEventMap>(
     register(view, type, current);
     if (current.subscribers.length === 0) {
       streams.get(view)?.delete(type);
+      // Without a listener the stream cannot hear a press end, so the
+      // presses it recorded may already have ended.
+      if (type === 'pointerup' || type === 'pointercancel') {
+        downPresses.delete(view);
+      }
     }
   };
 }
@@ -161,9 +208,19 @@ function register(view: Window, type: string, channel: Channel): void {
 
 function dispatch(view: Window, channel: Channel, event: Event): void {
   // Recorded before any subscriber runs, so each reads the pointer at hand.
-  const {pointerType} = event as Partial<PointerEvent>;
+  const {pointerType, clientX, clientY} = event as Partial<PointerEvent>;
   if (typeof pointerType === 'string' && pointerType !== '') {
     lastPointerTypes.set(view, pointerType);
+  }
+  if (
+    pointerType === 'mouse' &&
+    typeof clientX === 'number' &&
+    typeof clientY === 'number'
+  ) {
+    lastMousePoints.set(view, {x: clientX, y: clientY});
+  }
+  if (pointerType === 'touch' || pointerType === 'pen') {
+    recordPress(view, event);
   }
   // A subscriber may subscribe or unsubscribe while the event runs; the
   // event goes to those subscribed when it arrived.
@@ -179,6 +236,31 @@ function dispatch(view: Window, channel: Channel, event: Event): void {
       report(error);
     }
   }
+}
+
+function recordPress(view: Window, event: Event): void {
+  const {pointerId, clientX, clientY} = event as Partial<PointerEvent>;
+  if (typeof pointerId !== 'number') {
+    return;
+  }
+  let presses = downPresses.get(view);
+  if (event.type === 'pointerup' || event.type === 'pointercancel') {
+    presses?.delete(pointerId);
+    return;
+  }
+  if (
+    (event.type !== 'pointerdown' &&
+      !(event.type === 'pointermove' && presses?.has(pointerId) === true)) ||
+    typeof clientX !== 'number' ||
+    typeof clientY !== 'number'
+  ) {
+    return;
+  }
+  if (presses == null) {
+    presses = new Map();
+    downPresses.set(view, presses);
+  }
+  presses.set(pointerId, {x: clientX, y: clientY});
 }
 
 function report(error: unknown): void {

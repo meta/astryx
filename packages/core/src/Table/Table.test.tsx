@@ -1010,6 +1010,24 @@ describe('Table', () => {
     expect(wrapper).toHaveAttribute('tabindex', '2');
   });
 
+  it("composes a plugin's scroll-wrapper className with the wrapper's own", () => {
+    const plugin: TablePlugin<User> = {
+      transformScrollWrapper: props => ({
+        ...props,
+        htmlProps: {
+          ...props.htmlProps,
+          className: 'plugin-wrapper',
+        },
+      }),
+    };
+    render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
+    const wrapper = screen.getByRole('group', {name: 'Table'});
+    // The plugin's class reaches the scroll container, beside the wrapper's
+    // own theme target.
+    expect(wrapper).toHaveClass('plugin-wrapper');
+    expect(wrapper).toHaveClass('astryx-table-scroll-wrapper');
+  });
+
   it('contains overscroll only while the table scrolls', () => {
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal(

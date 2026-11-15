@@ -49,6 +49,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Stepper/Stepper.generated';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 registerEnglishFallback(english);
 
 /**

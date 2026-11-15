@@ -27,8 +27,9 @@ import {
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind} from './kind.mjs';
-import {pickAlternatives, rankPages} from './rank.mjs';
-import {asTemplate, chooseStart} from './start.mjs';
+import {rankPages} from './rank.mjs';
+import {readNames} from './words.mjs';
+import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
 
 /** A page at/above this score is a confident direct match. */
 const PAGE_DIRECT = 95;
@@ -91,7 +92,10 @@ const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
 /**
  * Everything build weighs for one request.
  * @typedef {object} KitSignals
- * @property {string} query search's echo of the query
+ * @property {string} query the caller's query, trimmed, as search echoes it
+ * @property {string} idea the query as build matches it: a page template it
+ *   names in any case or with a swapped pair of letters reads as that
+ *   template's own words (readNames)
  * @property {number} matchCount
  * @property {boolean} directMatch
  * @property {BuildStart | null} start the start, its alternatives, and its notes
@@ -132,9 +136,20 @@ export async function kitSignals(query, options = {}) {
   // search()'s JSDoc @returns widens results to object[]; the SearchResponse
   // shape is the contract (api/search/search.type.mjs). Cast locally rather than
   // tightening the search @returns (a separate follow-up).
+  // A kit narrowed to components or hooks has no page to start from; every
+  // other kit does, so the reader is never left to compose a page from scratch.
+  const wantsPages = !type || type === 'template';
+  const templates = wantsPages
+    ? await loadTemplates(cwd)
+    : {pages: [], blocks: []};
+  const catalog = templates.pages;
+  // Search reads a page template the idea names in any case, separator or
+  // with a neighbour-letter swap in a word of six or more letters as that template's own words
+  // (readNames), as the page ranker does, so such a name matches by name.
+  const searched = wantsPages ? readNames(query, catalog) : query;
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
-      await search(query, {
+      await search(searched, {
         cwd,
         type,
         // Search wider than the surfaced kit so a flood of doc matches cannot
@@ -223,13 +238,6 @@ export async function kitSignals(query, options = {}) {
   const blocksKept = toLimit(blocks);
   const domainKept = toLimit(domain);
 
-  // A kit narrowed to components or hooks has no page to start from; every
-  // other kit does, so the reader is never left to compose a page from scratch.
-  const wantsPages = !type || type === 'template';
-  const templates = wantsPages
-    ? await loadTemplates(cwd)
-    : {pages: [], blocks: []};
-  const catalog = templates.pages;
   const ranked = wantsPages ? rankPages(query, catalog) : [];
   // A part of a page starts where it lives (spec:AST-048/FR3); the project's
   // own components say what a part is. The search above already gathered them
@@ -247,7 +255,13 @@ export async function kitSignals(query, options = {}) {
   /** @type {BuildStart | null} */
   const start = chosen && {
     ...chosen,
-    alternatives: pickAlternatives(ranked, chosen.name).flatMap(r => {
+    alternatives: pickStartAlternatives(
+      ranked,
+      kind,
+      chosen.name,
+      catalog,
+      query,
+    ).flatMap(r => {
       const t = catalog.find(c => c.name === r.name);
       return t ? [asTemplate(t)] : [];
     }),
@@ -265,7 +279,10 @@ export async function kitSignals(query, options = {}) {
   }
 
   return {
-    query: result.data.query,
+    // The caller's own words, as search echoes a query; the names read as
+    // words are for matching only.
+    query: String(query).trim(),
+    idea: searched,
     matchCount,
     directMatch,
     start,

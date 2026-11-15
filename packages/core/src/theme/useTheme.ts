@@ -23,19 +23,14 @@
  * - /packages/core/src/theme/index.ts
  */
 
-import {
-  createContext,
-  use,
-  useCallback,
-  useMemo,
-  useSyncExternalStore,
-} from 'react';
+import {use, useCallback, useMemo, useSyncExternalStore} from 'react';
 import type {ThemeMode} from './types';
 import type {DefinedTheme} from './defineTheme';
 import {resolveThemeTokens} from './tokens';
 import {getRegisteredTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {createSharedContext} from '../utils/sharedContext';
 
 // =============================================================================
 // Context
@@ -57,7 +52,11 @@ export interface ThemeContextValue {
  * null when no provider is present.
  * @internal
  */
-export const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createSharedContext<ThemeContextValue | null>(
+  'ThemeContext',
+  1,
+  null,
+);
 ThemeContext.displayName = 'ThemeContext';
 
 // =============================================================================

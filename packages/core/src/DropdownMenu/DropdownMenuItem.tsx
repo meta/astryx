@@ -51,7 +51,7 @@ import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {isModifiedClick} from './menuItemRoles';
+import {isModifiedClick, keepDisabledRowUnfocused} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -270,6 +270,10 @@ export function DropdownMenuItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={ref}
       // A row that navigates IS the link: its root is the application's
       // anchor, so a modified click, a middle click, copying the address and
@@ -277,7 +281,7 @@ export function DropdownMenuItem({
       // address keeps the default root.
       as={href != null ? LinkComponent : undefined}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       // The row's own handling runs first, then the caller's.
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       {...pressable}
