@@ -299,8 +299,9 @@ const QUESTIONS = [
   [
     'disabled buttons look too faded',
     {
-      top: /^set q opacity 0\.8 --on button --state disabled$/,
-      adds: /aria-disabled.*opacity=0\.8/,
+      // (Less faded from the 0.5 Core draws disabled: halfway to 1.)
+      top: /^set q opacity 0\.75 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.75/,
     },
   ],
   [

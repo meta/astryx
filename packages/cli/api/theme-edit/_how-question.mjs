@@ -2208,6 +2208,8 @@ function aspectsOf(text) {
     (/\b(taller|shorter|wider|narrower|width|(?<!line )height|bigger|larger|smaller|tall|too (small|tiny|big|large))\b/.test(
       c,
     ) ||
+      // ("36px high": a length said high is a height.)
+      /\b\d*\.?\d+\s?(?:px|rem)\s+high\b/.test(c) ||
       (/\b(thick(er)?|thin(ner)?)\b/.test(c) &&
         /\b(progress|underline|indicator)/.test(c))) &&
     !a.includes('fontsize') &&
@@ -4009,11 +4011,45 @@ export function draftAnswer(ctx, env, question) {
     )
     // (The way word stays, so what is changed stays: "dividers twice as
     // thin" is their line, half of now.)
+    // ("Three times as soft" is a third of now, softer; "half as small" is
+    // twice now, the other way: bigger.)
     .replace(
-      /\b(?:twice|two times) as (small|thin|narrow|short|tight|soft|faint|subtle)\b/gi,
-      (_m, w) =>
-        `50% of now ${{small: 'smaller', thin: 'thinner', narrow: 'narrower', short: 'shorter', tight: 'tighter', soft: 'softer', faint: 'fainter', subtle: 'subtler'}[String(w).toLowerCase()]}`,
+      /\b(twice|two times|(\d+(?:\.\d+)?|three|four|five) times|half) as (small|thin|narrow|short|tight|soft|faint|subtle)\b/gi,
+      (_m, how, n, w) => {
+        const word = String(w).toLowerCase();
+        /** @type {Record<string, string>} */
+        const down = {
+          small: 'smaller',
+          thin: 'thinner',
+          narrow: 'narrower',
+          short: 'shorter',
+          tight: 'tighter',
+          soft: 'softer',
+          faint: 'fainter',
+          subtle: 'subtler',
+        };
+        /** @type {Record<string, string>} */
+        const up = {
+          small: 'bigger',
+          thin: 'thicker',
+          narrow: 'wider',
+          short: 'taller',
+          tight: 'looser',
+          soft: 'stronger',
+          faint: 'stronger',
+          subtle: 'stronger',
+        };
+        if (/^half$/i.test(how)) return `200% of now ${up[word]}`;
+        const times = /^(?:twice|two times)$/i.test(how)
+          ? 2
+          : (WORD_NUMBERS[String(n).toLowerCase()] ?? Number(n));
+        return times > 0
+          ? `${Number((100 / times).toFixed(3))}% of now ${down[word]}`
+          : _m;
+      },
     )
+    // "exactly 36px": the value said.
+    .replace(/\bexactly\s+(?=\d*\.?\d+\s?(?:px|rem|em|%)\b)/gi, '')
     .replace(
       /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(?:\s+of)?/gi,
       (_m, n, d) => {
@@ -5565,17 +5601,9 @@ export function draftAnswer(ctx, env, question) {
       c.unknownSubject = true;
       continue;
     }
-    // (Nor a clause whose subject is a role color or a dial, "and the
-    // accent darker": it is the whole theme's, never the part before.)
-    {
-      const subject =
-        /^(?:the\s+|my\s+|our\s+)?([a-z]+)/.exec(c.text)?.[1] ?? '';
-      if (
-        !c.parts.length &&
-        (ROLE_WORDS.test(subject) || Object.hasOwn(DIALS, subject))
-      )
-        continue;
-    }
+    // (Nor a clause whose subject is the whole theme's: "and the accent
+    // darker", "and the text bigger".)
+    if (!c.parts.length && themeSubject(c)) continue;
     if (!c.parts.length) {
       const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
         c.text,
@@ -6325,6 +6353,7 @@ export function draftAnswer(ctx, env, question) {
       !(c.aspects.length && c.aspects.every(a => a === 'family')) &&
       !unknownLead(c) &&
       !unknownSlot(c.text) &&
+      !themeSubject(c) &&
       // "serif headings, no shadows": a type part does not take a shadow,
       // corner or border ask.
       !(
@@ -7540,15 +7569,33 @@ export function draftAnswer(ctx, env, question) {
           const baseRules = /** @type {any} */ (env.base).components?.[part];
           for (const r of C.partReads(part, 'border') ?? []) {
             if (!r.props.includes('border-color')) continue;
-            for (const w of r.when) {
+            for (const w0 of r.when) {
+              // (A look Core writes beside its variant and size, "variant=
+              // input status=error", is read for its status or state only:
+              // a variant or a size is the look the ask changes, never one
+              // to keep.)
+              const words = w0.trim().split(/\s+/);
+              if (words.some(x => !/^:/.test(x) && !/^[a-z-]+=[\w-]+$/.test(x)))
+                continue;
+              const keptAttrs = words.filter(
+                x =>
+                  /^[a-z-]+=[\w-]+$/.test(x) &&
+                  !/^(?:variant|size|elevation|orientation)=/.test(x),
+              );
+              if (keptAttrs.length > 1) continue;
+              const w = [
+                keptAttrs[0] ?? '',
+                words.find(x => /^:/.test(x)) ?? '',
+              ]
+                .join(' ')
+                .trim();
               const m =
                 /^(?:([a-z-]+)=([\w-]+))?\s*(?::(focus-within|focus-visible|hover|active))?$/.exec(
-                  w.trim(),
+                  w,
                 );
               if (!m || (!m[1] && !m[3])) continue;
               if (m[1] && !(attrs[m[1]] ?? []).includes(m[2])) continue;
-              // (The plain look, "variant=default", takes the new color;
-              // so does hover, which follows it. Statuses and focus keep
+              // (Hover follows the new color. Statuses and focus keep
               // theirs.)
               if (m[2] === 'default' || m[3] === 'hover' || m[3] === 'active')
                 continue;
@@ -11077,7 +11124,15 @@ export function draftAnswer(ctx, env, question) {
         ];
     }
     // A hover effect with nothing more said: a slightly darker part.
-    if (c.parts.length && !c.aspects.length && c.state === 'hover' && !c.neg)
+    if (
+      c.parts.length &&
+      !c.aspects.length &&
+      c.state === 'hover' &&
+      !c.neg &&
+      !/\b(?:less (?:visible|noticeable|prominent|obvious)|half as (?:visible|noticeable|strong)|fainter|subtler|weaker)\b/.test(
+        c.text,
+      )
+    )
       c.aspects.push('background');
     // A part with no aspect asked fainter ("the divider less visible"): the
     // color its line or its fill reads, at a lower alpha, on the part.
@@ -11108,9 +11163,49 @@ export function draftAnswer(ctx, env, question) {
             ),
           ]
         : [];
+      // ("half as visible", "50% fainter": the amount said; else 60%.)
+      const said0 = exactFactor(c.text);
+      const k0 = said0 != null && said0 > 0 && said0 < 1 ? said0 : 0.6;
+      // (A part whose variants each paint their own fill, a button: each
+      // variant's fill at a lower alpha, in the state asked; never one
+      // variant's color on all, nor a line it does not draw.)
+      if (!lineReads.length) {
+        const {noState: _nsF, ...pfF} = flagsFor(c, p0);
+        const perVariant = byVariant(
+          p0.on,
+          'background',
+          'background-color',
+          'background-color',
+          pfF,
+          now =>
+            parseColor(now)
+              ? withAlpha(now, Math.max(0, alphaOf(now) * k0))
+              : null,
+          c,
+        );
+        if (perVariant?.length) {
+          seenPart(p0.on);
+          push({
+            text: `a fainter ${p0.on}${pfF.state ? ` when ${pfF.state}` : ''}: each variant's fill at ${Math.round(k0 * 100)}% of its alpha, from its own color${modesSaid(perVariant)}`,
+            options: [perVariant],
+            sequence: perVariant.length > 1,
+          });
+          continue;
+        }
+      }
+      // (A border only where the part draws one: a 0px border is no line.)
+      const drawsLine = Object.entries(C.MAP[one(p0.on)]?.at ?? {}).some(
+        ([pr, byRender]) =>
+          /^border(?:-[a-z]+)?-width$/.test(pr) &&
+          Object.values(/** @type {Record<string, string>} */ (byRender)).some(
+            v => !/^0(?:px)?$/.test(String(v).trim()),
+          ),
+      );
       const read =
         lineReads[0] ??
-        restRead(C.partReads(one(p0.on), 'border'), p0.when) ??
+        (drawsLine
+          ? restRead(C.partReads(one(p0.on), 'border'), p0.when)
+          : null) ??
         restRead(C.partReads(one(p0.on), 'background'), p0.when);
       if (read) {
         // ("half as visible", "50% fainter": the amount said; else 60%.)
@@ -13761,7 +13856,7 @@ export function draftAnswer(ctx, env, question) {
             })
             .filter(st => st != null);
           return {
-            text: `${soft ? 'softer' : 'stronger'} shadows everywhere: each shared shadow from its own layers, ${bigger && !c.mode ? 'its blur scaled' : `its colors' alpha ×${k}`}${c.mode ? ` in ${c.mode} mode only` : ' in both modes'}`,
+            text: `${soft ? 'softer' : 'stronger'} shadows everywhere: each shared shadow from its own layers, ${bigger && !c.mode ? 'its blur scaled' : `its colors' alpha ×${Math.round(k * 1000) / 1000}`}${c.mode ? ` in ${c.mode} mode only` : ' in both modes'}`,
             options: steps.length ? [/** @type {Step[]} */ (steps)] : [],
             sequence: true,
             ...(c.mode ? {modeInValue: true} : {}),
@@ -16075,24 +16170,55 @@ export function draftAnswer(ctx, env, question) {
                 text: `opacity${where}: ${pct}%`,
                 options: [[set('opacity', String(Number(pct) / 100), f)]],
               };
-        return on
-          ? {
-              text: `${c.neg || f.state === 'disabled' ? 'less faded' : 'more see-through'}${where}: opacity`,
-              options: [
-                [
-                  set(
-                    'opacity',
-                    c.neg ||
-                      f.state === 'disabled' ||
-                      /\btoo faded\b/.test(c.text)
-                      ? '0.8'
-                      : '0.6',
-                    f,
-                  ),
-                ],
-              ],
-            }
-          : null;
+        // The way is the words' ("more transparent" fades, "too faded"
+        // and a negation clear), from the opacity the part shows now in the
+        // state asked (a disabled button's 0.5), never a stock value.
+        if (!on) return null;
+        const lessFaded = c.neg || /\btoo faded\b/.test(c.text);
+        const opNow = (() => {
+          // (A value the theme already sets there; else what Core draws: in
+          // a state, the faintest look it gives any variant there, so "more
+          // transparent" never raises one; at rest, the main look.)
+          const own = existing(['opacity'], on).find(
+            x => (x.state ?? '') === (f.state ?? '') && !x.when,
+          )?.value;
+          if (own != null && !Number.isNaN(Number(own))) return Number(own);
+          const at = /** @type {Record<string, string>} */ (
+            C.MAP[one(on)]?.at?.opacity ?? {}
+          );
+          const vals = Object.entries(at)
+            .filter(([r]) =>
+              f.state
+                ? !/::/.test(r) &&
+                  (r
+                    .split(/[\s,]/)
+                    .some(
+                      x => x === `:${f.state}` || x === `${f.state}=${f.state}`,
+                    ) ||
+                    (f.state === 'disabled' && !/\s/.test(r)))
+                : !/[\s:]/.test(r) &&
+                  r
+                    .split(',')
+                    .every(x =>
+                      /^(?:variant=(?:default|primary|standard)|size=md|elevation=none)$/.test(
+                        x,
+                      ),
+                    ),
+            )
+            .map(([, v]) => Number(v))
+            .filter(n => !Number.isNaN(n));
+          return vals.length ? Math.min(...vals) : 1;
+        })();
+        const nextOp = Number(
+          (lessFaded
+            ? Math.min(1, opNow + (1 - opNow) / 2)
+            : opNow * 0.6
+          ).toFixed(2),
+        );
+        return {
+          text: `${lessFaded ? 'less faded' : 'more see-through'}${where}: opacity ${nextOp} (now ${opNow})`,
+          options: [[set('opacity', String(nextOp), f)]],
+        };
       }
       case 'scale':
         // "should not shrink when pressed": no scale.
@@ -18283,6 +18409,28 @@ export function draftAnswer(ctx, env, question) {
       return {word, parts: /** @type {string[]} */ ([])};
     }
     return null;
+  }
+
+  /**
+   * Whether a later clause's own subject is the whole theme's: a role color
+   * or a dial ("the accent darker", "the spacing tighter") or the theme's
+   * text said as a subject ("the text bigger"); such a clause takes no part
+   * from the clause before.
+   * @param {Clause} c
+   */
+  function themeSubject(c) {
+    // (The subject alone, before its way or value: "accent text" and
+    // "font-weight 500" name a part's own text color and weight.)
+    const m = /^(?:the\s+|my\s+|our\s+)?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
+      c.text,
+    );
+    const subject = m?.[1] ?? '';
+    const next = m?.[2] ?? '';
+    const bare = !next || /^colou?r$/.test(next) || !aspectsOf(next).length;
+    return (
+      (bare && (ROLE_WORDS.test(subject) || Object.hasOwn(DIALS, subject))) ||
+      /^the\s+text\b(?!-)/.test(c.text)
+    );
   }
 
   /** @param {string} text */
