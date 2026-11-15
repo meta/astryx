@@ -215,6 +215,43 @@ export async function discoverPackages() {
   return {packages, configured: true, project};
 }
 
+/** A terminal escape sequence: CSI (`ESC [ … final`), OSC, or a two-byte one. */
+const ESCAPE_SEQUENCE =
+  // eslint-disable-next-line no-control-regex
+  /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
+/**
+ * Every other control or format character: C0, C1, and the bidirectional and
+ * zero-width marks that would reorder or hide a printed line.
+ */
+const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * The `description` in the package.json of an installed package, so the list
+ * says what an installed integration is, as it does for one a source lists.
+ * The text is the package's own, so terminal escape sequences and control
+ * and format characters are removed; a blank one is left out.
+ * @param {string | undefined} packageDir
+ * @returns {string | undefined}
+ */
+export function packageDescription(packageDir) {
+  if (!packageDir) return undefined;
+  let raw;
+  try {
+    raw = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    )?.description;
+  } catch {
+    return undefined;
+  }
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw
+    .replace(ESCAPE_SEQUENCE, '')
+    .replace(CONTROL_CHARACTER, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean || undefined;
+}
+
 /**
  * Every integration the project loads, with what it adds. An integration with
  * no components root is included with `components: []`; one that failed to
@@ -259,8 +296,10 @@ export async function describeInstalled(project, scanned) {
     const {sets, withdrawn} = optedIntoIconSets(project)
       ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
       : {sets: [], withdrawn: []};
+    const description = packageDescription(integration.__packageDir);
     installed.push({
       ...base,
+      ...(description ? {description} : {}),
       templates: identities.templates.map(t => t.id),
       // Each doc by the name `astryx docs` opens it by, not the name on its
       // file: a doc that adds sections to `theme` opens as `theme`, and names

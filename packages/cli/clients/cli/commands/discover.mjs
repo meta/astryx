@@ -33,6 +33,7 @@ import {
   OFFICIAL_SOURCE_NAME,
 } from '../../../api/discover/discover.mjs';
 import {isValidSemver} from '../../../foundation/env/semver.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
@@ -393,7 +394,15 @@ export function registerDiscover(program) {
                 result.data.length > 0
                   ? records(
                       result.data.map(entry => withDocSections(entry, run)),
-                      listOpts,
+                      {
+                        ...listOpts,
+                        // A package's description shows its first sentence;
+                        // `--json` carries it whole.
+                        format: {
+                          ...listOpts.format,
+                          description: firstSentence,
+                        },
+                      },
                     )
                   : text(
                       kind
@@ -408,7 +417,10 @@ export function registerDiscover(program) {
               blocks.push(section('Available', sourceSubtitle(sources)));
               blocks.push(
                 available.length > 0
-                  ? records(available, listOpts)
+                  ? records(available, {
+                      ...listOpts,
+                      format: {...listOpts.format, description: firstSentence},
+                    })
                   : text(
                       !sources.some(s => s.status !== 'failed')
                         ? 'No source answered, so there is nothing to list.'
@@ -467,6 +479,7 @@ export function registerDiscover(program) {
             const blocks = [
               record(withDocSections(d, run), {
                 omit: ['versions', 'install'],
+                format: {description: firstSentence},
               }),
             ];
             if (d.versions && d.versions.length > 0) {
