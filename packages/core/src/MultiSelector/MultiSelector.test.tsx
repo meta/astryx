@@ -4030,6 +4030,43 @@ describe('MultiSelector light dismiss focus', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('leaves focus on a field that a key moved it to after a pick, when the list then closes', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <input aria-label="Notes" />
+        <MultiSelector
+          label="Fruits"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Banana', hidden: true}),
+    );
+    expect(screen.getByTestId('container')).toHaveFocus();
+    // The key moves focus from the container, so the list stays open.
+    await user.tab();
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    expect(notes).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    expect(notes).toHaveFocus();
+  });
+
   it('returns focus to the trigger after a keyboard pick and Escape from the search field inside the list', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
