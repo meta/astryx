@@ -198,20 +198,47 @@ type StickySide = {edge: 'start' | 'end'; offset: string};
  * Returns `null` for columns that should not be pinned.
  */
 function resolveStickySide(
-  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+  offsets: PinnedOffsets,
   columnKey: string,
-  startKeys: string[],
-  endKeys: string[],
 ): StickySide | null {
-  const startOffsets = computeStartOffsets(columns, startKeys);
-  if (startOffsets?.has(columnKey)) {
-    return {edge: 'start', offset: startOffsets.get(columnKey) ?? '0px'};
+  if (offsets.start?.has(columnKey)) {
+    return {edge: 'start', offset: offsets.start.get(columnKey) ?? '0px'};
   }
-  const endOffsets = computeEndOffsets(columns, endKeys);
-  if (endOffsets?.has(columnKey)) {
-    return {edge: 'end', offset: endOffsets.get(columnKey) ?? '0px'};
+  if (offsets.end?.has(columnKey)) {
+    return {edge: 'end', offset: offsets.end.get(columnKey) ?? '0px'};
   }
   return null;
+}
+
+interface PinnedOffsets {
+  start: Map<string, string> | null;
+  end: Map<string, string> | null;
+}
+
+/**
+ * Returns a reader of the pinned offsets for a column list. The offsets
+ * depend only on the columns and the pinned keys, so each cell of a render
+ * reads one result instead of resolving every column's width again.
+ */
+function createPinnedOffsetsReader(
+  startKeys: string[],
+  endKeys: string[],
+): (
+  columns: ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined,
+) => PinnedOffsets {
+  let lastColumns:
+    ReadonlyArray<TableColumn<Record<string, unknown>>> | undefined;
+  let last: PinnedOffsets | undefined;
+  return columns => {
+    if (last === undefined || columns !== lastColumns) {
+      lastColumns = columns;
+      last = {
+        start: computeStartOffsets(columns, startKeys),
+        end: computeEndOffsets(columns, endKeys),
+      };
+    }
+    return last;
+  };
 }
 
 // =============================================================================
@@ -675,6 +702,11 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
+  // Every cell of a render reads one set of pinned offsets.
+  const readOffsets = useMemo(
+    () => createPinnedOffsetsReader(pinned.start, pinned.end),
+    [pinned],
+  );
   const plugin = useMemo(
     (): TablePlugin<T> => ({
       rowModel: 'flat',
@@ -690,8 +722,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
       ): HeaderCellRenderProps {
-        const {start: s, end: e} = pinned;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -731,8 +762,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         props: BodyCellRenderProps,
         column: TableColumn<T>,
       ): BodyCellRenderProps {
-        const {start: s, end: e} = pinned;
-        const side = resolveStickySide(props.columns, column.key, s, e);
+        const side = resolveStickySide(readOffsets(props.columns), column.key);
         if (!side) {
           return props;
         }
@@ -793,10 +823,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         };
       },
     }),
-    // `pinned` keeps its identity while the pinned keys keep their values, and
-    // `attachScrollShadow` is stable, so the plugin object is reused until the
-    // pinned keys change.
-    [attachScrollShadow, pinned],
+    // `readOffsets` keeps its identity while the pinned keys keep their
+    // values, and `attachScrollShadow` is stable, so the plugin object is
+    // reused until the pinned keys change.
+    [attachScrollShadow, readOffsets],
   );
   registerPinnedColumnRuns(plugin, columns =>
     countPinnedRuns(columns, pinned.start, pinned.end),
