@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {use, useRef, type ReactNode} from 'react';
+import {use, useCallback, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -46,7 +46,7 @@ import {
   tabularNumbersStyle,
   truncationTooltipStyles,
 } from './text.stylex';
-import {useTruncation} from './useTruncation';
+import {measureTruncation, useTruncation} from './useTruncation';
 import {
   TruncationTooltip,
   useTruncationTooltipInterest,
@@ -57,7 +57,10 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {TextClampContext} from './textClampContext';
+import {
+  TextClampContext,
+  TextMeasureOnInterestContext,
+} from './textClampContext';
 
 export type {TextType, TextSize};
 
@@ -207,6 +210,8 @@ export function resolveStyleColor(color: TextColor): BuiltinTextColor {
   return 'primary';
 }
 
+const NO_INTEREST_ANSWER = {isTruncated: false, fullText: ''};
+
 /**
  * Semantic text component. Renders text with type-based styling from the theme.
  *
@@ -262,23 +267,52 @@ export function Text({
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
 
+  // Where many texts mount at once, such as a Table's default cells, the text
+  // measures on its first hover, tap or focus instead of when it mounts.
+  const measuresOnInterest =
+    use(TextMeasureOnInterestContext) &&
+    maxLines > 0 &&
+    hasTruncateTooltip !== false;
+
   // Truncation detection. Only the tooltip reads the measured overflow, so
   // with the tooltip off the text is clipped by CSS alone and nothing is
   // measured or observed.
   const truncation = useTruncation({
-    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+    maxLines: hasTruncateTooltip === false || measuresOnInterest ? 0 : maxLines,
   });
+
+  // Ref for the text element (used as tooltip anchor)
+  const textRef = useRef<HTMLElement>(null);
+
+  // Text that measures on interest keeps the answer of its last hover, tap or
+  // focus, and measures again at each one.
+  const [interestAnswer, setInterestAnswer] = useState(NO_INTEREST_ANSWER);
+  const measureOnInterest = useCallback((): boolean => {
+    const element = textRef.current;
+    if (element == null) {
+      return false;
+    }
+    const isTruncated = measureTruncation(element, maxLines);
+    const fullText = element.textContent ?? '';
+    setInterestAnswer(current =>
+      current.isTruncated === isTruncated && current.fullText === fullText
+        ? current
+        : {isTruncated, fullText},
+    );
+    return isTruncated;
+  }, [maxLines]);
+  const answer = measuresOnInterest ? interestAnswer : truncation;
 
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
-    maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
+    maxLines > 0 && hasTruncateTooltip !== false && answer.isTruncated;
   // The tooltip mounts on the first hover, tap or focus, not with the text.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
-
-  // Ref for the text element (used as tooltip anchor)
-  const textRef = useRef<HTMLElement>(null);
+  const tooltipInterest = useTruncationTooltipInterest(
+    tooltipEnabled,
+    measuresOnInterest ? measureOnInterest : undefined,
+  );
 
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
@@ -349,7 +383,7 @@ export function Text({
           anchorRef={textRef}
           content={
             <span {...stylex.props(truncationTooltipStyles.content)}>
-              {truncation.fullText}
+              {answer.fullText}
             </span>
           }
           placement={tooltipPlacement}

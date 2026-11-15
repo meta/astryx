@@ -90,6 +90,7 @@ import {devError} from '../utils/devWarning';
 import {useDevWarningPerMessage} from '../hooks/useDevWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
+import {TextMeasureOnInterestContext} from '../Text/textClampContext';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -273,10 +274,14 @@ function TableBodyCell<T extends Record<string, unknown>>({
     typeof rawContent === 'string' &&
     rawContent.length > 0
   ) {
+    // Many cells mount at once, so each measures its truncation on its
+    // first hover, tap or focus, which is when its tooltip can first show.
     content = (
-      <Text type="body" maxLines={1}>
-        {rawContent}
-      </Text>
+      <TextMeasureOnInterestContext value={true}>
+        <Text type="body" maxLines={1}>
+          {rawContent}
+        </Text>
+      </TextMeasureOnInterestContext>
     );
   } else {
     content = rawContent;

@@ -30,6 +30,7 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
+import {Text} from '../Text/Text';
 
 // =============================================================================
 // Test Data
@@ -1409,6 +1410,38 @@ describe('Table', () => {
     const textEl = cells[0].querySelector('span');
     expect(textEl).toBeTruthy();
     expect(textEl).toHaveTextContent('Alice');
+  });
+
+  it('measures no default cell when it mounts, and marks the cell text with no extra attribute', () => {
+    const proto = window.HTMLElement.prototype;
+    const original = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    let reads = 0;
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get() {
+        reads += 1;
+        return 0;
+      },
+    });
+    try {
+      render(<Table data={users} columns={columns} textOverflow="truncate" />);
+    } finally {
+      if (original) {
+        Object.defineProperty(proto, 'scrollWidth', original);
+      }
+    }
+    // Each cell measures on its first hover, tap or focus instead.
+    expect(reads).toBe(0);
+    const cellText = screen.getAllByRole('cell')[0].querySelector('span')!;
+    const {container} = render(
+      <Text type="body" maxLines={1}>
+        Alice
+      </Text>,
+    );
+    const plainText = container.querySelector('span')!;
+    const names = (element: Element) =>
+      [...element.attributes].map(attribute => attribute.name).sort();
+    expect(names(cellText)).toEqual(names(plainText));
   });
 
   it('does not wrap renderCell content in Text when truncating', () => {

@@ -65,6 +65,10 @@ export interface TruncationTooltipInterest {
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
+  // For text that measures on interest: measures now and returns whether the
+  // text is truncated, so the interaction that measures it can mount the
+  // tooltip.
+  measure?: () => boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
@@ -98,14 +102,15 @@ export function useTruncationTooltipInterest(
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (!isEnabled || state.isRead) {
+      const isTruncated = measure != null ? measure() : isEnabled;
+      if (!isTruncated || state.isRead) {
         return;
       }
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled],
+    [isEnabled, measure],
   );
   const forget = useCallback((interest: 'hover' | 'focus') => {
     const state = interestRef.current;
@@ -124,7 +129,8 @@ export function useTruncationTooltipInterest(
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      if (!isEnabled || interestRef.current.isRead) {
+      const isTruncated = measure != null ? measure() : isEnabled;
+      if (!isTruncated || interestRef.current.isRead) {
         tapRecognizer.forget();
         return;
       }
@@ -139,7 +145,7 @@ export function useTruncationTooltipInterest(
         forget('hover');
       }
     },
-    [isEnabled, tapRecognizer, want, forget],
+    [isEnabled, measure, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {

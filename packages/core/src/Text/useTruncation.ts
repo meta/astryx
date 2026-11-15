@@ -72,6 +72,32 @@ export interface UseTruncationReturn {
  * {truncation.isTruncated && <Tooltip>{truncation.fullText}</Tooltip>}
  * ```
  */
+/**
+ * Whether an element's text overflows its line clamp. Single-line text
+ * overflows horizontally. Multi-line text compares the content's real
+ * height: with -webkit-line-clamp, browsers may report the clamped size as
+ * scrollHeight, so Range.getBoundingClientRect() measures the content.
+ * @internal
+ */
+export function measureTruncation(
+  element: HTMLElement,
+  maxLines: number,
+): boolean {
+  if (maxLines === 1) {
+    return element.scrollWidth > element.offsetWidth;
+  }
+  let contentHeight = element.scrollHeight;
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    contentHeight = range.getBoundingClientRect().height;
+    range.detach();
+  } catch {
+    // Fallback to scrollHeight (e.g. jsdom in tests)
+  }
+  return contentHeight > element.offsetHeight;
+}
+
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
@@ -97,30 +123,8 @@ export function useTruncation(
       answerRef.current.fullText = element.textContent ?? '';
       setFullText(answerRef.current.fullText);
 
-      // Check for overflow
-      if (maxLines === 1) {
-        // Single-line: check horizontal overflow
-        answerRef.current.isTruncated =
-          element.scrollWidth > element.offsetWidth;
-        setIsTruncated(answerRef.current.isTruncated);
-      } else {
-        // Multi-line: use Range to measure actual content height.
-        // When -webkit-line-clamp is active, browsers may report
-        // scrollHeight === offsetHeight (the clamped size), so the
-        // naive scrollHeight check fails. Range.getBoundingClientRect()
-        // measures the real text content regardless of clamping.
-        let contentHeight = element.scrollHeight;
-        try {
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          contentHeight = range.getBoundingClientRect().height;
-          range.detach();
-        } catch {
-          // Fallback to scrollHeight (e.g. jsdom in tests)
-        }
-        answerRef.current.isTruncated = contentHeight > element.offsetHeight;
-        setIsTruncated(answerRef.current.isTruncated);
-      }
+      answerRef.current.isTruncated = measureTruncation(element, maxLines);
+      setIsTruncated(answerRef.current.isTruncated);
     },
     [maxLines],
   );
