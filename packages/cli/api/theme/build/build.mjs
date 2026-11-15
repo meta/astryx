@@ -59,6 +59,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -106,6 +107,8 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
+import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
+import {keyPathLine, nullThemeValues} from './null-values.mjs';
 import {
   installCommandFor,
   parsedSpecifiers,
@@ -1010,8 +1013,9 @@ export function generatedSourceCommand(file) {
     : missingGeneratedCommand(file);
 }
 
-/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */
+/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read (no regular file is opened) */
 function fileHead(file) {
+  if (irregularFileKind(file)) return '';
   try {
     const fd = fs.openSync(file, 'r');
     try {
@@ -2879,6 +2883,42 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
   }
 
+  // A theme object (tokens of its own) whose name is missing or no text is
+  // that theme without its name, not a module without a theme.
+  const unnamed = isModule
+    ? [
+        ...(hasDefault ? [['default', defaultExport]] : []),
+        ...Object.entries(mod).filter(
+          ([k]) => k !== 'default' && k !== 'module.exports',
+        ),
+      ].find(
+        ([, v]) =>
+          v &&
+          typeof v === 'object' &&
+          v.tokens &&
+          typeof v.tokens === 'object' &&
+          typeof v.name !== 'string',
+      )
+    : undefined;
+  if (unnamed) {
+    const [exportName, value] = unnamed;
+    let text = '';
+    try {
+      text = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // The line is left out.
+    }
+    const call = /\bdefineTheme\s*\(/.exec(text);
+    const line =
+      keyPathLine(text, ['name']) ??
+      (call ? text.slice(0, call.index).split('\n').length : null);
+    const stem = path
+      .basename(filePath)
+      .replace(/(?:\.theme)?\.[cm]?[jt]sx?$/, '');
+    throw new ThemeNameError(
+      `${exportName === 'default' ? 'The default export' : `The export ${exportName}`} is a theme with no name${value.name === undefined ? '' : ` (its name is ${value.name === null ? 'null' : `a ${typeof value.name}`}, not text)`}${line ? ` (line ${line})` : ''}, and the build names the theme's files after it. Give defineTheme a name, such as name: '${stem}'.`,
+    );
+  }
   throw new ThemeShapeError(
     `Could not find a defineTheme() result in ${filePath}.`,
   );
@@ -3111,6 +3151,7 @@ function themeLoadReason(error) {
   const message = error.message;
   if (error instanceof ThemeShapeError)
     return `${message}\n${THEME_EXPORT_FIX}`;
+  if (error instanceof ThemeNameError) return message;
   if (
     error instanceof TypeError &&
     /^Cannot read properties of (?:null|undefined)/.test(message) &&
@@ -3139,6 +3180,9 @@ function themeLoadReason(error) {
 
 /** A theme module that loaded but exports no theme object. */
 class ThemeShapeError extends Error {}
+
+/** A theme module whose theme object has no name. */
+class ThemeNameError extends Error {}
 
 /**
  * The command that moves a failed theme load forward: the install for a
@@ -3837,9 +3881,46 @@ export function validateComponentOverridesAgainstRegistry(
  */
 async function validateComponentOverrides(themeDef) {
   const knownComponents = await getKnownComponents();
-  return knownComponents == null
-    ? []
-    : validateComponentOverridesAgainstRegistry(themeDef, knownComponents);
+  if (knownComponents == null) return [];
+  const warnings = validateComponentOverridesAgainstRegistry(
+    themeDef,
+    knownComponents,
+  );
+  // Style keys no element can carry: a pseudo-class or pseudo-element
+  // written as a style key (`':hover'` builds `[data-="hover"]`), and a
+  // value a closed prop never takes (Button's size has no `xxl`, and no
+  // theme can add one). Either builds a selector nothing matches.
+  const layers = [
+    ...getThemeComponentLayers(themeDef).map(l => l.components),
+    ...adaptationRuleValues(themeDef)
+      .map((/** @type {any} */ v) => v?.components)
+      .filter(isRecord),
+  ];
+  for (const components of layers)
+    for (const [component, rules] of Object.entries(components)) {
+      const knownProps = knownComponents.propsByKey[component];
+      if (!knownProps || !isRecord(rules)) continue;
+      for (const key of Object.keys(rules))
+        for (const {prop, value} of componentValuePairs(key)) {
+          if (!prop) {
+            warnings.push(
+              `Style key "${key}" on component "${component}" is no prop or state: a pseudo-class or pseudo-element goes inside a style key, such as base: {'${key}': {…}}. As written it builds a selector nothing matches.`,
+            );
+            continue;
+          }
+          if (!knownProps.includes(prop)) continue;
+          const values = (await getKnownValues(component))[prop] ?? [];
+          if (
+            values.length > 0 &&
+            (await classifyComponentValue(component, prop, value)) ===
+              'unresolved'
+          )
+            warnings.push(
+              `Style key "${key}" on component "${component}": ${prop} takes ${values.join(', ')}, and a theme cannot add a value to it, so "${value}" builds a selector nothing matches.`,
+            );
+        }
+    }
+  return [...new Set(warnings)];
 }
 
 const BUILTIN_HEADING_TYPES = new Set(['display-1', 'display-2', 'display-3']);
@@ -4347,12 +4428,43 @@ async function themeBuildInternal(
   /** @type {import('./icon-imports.mjs').IconImports | null} */
   let componentIconInfo = null;
 
+  // A null part or style key: Core throws on it, so it is refused before
+  // anything is written, at the line that gives it. A null value keeps its
+  // meaning (Core writes it as it is), so it is warned at its line.
+  const shownSource = path.relative(cwd, filePath) || filePath;
+  const nulls = nullThemeValues(themeDef).map(n => ({
+    ...n,
+    line: keyPathLine(themeSource, n.path),
+  }));
+  /** @param {{path: string[], why: string, line: number | null}} n */
+  const nullLine = n =>
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : ''}: ${n.why}`;
+  const unbuildable = nulls.filter(n => n.unbuildable);
+  if (unbuildable.length > 0) {
+    const first = unbuildable.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
-  for (const w of warnings) {
+  for (const w of [
+    ...warnings,
+    ...nulls.filter(n => !n.unbuildable).map(nullLine),
+  ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
   }
@@ -4710,6 +4822,28 @@ async function themeBuildInternal(
   const writeRoot = handOff.writeRoot ?? cwd;
   let outPath;
   if (options.out) {
+    // A leading ~ reaches the build only when the shell did not expand it
+    // (quoted, or from a script or a config): it names a folder called ~
+    // in the project, never the home folder.
+    if (/^~(?:[\\/]|$)/.test(options.out)) {
+      const rest = options.out.replace(/^~[\\/]*/, '');
+      throw new AstryxError(
+        `--out ${options.out} starts with "~", which is not your home folder here: a shell expands ~ only when it is not quoted, so the build would write a folder named ~ in the project. Name the path from the project${rest ? ` (${rest})` : ''}, or give the home folder in full (${path.join(os.homedir(), rest)}). Nothing was written.`,
+        rest
+          ? [
+              {
+                name: buildSuggestion(
+                  path.relative(cwd, filePath),
+                  {iconsSpecifier: options.iconsSpecifier, out: rest},
+                  cwd,
+                ),
+                reason: 'write it in the project',
+              },
+            ]
+          : undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     outPath = path.resolve(cwd, options.out);
     // A folder, or a path that ends in a separator, names where the outputs
     // go: write `<folder>/<name>.css`, never a file named like the folder.
@@ -4718,14 +4852,21 @@ async function themeBuildInternal(
     }
     // The stylesheet is CSS whatever its name; a name that does not end in
     // .css still builds, and the module's import names the file as written.
-    if (path.extname(outPath).toLowerCase() !== '.css') {
-      const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
+    // The name's extension is what follows its last dot, a leading one too:
+    // `.css` is a name with no stem, which writes hidden files.
+    const file = path.basename(outPath);
+    const dot = file.lastIndexOf('.');
+    const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
+    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    if (ext !== '.css' || !stem) {
       const fixed = path
-        .join(path.dirname(options.out), `${stem}.css`)
+        .join(path.dirname(options.out), `${stem || baseName}.css`)
         .split(path.sep)
         .join('/');
       // The result's warnings say it too, as text does.
-      const w = `--out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`;
+      const w = stem
+        ? `--out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`
+        : `--out names a stylesheet with no name before .css, which writes hidden files; give it a name such as ${fixed}.`;
       warningMessages.push(w);
       logger.warn(`Warning: ${w}`);
     }
@@ -4857,6 +4998,18 @@ async function themeBuildInternal(
   ];
   if (variantDtsPath && variantContent) {
     writes.push({dest: variantDtsPath, content: variantContent});
+  }
+
+  // A named pipe, a device or a socket where an output goes is never read
+  // or replaced: an open of one can wait for good. A check refuses it too.
+  for (const write of writes) {
+    const kind = irregularFileKind(write.dest);
+    if (kind && kind !== 'a folder')
+      throw new AstryxError(
+        `${path.relative(cwd, write.dest) || write.dest} is ${kind}, not a file, so the build neither reads nor replaces it: remove it, then build again. Nothing was written.`,
+        undefined,
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
   }
 
   // Every output a build writes stays inside cwd, including the defaults

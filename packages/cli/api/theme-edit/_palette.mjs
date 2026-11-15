@@ -17,6 +17,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {readRegularFile} from '../../foundation/fs/regular-file.mjs';
 import {isAlive} from '../../foundation/release/cache.mjs';
 import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
@@ -63,6 +64,8 @@ import {splitTop} from './_css.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+
+export {readRegularFile};
 
 /**
  * Write a file whole: a temp file beside it, renamed into place, so a link
@@ -1494,44 +1497,6 @@ function syncPaletteFiles(cwd, slug, data, base) {
  */
 export function readWrittenRecord(cwd, slug) {
   return readRecordIn(path.join(cwd, 'themes', slug), slug);
-}
-
-/**
- * Read a file the editor reads or replaces, only when it is a regular
- * file: a named pipe, a device or a folder at its path is never read (a
- * read of one can wait for good, or never end). Opened without waiting,
- * then checked, so nothing blocks; one that is not a regular file throws
- * with code `ENOTREG`, as any unreadable file throws.
- * @overload
- * @param {string} file
- * @returns {Buffer}
- */
-/**
- * @overload
- * @param {string} file
- * @param {BufferEncoding} encoding
- * @returns {string}
- */
-/**
- * @param {string} file
- * @param {BufferEncoding} [encoding]
- * @returns {Buffer | string}
- */
-export function readRegularFile(file, encoding) {
-  const fd = fs.openSync(
-    file,
-    fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0),
-  );
-  try {
-    if (!fs.fstatSync(fd).isFile())
-      throw Object.assign(new Error(`${file} is not a regular file`), {
-        code: 'ENOTREG',
-        path: file,
-      });
-    return encoding ? fs.readFileSync(fd, encoding) : fs.readFileSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
 }
 
 /**

@@ -12,11 +12,12 @@
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {
   SYSTEM_FONTS_BY_PLATFORM,
+  appleFaceGeneric,
   collectUnloadedFonts,
   systemFontFamilies,
 } from '../theme/build/font-warning.mjs';
 
-export {systemFontFamilies};
+export {appleFaceGeneric, systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -245,7 +246,9 @@ export const oneSystemOf = family =>
  * @param {string} family without quotes
  */
 export const isDesktopFamily = family =>
-  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+  isSystemFamily(family) &&
+  !ONE_SYSTEM_FAMILIES.has(familyKey(family)) &&
+  !appleFaceGeneric(family);
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:
@@ -890,6 +893,53 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'volume-locked',
   'where',
   'xr-overlay',
+]);
+
+/**
+ * The pseudo-elements of CSS (the `::name` forms browsers ship), by name: the
+ * names a part's `::name` block is read against. The four CSS 2 ones also
+ * take one colon.
+ */
+export const CSS_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'backdrop',
+  'before',
+  'checkmark',
+  'column',
+  'cue',
+  'cue-region',
+  'details-content',
+  'file-selector-button',
+  'first-letter',
+  'first-line',
+  'grammar-error',
+  'highlight',
+  'marker',
+  'part',
+  'picker',
+  'picker-icon',
+  'placeholder',
+  'scroll-button',
+  'scroll-marker',
+  'scroll-marker-group',
+  'search-text',
+  'selection',
+  'slotted',
+  'spelling-error',
+  'target-text',
+  'view-transition',
+  'view-transition-group',
+  'view-transition-image-pair',
+  'view-transition-new',
+  'view-transition-old',
+]);
+
+/** The pseudo-elements CSS 2 wrote with one colon, which browsers still read. */
+export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'before',
+  'first-letter',
+  'first-line',
 ]);
 
 /** States every part takes, beyond the ones its doc lists. */

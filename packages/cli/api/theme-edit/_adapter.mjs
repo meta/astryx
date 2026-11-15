@@ -54,6 +54,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
 import {baseWeightNotes, context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
+import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {
   fontKey,
   importedFontFamilies,
@@ -1725,6 +1726,9 @@ function outSkipsCopy(root, slug, cwd, {check, out}) {
  * @param {string} file
  */
 function isCopyFile(file) {
+  // A pipe or a device there is never opened: it stands where the copy's
+  // file goes.
+  if (irregularFileKind(file)) return true;
   try {
     const head = fs.readFileSync(file, 'utf8').slice(0, 600);
     return (

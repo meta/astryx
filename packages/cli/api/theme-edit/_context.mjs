@@ -29,6 +29,7 @@ import {
   FONT_ROLES,
   FONTS,
   OPEN_FONTS,
+  appleFaceGeneric,
   isDesktopFamily,
   oneSystemOf,
   P,
@@ -64,6 +65,8 @@ import {
   SHOWCASE_GROUPS,
   copyFontsCss,
   fontPackageSheets,
+  fontPackageWeights,
+  shownWeight,
   baseFontsSheet,
   newPictureRun,
   renderPreview,
@@ -604,7 +607,8 @@ export function familiesNothingLoads(ctx, data, packages) {
       loaded.has(key) ||
       packages.some(x => fontKey(x.family) === key) ||
       isDesktopFamily(family) ||
-      oneSystemOf(family)
+      oneSystemOf(family) ||
+      appleFaceGeneric(family)
     );
   });
 }
@@ -697,7 +701,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each face the theme's weights show: ${fontPackageSheets(
             ctx,
             data.name,
             pkg,
@@ -744,6 +748,17 @@ export function fontNotes(ctx, data) {
     const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
     const system = oneSystemOf(named);
     const on = s.on ? ` --on ${s.on}` : '';
+    const generic = appleFaceGeneric(named);
+    if (generic) {
+      // Apple systems reach their interface faces only by a generic.
+      const {fallbacks} = fontOf(s.value);
+      const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
+      const value = [generic, fallbacks.trim()].filter(Boolean).join(', ');
+      notes.push(
+        `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
+      );
+      continue;
+    }
     if (system) {
       // A system font, on one system: the others show the next font.
       const next =
@@ -794,9 +809,11 @@ export function fontNotes(ctx, data) {
 }
 
 /**
- * A note for each weight the theme uses that the base theme's font
- * stylesheet does not load for its family (it shows as the nearest weight
- * the sheet loads), unless an installed package loads that family.
+ * A note for each weight the theme uses that a stylesheet loading one of
+ * its families has no face for (it shows as the face CSS font matching
+ * picks): the base theme's font stylesheet, unless an installed package
+ * loads that family, and each installed font package with a stylesheet per
+ * weight.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
@@ -804,28 +821,41 @@ export function fontNotes(ctx, data) {
 export function baseWeightNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  const base = baseFontsSheet(ctx, data);
+  const used = builtFontWeights(ctx, data.name) ?? [];
   const built = builtFontFamilies(ctx, data.name);
   const packages = fontPackages(ctx, data);
-  if (base?.weights.size) {
-    const used = builtFontWeights(ctx, data.name) ?? [];
-    for (const [family, loadedWeights] of base.weights) {
-      if (built && !built.has(family.toLowerCase())) continue;
-      if (
-        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
-      )
-        continue;
-      const missing = used.filter(w => !loadedWeights.includes(w));
-      if (!missing.length) continue;
-      const s = fontsourceSuggestion(family);
-      const nearest = (/** @type {number} */ w) =>
-        loadedWeights.reduce((a, b) =>
-          Math.abs(b - w) < Math.abs(a - w) ? b : a,
-        );
+  /**
+   * @param {string} family @param {string} by what loads it
+   * @param {number[]} faces the weights it loads @param {string} fix
+   */
+  const gap = (family, by, faces, fix) => {
+    const missing = used.filter(w => !faces.includes(w));
+    if (missing.length)
       notes.push(
-        `${family} is loaded by ${base.spec} at ${loadedWeights.join(', ')} only, so ${missing.map(w => `${w} shows as ${nearest(w)}`).join(', ')}${s ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it` : ''}`,
+        `${family} is loaded by ${by} at ${faces.join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, faces)}`).join(', ')}${fix}`,
       );
-    }
+  };
+  const base = baseFontsSheet(ctx, data);
+  for (const [family, faces] of base?.weights ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const s = fontsourceSuggestion(family);
+    gap(
+      family,
+      /** @type {{spec: string}} */ (base).spec,
+      faces,
+      s
+        ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it`
+        : '',
+    );
+  }
+  for (const {pkg, family, installed} of packages) {
+    if (!installed || (built && !built.has(family.toLowerCase()))) continue;
+    const faces = fontPackageWeights(ctx, pkg);
+    if (faces) gap(family, pkg, faces, '');
   }
   return notes;
 }

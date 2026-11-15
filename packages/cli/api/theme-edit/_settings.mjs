@@ -11,6 +11,7 @@
  */
 
 import {APP_COPY_MARK, EDITOR_GENERATED_MARK} from './_marks.mjs';
+import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
@@ -41,6 +42,7 @@ import {
 import {
   customPropertyValues,
   declarationValues,
+  elementCustomProperties,
 } from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   AUTO_SPREAD,
@@ -435,6 +437,30 @@ export function unreadableReason(file) {
   return null;
 }
 
+/** The build outputs of a theme, by their ending after `<theme>`. */
+export const APP_COPY_BUILT = [
+  '.css',
+  '.css.d.ts',
+  '.js',
+  '.d.ts',
+  '.variants.d.ts',
+];
+
+/**
+ * The names of a theme's app copy files.
+ * @param {string} slug
+ * @returns {Set<string>}
+ */
+export function appCopyNames(slug) {
+  const name = `${camel(slug)}Theme`;
+  return new Set([
+    `${name}.doc.mjs`,
+    `${name}.ts`,
+    `${slug}.fonts.css`,
+    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+  ]);
+}
+
 /**
  * Refuse, by name, when a file of the theme is a folder or cannot be read:
  * every command reads them, and none should crash on one. The fix is to
@@ -451,7 +477,17 @@ export function refuseUnreadableFiles(cwd, slug) {
     ...builtFiles(cwd, slug, {name: slug, mode: 'both', settings: []}),
     path.join(f.dir, `${slug}.variants.d.ts`),
   ]);
+  // A named pipe or a device at one of the app copy's names: every build
+  // reads the copy's file before it writes it, and a read of one waits for
+  // good.
+  for (const n of appCopyNames(slug)) {
+    const file = path.join(cwd, 'src', 'themes', slug, n);
+    const kind = irregularFileKind(file);
+    if (kind && kind !== 'a folder') refuseIrregular(cwd, file, kind);
+  }
   for (const file of [f.settings, f.ts, f.history]) {
+    const kind = irregularFileKind(file);
+    if (kind && kind !== 'a folder') refuseIrregular(cwd, file, kind);
     const why = unreadableReason(file);
     if (why)
       throw new AstryxError(
@@ -2119,17 +2155,131 @@ function themeSourceFile(cwd, slug) {
     if (callsDefineTheme(ast.program)) return {file, code};
     const from = file;
     const next = ast.program.body
-      .map((/** @type {any} */ st) =>
-        (st.type === 'ExportAllDeclaration' ||
-          st.type === 'ExportNamedDeclaration') &&
-        st.source &&
-        String(st.source.value).startsWith('.')
-          ? localModuleFile(path.dirname(from), String(st.source.value))
-          : null,
-      )
+      .map((/** @type {any} */ st) => reexportTarget(st, path.dirname(from)))
       .find(Boolean);
     if (!next) return {file, code};
     file = next;
+  }
+  return null;
+}
+
+/**
+ * The file beside a module that one of its statements re-exports from
+ * (`export * from './impl'`, `export {x} from './impl'`), or null.
+ * @param {any} st a top-level statement
+ * @param {string} dir the module's folder
+ * @returns {string | null}
+ */
+function reexportTarget(st, dir) {
+  return (st.type === 'ExportAllDeclaration' ||
+    st.type === 'ExportNamedDeclaration') &&
+    st.source &&
+    String(st.source.value).startsWith('.')
+    ? (localModuleFile(dir, String(st.source.value)) ?? null)
+    : null;
+}
+
+/**
+ * The value a module beside a theme exports by a name (`default` for its
+ * default export), read in the file that holds it: an exported
+ * declaration, a name in an `export {...}` list (an import the file
+ * re-exports is followed), a re-export (`export {x} from`, `export * from`).
+ * With that file's code and path, and an unwrap that reads its own
+ * bindings. Null when no file beside it holds the value as written.
+ * @param {string} file
+ * @param {string} name
+ * @param {number} [hops]
+ * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+ */
+function exportedValue(file, name, hops = 0) {
+  if (hops > 4) return null;
+  /** @type {string} */
+  let source;
+  /** @type {any} */
+  let ast;
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    source = file.endsWith('.json') ? `export default ${text}` : text;
+    ast = parseModule(source, {sourceType: 'module', plugins: ['typescript']});
+  } catch {
+    return null;
+  }
+  const dir = path.dirname(file);
+  /** @type {Map<string, any>} */
+  const local = new Map();
+  /** @type {Map<string, {from: string, name: string}>} */
+  const imports = new Map();
+  for (const top of ast.program.body) {
+    if (top.type === 'ImportDeclaration') {
+      const from = String(top.source?.value ?? '');
+      for (const x of top.specifiers)
+        if (x.type !== 'ImportNamespaceSpecifier' && from.startsWith('.'))
+          imports.set(x.local.name, {
+            from,
+            name:
+              x.type === 'ImportDefaultSpecifier'
+                ? 'default'
+                : (x.imported?.name ?? x.imported?.value),
+          });
+    }
+    const d = top.type === 'ExportNamedDeclaration' ? top.declaration : top;
+    for (const v of d?.declarations ?? [])
+      if (v.id?.type === 'Identifier') local.set(v.id.name, v.init);
+  }
+  /** @param {any} n @param {number} [k] @returns {any} */
+  const unwrap = (n, k = 0) => {
+    if (!n || k > 20) return null;
+    if (
+      [
+        'TSAsExpression',
+        'TSSatisfiesExpression',
+        'TSNonNullExpression',
+        'ParenthesizedExpression',
+      ].includes(n.type)
+    )
+      return unwrap(n.expression, k + 1);
+    if (n.type === 'Identifier' && local.has(n.name))
+      return unwrap(local.get(n.name), k + 1);
+    return n;
+  };
+  /** @param {any} node */
+  const found = node => ({obj: unwrap(node), code: source, file, unwrap});
+  /** A name the file binds, as its value: its own, or one it imports. @param {string} binding */
+  const bound = binding => {
+    if (local.has(binding)) return found(local.get(binding));
+    const via = imports.get(binding);
+    if (!via) return null;
+    const next = localModuleFile(dir, via.from);
+    return next ? exportedValue(next, via.name, hops + 1) : null;
+  };
+  /** @type {string[]} */
+  const starred = [];
+  for (const top of ast.program.body) {
+    if (top.type === 'ExportDefaultDeclaration' && name === 'default')
+      return top.declaration?.type === 'Identifier'
+        ? bound(top.declaration.name)
+        : found(top.declaration);
+    if (top.type === 'ExportAllDeclaration') {
+      const next = reexportTarget(top, dir);
+      if (next) starred.push(next);
+      continue;
+    }
+    if (top.type !== 'ExportNamedDeclaration') continue;
+    for (const v of top.declaration?.declarations ?? [])
+      if (v.id?.type === 'Identifier' && v.id.name === name)
+        return found(v.init);
+    for (const x of top.specifiers ?? []) {
+      const exported = x.exported?.name ?? x.exported?.value;
+      if (exported !== name) continue;
+      const orig = x.local?.name ?? x.local?.value;
+      if (!top.source) return bound(orig);
+      const next = reexportTarget(top, dir);
+      return next ? exportedValue(next, orig, hops + 1) : null;
+    }
+  }
+  for (const next of starred) {
+    const value = exportedValue(next, name, hops + 1);
+    if (value) return value;
   }
   return null;
 }
@@ -2291,12 +2441,16 @@ function ownPageTokens(
     from.startsWith('.') ? (localModuleFile(dir, from) ?? null) : null;
   /**
    * The object a name imported from a file beside the theme gives (`import
-   * {mine} from './mine'`, a default import of a .json file), read from
-   * that file, with its own code and path; null for any other name.
+   * {mine} from './mine'`, a default import of a .json file, or, with
+   * `member`, `s.mine` of `import * as s from './mine'`), read from the
+   * file that holds its value (through `export {mine}` lists and
+   * re-exports), with that file's code and path; null for any other name.
+   * `member` is true when the namespace member was read.
    * @param {string} name
-   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+   * @param {string} [member] the property read off the name
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any, member?: boolean} | null}
    */
-  const imported = name => {
+  const imported = (name, member) => {
     for (const st of ast.program.body) {
       if (st.type !== 'ImportDeclaration') continue;
       const spec = st.specifiers.find(
@@ -2306,57 +2460,47 @@ function ownPageTokens(
       if (!spec || !from.startsWith('.')) continue;
       const file = localFile(from);
       if (!file) return null;
-      try {
-        const text = fs.readFileSync(file, 'utf8');
-        const json = file.endsWith('.json');
-        const source = json ? `export default ${text}` : text;
-        const other = /** @type {any} */ (
-          parseModule(source, {sourceType: 'module', plugins: ['typescript']})
-        );
-        /** @type {Map<string, any>} */
-        const local = new Map();
-        /** @type {any} */
-        let found = null;
-        const want =
-          spec.type === 'ImportDefaultSpecifier'
-            ? 'default'
-            : (spec.imported?.name ?? spec.imported?.value);
-        for (const top of other.program.body) {
-          const d =
-            top.type === 'ExportNamedDeclaration' ? top.declaration : top;
-          for (const v of d?.declarations ?? [])
-            if (v.id?.type === 'Identifier') {
-              local.set(v.id.name, v.init);
-              if (top.type === 'ExportNamedDeclaration' && v.id.name === want)
-                found = v.init;
-            }
-          if (top.type === 'ExportDefaultDeclaration' && want === 'default')
-            found = top.declaration;
-        }
-        /** @param {any} n @param {number} [k] @returns {any} */
-        const unwrapIn = (n, k = 0) => {
-          if (!n || k > 20) return null;
-          if (
-            [
-              'TSAsExpression',
-              'TSSatisfiesExpression',
-              'TSNonNullExpression',
-              'ParenthesizedExpression',
-            ].includes(n.type)
-          )
-            return unwrapIn(n.expression, k + 1);
-          if (n.type === 'Identifier' && local.has(n.name))
-            return unwrapIn(local.get(n.name), k + 1);
-          return n;
-        };
-        return found
-          ? {obj: unwrapIn(found), code: source, file, unwrap: unwrapIn}
-          : null;
-      } catch {
-        return null;
+      if (spec.type === 'ImportNamespaceSpecifier') {
+        if (!member) return null;
+        const value = exportedValue(file, member);
+        return value ? {...value, member: true} : null;
       }
+      return exportedValue(
+        file,
+        spec.type === 'ImportDefaultSpecifier'
+          ? 'default'
+          : (spec.imported?.name ?? spec.imported?.value),
+      );
     }
     return null;
+  };
+  /**
+   * Where a value given by a name imported from a file beside the theme is
+   * written (`'--color-accent': brand`, `s.brand`): that file and the line
+   * of its value. Empty for any other value, or one read in another file.
+   * @param {any} node
+   * @param {string | null} file the file the node is in (null for the source)
+   * @returns {{file?: string, line?: number}}
+   */
+  const importedValueAt = (node, file) => {
+    if (file != null) return {};
+    const n = unwrap(node);
+    const from =
+      n?.type === 'Identifier'
+        ? imported(n.name)
+        : n?.type === 'MemberExpression' &&
+            !n.computed &&
+            n.object?.type === 'Identifier'
+          ? imported(n.object.name, n.property?.name)
+          : null;
+    const line = from?.obj?.loc?.start?.line;
+    if (
+      !from ||
+      line == null ||
+      (n.type === 'MemberExpression' && !from.member)
+    )
+      return {};
+    return {file: from.file, line};
   };
   // A theme the exported one extends that a file beside it defines
   // (`import {mid} from './mid'`): its call and each token its literal
@@ -2501,20 +2645,23 @@ function ownPageTokens(
         const member =
           obj?.type === 'MemberExpression' && !obj.computed ? obj : null;
         const name = member ? member.object : obj;
+        let read = member;
         if (name?.type === 'Identifier' && src.file == null) {
-          const from = imported(name.name);
+          const from = imported(name.name, member?.property?.name);
           if (from) {
             src = from;
             obj = from.obj;
+            // A namespace import's member is the value itself.
+            if (from.member) read = null;
           } else if (member) obj = src.unwrap(member.object);
         } else if (member) obj = src.unwrap(member.object);
-        if (member) {
+        if (read) {
+          const readKey = read.property?.name;
           const prop =
             obj?.type === 'ObjectExpression'
               ? obj.properties.find(
                   (/** @type {any} */ p) =>
-                    p.type === 'ObjectProperty' &&
-                    keyOf(p.key) === member.property?.name,
+                    p.type === 'ObjectProperty' && keyOf(p.key) === readKey,
                 )
               : null;
           obj = prop ? src.unwrap(prop.value) : null;
@@ -2559,6 +2706,7 @@ function ownPageTokens(
               scope: at.join('.'),
               line: q.loc?.start?.line ?? null,
               ...inFile,
+              ...importedValueAt(q.value, src.file),
             });
           else {
             // A block's own key (a style key, a pseudo-class, onDark's
@@ -2643,13 +2791,24 @@ function ownPageTokens(
     const obj = at.unwrap(node);
     // A name imported from a file beside the theme: read in that file, so
     // its values and lines are its own; the build still judges the result.
-    if (obj?.type === 'Identifier' && at.file == null) {
-      const from = imported(obj.name);
-      if (from) {
-        unresolved = true;
-        collect(from.obj, depth + 1, from);
-        return;
-      }
+    const namespaced =
+      obj?.type === 'MemberExpression' &&
+      !obj.computed &&
+      obj.object?.type === 'Identifier'
+        ? imported(obj.object.name, obj.property?.name)
+        : null;
+    const from =
+      at.file != null
+        ? null
+        : obj?.type === 'Identifier'
+          ? imported(obj.name)
+          : namespaced?.member
+            ? namespaced
+            : null;
+    if (from) {
+      unresolved = true;
+      collect(from.obj, depth + 1, from);
+      return;
     }
     if (obj?.type !== 'ObjectExpression' || depth > 20) {
       unresolved = true;
@@ -2669,6 +2828,7 @@ function ownPageTokens(
             key: at.code.slice(p.key.start, p.key.end),
             line: p.loc?.start?.line ?? null,
             ...(at.file ? {file: at.file} : {}),
+            ...importedValueAt(p.value, at.file),
             // A key that is no token name (`color`): the build writes it
             // as a declaration on the theme's root.
             ...(k && !k.startsWith('--') ? {notToken: true} : {}),
@@ -8939,6 +9099,8 @@ function refuseUnreadable(cwd, files) {
   for (const file of files) {
     const st = statIfThere(file);
     if (!st) continue;
+    const kind = irregularFileKind(file);
+    if (kind && kind !== 'a folder') refuseIrregular(cwd, file, kind);
     const rel = shown(cwd, file);
     if (st.isDirectory())
       throw new AstryxError(
@@ -8967,6 +9129,28 @@ function refuseUnreadable(cwd, files) {
       );
     }
   }
+}
+
+/**
+ * Refuse a named pipe, a device or a socket where a file of the theme goes:
+ * a read of one can wait for good, so no command opens it.
+ * @param {string} cwd
+ * @param {string} file
+ * @param {string} kind what is there
+ * @returns {never}
+ */
+function refuseIrregular(cwd, file, kind) {
+  const rel = shown(cwd, file);
+  throw new AstryxError(
+    `${rel} is ${kind}, not a file, where the theme keeps a file, so no command reads or replaces it: remove it, then run the command again. Nothing was changed.`,
+    [
+      {
+        name: `ls -la ${quoteCommandArgument(rel)}`,
+        reason: 'see what is there',
+      },
+    ],
+    ERROR_CODES.ERR_FILE_EXISTS,
+  );
 }
 
 /**
@@ -9462,6 +9646,35 @@ export function fontsourceSuggestion(family) {
   return pkg ? {pkg, known: false} : null;
 }
 
+/** @type {WeakMap<object, Set<string>>} */
+const coreElementVarsByProject = new WeakMap();
+
+/**
+ * The custom properties Core's stylesheet sets on a component's own
+ * element (not on the page root), once per project: a value a theme gives
+ * one of them on the page never reaches the part.
+ * @param {Ctx} ctx
+ * @returns {Set<string>}
+ */
+export function coreElementVars(ctx) {
+  const known = coreElementVarsByProject.get(ctx.project);
+  if (known) return known;
+  /** @type {Set<string>} */
+  let vars = new Set();
+  try {
+    vars = elementCustomProperties(
+      fs.readFileSync(
+        ctx.project.req.resolve('@astryxdesign/core/astryx.css'),
+        'utf8',
+      ),
+    );
+  } catch {
+    // No Core stylesheet to read: none known.
+  }
+  coreElementVarsByProject.set(ctx.project, vars);
+  return vars;
+}
+
 /**
  * The font weights the app's text takes with the theme: Core's weight
  * tokens (`--font-weight-*`, which its components' text reads) as the
@@ -9513,8 +9726,8 @@ export function builtFontWeights(ctx, slug) {
   ].flatMap(v => expandFontVars(v, lookup)))
     for (const word of value.split(/[\s,]+/)) {
       const n = KEYWORDS[word.toLowerCase()] ?? Number(word);
-      if (Number.isInteger(n) && n >= 100 && n <= 900 && n % 100 === 0)
-        weights.add(n);
+      // Any weight from 1 to 1000 is one CSS reads (550 too).
+      if (Number.isInteger(n) && n >= 1 && n <= 1000) weights.add(n);
     }
   return [...weights].sort((a, b) => a - b);
 }

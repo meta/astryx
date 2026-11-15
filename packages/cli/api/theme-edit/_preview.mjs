@@ -43,6 +43,8 @@ import {
   modesOf,
   shown,
   themeFiles,
+  APP_COPY_BUILT,
+  appCopyNames,
 } from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -376,20 +378,21 @@ export function baseFontsSheet(ctx, data) {
       /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
     ),
   ].map(m => m[1]);
-  // The weights a font service request names (`Figtree:wght@400;500`, or
-  // `ital,wght@0,400;1,400`): the last number of each tuple.
+  // The weights a font service request names: its axes (`wght`,
+  // `ital,wght`, `opsz,wght`) and one tuple of values per face
+  // (`Figtree:wght@400;500`, `Fraunces:opsz,wght@9..144,400`), the weight
+  // at the wght axis's place in each tuple.
   /** @type {Map<string, number[]>} */
   const weights = new Map();
-  for (const m of text.matchAll(
-    /family=([^:&'")]+):(?:ital,)?wght@([0-9;,.]+)/g,
-  )) {
+  for (const m of text.matchAll(/family=([^:&'")]+):([a-z,]+)@([0-9;,.]+)/gi)) {
     const family = decodeURIComponent(m[1].replace(/\+/g, ' '));
-    const list = m[2]
-      .split(';')
-      .map(t => Number(t.split(',').pop()))
-      .filter(n => Number.isInteger(n));
-    // A range (`wght@100..900`) is a variable face: every weight in it.
-    if (!m[2].includes('..') && list.length)
+    const at = m[2].toLowerCase().split(',').indexOf('wght');
+    if (at < 0) continue;
+    const values = m[3].split(';').map(t => t.split(',')[at] ?? '');
+    // A range (`100..900`) is a variable face: every weight in it.
+    if (values.some(v => v.includes('..'))) continue;
+    const list = values.map(Number).filter(n => Number.isInteger(n));
+    if (list.length)
       weights.set(
         family,
         [...new Set(list)].sort((a, b) => a - b),
@@ -411,20 +414,58 @@ export function baseFontsSheet(ctx, data) {
  */
 export function fontPackageSheets(ctx, slug, pkg) {
   const index = `${pkg}/index.css`;
-  if (pkg.startsWith('@fontsource-variable/')) return [index];
-  /** @param {string} spec */
-  const has = spec => {
+  const faces = fontPackageWeights(ctx, pkg);
+  if (!faces?.length) return [index];
+  // Each weight the theme uses loads the face CSS font matching shows for
+  // it (550 shows the 600 face), once.
+  const shown = new Set(
+    (builtFontWeights(ctx, slug) ?? [400]).map(w => shownWeight(w, faces)),
+  );
+  return faces.filter(w => shown.has(w)).map(w => `${pkg}/${w}.css`);
+}
+
+/**
+ * The weights an installed font package has a stylesheet of its own for
+ * (`@fontsource/lobster/400.css`), as Fontsource ships a static family;
+ * null for a variable package or one with no stylesheet per weight, which
+ * loads every weight it has from its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} pkg
+ * @returns {number[] | null}
+ */
+export function fontPackageWeights(ctx, pkg) {
+  if (pkg.startsWith('@fontsource-variable/')) return null;
+  const faces = [100, 200, 300, 400, 500, 600, 700, 800, 900].filter(w => {
     try {
-      ctx.project.req.resolve(spec);
+      ctx.project.req.resolve(`${pkg}/${w}.css`);
       return true;
     } catch {
       return false;
     }
-  };
-  const weights = (builtFontWeights(ctx, slug) ?? [400])
-    .map(w => `${pkg}/${w}.css`)
-    .filter(has);
-  return weights.length ? weights : [index];
+  });
+  return faces.length ? faces : null;
+}
+
+/**
+ * The face a browser shows for a font weight among the weights a family
+ * loads, by CSS font matching: from 400 to 500, the weights up to 500
+ * first, then lighter, then heavier; below 400, lighter first; above 500,
+ * heavier first.
+ * @param {number} weight
+ * @param {number[]} faces
+ * @returns {number}
+ */
+export function shownWeight(weight, faces) {
+  if (faces.includes(weight)) return weight;
+  const up = faces.filter(w => w > weight).sort((a, b) => a - b);
+  const down = faces.filter(w => w < weight).sort((a, b) => b - a);
+  const order =
+    weight >= 400 && weight <= 500
+      ? [...up.filter(w => w <= 500), ...down, ...up.filter(w => w > 500)]
+      : weight < 400
+        ? [...down, ...up]
+        : [...up, ...down];
+  return order[0] ?? weight;
 }
 
 /**
@@ -1966,21 +2007,6 @@ export function appCopyStale(cwd, slug) {
 }
 
 /**
- * The names of a theme's app copy files.
- * @param {string} slug
- * @returns {Set<string>}
- */
-function appCopyNames(slug) {
-  const name = `${camel(slug)}Theme`;
-  return new Set([
-    `${name}.doc.mjs`,
-    `${name}.ts`,
-    `${slug}.fonts.css`,
-    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
-  ]);
-}
-
-/**
  * Why the editor will not write a theme's app copy, or null when it will.
  * Only a file of yours AT one of the copy's names stops it: a descriptor,
  * source or font stylesheet without the editor's mark, or any copy file
@@ -2089,9 +2115,6 @@ export function appCopyBlocker(cwd, slug) {
     ? `${rel}/${foreign} is yours, at a name the copy uses, and the editor never writes over your files`
     : null;
 }
-
-/** The build outputs of a theme, by their ending after `<theme>`. */
-const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
 
 /**
  * Why the last write of a theme's app copy failed, by app and theme, and

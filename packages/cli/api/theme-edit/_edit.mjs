@@ -34,6 +34,8 @@ import {
   COMMON_STATES,
   CORNERS,
   CSS_PSEUDO_CLASSES,
+  CSS_PSEUDO_ELEMENTS,
+  ONE_COLON_PSEUDO_ELEMENTS,
   DIALS,
   FAMILIES,
   FONT_ROLES,
@@ -61,6 +63,7 @@ import {
   loadTheme,
   maskedSettings,
   modesOf,
+  coreElementVars,
   nearest,
   closestOf,
   partsOf,
@@ -2753,6 +2756,12 @@ async function ownTokenProblems(ctx, slug, data) {
     ),
   );
   /**
+   * The refusal for a key that holds null where the build reads a block.
+   * @param {string} key @param {string} give what to give it instead
+   */
+  const nullBlock = (key, give) =>
+    `${key} holds null, which the build cannot read as a block: give it ${give}, or remove it`;
+  /**
    * Judge one block of what a theme gives: its tokens and local tokens,
    * its parts, its onDark and onLight surfaces, and each adaptation rule's
    * value, which is a block too. A var() reads the custom properties the
@@ -2833,6 +2842,35 @@ async function ownTokenProblems(ctx, slug, data) {
             `"${k}" is not a design token, so the build writes a custom property nothing reads; did you mean ${near}? A custom property of the theme's own goes in localTokens`,
             asWritten(v),
           );
+        // A part's variable that Core sets on the part's own element: the
+        // element's value shadows the one it inherits from the page. A
+        // name one typo from one is that variable misspelled.
+        const shadowed = (ctx.project.vars ?? []).filter(x =>
+          coreElementVars(ctx).has(x.name),
+        );
+        const partVar =
+          shadowed.find(x => x.name === k) ??
+          shadowed.find(
+            x =>
+              x.name ===
+              nearest(
+                k,
+                shadowed.map(y => y.name),
+              )[0],
+          );
+        if (partVar) {
+          const key =
+            [...ctx.project.target.values()].find(
+              t => t.component === partVar.component,
+            )?.key ?? partVar.component.toLowerCase();
+          const typo = partVar.name !== k;
+          return refuse(
+            at,
+            k,
+            `${typo ? `"${k}" is not a design token; did you mean ${partVar.name}? ` : ''}${partVar.name} is a variable ${partVar.component} sets on its own element, so a value in the page's tokens never reaches it: set it on the part, components: {${key}: {base: {'${partVar.name}': ${JSON.stringify(asWritten(v) || '…')}}}}`,
+            asWritten(v),
+          );
+        }
       }
       if (k.startsWith('--_'))
         return refuse(
@@ -2866,6 +2904,8 @@ async function ownTokenProblems(ctx, slug, data) {
         ? (ctx.project.vars ?? []).filter(x => x.component === target.component)
         : [];
       for (const [k, v] of Object.entries(node)) {
+        // A style key's own value is judged with the part's entries.
+        if (depth === 0 && (!v || typeof v !== 'object')) continue;
         if (k.startsWith('--') && component && v !== undefined) {
           const own = partVars.find(x => x.name === k);
           // A variable named for the part, one typo from a variable the
@@ -2909,25 +2949,38 @@ async function ownTokenProblems(ctx, slug, data) {
           token(at, k, v, here, false);
           continue;
         }
-        // A pseudo-class one typo from one browsers know (or a state the
-        // part takes): that one misspelled, a rule that never applies. A
-        // name near none of them is the author's own call.
-        const pseudo = /^:([a-z-]+)/i.exec(k)?.[1]?.toLowerCase();
-        const nearPseudo =
-          pseudo &&
-          !k.startsWith('::') &&
-          !CSS_PSEUDO_CLASSES.has(pseudo) &&
-          !pseudo.startsWith('-')
-            ? (nearest(pseudo, [
-                ...(target?.states ?? []),
-                ...COMMON_STATES,
-              ])[0] ?? nearest(pseudo, [...CSS_PSEUDO_CLASSES])[0])
-            : undefined;
-        if (nearPseudo) {
+        // A pseudo-class or pseudo-element one typo from one browsers know
+        // (or a state the part takes), anywhere in the key's selector
+        // chain, inside :not() and :is() too: that one misspelled, a rule
+        // that never applies. A name near none of them is the author's own
+        // call.
+        const typo = k.startsWith(':')
+          ? pseudoTypo(k, target?.states ?? [])
+          : null;
+        if (typo) {
           refuse(
             at,
             k,
-            `${k} is no pseudo-class a browser knows, so the build writes a selector that never matches; did you mean :${nearPseudo}?`,
+            `${typo.written} is no ${typo.element ? 'pseudo-element' : 'pseudo-class'} a browser knows, so the build writes a selector that never matches; did you mean ${typo.fixed}?`,
+            '',
+            whereKey(at.join('.'), k),
+          );
+          continue;
+        }
+        // Inside a style key, a block under a pseudo-class's bare name is
+        // that pseudo-class without its colon.
+        if (
+          depth > 0 &&
+          v &&
+          typeof v === 'object' &&
+          /^[a-z-]+$/i.test(k) &&
+          (CSS_PSEUDO_CLASSES.has(k.toLowerCase()) ||
+            (target?.states ?? []).includes(k))
+        ) {
+          refuse(
+            at,
+            k,
+            `${k} holds a block, and a pseudo-class starts with a colon: write it as ':${k}'`,
             '',
             whereKey(at.join('.'), k),
           );
@@ -2944,6 +2997,12 @@ async function ownTokenProblems(ctx, slug, data) {
         // An undefined property is not set: the build writes nothing for it.
         if (v === undefined) continue;
         const loc = where(at.join('.'), k);
+        // Null under a key that is no property (a pseudo-class, an
+        // at-rule, a variant) is a block left empty, not a property.
+        if (v === null && !cssProperties().has(prop)) {
+          refuse(at, k, nullBlock(k, 'properties'));
+          continue;
+        }
         if (!cssProperties().has(prop)) {
           const near = nearest(k, camelNames())[0];
           refuse(
@@ -2954,7 +3013,8 @@ async function ownTokenProblems(ctx, slug, data) {
           continue;
         }
         const why = judgeProperty(prop, v, fileName(loc), here, component);
-        if (why) refuse(at, prop, why, typeof v === 'string' ? v : '');
+        // Found by the key as the file writes it (backgroundColor).
+        if (why) refuse(at, prop, why, typeof v === 'string' ? v : '', loc);
       }
     };
     const components = block.components;
@@ -2990,9 +3050,17 @@ async function ownTokenProblems(ctx, slug, data) {
           );
           continue;
         }
-        // A component's entries are style keys, each holding a block.
+        // A component's entries are style keys, each holding a block. A
+        // value there is a property written outside one; null is no block
+        // and no value.
         for (const [key, block] of Object.entries(styles))
-          if (block !== undefined && (!block || typeof block !== 'object'))
+          if (block === null)
+            refuse(
+              [...path, 'components', name],
+              key,
+              nullBlock(key, `properties, such as ${key}: {color: …}`),
+            );
+          else if (block !== undefined && typeof block !== 'object')
             refuse(
               [...path, 'components', name],
               key,
@@ -3324,6 +3392,45 @@ async function refuseOwnTokenValues(ctx, slug, data) {
   if (err) throw err;
 }
 setOwnTokenCheck(refuseOwnTokenValues);
+
+/**
+ * The first pseudo-class or pseudo-element in a selector key (`:hover`,
+ * `::before`, `:hover:focus-visible`, `:not(:hover)`) that browsers do not
+ * know and that is one typo from one they know (or from a state the part
+ * takes): the name as written, and the key with that name corrected. Null
+ * when every name is known, vendor-prefixed, or near none.
+ * @param {string} key
+ * @param {string[]} states the states the part takes
+ * @returns {{written: string, fixed: string, element: boolean} | null}
+ */
+function pseudoTypo(key, states) {
+  // Attribute selectors and quoted text may hold colons of their own.
+  const bare = key.replace(/\[[^\]]*\]|"[^"]*"|'[^']*'/g, m =>
+    ' '.repeat(m.length),
+  );
+  for (const m of bare.matchAll(/(::?)([a-z-]+)/gi)) {
+    const [whole, colons, raw] = m;
+    const name = raw.toLowerCase();
+    if (name.startsWith('-')) continue;
+    const element = colons === '::';
+    const known = element
+      ? CSS_PSEUDO_ELEMENTS.has(name)
+      : CSS_PSEUDO_CLASSES.has(name) || ONE_COLON_PSEUDO_ELEMENTS.has(name);
+    if (known) continue;
+    const near = element
+      ? nearest(name, [...CSS_PSEUDO_ELEMENTS])[0]
+      : (nearest(name, [...states, ...COMMON_STATES])[0] ??
+        nearest(name, [...CSS_PSEUDO_CLASSES])[0]);
+    if (!near || near === name) continue;
+    const at = /** @type {number} */ (m.index);
+    return {
+      written: `${colons}${raw}`,
+      fixed: `${key.slice(0, at)}${colons}${near}${key.slice(at + whole.length)}`,
+      element,
+    };
+  }
+  return null;
+}
 
 /**
  * The refusal for own-source token values `set` refuses, or null.
