@@ -171,7 +171,9 @@ const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
  * imports that are not there yet, each loaded as an empty module.
  * Only a caller that asks (`unbuilt`) has them loaded; for any other, a
  * missing stylesheet fails like any missing import.
- * @type {AsyncLocalStorage<{unbuilt: Set<string> | null}>}
+ * The stylesheets that are there and load empty too, when the caller asks
+ * (`imported`), so the build can say the outputs do not carry them.
+ * @type {AsyncLocalStorage<{unbuilt: Set<string> | null, imported: Set<string> | null}>}
  */
 const themeModuleLoad = new AsyncLocalStorage();
 let themeModuleLoadsInFlight = 0;
@@ -201,6 +203,7 @@ function loadStylesheetAsEmptyModule(url, context, next) {
   if (themeModuleLoad.getStore() && url.endsWith(UNBUILT_QUERY))
     return {format: 'module', source: '', shortCircuit: true};
   if (themeModuleLoad.getStore() && isStylesheetUrl(url)) {
+    themeModuleLoad.getStore()?.imported?.add(fileURLToPath(url.split('?')[0]));
     return {format: 'module', source: '', shortCircuit: true};
   }
   if (themeModuleLoad.getStore() && isAssetUrl(url)) {
@@ -296,13 +299,15 @@ function removeStylesheetHooks() {
  * With `options.unbuilt`, a stylesheet import that names no file yet loads
  * as an empty module too, and its path is added there: the caller tells
  * whether it is a file the build itself writes, and refuses any other.
- * Without it, a missing stylesheet fails like any missing import. Module loads
+ * Without it, a missing stylesheet fails like any missing import. With
+ * `options.imported`, each stylesheet that is there and loads empty is added
+ * there, so the caller can say what its outputs do not carry. Module loads
  * outside this call's async context do not change. The module hook is
  * installed for the first overlapping load and removed after the last. A
  * Node without module hooks (before 22.15) runs the load unchanged.
  * @template T
  * @param {() => Promise<T>} load
- * @param {{unbuilt?: Set<string>}} [options]
+ * @param {{unbuilt?: Set<string>, imported?: Set<string>}} [options]
  * @returns {Promise<T>}
  */
 export async function withEmptyStylesheets(load, options = {}) {
@@ -319,7 +324,7 @@ export async function withEmptyStylesheets(load, options = {}) {
   themeModuleLoadsInFlight++;
   try {
     return await themeModuleLoad.run(
-      {unbuilt: options.unbuilt ?? null},
+      {unbuilt: options.unbuilt ?? null, imported: options.imported ?? null},
       guarded,
     );
   } finally {
@@ -331,7 +336,7 @@ export async function withEmptyStylesheets(load, options = {}) {
  * Set in the async context of a guarded theme module load: whether the load
  * is done, and the handles (timers, watchers, servers, message ports) the
  * module opened while it loaded.
- * @typedef {{done: boolean, handles: Array<{unref: () => void}>, listeners: Array<{event: string | symbol, listener: (...args: any[]) => void}>, fail: (error: unknown) => void}} GuardedLoad
+ * @typedef {{done: boolean, handles: Array<{unref: () => void}>, listeners: Array<{event: string | symbol, listener: (...args: any[]) => void}>, fail: (error: unknown) => void, globals: Map<string | symbol, {set: (value: unknown) => void, value: unknown}>}} GuardedLoad
  * @type {AsyncLocalStorage<GuardedLoad>}
  */
 const guardedLoad = new AsyncLocalStorage();
@@ -363,10 +368,12 @@ function restoreCwd(cwd) {
 
 /**
  * The built-in objects a theme module's code can patch for the whole process
- * (`JSON.stringify = …`, `Object.prototype.x = …`): each is put back as it
- * was when the load ends, so the command's own code runs on the real ones.
+ * (`JSON.stringify = …`, `Object.prototype.x = …`, `console.log = …`, a
+ * global such as `Buffer` replaced): each is put back as it was when the
+ * load ends, so the command's own code runs on the real ones.
  */
 const INTRINSICS = [
+  console,
   Object,
   Object.prototype,
   Array,
@@ -392,12 +399,48 @@ const INTRINSICS = [
   Reflect,
 ];
 
-/** The own properties of each intrinsic, to put back after a load. */
+/**
+ * The process's file mode mask, read without the deprecated no-argument
+ * call; null where it cannot be set (a worker thread).
+ * @returns {number | null}
+ */
+function currentUmask() {
+  try {
+    const mask = process.umask(0o022);
+    process.umask(mask);
+    return mask;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The globals the process had before any module was read (`console`,
+ * `Buffer`, `URL`…): the CLI's own code relies on them.
+ */
+const BUILT_IN_GLOBALS = new Set(Reflect.ownKeys(globalThis));
+
+/**
+ * The own properties of each intrinsic, to put back after a load. Of the
+ * global object, only the built-in globals are put back (`console` or
+ * `Buffer` replaced); a global a library the theme imports adds or keeps up
+ * to date is its own state, and is left.
+ */
 function snapshotIntrinsics() {
-  return INTRINSICS.map(target => ({
-    target,
-    properties: Object.getOwnPropertyDescriptors(target),
-  }));
+  /** @type {Record<string | symbol, PropertyDescriptor>} */
+  const globals = {};
+  for (const key of BUILT_IN_GLOBALS) {
+    const property = Object.getOwnPropertyDescriptor(globalThis, key);
+    if (property) /** @type {any} */ (globals)[key] = property;
+  }
+  return [
+    ...INTRINSICS.map(target => ({
+      target,
+      properties: Object.getOwnPropertyDescriptors(target),
+      keepAdded: false,
+    })),
+    {target: globalThis, properties: globals, keepAdded: true},
+  ];
 }
 
 /**
@@ -406,8 +449,8 @@ function snapshotIntrinsics() {
  * @param {ReturnType<typeof snapshotIntrinsics>} snapshot
  */
 function restoreIntrinsics(snapshot) {
-  for (const {target, properties} of snapshot) {
-    for (const key of Reflect.ownKeys(target)) {
+  for (const {target, properties, keepAdded} of snapshot) {
+    for (const key of keepAdded ? [] : Reflect.ownKeys(target)) {
       if (!Object.prototype.hasOwnProperty.call(properties, key)) {
         try {
           delete (/** @type {any} */ (target)[key]);
@@ -526,6 +569,23 @@ function installThemeModuleGuards() {
     load.fail(error);
     return 'during';
   });
+  // A global Node defines as replaceable (an accessor, such as `Buffer`)
+  // that a theme module assigns while it loads is put back when the load
+  // ends: its value as it was is read only when the module assigns it.
+  for (const key of Reflect.ownKeys(globalThis)) {
+    const property = Object.getOwnPropertyDescriptor(globalThis, key);
+    if (!property?.get || !property.set || !property.configurable) continue;
+    const {get, set} = property;
+    Object.defineProperty(globalThis, key, {
+      ...property,
+      set(value) {
+        const load = guardedLoad.getStore();
+        if (load && !load.done && !load.globals.has(key))
+          load.globals.set(key, {set, value: get.call(globalThis)});
+        set.call(globalThis, value);
+      },
+    });
+  }
   // A listener a theme module adds to `process` (`process.on('exit', …)`)
   // is recorded while it loads and removed when the load ends; one it adds
   // from a callback after its load is not added.
@@ -614,12 +674,20 @@ async function withThemeModuleGuards(load) {
   // Read only through the race below; a failure after it settled is moot.
   failed.catch(() => {});
   /** @type {GuardedLoad} */
-  const store = {done: false, handles: [], listeners: [], fail};
+  const store = {
+    done: false,
+    handles: [],
+    listeners: [],
+    fail,
+    globals: new Map(),
+  };
   const exitCode = process.exitCode;
   // What the module's code may change for the whole process, put back when
-  // the load ends: the working folder and the built-in objects.
+  // the load ends: the working folder, the file mode mask, and the built-in
+  // objects.
   const cwd = process.cwd();
   const intrinsics = snapshotIntrinsics();
+  const umask = currentUmask();
   /** @type {() => void} */
   let drained = () => {};
   const unsettled = new Promise((_resolve, reject) => {
@@ -640,6 +708,12 @@ async function withThemeModuleGuards(load) {
     process.exitCode = exitCode;
     restoreCwd(cwd);
     restoreIntrinsics(intrinsics);
+    // A replaceable global the module assigned (`Buffer = …`): Node keeps the
+    // assigned value behind the same accessor, so it is set back.
+    for (const {set, value} of store.globals.values())
+      set.call(globalThis, value);
+    store.globals.clear();
+    if (umask !== null) process.umask(umask);
     store.done = true;
     // A listener the module added to `process` would run in the CLI's own
     // process after the load, outside every guard: it goes with the load.
