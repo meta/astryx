@@ -285,6 +285,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
  * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
  * @property {string[]} [than] parts the question compares against ("darker than the page"): a color moves past theirs
+ * @property {string} [from] a theme color the way is taken from ("the accent color but lighter"): a color moves that way from it, not from the part's own
  * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
@@ -713,10 +714,24 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           typed.has(String(st.value ?? '').toLowerCase()) &&
           familyOf(st.thing) === fam,
       );
+      // A property Core draws from the very token a step writes (a title's
+      // margin from its heading size) moves with it: that token is asked.
+      const sameToken = steps.some(
+        st =>
+          /^--/.test(String(st.thing)) &&
+          Object.keys(GROUPS).some(g =>
+            (C.partReads(part, g) ?? []).some(
+              (/** @type {{token: string, props: string[]}} */ r) =>
+                r.token === st.thing && r.props.includes(prop),
+            ),
+          ) &&
+          steps.some(x => x.thing === st.thing && familyOf(x.thing) !== fam),
+      );
       if (
         intent.families.length &&
         !intent.families.includes(fam) &&
-        !typedHere
+        !typedHere &&
+        !sameToken
       )
         return `it would also change ${part}'s ${prop}, which is not what the question asks to change`;
       for (const mode of /** @type {const} */ (['light', 'dark'])) {
@@ -796,9 +811,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           )
             continue;
           const x = painted(after, tn[mode], mode);
-          const y = painted(before, tw[mode], mode);
+          const y = intent.from
+            ? painted(
+                resolveIn(`var(${intent.from})`, tw[mode], mode),
+                tw[mode],
+                mode,
+              )
+            : painted(before, tw[mode], mode);
+          // (A way from a theme color is that color's way, in every mode.)
           const want =
             mode === 'dark' &&
+            !intent.from &&
             isForeground(prop, intent.contrast, intent.literal)
               ? !intent.lighter
               : intent.lighter;

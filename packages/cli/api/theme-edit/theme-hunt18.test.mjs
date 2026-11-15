@@ -52,9 +52,13 @@ const names = (/** @type {any} */ err) =>
 const settingsFile = () => path.join(cwd, 'themes/t/t.settings.json');
 
 describe('L1: an invalid name suggests a name new takes', () => {
-  it('turns a built-in name into my-<name>', async () => {
+  it('turns a built-in name into my-<name>, on that base', async () => {
     const err = await refusal(() => themeEditNew('Neutral', {cwd}));
-    expect(names(err)[0]).toMatch(/ new my-neutral$/);
+    expect(
+      names(err).some((/** @type {string} */ n) =>
+        / new my-neutral --like neutral$/.test(n),
+      ),
+    ).toBe(true);
   });
 
   it("skips a folder of the user's files", async () => {
@@ -79,7 +83,7 @@ describe('L2: new on an existing theme', () => {
   it('suggests the base asked for, and a free name', async () => {
     const err = await refusal(() => themeEditNew('t', {cwd, like: 'butter'}));
     // butter is not installed in this app: its install line comes before
-    // the commands that build on it.
+    // the commands that build on it, and the same new on no base works now.
     expect(names(err)).toEqual([
       expect.stringMatching(/ show t$/),
       expect.stringMatching(
@@ -87,6 +91,7 @@ describe('L2: new on an existing theme', () => {
       ),
       expect.stringMatching(/ set t base butter$/),
       expect.stringMatching(/ new t-2 --like butter$/),
+      expect.stringMatching(/ new t-2$/),
     ]);
   });
 });

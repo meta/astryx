@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {themeAdd} from './add.mjs';
 import {themeEject} from '../eject/eject.mjs';
+import {themeListAvailable} from '../list/list.mjs';
 import {
   THEME_MODULE_MARKER,
   parseThemeModuleRecord,
@@ -268,6 +269,23 @@ describe('themeAdd', () => {
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
     }
+  });
+
+  it('adds a bundled theme exactly when theme list calls its package installed', async () => {
+    installBuiltThemePackage('neutral');
+    const listed = (await themeListAvailable({cwd: tmpDir})).data;
+    const installed = (/** @type {string} */ slug) =>
+      listed.find(theme => theme.slug === slug)?.installed;
+    expect(installed('neutral')).toBe(true);
+    expect(installed('butter')).toBe(false);
+    await expect(themeAdd('neutral', {cwd: tmpDir})).resolves.toMatchObject({
+      type: 'theme.app',
+    });
+    await expect(themeAdd('butter', {cwd: tmpDir})).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'Theme package "@astryxdesign/theme-butter" is not installed',
+      ),
+    });
   });
 
   it('keeps the released CLI selector while recording the import package', async () => {

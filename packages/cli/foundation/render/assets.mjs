@@ -88,7 +88,18 @@ export function assetDataUri(file) {
   const mime =
     MIME[path.extname(file).slice(1).toLowerCase()] ??
     'application/octet-stream';
-  return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
+  /** @type {Buffer} */
+  let bytes;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch (e) {
+    throw new RenderAssetError(
+      'ERR_FILE_NOT_FOUND',
+      `The page uses ${file}, which cannot be read (${/** @type {any} */ (e)?.code ?? String(e)})`,
+      {module: file},
+    );
+  }
+  return `data:${mime};base64,${bytes.toString('base64')}`;
 }
 
 /**

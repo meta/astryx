@@ -307,7 +307,10 @@ describe('scope words', () => {
       );
       expect(
         (await answer('make the dialog header title bold')).commands[0],
-      ).toBe('set q font-weight 700 --on dialog-header-title-block');
+        // The title sets its own weight: its tokens, on the title block.
+      ).toMatch(
+        /^set q --text-heading-\d-weight 700 --on dialog-header-title-block$/,
+      );
     },
     T,
   );
