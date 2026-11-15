@@ -51,12 +51,15 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
-    // hint's name summaries (kept-tree.mjs) and the CLI's own docs tree
-    // (the docs adapter) included.
+    // hint's name summaries (kept-tree.mjs), the CLI's own docs tree (the
+    // docs adapter) and theme build's facts from Core's docs included.
     expect(plain).toContain(
       "the lookup commands' not-found hint's name summaries",
     );
     expect(plain).toContain("the CLI's own docs tree");
+    expect(plain).toContain(
+      "what theme build checks a theme against in Core's component docs",
+    );
     // The row names the one other command that can make the folder.
     expect(plain).toContain(
       "A lookup command's not-found path may also create the folder, for its name index.",
