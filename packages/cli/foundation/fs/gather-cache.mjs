@@ -165,8 +165,9 @@ let lastOutcome = null;
  * those it was stored with and that a hit has just found unchanged, or those
  * a fresh gather was stored with. A derived value keys on them, so an edit to
  * the CLI's code in an installed copy, which misses the gather, misses the
- * derived value too. Null before any kept gather in the run.
- * @type {[string, string][] | null}
+ * derived value too. Null before any kept gather in the run. A hit leaves
+ * how to work them out, since only a derived value after it reads them.
+ * @type {[string, string][] | (() => [string, string][]) | null}
  */
 let gatherCode = null;
 
@@ -702,7 +703,11 @@ function mergeStates(...lists) {
   /** @type {Map<string, string>} */
   const merged = new Map();
   for (const list of lists) {
-    for (const [at, state] of list) keepState(merged, at, state);
+    for (const [at, state] of list) {
+      const had = merged.get(at);
+      if (had === undefined) merged.set(at, state);
+      else if (had !== state) keepState(merged, at, state);
+    }
   }
   return [...merged];
 }
@@ -946,7 +951,8 @@ async function gatherAt(key, load, codec, keep) {
         // The CLI's own files, one state per path, in the order a fresh
         // gather reads them: merging only those is merging all, then picking
         // them out.
-        gatherCode = mergeStates(...entry.lists.map(cliStates));
+        const {lists} = entry;
+        gatherCode = () => mergeStates(...lists.map(cliStates));
         lastOutcome = {hit: true, reason: 'unchanged'};
         markUsed(file, confirmed);
         return value;
@@ -1020,6 +1026,7 @@ function codeStamp(code, inputs) {
  */
 export function persistedDerived(key, compute, codec, inputs = []) {
   if (!run || gatherCode == null) return compute();
+  if (typeof gatherCode === 'function') gatherCode = gatherCode();
   const id = withoutRecording(buildId);
   const dir = id == null ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return compute();
