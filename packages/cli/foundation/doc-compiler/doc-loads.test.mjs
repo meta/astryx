@@ -85,7 +85,7 @@ const RUNNERS = {
     sites: [
       '.evalModule() ×2',
       '.import() ×2',
-      'createJiti ×6',
+      'createJiti ×7',
       'import(<computed>) ×2',
       'require(<computed>)',
       'withEmptyStylesheets ×6',
