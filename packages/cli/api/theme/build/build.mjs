@@ -1145,10 +1145,33 @@ export function themeSourceGuesses(file, cwd) {
   }
   if (/[/.]/.test(file)) {
     const given = path.resolve(cwd, file);
-    const folder = path.dirname(given);
+    // A folder typed in other letters (themes/T/ for themes/t/) is the
+    // folder of that name there, when there is exactly one.
+    let folder = path.dirname(given);
+    if (!fs.existsSync(folder)) {
+      const parent = path.dirname(folder);
+      const want = path.basename(folder).toLowerCase();
+      /** @type {string[]} */
+      let names;
+      try {
+        names = fs
+          .readdirSync(parent, {withFileTypes: true})
+          .filter(d => d.isDirectory() && d.name.toLowerCase() === want)
+          .map(d => d.name);
+      } catch {
+        names = [];
+      }
+      if (names.length === 1) folder = path.join(parent, names[0]);
+    }
     const base = path.basename(given);
+    // The name with its ending cut short or left off (`t`, `t.theme.`,
+    // `t.theme`): the theme source whose name it starts.
+    const stem = base.replace(/\.+$/, '').replace(/\.theme$/, '');
     for (const name of themeFilesIn(folder))
-      if (levenshteinDistance(name, base, 1, {swaps: true}) <= 1)
+      if (
+        levenshteinDistance(name, base, 1, {swaps: true}) <= 1 ||
+        name.replace(/(\.theme)?\.[^.]+$/, '') === stem
+      )
         guesses.push(shown(path.join(folder, name)));
   }
   return [...new Set(guesses)].slice(0, 3);
@@ -3036,6 +3059,27 @@ function standaloneInterception(filePath) {
 }
 
 /**
+ * Load a built theme module (`<name>.js`) as the app's bundler loads it:
+ * an import without its ending (a module beside the theme, `./icons`)
+ * resolves to the file it names in any theme source extension, and a
+ * stylesheet a module imports loads as an empty module. Nothing is cached,
+ * so a module built again is read again.
+ * @param {string} file
+ * @returns {Promise<Record<string, any>>}
+ */
+export async function loadBuiltThemeModule(file) {
+  const jiti = createJiti(import.meta.url, {
+    moduleCache: false,
+    ...jitiCacheOptions(),
+    jsx: true,
+    extensions: THEME_MODULE_EXTENSIONS,
+  });
+  return /** @type {Record<string, any>} */ (
+    await withEmptyStylesheets(() => jiti.import(file))
+  );
+}
+
+/**
  * Load a theme module as a standalone build of it loads it (the Core the
  * build selects, the same loader and interception) and name the export the
  * build reads. Callers that must agree with the build on which theme a
@@ -4170,15 +4214,12 @@ async function themeBuildInternal(
   report = {},
   handOff = {},
 ) {
-  // A blank --out names no file: the build would write files named by the
-  // spaces alone.
-  if (
-    typeof options.out === 'string' &&
-    options.out !== '' &&
-    !options.out.trim()
-  )
+  // A blank or empty --out names no file: the build would write files named
+  // by the spaces alone, or (empty) where no --out writes, which is not
+  // what an --out asks for.
+  if (typeof options.out === 'string' && !options.out.trim())
     throw new AstryxError(
-      '--out is blank; name a file or folder, or leave out --out to write beside the source.',
+      `--out is ${options.out === '' ? 'empty' : 'blank'}; name a file or folder, or leave out --out to write beside the source. Nothing was written.`,
       [
         {
           name: buildSuggestion(file, {...options, out: undefined}, cwd),
@@ -4210,7 +4251,16 @@ async function themeBuildInternal(
       editorThemeRecord(dir)
     )
       (editorFolderListener ?? (w => logger.warn(w)))(
-        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
+        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.${
+          // The app imports the theme's app copy, which only the editor's
+          // own build writes (and its --check checks): this one neither
+          // writes it nor ${options.check ? 'checks' : 'updates'} it.
+          fs.existsSync(
+            path.join(path.dirname(dir), '..', 'src', 'themes', slug),
+          )
+            ? ` It ${options.check ? 'does not check' : 'does not write'} the app copy in src/themes/${slug}/, which the app imports; ${formatCliCommand(`experimental theme compile ${shellWord(path.relative(cwd, filePath).split(path.sep).join('/'))}${options.check ? ' --check' : ''}`, cwd)} ${options.check ? 'checks the build and the copy' : 'builds it and writes the copy'}.`
+            : ''
+        }`,
       );
   }
 

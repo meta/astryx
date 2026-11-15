@@ -1246,11 +1246,22 @@ export async function editorCompileProblem(
         );
       }
       // Its source too: a compile of the copy builds neither the theme
-      // nor a current copy.
+      // nor a current copy. The compile offered is the one this check
+      // takes (an --out in the theme's own folder is refused there, and its
+      // refusal's line is offered instead).
+      const ownRefused = await editorCompileProblem([own], {
+        cwd,
+        check,
+        family,
+        iconsSpecifier,
+        out,
+      });
       return new AstryxError(
         `${file} is ${relParts.length === 3 ? '' : 'part of '}${t}'s app copy, which the editor writes from themes/${t}/ after every build; compile the theme itself.`,
         [
-          {name: compileLine(own, cwd), reason: 'do this instead'},
+          ...(ownRefused?.suggestions?.length
+            ? ownRefused.suggestions
+            : [{name: compileLine(own, cwd), reason: 'do this instead'}]),
           {
             name: runLine(cwdRoot, `experimental theme editor show ${t}`),
             reason: 'writes the app copy again from the theme',

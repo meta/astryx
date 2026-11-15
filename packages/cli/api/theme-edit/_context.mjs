@@ -829,7 +829,6 @@ export function fontNotes(ctx, data) {
 export function baseWeightNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  const used = builtFontWeights(ctx, data.name) ?? [];
   const built = builtFontFamilies(ctx, data.name);
   const packages = fontPackages(ctx, data);
   /**
@@ -837,6 +836,9 @@ export function baseWeightNotes(ctx, data) {
    * @param {number[]} faces the weights it loads @param {string} fix
    */
   const gap = (family, by, faces, fix) => {
+    // The weights text in this family uses: those set beside it, and the
+    // ones every text reads (never a weight only another family uses).
+    const used = builtFontWeights(ctx, data.name, family) ?? [];
     const missing = used.filter(w => !faces.includes(w));
     if (missing.length)
       notes.push(

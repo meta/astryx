@@ -42,12 +42,14 @@ import {
 import {
   expandFontVars,
   fontShorthandFamilyList,
+  fontShorthandWeight,
   namedFontFamilies,
 } from '../theme/build/font-warning.mjs';
 import {
   customPropertyValues,
   declarationValues,
   elementCustomProperties,
+  fontRules,
 } from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   AUTO_SPREAD,
@@ -7003,6 +7005,29 @@ export async function themeSourceProblem(cwd, slug) {
         }
       : notImported;
   }
+  // The theme extends the settings, but its own tokens may still replace
+  // theirs (a spread of defineTheme's result with a tokens field of its
+  // own): every token the settings set must reach the theme the build
+  // reads, or a change is saved and never built.
+  /** @type {any} */
+  let settingsTheme;
+  try {
+    settingsTheme = (
+      await loadThemeExport(path.join(f.dir, `${slug}.settings.ts`), {cwd})
+    ).theme;
+  } catch {
+    settingsTheme = null;
+  }
+  const theirs = Object.entries(settingsTheme?.tokens ?? {}).filter(
+    ([, v]) => v != null,
+  );
+  const ours = loaded.theme?.tokens ?? {};
+  const lost = theirs.filter(([k]) => !Object.hasOwn(ours, k)).map(([k]) => k);
+  if (lost.length)
+    return {
+      problem: `${slug}.theme.ts replaces the tokens of ${settings}: ${lost.length} of the ${theirs.length} tokens the settings set (${lost.slice(0, 3).join(', ')}${lost.length > 3 ? ', …' : ''}) do not reach the theme it exports`,
+      fix: `Give your own tokens inside defineTheme({extends: ${settings}, name: '${slug}', tokens: {…}}) in themes/${slug}/${slug}.theme.ts, where they are added to the settings' tokens, instead of replacing the tokens of its result.`,
+    };
   return null;
 }
 
@@ -7683,7 +7708,12 @@ export async function resolvedTokens(ctx, slug) {
   let copy = path.join(f.dir, name);
   // A real relative import (not the usage example in the doc comment).
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  if (!/^\s*(import|export)\b[^;]*\bfrom\s+['"]\.\.?\//m.test(code))
+  // A module that imports one of the theme folder's own modules (an icon
+  // registry beside the theme, `./icons`, written in TypeScript) is loaded
+  // as the app's bundler and the build load it: Node's own loader resolves
+  // no import without its ending, nor reads TypeScript.
+  const local = /^\s*(import|export)\b[^;]*\bfrom\s+['"]\.\.?\//m.test(code);
+  if (!local)
     try {
       fs.mkdirSync(ctx.project.cacheDir, {recursive: true});
       fs.writeFileSync(path.join(ctx.project.cacheDir, name), source);
@@ -7693,17 +7723,37 @@ export async function resolvedTokens(ctx, slug) {
     }
   /** @type {Record<string, any>} */
   let mod;
-  try {
-    if (copy.startsWith(f.dir)) fs.writeFileSync(copy, source);
-    mod = await import(
-      `${pathToFileURL(copy).href}?t=${Date.now()}${Math.random()}`
-    );
-  } catch (e) {
-    if (e instanceof Error) e.message = e.message.split(copy).join(f.js);
-    throw e;
-  } finally {
-    fs.rmSync(copy, {force: true});
-  }
+  if (local)
+    try {
+      mod = await (
+        await import('../theme/build/build.mjs')
+      ).loadBuiltThemeModule(f.js);
+    } catch (e) {
+      // A module of the theme folder that does not load (a syntax error,
+      // a missing file) is the theme's own problem, named.
+      throw new AstryxError(
+        `${slug} could not be read: ${shown(ctx.project.cwd, f.js)} or a module of the theme folder it imports does not load (${e instanceof Error ? e.message.split('\n')[0] : String(e)}).`,
+        [
+          {
+            name: `${P} show ${slug}`,
+            reason: 'builds the theme again from its settings',
+          },
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
+  else
+    try {
+      if (copy.startsWith(f.dir)) fs.writeFileSync(copy, source);
+      mod = await import(
+        `${pathToFileURL(copy).href}?t=${Date.now()}${Math.random()}`
+      );
+    } catch (e) {
+      if (e instanceof Error) e.message = e.message.split(copy).join(f.js);
+      throw e;
+    } finally {
+      fs.rmSync(copy, {force: true});
+    }
   const t = withoutNullTokens(
     Object.values(mod).find(
       v => v && typeof v === 'object' && typeof v.name === 'string',
@@ -10274,14 +10324,18 @@ export function coreElementVars(ctx) {
  * The font weights the app's text takes with the theme: Core's weight
  * tokens (`--font-weight-*`, which its components' text reads) as the
  * theme sets them, every `font-weight` and weight token the theme's build
- * writes, each var() read through the theme's own values and then Core's
- * stylesheet, and the normal weight (400). Null before the theme has been
- * built.
+ * writes (a `font` shorthand's weight too), each var() read through the
+ * theme's own values and then Core's stylesheet, and the normal weight
+ * (400). With `family`, only the weights text in that family takes: the
+ * weight tokens, and each weight set beside that family (or, for a family
+ * of the theme's font tokens, beside no family), never one only another
+ * family's rule sets. Null before the theme has been built.
  * @param {Ctx} ctx
  * @param {string} slug
+ * @param {string | null} [family]
  * @returns {number[] | null}
  */
-export function builtFontWeights(ctx, slug) {
+export function builtFontWeights(ctx, slug, family = null) {
   /** @type {string} */
   let css;
   try {
@@ -10312,18 +10366,55 @@ export function builtFontWeights(ctx, slug) {
     normal: 400,
     bold: 700,
   });
+  /** @param {string[]} values */
+  const add = values => {
+    for (const value of values.flatMap(v => expandFontVars(v, lookup)))
+      for (const word of value.split(/[\s,]+/)) {
+        const n = KEYWORDS[word.toLowerCase()] ?? Number(word);
+        // Any weight from 1 to 1000 is one CSS reads (550 too).
+        if (Number.isInteger(n) && n >= 1 && n <= 1000) weights.add(n);
+      }
+  };
+  // The weight tokens (Core's, and every weight token the theme sets):
+  // text anywhere reads them, whatever its family.
   const coreWeightTokens = [...core.keys()].filter(k =>
     /^--font-weight-/.test(k),
   );
-  for (const value of [
+  add([
     ...coreWeightTokens.flatMap(lookup),
-    ...declarationValues(css, /^(font-weight|--.*-weight(-[a-z0-9]+)?)$/),
-  ].flatMap(v => expandFontVars(v, lookup)))
-    for (const word of value.split(/[\s,]+/)) {
-      const n = KEYWORDS[word.toLowerCase()] ?? Number(word);
-      // Any weight from 1 to 1000 is one CSS reads (550 too).
-      if (Number.isInteger(n) && n >= 1 && n <= 1000) weights.add(n);
-    }
+    ...declarationValues(css, /^--.*-weight(-[a-z0-9]+)?$/),
+  ]);
+  /** The families a rule sets (a font shorthand's too), by lowercase name. @param {{families: string[], fonts: string[]}} rule */
+  const familiesOf = rule =>
+    [...rule.families, ...rule.fonts.map(fontShorthandFamilyList)]
+      .flatMap(v => expandFontVars(v, lookup))
+      .flatMap(namedFontFamilies)
+      .map(x => x.toLowerCase());
+  /** The weights a rule sets: its font-weight, and a font shorthand's. @param {{fonts: string[], weights: string[]}} rule */
+  const weightsOf = rule => [
+    ...rule.weights,
+    ...rule.fonts.map(f => fontShorthandWeight(f) ?? 'normal'),
+  ];
+  // The families of the theme's font tokens: the text of a rule that sets
+  // a weight and no family of its own shows one of them.
+  const tokenFamilies = new Set(
+    declarationValues(css, /^--font-family-/)
+      .flatMap(v => expandFontVars(v, lookup))
+      .flatMap(namedFontFamilies)
+      .map(x => x.toLowerCase()),
+  );
+  const want = family?.toLowerCase() ?? null;
+  for (const rule of fontRules(css)) {
+    const fams = familiesOf(rule);
+    // Each weight goes to the family it is set beside; with none, to the
+    // theme's own families. Asked for no family: every weight.
+    if (
+      want == null ||
+      fams.includes(want) ||
+      (!fams.length && (tokenFamilies.has(want) || !tokenFamilies.size))
+    )
+      add(weightsOf(rule));
+  }
   return [...weights].sort((a, b) => a - b);
 }
 

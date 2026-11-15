@@ -81,14 +81,14 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
-      '.import()',
-      'createJiti ×5',
+      '.import() ×2',
+      'createJiti ×6',
       'import(<computed>) ×2',
       'require(<computed>)',
-      'withEmptyStylesheets ×5',
+      'withEmptyStylesheets ×6',
     ],
   },
   'api/theme/build/core-interception.mjs': {

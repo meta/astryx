@@ -326,6 +326,27 @@ export function fontShorthandFamilyList(value) {
 }
 
 /**
+ * The weight a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`300 16px Inter`, `italic bold 1rem/1.2 Inter`): a number from
+ * 1 to 1000 or a weight keyword; null when it gives none (400 then).
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function fontShorthandWeight(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  // The words before the size: style, variant, weight and stretch.
+  for (const word of head.split(/\s+/)) {
+    if (/^(normal|bold|bolder|lighter)$/i.test(word)) return word.toLowerCase();
+    const n = Number(word);
+    if (/^\d+(\.\d+)?$/.test(word) && n >= 1 && n <= 1000) return word;
+  }
+  return null;
+}
+
+/**
  * A font value with each `var(--x, ...)` it reads replaced by the values
  * `lookup` gives for `--x` (each of them, when several places set it): the
  * family lists the theme's own values make it show. A `var()` the theme

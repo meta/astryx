@@ -1207,7 +1207,8 @@ function registerThemeCommands(theme, program, docs, words) {
           : null;
         out.push(...(refused ? (refused.suggestions ?? []) : [s]));
       }
-      return out;
+      // Two guesses can lead to the same line: it is offered once.
+      return out.filter((s, i) => out.findIndex(x => x.name === s.name) === i);
     };
     /** @param {string} message @param {Parameters<typeof cliError>[1]} [opts] */
     const refuse = async (message, opts = {}) =>

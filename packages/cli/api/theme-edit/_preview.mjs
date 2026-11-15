@@ -1920,6 +1920,79 @@ export function writeAppCopy(ctx, slug, data) {
   return writeAppCopyAt(ctx.project.cwd, slug, copyFontsCss(ctx, slug, data));
 }
 
+/** What a module file of the theme folder may end with, as a bundler reads it. */
+const LOCAL_MODULE_ENDINGS = ['', '.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx'];
+
+/**
+ * The modules of the theme's own folder its built module imports (an icon
+ * registry beside the theme, and what those import in turn), by their path
+ * in the folder: the copy carries each, as the app's bundler resolves it
+ * (an import without its ending, or a folder's index). `problem` names an
+ * import that leaves the folder, does not resolve, or names a file the
+ * editor writes; the copy is not written then.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{files: Array<{rel: string, file: string}>, problem: string | null}}
+ */
+export function themeLocalModules(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string} */
+  let root;
+  try {
+    root = fs.realpathSync(f.dir);
+  } catch {
+    return {files: [], problem: null};
+  }
+  const own = appCopyNames(slug);
+  /** @type {Map<string, string>} */
+  const found = new Map();
+  /** @param {string} from @param {string} spec */
+  const resolveIn = (from, spec) => {
+    const at = path.resolve(path.dirname(from), spec);
+    for (const c of [
+      ...LOCAL_MODULE_ENDINGS.map(e => `${at}${e}`),
+      ...LOCAL_MODULE_ENDINGS.slice(1).map(e => path.join(at, `index${e}`)),
+    ]) {
+      const st = fs.statSync(c, {throwIfNoEntry: false});
+      if (st?.isFile()) return c;
+    }
+    return null;
+  };
+  /** @param {string} from @returns {string | null} */
+  const walk = from => {
+    /** @type {string[]} */
+    let specs;
+    try {
+      specs = themeFileImports(from);
+    } catch {
+      specs = [];
+    }
+    for (const spec of specs.filter(s => s.startsWith('.'))) {
+      const shownFrom = `themes/${slug}/${path.relative(f.dir, from).split(path.sep).join('/')}`;
+      const file = resolveIn(from, spec);
+      if (!file)
+        return `${shownFrom} imports ${spec}, which is not there, so the copy cannot carry it`;
+      const real = fs.realpathSync(file);
+      if (real !== root && !real.startsWith(root + path.sep))
+        return `${shownFrom} imports ${spec}, a file outside themes/${slug}/, which the copy cannot carry (a local theme imports only files of its own folder); move it into themes/${slug}/`;
+      const rel = path.relative(root, real).split(path.sep).join('/');
+      if (own.has(rel) && rel !== `${slug}.js`)
+        return `${shownFrom} imports ${spec}, a file the editor writes, which the copy cannot carry as a module of its own`;
+      if (rel === `${slug}.js` || found.has(rel)) continue;
+      found.set(rel, real);
+      const deeper = walk(real);
+      if (deeper) return deeper;
+    }
+    return null;
+  };
+  if (!fs.existsSync(f.js)) return {files: [], problem: null};
+  const problem = walk(f.js);
+  return {
+    files: [...found].map(([rel, file]) => ({rel, file})),
+    problem,
+  };
+}
+
 /**
  * The files of a theme's app copy as the editor would write them now, by
  * name; null with no build to copy. Font stylesheets as given, or null for
@@ -1966,6 +2039,14 @@ function appCopyFiles(cwd, slug, fontsCss) {
     [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
+    // The theme folder's own modules the build imports, as they are, under
+    // the copy's mark (a file there without it is yours, and is left).
+    ...Object.fromEntries(
+      themeLocalModules(cwd, slug).files.map(({rel, file}) => [
+        rel,
+        `${head('//', '')}${fs.readFileSync(file, 'utf8')}`,
+      ]),
+    ),
     // Always there, so the app theme module's import of it holds when the
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
@@ -2035,6 +2116,8 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       const file = path.join(dir, n);
       if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
         continue;
+      // A module of the theme folder may sit in a folder of its own.
+      fs.mkdirSync(path.dirname(file), {recursive: true});
       writeWhole(file, text);
     }
     // A copy's own file this build no longer writes goes; anything else in
@@ -2113,21 +2196,27 @@ export function appCopyBlocker(cwd, slug) {
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
   const rel = path.relative(cwd, dir).split(path.sep).join('/');
-  // The copy carries the built module whole, and a local theme imports
-  // only files of its own folder: a module that imports a file beside it
-  // (an icon registry of the theme's folder) would break in the app.
-  {
-    const built = themeFiles(cwd, slug).js;
-    /** @type {string[]} */
-    let specifiers;
+  // The copy carries the built module whole, with the modules of the theme
+  // folder it imports (an icon registry beside the theme); one it cannot
+  // carry (outside the folder, or not there) keeps the copy as it was.
+  const locals = themeLocalModules(cwd, slug);
+  if (locals.problem) return locals.problem;
+  // A file of yours at a name the copy carries a module to is left alone.
+  for (const {rel: r} of locals.files) {
+    const at = path.join(dir, r);
+    const st = fs.lstatSync(at, {throwIfNoEntry: false});
+    if (!st) continue;
+    if (!st.isFile())
+      return `${rel}/${r} is ${st.isSymbolicLink() ? 'a link' : 'a folder'}, at a name the copy carries themes/${slug}/${r} to, and the editor writes nothing there`;
+    /** @type {string} */
+    let text;
     try {
-      specifiers = themeFileImports(built);
+      text = fs.readFileSync(at, 'utf8');
     } catch {
-      specifiers = [];
+      text = '';
     }
-    const local = specifiers.find(s => s.startsWith('.'));
-    if (local)
-      return `themes/${slug}/${path.basename(built)} imports ${local}, a file beside the theme, which the copy cannot carry (a local theme imports only files of its own folder); import it from a package instead`;
+    if (!text.includes(APP_COPY_MARK))
+      return `${rel}/${r} is a file the editor did not write, at a name the copy carries themes/${slug}/${r} to; move it, then any set or show writes the copy`;
   }
   // Nothing is written through a link on the way from the app to the copy
   // (src/, src/themes/, the copy's folder), as for themes/.

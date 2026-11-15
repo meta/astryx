@@ -125,6 +125,39 @@ export function declarationValues(css, property) {
 }
 
 /**
+ * Each rule of a stylesheet's text that names a font or a weight: the
+ * values of its `font-family` and `font` declarations, and of its
+ * `font-weight` ones, in source order. What one rule sets goes together
+ * (the weight a part gives the family it sets).
+ * @param {string} css
+ * @returns {Array<{families: string[], fonts: string[], weights: string[]}>}
+ */
+export function fontRules(css) {
+  /** @type {Array<{families: string[], fonts: string[], weights: string[]}>} */
+  const out = [];
+  try {
+    postcss()
+      .parse(css)
+      .walkRules(rule => {
+        /** @type {{families: string[], fonts: string[], weights: string[]}} */
+        const one = {families: [], fonts: [], weights: []};
+        rule.each(node => {
+          if (node.type !== 'decl') return;
+          const prop = node.prop.toLowerCase();
+          if (prop === 'font-family') one.families.push(node.value);
+          else if (prop === 'font') one.fonts.push(node.value);
+          else if (prop === 'font-weight') one.weights.push(node.value);
+        });
+        if (one.families.length || one.fonts.length || one.weights.length)
+          out.push(one);
+      });
+  } catch {
+    // A stylesheet that does not parse names nothing known here.
+  }
+  return out;
+}
+
+/**
  * Every custom property a stylesheet's text sets, with each value it is
  * given (one per rule that sets it), in source order.
  * @param {string} css
