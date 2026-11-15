@@ -72,6 +72,51 @@ const T = 180_000;
 
 describe('lists and excepts', () => {
   it(
+    'every ask said of a list goes with each item, up to an except',
+    async test => {
+      needsBases(test);
+      expect(
+        (await answer('make primary and ghost buttons blue and cards red'))
+          .first,
+      ).toEqual([
+        "set n background-color '#2563eb' --on button --when variant:primary",
+        "set n background-color '#2563eb' --on button --when variant:ghost",
+        "set n background-color '#dc2626' --on card",
+      ]);
+      const kept = await answer(
+        'make primary and ghost buttons blue except disabled ones',
+      );
+      for (const v of ['primary', 'ghost']) {
+        expect(kept.first).toContain(
+          `set n background-color '#2563eb' --on button --when variant:${v}`,
+        );
+        expect(
+          kept.first.some(x =>
+            x.includes(`--when variant:${v} --state disabled`),
+          ),
+        ).toBe(true);
+      }
+      const both = await answer(
+        'give primary and ghost buttons a border and a shadow',
+      );
+      for (const v of ['primary', 'ghost'])
+        for (const prop of ['border', 'box-shadow'])
+          expect(
+            both.first.some(
+              x => x.startsWith(`set n ${prop} `) && x.endsWith(`variant:${v}`),
+            ),
+          ).toBe(true);
+      const their = await answer(
+        'make primary and ghost buttons blue and their text white',
+      );
+      for (const v of ['primary', 'ghost'])
+        expect(their.first).toContain(
+          `set n color '#ffffff' --on button --when variant:${v}`,
+        );
+    },
+    T,
+  );
+  it(
     'a list of variants or states names each one',
     async test => {
       needsBases(test);

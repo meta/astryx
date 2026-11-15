@@ -1920,31 +1920,59 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
 function namedLists(q, partWords, isVariant) {
   /** @param {string} w */
   const partOf = w => partWords.find(([re]) => re.test(` ${w} `))?.[1] ?? null;
-  // "primary and ghost buttons blue and cards red": a list of a part's
-  // variants or states with an ask after its noun, then another ask: the
-  // ask goes with each item, so each is one ask of its own.
-  const tailed = q.replace(
-    /\b((?:the\s+)?[a-z]+(?:\s*,\s*(?:the\s+)?[a-z]+)*\s*,?\s+(?:and|or)\s+(?:the\s+)?[a-z]+)\s+([a-z][a-z-]*)\b([^,;.]*?)(?=\s+(?:and|but|or|then|plus)\s+|[,;.]|$)/gi,
-    (m, list, noun, tail, at, all) => {
-      if (!String(tail).trim()) return m;
-      if (/\bexcept\b[^,;.]*$/i.test(String(all).slice(0, at))) return m;
-      const items = String(list)
-        .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
-        .map(w =>
-          w
-            .trim()
-            .toLowerCase()
-            .replace(/^the\s+/, ''),
-        )
-        .filter(Boolean);
-      const on = partOf(String(noun).toLowerCase())?.on;
-      return on &&
-        items.length > 1 &&
-        items.every(w => stateWord(w) != null || isVariant(w, on))
-        ? items.map(w => `${w} ${noun}${tail}`).join(' and ')
-        : m;
-    },
-  );
+  // "primary and ghost buttons blue and cards red", "… a border and a
+  // shadow", "… blue and their text white": a list of a part's variants or
+  // states with asks after its noun. Every ask said of them, up to an
+  // except or an ask that names a part of its own, goes with each item, so
+  // each item is one set of asks of its own.
+  const LIST =
+    /\b((?:the\s+)?[a-z]+(?:\s*,\s*(?:the\s+)?[a-z]+)*\s*,?\s+(?:and|or)\s+(?:the\s+)?[a-z]+)\s+([a-z][a-z-]*)\b/gi;
+  let tailed = '';
+  let from = 0;
+  for (const m of q.matchAll(LIST)) {
+    const at = /** @type {number} */ (m.index);
+    if (at < from) continue;
+    const [whole, list, noun] = m;
+    const before = q.slice(0, at);
+    const on = partOf(String(noun).toLowerCase())?.on;
+    const items = String(list)
+      .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
+      .map(w =>
+        w
+          .trim()
+          .toLowerCase()
+          .replace(/^the\s+/, ''),
+      )
+      .filter(Boolean);
+    if (
+      !on ||
+      items.length < 2 ||
+      /\bexcept\b[^,;.]*$/i.test(before) ||
+      !items.every(w => stateWord(w) != null || isVariant(w, on))
+    )
+      continue;
+    // The asks said of the list: up to a full stop or semicolon, an
+    // except, or an "and" before an ask about a part of its own (one that
+    // does not refer back with "their", "its" or "them").
+    const rest = q.slice(at + whole.length);
+    const stop = /[;.]|\bexcept\b/i.exec(rest);
+    const span = stop ? rest.slice(0, stop.index) : rest;
+    const pieces = span.split(/(\s*,?\s+(?:and|but|then|plus)\s+|\s*,\s*)/);
+    let tail = pieces[0] ?? '';
+    for (let k = 1; k + 1 < pieces.length; k += 2) {
+      const next = pieces[k + 1];
+      const own =
+        !/^\s*(?:their|its|them|they|the same)\b/i.test(next) &&
+        partWords.some(([re]) => re.test(` ${next.toLowerCase()} `));
+      if (own) break;
+      tail += pieces[k] + next;
+    }
+    if (!tail.trim()) continue;
+    tailed +=
+      q.slice(from, at) + items.map(w => `${w} ${noun}${tail}`).join(' and ');
+    from = at + whole.length + tail.length;
+  }
+  tailed += q.slice(from);
   return tailed
     .replace(
       /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\b/gi,
