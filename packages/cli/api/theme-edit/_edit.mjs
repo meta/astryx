@@ -2866,6 +2866,36 @@ export async function editorStoredRefusal(root, slug) {
   }
 }
 
+/** @type {WeakMap<object, Record<string, Record<string, unknown>>>} */
+const coreSurfaces = new WeakMap();
+/**
+ * The tokens the project's Core sets on a media surface by itself (on dark
+ * surfaces, the main text color reads --color-on-dark): the surface of a
+ * theme that sets none.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} surface `onDark` or `onLight`
+ * @returns {Record<string, unknown>}
+ */
+function coreSurfaceTokens(ctx, surface) {
+  const core = ctx.project.core;
+  let surfaces = coreSurfaces.get(core);
+  if (!surfaces) {
+    /** @type {any} */
+    let bare = null;
+    try {
+      bare = core.defineTheme({name: 'astryx-defaults'});
+    } catch {
+      // A Core that cannot define a bare theme sets nothing known here.
+    }
+    surfaces = {
+      onDark: bare?.__onDark?.tokens ?? {},
+      onLight: bare?.__onLight?.tokens ?? {},
+    };
+    coreSurfaces.set(core, surfaces);
+  }
+  return surfaces[surface] ?? {};
+}
+
 /**
  * The token values the theme's own source gives that `set` refuses (a
  * radius of `banana`, a color of `12px`), each with why and the line of
@@ -3362,10 +3392,14 @@ async function ownTokenProblems(ctx, slug, data) {
       if (v === undefined) return;
       if (!at.length && !prefix && named.has(k)) return;
       // A surface's tokens resolve on the surface, where only what it sets
-      // can loop back.
+      // can loop back: the tokens Core sets there itself, under the theme's.
       const element =
         surface && !at.includes('components')
-          ? {...(block.localTokens ?? {}), ...(block.tokens ?? {})}
+          ? {
+              ...coreSurfaceTokens(ctx, String(path.at(-1))),
+              ...(block.localTokens ?? {}),
+              ...(block.tokens ?? {}),
+            }
           : undefined;
       const why = judge(k, v, fileName(loc), here, element);
       if (why) refuse(at, k, why, asWritten(v));

@@ -110,6 +110,11 @@ import {
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {
+  INPUT_DECLARATION_FILES,
+  inputFieldsFrom,
+  sourceFieldProblems,
+} from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
 import {writtenValueProblems} from './written-values.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
@@ -162,6 +167,7 @@ import {generatedMark} from '../../theme-edit/_marks.mjs';
  */
 let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
+/** @type {string | null} */ let _coreThemeFile = null;
 
 /**
  * The bindings one Core provides: the namespaces interception spreads, the
@@ -174,6 +180,7 @@ let _coreRootModule = null;
  *   generateThemeRulesSplit: any,
  *   generateOnMediaCSS: any,
  *   generateAdaptationCSS: any,
+ *   themeFile?: string | null,
  * }} CoreBindings
  */
 
@@ -242,6 +249,7 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
+    core.themeFile = cliCoreThemeFile();
     core.rootModule = lazyRootModule(() =>
       fileURLToPath(import.meta.resolve('@astryxdesign/core')),
     );
@@ -288,6 +296,61 @@ function setCore(core) {
   _generateThemeRulesSplit = core.generateThemeRulesSplit;
   _generateOnMediaCSS = core.generateOnMediaCSS;
   _generateAdaptationCSS = core.generateAdaptationCSS;
+  _coreThemeFile = core.themeFile ?? null;
+}
+
+/**
+ * The tokens the chosen Core sets on each media surface by itself: the
+ * surfaces of a theme that sets none.
+ * @returns {{onDark?: Record<string, unknown>, onLight?: Record<string, unknown>}}
+ */
+function coreSurfaceTokens() {
+  try {
+    const bare = _defineTheme?.({name: 'astryx-defaults'});
+    return {onDark: bare?.__onDark?.tokens, onLight: bare?.__onLight?.tokens};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * A JSON replacer that writes a BigInt as its digits, the text Core writes
+ * into the stylesheet for it: JSON itself has no BigInt.
+ * @param {string} _key
+ * @param {unknown} value
+ */
+const bigIntAsText = (_key, value) =>
+  typeof value === 'bigint' ? String(value) : value;
+
+/** @type {Map<string, import('./input-fields.mjs').InputFields | null>} */
+const _inputFields = new Map();
+/**
+ * The fields the chosen Core's theme input takes, from its type
+ * declarations; null when they cannot be read.
+ * @returns {import('./input-fields.mjs').InputFields | null}
+ */
+function coreInputFields() {
+  if (!_coreThemeFile) return null;
+  if (!_inputFields.has(_coreThemeFile))
+    _inputFields.set(
+      _coreThemeFile,
+      inputFieldsFrom(
+        INPUT_DECLARATION_FILES.map(file => {
+          try {
+            return fs.readFileSync(
+              path.join(
+                path.dirname(/** @type {string} */ (_coreThemeFile)),
+                file,
+              ),
+              'utf8',
+            );
+          } catch {
+            return null;
+          }
+        }),
+      ),
+    );
+  return _inputFields.get(_coreThemeFile) ?? null;
 }
 
 /**
@@ -424,6 +487,7 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
     generateOnMediaCSS: themeModule.generateOnMediaCSS,
     generateAdaptationCSS: themeModule.generateAdaptationCSS,
+    themeFile,
   };
 }
 
@@ -3949,7 +4013,7 @@ function generateBuiltModule(
     }
   }
 
-  const tokensStr = JSON.stringify(resolvedTokens, null, 2)
+  const tokensStr = JSON.stringify(resolvedTokens, bigIntAsText, 2)
     .split('\n')
     .map((line, i) => (i === 0 ? line : '  ' + line))
     .join('\n');
@@ -3965,7 +4029,7 @@ function generateBuiltModule(
   const serializeField = (field, value, includeEmpty = false) => {
     if (value == null || (!includeEmpty && Object.keys(value).length === 0))
       return '';
-    const body = JSON.stringify(value, null, 2)
+    const body = JSON.stringify(value, bigIntAsText, 2)
       .split('\n')
       .map((line, i) => (i === 0 ? line : '  ' + line))
       .join('\n');
@@ -4918,8 +4982,20 @@ async function themeBuildInternal(
   const badValues = writtenValueProblems(themeDef, {
     reads: tokenDefaults ? name => setNames.has(name) : undefined,
     rootTokens: tokenDefaults,
+    surfaceDefaults: coreSurfaceTokens(),
   });
   const badValueLines = placed(badValues);
+  // defineTheme() drops a field it does not take, so only the source shows
+  // a misspelled one.
+  const fields = coreInputFields();
+  const badFields = fields
+    ? sourceFieldProblems(themeSource, fields).map(f => ({
+        ...f,
+        inherited: false,
+        elsewhere: false,
+        from: null,
+      }))
+    : [];
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -4946,6 +5022,7 @@ async function themeBuildInternal(
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
     ...badKeys.map(nullLine),
     ...badValueLines.map(nullLine),
+    ...badFields.map(nullLine),
   ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
@@ -5200,16 +5277,23 @@ async function themeBuildInternal(
     // #3658: also emit attribute-specific rules so <Theme mode> can override
     // color-scheme. Inspect root and rule-owned values, not generated CSS, which
     // also carries theme-independent data-token defaults with light-dark().
-    const themeOwnValues = JSON.stringify([
-      resolvedTheme.tokens ?? {},
-      resolvedTheme.localTokens ?? {},
-      resolvedTheme.components ?? {},
-      ...(resolvedTheme.__adaptationRules ?? []).flatMap(
-        (
-          /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
-        ) => [rule.tokens ?? {}, rule.localTokens ?? {}, rule.components ?? {}],
-      ),
-    ]);
+    const themeOwnValues = JSON.stringify(
+      [
+        resolvedTheme.tokens ?? {},
+        resolvedTheme.localTokens ?? {},
+        resolvedTheme.components ?? {},
+        ...(resolvedTheme.__adaptationRules ?? []).flatMap(
+          (
+            /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
+          ) => [
+            rule.tokens ?? {},
+            rule.localTokens ?? {},
+            rule.components ?? {},
+          ],
+        ),
+      ],
+      bigIntAsText,
+    );
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')

@@ -23,6 +23,24 @@ const isBlock = value =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
+ * A block of keys, as a theme writes one: a plain object. An instance of a
+ * class (a Date) is a value, which the build writes as its text.
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
+const isPlainBlock = value =>
+  isBlock(value) && Object.prototype.toString.call(value) === '[object Object]';
+
+/** What the build writes for a value, as Core writes it (as text). @param {unknown} value */
+const writtenAs = value => {
+  try {
+    return String(value);
+  } catch {
+    return null;
+  }
+};
+
+/**
  * @typedef {{path: string[], why: string}} WrittenValueProblem
  */
 
@@ -36,8 +54,14 @@ function nonText(key, value) {
     return `${key} holds ${value}, which the build writes as it is (${key}: ${value}), a value no browser reads: give it a CSS value in quotes`;
   if (typeof value === 'number' && !Number.isFinite(value))
     return `${key} holds ${value}, a number no CSS value holds (a computed value gone wrong, such as a division by zero), which the build writes as it is: give it a CSS value in quotes`;
+  if (typeof value === 'bigint')
+    return `${key} holds ${value}n, a BigInt, which the build writes as ${value}: give it a CSS value in quotes`;
+  if (typeof value === 'function')
+    return `${key} holds a function, which the build writes as its source text (${writtenAs(value)?.replace(/\s+/g, ' ').slice(0, 60)}), a value no browser reads: call it, or give it a CSS value in quotes`;
+  if (typeof value === 'symbol')
+    return `${key} holds a symbol, which the build cannot write as text: give it a CSS value in quotes`;
   if (isBlock(value))
-    return `${key} holds an object, which the build writes as [object Object], a value no browser reads: give it a CSS value in quotes${'light' in value || 'dark' in value ? ", or a [light, dark] pair such as ['#fff', '#000']" : ''}`;
+    return `${key} holds an object, which the build writes as ${writtenAs(value) ?? 'no text'}, a value no browser reads: give it a CSS value in quotes${isPlainBlock(value) && ('light' in value || 'dark' in value) ? ", or a [light, dark] pair such as ['#fff', '#000']" : ''}`;
   return null;
 }
 
@@ -152,21 +176,26 @@ export function cycleProblem(name, values) {
  * its tokens and local tokens, and in its parts' properties, on the page,
  * its surfaces (onDark, onLight) and the adaptation rules' values.
  * @param {Record<string, any>} theme
- * @param {{reads?: (name: string) => boolean, rootTokens?: Record<string, unknown>}} [options]
+ * @param {{reads?: (name: string) => boolean, rootTokens?: Record<string, unknown>, surfaceDefaults?: {onDark?: Record<string, unknown>, onLight?: Record<string, unknown>}}} [options]
  *   `reads`: whether a var() of a name reads a value (left out, var()
  *   targets are not judged); `rootTokens`: the token definitions Core's
  *   stylesheet sets on the theme's root too, which a loop of the page's
- *   tokens can run through
+ *   tokens can run through; `surfaceDefaults`: the tokens Core itself sets
+ *   on each media surface, which a resolved surface carries: a loop runs
+ *   through them, but they are Core's, not the theme's, so none is named
  * @returns {WrittenValueProblem[]}
  */
-export function writtenValueProblems(theme, {reads, rootTokens} = {}) {
+export function writtenValueProblems(
+  theme,
+  {reads, rootTokens, surfaceDefaults} = {},
+) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
   /** @param {any} node @param {string[]} at @param {number} depth */
   const part = (node, at, depth) => {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
-      if (isBlock(v)) {
+      if (isPlainBlock(v)) {
         part(v, [...at, k], depth + 1);
         continue;
       }
@@ -182,8 +211,11 @@ export function writtenValueProblems(theme, {reads, rootTokens} = {}) {
     Object.fromEntries(
       Object.entries(node).filter(([k]) => k.startsWith('--')),
     );
-  /** @param {any} surface @param {string[]} at */
-  const visit = (surface, at) => {
+  /**
+   * @param {any} surface @param {string[]} at
+   * @param {Record<string, unknown>} [defaults] the tokens Core sets there
+   */
+  const visit = (surface, at, defaults = {}) => {
     if (!isBlock(surface) || '__built' in surface) return;
     // A defined theme's tokens are resolved (a pair is already its
     // light-dark() text); the ones its author wrote are `__inputTokens`.
@@ -208,6 +240,12 @@ export function writtenValueProblems(theme, {reads, rootTokens} = {}) {
       const values = valuesOf(map);
       if (isBlock(values))
         for (const [k, v] of Object.entries(values)) {
+          if (
+            map === 'tokens' &&
+            Object.hasOwn(defaults, k) &&
+            defaults[k] === v
+          )
+            continue;
           const why =
             tokenNameProblem(k, v) ??
             tokenValueProblem(k, v, reads) ??
@@ -222,8 +260,12 @@ export function writtenValueProblems(theme, {reads, rootTokens} = {}) {
             part(rules, [...at, 'components', name, key], 0);
   };
   visit(theme, []);
-  visit(theme.onDark ?? theme.__onDark, ['onDark']);
-  visit(theme.onLight ?? theme.__onLight, ['onLight']);
+  visit(theme.onDark ?? theme.__onDark, ['onDark'], surfaceDefaults?.onDark);
+  visit(
+    theme.onLight ?? theme.__onLight,
+    ['onLight'],
+    surfaceDefaults?.onLight,
+  );
   const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
   if (Array.isArray(rules))
     rules.forEach((rule, i) =>
