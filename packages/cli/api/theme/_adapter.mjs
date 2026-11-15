@@ -15,7 +15,6 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
-  findInstalledPackage,
   findPackageRoot,
   projectWritePath,
   requireCoreDir,
@@ -34,6 +33,7 @@ import {
 import {
   ThemeImportError,
   resolveThemeImports,
+  themePackageDir,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   findThemeProject,
@@ -77,18 +77,15 @@ export function themeRecordOwner(theme) {
 }
 
 /**
- * Whether the app can import a theme now, by the rule `theme add` applies: a
- * local theme or an installed integration's theme is in the project, and a
- * bundled theme's own package (the one the generated module imports, such
- * as `@astryxdesign/theme-neutral`) must be installed.
+ * Whether the app can import a theme now, by the rule `theme add` applies
+ * (`themePackageDir`): a local theme is in the project, and a package
+ * theme's package (a bundled theme's own, such as
+ * `@astryxdesign/theme-neutral`) is installed.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} projectDir
  */
 export function themeOwnerInstalled(theme, projectDir) {
-  return (
-    /** @type {any} */ ((theme).packageDir ??
-      findInstalledPackage(projectDir, themeImportPackage(theme))) != null
-  );
+  return theme.source === 'local' || themePackageDir(theme, projectDir) != null;
 }
 
 /**
