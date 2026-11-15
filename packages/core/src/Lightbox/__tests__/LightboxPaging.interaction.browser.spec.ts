@@ -2221,13 +2221,21 @@ for (const {name, story, expectedReads} of SHRINK_CASES) {
 // element. A flex row and a clipped block have a sweep of their own below.
 // Last, room under the last line of text: bottom padding, a bottom rule, two
 // line breaks, an empty inline-block.
+// WebKit sweeps five of these shapes: plain text in each direction, a drop
+// cap's first letter, generated words and bottom padding. A sweep of every
+// shape takes WebKit longer than its CI leg allows, so the other shapes run in
+// Chromium only.
 const CAPTION_FIT_CASES: {
   name: string;
   story: string;
   isInFrame?: boolean;
   isRtl?: boolean;
+  isInWebKit?: boolean;
 }[] = [
-  ...CAPTION_STORIES,
+  ...CAPTION_STORIES.map(caption => ({
+    ...caption,
+    isInWebKit: caption.name === 'a plain caption',
+  })),
   {
     name: 'a plain caption in a second document',
     story: 'core-lightbox--gallery-with-captions-in-frame-fixture',
@@ -2264,6 +2272,7 @@ const CAPTION_FIT_CASES: {
   {
     name: 'a paragraph caption with generated words after its text',
     story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a caption ending in an inline-block element',
@@ -2281,6 +2290,7 @@ const CAPTION_FIT_CASES: {
     name: 'a plain caption, right to left',
     story: 'core-lightbox--gallery-with-captions',
     isRtl: true,
+    isInWebKit: true,
   },
   {
     name: 'a paragraph caption with start padding, right to left',
@@ -2314,6 +2324,7 @@ const CAPTION_FIT_CASES: {
   {
     name: 'a caption whose last paragraph starts with a drop cap',
     story: 'core-lightbox--gallery-with-drop-cap-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a paragraph caption with its last line justified',
@@ -2327,6 +2338,7 @@ const CAPTION_FIT_CASES: {
     name: 'a paragraph caption with bottom padding',
     story:
       'core-lightbox--gallery-with-bottom-padded-paragraph-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a paragraph caption with bottom padding and a bottom rule',
@@ -2348,10 +2360,16 @@ for (const {
   story,
   isInFrame = false,
   isRtl = false,
+  isInWebKit = false,
 } of CAPTION_FIT_CASES) {
   test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
     page,
+    browserName,
   }) => {
+    test.skip(
+      browserName === 'webkit' && !isInWebKit,
+      'WebKit sweeps the five shapes CAPTION_FIT_CASES marks; Chromium sweeps this one',
+    );
     await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
       const id =
         /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
@@ -2383,6 +2401,12 @@ for (const {
     await frames(page, 4);
     expect(await dialog.evaluate(el => getComputedStyle(el).direction)).toBe(
       isRtl ? 'rtl' : 'ltr',
+    );
+    // The backdrop's blur makes each frame that resizes the page cost WebKit
+    // about four times as much. The sweep reads layout only, so it turns the
+    // blur off, as a drag to dismiss does.
+    await dialog.evaluate(element =>
+      element.style.setProperty('--_lightbox-backdrop-filter', 'none'),
     );
     const read = async () =>
       dialog.evaluate(element => {
@@ -2748,6 +2772,11 @@ for (const {name, story} of FIT_CASES) {
     await dialog.getByRole('button', {name: 'more'}).click();
     await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
     await frames(page, 4);
+    // As in the sweep above: the sweep reads layout only, so it turns the
+    // backdrop's blur off, which WebKit repaints in every resized frame.
+    await dialog.evaluate(element =>
+      element.style.setProperty('--_lightbox-backdrop-filter', 'none'),
+    );
     const read = async () =>
       dialog.evaluate(element => {
         const caption = element.querySelector(
