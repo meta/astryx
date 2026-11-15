@@ -634,6 +634,37 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
 }
 
 /**
+ * The pick model's probability for a page template among the ready, non-shell
+ * templates: a softmax over the pick model's scores. It says how clearly the
+ * pick model prefers that template over the others, not whether the template
+ * is right. Null without weights or for a template the pick model does not
+ * score.
+ * @param {string} name
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @returns {number | null}
+ */
+export function pickFit(name, idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores} = blend(
+    readNames(idea, catalog),
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  const pages = cands.flatMap((c, i) => (c === SHELL ? [] : [scores[i]]));
+  const at = cands.filter(c => c !== SHELL).indexOf(name);
+  if (at < 0) return null;
+  const top = Math.max(...pages);
+  const sum = pages.reduce((t, s) => t + Math.exp(s - top), 0);
+  return round4(Math.exp(pages[at] - top) / sum);
+}
+
+/**
  * Every ready, non-shell template in the blend's own order, best first: the
  * order the page start is chosen from, so the alternatives build names beside
  * the start come from the same ranking. Null without weights.
