@@ -25,6 +25,7 @@ import {
   densityWords,
   HEADING_WEIGHTS,
   P,
+  CORNERS,
   FAMILIES,
   FONTS,
   HOW,
@@ -43,6 +44,7 @@ import {
 } from './_palette.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
+  radioCircle,
   cornerParts,
   focusStateOf,
   paddedParts,
@@ -5637,8 +5639,25 @@ export function draftAnswer(ctx, env, question) {
   const groupCornerEnds = d => {
     /** @type {string[]} */
     const skipped = [];
+    /** @type {string[]} */
+    const circles = [];
     const options = d.options.map(o =>
       o.flatMap(st => {
+        // A radio's circle is no corner: a corner size asked of radios alone
+        // sets their own border-radius, which overrides the circle.
+        if (
+          st.verb === 'set' &&
+          st.thing === 'corners' &&
+          st.on &&
+          (FAMILIES[st.on] ?? [st.on]).every(m => radioCircle(C, m))
+        ) {
+          const px = CORNERS.find(([n]) => n === st.value)?.[1];
+          if (px == null || px >= 9999) return [st];
+          circles.push(st.on);
+          return [
+            {...st, thing: 'border-radius', value: px === 0 ? '0' : `${px}px`},
+          ];
+        }
         const members = st.on ? FAMILIES[st.on] : undefined;
         if (
           !members ||
@@ -5648,6 +5667,8 @@ export function draftAnswer(ctx, env, question) {
         )
           return [st];
         const atEnd = (/** @type {string} */ m) => {
+          // A radio's circle is no corner: it is left either way.
+          if (radioCircle(C, m)) return true;
           const tok = C.partReads(m, 'corners')?.[0]?.token;
           const v = /^(\d*\.?\d+)(px|rem)$/.exec(
             String(tok ? resolvedValue(tok) || '' : ''),
@@ -5667,9 +5688,20 @@ export function draftAnswer(ctx, env, question) {
       ? {
           ...d,
           options,
-          text: `${d.text} (${[...new Set(skipped)].join(', ')} is ${d.options.flat().some(st => st.value === 'more') ? 'fully round already' : 'square already'}, so it is left as it is)`,
+          text: `${d.text} (${[...new Set(skipped)]
+            .map(
+              m =>
+                `${m} ${radioCircle(C, m) ? "is a radio's circle" : d.options.flat().some(st => st.value === 'more') ? 'is fully round already' : 'is square already'}`,
+            )
+            .join(', ')}, so it is left as it is)`,
         }
-      : d;
+      : circles.length
+        ? {
+            ...d,
+            options,
+            text: `${d.text}: ${circles.join(', ')} is a radio's circle, not a corner, so its own border-radius sets its shape`,
+          }
+        : d;
   };
   /** @param {Draft} input */
   const push = input => {
