@@ -965,6 +965,28 @@ export const RowActionsRtl: Story = {
   },
 };
 
+/** A Notes field and a MultiSelector inside a container that takes focus. */
+function MultiSelectorInContainer({tabIndex}: {tabIndex: number}) {
+  const [value, setValue] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  return (
+    <div
+      tabIndex={tabIndex}
+      data-testid="focusable-container"
+      style={{padding: 32}}>
+      <VStack gap={4}>
+        <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <MultiSelector
+          label="Fruits"
+          options={['Apple', 'Banana', 'Cherry']}
+          value={value}
+          onChange={setValue}
+        />
+      </VStack>
+    </div>
+  );
+}
+
 /**
  * A MultiSelector inside a container that takes focus but is no control,
  * such as a dialog's content box with `tabIndex={-1}`, below another field.
@@ -973,24 +995,14 @@ export const RowActionsRtl: Story = {
  */
 export const InsideFocusableContainer: Story = {
   tags: ['!autodocs'],
-  render: () => {
-    const [value, setValue] = useState<string[]>([]);
-    const [notes, setNotes] = useState('');
-    return (
-      <div
-        tabIndex={-1}
-        data-testid="focusable-container"
-        style={{padding: 32}}>
-        <VStack gap={4}>
-          <TextInput label="Notes" value={notes} onChange={setNotes} />
-          <MultiSelector
-            label="Fruits"
-            options={['Apple', 'Banana', 'Cherry']}
-            value={value}
-            onChange={setValue}
-          />
-        </VStack>
-      </div>
-    );
-  },
+  render: () => <MultiSelectorInContainer tabIndex={-1} />,
+};
+
+/**
+ * A MultiSelector inside a container that is a Tab stop, such as a card with
+ * `tabIndex={0}`. A press on the container's padding focuses the container.
+ */
+export const InsideTabStopContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <MultiSelectorInContainer tabIndex={0} />,
 };

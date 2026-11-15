@@ -1726,6 +1726,29 @@ export const SearchableRequired: Story = {
   },
 };
 
+/** A Notes field and a Selector inside a container that takes focus. */
+function SelectorInContainer({tabIndex}: {tabIndex: number}) {
+  const [value, setValue] = useState<string | undefined>(undefined);
+  const [notes, setNotes] = useState('');
+  return (
+    <div
+      tabIndex={tabIndex}
+      data-testid="focusable-container"
+      style={{padding: 32}}>
+      <VStack gap={4}>
+        <TextInput label="Notes" value={notes} onChange={setNotes} />
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana', 'Cherry']}
+          value={value}
+          onChange={v => setValue(v)}
+          placement="below"
+        />
+      </VStack>
+    </div>
+  );
+}
+
 /**
  * A Selector inside a container that takes focus but is no control, such as
  * a dialog's content box with `tabIndex={-1}`, below another field. A press
@@ -1734,25 +1757,14 @@ export const SearchableRequired: Story = {
  */
 export const InsideFocusableContainer: Story = {
   tags: ['!autodocs'],
-  render: () => {
-    const [value, setValue] = useState<string | undefined>(undefined);
-    const [notes, setNotes] = useState('');
-    return (
-      <div
-        tabIndex={-1}
-        data-testid="focusable-container"
-        style={{padding: 32}}>
-        <VStack gap={4}>
-          <TextInput label="Notes" value={notes} onChange={setNotes} />
-          <Selector
-            label="Fruit"
-            options={['Apple', 'Banana', 'Cherry']}
-            value={value}
-            onChange={v => setValue(v)}
-            placement="below"
-          />
-        </VStack>
-      </div>
-    );
-  },
+  render: () => <SelectorInContainer tabIndex={-1} />,
+};
+
+/**
+ * A Selector inside a container that is a Tab stop, such as a card with
+ * `tabIndex={0}`. A press on the container's padding focuses the container.
+ */
+export const InsideTabStopContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => <SelectorInContainer tabIndex={0} />,
 };
