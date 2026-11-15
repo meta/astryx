@@ -209,7 +209,8 @@ const REFUSED =
     ['accent', 'variant: primary', {}, /how 'primary accent'/, null],
     ['corners', 'mode: dark', {}, / set b mode dark-only$/, null],
     // A two-word color name, or a hex written as in code.
-    ['accent', 'navy blue', {}, / set b accent navy$/, / accent blue$/],
+    // navy is one word of two: no part of a value is offered alone.
+    ['accent', 'navy blue', {}, / how accent$/, / accent (navy|blue)$/],
     ['accent', '0xe11d48', {}, / set b accent '#e11d48'$/, null],
     // A hex color one digit short: never a digit made up.
     ['accent', '#e11d4', {}, null, /#e11d44/],

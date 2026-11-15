@@ -93,6 +93,56 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
+/** @type {{call: string, file: string, line: number}[]} */
+const screenQueries = [];
+
+/** Core's media query hook, and the entries that export it. */
+const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign/core/hooks']), name: 'useMediaQuery'};
+
+/**
+ * The call a page makes to ask a media query in JavaScript, as the warning
+ * names it: Core's `useMediaQuery`, or `matchMedia` (bare or on an object such
+ * as `window`, optional calls included), with its query.
+ * @param {any} p a call expression
+ * @returns {string | null}
+ */
+function screenQuery(p) {
+  const callee = p.node.callee;
+  /** @param {any} spec the binding's path @param {boolean} namespace */
+  const fromCore = (spec, namespace) =>
+    (namespace ? spec?.isImportNamespaceSpecifier() : spec?.isImportSpecifier()) &&
+    MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value);
+  let name = null;
+  if (callee.type === 'Identifier') {
+    const binding = p.scope.getBinding(callee.name);
+    const spec = binding?.path;
+    if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
+    else if (fromCore(spec, false) && (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  } else if ((callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') && !callee.computed) {
+    if (callee.property.name === 'matchMedia') name = 'matchMedia';
+    // `core.useMediaQuery(…)` through `import * as core from '@astryxdesign/core'`.
+    else if (
+      callee.property.name === MEDIA_QUERY_HOOK.name &&
+      callee.object.type === 'Identifier' &&
+      fromCore(p.scope.getBinding(callee.object.name)?.path, true)
+    ) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  }
+  if (!name) return null;
+  const arg = p.node.arguments[0];
+  const query = !arg
+    ? ''
+    : arg.type === 'StringLiteral'
+      ? JSON.stringify(arg.value).replace(/^"|"$/g, "'")
+      : arg.type === 'TemplateLiteral' && arg.expressions.length === 0
+        ? `'${arg.quasis[0].value.cooked}'`
+        : (p.get('arguments.0')?.getSource?.() ?? '');
+  return `${name}(${query})`;
+}
 
 /** Components that show their content only on demand. */
 const HIDING =
@@ -414,6 +464,39 @@ function pagePlugin(filename) {
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
+        const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
+        const target = isAliased(raw) ? resolveAlias(raw) : raw;
+        if (query && (target.startsWith('.') || path.isAbsolute(target))) {
+          // `?raw` gives the file's text and `?inline` a stylesheet's text (not
+          // added to the page), as Vite does by itself. Any other query loads
+          // the file as it loads without one: an image, font or media file as
+          // its address (`?url`, `?inline`, `?w=400`), a module as itself.
+          const file = path.resolve(dir, target);
+          if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
+            if (!fs.existsSync(file)) {
+              const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
+              /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+              throw err;
+            }
+            if (!localFiles.includes(file)) localFiles.push(file);
+            // The text is the module's default export, as Vite gives it, to
+            // every way of importing it.
+            const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
+            const declarators = p.node.specifiers.map((/** @type {any} */ s) =>
+              t.variableDeclarator(
+                t.identifier(s.local.name),
+                s.type === 'ImportNamespaceSpecifier'
+                  ? t.objectExpression([t.objectProperty(t.identifier('default'), text)])
+                  : s.type === 'ImportDefaultSpecifier' || (s.imported.name ?? s.imported.value) === 'default'
+                    ? text
+                    : t.identifier('undefined'),
+              ),
+            );
+            if (declarators.length > 0) p.replaceWith(t.variableDeclaration('const', declarators));
+            else p.remove();
+            return;
+          }
+        }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -497,6 +580,10 @@ function pagePlugin(filename) {
             ]),
           );
         }
+      },
+      'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        const call = screenQuery(p);
+        if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
       JSXText(/** @type {any} */ p) {
         const v = cleanText(p.node);
@@ -961,6 +1048,8 @@ try {
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
   // file carries each module the page reaches, as --reverse expects.
+  /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
+  const aliasImports = [];
   for (let i = 0; i < localFiles.length; i++) {
     const file = localFiles[i];
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -972,6 +1061,8 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
+      const raw = spec.split('?')[0];
+      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
@@ -992,8 +1083,10 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    aliasImports,
     texts,
     fnTexts,
+    screenQueries,
     logs,
   });
 } catch (e) {

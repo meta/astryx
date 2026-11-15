@@ -17,10 +17,12 @@
  *   time so far, so the slowest files each take a leg of their own and the
  *   slowest single file sets the floor (spec:AST-030 FR22). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
- *   others. A file with no recorded time counts as the median
- *   (scripts/lib/duration-split.mjs). The numbers only steer balance; which
- *   files run never depends on them. Other projects keep Vitest's split and
- *   order.
+ *   others. Each file costs what the Node leg planner
+ *   (scripts/vitest-node-legs.mjs) books for it, so the legs it planned are
+ *   the legs that run; a file with no recorded time counts as the ninetieth
+ *   percentile (scripts/lib/duration-split.mjs). The numbers only steer
+ *   balance; which files run never depends on them. Other projects keep
+ *   Vitest's split and order.
  */
 
 import fs from 'node:fs';
@@ -28,15 +30,21 @@ import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
 import {
-  costOf,
   mergeRecord as mergeSeconds,
   slowestFirst,
   splitByDuration,
   SWIZZLE_PROOF,
 } from './lib/duration-split.mjs';
+import {
+  DURATIONS,
+  nodeFileCost,
+  PER_FILE_SECONDS,
+  readDurations as readRecord,
+} from './vitest-node-legs.mjs';
+
+export {DURATIONS, PER_FILE_SECONDS};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
 
 /**
  * The record this run reads and writes: `VITEST_DURATIONS_FILE` (relative to
@@ -47,9 +55,13 @@ export function durationsFile() {
   const other = process.env.VITEST_DURATIONS_FILE;
   return other ? path.resolve(ROOT, other) : DURATIONS;
 }
+
+/** Recorded seconds per file in the record this run reads, or none. */
+export function readDurations(file = durationsFile()) {
+  return readRecord(file);
+}
+
 const PROJECT = 'node';
-// Seconds of import and transform per Node test file, as the legs report.
-export const PER_FILE_SECONDS = 0.4;
 
 /**
  * Splits files into `count` legs by recorded seconds.
@@ -64,23 +76,9 @@ export function partitionByDuration(
   seconds,
   {idle = new Set()} = {},
 ) {
-  const recorded = costOf(files, seconds);
   // A file that runs no test in this run (the swizzle-proof slices when the
   // change reaches no component) costs only its import.
-  const cost = file => (idle.has(file) ? 0 : recorded(file));
-  // Every file also costs its import and transform, which its recorded time
-  // leaves out; without it the hundreds of files recorded at 0 s would all go
-  // to one leg.
-  return splitByDuration(files, count, file => cost(file) + PER_FILE_SECONDS);
-}
-
-/** Recorded seconds per file, or none when the file cannot be read. */
-export function readDurations(file = durationsFile()) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).seconds ?? {};
-  } catch {
-    return {};
-  }
+  return splitByDuration(files, count, nodeFileCost(files, seconds, {idle}));
 }
 
 /**
@@ -202,7 +200,7 @@ export default class DurationShardSequencer extends BaseSequencer {
     // One spec per file is the rule; anything else keeps Vitest's order.
     if (byPath.size !== node.length) return sorted;
     const files = [...byPath.keys()];
-    const order = slowestFirst(files, costOf(files, readDurations()));
+    const order = slowestFirst(files, nodeFileCost(files, readDurations()));
     const result = [...sorted];
     order.forEach((file, i) => {
       result[slots[i]] = byPath.get(file);

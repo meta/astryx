@@ -50,6 +50,7 @@ import {integrationDocConsistency} from '../../foundation/discovery/doc-consiste
 import {
   integrationDocCommands,
   integrationDocTargets,
+  integrationExampleCode,
   projectUsesIconSets,
 } from './_adapter.mjs';
 import {
@@ -89,6 +90,7 @@ import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -254,7 +256,7 @@ async function findUnreachableContributionIssues(
     try {
       entries = fs
         .readdirSync(dir, {withFileTypes: true})
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareText(a.name, b.name));
     } catch (err) {
       // One folder the user running astryx cannot read must not end the whole
       // validation: name it and keep checking the rest of the package.
@@ -891,6 +893,11 @@ export async function validateIntegration(pkg, options = {}) {
   const examples = integration
     ? await componentExamplesCheck(integration)
     : undefined;
+  // Component doc examples that are not `kind: 'setup'` but cannot run on
+  // their own, by the rule a live preview uses.
+  const exampleCode = integration
+    ? await integrationExampleCode(integration)
+    : undefined;
   // What a catalog needs to list the package: a logo, and an example of
   // its components.
   const listing = integration
@@ -920,6 +927,7 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
+        ...(exampleCode?.notes ?? []).map(note => ({...note, next: true})),
         // What a catalog needs to list the package is information only:
         // these notes fail no check, under any flag.
         ...(listing?.notes ?? []),
@@ -994,6 +1002,16 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Examples whose names could not be judged, when there are any.
+      ...(exampleCode && exampleCode.unchecked.length > 0
+        ? {
+            exampleCode: {
+              status: 'checked',
+              findings: [],
+              unchecked: exampleCode.unchecked,
+            },
+          }
         : {}),
     },
   };

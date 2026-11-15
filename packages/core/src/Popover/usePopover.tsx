@@ -611,7 +611,13 @@ function usePopoverImplementation(
       const activeElement = (
         triggerElementRef.current?.ownerDocument ?? document
       ).activeElement as HTMLElement | null;
-      const opener = getOpenerRef.current?.() ?? activeElement;
+      const focused = getOpenerRef.current?.() ?? activeElement;
+      // Initial focus can move inside before a controlled popover's sync runs
+      // show() again. That call keeps the element that opened the popover.
+      const opener =
+        focused != null && contentRef.current?.contains(focused) === true
+          ? openerRef.current
+          : focused;
       openerRef.current =
         opener != null && !contentRef.current?.contains(opener) ? opener : null;
       const focusWithinEvent = () => {

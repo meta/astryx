@@ -316,6 +316,16 @@ function printIntegrationValidation(data, seen) {
           }),
         ]
       : []),
+    ...(data.exampleCode && data.exampleCode.unchecked.length > 0
+      ? [
+          text(
+            `[info] Examples not checked: ${data.exampleCode.unchecked.length}:`,
+          ),
+          records(data.exampleCode.unchecked, {
+            fields: ['file', 'example', 'reason'],
+          }),
+        ]
+      : []),
   );
 }
 
