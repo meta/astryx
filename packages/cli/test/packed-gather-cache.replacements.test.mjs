@@ -189,9 +189,9 @@ function linkOnTheWay(file) {
 /**
  * Every path an entry holds by the folder it is found in (`in:`) through a
  * link is under a folder the same entry, or an entry it builds on, holds by
- * a listing or a stat, at or below that link. A folder moved and a link
- * re-pointed to its new place keeps the found folder's identity; the folder
- * stamp below the link still changes.
+ * a listing or a stat, at or below that link: the entry checks a folder it
+ * reached through the link by that folder's own state, as main's record
+ * does, besides the folder identity in the `in:` state.
  * @param {ReturnType<typeof keptEntries>} entries
  */
 function expectFoundThroughLinksCovered(entries) {

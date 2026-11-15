@@ -360,15 +360,21 @@ describe('an exact run', () => {
 
   /**
    * Record a real-path lookup of a file with the stat of its folder changed
-   * as `change` says, after the lookup, from a fresh copy of the recorder.
+   * as `change` says, from a fresh copy of the recorder: after the lookup,
+   * or from the start (`always`).
    * @param {(stat: import('node:fs').BigIntStats) => Partial<import('node:fs').BigIntStats>} change
    * @param {(dir: string) => void} [act] - what changes on disk too
+   * @param {{always?: boolean}} [options]
    */
-  async function lookupWithFolder(change, act = () => {}) {
+  async function lookupWithFolder(
+    change,
+    act = () => {},
+    {always = false} = {},
+  ) {
     const {dir, file} = scratch();
     const nodeFs = createRequire(import.meta.url)('node:fs');
     const {statSync} = nodeFs;
-    let changed = false;
+    let changed = always;
     nodeFs.statSync = (/** @type {any[]} */ ...args) => {
       const stat = statSync(...args);
       if (!changed || args[0] !== dir || !stat || !args[1]?.bigint) {
@@ -407,11 +413,15 @@ describe('an exact run', () => {
   });
 
   it('checks the folder a looked-up path is found in by its full stamp where its birth time is broken', async () => {
-    // A birth time later than the change time, which no folder has: an entry
-    // added to the folder changes the state, as the full stamp does.
+    // One birth time, later than the change time, which no folder has, when
+    // the lookup is recorded and when it is checked: an entry added to the
+    // folder changes the state, as the full stamp does.
+    /** @type {bigint | undefined} */
+    let broken;
     const {before, after} = await lookupWithFolder(
-      stat => ({birthtimeNs: stat.ctimeNs + 1n}),
+      stat => ({birthtimeNs: (broken ??= stat.ctimeNs + 1_000_000_000_000n)}),
       dir => fs.writeFileSync(path.join(dir, 'added.txt'), 'new'),
+      {always: true},
     );
     expect(before).toBe(true);
     expect(after).toBe(false);

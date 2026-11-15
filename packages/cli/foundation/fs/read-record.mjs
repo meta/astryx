@@ -51,7 +51,7 @@ function note(runs, file, kind = 'read') {
       const had = seen.get(file);
       if (had === undefined) {
         seen.set(file, (exact ??= exactState(file, kind, seen)));
-      } else if (had.charCodeAt(0) > 57 && mayTake(had, GIVES[kind])) {
+      } else if (weak(had) && mayTake(had, GIVES[kind])) {
         // A path first only checked for, or only resolved, or a folder first
         // only probed, now resolved, statted, read or listed: what the later
         // call returned counts, so it is checked by that from here on.
@@ -65,7 +65,7 @@ function note(runs, file, kind = 'read') {
       const had = seen.get(checked);
       if (had === undefined) {
         seen.set(checked, (state ??= stateOf(checked)));
-      } else if (had.charCodeAt(0) > 57) {
+      } else if (weak(had)) {
         // A state another record handed in, such as a kept entry's `present`,
         // gives way to what this read returned.
         keepState(seen, checked, (state ??= stateOf(checked)));
@@ -354,9 +354,8 @@ function presenceState(file) {
 }
 
 /**
- * A real-path lookup's state, which changes whenever the lookup could
- * resolve the path elsewhere, worked out the same way when it is recorded
- * and when it is checked; or absent. The program still receives what its own
+ * A real-path lookup's state, worked out the same way when it is recorded and
+ * when it is checked; or absent. The program still receives what its own
  * lookup returned.
  *
  * - A path whose last part is a link, or the root, or a path ending in a
@@ -364,12 +363,15 @@ function presenceState(file) {
  * - Any other path: the folder it is found in, by that folder's identity
  *   with links followed, then its name and what it is: a file, a folder or
  *   another kind of entry (FOUND_IN). The lookup answers the folder's real
- *   path joined with the name, so the state changes when that answer can:
- *   a link above the path moved to another folder, that folder made anew,
- *   the entry made a link, or the entry gone or of another kind. A file
- *   written in place, or replaced by a save that renames a new file over
- *   it, keeps the state, as it keeps the answer. Two version folders can
- *   hold one file through hard links, but never one folder.
+ *   path joined with the name, so the state changes when the lookup can
+ *   find the path elsewhere: a link above the path moved to another folder,
+ *   that folder made anew, the entry made a link, or the entry gone or of
+ *   another kind. A file written in place, or replaced by a save that
+ *   renames a new file over it, keeps the state, as it keeps the answer.
+ *   Two version folders can hold one file through hard links, but never one
+ *   folder. One change keeps the state while the answer's text changes: the
+ *   folder moved, and a link re-pointed to its new place. A full stamp of
+ *   the file, which main records, misses that too.
  *
  * One lstat per path, and one stat per folder, which `parents` shares across
  * the paths one check or one run looks up.
