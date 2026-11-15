@@ -3519,7 +3519,8 @@ function selfContainedInfos(iconInfo, componentIconInfo, options) {
  * The folder a build's compiled local modules go to: one per output stem,
  * beside the outputs, so two builds never compile to one path.
  * @param {string} outDir
- * @param {string} stem the outputs' name (`w98` for w98.css), or a family key
+ * @param {string} stem the module's name (the theme's, whatever --out names
+ *   the stylesheet), or a family key
  */
 function modulesFolder(outDir, stem) {
   return path.join(outDir, `${stem}.modules`);
@@ -5012,7 +5013,10 @@ async function themeBuildInternal(
     : selfContainedInfos(iconInfo, componentIconInfo, {
         sourceFile: filePath,
         outDir,
-        modulesDir: modulesFolder(outDir, path.basename(outPath, '.css')),
+        // Named after the module, which --out does not rename, so a rebuild
+        // to the theme's own name (as integration verify does) writes the
+        // same imports.
+        modulesDir: modulesFolder(outDir, baseName),
         cwd,
         header: file =>
           generatedHeader(
@@ -5981,7 +5985,13 @@ Load the family CSS once, then select any member by theme identity (paths are re
 Or load the same stylesheet natively:
   <link rel="stylesheet" href="${cssImport}" />
 `);
-  const warnings = [...new Set(members.flatMap(member => member.warnings))];
+  // A member's registry left uncompiled for a file of your own is said, as a
+  // single build says it.
+  const keptLocal = keptWarnings(localPlan.kept, cwd);
+  for (const w of keptLocal) logger.warn(`Warning: ${w}`);
+  const warnings = [
+    ...new Set([...members.flatMap(member => member.warnings), ...keptLocal]),
+  ];
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];

@@ -86,11 +86,11 @@ describe('themeBuild({iconsSpecifier}) — direct API', () => {
 
     expect(result?.type).toBe('theme.build');
     expect(builtModule()).toContain(
-      `import { myIcons } from './theme.modules/icons.ts.js';`,
+      `import { myIcons } from './icotheme.modules/icons.ts.js';`,
     );
     expect(
       fs.readFileSync(
-        path.join(tmpDir, 'dist', 'theme.modules', 'icons.ts.js'),
+        path.join(tmpDir, 'dist', 'icotheme.modules', 'icons.ts.js'),
         'utf8',
       ),
     ).toContain(`export const myIcons = {`);

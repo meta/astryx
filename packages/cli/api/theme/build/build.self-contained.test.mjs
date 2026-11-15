@@ -287,6 +287,34 @@ describe('a theme family whose member’s registry is TypeScript', () => {
   });
 });
 
+describe('a family build over a file of yours at a compiled path', () => {
+  it('keeps the file and the TypeScript import, and warns as a single build does', async () => {
+    write('fam/icons.ts', `export const calmIcons = {close: 'calm-close'};\n`);
+    write(
+      'fam/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean.ts';\nimport {calmIcons} from './icons.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', icons: calmIcons});\n`,
+    );
+    const mine = '// mine\nexport const calmIcons = {};\n';
+    write('fam/ocean-family.modules/icons.ts.js', mine);
+    const built = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'ocean-family'},
+        {cwd: dir},
+      ),
+    );
+    expect(read('fam/ocean-family.modules/icons.ts.js')).toBe(mine);
+    const said =
+      'fam/ocean-family.modules/icons.ts.js is a file this build did not write, so fam/icons.ts is not compiled there';
+    expect(built.lines.join('\n')).toContain(said);
+    expect(built.result.data.warnings.join('\n')).toContain(said);
+  });
+});
+
 describe('a family whose members each keep ./icons.ts in their own folder', () => {
   it('compiles each to its own file, and the family module loads both', async () => {
     write(

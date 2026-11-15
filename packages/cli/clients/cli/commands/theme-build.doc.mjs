@@ -23,7 +23,7 @@ export const doc = {
     'A local module the built module imports (an icon registry, a slot value, ' +
     'the helpers they import) that is TypeScript or JSX is compiled to JavaScript ' +
     'named after its source (icons.tsx → icons.tsx.js) in a folder beside the ' +
-    "outputs named for them (w98.modules for w98.css), mirroring each source's " +
+    "built module named for it (w98.modules beside w98.js), mirroring each source's " +
     'place under the folder that holds the theme and its compiled sources. Each ' +
     'local import names its file with its extension, ' +
     'so the built module loads in any bundler and in plain Node; package imports ' +
