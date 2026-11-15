@@ -90,9 +90,7 @@ export const ${slug}Theme = {name: '${slug}'};`,
       );
       expect(
         normalizeThemeVerifyForCompare(builtModule('npx astryx', slug)),
-      ).toBe(
-        normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)),
-      );
+      ).toBe(normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)));
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
       ).not.toBe(
@@ -901,6 +899,10 @@ describe('integrationPackCheck', () => {
         fs.writeFileSync(
           path.join(tmpDir, 'themes', 'ocean', 'ocean.fonts.css'),
           '@font-face { font-family: Ocean; src: url(./ocean.woff2); }\n',
+        );
+        fs.writeFileSync(
+          path.join(tmpDir, 'themes', 'ocean', 'ocean.woff2'),
+          'font',
         );
       }
       setThemeExports(exportsMap);
@@ -1862,13 +1864,16 @@ describe('integrationPackCheck', () => {
       );
     const found = async () =>
       (await integrationPackCheck({cwd: tmpDir})).data.issues.filter(
-        (/** @type {{code: string}} */ issue) => issue.code === 'doc_tokens_need_cli',
+        (/** @type {{code: string}} */ issue) =>
+          issue.code === 'doc_tokens_need_cli',
       );
     // An escaped token is shown as written by every release.
     write('escaped', 'Write {@@pm install x} for an install.');
     expect(await found()).toEqual([]);
     write('tokens', 'Run {@command doctor} first.');
-    expect((await found()).map((/** @type {any} */ issue) => issue.severity)).toEqual(['warning']);
+    expect(
+      (await found()).map((/** @type {any} */ issue) => issue.severity),
+    ).toEqual(['warning']);
     const pkgFile = path.join(tmpDir, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
     pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.3'};

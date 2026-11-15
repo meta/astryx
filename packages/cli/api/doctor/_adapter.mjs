@@ -71,6 +71,7 @@ import {
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {shippedImportFindings} from '../../foundation/integrations/shipped-imports.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
@@ -300,6 +301,34 @@ export async function discoverDoctorThemes(projectDir) {
  */
 export function resolveDoctorThemeImports(theme, options) {
   return resolveThemeImports(theme, options);
+}
+
+/**
+ * A finding for each relative import of a package theme's built module and
+ * stylesheets that names no file its package ships (see
+ * `shippedImportFindings`). A local theme is no package: none.
+ * @param {import('../../foundation/config/theme-state.mjs').ResolvedAppTheme} theme
+ * @returns {import('../../foundation/integrations/shipped-imports.mjs').ShippedImportFinding[]}
+ */
+export function themeShippedImportFindings(theme) {
+  if (theme.source === 'local') return [];
+  const moduleFile = realDoctorFile(theme.moduleFile);
+  if (!moduleFile) return [];
+  // The package that ships the module: the nearest package.json with a name
+  // (a build folder may hold one that only sets "type").
+  let packageDir = path.dirname(moduleFile);
+  for (;;) {
+    const name = readPackageJson(path.join(packageDir, 'package.json'))?.name;
+    if (typeof name === 'string' && name !== '') break;
+    const parent = path.dirname(packageDir);
+    if (parent === packageDir) return [];
+    packageDir = parent;
+  }
+  return shippedImportFindings(packageDir, {
+    entries: [theme.moduleFile, theme.stylesheetFile, theme.fontStylesheetFile]
+      .filter(file => typeof file === 'string')
+      .map(file => realDoctorFile(file) ?? file),
+  });
 }
 
 /** @param {string} projectDir */

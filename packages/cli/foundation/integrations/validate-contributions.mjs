@@ -23,7 +23,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
@@ -56,7 +55,12 @@ import {
   TEMPLATE_CANDIDATE_RE,
 } from './contribution-fixes.mjs';
 import {MANIFEST_BASENAMES} from './integrations.mjs';
-import {npmCommand} from '../release/cache.mjs';
+import {
+  filesOnDisk,
+  isInstalledPackage,
+  npmPackedPaths,
+  shippedImportFindings,
+} from './shipped-imports.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
@@ -1139,67 +1143,6 @@ function globSource(pattern) {
     }
   }
   return out;
-}
-
-/**
- * The paths npm packs for the package in `base`, read from
- * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
- * written), started the way the CLI starts npm everywhere else, or why npm
- * could not answer.
- * @param {string} base
- * @returns {{paths: Set<string>} | {error: string}}
- */
-function npmPackedPaths(base) {
-  let npm;
-  try {
-    npm = npmCommand();
-  } catch {
-    return {error: 'npm was not found'};
-  }
-  const result = spawnSync(
-    npm.command,
-    [
-      ...npm.prefix,
-      'pack',
-      '--dry-run',
-      '--json',
-      '--ignore-scripts',
-      '--silent',
-    ],
-    {
-      cwd: base,
-      encoding: 'utf-8',
-      shell: false,
-      timeout: 60_000,
-      // One line per packed file: room for a very large package.
-      maxBuffer: 256 * 1024 * 1024,
-    },
-  );
-  if (result.error) return {error: `npm did not run (${result.error.message})`};
-  if (result.status !== 0) {
-    let code = '';
-    try {
-      code = JSON.parse(result.stdout)?.error?.code ?? '';
-    } catch {
-      // not JSON
-    }
-    return {
-      error: `npm pack failed${code ? ` (${code})` : ` with exit ${result.status}`}`,
-    };
-  }
-  try {
-    const [info] = JSON.parse(result.stdout);
-    if (Array.isArray(info?.files)) {
-      return {
-        paths: new Set(
-          info.files.map((/** @type {{path: string}} */ f) => f.path),
-        ),
-      };
-    }
-  } catch {
-    // fall through
-  }
-  return {error: 'npm pack printed no file list'};
 }
 
 /**
@@ -2374,6 +2317,32 @@ async function runContributionChecks(integration, issues) {
   await checkComponents(integration, issues);
   await checkDocs(integration, issues);
   await checkThemes(integration, issues);
+  checkShippedImports(integration, issues);
+}
+
+/**
+ * An installed package's shipped modules, each relative import resolved
+ * against its files on disk, which are the files npm unpacked. A package's
+ * own folder is checked against what npm packs by validate
+ * (api/integration/validate-integration.mjs), which asks npm; everyday
+ * commands never start npm.
+ * @param {LoadedIntegration} integration
+ * @param {Issue[]} issues
+ */
+function checkShippedImports(integration, issues) {
+  const packageDir = integration.__packageDir;
+  if (typeof packageDir !== 'string' || !isInstalledPackage(packageDir)) {
+    return;
+  }
+  // Listed until the next minor release, which makes each one an error: a
+  // new failure joins only in a minor release (architecture:cli-surface
+  // INV35).
+  for (const finding of shippedImportFindings(packageDir, {
+    files: filesOnDisk(packageDir),
+    manifestFile: integration.__manifestFile,
+  })) {
+    issues.push(issueListed(finding.code, finding.message));
+  }
 }
 
 /**

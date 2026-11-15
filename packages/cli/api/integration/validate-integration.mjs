@@ -89,6 +89,10 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
+import {
+  isInstalledPackage,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -541,6 +545,17 @@ async function validateAtPackageDir(
       ...publicImports.notes.map(note => ({...note, next: true})),
     );
   result.publicImports = publicImports.report;
+  // Each relative import of the modules the package ships, resolved against
+  // the files npm packs, as an app's bundler resolves it: a `next` note until
+  // the next minor release makes it an error. An installed package is
+  // checked with the contribution checks above, against its files on disk.
+  if (!isInstalledPackage(packageDir)) {
+    (result.listed ??= []).push(
+      ...shippedImportFindings(packageDir, {
+        manifestFile: loaded.__manifestFile,
+      }).map(finding => listed(finding.code, finding.message)),
+    );
+  }
   if (scanUnreachable) {
     issues.push(
       ...(await findUnreachableContributionIssues(
