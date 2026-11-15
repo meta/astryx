@@ -281,3 +281,57 @@ describe('the component and template not-found errors', () => {
     SLOW,
   );
 });
+
+describe("a suggested component's search card", () => {
+  /** @type {string} */
+  let cardDir;
+
+  /**
+   * A project whose stand-in Core ships the component Text, whose doc
+   * declares only the keyword `clamp` while the CLI's search card for Text
+   * lists `line clamp`, and a hook whose doc declares `line clamp`.
+   */
+  beforeAll(() => {
+    cardDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-hook-card-'));
+    fs.writeFileSync(
+      path.join(cardDir, 'package.json'),
+      JSON.stringify({
+        name: 'consumer',
+        dependencies: {'@astryxdesign/core': '0.0.0'},
+      }),
+    );
+    const coreDir = path.join(cardDir, 'node_modules', '@astryxdesign', 'core');
+    fs.mkdirSync(path.join(coreDir, 'src', 'hooks'), {recursive: true});
+    fs.mkdirSync(path.join(coreDir, 'src', 'Text'), {recursive: true});
+    fs.writeFileSync(
+      path.join(coreDir, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: '0.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(coreDir, 'src', 'hooks', 'useClampedLines.doc.mjs'),
+      "export const docs = {\n  name: 'useClampedLines',\n  keywords: ['line clamp'],\n  params: [],\n  returns: [],\n};\n",
+    );
+    fs.writeFileSync(
+      path.join(coreDir, 'src', 'Text', 'Text.doc.mjs'),
+      "export const docs = {name: 'Text', description: 'Text.', keywords: ['clamp'], props: []};\n",
+    );
+    fs.writeFileSync(
+      path.join(coreDir, 'src', 'Text', 'Text.tsx'),
+      'export function Text() { return null; }\n',
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(cardDir, {recursive: true, force: true});
+  });
+
+  it(
+    'keeps a suggested component whose search card lists the keyword ahead of the hint',
+    async () => {
+      const error = await failure(component('LineClamp', {cwd: cardDir}));
+      expect(error.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(error.suggestions?.[0]?.name).toBe('Text');
+    },
+    SLOW,
+  );
+});

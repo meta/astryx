@@ -112,8 +112,9 @@ owns response fields and compatibility.
   hook whose doc declares a keyword with exactly those words. A tie, or a
   keyword that more than one hook declares, means no hook. At these two tiers, a
   suggestion also matches as well when one of its names is a near name or
-  carries every word of the argument, or, at hook keyword, when its doc declares
-  the same keyword. A better tier wins; inside a
+  carries every word of the argument, or, at hook keyword, when its doc's
+  keywords or its search card's synonyms hold the same keyword. A better tier
+  wins; inside a
   tier, a component wins over a hook, a hook over a template, and a template
   over a docs topic; among docs routes, the route with the fewest segments
   wins, then the first in tree order. That command goes right after the last

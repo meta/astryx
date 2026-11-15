@@ -258,8 +258,8 @@ export function otherCommand(typed, entries, from) {
  *   namesOf?: (suggestion: T) => Array<string | undefined>,
  *   keywordsOf?: (suggestion: T) => string[],
  * }} options `namesOf` gives the names the command matched a suggestion by;
- *   by default its name. `keywordsOf` gives the keywords and other names the
- *   suggestion's doc declares; by default none
+ *   by default its name. `keywordsOf` gives the keywords the suggestion's doc
+ *   declares and the synonyms its search card lists; by default none
  * @returns {Array<T | Hint> | undefined}
  */
 export function withOtherCommand(
