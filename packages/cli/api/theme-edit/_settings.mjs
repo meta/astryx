@@ -59,6 +59,7 @@ import {
 import {
   AUTO_SPREAD,
   CORNERS,
+  COMMON_STATES,
   DIALS,
   FAMILIES,
   FONTS,
@@ -1894,9 +1895,21 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
       }
     }
     // A state saved in other letters or with its colon (`Hover`, `:hover`)
-    // is that state, as a typed --state is read (the one state reader).
-    if (typeof s.state === 'string' && stateSpelling(s.state) !== s.state) {
-      const read = stateSpelling(s.state);
+    // is that state, as a typed --state is read (the one state reader). Its
+    // words are split (`focusVisible` is focus-visible) only into a state
+    // CSS writes that way: a part's own state is written as its census
+    // names it (toggle-button's isPressed), which set saves and the build
+    // reads, so that spelling is kept.
+    const stateRead =
+      typeof s.state === 'string' ? stateSpelling(s.state) : null;
+    if (
+      typeof s.state === 'string' &&
+      stateRead &&
+      stateRead !== s.state &&
+      (COMMON_STATES.includes(stateRead) ||
+        stateRead === s.state.trim().replace(/^:+/, '').toLowerCase())
+    ) {
+      const read = stateRead;
       notes.push(
         `${s.thing} was saved with state ${JSON.stringify(s.state)}, read as ${read}`,
       );
