@@ -6437,10 +6437,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         ],
       },
     );
+  // The motion knobs of defineTheme (`motion`, its `tempo` and
+  // `character`) are no editor setting: the editor sets motion through the
+  // duration and ease tokens, which how answers with. A tempo above 1 is
+  // slower, below 1 faster.
+  if (/^(?:motion|tempo|character)$/i.test(thing)) {
+    const tempo = Number(/(\d*\.?\d+)/.exec(v)?.[1]);
+    const asks =
+      Number.isFinite(tempo) && tempo > 1
+        ? ['slower', 'faster']
+        : ['faster', 'slower'];
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. defineTheme's motion knobs (tempo, character) are not editor settings: the editor sets motion through the duration and ease tokens (--duration-*, --ease-*), and how answers for faster or slower motion with them.`,
+      {
+        run: asks.map(a => `${HOW} ${quoteCommandArgument(`${a} motion`)}`),
+      },
+    );
+  }
   const hint =
     /** @type {((v: string, on: string | undefined) => string[]) | undefined} */ (
       THING_HINTS[thing.toLowerCase()]
     );
+
   // A dial by another name or case: Accent, gray, saturation, error.
   const lower = thing.toLowerCase();
   const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
