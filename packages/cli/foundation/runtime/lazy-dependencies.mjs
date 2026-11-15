@@ -5,16 +5,15 @@
  *   first use rather than when a module that may use it is imported.
  * @input Nothing; each getter requires its package once and keeps it.
  * @output `babelParser` (and `babelParse`, its `parse`), `babelCore`,
- *   `jscodeshift` and `selectorParser`: the same module objects a static
- *   import gives, since each package resolves to the same file for `require`
- *   as for `import` (test/lazy-dependencies.test.mjs checks it).
+ *   `jscodeshift`, `selectorParser` and `postcss`: the same module objects a
+ *   static import gives (test/lazy-dependencies.test.mjs checks it).
  * @position The first-use loader for these packages on the API's import
  *   path (authoring/ may not import foundation, so the ShadCN source variants
  *   keep their own). Everything that imports the CLI's API reaches the
  *   modules that parse or rewrite sources, and most runs never parse one, so
  *   loading Babel and jscodeshift with them cost every importer about 350
  *   modules. Each package is still resolved when this module loads, which
- *   reads no module, so every module that imports this loader needs all four
+ *   reads no module, so every module that imports this loader needs all five
  *   packages installed: a broken install without one fails when such a
  *   module loads, never as a parse that quietly finds nothing. The `Project`
  *   seam and the agent docs reach this loader through component discovery,
@@ -33,6 +32,7 @@ for (const pkg of [
   '@babel/parser',
   '@babel/core',
   'jscodeshift',
+  'postcss',
   'postcss-selector-parser',
 ]) {
   require.resolve(pkg);
@@ -46,6 +46,8 @@ let core;
 let codeshift;
 /** @type {typeof import('postcss-selector-parser') | undefined} */
 let selectors;
+/** @type {typeof import('postcss').default | undefined} */
+let css;
 
 /** @returns {typeof import('@babel/parser')} */
 export const babelParser = () => (parser ??= require('@babel/parser'));
@@ -67,6 +69,17 @@ export const jscodeshift = () => (codeshift ??= require('jscodeshift'));
 /** @returns {typeof import('postcss-selector-parser')} */
 export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
+
+/**
+ * postcss, for modules that `component` and the theme commands load and that
+ * read a stylesheet only now and then (render/embedded-imports.mjs,
+ * fonts/font-stylesheet.mjs). Its ES module entry hands on
+ * what its CommonJS one exports, so this is the one postcss the modules that
+ * import it get. Not in {@link LAZY_PACKAGES}: those modules import it as
+ * they load.
+ * @returns {typeof import('postcss').default}
+ */
+export const postcss = () => (css ??= require('postcss'));
 
 /**
  * Every package loaded on first use, here and in the ShadCN source variants,

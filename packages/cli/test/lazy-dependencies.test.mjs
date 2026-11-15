@@ -5,8 +5,9 @@
  * @input The heavy dependencies foundation/runtime/lazy-dependencies.mjs
  *   loads on first use, and the public API entry point
  * @output Each resolves to the same file for `require` as for `import`, the
- *   API's exports keep their names and shapes, and importing the API loads
- *   none of those dependencies
+ *   API's exports keep their names and shapes, importing the API loads none
+ *   of those dependencies, and the theme build module, which `component` and
+ *   the theme commands load, loads no postcss
  */
 
 import {spawnSync} from 'node:child_process';
@@ -133,6 +134,32 @@ describe('lazy dependencies', () => {
       {encoding: 'utf8'},
     );
     expect(result.stdout, result.stderr).toBe('MODULE_NOT_FOUND');
+  }, 60_000);
+
+  it('give the postcss the other modules import, and leave it unloaded by the theme build module', async () => {
+    const require = createRequire(
+      pathToFileURL(
+        path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
+      ),
+    );
+    expect(require('postcss')).toBe((await import('postcss')).default);
+    const script = `
+      import {createRequire} from 'node:module';
+      await import(${JSON.stringify(
+        pathToFileURL(path.join(CLI, 'api', 'theme', 'build', 'build.mjs'))
+          .href,
+      )});
+      const files = Object.keys(createRequire(import.meta.url).cache);
+      process.stdout.write(
+        String(files.some(file => /node_modules[\\\\/]postcss[\\\\/]/.test(file))),
+      );
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {encoding: 'utf8'},
+    );
+    expect(result.stdout, result.stderr).toBe('false');
   }, 60_000);
 
   it('are not loaded by importing the API', () => {
