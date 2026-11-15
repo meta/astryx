@@ -113,7 +113,7 @@ export default function TechnicalDocumentationPage() {
                     icon={<Icon icon={ClipboardDocumentIcon} />}
                     onClick={() => {
                       void navigator.clipboard.writeText(
-                        'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and the StyleX compiler. 2. Wrap my app in ThemeProvider. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
+                        'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
                       );
                     }}
                   />
@@ -135,9 +135,11 @@ export default function TechnicalDocumentationPage() {
                 </HStack>
                 <Text type="body" color="secondary">
                   Help me get set up with Product Name. Based on my project, do
-                  the following: 1. Install @astryxdesign/core and the StyleX
-                  compiler. 2. Wrap my app in ThemeProvider. 3. Replace one
-                  existing component with an Astryx equivalent.
+                  the following: 1. Install @astryxdesign/core and import its
+                  precompiled reset.css and astryx.css once at the app entry
+                  point. 2. Wrap my app in Theme with a theme package such as
+                  @astryxdesign/theme-neutral. 3. Replace one existing component
+                  with an Astryx equivalent.
                 </Text>
               </VStack>
             </Card>
@@ -148,7 +150,7 @@ export default function TechnicalDocumentationPage() {
               </Heading>
               <List density="compact" listStyle="disc">
                 <ListItem label="Node.js 18+" />
-                <ListItem label="React 18 or 19" />
+                <ListItem label="React 19 or later" />
                 <ListItem label="A package manager (npm, yarn, or pnpm)" />
               </List>
             </VStack>
@@ -213,18 +215,16 @@ export default function App() {
               </Heading>
               <Text type="body">
                 Astryx ships with a default theme that works out of the box. To
-                customize colors, typography, and spacing, wrap your app in a
-                theme provider.
+                customize colors, typography, and spacing, install a theme
+                package, import its stylesheet, and wrap your app in Theme.
               </Text>
               <CodeBlock
-                code={`import { ThemeProvider } from '@astryxdesign/core/Theme';
+                code={`import { Theme } from '@astryxdesign/core/theme';
+import { neutralTheme } from '@astryxdesign/theme-neutral/built';
+import '@astryxdesign/theme-neutral/theme.css';
 
 export default function App({ children }) {
-  return (
-    <ThemeProvider theme="default">
-      {children}
-    </ThemeProvider>
-  );
+  return <Theme theme={neutralTheme}>{children}</Theme>;
 }`}
                 language="tsx"
                 width="100%"

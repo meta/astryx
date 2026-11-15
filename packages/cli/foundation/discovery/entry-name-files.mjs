@@ -22,6 +22,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {hasNameLine, nameLines} from '../fs/kept-tree.mjs';
+import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
 
 /** A component doc's suffix, as integration discovery reads it. */
 const INTEGRATION_DOC_RE = /\.doc\.(ts|mjs|js)$/;
@@ -156,12 +157,10 @@ export function coreFilesNaming(index, wanted) {
 /** A name a doc's text can spell: a run of word characters. */
 const WORD_RE = /[A-Za-z0-9_$]+/g;
 
-/**
- * The shape of a component name a component doc spells out (its export, or
- * a family member). Component discovery lists a spelled name only when it
- * has this shape, so the words index keeps only such words.
- */
-export const COMPONENT_NAME_RE = /^[A-Z][\w$]*$/;
+// A component name a component doc spells out (its export, or a family
+// member) has the shape COMPONENT_NAME_RE. Component discovery lists a
+// spelled name only when it has that shape, so the words index keeps only
+// such words.
 
 /**
  * What an integration's component docs can name: each doc's folded file

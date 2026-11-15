@@ -307,7 +307,10 @@ describe('scope words', () => {
       );
       expect(
         (await answer('make the dialog header title bold')).commands[0],
-      ).toBe('set q font-weight 700 --on dialog-header-title-block');
+        // The title sets its own weight: its tokens, on the title block.
+      ).toMatch(
+        /^set q --text-heading-\d-weight 700 --on dialog-header-title-block$/,
+      );
     },
     T,
   );
@@ -534,6 +537,36 @@ describe('the answer that joins every clause is measured too', () => {
       );
       expect(commands.some(c => c.includes('--on checks'))).toBe(false);
       expect(commands[0]).toBe('set q corners more --on inputs');
+      // A radio's circle alone is no corner the dial reaches.
+      await expect(
+        themeEditSet('q', 'corners', 'more', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        }),
+      ).rejects.toThrow(/a radio's circle \(border-radius 50%\), not a corner/);
+      // A square radio is asked of the radio by name: its own border-radius.
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditSet('q', 'corners', 'square', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(
+        err.suggestions.map((/** @type {{name: string}} */ x) => x.name),
+      ).toContainEqual(
+        expect.stringMatching(
+          / set q border-radius 0 --on radio-indicator --only$/,
+        ),
+      );
+      expect((await answer('make radios square')).commands).toEqual([
+        'set q border-radius 0 --on radio-indicator --only',
+      ]);
     },
     T,
   );

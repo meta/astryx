@@ -59,6 +59,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -90,22 +91,25 @@ import {validatePrivateVars} from '../../../foundation/config/theme-private-vars
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
-import {coreComponentDocs} from '../../../foundation/discovery/core-component-docs.mjs';
+import {
+  coreThemeTargets,
+  coreThemeValues,
+  keepCoreThemeFacts,
+} from '../../../foundation/discovery/core-theme-facts.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   createJiti,
   withEmptyStylesheets,
 } from '../../../foundation/fs/module-loader.mjs';
-import {
-  collectThemingTargets,
-  targetsByKey,
-} from '../../../foundation/discovery/theming-targets.mjs';
+import {targetsByKey} from '../../../foundation/discovery/theming-targets.mjs';
 import {
   collectUnloadedFonts,
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
+import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
+import {keyPathLine, nullThemeValues} from './null-values.mjs';
 import {
   installCommandFor,
   parsedSpecifiers,
@@ -1010,8 +1014,9 @@ export function generatedSourceCommand(file) {
     : missingGeneratedCommand(file);
 }
 
-/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */
+/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read (no regular file is opened) */
 function fileHead(file) {
+  if (irregularFileKind(file)) return '';
   try {
     const fd = fs.openSync(file, 'r');
     try {
@@ -1693,109 +1698,9 @@ let _knownValuesIndexPromise = null;
  * guessing is not a valid lookup strategy.
  */
 async function loadKnownValuesIndex() {
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
-
-  // One malformed or optional doc must not erase validation for the rest.
-  const docs = (await coreComponentDocs(coreSrc)).flatMap(read =>
-    'error' in read ? [] : [read.doc],
-  );
-
-  /** @param {string} value */
-  const targetName = value =>
-    value
-      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-      .replace(/\s+/g, '-')
-      .toLowerCase();
-  /**
-   * @param {any[]} props
-   * @returns {Record<string, Set<string>>}
-   */
-  const valuesFromProps = props => {
-    /** @type {Record<string, Set<string>>} */
-    const result = {};
-    for (const prop of props ?? []) {
-      if (typeof prop?.name !== 'string' || typeof prop?.type !== 'string') {
-        continue;
-      }
-      /** @type {Set<string>} */
-      const values = new Set();
-      for (const match of prop.type.match(/'([^']+)'/g) ?? []) {
-        values.add(match.slice(1, -1));
-      }
-      for (const part of prop.type
-        .split('|')
-        .map((/** @type {string} */ value) => value.trim())) {
-        if (/^-?\d+(?:\.\d+)?$/.test(part)) values.add(part);
-      }
-      if (values.size > 0) result[prop.name] = values;
-    }
-    return result;
-  };
-
-  // A component can appear in more than one doc: its own doc declares its
-  // props, and a parent doc can list it by name only. Merge every entry, so
-  // the result does not depend on the order the docs load in.
-  /** @type {Record<string, Record<string, Set<string>>>} */
-  const valuesByOwner = {};
-  /**
-   * @param {string} name
-   * @param {any[]} props
-   */
-  const addOwnerValues = (name, props) => {
-    const owner = (valuesByOwner[targetName(name)] ??= {});
-    for (const [prop, values] of Object.entries(valuesFromProps(props))) {
-      owner[prop] = new Set([...(owner[prop] ?? []), ...values]);
-    }
-  };
-  for (const doc of docs) {
-    if (typeof doc?.name === 'string') {
-      addOwnerValues(doc.name, doc.props);
-    }
-    for (const component of /** @type {any[]} */ (doc?.components ?? [])) {
-      if (typeof component?.name === 'string') {
-        addOwnerValues(component.name, component.props);
-      }
-    }
-  }
-
-  /** @type {Record<string, Record<string, Set<string>>>} */
-  const collected = {};
-  for (const doc of docs) {
-    const localValues = valuesFromProps([
-      ...(doc?.props ?? []),
-      ...(doc?.components ?? []).flatMap(
-        (/** @type {any} */ component) => component?.props ?? [],
-      ),
-    ]);
-    for (const target of doc?.theming?.targets ?? []) {
-      if (typeof target?.className !== 'string') continue;
-      const componentName = target.className.replace(/^astryx-/, '');
-      const ownerValues = valuesByOwner[componentName] ?? {};
-      if (!collected[componentName]) collected[componentName] = {};
-      for (const prop of target.visualProps ?? []) {
-        if (!collected[componentName][prop]) {
-          collected[componentName][prop] = new Set();
-        }
-        for (const value of [
-          ...(localValues[prop] ?? []),
-          ...(ownerValues[prop] ?? []),
-        ]) {
-          collected[componentName][prop].add(value);
-        }
-      }
-    }
-  }
-
-  return Object.fromEntries(
-    Object.entries(collected).map(([component, props]) => [
-      component,
-      Object.fromEntries(
-        Object.entries(props).map(([prop, values]) => [prop, [...values]]),
-      ),
-    ]),
-  );
+  return (await coreThemeValues(coreSrc)).knownValues;
 }
 
 /**
@@ -1818,6 +1723,16 @@ function resolveCoreRoot() {
   const cliDir = path.dirname(fileURLToPath(import.meta.url));
   const coreRoot = path.resolve(cliDir, '../../../../core');
   return fs.existsSync(coreRoot) ? coreRoot : null;
+}
+
+/**
+ * The `src` folder of the Core beside the CLI ({@link resolveCoreRoot}), or
+ * null when there is none.
+ * @returns {string | null}
+ */
+function coreSrcPath() {
+  const coreRoot = resolveCoreRoot();
+  return coreRoot ? path.join(coreRoot, 'src') : null;
 }
 
 /**
@@ -1901,8 +1816,7 @@ async function resolveAugmentationTargetCandidates(componentName) {
     },
   ];
 
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) {
     _augmentationTargetCache.set(componentName, fallback);
     return fallback;
@@ -1924,33 +1838,16 @@ async function resolveAugmentationTargetCandidates(componentName) {
     matches.push({moduleName, interfacePrefix});
   }
 
-  for (const read of await coreComponentDocs(coreSrc)) {
-    if ('error' in read) continue;
-    const {file, doc} = read;
-    const matchesTarget = (doc?.theming?.targets || []).some(
-      (/** @type {any} */ target) =>
-        typeof target?.className === 'string' &&
-        target.className.replace(/^astryx-/, '') === componentName,
-    );
-    if (!matchesTarget) continue;
-
-    const moduleName =
-      typeof doc?.name === 'string' && doc.name
-        ? doc.name
-        : path.basename(path.dirname(file));
-
+  const {owners} = await coreThemeValues(coreSrc);
+  for (const {moduleName, components} of Object.hasOwn(owners, componentName)
+    ? owners[componentName]
+    : []) {
     // Try the exact rendered token first for documented subtargets such as
     // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
     // component name (for example, ProgressBar for progress-bar-fill).
     addCandidate(moduleName, toPascalCase(componentName));
     addCandidate(moduleName, moduleName);
-    if (Array.isArray(doc?.components)) {
-      for (const comp of doc.components) {
-        if (typeof comp?.name === 'string') {
-          addCandidate(moduleName, comp.name);
-        }
-      }
-    }
+    for (const name of components) addCandidate(moduleName, name);
   }
   // A target documented by a parent component may also have its own public
   // subpath and augmentation interface (Heading is documented under Text but
@@ -2879,6 +2776,42 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
   }
 
+  // A theme object (tokens of its own) whose name is missing or no text is
+  // that theme without its name, not a module without a theme.
+  const unnamed = isModule
+    ? [
+        ...(hasDefault ? [['default', defaultExport]] : []),
+        ...Object.entries(mod).filter(
+          ([k]) => k !== 'default' && k !== 'module.exports',
+        ),
+      ].find(
+        ([, v]) =>
+          v &&
+          typeof v === 'object' &&
+          v.tokens &&
+          typeof v.tokens === 'object' &&
+          typeof v.name !== 'string',
+      )
+    : undefined;
+  if (unnamed) {
+    const [exportName, value] = unnamed;
+    let text = '';
+    try {
+      text = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // The line is left out.
+    }
+    const call = /\bdefineTheme\s*\(/.exec(text);
+    const line =
+      keyPathLine(text, ['name']) ??
+      (call ? text.slice(0, call.index).split('\n').length : null);
+    const stem = path
+      .basename(filePath)
+      .replace(/(?:\.theme)?\.[cm]?[jt]sx?$/, '');
+    throw new ThemeNameError(
+      `${exportName === 'default' ? 'The default export' : `The export ${exportName}`} is a theme with no name${value.name === undefined ? '' : ` (its name is ${value.name === null ? 'null' : `a ${typeof value.name}`}, not text)`}${line ? ` (line ${line})` : ''}, and the build names the theme's files after it. Give defineTheme a name, such as name: '${stem}'.`,
+    );
+  }
   throw new ThemeShapeError(
     `Could not find a defineTheme() result in ${filePath}.`,
   );
@@ -3111,6 +3044,7 @@ function themeLoadReason(error) {
   const message = error.message;
   if (error instanceof ThemeShapeError)
     return `${message}\n${THEME_EXPORT_FIX}`;
+  if (error instanceof ThemeNameError) return message;
   if (
     error instanceof TypeError &&
     /^Cannot read properties of (?:null|undefined)/.test(message) &&
@@ -3139,6 +3073,9 @@ function themeLoadReason(error) {
 
 /** A theme module that loaded but exports no theme object. */
 class ThemeShapeError extends Error {}
+
+/** A theme module whose theme object has no name. */
+class ThemeNameError extends Error {}
 
 /**
  * The command that moves a failed theme load forward: the install for a
@@ -3726,11 +3663,10 @@ function builtThemeType(themeDef) {
  * @returns {Promise<{propsByKey: Record<string, string[]>} | null>}
  */
 async function loadKnownComponents() {
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) return null;
 
-  const propsByKey = targetsByKey(await collectThemingTargets(coreSrc));
+  const propsByKey = targetsByKey(await coreThemeTargets(coreSrc));
   return Object.keys(propsByKey).length > 0 ? {propsByKey} : null;
 }
 
@@ -3837,9 +3773,46 @@ export function validateComponentOverridesAgainstRegistry(
  */
 async function validateComponentOverrides(themeDef) {
   const knownComponents = await getKnownComponents();
-  return knownComponents == null
-    ? []
-    : validateComponentOverridesAgainstRegistry(themeDef, knownComponents);
+  if (knownComponents == null) return [];
+  const warnings = validateComponentOverridesAgainstRegistry(
+    themeDef,
+    knownComponents,
+  );
+  // Style keys no element can carry: a pseudo-class or pseudo-element
+  // written as a style key (`':hover'` builds `[data-="hover"]`), and a
+  // value a closed prop never takes (Button's size has no `xxl`, and no
+  // theme can add one). Either builds a selector nothing matches.
+  const layers = [
+    ...getThemeComponentLayers(themeDef).map(l => l.components),
+    ...adaptationRuleValues(themeDef)
+      .map((/** @type {any} */ v) => v?.components)
+      .filter(isRecord),
+  ];
+  for (const components of layers)
+    for (const [component, rules] of Object.entries(components)) {
+      const knownProps = knownComponents.propsByKey[component];
+      if (!knownProps || !isRecord(rules)) continue;
+      for (const key of Object.keys(rules))
+        for (const {prop, value} of componentValuePairs(key)) {
+          if (!prop) {
+            warnings.push(
+              `Style key "${key}" on component "${component}" is no prop or state: a pseudo-class or pseudo-element goes inside a style key, such as base: {'${key}': {…}}. As written it builds a selector nothing matches.`,
+            );
+            continue;
+          }
+          if (!knownProps.includes(prop)) continue;
+          const values = (await getKnownValues(component))[prop] ?? [];
+          if (
+            values.length > 0 &&
+            (await classifyComponentValue(component, prop, value)) ===
+              'unresolved'
+          )
+            warnings.push(
+              `Style key "${key}" on component "${component}": ${prop} takes ${values.join(', ')}, and a theme cannot add a value to it, so "${value}" builds a selector nothing matches.`,
+            );
+        }
+    }
+  return [...new Set(warnings)];
 }
 
 const BUILTIN_HEADING_TYPES = new Set(['display-1', 'display-2', 'display-3']);
@@ -4088,6 +4061,10 @@ async function themeBuildInternal(
   if (typeof options.out === 'string' && options.out.includes('\\'))
     options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
+
+  // Core's facts first, before the build reads the theme: kept facts then do
+  // not depend on it, and a build after an edit to the theme reads them back.
+  await keepCoreThemeFacts(coreSrcPath());
 
   {
     const problem = buildInputProblem(file, options, cwd);
@@ -4347,12 +4324,43 @@ async function themeBuildInternal(
   /** @type {import('./icon-imports.mjs').IconImports | null} */
   let componentIconInfo = null;
 
+  // A null part or style key: Core throws on it, so it is refused before
+  // anything is written, at the line that gives it. A null value keeps its
+  // meaning (Core writes it as it is), so it is warned at its line.
+  const shownSource = path.relative(cwd, filePath) || filePath;
+  const nulls = nullThemeValues(themeDef).map(n => ({
+    ...n,
+    line: keyPathLine(themeSource, n.path),
+  }));
+  /** @param {{path: string[], why: string, line: number | null}} n */
+  const nullLine = n =>
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : ''}: ${n.why}`;
+  const unbuildable = nulls.filter(n => n.unbuildable);
+  if (unbuildable.length > 0) {
+    const first = unbuildable.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
-  for (const w of warnings) {
+  for (const w of [
+    ...warnings,
+    ...nulls.filter(n => !n.unbuildable).map(nullLine),
+  ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
   }
@@ -4710,6 +4718,16 @@ async function themeBuildInternal(
   const writeRoot = handOff.writeRoot ?? cwd;
   let outPath;
   if (options.out) {
+    // A leading ~ reaches the build only when the shell did not expand it
+    // (quoted, or from a script or a config): it names a folder called ~
+    // in the project, never the home folder. The build writes there, as it
+    // always has, and says so.
+    if (/^~(?:[\\/]|$)/.test(options.out)) {
+      const rest = options.out.replace(/^~[\\/]*/, '');
+      const w = `--out ${options.out} starts with "~", which is not your home folder here: a shell expands ~ only when it is not quoted, so the build writes in a folder named ~ in the project (${path.join(cwd, '~', rest)}). To write in the home folder, give it in full (${path.join(os.homedir(), rest)}).`;
+      warningMessages.push(w);
+      logger.warn(`Warning: ${w}`);
+    }
     outPath = path.resolve(cwd, options.out);
     // A folder, or a path that ends in a separator, names where the outputs
     // go: write `<folder>/<name>.css`, never a file named like the folder.
@@ -4718,14 +4736,21 @@ async function themeBuildInternal(
     }
     // The stylesheet is CSS whatever its name; a name that does not end in
     // .css still builds, and the module's import names the file as written.
-    if (path.extname(outPath).toLowerCase() !== '.css') {
-      const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
+    // The name's extension is what follows its last dot, a leading one too:
+    // `.css` is a name with no stem, which writes hidden files.
+    const file = path.basename(outPath);
+    const dot = file.lastIndexOf('.');
+    const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
+    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    if (ext !== '.css' || !stem) {
       const fixed = path
-        .join(path.dirname(options.out), `${stem}.css`)
+        .join(path.dirname(options.out), `${stem || baseName}.css`)
         .split(path.sep)
         .join('/');
       // The result's warnings say it too, as text does.
-      const w = `--out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`;
+      const w = stem
+        ? `--out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`
+        : `--out names a stylesheet with no name before .css, which writes hidden files; give it a name such as ${fixed}.`;
       warningMessages.push(w);
       logger.warn(`Warning: ${w}`);
     }
@@ -4857,6 +4882,18 @@ async function themeBuildInternal(
   ];
   if (variantDtsPath && variantContent) {
     writes.push({dest: variantDtsPath, content: variantContent});
+  }
+
+  // A named pipe, a device or a socket where an output goes is never read
+  // or replaced: an open of one can wait for good. A check refuses it too.
+  for (const write of writes) {
+    const kind = irregularFileKind(write.dest);
+    if (kind && kind !== 'a folder')
+      throw new AstryxError(
+        `${path.relative(cwd, write.dest) || write.dest} is ${kind}, not a file, so the build neither reads nor replaces it: remove it, then build again. Nothing was written.`,
+        undefined,
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
   }
 
   // Every output a build writes stays inside cwd, including the defaults

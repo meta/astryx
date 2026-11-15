@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {persistedSummary, persistedSummaryAsync} from './gather-cache.mjs';
-import {fileStamp, recordReads} from './read-record.mjs';
+import {PRESENT, RESOLVED, fileStamp, recordReads} from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
@@ -168,13 +168,15 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
           const walked = new Set(stamps.map(([file]) => file));
           for (const [file, state] of seen) {
             if (walked.has(file)) continue;
-            // A folder probed is recorded by its identity alone. The full
-            // stamp, taken now, is stricter; a change during the read leaves
-            // it too young to store.
-            stamps.push([
-              file,
-              state.startsWith('dir:') ? fileStamp(file) : state,
-            ]);
+            // A folder probe, an existence check and a real-path lookup each
+            // record less than a stamp, which a stored summary cannot check.
+            // The full stamp, taken now, is stricter; a change during the
+            // read leaves it too young to store.
+            const partial =
+              state.startsWith('dir:') ||
+              state === PRESENT ||
+              state.startsWith(RESOLVED);
+            stamps.push([file, partial ? fileStamp(file) : state]);
           }
         },
       };

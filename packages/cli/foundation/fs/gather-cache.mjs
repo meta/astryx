@@ -21,7 +21,9 @@
  *   the component list (api/component/list/list.mjs) and component
  *   replacement (foundation/discovery/component-replacement.mjs), by theme
  *   discovery (foundation/discovery/theme-discovery.mjs) for each
- *   integration's themes,
+ *   integration's themes, by theme build
+ *   (foundation/discovery/core-theme-facts.mjs) for what it checks a theme
+ *   against in Core's component docs,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
  *   the CLI's own docs tree, which `docs` and `search` read,
@@ -75,6 +77,8 @@ import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
+  PRESENT,
+  lookedUp,
   fileStamp,
   keepState,
   recordReads,
@@ -163,8 +167,9 @@ let lastOutcome = null;
  * those it was stored with and that a hit has just found unchanged, or those
  * a fresh gather was stored with. A derived value keys on them, so an edit to
  * the CLI's code in an installed copy, which misses the gather, misses the
- * derived value too. Null before any kept gather in the run.
- * @type {[string, string][] | null}
+ * derived value too. Null before any kept gather in the run. A hit leaves
+ * how to work them out, since only a derived value after it reads them.
+ * @type {[string, string][] | (() => [string, string][]) | null}
  */
 let gatherCode = null;
 
@@ -435,7 +440,8 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
           if (hooks && url.startsWith('file:')) {
             try {
               const file = fileURLToPath(url);
-              if (!reads.has(file)) reads.set(file, fileStamp(file));
+              // The load reads the module's content: its stamp.
+              keepState(reads, file, fileStamp, 'stamp');
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -494,7 +500,7 @@ function noteLookups(specifier, parentURL, reads) {
     for (;;) {
       if (path.basename(dir) !== 'node_modules') {
         const candidate = path.join(dir, 'node_modules', name);
-        if (!reads.has(candidate)) reads.set(candidate, lookupStamp(candidate));
+        keepState(reads, candidate, lookupStamp);
       }
       const up = path.dirname(dir);
       if (up === dir) break;
@@ -631,7 +637,9 @@ function staleReason(stamps, env) {
     }
   }
   for (const [file, state] of stamps) {
-    if (!stillInState(file, state)) return 'a file or folder it read changed';
+    if (!stillInState(file, state)) {
+      return 'a file or folder it read changed';
+    }
   }
   return null;
 }
@@ -697,7 +705,11 @@ function mergeStates(...lists) {
   /** @type {Map<string, string>} */
   const merged = new Map();
   for (const list of lists) {
-    for (const [at, state] of list) keepState(merged, at, state);
+    for (const [at, state] of list) {
+      const had = merged.get(at);
+      if (had === undefined) merged.set(at, state);
+      else if (had !== state) keepState(merged, at, state);
+    }
   }
   return [...merged];
 }
@@ -783,8 +795,10 @@ function confirmedEntry(file, version, confirmed, reading) {
  * The kept entries a new entry builds on: those the run has read back or
  * stored whose every state the run read too, as it holds them, largest
  * first, each only when it holds a state the others do not. Never one that
- * builds on the new entry's own file. The new entry stores the rest of its
- * states itself.
+ * builds on the new entry's own file. An entry that only checked whether a
+ * path is there still holds where the run read more of that path (holdsIn);
+ * the new entry stores that fuller state, and the rest of its states,
+ * itself.
  * @param {string} file - the new entry's file
  * @param {[string, string][]} stamps - every state the run read
  * @param {Confirmed} confirmed
@@ -804,14 +818,31 @@ function chooseBase(file, stamps, confirmed) {
     .sort((a, b) => b.held.length - a.held.length);
   for (const {other, entry, held} of candidates) {
     if (held.length === 0) continue;
-    if (!held.every(([at, state]) => states.get(at) === state)) continue;
-    if (held.every(([at]) => covered.has(at))) continue;
+    if (!held.every(([at, state]) => holdsIn(states.get(at), state))) continue;
+    const same = held.filter(([at, state]) => states.get(at) === state);
+    if (same.every(([at]) => covered.has(at))) continue;
     deps.push([path.basename(other), entry.version]);
     under.add(other);
     for (const below of entry.under) under.add(below);
-    for (const [at] of held) covered.add(at);
+    for (const [at] of same) covered.add(at);
   }
   return {deps, own: stamps.filter(([at]) => !covered.has(at)), under};
+}
+
+/**
+ * Whether a state an entry holds agrees with the state the run read of the
+ * same path: the same state, or the entry holds only that the path is there,
+ * or what a real-path lookup of it gave (confirmed this run), and the run
+ * read it there.
+ * @param {string | undefined} read - the run's state of the path
+ * @param {string} held - the entry's state of it
+ * @returns {boolean}
+ */
+function holdsIn(read, held) {
+  return (
+    read === held ||
+    ((held === PRESENT || lookedUp(held)) && read !== undefined && read !== '-')
+  );
 }
 
 /**
@@ -922,7 +953,8 @@ async function gatherAt(key, load, codec, keep) {
         // The CLI's own files, one state per path, in the order a fresh
         // gather reads them: merging only those is merging all, then picking
         // them out.
-        gatherCode = mergeStates(...entry.lists.map(cliStates));
+        const {lists} = entry;
+        gatherCode = () => mergeStates(...lists.map(cliStates));
         lastOutcome = {hit: true, reason: 'unchanged'};
         markUsed(file, confirmed);
         return value;
@@ -996,6 +1028,7 @@ function codeStamp(code, inputs) {
  */
 export function persistedDerived(key, compute, codec, inputs = []) {
   if (!run || gatherCode == null) return compute();
+  if (typeof gatherCode === 'function') gatherCode = gatherCode();
   const id = withoutRecording(buildId);
   const dir = id == null ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return compute();
