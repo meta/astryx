@@ -445,18 +445,18 @@ template.
 ### DEC-12 — The page pick needs a shared word when the ranker leads nothing
 
 **Reference:** `spec:AST-048/DEC-12`
-**Decider:** `josephfarina`, `2026-11-15`
+**Status:** recorded under the code-first rule; describes the shipped rule.
 
 When the page ranker proposes no page and search matched no template directly,
-the page build's word tables favor (DEC-11) becomes the start only when the
+a page chosen by build's word tables (DEC-11) becomes the start only if the
 request names at least one content word of that template's own descriptor: its
 display name, category, keywords, description or components. Otherwise the
 start is the app shell, and DEC-10's shell lift does not bring that same page
-back. A request such as "an event page for a concert with a date, venue,
-lineup and a buy tickets button" leans toward a checkout page through the
-tables' learned words but names nothing the checkout template is; starting
-there would scaffold the wrong page. The shell lift may still choose a
-different page by its own decision.
+back. The shell lift is otherwise unchanged: it may still choose a different
+page by its own decision. A request such as "an event page for a concert with
+a date, venue, lineup and a buy tickets button" leans toward a checkout page
+through the tables' learned words but names nothing the checkout template is;
+starting there would scaffold the wrong page.
 
 Rejected: requiring the request's leading phrase to name a kind of page some
 template calls itself, which sends more whole pages back to the empty shell
