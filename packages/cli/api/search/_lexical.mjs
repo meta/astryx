@@ -167,7 +167,7 @@ function identifierReading(query, all) {
   let otherHit = false;
   if (oneIdentifier)
     for (const candidate of all) {
-      const hit = scoreCandidate(term, candidate);
+      const hit = scoreCandidate(term, candidate, {mentions: mentionsSplit});
       if (!hit) continue;
       wholeHit = true;
       if (!mentionsSplit || !hit.inText) {

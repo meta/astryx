@@ -136,9 +136,8 @@ function mentionPattern(term, t) {
  * the catalog does. A candidate's name, aliases, keywords, description, prose
  * and guidance must not change after its first score, as no catalog changes
  * them: an edited candidate, including one in a stored index passed to
- * `rankSearchIndex()` again, would still be scored on its first text. A
- * keyword's `mention` marks one its text mentions (see mentionKeyword).
- * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string, mention: boolean}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
+ * `rankSearchIndex()` again, would still be scored on its first text.
+ * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
  */
 const prepared = new WeakMap();
 
@@ -179,8 +178,7 @@ function prepare(candidate) {
       }),
       keywords: keywords.map((/** @type {string} */ kw) => {
         const text = String(kw);
-        const lower = text.toLowerCase();
-        return {kw, text, lower, mention: mentionKeyword(candidate, lower)};
+        return {kw, text, lower: text.toLowerCase()};
       }),
       description: undefined,
       prose: [],
@@ -238,16 +236,23 @@ function weakKeywordScore(t, kw) {
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
  * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
  * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
- * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
+ * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean, mentions?: boolean}} [opts] - `mentions`: also say whether the hit is only a mention (see `inText`); only the reading of a one-identifier query asks, so other searches pay nothing for it. `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
  * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true} | null}
- *   `alias` marks a hit that read the query's words joined; `inText`, a hit
- *   that is the term mentioned in the description, docs or guidance, not a
- *   name or keyword.
+ *   `alias` marks a hit that read the query's words joined; `inText`, asked
+ *   for with `mentions`, a hit that is the term mentioned in the
+ *   description, docs or guidance, or a doc keyword its text gathers (see
+ *   mentionKeyword), not a name or a keyword of its own.
  */
 export function scoreCandidate(
   term,
   candidate,
-  {fuzzy = true, joins = true, part = false, synonym = false} = {},
+  {
+    fuzzy = true,
+    joins = true,
+    part = false,
+    synonym = false,
+    mentions = false,
+  } = {},
 ) {
   const {
     domain,
@@ -373,26 +378,28 @@ export function scoreCandidate(
 
   // ── Keyword signals ─────────────────────────────────────────────
   const termJoined = joined(term);
-  for (const {kw, text: kwText, lower: kwLower, mention} of p.keywords) {
+  for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
+    // Whether a hit on this keyword is only a mention, read only when asked.
+    const mention = () => mentions && mentionKeyword(candidate, kwLower);
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
     // capitalized one names another entry (a block's `componentsUsed`). A
     // doc's keywords include code terms, matched as written.
     if (kwLower === term) {
-      consider(90, `keyword "${kw}"`, false, mention);
+      consider(90, `keyword "${kw}"`, false, mention());
       continue;
     }
     if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
-      consider(90, `keyword "${kw}"`, 'keyword', mention);
+      consider(90, `keyword "${kw}"`, 'keyword', mention());
       continue;
     }
     if (sameTermWord(t, kwLower)) {
-      consider(88, `keyword "${kw}"`, false, mention);
+      consider(88, `keyword "${kw}"`, false, mention());
       continue;
     }
     if (startsATermWordOf(t, kw))
-      consider(70, `keyword "${kw}"`, false, mention);
+      consider(70, `keyword "${kw}"`, false, mention());
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
       if (dist != null && dist <= 2) {
@@ -400,7 +407,7 @@ export function scoreCandidate(
           dist === 1 ? 70 : 30,
           `keyword "${kw}" (distance ${dist})`,
           false,
-          mention,
+          mention(),
         );
       }
     }
@@ -456,7 +463,7 @@ export function scoreCandidate(
         score: best,
         reason,
         ...(alias ? {alias} : {}),
-        ...(inText ? {inText: true} : {}),
+        ...(mentions && inText ? {inText: true} : {}),
       }
     : null;
 }
