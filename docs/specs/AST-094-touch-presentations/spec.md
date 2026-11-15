@@ -516,11 +516,12 @@ a measured, sourced difference exists.
   taps) MUST be deadlines on that clock, so a blocked main thread delays the
   report and never the moment reported. Behind a blocked page, a deadline
   waits for input still queued before it. It waits 50 ms when its timer runs
-  more than 17 ms late. Each input from before it that reaches the page more
-  than 33 ms late keeps it waiting 50 ms more. An input stamped at or past the
-  deadline ends the wait. A deadline that comes due during the wait runs as it
-  ends. A deadline among a coalesced move's samples runs between them: the
-  samples stamped before it come first.
+  more than 17 ms late. Every recognizer's deadline whose timer runs more than
+  17 ms late waits those 50 ms, even when no input is queued. Each input from
+  before it that reaches the page more than 33 ms late keeps it waiting 50 ms
+  more. An input stamped at or past the deadline ends the wait. A deadline
+  that comes due during the wait runs as it ends. A deadline among a coalesced
+  move's samples runs between them: the samples stamped before it come first.
 - **FR17 — Native readings.** A recognizer's thresholds MUST follow UIKit's
   measured values (FR1, FR2). A pan begins at 10 pt of travel on either axis (a
   screen-edge pan attached to an element within the band at 15 px, FR18),

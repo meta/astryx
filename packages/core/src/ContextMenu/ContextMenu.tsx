@@ -520,7 +520,7 @@ export function ContextMenu({
   // The touch layer loads after the page's first paint, and only while the
   // touch model applies.
   const {layer: TouchLayer, hasFailed: hasTouchLayerFailed} =
-    useContextMenuTouchLayer(touchModes && !isDisabled);
+    useContextMenuTouchLayer(touchModes && !isDisabled, triggerRef);
   // A finger that lands before the touch layer has loaded, with its pointer.
   // The layer begins it as it mounts, if the finger is still down.
   const lateTouchRef = useRef<LateTouch | null>(null);
@@ -905,6 +905,9 @@ export function ContextMenu({
       if (touchModes && !isDisabled && TouchLayer == null) {
         if (hasTouchLayerFailed) {
           // After a failed load, a touch is the intent that loads it again.
+          // The trigger keeps no late touch, so the long press and the
+          // browser's own menu open the menu meanwhile.
+          lateTouchRef.current = null;
           retryContextMenuTouchLayer();
         } else {
           // Kept while the touch layer loads: one finger, until it lifts.
@@ -1002,18 +1005,19 @@ export function ContextMenu({
     (event: React.MouseEvent<HTMLElement>) => {
       if (
         touchHandleRef.current?.isTracking() === true ||
-        lateTouchRef.current != null
+        (lateTouchRef.current != null && !hasTouchLayerFailed)
       ) {
         // The browser's own long-press menu (Android Chrome) for a finger the
         // recognizer is timing, or will time once the touch layer loads: the
-        // recognizer decides, not this event.
+        // recognizer decides, not this event. After a failed load, a finger
+        // kept during that load gets the browser's menu.
         event.preventDefault();
       } else {
         handleContextMenu(event);
       }
       onContextMenuProp?.(event);
     },
-    [handleContextMenu, onContextMenuProp],
+    [handleContextMenu, onContextMenuProp, hasTouchLayerFailed],
   );
 
   const popoverXstyle = menuWidth
