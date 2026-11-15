@@ -16,6 +16,7 @@
 
 import {babelParse as parseModule} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
+import {sourcePlugins} from './source-syntax.mjs';
 
 /**
  * The fields Core's `defineTheme()` input takes, read from the type
@@ -149,9 +150,13 @@ const unwrap = node => {
   return n;
 };
 
-/** @param {any} p @returns {string | null} */
+/**
+ * The field a property or method writes (`onLoad() {}` is a field too).
+ * @param {any} p
+ * @returns {string | null}
+ */
 const keyOf = p =>
-  p.type !== 'ObjectProperty' || p.computed
+  (p.type !== 'ObjectProperty' && p.type !== 'ObjectMethod') || p.computed
     ? null
     : p.key.type === 'Identifier'
       ? p.key.name
@@ -160,140 +165,270 @@ const keyOf = p =>
         : null;
 
 /**
- * The objects a theme source gives as theme input: the object given to
- * `defineTheme()`, and a plain object exported as the default with a name.
- * Empty when the source does not parse.
- * @param {string} source
- * @returns {any[]}
+ * @typedef {{file: string, source: string}} SourceFile
+ * @typedef {(from: string, specifier: string) => SourceFile | null} LoadSource
+ *   the source of the module a relative import names, or null
  */
-function themeInputNodes(source) {
+
+/** The specifiers Core's defineTheme() is imported from. */
+const CORE_THEME = /^@astryxdesign\/core(?:\/theme)?$/;
+
+/**
+ * One module of a theme's sources, read for what a field check follows: its
+ * consts, its imports and its exports.
+ * @param {SourceFile} sourceFile
+ */
+function readModule({file, source}) {
   /** @type {any} */
   let ast;
   try {
     ast = parseModule(source, {
       sourceType: 'unambiguous',
-      plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes'],
+      plugins: sourcePlugins(file),
     });
   } catch {
-    return [];
+    return null;
   }
-  /** @type {any[]} */
-  const inputs = [];
-  /** @param {any} node */
-  const find = node => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      node.forEach(find);
-      return;
-    }
-    const callee = node.type === 'CallExpression' ? node.callee : null;
-    const name =
-      callee?.type === 'Identifier'
-        ? callee.name
-        : callee?.type === 'MemberExpression' && !callee.computed
-          ? callee.property?.name
-          : null;
-    if (name === 'defineTheme') {
-      const arg = unwrap(node.arguments?.[0]);
-      if (arg?.type === 'ObjectExpression') inputs.push(arg);
-    }
-    // A plain object exported as the default is a theme when it has its
-    // name (one that holds themes by name is no theme input).
-    if (node.type === 'ExportDefaultDeclaration') {
-      const value = unwrap(node.declaration);
-      if (
-        value?.type === 'ObjectExpression' &&
-        value.properties.some((/** @type {any} */ p) => keyOf(p) === 'name')
-      )
-        inputs.push(value);
-    }
-    for (const [k, v] of Object.entries(node))
-      if (
-        k !== 'loc' &&
-        k !== 'start' &&
-        k !== 'end' &&
-        v &&
-        typeof v === 'object'
-      )
-        find(v);
-  };
-  find(ast.program);
-  return inputs;
-}
-
-/**
- * A theme source's typography block as the plain values it writes: text
- * and numbers, in nested blocks. A value written as anything else (a name,
- * a call, a spread) is left out. Null when the source writes none.
- * @param {string} source
- * @returns {Record<string, any> | null}
- */
-export function sourceTypography(source) {
-  /** @param {any} node @returns {any} */
-  const plain = node => {
-    const n = unwrap(node);
-    if (!n) return undefined;
-    if (n.type === 'StringLiteral' || n.type === 'NumericLiteral')
-      return n.value;
-    if (n.type === 'TemplateLiteral' && n.expressions.length === 0)
-      return n.quasis.map((/** @type {any} */ q) => q.value.cooked).join('');
-    if (n.type === 'ObjectExpression') {
-      /** @type {Record<string, any>} */
-      const out = {};
-      for (const p of n.properties) {
-        const k = keyOf(p);
-        if (k == null) continue;
-        const v = plain(p.value);
-        if (v !== undefined) out[k] = v;
+  /** @type {Map<string, any>} */
+  const consts = new Map();
+  /** @type {Map<string, {specifier: string, imported: string}>} */
+  const imports = new Map();
+  /** @type {Map<string, any>} the value each name exports, by its name */
+  const exported = new Map();
+  /** @type {Array<{specifier: string, names: Map<string, string> | null}>} exports of another module (null: all of them) */
+  const reExports = [];
+  /** @type {Set<string>} the local names of Core's defineTheme */
+  const defineNames = new Set(['defineTheme']);
+  for (const st of ast.program.body) {
+    const decl = st.type === 'ExportNamedDeclaration' ? st.declaration : st;
+    if (decl?.type === 'VariableDeclaration')
+      for (const d of decl.declarations)
+        if (d.id?.type === 'Identifier' && d.init) {
+          consts.set(d.id.name, d.init);
+          if (decl !== st) exported.set(d.id.name, d.init);
+        }
+    if (st.type === 'ImportDeclaration' && st.importKind !== 'type') {
+      const specifier = String(st.source.value);
+      for (const x of st.specifiers) {
+        const imported =
+          x.type === 'ImportDefaultSpecifier'
+            ? 'default'
+            : x.type === 'ImportSpecifier'
+              ? (x.imported.name ?? x.imported.value)
+              : null;
+        if (imported == null) continue;
+        imports.set(x.local.name, {specifier, imported});
+        if (CORE_THEME.test(specifier) && imported === 'defineTheme')
+          defineNames.add(x.local.name);
       }
-      return out;
     }
-    return undefined;
-  };
-  for (const input of themeInputNodes(source)) {
-    const p = input.properties.find(
-      (/** @type {any} */ x) => keyOf(x) === 'typography',
-    );
-    const v = p ? plain(p.value) : undefined;
-    if (v && typeof v === 'object') return v;
+    if (st.type === 'ExportDefaultDeclaration')
+      exported.set('default', st.declaration);
+    if (st.type === 'ExportNamedDeclaration' && !st.declaration) {
+      if (st.source) {
+        /** @type {Map<string, string>} */
+        const names = new Map();
+        for (const x of st.specifiers)
+          if (x.type === 'ExportSpecifier')
+            names.set(
+              x.exported.name ?? x.exported.value,
+              x.local.name ?? x.local.value,
+            );
+        reExports.push({specifier: String(st.source.value), names});
+      } else
+        for (const x of st.specifiers)
+          if (x.type === 'ExportSpecifier')
+            exported.set(x.exported.name ?? x.exported.value, {
+              type: 'Identifier',
+              name: x.local.name,
+            });
+    }
+    if (st.type === 'ExportAllDeclaration')
+      reExports.push({specifier: String(st.source.value), names: null});
   }
-  return null;
+  return {file, ast, consts, imports, exported, reExports, defineNames};
 }
 
 /**
- * Each field a theme source writes that Core's theme input does not take:
- * in the object given to `defineTheme()` or exported as the default with a
- * name, and in
- * its `onDark`, `onLight` and `typography` blocks, each with its line and
- * the field it is near. A field written through a spread or a computed key
- * is not judged.
- * @param {string} source
- * @param {InputFields} fields
- * @returns {Array<{path: string[], line: number | null, why: string}>}
+ * The objects a theme's sources give as theme input, each with the module
+ * that writes it: every object given to Core's `defineTheme()` (by any
+ * local name it is imported as) or exported as the default with a name,
+ * followed where the source holds it in a const or imports it from a
+ * relative module, and in a module the theme file re-exports. With
+ * `objectOf`, which follows a value the same way.
+ * @param {SourceFile} entry
+ * @param {LoadSource} load
  */
-export function sourceFieldProblems(source, fields) {
-  const inputs = themeInputNodes(source);
-  /** @type {Array<{path: string[], line: number | null, why: string}>} */
+function themeInputs(entry, load) {
+  /** @type {Map<string, ReturnType<typeof readModule>>} */
+  const modules = new Map();
+  /** @param {SourceFile} sf */
+  const moduleOf = sf => {
+    if (!modules.has(sf.file)) modules.set(sf.file, readModule(sf));
+    return modules.get(sf.file) ?? null;
+  };
+  /**
+   * The module a relative import of `mod` names, read.
+   * @param {any} mod @param {string} specifier
+   */
+  const imported = (mod, specifier) => {
+    if (!specifier.startsWith('.')) return null;
+    const sf = load(mod.file, specifier);
+    return sf ? moduleOf(sf) : null;
+  };
+  /**
+   * The object literal a value is, following consts and relative imports,
+   * with the module that writes it; null when it is no literal the source
+   * shows.
+   * @param {any} node @param {any} mod @param {number} [depth]
+   * @returns {{node: any, mod: any} | null}
+   */
+  const objectOf = (node, mod, depth = 0) => {
+    const value = unwrap(node);
+    if (!value || depth > 8) return null;
+    if (value.type === 'ObjectExpression') return {node: value, mod};
+    if (value.type !== 'Identifier') return null;
+    if (mod.consts.has(value.name))
+      return objectOf(mod.consts.get(value.name), mod, depth + 1);
+    const from = mod.imports.get(value.name);
+    if (!from) return null;
+    const other = imported(mod, from.specifier);
+    return other ? exportOf(other, from.imported, depth + 1) : null;
+  };
+  /**
+   * The object literal a module exports under a name.
+   * @param {any} mod @param {string} name @param {number} depth
+   * @returns {{node: any, mod: any} | null}
+   */
+  const exportOf = (mod, name, depth) => {
+    if (depth > 8) return null;
+    if (mod.exported.has(name))
+      return objectOf(mod.exported.get(name), mod, depth);
+    for (const re of mod.reExports) {
+      const local = re.names ? re.names.get(name) : name;
+      if (local == null) continue;
+      const other = imported(mod, re.specifier);
+      const found = other && exportOf(other, local, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  };
+  /** @type {Array<{node: any, mod: any}>} */
+  const inputs = [];
+  /** @type {Set<any>} */
+  const seen = new Set();
+  /** @param {{node: any, mod: any} | null} input */
+  const add = input => {
+    if (input && !seen.has(input.node)) {
+      seen.add(input.node);
+      inputs.push(input);
+    }
+  };
+  /** @type {Set<string>} */
+  const scanned = new Set();
+  /** @param {any} mod @param {number} depth */
+  const scan = (mod, depth) => {
+    if (!mod || scanned.has(mod.file) || depth > 4) return;
+    scanned.add(mod.file);
+    /** @param {any} node */
+    const find = node => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(find);
+        return;
+      }
+      const callee = node.type === 'CallExpression' ? node.callee : null;
+      const name =
+        callee?.type === 'Identifier'
+          ? mod.defineNames.has(callee.name)
+            ? 'defineTheme'
+            : null
+          : callee?.type === 'MemberExpression' && !callee.computed
+            ? callee.property?.name
+            : null;
+      if (name === 'defineTheme') add(objectOf(node.arguments?.[0], mod));
+      // A plain object exported as the default is a theme when it has its
+      // name (one that holds themes by name is no theme input).
+      if (node.type === 'ExportDefaultDeclaration') {
+        const value = objectOf(node.declaration, mod);
+        if (
+          value?.node.properties.some(
+            (/** @type {any} */ p) => keyOf(p) === 'name',
+          )
+        )
+          add(value);
+      }
+      for (const [k, v] of Object.entries(node))
+        if (
+          k !== 'loc' &&
+          k !== 'start' &&
+          k !== 'end' &&
+          v &&
+          typeof v === 'object'
+        )
+          find(v);
+    };
+    find(mod.ast.program);
+    // A theme file that re-exports its theme from another module builds
+    // that module's theme.
+    for (const re of mod.reExports)
+      scan(imported(mod, re.specifier), depth + 1);
+  };
+  scan(moduleOf(entry), 0);
+  return {inputs, objectOf};
+}
+
+/**
+ * Each field a theme's sources write that Core's theme input does not take,
+ * each with its file, its line and the field it is near: in every object
+ * given to Core's `defineTheme()` (by any local name it is imported as) or
+ * exported as the default with a name, and in its `onDark`, `onLight` and
+ * `typography` blocks. An object is followed where the source holds it in a
+ * const or imports it from a relative module, and a module the theme file
+ * re-exports is read too. A field written through a spread or a computed key
+ * is not judged.
+ * @param {SourceFile} entry
+ * @param {InputFields} fields
+ * @param {LoadSource} load
+ * @returns {Array<{path: string[], file: string, line: number | null, why: string}>}
+ */
+export function sourceFieldProblems(entry, fields, load) {
+  const {inputs, objectOf} = themeInputs(entry, load);
+  /** @type {Array<{path: string[], file: string, line: number | null, why: string}>} */
   const out = [];
   /**
-   * @param {any} object
+   * @param {{node: any, mod: any}} object
    * @param {string[]} at
    * @param {string[]} takes
    * @param {(k: string, near: string | null) => string} why
-   * @returns {Map<string, any>} the value of each field it takes
+   * @param {boolean} [values_] whether each field holds a CSS value (a
+   *   typography role's), so a BigInt written there is named
+   * @returns {Map<string, {node: any, mod: any}>} the object each field it takes holds
    */
-  const check = (object, at, takes, why) => {
-    /** @type {Map<string, any>} */
+  const check = (object, at, takes, why, values_ = false) => {
+    /** @type {Map<string, {node: any, mod: any}>} */
     const values = new Map();
-    for (const p of object.properties) {
+    for (const p of object.node.properties) {
       const k = keyOf(p);
       if (k == null) continue;
+      const literal = p.type === 'ObjectProperty' ? unwrap(p.value) : null;
+      if (values_ && takes.includes(k) && literal?.type === 'BigIntLiteral') {
+        out.push({
+          path: [...at, k],
+          file: object.mod.file,
+          line: p.loc?.start?.line ?? null,
+          why: `${k} holds ${literal.value}n, a BigInt, which is no CSS value: give it a CSS value in quotes, such as '${literal.value}'`,
+        });
+        continue;
+      }
       if (takes.includes(k)) {
-        values.set(k, unwrap(p.value));
+        const value = objectOf(p.value, object.mod);
+        if (value) values.set(k, value);
         continue;
       }
       out.push({
         path: [...at, k],
+        file: object.mod.file,
         line: p.loc?.start?.line ?? null,
         why: why(k, nearField(k, takes)),
       });
@@ -312,7 +447,7 @@ export function sourceFieldProblems(source, fields) {
     );
     for (const surface of ['onDark', 'onLight']) {
       const block = top.get(surface);
-      if (block?.type === 'ObjectExpression')
+      if (block)
         check(
           block,
           [surface],
@@ -322,7 +457,7 @@ export function sourceFieldProblems(source, fields) {
         );
     }
     const typography = top.get('typography');
-    if (typography?.type !== 'ObjectExpression') continue;
+    if (!typography) continue;
     const roles = check(
       typography,
       ['typography'],
@@ -331,7 +466,6 @@ export function sourceFieldProblems(source, fields) {
         `${k} is no field typography takes (${fields.typography.join(', ')}), so Core builds nothing from it${did(near)}`,
     );
     for (const [role, block] of roles) {
-      if (block?.type !== 'ObjectExpression') continue;
       const takes = role === 'scale' ? fields.scale : fields.role;
       if (!takes.length) continue;
       check(
@@ -340,8 +474,52 @@ export function sourceFieldProblems(source, fields) {
         takes,
         (k, near) =>
           `${k} is no field typography.${role} takes (${takes.join(', ')}), so Core builds nothing from it${did(near)}`,
+        true,
       );
     }
   }
   return out;
+}
+
+/**
+ * A theme source's typography block as the plain values it writes: text
+ * and numbers, in nested blocks, followed through the consts of the theme
+ * file. A value written as anything else (a name, a call, a spread) is
+ * left out. Null when the source writes none.
+ * @param {string} source
+ * @param {string} [file] the source's file name, which says whether it is
+ *   read with JSX
+ * @returns {Record<string, any> | null}
+ */
+export function sourceTypography(source, file = '') {
+  const {inputs, objectOf} = themeInputs({file, source}, () => null);
+  /** @param {any} node @param {any} mod @returns {any} */
+  const plain = (node, mod) => {
+    const n = unwrap(node);
+    if (!n) return undefined;
+    if (n.type === 'StringLiteral' || n.type === 'NumericLiteral')
+      return n.value;
+    if (n.type === 'TemplateLiteral' && n.expressions.length === 0)
+      return n.quasis.map((/** @type {any} */ q) => q.value.cooked).join('');
+    const object = objectOf(n, mod);
+    if (!object) return undefined;
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const p of object.node.properties) {
+      const k = keyOf(p);
+      if (k == null || p.type !== 'ObjectProperty') continue;
+      const v = plain(p.value, object.mod);
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  };
+  for (const input of inputs) {
+    const p = input.node.properties.find(
+      (/** @type {any} */ x) =>
+        x.type === 'ObjectProperty' && keyOf(x) === 'typography',
+    );
+    const v = p ? plain(p.value, input.mod) : undefined;
+    if (v && typeof v === 'object') return v;
+  }
+  return null;
 }

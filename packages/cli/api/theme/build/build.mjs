@@ -111,6 +111,7 @@ import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
 import {typographyInputProblems} from './typography-values.mjs';
+import {sourcePlugins} from './source-syntax.mjs';
 import {
   INPUT_DECLARATION_FILES,
   inputFieldsFrom,
@@ -323,6 +324,36 @@ function coreSurfaceTokens() {
  */
 const bigIntAsText = (_key, value) =>
   typeof value === 'bigint' ? String(value) : value;
+
+/**
+ * A value with each BigInt in it, in plain objects and arrays at any depth,
+ * replaced by its digits; the same object where it holds none, so a theme
+ * without one is handed on as it is.
+ * @template T
+ * @param {T} value
+ * @param {Map<any, any>} [done] each object already replaced, for one that holds itself
+ * @returns {T}
+ */
+function bigIntsAsText(value, done = new Map()) {
+  if (typeof value === 'bigint') return /** @type {any} */ (String(value));
+  if (value === null || typeof value !== 'object') return value;
+  const plain =
+    Array.isArray(value) ||
+    Object.prototype.toString.call(value) === '[object Object]';
+  if (!plain) return value;
+  if (done.has(value)) return done.get(value);
+  done.set(value, value);
+  /** @type {any} */
+  let copy = null;
+  for (const [k, v] of Object.entries(value)) {
+    const next = bigIntsAsText(v, done);
+    if (next === v) continue;
+    copy ??= Array.isArray(value) ? [...value] : {...value};
+    copy[k] = next;
+  }
+  if (copy) done.set(value, copy);
+  return copy ?? value;
+}
 
 /** @type {Map<string, import('./input-fields.mjs').InputFields | null>} */
 const _inputFields = new Map();
@@ -2643,7 +2674,7 @@ const THEME_MODULE_EXTENSIONS = [
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
 // prettier-ignore
 function parseRegistryModule(/** @type {string} */ source, /** @type {string} */ filePath) {
-  try { return parse(source, {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+  try { return parse(source, {sourceType: 'unambiguous', plugins: sourcePlugins(filePath)}); }
   catch (error) { throw registryGraphError(`Cannot inspect registry module ${filePath}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 // prettier-ignore
@@ -2753,7 +2784,7 @@ function extendedThemeSources(filePath, source) {
     try {
       ast = parse(text, {
         sourceType: 'unambiguous',
-        plugins: ['typescript', 'jsx'],
+        plugins: sourcePlugins(file),
       });
     } catch {
       return chain;
@@ -3034,7 +3065,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
     const call = /\bdefineTheme\s*\(/.exec(text);
     const line =
-      keyPathLine(text, ['name']) ??
+      keyPathLine(text, ['name'], filePath) ??
       (call ? text.slice(0, call.index).split('\n').length : null);
     const stem = path
       .basename(filePath)
@@ -4919,12 +4950,12 @@ async function themeBuildInternal(
    */
   const placed = items =>
     items.flatMap(item => {
-      const line = keyPathLine(themeSource, item.path);
+      const line = keyPathLine(themeSource, item.path, filePath);
       /** @type {{file: string, line: number} | null} */
       let from = null;
       if (line == null)
         for (const base of extendedSources) {
-          const at = keyPathLine(base.source, item.path);
+          const at = keyPathLine(base.source, item.path, base.file);
           if (at == null) continue;
           from = {file: path.relative(cwd, base.file) || base.file, line: at};
           break;
@@ -4939,9 +4970,9 @@ async function themeBuildInternal(
         : [{...item, line, inherited, elsewhere: line == null, from}];
     });
   const nulls = placed(nullThemeValues(themeDef));
-  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null}} n */
+  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null, at?: {file: string, line: number} | null}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.at ? ` (in ${n.at.file}, line ${n.at.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);
@@ -4987,12 +5018,45 @@ async function themeBuildInternal(
     surfaceDefaults: coreSurfaceTokens(),
   });
   const badValueLines = placed(badValues);
+  const cannotWrite = badValueLines.filter(n => n.unbuildable);
+  if (cannotWrite.length > 0) {
+    const first = cannotWrite.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives a value the build cannot write: ${cannotWrite.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
   // defineTheme() drops a field it does not take, so only the source shows
   // a misspelled one.
   const fields = coreInputFields();
   const badFields = fields
-    ? sourceFieldProblems(themeSource, fields).map(f => ({
-        ...f,
+    ? sourceFieldProblems(
+        {file: filePath, source: themeSource},
+        fields,
+        (from, specifier) => {
+          try {
+            const file = resolveThemeModule(specifier, from);
+            return {file, source: fs.readFileSync(file, 'utf8')};
+          } catch {
+            return null;
+          }
+        },
+      ).map(f => ({
+        path: f.path,
+        why: f.why,
+        line: f.file === filePath ? f.line : null,
+        at:
+          f.file === filePath || f.line == null
+            ? null
+            : {file: path.relative(cwd, f.file) || f.file, line: f.line},
         inherited: false,
         elsewhere: false,
         from: null,
@@ -5006,7 +5070,7 @@ async function themeBuildInternal(
   // source writes are read from it.
   const typographyInput =
     interception?.inputOf(themeDef)?.typography ??
-    sourceTypography(themeSource);
+    sourceTypography(themeSource, filePath);
   const badTypography = placed(
     typographyInputProblems(typographyInput, fields?.levels ?? []),
   ).filter(t => t.line != null);
@@ -5244,6 +5308,10 @@ async function themeBuildInternal(
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
+
+    // Core writes a BigInt it meets as a value as its digits, but a BigInt
+    // inside an object it writes as JSON text throws: it gets the digits too.
+    resolvedTheme = bigIntsAsText(resolvedTheme);
 
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
@@ -6188,7 +6256,7 @@ function planFamilySources(files, cwd) {
     const key = canonical(filePath), cached = reachableMemo.get(key); if (cached) return cached;
     if (visiting.has(key) || !fs.existsSync(key)) return new Set();
     visiting.add(key); /** @type {Set<string>} */ const found = new Set(), direct = new Set(); let ast;
-    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: sourcePlugins(key)}); }
     catch { visiting.delete(key); reachableMemo.set(key, found); return found; }
     for (const node of /** @type {any[]} */ (ast.program.body)) {
       const specifier = node.importKind !== 'type' ? node.source?.value : null; if (typeof specifier !== 'string' || (!specifier.startsWith('.') && !path.isAbsolute(specifier))) continue;

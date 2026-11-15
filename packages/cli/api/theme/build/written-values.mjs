@@ -31,6 +31,34 @@ const isBlock = value =>
 const isPlainBlock = value =>
   isBlock(value) && Object.prototype.toString.call(value) === '[object Object]';
 
+/**
+ * A primitive's boxed form (`new String('4px')`, `Object(4)`), or false.
+ * Core writes a token's value as text, which unboxes it.
+ * @param {unknown} value
+ */
+const boxed = value =>
+  isBlock(value) &&
+  /^\[object (?:String|Number|Boolean)\]$/.test(
+    Object.prototype.toString.call(value),
+  );
+
+/**
+ * The JSON text Core writes for an object a part holds as a value, where it
+ * writes a BigInt as its digits (the build hands Core its digits); null for
+ * an object that holds itself, which has no JSON text.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function partJsonText(value) {
+  try {
+    return JSON.stringify(value, (_, v) =>
+      typeof v === 'bigint' ? String(v) : v,
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** What the build writes for a value, as Core writes it (as text). @param {unknown} value */
 const writtenAs = value => {
   try {
@@ -41,7 +69,8 @@ const writtenAs = value => {
 };
 
 /**
- * @typedef {{path: string[], why: string}} WrittenValueProblem
+ * @typedef {{path: string[], why: string, unbuildable?: boolean}} WrittenValueProblem
+ *   `unbuildable`: a value Core cannot write at all, so the build stops
  */
 
 /**
@@ -50,6 +79,7 @@ const writtenAs = value => {
  * @param {unknown} value
  */
 function nonText(key, value) {
+  if (boxed(value)) return nonText(key, /** @type {any} */ (value).valueOf());
   if (typeof value === 'boolean')
     return `${key} holds ${value}, which the build writes as it is (${key}: ${value}), a value no browser reads: give it a CSS value in quotes`;
   if (typeof value === 'number' && !Number.isFinite(value))
@@ -81,15 +111,17 @@ function tokenValueProblem(key, value, reads) {
     const missing = value.findIndex(h => h === null || h === undefined);
     if (missing !== -1)
       return `${key} gives no ${missing === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and the browser drops the whole value, in both modes: give both halves, or one value for both modes`;
-    const half = value.find(
-      h => typeof h !== 'string' && typeof h !== 'number',
-    );
+    const half = value.find(h => {
+      const v = boxed(h) ? h.valueOf() : h;
+      return typeof v !== 'string' && typeof v !== 'number';
+    });
     return half === undefined
       ? null
       : `${key} holds a half that is no text (${typeof half}), so the build writes ${shown}, which the browser drops: give each half a CSS value in quotes`;
   }
   const bad = nonText(key, value);
   if (bad) return bad;
+  if (boxed(value)) value = /** @type {any} */ (value).valueOf();
   if (typeof value !== 'string') return null;
   for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/gi)) {
     if (comma || name === key) continue;
@@ -199,10 +231,40 @@ export function writtenValueProblems(
         part(v, [...at, k], depth + 1);
         continue;
       }
-      const why = Array.isArray(v)
-        ? `${k} holds an array, which the build writes as JSON text (${JSON.stringify(v)}), a value no browser reads: give it a CSS value in quotes`
-        : (nonText(k, v) ??
-          (k.startsWith('--') ? cycleProblem(k, ownCustom(node)) : null));
+      // Core writes an object a part holds as a value (an array, a boxed
+      // string, a Date) as its JSON text.
+      if (typeof v === 'symbol') {
+        out.push({
+          path: [...at, k],
+          why: `${k} holds a symbol, which has no text the build can write: give it a CSS value in quotes`,
+          unbuildable: true,
+        });
+        continue;
+      }
+      if (Array.isArray(v) || isBlock(v)) {
+        const text = partJsonText(v);
+        const what = Array.isArray(v)
+          ? 'an array'
+          : boxed(v)
+            ? `a ${Object.prototype.toString.call(v).slice(8, -1)} object`
+            : 'an object';
+        out.push(
+          text == null
+            ? {
+                path: [...at, k],
+                why: `${k} holds ${what} that holds itself, which has no text the build can write: give it a CSS value in quotes`,
+                unbuildable: true,
+              }
+            : {
+                path: [...at, k],
+                why: `${k} holds ${what}, which the build writes as JSON text (${text}), a value no browser reads: give it ${boxed(v) ? `the text itself, '${String(v)}'` : 'a CSS value in quotes'}`,
+              },
+        );
+        continue;
+      }
+      const why =
+        nonText(k, v) ??
+        (k.startsWith('--') ? cycleProblem(k, ownCustom(node)) : null);
       if (why) out.push({path: [...at, k], why});
     }
   };
@@ -246,6 +308,19 @@ export function writtenValueProblems(
             defaults[k] === v
           )
             continue;
+          // Core writes a token's value as text: a symbol has none, and an
+          // object that holds itself cannot be read for one.
+          if (
+            typeof v === 'symbol' ||
+            (isBlock(v) && !boxed(v) && partJsonText(v) == null)
+          ) {
+            out.push({
+              path: [...at, map, k],
+              why: `${k} holds ${typeof v === 'symbol' ? 'a symbol' : 'an object that holds itself'}, which has no text the build can write: give it a CSS value in quotes`,
+              unbuildable: true,
+            });
+            continue;
+          }
           const why =
             tokenNameProblem(k, v) ??
             tokenValueProblem(k, v, reads) ??
