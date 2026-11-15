@@ -178,7 +178,7 @@ export function registerSearch(program) {
             ? `Results for "${q}" (${results.length} of ${matchCount})`
             : `Results for "${q}" (${results.length})`,
         ),
-        records(results, {
+        records(results.map(markNotReady), {
           fields,
           format: {
             command: formatCliCommand,
@@ -196,6 +196,17 @@ export function registerSearch(program) {
       return answered;
     },
   });
+}
+
+/**
+ * The text view of a result: an unready template's kind reads
+ * `page (not ready)`. The JSON carries the same fact as `isReady: false`.
+ * @param {import('../../../api/search/search.type.mjs').SearchResultEntry} result
+ */
+function markNotReady(result) {
+  return result.isReady === false
+    ? {...result, kind: `${result.kind} (not ready)`}
+    : result;
 }
 
 /**
