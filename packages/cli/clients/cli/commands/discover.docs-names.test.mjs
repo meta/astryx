@@ -16,6 +16,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {
+  definitionSource,
+  writeIconSetProject,
+} from '../../../test-utils/icon-set-fixture.mjs';
 
 const SLOW = 60_000;
 
@@ -141,6 +145,36 @@ describe('astryx discover: docs an installed integration adds', () => {
         const read = await runCli(['docs', name], {cwd: tmpDir});
         expect({name, status: read.status}).toEqual({name, status: 0});
       }
+    },
+    SLOW,
+  );
+});
+
+describe('astryx discover: an icon set beside docs', () => {
+  it(
+    'lists an icon set’s own icon definitions with the set, never as docs',
+    async () => {
+      // The set ships an icon definition of its own, a typed doc the docs tree
+      // places; the Acme kit beside it ships docs, so the catalog is built.
+      const cwd = writeIconSetProject(path.join(tmpDir, 'icons'), {
+        packages: [{definitions: {sparkle: definitionSource('sparkle')}}],
+        config: {
+          integrations: ['@acme/glyphs', '@acme/kit'],
+          experimental: {iconSet: 'glyphs'},
+        },
+      });
+      fs.cpSync(
+        path.join(tmpDir, 'node_modules', '@acme', 'kit'),
+        path.join(cwd, 'node_modules', '@acme', 'kit'),
+        {recursive: true},
+      );
+      const result = await runCli(['--json', 'discover'], {cwd});
+      expect(result.status).toBe(0);
+      const glyphs = JSON.parse(result.stdout).data.find(
+        (/** @type {{name: string}} */ each) => each.name === '@acme/glyphs',
+      );
+      expect(glyphs.iconSets).toEqual(['glyphs']);
+      expect(glyphs.docs ?? []).toEqual([]);
     },
     SLOW,
   );

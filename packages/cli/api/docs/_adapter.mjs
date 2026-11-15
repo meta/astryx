@@ -1932,12 +1932,15 @@ export function holdsOwnName(tree, catalog, entry) {
  * The names `astryx docs` opens a package's docs by, sorted: the one rule
  * every surface that lists a package's docs names them by, so each name it
  * prints opens (`astryx discover` lists an installed integration's docs this
- * way). A doc opens where it lands, not by the name on its file: a topic the
- * package wrote or took over opens by its own name; a doc that adds sections
- * to another topic opens with that topic, by its name; a namespace or guide
- * the package places, and a guide it replaces or extends by its route, open by
- * that route. A topic whose name opens another doc is left out, as the topic
- * list leaves it out (spec:AST-046 FR11).
+ * way). The docs are what the package's docs root ships, and each opens where
+ * it lands, not by the name on its file: a topic the package wrote or took
+ * over opens by its own name; a doc that adds sections to another topic opens
+ * with that topic, by its name; a namespace doc or guide the package places,
+ * and a guide it replaces or extends by its route, open by that route. A topic
+ * whose name opens another doc is left out, as the topic list leaves it out
+ * (spec:AST-046 FR11). Typed docs of the package's other contributions, such
+ * as an icon set's own icon definitions, are listed with those contributions,
+ * not here.
  * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
  * @param {string} owner the package
@@ -1952,9 +1955,11 @@ export function packageDocNames(catalog, tree, owner) {
     }
   }
   for (const node of tree.nodes.values()) {
-    // A generated level has no doc of its own, and a guide that is a topic
-    // opens by the topic's name, named above.
-    if (node.generated || node.ref?.flatTopic != null) continue;
+    // What a docs root ships to the tree: a namespace doc, or a guide (a topic
+    // file the tree places). A generated level has no doc of its own, and a
+    // topic the tree files in one opens by its name, named above.
+    if (node.generated) continue;
+    if (node.kind !== 'namespace' && node.ref?.topicFile == null) continue;
     if (ownsNode(node, owner)) names.add(node.route);
   }
   return [...names].sort();
