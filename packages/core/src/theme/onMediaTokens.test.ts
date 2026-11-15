@@ -676,6 +676,26 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     }
   });
 
+  it("keeps a reference's fallback on the root alias", () => {
+    const withFallback = defineTheme({
+      name: 'media-scheme-replay-alias-fallback',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-border':
+          'color-mix(in srgb, var(--color-text-secondary) 50%, var(--brand-muted, #00c000))',
+      },
+    });
+    const css = generateOnMediaCSS(withFallback);
+    expect(css).toContain('--_theme-root-brand-muted: var(--brand-muted);');
+    // Where the token is unset, the root alias is invalid and the surface
+    // takes the same fallback the root takes.
+    for (const surface of ['dark', 'light'] as const) {
+      expect(mediaDeclarations(css, surface)['--color-border']).toBe(
+        'color-mix(in srgb, var(--color-text-secondary) 50%, var(--_theme-root-brand-muted, #00c000))',
+      );
+    }
+  });
+
   it('declares no root alias for a theme whose surface values refer only to its own tokens', () => {
     const own = defineTheme({
       name: 'media-scheme-replay-own-mix',
