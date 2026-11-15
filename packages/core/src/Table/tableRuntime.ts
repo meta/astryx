@@ -23,8 +23,15 @@ export interface TableGeometrySnapshot {
   readonly viewportHeight: number;
   readonly scrollTop: number;
   readonly scrollHeight: number;
-  readonly bodyOffset: number;
+  readonly startOffset: number;
   readonly isMeasured: boolean;
+  /** Inline viewport size, measured with the block axis. */
+  readonly viewportWidth: number;
+  /**
+   * Logical inline scroll distance from the inline start, also in right-to-left
+   * tables. It is read only while an inline subscriber exists, otherwise 0.
+   */
+  readonly scrollLeft: number;
   /** Increments on each content or layout invalidation; a scroll keeps it. */
   readonly revision: number;
   /** Increments on each size, font, or outer class or style change. */
@@ -34,8 +41,10 @@ const EMPTY_GEOMETRY: TableGeometrySnapshot = {
   viewportHeight: 0,
   scrollTop: 0,
   scrollHeight: 0,
-  bodyOffset: 0,
+  startOffset: 0,
   isMeasured: false,
+  viewportWidth: 0,
+  scrollLeft: 0,
   revision: 0,
   layoutRevision: 0,
 };
@@ -45,6 +54,9 @@ export function createTableRuntime() {
   const body = {current: null as HTMLTableSectionElement | null};
   const table = {current: null as HTMLTableElement | null};
   const listeners = new Set<() => void>();
+  // Only column windowing reads the inline position. Without it, an inline
+  // scroll publishes nothing, so row windowing does no extra work.
+  let inlineListenerCount = 0;
   let snapshot = EMPTY_GEOMETRY;
   let stopGeometry: (() => void) | undefined;
   let measuredViewport: HTMLDivElement | null = null;
@@ -76,8 +88,13 @@ export function createTableRuntime() {
       measuredViewport === el
     ) {
       const scrollTop = el.scrollTop;
-      if (scrollTop !== snapshot.scrollTop) {
-        publish({...snapshot, scrollTop});
+      const scrollLeft =
+        inlineListenerCount > 0 ? Math.abs(el.scrollLeft) : snapshot.scrollLeft;
+      if (
+        scrollTop !== snapshot.scrollTop ||
+        scrollLeft !== snapshot.scrollLeft
+      ) {
+        publish({...snapshot, scrollTop, scrollLeft});
       }
       return;
     }
@@ -90,12 +107,14 @@ export function createTableRuntime() {
       viewportHeight,
       scrollTop,
       scrollHeight: el.scrollHeight,
-      bodyOffset:
+      startOffset:
         section.getBoundingClientRect().top -
         el.getBoundingClientRect().top +
         scrollTop -
         el.clientTop,
       isMeasured: true,
+      viewportWidth: el.clientWidth,
+      scrollLeft: inlineListenerCount > 0 ? Math.abs(el.scrollLeft) : 0,
       revision:
         snapshot.revision +
         (hasContentInvalidation || hasLayoutInvalidation ? 1 : 0),
@@ -108,7 +127,9 @@ export function createTableRuntime() {
       snapshot.viewportHeight === next.viewportHeight &&
       snapshot.scrollTop === next.scrollTop &&
       snapshot.scrollHeight === next.scrollHeight &&
-      snapshot.bodyOffset === next.bodyOffset &&
+      snapshot.startOffset === next.startOffset &&
+      snapshot.viewportWidth === next.viewportWidth &&
+      snapshot.scrollLeft === next.scrollLeft &&
       snapshot.isMeasured
     ) {
       return;
@@ -123,16 +144,28 @@ export function createTableRuntime() {
     stopGeometry = subscribeScrollGeometry(node, refresh);
     refresh(true, true);
   }
+  function subscribe(fn: () => void) {
+    listeners.add(fn);
+    connectGeometry();
+    return () => {
+      listeners.delete(fn);
+      if (listeners.size === 0) {
+        stopGeometry?.();
+        stopGeometry = undefined;
+      }
+    };
+  }
   const geometry = {
-    subscribe(fn: () => void) {
-      listeners.add(fn);
-      connectGeometry();
+    subscribe,
+    /** Also publishes inline scrolling, through the same subscription. */
+    subscribeInline(fn: () => void) {
+      inlineListenerCount++;
+      const unsubscribe = subscribe(fn);
+      // An existing measurement has no inline position yet.
+      refresh();
       return () => {
-        listeners.delete(fn);
-        if (listeners.size === 0) {
-          stopGeometry?.();
-          stopGeometry = undefined;
-        }
+        inlineListenerCount--;
+        unsubscribe();
       };
     },
     getSnapshot: () => snapshot,
@@ -187,5 +220,5 @@ export function createTableRuntime() {
 }
 export type TableRuntime = ReturnType<typeof createTableRuntime>;
 export const TableRuntimeContext = createSharedContext<
-  (TableRuntime & {viewportHeight?: number}) | null
+  (TableRuntime & {viewportHeight?: number; isLoadingAdmitted?: boolean}) | null
 >('TableRuntimeContext', 1, null);

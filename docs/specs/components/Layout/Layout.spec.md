@@ -199,8 +199,7 @@ Panel stands for every LayoutPanel, at logical start, end, or both.
 - `architecture:container-padding` owns publication and escape of container
   inset; FR2 and FR3 apply it.
 - `component:LayoutHeader`, `component:LayoutContent`, `component:LayoutFooter`,
-  and `component:LayoutPanel` own each region's behavior, including the
-  publication gap LayoutPanel records.
+  and `component:LayoutPanel` own each region's behavior.
 - `architecture:component-theming-surface` owns anatomy and target mapping.
 - `architecture:public-component-api` owns caller-input routing; FR7 applies
   it.

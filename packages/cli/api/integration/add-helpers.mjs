@@ -12,11 +12,13 @@
  * same transaction. Side-effect-free outside of {@link applyWrites}.
  */
 
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AstryxError} from '../error.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
+import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findLocalIntegrationManifestOrNull} from '../../foundation/integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../../foundation/integrations/integrations.mjs';
@@ -341,6 +343,15 @@ export function applyWrites(plans) {
     for (const plan of plans) {
       fs.mkdirSync(path.dirname(plan.path), {recursive: true});
       assertNotSymlink(plan.path);
+      // A named pipe or a device is never opened: a read of one can wait
+      // for good.
+      const kind = irregularFileKind(plan.path);
+      if (kind && kind !== 'a folder')
+        throw new AstryxError(
+          `${plan.path} is ${kind}, not a file, so it is not replaced: remove it, then run again.`,
+          undefined,
+          ERROR_CODES.ERR_FILE_EXISTS,
+        );
       const exists = fs.existsSync(plan.path);
       if (plan.createOnly && exists) {
         throw new AstryxError(
@@ -376,6 +387,10 @@ export function applyWrites(plans) {
       staged.push({...plan, temporary, original, mode});
     }
 
+    // Under a folder lock (the theme editor's), a run that lost the lock
+    // while it was stopped publishes nothing. Outside a lock this does
+    // nothing.
+    stillHolds();
     for (const plan of staged) {
       if (plan.original == null) {
         publishNewFile(plan.temporary, plan.path);
@@ -486,7 +501,7 @@ export async function loadCurrentManifest(manifestFile, manifestExists) {
  * @param {string} manifestPath
  * @param {string[]} files
  * @param {boolean} dryRun
- * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, updated?: boolean, renamed?: Array<{from: string, to: string}>, moved?: Array<{id: string, from: string, to: string}>, licenseNoticeMissing?: {library: string, path: string}, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[]}}}
+ * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, updated?: boolean, renamed?: Array<{from: string, to: string}>, moved?: Array<{id: string, from: string, to: string}>, licenseNoticeMissing?: {library: string, path: string}, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[], moduleUpdate?: {previous: string, module: string}}}}
  */
 export function receipt(kind, name, root, manifestPath, files, dryRun) {
   return {

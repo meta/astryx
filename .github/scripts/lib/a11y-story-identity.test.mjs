@@ -59,6 +59,7 @@ describe('a11y story identity migration', () => {
   it('routes every pattern binding prefix to a canonical public owner', () => {
     for (const [prefix, owner] of [
       ['a11y-button-pattern--button-default', 'core/Button'],
+      ['a11y-link-pattern--provider-router', 'core/LinkProvider'],
       ['a11y-button-pattern--icon-button-default', 'core/IconButton'],
       [
         'a11y-button-pattern--sidenav-collapse-icon',

@@ -1204,6 +1204,41 @@ describe('Timestamp', () => {
       });
     });
 
+    it('names and announces a failed copy, then returns to rest', async () => {
+      (
+        navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+      ).mockRejectedValueOnce(new Error('clipboard denied'));
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      const restName = button.getAttribute('aria-label');
+      fireEvent.mouseEnter(button);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(button).toHaveAccessibleName(
+          'Failed to copy value to clipboard.',
+        ),
+      );
+      // The tooltip says the same, in step with the name.
+      await waitFor(() =>
+        expect(
+          screen.getByText('Failed to copy value to clipboard.', {
+            selector: '[role="tooltip"] *, [role="tooltip"]',
+          }),
+        ).toBeInTheDocument(),
+      );
+      // A failure is an error, so it goes to the assertive region.
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-astryx-live-region="assertive"]'),
+        ).toHaveTextContent('Failed to copy value to clipboard.'),
+      );
+      await waitFor(
+        () => expect(button).toHaveAttribute('aria-label', restName ?? ''),
+        {timeout: 3000},
+      );
+    });
+
     it("shows a 'Copy' tooltip on the copy button, flipping to 'Copied' after a copy", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
@@ -1237,6 +1272,7 @@ describe('Timestamp', () => {
         check: <span data-icon="check" />,
         clock: <span data-icon="clock" />,
         checkDouble: <span data-icon="checkDouble" />,
+        close: <span data-icon="close" />,
       };
 
       async function renderCard(componentIcons?: ComponentIconMap<never>) {
@@ -1267,6 +1303,42 @@ describe('Timestamp', () => {
         expect(glyph(button)).toBe('copy');
         await copy(button);
         expect(glyph(button)).toBe('check');
+      });
+
+      it('draws close while a failed copy shows, when the theme maps nothing', async () => {
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        const button = await renderCard();
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(glyph(button)).toBe('close');
+      });
+
+      it('passes `copied: false` to a slot function while a failure that follows a success shows', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+        await copy(button);
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+
+        // A second write fails within the 1.5 seconds the success shows.
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        expect(glyph(button)).toBe('clock');
       });
 
       it('passes `copied` to a slot function and draws the name it returns', async () => {

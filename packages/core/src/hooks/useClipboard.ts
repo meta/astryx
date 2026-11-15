@@ -99,7 +99,7 @@ export function useClipboard(
  * component needs to report a failed write.
  */
 export interface UseClipboardCopyOptions extends UseClipboardOptions {
-  /** Message announced to the polite live region when a write fails. */
+  /** Message announced to the assertive live region when a write fails. */
   announceFailure?: string;
   /**
    * Called once with the rejection when a write fails. `copy` still resolves
@@ -136,10 +136,14 @@ export function useClipboardCopy(
   const [isFailed, setIsFailed] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
 
-  // Clear pending resets when the consumer unmounts.
+  // Syncs the reset timers with the consumer's mount: unmounting clears
+  // them, and a write still in flight then sets no state.
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (resetTimerRef.current != null) {
         clearTimeout(resetTimerRef.current);
       }
@@ -154,6 +158,10 @@ export function useClipboardCopy(
       try {
         await navigator.clipboard.writeText(text);
       } catch (error) {
+        if (!isMountedRef.current) {
+          onError?.(error);
+          return false;
+        }
         // A failure leaves the copied state unchanged; it shows for as long
         // as a copy would.
         setIsFailed(true);
@@ -165,10 +173,14 @@ export function useClipboardCopy(
           setIsFailed(false);
         }, resetAfterMs);
         if (announceFailure) {
-          announce(announceFailure);
+          // A failure is an error, so screen readers hear it at once.
+          announce(announceFailure, 'assertive');
         }
         onError?.(error);
         return false;
+      }
+      if (!isMountedRef.current) {
+        return true;
       }
       if (failedTimerRef.current != null) {
         clearTimeout(failedTimerRef.current);

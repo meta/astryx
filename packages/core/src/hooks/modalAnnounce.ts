@@ -30,6 +30,7 @@ import {
   type WaitingWords,
   type WithdrawAnnouncement,
 } from './useAnnounce';
+import {sharedMap, sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * Whether what is written inside `dialog` reaches assistive technology: open
@@ -66,7 +67,13 @@ function enclosingOpenModal(
 // presented. `showModal()` sets `open` as it is called, so the order of the
 // attribute records is the top-layer order, and the last one still open as a
 // modal is the modal on top.
-const presented: HTMLDialogElement[] = [];
+// Every copy of Core on the page keeps one list, one hold and one deferral
+// map, so a package component and a copy route to the same open modal.
+const presented = sharedState(
+  'hooks/modal-announce/presented',
+  1,
+  (): HTMLDialogElement[] => [],
+);
 
 export function notePresented(dialog: HTMLDialogElement): void {
   const at = presented.indexOf(dialog);
@@ -153,10 +160,10 @@ function isAnyModalOpen(): boolean {
 interface HeldWords extends WaitingWords {
   readonly receipts: AnnounceReceipt[];
 }
-const held = new Map<
+const held = sharedMap<
   HTMLDialogElement,
   Record<AnnouncePoliteness, HeldWords[]>
->();
+>('hooks/modal-announce/held', 1);
 
 /** Hold `message` for `dialog`, for the announcer `receipt` stands for. */
 function hold(
@@ -346,7 +353,10 @@ interface Deferred {
   words: Record<AnnouncePoliteness, HeldWords[]>;
   clears: Record<AnnouncePoliteness, boolean>;
 }
-const deferredByScope = new WeakMap<ModalAnnounceScope, Deferred>();
+const deferredByScope = sharedWeakMap<ModalAnnounceScope, Deferred>(
+  'hooks/modal-announce/deferred-by-scope',
+  1,
+);
 
 function deferUntilPresented(
   scope: ModalAnnounceScope,

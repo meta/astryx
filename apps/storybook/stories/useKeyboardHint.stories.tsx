@@ -15,9 +15,9 @@ import {VStack} from '@astryxdesign/core/Layout';
  * roving-tabindex composite receives keyboard focus, teaching sighted keyboard
  * users that arrow keys move within the group.
  *
- * **Tab into the widget with the keyboard** to see the hint appear. It
- * auto-dismisses on the first arrow press, on blur, or after a short timeout,
- * and does not re-show for that instance. (A mouse click does not trigger it —
+ * **Tab into the widget with the keyboard** to see the hint appear. It stays
+ * until the first arrow press, Escape, or blur, and does not re-show for that
+ * instance. (A mouse click does not trigger it —
  * the hint only appears on `:focus-visible` entry.)
  */
 

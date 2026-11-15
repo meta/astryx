@@ -17,8 +17,9 @@
 #   classifier, an API error, an empty file list or one GitHub truncates)
 #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
 #   Changeset) fails the step, as the old scope job failed its dependents.
-# - A release-branch pull request is the generated version bump: spec-only and
-#   tooling-only, with `release_bump` true.
+# - A release-branch generated bump keeps its narrow lane. Any other candidate
+#   runs every test lane; the trusted release validator then admits only the
+#   proven test-repair class and rejects every broader change.
 #
 # The job must be checked out first: this is a local action.
 
@@ -86,7 +87,7 @@ outputs:
       classifier predates it reports nothing, which runs every test.
     value: ${{ steps.scope.outputs.vitest_full_suite }}
   release_bump:
-    description: The PR targets a release branch (the generated version bump).
+    description: The PR targets a release branch and must pass release validation.
     value: ${{ steps.scope.outputs.release_bump }}
   decided:
     description: >-
@@ -190,6 +191,21 @@ runs:
             for (const [key, value] of Object.entries(values)) core.setOutput(key, value);
             core.info(Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' '));
           };
+          const writeChangedFiles = files => {
+            const changedFilesPath = path.join(
+              process.env.RUNNER_TEMP || os.tmpdir(),
+              'test-scope-changed-files.txt',
+            );
+            const changed = [
+              ...new Set(
+                files.flatMap(file =>
+                  [file.filename, file.previous_filename].filter(Boolean),
+                ),
+              ),
+            ];
+            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
+            return changedFilesPath;
+          };
 
           if (context.eventName !== 'pull_request') {
             core.info(`${context.eventName}: not a pull request, so everything is in scope.`);
@@ -197,20 +213,6 @@ runs:
             return;
           }
           const pr = context.payload.pull_request;
-          if (pr.base.ref.startsWith('release/v')) {
-            core.info('Release-branch pull request: the generated version bump.');
-            report({
-              ...everything,
-              ...(audit ? auditNone : {}),
-              spec_only: 'true',
-              tooling_only: 'true',
-              release_bump: 'true',
-              touches: 'false',
-              applies: 'false',
-            });
-            return;
-          }
-
           let files;
           let root;
           // The base's policy files are copied to a temporary folder that
@@ -233,6 +235,9 @@ runs:
                 '.github/scripts/change-scope.cjs',
                 '.github/scripts/knowledge-paths.cjs',
                 'scripts/component-packages.cjs',
+                ...(pr.base.ref.startsWith('release/v')
+                  ? ['scripts/release/release-paths.mjs']
+                  : []),
                 ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
                 // Data, not code: the Lab entry check reads the base's copy.
                 'packages/cli/assets/discover/official-packages.json',
@@ -258,6 +263,7 @@ runs:
               core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);
               report({
                 ...everything,
+                release_bump: String(pr.base.ref.startsWith('release/v')),
                 decided: 'false',
                 truncated: String(/truncated the file list/.test(error.message)),
               });
@@ -270,6 +276,40 @@ runs:
                 ? `R100\t${f.previous_filename}\t${f.filename}`
                 : `${STATUS[f.status] ?? 'M'}\t${f.filename}`)
               .join('\n');
+
+            if (pr.base.ref.startsWith('release/v')) {
+              const releaseKind = execFileSync(
+                'node',
+                [
+                  path.join(root, 'scripts/release/release-paths.mjs'),
+                  '--classify',
+                ],
+                {encoding: 'utf8', input: `${nameStatus}\n`},
+              ).trim();
+              if (releaseKind === 'version-bump') {
+                core.info('Release-branch pull request: the generated version bump.');
+                report({
+                  ...everything,
+                  ...(audit ? auditNone : {}),
+                  spec_only: 'true',
+                  tooling_only: 'true',
+                  release_bump: 'true',
+                  touches: 'false',
+                  applies: 'false',
+                });
+              } else {
+                core.info(
+                  `Release-branch ${releaseKind} candidate: every test lane runs; the release validator decides whether the change is allowed.`,
+                );
+                report({
+                  ...everything,
+                  ...(audit ? auditAll : {}),
+                  release_bump: 'true',
+                  changed_files_path: writeChangedFiles(files),
+                });
+              }
+              return;
+            }
             const outputFile = path.join(root, 'classification');
             fs.writeFileSync(outputFile, '');
             // GitHub's patch text for the Lab entry files, handed over as data:
@@ -363,12 +403,7 @@ runs:
                   componentScope = auditAll;
                 }
               }
-              // A file, not an output value: a large pull request's list would
-              // not fit an environment variable.
-              const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
-              const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
-              fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
-              componentScope.changed_files_path = changedFilesPath;
+              componentScope.changed_files_path = writeChangedFiles(files);
             }
             report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent, lab_specs_path: labSpecsPath});
           } finally {

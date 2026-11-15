@@ -10,17 +10,38 @@
  *   ends at its release and runs once per press and layer. A release target
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
- *   fired `contextmenu`
+ *   fired `contextmenu`. A claim runs its onRelease at its release, and no
+ *   other. A claim ends when another control takes the pointer. A release
+ *   is in flight from its pointerup to its click or the next task, and
+ *   afterRelease runs once, at that click or that task. A press mark names
+ *   a pointer press, survives another pointer's press for its own pointer,
+ *   and is null for a keystroke
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  afterRelease,
   claimContextMenuPress,
   claimPress,
   currentGesture,
   isPressInFlight,
+  isReleaseInFlight,
 } from './gestureCounter';
+import {armClickGuard, disarmClickGuard} from '../utils/clickGuard';
+
+/** A touch pointer event of `type` for `pointerId`. */
+function touchPointerEvent(type: string, pointerId: number): Event {
+  const event = new Event(type, {bubbles: true});
+  Object.defineProperty(event, 'pointerId', {value: pointerId});
+  Object.defineProperty(event, 'pointerType', {value: 'touch'});
+  return event;
+}
+
+/** The browser's click for a release: `detail` counts the clicks. */
+function browserClick(target: Element): void {
+  target.dispatchEvent(new MouseEvent('click', {bubbles: true, detail: 1}));
+}
 
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
 function pointerEvent(
@@ -320,6 +341,57 @@ describe('claimPress', () => {
     expect([...listening].filter(([, n]) => n !== 0)).toEqual([]);
   });
 
+  it('runs onRelease at the release of a claim that is still held', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    expect(onRelease).not.toHaveBeenCalled();
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    expect(onRelease).toHaveBeenCalledOnce();
+  });
+
+  it('runs no onRelease for a claim whose layer closed first, or a cancelled press', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    layer.dispatchEvent(
+      Object.assign(new Event('toggle'), {newState: 'closed'}),
+    );
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    trigger.dispatchEvent(pointerEvent('pointercancel', 7));
+    expect(onRelease).not.toHaveBeenCalled();
+  });
+
+  it('ends when another control takes the pointer, and then neither takes it back nor runs onRelease', () => {
+    const {trigger, layer} = mountLayer();
+    const row = document.createElement('div');
+    document.body.append(row);
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    row.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('pointerup', 7, {x: 20, y: 20}));
+    expect(onRelease).not.toHaveBeenCalled();
+  });
+
+  it('keeps the claim when the layer itself takes the pointer', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    layer.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    expect(onRelease).toHaveBeenCalledOnce();
+  });
+
   it('claims a press for the context menu only once that press fired contextmenu', () => {
     const {trigger, layer} = mountLayer();
     trigger.dispatchEvent(pointerEvent('pointerdown', 7));
@@ -330,5 +402,217 @@ describe('claimPress', () => {
     );
     claimContextMenuPress(layer);
     expect(captured).toEqual([7]);
+  });
+});
+
+describe('the release in flight and afterRelease', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.replaceChildren();
+  });
+
+  /** A press on a fresh button: down, then up, as the window sees them. */
+  function press(pointerId = 3) {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(pointerEvent('pointerdown', pointerId));
+    return {
+      button,
+      release: () => button.dispatchEvent(pointerEvent('pointerup', pointerId)),
+    };
+  }
+
+  it('is in flight from the release until its click', () => {
+    const {button, release} = press();
+    expect(isReleaseInFlight()).toBe(false);
+    let duringRelease = false;
+    button.addEventListener('pointerup', () => {
+      duringRelease = isReleaseInFlight();
+    });
+    release();
+    expect(duringRelease).toBe(true);
+    browserClick(button);
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('stays in flight through a click the page dispatches inside the release', () => {
+    const {button, release} = press();
+    let afterDispatch = false;
+    button.addEventListener('pointerup', () => {
+      // A menu row's activation: a dispatched click, `detail` 0.
+      button.click();
+      afterDispatch = isReleaseInFlight();
+    });
+    release();
+    expect(afterDispatch).toBe(true);
+    browserClick(button);
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('ends at a click the page dispatches after the release', () => {
+    const {button, release} = press();
+    release();
+    expect(isReleaseInFlight()).toBe(true);
+    // A dispatched click in a later task, as a test or an app sends one.
+    button.click();
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('ends at the next task when no click comes', () => {
+    vi.useFakeTimers();
+    const {release} = press();
+    release();
+    expect(isReleaseInFlight()).toBe(true);
+    vi.runOnlyPendingTimers();
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('runs afterRelease once, at the click, and not again at the next task', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, callback);
+    });
+    release();
+    expect(callback).not.toHaveBeenCalled();
+    browserClick(button);
+    expect(callback).toHaveBeenCalledTimes(1);
+    vi.runOnlyPendingTimers();
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends the release at its click before afterRelease runs, so a show it asks for is not held again', () => {
+    const {button, release} = press();
+    let inFlightInCallback: boolean | null = null;
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, () => {
+        inFlightInCallback = isReleaseInFlight();
+      });
+    });
+    release();
+    browserClick(button);
+    expect(inFlightInCallback).toBe(false);
+  });
+
+  it('holds no touch release whose touchend the click guard cancels', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 9));
+    button.addEventListener(
+      'pointerup',
+      () => armClickGuard(document, {cancelsTouchEnd: true}),
+      {once: true},
+    );
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 9));
+    expect(inFlight).toBe(false);
+    disarmClickGuard(document);
+  });
+
+  it('holds a touch release after a stale mark from an earlier press', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    // An earlier touch armed the guard, and its touchend never came.
+    button.dispatchEvent(touchPointerEvent('pointerdown', 11));
+    button.addEventListener(
+      'pointerup',
+      () => armClickGuard(document, {cancelsTouchEnd: true}),
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 11));
+    // The next press clears the mark; its release is held.
+    button.dispatchEvent(touchPointerEvent('pointerdown', 12));
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 12));
+    expect(inFlight).toBe(true);
+    disarmClickGuard(document);
+  });
+
+  it('reads a mark that a second copy of Core writes', async () => {
+    vi.resetModules();
+    const secondCopy = await import('../utils/touchEndMark');
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 13));
+    button.addEventListener(
+      'pointerup',
+      () => secondCopy.markTouchEndCancelled(),
+      {once: true},
+    );
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 13));
+    expect(inFlight).toBe(false);
+  });
+
+  it('holds a touch release that the click guard does not cancel', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 10));
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 10));
+    expect(inFlight).toBe(true);
+  });
+
+  it('runs afterRelease once at the next task when no click comes', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, callback);
+    });
+    release();
+    vi.runOnlyPendingTimers();
+    expect(callback).toHaveBeenCalledTimes(1);
+    browserClick(button);
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs nothing once cancelled', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    let cancel = () => {};
+    button.addEventListener('pointerup', () => {
+      cancel = afterRelease(document, callback);
+    });
+    release();
+    cancel();
+    browserClick(button);
+    vi.runOnlyPendingTimers();
+    expect(callback).not.toHaveBeenCalled();
   });
 });

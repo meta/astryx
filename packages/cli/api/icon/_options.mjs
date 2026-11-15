@@ -18,6 +18,7 @@ const ALLOWED = {
     'dryRun',
     'from',
     'exclude',
+    'adapter',
     'variants',
     'defaultVariant',
     'displayName',

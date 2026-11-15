@@ -71,7 +71,9 @@ reflows no line; only editing affordances appear or disappear.
   block's leading margin and the last block's trailing margin are zero.
 - **FR4 — Same measure.** Prose blocks cap at the same content width,
   `680px` by default, and wide blocks (fenced code, tables) span the
-  available width on every surface.
+  available width on every surface. A RichText table whose column widths a
+  writer set keeps those widths in `RichTextEditor` and `RichTextView`
+  (`spec:AST-106/DEC-3`).
 - **FR5 — Same structure.** Paragraph soft line breaks join into one line of
   flowing text; hard breaks break. A blockquote's lines continue one
   paragraph. Ordered and unordered lists nest by CommonMark indentation, show
@@ -314,10 +316,13 @@ JSON: `defaultValue` takes it, `onChange` reports the editor state that
 serializes to it, and `RichTextView` renders it. Markdown is an import and
 export format, not the value: `markdownToEditorStateJSON` and
 `editorStateJSONToMarkdown` convert between the two, and `spec:AST-062` owns
-what that conversion returns. RichText is not a document editor; collaboration,
-persistence, and document hosting stay outside it, and a product that edits
-whole documents chooses its own engine and stored value. This record stays
-the one visual contract that RichText and `Markdown` share.
+what that conversion returns. RichText is not a document host:
+collaboration, persistence, and document hosting stay with the product, which
+brings them around the editor or through `plugins`. RichText offers the opt-in
+document affordances that `spec:AST-106` admits, each as a plugin through
+`plugins`; with none turned on, it is the
+form field this decision describes. This record stays the one visual contract
+that RichText and `Markdown` share.
 
 ### DEC-8 — RichText's public surface is Lexical's, kept small
 

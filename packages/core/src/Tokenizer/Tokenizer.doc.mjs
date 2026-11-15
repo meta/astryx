@@ -151,7 +151,8 @@ export const docs = {
     {
       name: 'hasEntriesOnFocus',
       type: 'boolean',
-      description: 'Show bootstrap results on focus before typing.',
+      description:
+        'Show bootstrap results on focus before typing. After a pick from that list, the input keeps focus and the list stays open with the next choice active, while another choice remains.',
       default: 'false',
     },
     {
@@ -190,7 +191,8 @@ export const docs = {
     {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
-      description: 'Input and token size.',
+      description:
+        "Input and token size. Inside an InputGroup the group's size applies instead.",
       default: "'md'",
     },
     {
@@ -233,7 +235,19 @@ export const docs = {
       name: 'handleRef',
       type: 'React.Ref<TokenizerHandle>',
       description:
-        'Imperative handle exposing focusInput(), focusFirstToken(), focusLastToken(), clearInput(), and selectAll().',
+        'Imperative handle exposing focus(), blur(), open() and close(). open() and close() drive the inline menu; the sheet presentation ignores them.',
+    },
+    {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, isEmptySearch, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange. The sheet presentation keeps its own sheet and ignores it.",
+    },
+    {
+      name: 'onOpenChange',
+      type: '(isOpen: boolean) => void',
+      description:
+        'Called when the inline menu opens or closes. It reports changes only; drive the menu with handleRef. Not called by the sheet presentation.',
     },
     {
       name: 'width',
@@ -296,7 +310,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        'How the field presents its choices. adaptive (the default) uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it; the server render and the hydrating render are the popover. popover is the inline combobox with its anchored suggestion menu on every device. bottom-sheet replaces it on every device with a field showing the selected tokens, whose trigger opens one tall modal sheet: a search row on top, full-width checkbox rows that keep their place while the sheet is open, a Create row with hasCreate, and a footer pinned in every state with a confirmed Clear all and Save; the sheet edits a draft, so onChange fires once, when Save commits it, and a swipe, scrim or Escape close of a changed draft asks before discarding. In the sheet presentation the field box holds the trigger, the tokens and endContent, and keeps the box, theming target and focus ring of the inline field; the trigger is the control: ref, id, aria-* and data-* reach it, and ref receives the trigger button there, so type it Ref<HTMLInputElement | HTMLButtonElement>, which the component accepts (TokenizerProps keeps its released input ref type). endContent sits at the inline end of the field and renderToken renders its tokens, as in the inline field; their own controls act without opening the sheet. renderItem, hasClear (the sheet has its own Clear all), hasEntriesOnFocus, menuWidth, tokenOverflowBehavior (the field wraps its tokens) and hasAutoFocus have no surface in the sheet, and the field warns once in development when they are passed. Pass presentation="popover" to keep the inline field and those props on every device.',
+        'How the field presents its choices. adaptive (the default) uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it; the server render and the hydrating render are the popover. popover is the inline combobox with its anchored suggestion menu on every device. bottom-sheet replaces it on every device with a field showing the selected tokens, whose trigger opens one tall modal sheet: a search row on top, full-width checkbox rows that keep their place while the sheet is open, a Create row with hasCreate, and a footer pinned in every state with a confirmed Clear all and Save; the sheet edits a draft, so onChange fires once, when Save commits it, and a swipe, scrim or Escape close of a changed draft asks before discarding. In the sheet presentation the field box holds the trigger, the tokens and endContent, and keeps the box, theming target and focus ring of the inline field; the trigger is the control: ref, id, aria-* and data-* reach it, and ref receives the trigger button there, so type it Ref<HTMLInputElement | HTMLButtonElement>, which the component accepts (TokenizerProps keeps its released input ref type). endContent sits at the inline end of the field and renderToken renders its tokens, as in the inline field; their own controls act without opening the sheet. renderItem, hasClear (the sheet has its own Clear all), hasEntriesOnFocus, menuWidth, menu, onOpenChange, tokenOverflowBehavior (the field wraps its tokens) and hasAutoFocus have no surface in the sheet, and the field warns once in development when they are passed. Pass presentation="popover" to keep the inline field and those props on every device.',
       default: "'adaptive'",
     },
   ],
@@ -332,6 +346,11 @@ export const docs = {
         guidance: true,
         description:
           'Show validation status with the status prop so users know immediately when a selection is missing or invalid.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
       },
       {
         guidance: false,
@@ -533,7 +552,7 @@ export const docsZh = {
       name: 'hasEntriesOnFocus',
       type: 'boolean',
       description:
-        '\u805a\u7126\u65f6\u5728\u8f93\u5165\u524d\u663e\u793a\u5f15\u5bfc\u7ed3\u679c\u3002',
+        '\u805a\u7126\u65f6\u5728\u8f93\u5165\u524d\u663e\u793a\u5f15\u5bfc\u7ed3\u679c\u3002从该列表中选择一项后，只要还有其他选项，输入框保持焦点，列表保持打开，并激活下一项。',
       default: 'false',
     },
     {
@@ -573,7 +592,7 @@ export const docsZh = {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
       description:
-        '\u8f93\u5165\u6846\u548c\u6807\u8bb0\u7684\u5c3a\u5bf8\u3002',
+        '\u8f93\u5165\u6846\u548c\u6807\u8bb0\u7684\u5c3a\u5bf8\u3002\u5728 InputGroup \u5185\u5219\u4f7f\u7528\u8be5\u7ec4\u7684\u5c3a\u5bf8\u3002',
       default: "'md'",
     },
     {
@@ -604,7 +623,20 @@ export const docsZh = {
     {
       name: 'handleRef',
       type: 'React.Ref<TokenizerHandle>',
-      description: '用于 focus() 和 blur() 控制的命令式句柄。',
+      description:
+        '命令式句柄，提供 focus()、blur()、open() 和 close()。open() 和 close() 控制内联菜单；底部面板呈现会忽略它们。',
+    },
+    {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "菜单显示的内容。role 为 'listbox'（默认）时显示结果列表；可选的 render({listbox, query, isBusy, isEmptySearch, close}) 可在列表周围放置标题或提示等信息，用户可操作的内容仍需作为结果放在列表中，以便方向键可达。role 为 'dialog' 时在以 label 命名的对话框中显示 render({query, close})，并将焦点移入；按 Escape、点击外部或调用 close() 后焦点回到菜单打开时的位置。两种情况下图层都由 Astryx 管理。从 listbox 切换到 dialog 时菜单保持打开：在 onChange 中调用 handleRef.open()。底部面板呈现保留自己的面板并忽略此属性。",
+    },
+    {
+      name: 'onOpenChange',
+      type: '(isOpen: boolean) => void',
+      description:
+        '内联菜单打开或关闭时调用。它只报告变化；请用 handleRef 控制菜单。底部面板呈现不会调用它。',
     },
     {
       name: 'containerXstyle',
@@ -642,7 +674,7 @@ export const docsZh = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        '字段如何呈现选项。adaptive（默认）在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同；服务端渲染和水合期间的渲染均为 popover。popover 在所有设备上为内联组合框及其锚定建议菜单。bottom-sheet 在所有设备上改为一个显示已选标记的字段，点按其中的触发按钮后打开一个高的模态底部面板——顶部为搜索行，下方为整行复选框行（面板打开期间位置保持不变），hasCreate 时有「创建」行，底部固定显示需确认的「全部清除」和「保存」；面板编辑的是草稿，onChange 仅在「保存」提交时触发一次，草稿有改动时滑动、点击遮罩或按 Escape 关闭会先询问是否放弃。在底部面板呈现中，字段框包含触发按钮、标记和 endContent，并保留内联字段的外框、主题目标和焦点环；触发按钮即为控件：ref、id、aria-* 和 data-* 都作用于它，ref 在该呈现中收到的是触发按钮，因此请将其类型声明为组件所接受的 Ref<HTMLInputElement | HTMLButtonElement>（TokenizerProps 保留已发布的输入框 ref 类型）。endContent 位于字段的行内末端，renderToken 渲染字段中的标记，与内联字段相同；其中的控件可直接操作，不会打开底部面板。renderItem、hasClear（底部面板自带“全部清除”）、hasEntriesOnFocus、menuWidth、tokenOverflowBehavior（字段会换行显示标记）和 hasAutoFocus 在底部面板中没有作用对象，传入时开发模式下会警告一次。传入 presentation="popover" 可在所有设备上保留内联字段和这些属性。',
+        '字段如何呈现选项。adaptive（默认）在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同；服务端渲染和水合期间的渲染均为 popover。popover 在所有设备上为内联组合框及其锚定建议菜单。bottom-sheet 在所有设备上改为一个显示已选标记的字段，点按其中的触发按钮后打开一个高的模态底部面板——顶部为搜索行，下方为整行复选框行（面板打开期间位置保持不变），hasCreate 时有「创建」行，底部固定显示需确认的「全部清除」和「保存」；面板编辑的是草稿，onChange 仅在「保存」提交时触发一次，草稿有改动时滑动、点击遮罩或按 Escape 关闭会先询问是否放弃。在底部面板呈现中，字段框包含触发按钮、标记和 endContent，并保留内联字段的外框、主题目标和焦点环；触发按钮即为控件：ref、id、aria-* 和 data-* 都作用于它，ref 在该呈现中收到的是触发按钮，因此请将其类型声明为组件所接受的 Ref<HTMLInputElement | HTMLButtonElement>（TokenizerProps 保留已发布的输入框 ref 类型）。endContent 位于字段的行内末端，renderToken 渲染字段中的标记，与内联字段相同；其中的控件可直接操作，不会打开底部面板。renderItem、hasClear（底部面板自带“全部清除”）、hasEntriesOnFocus、menuWidth、menu、onOpenChange、tokenOverflowBehavior（字段会换行显示标记）和 hasAutoFocus 在底部面板中没有作用对象，传入时开发模式下会警告一次。传入 presentation="popover" 可在所有设备上保留内联字段和这些属性。',
       default: "'adaptive'",
     },
   ],
@@ -678,6 +710,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Show validation status with the status prop so users know immediately when a selection is missing or invalid.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
       },
       {
         guidance: false,
@@ -775,6 +812,11 @@ export const docsDense = {
         description: 'status prop for immediate validation feedback.',
       },
       {
+        guidance: true,
+        description:
+          'Use inside InputGroup only for a short prefix or suffix addon; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior.',
+      },
+      {
         guidance: false,
         description:
           "Don't use for single-item selection; use Typeahead instead.",
@@ -829,7 +871,8 @@ export const docsDense = {
     isRequired: 'Marks field required.',
     isOptional: 'Shows optional indicator on label.',
     labelTooltip: 'Tooltip on label.',
-    hasEntriesOnFocus: 'Show bootstrap results on focus before typing.',
+    hasEntriesOnFocus:
+      'Show bootstrap results on focus before typing; a pick keeps the list open with the next choice active while choices remain.',
     maxMenuItems:
       'Max search results shown; the hasCreate entry sits on top of them.',
     menuWidth: 'Fixed dropdown width in pixels.',
@@ -837,14 +880,17 @@ export const docsDense = {
       'Min query length before searching. Menu stays closed below it, except the hasCreate entry.',
     emptySearchText: 'Content when the query matched nothing. ReactNode.',
     hasAutoFocus: 'Auto-focus input on mount.',
-    size: 'Input+token size.',
+    size: 'Input+token size; the group size applies inside InputGroup.',
     debounceMs: 'Search debounce delay ms. 0 for sync sources.',
     onChangeQuery: 'Fired on search query text change.',
     startIcon:
       'Icon at input start, before tokens. Icon name, SVG component, or ReactNode.',
     endContent: 'Content at input row end. For buttons, counts, controls.',
-    handleRef: 'Imperative handle for focus() and blur() control.',
+    handleRef:
+      'Handle: focus(), blur(), open(), close() (open/close inline only).',
+    menu: "Menu content: {role:'listbox', render?({listbox,query,isBusy,isEmptySearch,close})} (info around the list; actions stay results) | {role:'dialog', label, render({query,close})} (takes focus; close returns focus to opener, else input). Astryx owns the layer. open() from onChange keeps it open across a role switch. Sheet ignores it (dev warning).",
+    onOpenChange: 'Inline menu open/close report. Not called by the sheet.',
     presentation:
-      "'adaptive' (default: sheet on compact touch, else popover; SSR/hydration render popover) | 'popover' (inline combobox, every device) | 'bottom-sheet' (field box with trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save). Sheet: field box keeps the inline box, theming target and focus ring; ref reaches the trigger button; endContent (field end) and renderToken (field tokens) work as inline; renderItem/hasClear/hasEntriesOnFocus/menuWidth/tokenOverflowBehavior/hasAutoFocus inert (dev warning). presentation=\"popover\" keeps them on every device.",
+      "'adaptive' (default: sheet on compact touch, else popover; SSR/hydration render popover) | 'popover' (inline combobox, every device) | 'bottom-sheet' (field box with trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save). Sheet: field box keeps the inline box, theming target and focus ring; ref reaches the trigger button; endContent (field end) and renderToken (field tokens) work as inline; renderItem/hasClear/hasEntriesOnFocus/menuWidth/menu/onOpenChange/tokenOverflowBehavior/hasAutoFocus inert (dev warning). presentation=\"popover\" keeps them on every device.",
   },
 };
