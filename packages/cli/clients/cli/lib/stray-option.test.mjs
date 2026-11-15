@@ -169,6 +169,13 @@ describe('the run as meant', () => {
     ]);
   });
 
+  it('offers no run as meant that does not parse', () => {
+    const {theme} = program();
+    expect(runs(answer(theme, '--list', ['theme', '--list', 'extra']))).toEqual(
+      [],
+    );
+  });
+
   it('offers no run while another word is still not an option the command takes', () => {
     const {component} = program();
     expect(
@@ -240,6 +247,17 @@ describe('withoutStray', () => {
     expect(
       withoutStray(['--props', 'Button'], '--props', root.options),
     ).toEqual(['Button']);
+  });
+
+  it('gives the option the value names once', () => {
+    const {root} = program();
+    expect(
+      withoutStray(
+        ['--json', 'describe', 'Table', '--format', 'json'],
+        '--format',
+        root.options,
+      ),
+    ).toEqual(['--json', 'describe', 'Table']);
   });
 });
 

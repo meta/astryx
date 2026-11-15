@@ -2,8 +2,9 @@
 
 /**
  * @file A refusal names a run that works: paths given to `doctor` as words,
- * `search --type icon`, and `upgrade --list` with `--from`. Each test runs
- * the named command too.
+ * `search --type icon`, `upgrade --list` with `--from`, `template
+ * --skeleton` with a path, and an unknown option before an unknown command.
+ * Each test runs the named command too.
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
@@ -43,8 +44,19 @@ function app() {
   return dir;
 }
 
-/** @param {string} line `astryx …` @returns {string[]} */
-const words = line => line.split(' ').slice(1);
+/**
+ * The words a shell reads from a named run, after the CLI itself (`astryx`,
+ * or a package runner's `@astryxdesign/cli@<version>`).
+ * @param {string} line
+ * @returns {string[]}
+ */
+function words(line) {
+  const parts = [...line.matchAll(/'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2]);
+  const cli = parts.findIndex(
+    p => p === 'astryx' || p.startsWith('@astryxdesign/cli'),
+  );
+  return parts.slice(cli + 1);
+}
 
 describe('doctor given paths as words', () => {
   it('names --built for one path', async () => {
@@ -123,7 +135,7 @@ describe('search --type icon', () => {
     const envelope = JSON.parse(stdout);
     expect(envelope.code).toBe('ERR_INVALID_ARGUMENT');
     expect(envelope.suggestions[0]).toEqual({
-      name: 'astryx experimental icon play pause',
+      name: "astryx experimental icon 'play pause'",
       reason: 'finds icons',
     });
 
@@ -183,5 +195,48 @@ describe('template --skeleton with a path', () => {
       ...words(envelope.suggestions[0].name),
     ]);
     expect(skeleton.status).toBe(0);
+  });
+});
+
+describe('doctor given paths outside the project', () => {
+  it('answers at once and names no folder past the project', async () => {
+    const cwd = app();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-outside-'));
+    made.push(outside);
+    const {status, stdout} = await runCli(
+      ['--json', 'doctor', '--built', 'app/page.tsx', outside],
+      cwd,
+    );
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
+    expect(
+      (envelope.suggestions ?? []).some((/** @type {{name: string}} */ s) =>
+        s.name.includes('--built'),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('an unknown option before an unknown command', () => {
+  it('reports the unknown command and names the run once', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'describe',
+      'Text',
+      '--format',
+      'json',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_UNKNOWN_COMMAND');
+    expect(words(envelope.suggestions[0].name)).toEqual([
+      '--json',
+      'component',
+      'Text',
+    ]);
+
+    const named = await runCli(words(envelope.suggestions[0].name));
+    expect(named.status).toBe(0);
   });
 });

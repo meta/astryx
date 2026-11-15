@@ -320,7 +320,9 @@ export function strayOptionAnswer(
 
   /** @type {Array<{name: string, reason: string}>} */
   const suggestions = [];
-  const run = runAsMeant(cmd, path, stray, message, words, offered);
+  const meantRun = runAsMeant(cmd, path, stray, message, words, offered);
+  // Only a run that parses: a line that fails again names nothing that works.
+  const run = meantRun && runParses(rootOf(cmd), meantRun) ? meantRun : null;
   if (run)
     suggestions.push({
       name: formatCliCommand(run.map(w => quoteCommandArgument(w)).join(' ')),
@@ -331,6 +333,17 @@ export function strayOptionAnswer(
     reason: 'every option it takes',
   });
   return {message: `unknown option '${stray}': ${sentence}.`, suggestions};
+}
+
+/**
+ * The program a command belongs to.
+ * @param {CommandLike} cmd
+ * @returns {CommandLike}
+ */
+function rootOf(cmd) {
+  let node = cmd;
+  while (node.parent) node = node.parent;
+  return node;
 }
 
 /**
@@ -415,10 +428,14 @@ export function withoutStray(words, stray, options) {
           o => !takesValue(o) && o.long === `--${value.toLowerCase()}`,
         )
       : undefined;
+  // The option the value names, once: a run that already gives it keeps
+  // its own.
   if (named)
     return [
       ...words.slice(0, at),
-      /** @type {string} */ (named.long),
+      ...(words.includes(/** @type {string} */ (named.long))
+        ? []
+        : [/** @type {string} */ (named.long)]),
       ...words.slice(at + (attached ? 1 : 2)),
     ];
   return [...words.slice(0, at), ...words.slice(at + 1)];

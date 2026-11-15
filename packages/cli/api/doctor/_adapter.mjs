@@ -742,7 +742,9 @@ const BUILT_FILE_MAX_BYTES = BUILT_FILE_MAX_MB * 1024 * 1024;
 /**
  * The path `doctor --built` checks for paths given to `doctor` as words, or
  * null when one of them names nothing on disk: the path itself when there is
- * one, else the folder that holds them all. Relative to `cwd`; `.` is `cwd`.
+ * one, else the folder that holds them all. That folder must be `cwd` or a
+ * folder in it, so the check never reaches past the project. Relative to
+ * `cwd`; `.` is `cwd`.
  * @param {string} cwd
  * @param {string[]} paths
  * @returns {string | null}
@@ -752,15 +754,18 @@ export function builtTargetOf(cwd, paths) {
   if (resolved.length === 0 || !resolved.every(p => fs.existsSync(p)))
     return null;
   if (paths.length === 1) return paths[0];
+  const root = path.resolve(cwd);
+  const inside = (/** @type {string} */ folder, /** @type {string} */ p) =>
+    p === folder ||
+    p.startsWith(folder.endsWith(path.sep) ? folder : `${folder}${path.sep}`);
   const folders = resolved.map(p =>
     fs.statSync(p).isDirectory() ? p : path.dirname(p),
   );
+  if (!folders.every(f => inside(root, f))) return null;
   let shared = folders[0];
-  while (
-    !folders.every(f => f === shared || f.startsWith(`${shared}${path.sep}`))
-  )
+  while (shared !== root && !folders.every(f => inside(shared, f)))
     shared = path.dirname(shared);
-  return path.relative(cwd, shared) || '.';
+  return path.relative(root, shared) || '.';
 }
 
 /**

@@ -11,7 +11,7 @@
  * @position CLI presentation adapter for project and integration health.
  */
 
-import {runChecks} from '../../../api/doctor/doctor.mjs';
+import {builtTarget, runChecks} from '../../../api/doctor/doctor.mjs';
 import {
   integrationComponentConflicts,
   integrationDocConflicts,
@@ -42,7 +42,6 @@ import {
   formatCliCommand,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
-import {builtTargetOf} from '../../../api/doctor/_adapter.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {templateMeaningsLine} from '../../../foundation/text/template-meanings-line.mjs';
 
@@ -937,7 +936,7 @@ export function registerDoctor(program) {
           .map(String)
           .filter((/** @type {string} */ w) => !w.startsWith('-')),
       ];
-      const target = word == null ? null : builtTargetOf(process.cwd(), paths);
+      const target = word == null ? null : builtTarget(paths);
       if (target != null) return pathWords(options.built, paths, target);
       if (word != null) return unknownSubcommand(doctorCmd, 'doctor', word);
       return runProjectDoctor(program, options);

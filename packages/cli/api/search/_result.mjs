@@ -9,6 +9,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {setResultCoverage} from './coverage.mjs';
 import {SEARCH_DOMAINS} from './_query.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -133,7 +134,7 @@ export function checkSearchArgs(query, options) {
         ...(finder
           ? [
               {
-                name: `astryx ${finder.command} ${String(query).trim()}`,
+                name: `astryx ${finder.command} ${quoteCommandArgument(String(query).trim())}`,
                 reason: `finds ${finder.kind}`,
               },
             ]

@@ -336,7 +336,11 @@ export async function findEntry(name) {
   const {findOtherCommand} =
     await import('../../../foundation/suggest/other-command.mjs');
   const found = await findOtherCommand(name, {cwd: process.cwd()});
-  const words = found?.hint.name.split(' ') ?? [];
+  // The hint's own options (`--json`) are left out: the run keeps the
+  // options the reader gave.
+  const words = (found?.hint.name.split(' ') ?? []).filter(
+    w => !w.startsWith('-'),
+  );
   return words.length >= 3
     ? {command: words[1], name: words.slice(2).join(' ')}
     : null;

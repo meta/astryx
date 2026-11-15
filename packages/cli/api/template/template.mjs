@@ -1,41 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * The runs a refused combination splits into: the mode alone (`template
- * <name> --skeleton`, `template --list`), and the template scaffolded to the
- * path, when a name and a path were given.
- * @param {string[]} mode the mode's own words
- * @param {string | undefined} name
- * @param {string | undefined} targetPath
- * @param {string | undefined} packageFilter
- * @returns {Array<{name: string, reason: string}>}
- */
-function eachAlone(mode, name, targetPath, packageFilter) {
-  const scope = packageFilter
-    ? ` --package ${quoteCommandArgument(packageFilter)}`
-    : '';
-  const quoted = name ? ` ${quoteCommandArgument(name)}` : '';
-  const alone =
-    mode[0] === '--list'
-      ? {name: `astryx template --list${scope}`, reason: 'list the templates'}
-      : {
-          name: `astryx template${quoted} ${mode.join(' ')}${scope}`,
-          reason: 'print it',
-        };
-  return [
-    alone,
-    ...(name && targetPath
-      ? [
-          {
-            name: `astryx template${quoted} ${quoteCommandArgument(targetPath)}${scope}`,
-            reason: 'scaffold the template there',
-          },
-        ]
-      : []),
-  ];
-}
-
-/**
  * @file Programmatic API for the template command.
  *
  * This module is BOTH the template dispatcher and the stable import surface for
@@ -87,6 +52,41 @@ export {
   extractComponents,
   pkgOf,
 } from '../../foundation/discovery/template-adapter.mjs';
+
+/**
+ * The runs a refused combination splits into: the mode alone (`template
+ * <name> --skeleton`, `template --list`), and the template scaffolded to the
+ * path, when a name and a path were given.
+ * @param {string[]} mode the mode's own words
+ * @param {string | undefined} name
+ * @param {string | undefined} targetPath
+ * @param {string | undefined} packageFilter
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function eachAlone(mode, name, targetPath, packageFilter) {
+  const scope = packageFilter
+    ? ` --package ${quoteCommandArgument(packageFilter)}`
+    : '';
+  const quoted = name ? ` ${quoteCommandArgument(name)}` : '';
+  const alone =
+    mode[0] === '--list'
+      ? {name: `astryx template --list${scope}`, reason: 'list the templates'}
+      : {
+          name: `astryx template${quoted} ${mode.join(' ')}${scope}`,
+          reason: 'print it',
+        };
+  return [
+    alone,
+    ...(name && targetPath
+      ? [
+          {
+            name: `astryx template${quoted} ${quoteCommandArgument(targetPath)}${scope}`,
+            reason: 'scaffold the template there',
+          },
+        ]
+      : []),
+  ];
+}
 
 /**
  * @typedef {import('../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} DiscoveredTemplate

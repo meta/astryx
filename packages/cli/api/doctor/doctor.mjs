@@ -124,6 +124,7 @@ import {
   corePeerRange,
   isLocalThemeOwner,
   readThemeState,
+  builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -285,6 +286,18 @@ function projectRootOf(ctx) {
 }
 
 /* ── individual checks ────────────────────────────────────────────────── */
+
+/**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when they are not paths it can check: the path itself when there is
+ * one, else the project folder that holds them all.
+ * @param {string[]} paths
+ * @param {{cwd?: string}} [options]
+ * @returns {string | null}
+ */
+export function builtTarget(paths, {cwd = process.cwd()} = {}) {
+  return builtTargetOf(cwd, paths);
+}
 
 /**
  * Check 1 — running Node version meets the CLI's minimum.
