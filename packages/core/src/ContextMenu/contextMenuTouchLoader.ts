@@ -4,10 +4,11 @@
 
 /**
  * @file contextMenuTouchLoader.ts
- * @input Nothing from the caller: ContextMenu calls `useContextMenuTouchLayer`
- *   while its touch model applies
- * @output The touch layer once the page has loaded it, else `null`
- * @position ContextMenu's one load of its touch layer, after first paint
+ * @input No props: ContextMenu calls `useContextMenuTouchLayer` while its
+ *   touch model applies
+ * @output The touch layer after the page loads it; `null` until then
+ * @position Between ContextMenu and its touch layer: loads the layer after
+ *   first paint
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
@@ -16,17 +17,16 @@ import {useEffect, useSyncExternalStore} from 'react';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {ContextMenuTouchLayer as TouchLayer} from './ContextMenuTouchLayer';
 
-// The touch layer brings the gesture host, the arena and the long-press
-// recognizer. A page that never holds a finger on a ContextMenu must not pay
-// for them in its first load. So the first ContextMenu under the touch model
-// schedules one load: after the page's first paint, when the main thread is
-// idle, and no later than LOAD_CAP_MS after that paint. An input never starts
-// or hurries the load. A finger that lands before the load is the layer's to
-// take when it mounts.
+// The touch layer imports the long-press recognizer, which brings the arena
+// and the gesture host. These modules stay out of the page's first load. The
+// first ContextMenu under the touch model asks for them once. The request
+// waits until the next frame has painted, then for an idle moment, capped at
+// LOAD_CAP_MS. Touches, clicks and keys do not change when the load starts.
+// As the layer mounts, it takes a finger that landed before the load.
 
 /**
- * The latest the load starts after first paint, in ms, when the main thread
- * never goes idle.
+ * How long the load waits for an idle main thread after that paint, in ms.
+ * Past it, the load starts anyway.
  */
 export const LOAD_CAP_MS = 2000;
 
@@ -59,7 +59,7 @@ function publish(loaded: typeof TouchLayer | null): void {
 function load(): void {
   layerModule.load().then(
     loaded => publish(loaded.ContextMenuTouchLayer),
-    // A chunk that fails to load leaves the menu on right clicks and keys.
+    // If the chunk fails, the menu still opens from right clicks and keys.
     () => {},
   );
 }
@@ -69,10 +69,10 @@ function scheduleLoad(): void {
     return;
   }
   isScheduled = true;
-  // The timers belong to this window, so they end with its document.
+  // Timers from this window stop when its document goes away.
   const view = window;
-  // A frame callback runs before the frame paints. The task it queues runs
-  // after that paint.
+  // The frame callback runs just before that frame paints, so the timeout it
+  // sets runs just after the paint.
   view.requestAnimationFrame(() => {
     view.setTimeout(() => {
       if (typeof view.requestIdleCallback === 'function') {
@@ -85,16 +85,17 @@ function scheduleLoad(): void {
 }
 
 /**
- * The touch layer once the page has loaded it, else `null`. A ContextMenu
- * that wants it schedules the page's one load. The server and the hydration
- * render read `null`, so the markup matches.
+ * The touch layer after the page loads it, `null` until then. The first
+ * ContextMenu that wants it asks for the load, and later ones share it. It is
+ * `null` on the server and while hydrating, so both renders produce the same
+ * markup.
  */
 export function useContextMenuTouchLayer(
   isWanted: boolean,
 ): typeof TouchLayer | null {
   const current = useSyncExternalStore(subscribe, getLayer, () => null);
-  // Syncs the page's one load of the touch layer with the first ContextMenu
-  // under the touch model.
+  // Syncs with the browser's frame and idle timers, which decide when the
+  // touch layer loads.
   useEffect(() => {
     if (isWanted) {
       scheduleLoad();
@@ -103,13 +104,16 @@ export function useContextMenuTouchLayer(
   return isWanted ? current : null;
 }
 
-/** Test only: loads the layer now and makes every reader see it. */
+/**
+ * Test only: loads the layer at once and hands it to every hook that reads
+ * it.
+ */
 export async function __loadContextMenuTouchLayerForTest(): Promise<void> {
   publish((await layerModule.load()).ContextMenuTouchLayer);
   isScheduled = true;
 }
 
-/** Test only: forgets the loaded layer and any scheduled load. */
+/** Test only: drops the loaded layer and clears the scheduled load. */
 export function __resetContextMenuTouchLayerForTest(): void {
   isScheduled = false;
   publish(null);

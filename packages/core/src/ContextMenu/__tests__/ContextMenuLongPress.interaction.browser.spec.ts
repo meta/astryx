@@ -291,10 +291,11 @@ async function watchTouchLayer(page: Page): Promise<ChunkResponse> {
 }
 
 /**
- * Waits for the touch layer, which loads after the page's first paint: its
- * chunk's response, then the module itself (an import of the same URL
- * resolves once it and its imports have run), then two frames for the layer
- * to mount. A finger that lands sooner starts its hold only at that mount.
+ * Waits for the touch layer, which loads after the page's first paint. It
+ * waits for the chunk's response, then for the module itself, then two frames
+ * for the layer to mount. An import of the same URL resolves once it and its
+ * imports have run. A finger that lands sooner starts its hold only at that
+ * mount.
  */
 async function waitForTouchLayer(
   page: Page,
