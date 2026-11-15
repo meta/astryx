@@ -34,6 +34,10 @@ import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
+  oklabCoordinates,
+  oklabCoordinatesToHex,
+} from '../theme/palette/generate/color.mjs';
+import {
   loadThemeExport,
   loadThemeInput,
   oneColorMode,
@@ -90,6 +94,7 @@ import {
   alphaOf,
   colorProblem,
   compositeOver,
+  hex,
   isColorValue,
   isSafeValue,
   parseColor,
@@ -6377,6 +6382,61 @@ export function compileTheme(ctx, data, base) {
     if (ref && (held == null || base[side][ref[1]] === held)) return TOKENS[k];
     return held ?? TOKENS[k];
   };
+  // A family follows the token it is made from, in each mode, unless the
+  // theme pins it: the fills made from the surface (cards, popovers, the
+  // muted fill, code blocks, skeletons) keep the base theme's lightness
+  // step from it, and the emphasized border is an opaque border's own
+  // color. An exact setting or the theme's own source value always wins.
+  /** @param {string} k @param {'light' | 'dark'} m */
+  const pinned = (k, m) =>
+    k in ownTokenValues() ||
+    data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === k &&
+        !x.on &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m),
+    );
+  /** The color a token shows in a mode, opaque, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
+  const written = (k, m) => {
+    const v = tok[k]?.[m];
+    const rgb = v == null ? null : parseColor(String(v).trim());
+    return rgb && alphaOf(String(v)) >= 1 ? hex(rgb) : null;
+  };
+  /** The base theme's opaque color for a token in a mode, or null. @param {string} k @param {'light' | 'dark'} m */
+  const baseColor = (k, m) => {
+    const v = base[m]?.[k];
+    const rgb = v == null ? null : parseColor(String(v).trim());
+    return rgb && alphaOf(String(v)) >= 1 ? hex(rgb) : null;
+  };
+  for (const m of /** @type {const} */ (['light', 'dark'])) {
+    if (modeOnly && m !== modeOnly) continue;
+    const surface = pinned('--color-background-surface', m)
+      ? written('--color-background-surface', m)
+      : null;
+    const baseSurface = baseColor('--color-background-surface', m);
+    if (surface && baseSurface)
+      for (const k of SURFACE_FAMILY) {
+        if (!(k in TOKENS || base[m]?.[k] != null) || pinned(k, m)) continue;
+        const from = baseColor(k, m);
+        if (!from) continue;
+        const [sl, sa, sb] = oklabCoordinates(surface);
+        const step =
+          oklabCoordinates(from)[0] - oklabCoordinates(baseSurface)[0];
+        putTok(
+          k,
+          oklabCoordinatesToHex([Math.max(0, Math.min(1, sl + step)), sa, sb]),
+          m,
+        );
+      }
+    const border = pinned('--color-border', m)
+      ? written('--color-border', m)
+      : null;
+    if (border && !pinned('--color-border-emphasized', m))
+      putTok('--color-border-emphasized', border, m);
+  }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
     const d = dark ?? shownHalf(k, 'dark');
@@ -6540,6 +6600,18 @@ function layerParts(layer) {
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
 const BOX_SIDES = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * The fills made from the surface: they follow a surface the theme sets,
+ * at the base theme's lightness step from it.
+ */
+const SURFACE_FAMILY = [
+  '--color-background-card',
+  '--color-background-popover',
+  '--color-background-muted',
+  '--color-syntax-background',
+  '--color-skeleton',
+];
 
 /**
  * A block's longhands that follow a shorthand covering them, where the base

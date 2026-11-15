@@ -430,9 +430,10 @@ const officialStops = token =>
   );
 
 /**
- * The tokens the neutral color sets at the official theme's stops. The page
- * background, `--color-background-body`, stays the base theme's, so a
- * tinted gray never tints the page. The inverted surface (tooltips,
+ * The tokens the neutral color sets at the official theme's stops, the
+ * page background (`--color-background-body`) with the surfaces on it, so
+ * a warm or cool gray reaches the page as it reaches the cards. The
+ * inverted surface (tooltips,
  * toasts), which the official theme leaves to Core, is the card surface of
  * the other mode, as Core makes it from a neutral scale, inside the ramp
  * (Core's tones 10 and 99: never the white or black end every ramp shares)
@@ -444,6 +445,7 @@ const NEUTRAL_STOPS = wordTable(
   /** @type {Record<string, [number, number]>} */ ({
     ...Object.fromEntries(
       [
+        '--color-background-body',
         '--color-background-surface',
         '--color-background-card',
         '--color-background-popover',
@@ -2593,7 +2595,6 @@ export function paletteDialOf(token) {
 /** Every token a color dial can point at a generated shade. */
 export const PALETTE_TOKENS = new Set([
   ...Object.keys(NEUTRAL_STOPS),
-  '--color-background-body',
   ...Object.keys(NEUTRAL_TINTS),
   '--color-accent',
   '--color-on-accent',
@@ -2629,7 +2630,6 @@ export function mappingRows(dial) {
         ([t, [[l, la], [d, da]]]) =>
           `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
-      "--color-background-body: the base theme's page color, so a tinted gray never tints the page",
       ...Object.values(LIFT_GROUNDS).map(
         g =>
           `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,

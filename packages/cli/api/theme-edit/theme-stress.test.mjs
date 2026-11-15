@@ -154,13 +154,13 @@ describe('colors', () => {
     ).toBeUndefined();
   }, 180_000);
 
-  it('neutral leaves the page background to the base theme', async () => {
+  it('neutral reaches the page background with the surfaces', async () => {
     await themeEditSet('s', 'neutral', '#425466', {cwd});
     const source = read('themes/s/s.settings.ts');
     expect(source).toMatch(
       /"--color-background-surface": \[\s*palette\.neutral/,
     );
-    expect(source).not.toContain('"--color-background-body"');
+    expect(source).toMatch(/"--color-background-body": \[\s*palette\.neutral/);
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 120_000);
 
