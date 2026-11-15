@@ -547,68 +547,12 @@ export function missedSteps(ctx, data, res, base) {
       });
     }
   if (borders)
-    for (const p of borderlessSurfaces(C).filter(
-      x =>
-        has(x) &&
-        !covers(x, /^(border(-width|-style|-color)?|--border-[\w-]+)$/),
-    )) {
-      // A part whose variants differ, some with a filled box and some with
-      // none (a button's ghost): only the variants that draw a filled box
-      // at rest get a frame; one with no fill is borderless on purpose.
-      const variants = [
-        ...new Set(
-          fills(p)
-            .filter(
-              (/** @type {any} */ r) => !/^--color-overlay-/.test(r.token),
-            )
-            .flatMap((/** @type {any} */ r) => r.when)
-            .filter((/** @type {string} */ w) => !/:|aria-|selected|\[/.test(w))
-            .map(
-              (/** @type {string} */ w) => /(?:^|\s)variant=(\S+)/.exec(w)?.[1],
-            )
-            .filter(Boolean),
-        ),
-      ];
-      // A part that draws no filled box at rest in any variant (a ghost
-      // toggle button, a menu row: their fills are pressed, hover or
-      // selected ones) is borderless on purpose: no frame for it.
-      const boxAtRest = fills(p).some(
-        (/** @type {any} */ r) =>
-          !/^--color-overlay-/.test(r.token) &&
-          r.when.some(
-            (/** @type {string} */ w) =>
-              w === '' || !/:|aria-|selected|\[/.test(w),
-          ),
-      );
-      if (!boxAtRest) continue;
-      const all = /** @type {string[]} */ ([
-        ...(C.MAP[p]?.attrs?.variant ?? []),
-      ]);
-      const scoped = variants.length && all.some(v => !variants.includes(v));
-      // Scoped to variants set can name (the part's own variant prop); a
-      // part whose filled variants set cannot name is left out: one frame
-      // for all of them would frame the ones that draw no box.
-      const settable = /** @type {string[]} */ (
-        C.variantValues(p)?.variant ?? []
-      );
-      if (scoped && !variants.every(v => settable.includes(v))) continue;
-      found.push({
-        kind: 5,
-        part: p,
-        why: scoped
-          ? `still borderless: the border width reaches no border it does not draw (the ${variants.join(', ')} variant${variants.length > 1 ? 's' : ''}; the others draw no box)`
-          : 'still borderless: the border width reaches no border it does not draw',
-        aspect: 'border',
-        steps: (scoped ? variants.map(v => `variant:${v}`) : [undefined]).map(
-          when => ({
-            thing: 'border',
-            value: 'var(--border-width) solid var(--color-border)',
-            on: p,
-            ...(when ? {when} : {}),
-          }),
-        ),
-      });
-    }
+    for (const x of borderFrames(
+      ctx,
+      data,
+      'var(--border-width) solid var(--color-border)',
+    ))
+      found.push({...x, kind: 5, aspect: 'border'});
 
   // One of each kind first, in the order the kinds are missed most (an
   // inverted surface, a disabled part, a selected state, a status fill,
@@ -626,4 +570,86 @@ export function missedSteps(ctx, data, res, base) {
       if (x) ordered.push(x);
     }
   return ordered;
+}
+
+/**
+ * The surfaces a border width does not reach that draw a box of their own
+ * (a dialog, a banner, a filled button's variants), each with the steps
+ * that frame it with `value`: scoped to the variants that draw a filled
+ * box at rest, where some do not (a ghost button); none for a part that
+ * draws no box at rest (a ghost toggle button, a menu row), one whose
+ * filled variants set cannot name, or one a border setting covers. Show's
+ * missed list and set's note on a border width both take them.
+ * @param {any} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} value the border each step sets
+ * @returns {Array<{part: string, why: string, steps: MissedStep[]}>}
+ */
+export function borderFrames(ctx, data, value) {
+  const C = ctx.C;
+  /** @param {string} p */
+  const covered = p =>
+    data.settings.some(
+      x =>
+        x.on &&
+        !x.state &&
+        partsOf(ctx, x).includes(p) &&
+        /^(border(-width|-style|-color)?|--border-[\w-]+)$/.test(x.thing),
+    );
+  /** The fills a part draws (never the shared hover and pressed tints). @param {string} p */
+  const fills = p =>
+    (C.partReads(p, null) ?? []).filter(
+      (/** @type {any} */ r) =>
+        /^--color-/.test(r.token) &&
+        !/^--color-overlay-/.test(r.token) &&
+        r.props.some((/** @type {string} */ x) => /^background/.test(x)),
+    );
+  /** @type {Array<{part: string, why: string, steps: MissedStep[]}>} */
+  const out = [];
+  for (const p of borderlessSurfaces(C).filter(
+    x => ctx.project.target.has(x) && !covered(x),
+  )) {
+    // A part whose variants differ, some with a filled box and some with
+    // none (a button's ghost): only the variants that draw a filled box
+    // at rest get a frame; one with no fill is borderless on purpose.
+    const variants = [
+      ...new Set(
+        fills(p)
+          .flatMap((/** @type {any} */ r) => r.when)
+          .filter((/** @type {string} */ w) => !/:|aria-|selected|\[/.test(w))
+          .map(
+            (/** @type {string} */ w) => /(?:^|\s)variant=(\S+)/.exec(w)?.[1],
+          )
+          .filter(Boolean),
+      ),
+    ];
+    // A part that draws no filled box at rest in any variant (a ghost
+    // toggle button, a menu row: their fills are pressed, hover or
+    // selected ones) is borderless on purpose: no frame for it.
+    const boxAtRest = fills(p).some((/** @type {any} */ r) =>
+      r.when.some(
+        (/** @type {string} */ w) => w === '' || !/:|aria-|selected|\[/.test(w),
+      ),
+    );
+    if (!boxAtRest) continue;
+    const all = /** @type {string[]} */ ([...(C.MAP[p]?.attrs?.variant ?? [])]);
+    const scoped = variants.length && all.some(v => !variants.includes(v));
+    // Scoped to variants set can name (the part's own variant prop); a
+    // part whose filled variants set cannot name is left out: one frame
+    // for all of them would frame the ones that draw no box.
+    const settable = /** @type {string[]} */ (
+      C.variantValues(p)?.variant ?? []
+    );
+    if (scoped && !variants.every(v => settable.includes(v))) continue;
+    out.push({
+      part: p,
+      why: scoped
+        ? `still borderless: the border width reaches no border it does not draw (the ${variants.join(', ')} variant${variants.length > 1 ? 's' : ''}; the others draw no box)`
+        : 'still borderless: the border width reaches no border it does not draw',
+      steps: (scoped ? variants.map(v => `variant:${v}`) : [undefined]).map(
+        when => ({thing: 'border', value, on: p, ...(when ? {when} : {})}),
+      ),
+    });
+  }
+  return out;
 }

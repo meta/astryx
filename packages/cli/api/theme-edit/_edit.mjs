@@ -144,7 +144,6 @@ import {
   OPEN_SECTION,
 } from './_settings.mjs';
 import {
-  borderlessSurfaces,
   checkSetting,
   indicatorLines,
   selectedBoxes,
@@ -210,7 +209,7 @@ import {
   themeCacheRoot,
 } from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
-import {missedSteps} from './_missed.mjs';
+import {borderFrames, missedSteps} from './_missed.mjs';
 import {
   reactCopies,
   renderCause,
@@ -2249,14 +2248,24 @@ function leftOutParts(ctx, slug, data, sub, s) {
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
-    const bordered = (/** @type {string} */ p) =>
-      data.settings.some(x => x.on === p && /^border(-width)?$/.test(x.thing));
-    const bare = borderlessSurfaces(C).filter(p => has(p) && !bordered(p));
     const line = quoteCommandArgument(`${s.value} solid var(--color-border)`);
-    if (bare.length)
+    // The same frames show's missed list has (only parts that draw a box,
+    // scoped to the variants that do); none for a width of zero, which
+    // draws no border anywhere.
+    const zero = /^0(?:px|rem|em)?$/.test(String(s.value).trim());
+    const frames = zero
+      ? []
+      : borderFrames(ctx, data, `${s.value} solid var(--color-border)`);
+    const bare = frames.map(x => x.part);
+    if (frames.length)
       out.push({
         note: `--border-width does not reach the surfaces that draw no border or a fixed line of their own (${bare.join(', ')}); these give each one:`,
-        run: bare.map(p => `${P} set ${slug} border ${line} --on ${p}`),
+        run: frames.flatMap(x =>
+          x.steps.map(
+            st =>
+              `${P} set ${slug} border ${quoteCommandArgument(st.value)} --on ${st.on}${st.when ? ` --when ${st.when}` : ''}`,
+          ),
+        ),
       });
     const own = String(
       ctx.project.core.tokenDefaults?.['--border-width'] ?? '1px',
@@ -2277,7 +2286,9 @@ function leftOutParts(ctx, slug, data, sub, s) {
       data.settings.some(
         x => x.on === p && x.state === 'selected' && /^border/.test(x.thing),
       );
-    const selected = selectedBoxes(C).filter(p => has(p) && !boxed(p));
+    const selected = zero
+      ? []
+      : selectedBoxes(C).filter(p => has(p) && !boxed(p));
     if (selected.length)
       out.push({
         note: `the parts that draw a box only when selected draw no border (${selected.join(', ')}); these give each one there:`,
@@ -6654,25 +6665,29 @@ async function changeOnce(
         ...problemLines(r.newProblems),
         ...colorFails.map(problem => ({problem, fix: null})),
       ],
-      // How many parts the theme's own changes still do not reach (show
-      // lists each with the line that reaches it).
+      // How many misses the theme's own changes left (show lists each with
+      // the line that reaches it), and on how many parts (a part can miss
+      // two ways: its border and its shadow).
       // (Left out when none is missed.)
       ...(await (async () => {
-        const n = (
-          await missedParts(
-            ctx,
-            slug,
-            data,
-            // The theme's tokens as they are now: a change that changed
-            // nothing comes back with none of its own.
-            Object.keys(r.res?.light ?? {}).length
-              ? r.res
-              : await resolvedTokens(ctx, slug),
-            await baseResolved(ctx.project, data.like),
-            {count: true},
-          ).catch(() => [])
-        ).length;
-        return n ? {missed: n} : {};
+        const list = await missedParts(
+          ctx,
+          slug,
+          data,
+          // The theme's tokens as they are now: a change that changed
+          // nothing comes back with none of its own.
+          Object.keys(r.res?.light ?? {}).length
+            ? r.res
+            : await resolvedTokens(ctx, slug),
+          await baseResolved(ctx.project, data.like),
+          {count: true},
+        ).catch(() => []);
+        return list.length
+          ? {
+              missed: list.length,
+              missedParts: new Set(list.map(m => m.part)).size,
+            }
+          : {};
       })()),
       warnings: r.warnings,
       ...p,

@@ -575,6 +575,7 @@ function changeBlocks(r) {
     newProblems = [],
     leftOut = [],
     missed = 0,
+    missedParts = missed,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -600,7 +601,7 @@ function changeBlocks(r) {
     ...(missed
       ? [
           record({
-            missed: `${missed} part${missed > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
           }),
         ]
       : []),
@@ -700,7 +701,7 @@ function showBlocks(d) {
     ...(missed.length
       ? [
           section(
-            `missed (${missed.length} part${missed.length > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
+            `missed (${missed.length} miss${missed.length > 1 ? 'es' : ''} on ${new Set(missed.map(m => m.part)).size} part${new Set(missed.map(m => m.part)).size > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
           ),
           // Each part and why, then the line that reaches it.
           missed
@@ -713,19 +714,20 @@ function showBlocks(d) {
         ]
       : []),
     ...(() => {
-      // The rest, each said for what it is: a part whose fill or text
-      // color is still the base's (unreached), and a missed part beyond
-      // the six shown (a pill, a borderless surface, a state).
-      const shown = new Set(missed.slice(0, 6).map(m => m.part));
-      const still = (unreached ?? []).filter(p => !shown.has(p)).length;
-      const others = missed
-        .slice(6)
-        .filter(m => !(unreached ?? []).includes(m.part)).length;
+      // The rest, each said for what it is: the misses beyond the six shown
+      // (a border, a shadow, a pill, a state), and the parts with no miss
+      // whose fill or text color is still the base's (unreached).
+      const hidden = missed.slice(6);
+      const missedNames = new Set(missed.map(m => m.part));
+      const still = (unreached ?? []).filter(p => !missedNames.has(p)).length;
+      const hiddenParts = new Set(hidden.map(m => m.part)).size;
       const said = [
+        hidden.length
+          ? `${hidden.length} more miss${hidden.length > 1 ? 'es' : ''} (on ${hiddenParts} part${hiddenParts > 1 ? 's' : ''})`
+          : '',
         still
           ? `${still} more part${still > 1 ? 's' : ''} whose fill or text color is still the base's`
           : '',
-        others ? `${others} more missed part${others > 1 ? 's' : ''}` : '',
       ].filter(Boolean);
       return said.length
         ? [

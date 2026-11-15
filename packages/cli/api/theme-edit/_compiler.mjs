@@ -679,6 +679,10 @@ export function makeCompiler(project, parts) {
     );
     for (const p of [...parts.pairs, ...extra]) {
       if (replaced.has(p)) continue;
+      // Text drawn in a disabled color marks an inactive control, which
+      // needs no 4.5:1 (and must stay dimmer than the live text beside it).
+      if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
+        continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&

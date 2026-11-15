@@ -45,7 +45,9 @@ import {
   builtFontWeights,
   builtItalic,
   fontPackages,
+  mediaSurfaceSides,
   modesOf,
+  settleMediaSides,
   shown,
   themeFiles,
   APP_COPY_BUILT,
@@ -889,8 +891,19 @@ export async function renderPreview(ctx, slug, data) {
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   refuseOverIrregular(project.cwd, out, 'the sample page');
-  // Written whole and renamed in, never through a link.
-  writeWhole(out, withRenderKey(html, key));
+  // Written whole and renamed in, never through a link; an auto media
+  // surface drawn on the side the app's measurement picks.
+  writeWhole(
+    out,
+    withRenderKey(
+      settleMediaSides(
+        html,
+        await mediaSurfaceSides(ctx, slug, data),
+        themeImports(ctx, slug, data, renderDir(project)).mode,
+      ),
+      key,
+    ),
+  );
   return shown(project.cwd, out);
 }
 
@@ -940,8 +953,19 @@ export async function renderSheet(ctx, slug, data, options = {}) {
   );
   fs.mkdirSync(path.dirname(out), {recursive: true});
   refuseOverIrregular(project.cwd, out, 'the sheet');
-  // Written whole and renamed in, never through a link.
-  writeWhole(out, withRenderKey(html, key));
+  // Written whole and renamed in, never through a link; an auto media
+  // surface drawn on the side the app's measurement picks.
+  writeWhole(
+    out,
+    withRenderKey(
+      settleMediaSides(
+        html,
+        await mediaSurfaceSides(ctx, slug, data),
+        themeImports(ctx, slug, data, renderDir(project)).mode,
+      ),
+      key,
+    ),
+  );
   return {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
