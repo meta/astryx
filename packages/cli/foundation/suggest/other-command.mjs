@@ -196,9 +196,11 @@ function bestMatch(command, names, typed) {
 
 /**
  * The hint that names `name`, an entry of `command`, for `from`, at `tier`.
+ * Without `from` (a word that is no command), the reason names the entry's
+ * kind alone.
  * @param {LookupCommand} command
  * @param {string} name
- * @param {LookupCommand} from
+ * @param {LookupCommand | undefined} from
  * @param {number} tier
  * @returns {Found}
  */
@@ -206,7 +208,9 @@ function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
-      reason: `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`,
+      reason: from
+        ? `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`
+        : ENTRY_KIND[command],
     },
     tier,
   };
@@ -311,14 +315,16 @@ export function withOtherCommand(
  * route. A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
- *   from: LookupCommand,
+ *   from?: LookupCommand,
  *   cwd?: string,
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
- * }} context `coreDir` and `integrations` are the ones the lookup found, if
- *   any. `docsRoutes` works out every route `astryx docs` reads in the
- *   project with these integrations; without it, no docs route is a hint
+ * }} context `from` is the lookup command that did not find the name; without
+ *   it, every lookup command is asked. `coreDir` and `integrations` are the
+ *   ones the lookup found, if any. `docsRoutes` works out every route
+ *   `astryx docs` reads in the project with these integrations; without it,
+ *   no docs route is a hint
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -471,7 +477,7 @@ export async function findOtherCommand(
       if (match.tier === MATCH_TIER.exact) break;
     }
   }
-  if (!best && coreDir && !isPath && NEAR_HOOK_FROM.has(from)) {
+  if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
       const {discoverHookKeywords} =
         await import('../discovery/hook-discovery.mjs');

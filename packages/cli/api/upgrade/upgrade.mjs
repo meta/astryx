@@ -31,6 +31,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /**
  * @typedef {import('./upgrade.type.mjs').UpgradeOptions} UpgradeOptions
@@ -70,7 +71,21 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
       const msg = `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists available codemods and does not run a migration.`;
       logger.error(msg);
       logger.log('Aborted\n');
-      throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
+      throw new AstryxError(
+        msg,
+        [
+          {name: 'astryx upgrade --list', reason: 'list the codemods'},
+          ...(options.from
+            ? [
+                {
+                  name: `astryx upgrade --from ${quoteCommandArgument(String(options.from))}`,
+                  reason: 'show what a migration from that version changes',
+                },
+              ]
+            : []),
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
     }
   }
 

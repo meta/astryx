@@ -1306,7 +1306,7 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but it or its stylesheet names a file the package does not ship, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);
@@ -1416,7 +1416,7 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'warn',
       message: unshippedImports.map(each => each.message).join(' '),
-      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships the named file, or ask its owner to publish one.`,
+      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships every file its built module imports, as JavaScript, or ask its owner to publish one.`,
     });
   } else {
     checks.push({
