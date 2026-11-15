@@ -25,27 +25,37 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt166-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('t', {cwd, like: 'neutral'});
-  await themeEditSet('t', 'neutral', '#101010', {cwd});
+  // An accent alone: parts painted with the neutral surfaces (a toast on
+  // its inverted surface, a tooltip, a banner) keep the base's fill.
+  await themeEditSet('t', 'accent', '#00aa2a', {cwd});
 }, 240_000);
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
 describe('unreached', () => {
-  it("lists a part whose fill stays the base's though its text changed, most visible first", async () => {
+  it("lists a part whose fill stays the base's, most visible first", async () => {
     const r = /** @type {any} */ (await themeEditShow('t', {cwd})).data;
     const list = /** @type {string[]} */ (r.unreached);
     for (const part of ['toast', 'tooltip', 'banner'])
       expect(list).toContain(part);
-    // Overlays and feedback come first: in the ten the text names.
-    for (const part of ['toast', 'tooltip', 'banner'])
+    // Overlays come first: in the ten the text names.
+    for (const part of ['toast', 'tooltip'])
       expect(list.indexOf(part)).toBeLessThan(10);
   }, 240_000);
 
-  it('a setting on a part takes it off the list', async () => {
-    await themeEditSet('t', 'background-color', '#222222', {cwd, on: 'toast'});
+  it('a part counts as reached once its fill and its text both changed', async () => {
+    // The neutral color reaches the inverted surface a toast draws on and
+    // the text on it.
+    await themeEditSet('t', 'neutral', '#101010', {cwd});
     const r = /** @type {any} */ (await themeEditShow('t', {cwd})).data;
     expect(r.unreached).not.toContain('toast');
+  }, 240_000);
+
+  it('a setting on a part takes it off the list', async () => {
+    await themeEditSet('t', 'background-color', '#222222', {cwd, on: 'banner'});
+    const r = /** @type {any} */ (await themeEditShow('t', {cwd})).data;
+    expect(r.unreached).not.toContain('banner');
   }, 240_000);
 
   it('the text names ten and how many more; the JSON names them all', async () => {
