@@ -112,6 +112,15 @@ export const integrationBaseSchema = z.object({
           'themeProvider.themeProp must name a prop',
         )
         .optional(),
+      modeProp: z
+        .string()
+        .regex(/^[A-Za-z_$][\w$]*$/u, 'themeProvider.modeProp must name a prop')
+        .optional(),
+    })
+    // A mode passed alone means nothing: the theme goes with it.
+    .refine(p => p.modeProp == null || p.themeProp != null, {
+      message: 'themeProvider.modeProp needs themeProp beside it',
+      path: ['modeProp'],
     })
     .optional(),
   // Experimental roots (spec:AST-017 FR27). An unknown key inside is

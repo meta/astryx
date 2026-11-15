@@ -628,6 +628,18 @@ const CASES = [
     },
   },
   {
+    // And for a theme with one color mode, when the provider takes the mode.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    setup: dir =>
+      providerApp(dir, 'theme', {modeProp: 'themeMode', oneMode: true}),
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme', {modeProp: 'themeMode', oneMode: true});
+    },
+  },
+  {
     name: 'theme remove',
     args: ['theme', 'remove', 'does-not-exist'],
     errorExpected: true,
@@ -953,8 +965,10 @@ const CASES = [
  * object through.
  * @param {string} dir
  * @param {string} [themeProp]
+ * @param {{modeProp?: string, oneMode?: boolean}} [more] the provider's mode
+ *   prop, and a theme with one color mode
  */
-function providerApp(dir, themeProp) {
+function providerApp(dir, themeProp, more = {}) {
   /** @param {string} rel @param {string} content */
   const put = (rel, content) => {
     const file = path.join(dir, rel);
@@ -985,7 +999,7 @@ function providerApp(dir, themeProp) {
   );
   put(
     'node_modules/@acme/ui/astryx.integration.mjs',
-    `export default {themes: './themes', themeProvider: ${JSON.stringify({export: 'AcmeThemeProvider', from: '@acme/ui/theme', ...(themeProp ? {themeProp} : {})})}};\n`,
+    `export default {themes: './themes', themeProvider: ${JSON.stringify({export: 'AcmeThemeProvider', from: '@acme/ui/theme', ...(themeProp ? {themeProp} : {}), ...(more.modeProp ? {modeProp: more.modeProp} : {})})}};\n`,
   );
   put(
     'node_modules/@acme/ui/dist/theme.js',
@@ -1001,7 +1015,7 @@ function providerApp(dir, themeProp) {
   );
   put(
     'node_modules/@acme/ui/dist/brand.js',
-    "export const brandTheme = {name: 'brand', tokens: {}};\n",
+    `export const brandTheme = {name: 'brand', tokens: {}};\n${more.oneMode ? 'export const colorModes = ["dark"];\n' : ''}`,
   );
   put(
     'node_modules/@acme/ui/dist/brand.css',

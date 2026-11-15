@@ -131,8 +131,10 @@
  * root (the text's wiring is then that provider, with `line` as its opening
  * JSX, in place of a Theme wrap), else what replacing it costs and what a
  * Theme inside it covers. `themeProp` and `line` are present when a
- * provider takes a theme object. The add reads no app source.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
+ * provider takes a theme object; `line` passes the theme's mode too
+ * (`themeModes[defaultThemeSlug]`) when the provider names a `modeProp` and
+ * an added theme has one color mode. The add reads no app source.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 
 /**

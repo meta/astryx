@@ -43,7 +43,7 @@ export async function themeAdd(slug, options = {}) {
   // result says how Themes nest and never says to replace a provider, which
   // may do more than theming.
   const {themes} = await listAvailableThemeState(options.cwd ?? process.cwd());
-  /** Each provider once, with the package that declares it. @type {Map<string, {provider: {export: string, from: string, themeProp?: string}, owner: string}>} */
+  /** Each provider once, with the package that declares it. @type {Map<string, {provider: {export: string, from: string, themeProp?: string, modeProp?: string}, owner: string}>} */
   const byProvider = new Map();
   for (const theme of themes)
     if (theme.provider)
@@ -54,6 +54,9 @@ export async function themeAdd(slug, options = {}) {
           ...(theme.provider.themeProp
             ? {themeProp: theme.provider.themeProp}
             : {}),
+          ...(theme.provider.themeProp && theme.provider.modeProp
+            ? {modeProp: theme.provider.modeProp}
+            : {}),
         },
         owner: String(theme.package ?? theme.provider.from),
       });
@@ -63,8 +66,12 @@ export async function themeAdd(slug, options = {}) {
   // added theme (as the wiring below imports it) to it. One that does not:
   // what replacing it would cost, and what a Theme inside it covers.
   const taking = found.find(x => x.provider.themeProp);
+  // A theme with one color mode passes its mode too, as the Theme wiring
+  // does, when the provider takes one; a theme with both modes passes none.
+  const oneMode = result.data.themes.some(t => t.mode);
+  const modeProp = oneMode ? taking?.provider.modeProp : undefined;
   const line = taking
-    ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}>`
+    ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}${modeProp ? ` ${modeProp}={themeModes[defaultThemeSlug]}` : ''}>`
     : null;
   // With a provider that takes the theme, the wiring the text shows is that
   // provider's, in place of a Theme wrap: one instruction, not two.

@@ -56,7 +56,7 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
- * @property {{export: string, from: string, themeProp?: string}} [themeProvider]
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [themeProvider]
  *   the manifest's provider component that wires every theme under `themes`
  * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]

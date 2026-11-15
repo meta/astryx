@@ -368,6 +368,65 @@ describe('theme add with an installed package that names its provider', () => {
     });
   });
 
+  /**
+   * An app whose provider takes the theme and, with `modeProp`, its mode;
+   * with `oneMode`, the theme has the one color mode dark.
+   * @param {{modeProp?: string, oneMode?: boolean}} opts
+   */
+  const withProps = ({modeProp, oneMode}) => {
+    const dir = app();
+    write(
+      path.join(dir, 'node_modules/@acme/ui/astryx.integration.mjs'),
+      `export default {themes: './themes', themeProvider: ${JSON.stringify({...PROVIDER, themeProp: 'theme', ...(modeProp ? {modeProp} : {})})}};\n`,
+    );
+    if (oneMode)
+      write(
+        path.join(dir, 'node_modules/@acme/ui/dist/brand.js'),
+        'export const brandTheme = {name: \'brand\', tokens: {}};\nexport const colorModes = ["dark"];\n',
+      );
+    return dir;
+  };
+
+  it('passes a one-mode theme its mode when the provider names a modeProp', async () => {
+    const dir = withProps({modeProp: 'themeMode', oneMode: true});
+    const text = (
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
+    ).stdout;
+    expect(text).toContain(
+      "import {themes, defaultThemeSlug, themeModes} from './astryx-themes';",
+    );
+    expect(text).toContain(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]} themeMode={themeModes[defaultThemeSlug]}>',
+    );
+    const again = withProps({modeProp: 'themeMode', oneMode: true});
+    const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
+    expect(r.data.appProvider.line).toBe(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]} themeMode={themeModes[defaultThemeSlug]}>',
+    );
+  });
+
+  it('passes no mode for a one-mode theme when the provider names no modeProp', async () => {
+    const dir = withProps({oneMode: true});
+    const r = await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    expect(r.data.appProvider.line).toBe(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
+    );
+  });
+
+  it('passes no mode for a theme with both modes, even with a modeProp', async () => {
+    const dir = withProps({modeProp: 'themeMode'});
+    const text = (
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
+    ).stdout;
+    expect(text).not.toContain('themeMode=');
+    expect(text).not.toContain('themeModes');
+    const again = withProps({modeProp: 'themeMode'});
+    const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
+    expect(r.data.appProvider.line).toBe(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
+    );
+  });
+
   it('says nothing when no installed package names a provider', async () => {
     const dir = app();
     write(

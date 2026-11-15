@@ -881,11 +881,12 @@ function printThemeApp(result) {
     ? appProvider.wiredBy.find(p => p.themeProp === appProvider.themeProp)
     : undefined;
   if (appProvider && taking) {
+    const passesMode = /\bthemeModes\[/.test(String(appProvider.line));
     emit(
       text(appProvider.wire),
       code(
         `import {${taking.export}} from '${taking.from}';\n` +
-          `import {themes, defaultThemeSlug} from './${stem}';\n\n` +
+          `import {themes, defaultThemeSlug${passesMode ? ', themeModes' : ''}} from './${stem}';\n\n` +
           `${appProvider.line}\n  <App />\n</${taking.export}>`,
       ),
     );
