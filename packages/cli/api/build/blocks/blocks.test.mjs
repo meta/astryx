@@ -10,8 +10,8 @@
  * not know; and ties keep build's order.
  */
 
-import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
+import {loadBlockPicker} from '../_adapter.mjs';
 import {pickBlocks, stemOf, termsOf, wordsOf} from './blocks.mjs';
 
 /** Two dims, each byte a weight offset by 128: "chart" words on the first, "table" words on the second. */
@@ -232,16 +232,12 @@ describe('pickBlocks', () => {
 });
 
 describe('the shipped picker weights', () => {
-  it('count every block the doc matrix was fitted with as known', () => {
+  it('count a block the doc matrix was fitted with as known', () => {
     // A block outside `known` is ranked as one the matrices never saw. A
     // block whose docs the doc matrix was fitted with is not such a block.
-    const shipped = JSON.parse(
-      fs.readFileSync(
-        new URL('./blocks.weights.json', import.meta.url),
-        'utf8',
-      ),
-    );
-    expect(shipped.known).toContain('InfoTipShowcase');
+    const shipped = loadBlockPicker();
+    expect(shipped).not.toBeNull();
+    expect(shipped?.known).toContain('InfoTipShowcase');
   });
 });
 
