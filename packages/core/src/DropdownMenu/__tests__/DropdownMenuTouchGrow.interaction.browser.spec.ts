@@ -2,12 +2,13 @@
 
 /**
  * @file DropdownMenuTouchGrow.interaction.browser.spec.ts
- * @input The built Default DropdownMenu and Popover stories, real touch input
- *   (Chromium CDP / WebKit's input command), the interaction harness, and
- *   UIKit's popover values
+ * @input The built Default, InClosedInFlowDialog and Popover stories, real
+ *   touch input (Chromium CDP / WebKit's input command), the interaction
+ *   harness, and UIKit's popover values
  * @output Interaction proofs for the touch grow. A finger's first tap after
- *   the page loads grows the menu out of its trigger. In Chromium its first
- *   painted frame is the grow's collapsed start. A tap in scrolling
+ *   the page loads grows the menu out of its trigger, also in a closed
+ *   dialog that the page displays. In Chromium its first painted frame is
+ *   the grow's collapsed start. A tap in scrolling
  *   page content, which opens the menu at its lift, grows it too, and so does
  *   a held finger. The grow follows Popover's path and timing, frame by
  *   frame. Under Reduce Motion a finger's close fades the menu out where it
@@ -196,6 +197,21 @@ test("a finger's first tap after the page loads grows the menu out of its trigge
   const story = await openOnPhone(
     page,
     'core-dropdownmenu--default',
+    'Actions',
+  );
+  const surface = page.locator(MENU_SURFACE).first();
+  expectGrow(
+    await heldGrow(page, surface, async () => story.driver.tap(story.center)),
+  );
+});
+
+test("a finger's tap on a trigger in a closed dialog that the page displays grows the menu out of its trigger", async ({
+  page,
+}) => {
+  // The layer decides one commit after the press, inside the press.
+  const story = await openOnPhone(
+    page,
+    'core-dropdownmenu--in-closed-in-flow-dialog',
     'Actions',
   );
   const surface = page.locator(MENU_SURFACE).first();

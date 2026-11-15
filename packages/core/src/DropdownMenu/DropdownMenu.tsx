@@ -1043,7 +1043,10 @@ function DropdownMenuPopover({
   // The gesture of a finger's or a pen's open, a tap's open at its lift
   // included, until the layer shows. A show in another gesture, such as a
   // later open from code, plays the layer's own entrance.
-  const touchOpenRef = useRef<{gesture: number} | null>(null);
+  const touchOpenRef = useRef<{
+    gesture: number;
+    waitsForShow?: boolean;
+  } | null>(null);
   // Runs as the menu opens, before it paints; set once `usePopoverInternal`
   // has returned the surface it presents.
   const presentSurfaceRef = useRef<() => void>(() => {});
@@ -1120,6 +1123,7 @@ function DropdownMenuPopover({
     openModalityRef.current = 'keyboard';
     shouldFocusOnOpenRef.current = false;
     focusLastOnOpenRef.current = false;
+    touchOpenRef.current = null;
   }, []);
 
   // Synchronizes the dialog's name from the custom trigger's DOM, an external
@@ -1201,7 +1205,8 @@ function DropdownMenuPopover({
       buttonRef.current,
       null,
       pressTouchModel === 'uikit' &&
-        touchOpenRef.current?.gesture === currentGesture(),
+        (touchOpenRef.current?.waitsForShow === true ||
+          touchOpenRef.current?.gesture === currentGesture()),
     );
   });
 
@@ -1480,6 +1485,11 @@ function DropdownMenuPopover({
       // The layer can accept the open and hold it until the trigger is a
       // valid anchor. The armed focus and click then wait for that open.
       if (openPendingRef.current) {
+        // A finger's open still grows when it shows, also after a key press
+        // has started another gesture.
+        if (touchOpenRef.current?.gesture === currentGesture()) {
+          touchOpenRef.current = {...touchOpenRef.current, waitsForShow: true};
+        }
         return 'pending';
       }
       disarmOpen();
