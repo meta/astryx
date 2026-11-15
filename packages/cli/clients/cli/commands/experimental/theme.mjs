@@ -712,14 +712,24 @@ function showBlocks(d) {
         ]
       : []),
     ...(() => {
+      // The rest, each said for what it is: a part whose fill or text
+      // color is still the base's (unreached), and a missed part beyond
+      // the six shown (a pill, a borderless surface, a state).
       const shown = new Set(missed.slice(0, 6).map(m => m.part));
-      const more =
-        (unreached ?? []).filter(p => !shown.has(p)).length +
-        missed.slice(6).filter(m => !(unreached ?? []).includes(m.part)).length;
-      return more
+      const still = (unreached ?? []).filter(p => !shown.has(p)).length;
+      const others = missed
+        .slice(6)
+        .filter(m => !(unreached ?? []).includes(m.part)).length;
+      const said = [
+        still
+          ? `${still} more part${still > 1 ? 's' : ''} whose fill or text color is still the base's`
+          : '',
+        others ? `${others} more missed part${others > 1 ? 's' : ''}` : '',
+      ].filter(Boolean);
+      return said.length
         ? [
             record({
-              unreached: `${more} more parts keep the base's fill or text color (show --json)`,
+              unreached: `${said.join(', and ')} (show --json lists each)`,
             }),
           ]
         : [];

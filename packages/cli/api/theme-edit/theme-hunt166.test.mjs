@@ -74,7 +74,7 @@ describe('unreached', () => {
     ).data.unreached;
     expect(json.length).toBeGreaterThan(10);
     expect(line).toMatch(
-      /^unreached: +\d+ more parts keep the base's fill or text color \(show --json\)$/,
+      /^unreached: +\d+ more parts? whose fill or text color is still the base's.* \(show --json lists each\)$/,
     );
     const set = (
       await runCli(

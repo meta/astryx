@@ -79,6 +79,7 @@ import {
   refuse,
   settingsProblem,
   resolvedTokens,
+  baseComponent,
   shown,
   slugOk,
   themeFiles,
@@ -6235,16 +6236,24 @@ async function changeOnce(
       ],
       // How many parts the theme's own changes still do not reach (show
       // lists each with the line that reaches it).
-      missed: (
-        await missedParts(
-          ctx,
-          slug,
-          data,
-          r.res,
-          await baseResolved(ctx.project, data.like),
-          {count: true},
-        ).catch(() => [])
-      ).length,
+      // (Left out when none is missed.)
+      ...(await (async () => {
+        const n = (
+          await missedParts(
+            ctx,
+            slug,
+            data,
+            // The theme's tokens as they are now: a change that changed
+            // nothing comes back with none of its own.
+            Object.keys(r.res?.light ?? {}).length
+              ? r.res
+              : await resolvedTokens(ctx, slug),
+            await baseResolved(ctx.project, data.like),
+            {count: true},
+          ).catch(() => [])
+        ).length;
+        return n ? {missed: n} : {};
+      })()),
       warnings: r.warnings,
       ...p,
     },
@@ -7449,30 +7458,74 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
     const rest = reads.filter((/** @type {any} */ r) => r.when.includes(''));
     const restKept =
       rest.length && !rest.some((/** @type {any} */ r) => changed(r.token));
-    // A part on the base's inverted surface that no longer stands out from
-    // the theme's page (under 3:1 against it in a mode): an inverted
-    // surface that still stands out is drawn so on purpose. The surface and
-    // the text on it change together, so the line is how's answer for it.
+    // A part on the base's inverted surface (a toast's, or a tooltip drawn
+    // in the theme's text color) that no longer stands out from the
+    // theme's page (under 3:1 against it in a mode): one that still stands
+    // out is drawn so on purpose. Its line, in each mode it disappears in,
+    // turns the surface to the theme's own light surface where the page is
+    // dark (or the other way), with the text on it the theme's text color.
+    const INVERTED = ['--color-background-inverted', '--color-text-primary'];
+    const inverted = rest.find((/** @type {any} */ r) =>
+      INVERTED.includes(r.token),
+    )?.token;
+    /** Whether a color stands out from the page in a mode. @param {unknown} v @param {string} m */
+    const standsOut = (v, m) => {
+      const a = parseColor(String(v));
+      const b = parseColor(String(res[m]?.['--color-background-body']));
+      return !a || !b || ratio(a, b) >= 3;
+    };
+    const lost = inverted
+      ? modes.filter(m => !standsOut(res[m]?.[inverted], m))
+      : [];
+    // (Only a surface that holds text: a placeholder block is no surface
+    // a reader looks for.)
+    const holdsText =
+      Boolean(C.MAP[p]?.media) || fills(p, x => x === 'color').length > 0;
     if (
       surfaces &&
       restKept &&
-      rest.some(
-        (/** @type {any} */ r) => r.token === '--color-background-inverted',
-      ) &&
-      !covers(p, FILL) &&
-      modes.some(m => {
-        const a = parseColor(String(res[m]?.['--color-background-inverted']));
-        const b = parseColor(String(res[m]?.['--color-background-body']));
-        return Boolean(a && b && ratio(a, b) < 3);
-      })
-    )
+      inverted &&
+      holdsText &&
+      lost.length &&
+      !covers(p, FILL)
+    ) {
+      const swap = lost.filter(m =>
+        standsOut(res[m]?.['--color-background-surface'], m),
+      );
       found.push({
         kind: 0,
         part: p,
-        why: "still the base's inverted surface (--color-background-inverted), which no longer stands out from the page",
+        why: `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`,
         aspect: 'background',
-        steps: [],
+        // The inverted surface itself is the theme's own token: it turns to
+        // the light surface in that mode, and Core picks the text on it
+        // (a toast). A part drawn in the text color gets that surface with
+        // the text color on it.
+        steps:
+          swap.length !== lost.length
+            ? []
+            : inverted === '--color-background-inverted'
+              ? lost.map(m => ({
+                  thing: '--color-background-inverted',
+                  value: 'var(--color-background-surface)',
+                  mode: m,
+                }))
+              : lost.flatMap(m => [
+                  {
+                    thing: 'background-color',
+                    value: 'var(--color-background-surface)',
+                    on: p,
+                    mode: m,
+                  },
+                  {
+                    thing: 'color',
+                    value: 'var(--color-text-primary)',
+                    on: p,
+                    mode: m,
+                  },
+                ]),
       });
+    }
     if (!accent) continue;
     // A status fill still the base's: the status color generated at the
     // theme's vibrancy (its dial), with the text that reads on it.
@@ -7586,8 +7639,17 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
               !r.when.includes(without(w)),
           ),
       );
+      // The base theme's own rule for the state (butter draws its
+      // selected nav item with no fill, on purpose) is the look there.
+      const baseDraws = ['backgroundColor', 'background'].some(
+        prop =>
+          baseComponent(/** @type {any} */ (base), ctx, p, prop, {
+            state: st,
+          }) != null,
+      );
       if (
         inState.length &&
+        !baseDraws &&
         !inState.some((/** @type {any} */ r) => changed(r.token)) &&
         !covers(p, FILL, st)
       )
@@ -7608,7 +7670,15 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
         });
     }
   }
-  if (corners)
+  // With the theme's own corners at a pill (its element corners as round
+  // as --radius-full), a pill part draws what the corners give: none is
+  // missed, and a line would change nothing.
+  const pillCorners = modes.every(
+    m =>
+      String(res[m]?.['--radius-element']) ===
+      String(res[m]?.['--radius-full']),
+  );
+  if (corners && !pillCorners)
     for (const p of pillParts(C).filter(
       x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
     ))
@@ -7626,20 +7696,46 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
       x =>
         has(x) &&
         !covers(x, /^(border(-width|-style|-color)?|--border-[\w-]+)$/),
-    ))
+    )) {
+      // A part whose variants differ, some with a filled box and some with
+      // none (a button's ghost): only the variants that draw a filled box
+      // at rest get a frame; one with no fill is borderless on purpose.
+      const variants = [
+        ...new Set(
+          fills(p)
+            .filter(
+              (/** @type {any} */ r) => !/^--color-overlay-/.test(r.token),
+            )
+            .flatMap((/** @type {any} */ r) => r.when)
+            .filter((/** @type {string} */ w) => !/:|aria-|selected|\[/.test(w))
+            .map(
+              (/** @type {string} */ w) => /(?:^|\s)variant=(\S+)/.exec(w)?.[1],
+            )
+            .filter(Boolean),
+        ),
+      ];
+      const all = /** @type {string[]} */ ([
+        ...(C.MAP[p]?.attrs?.variant ?? []),
+      ]);
+      const scoped = variants.length && all.some(v => !variants.includes(v));
       found.push({
         kind: 5,
         part: p,
-        why: 'still borderless: the border width reaches no border it does not draw',
+        why: scoped
+          ? `still borderless: the border width reaches no border it does not draw (the ${variants.join(', ')} variant${variants.length > 1 ? 's' : ''}; the others draw no box)`
+          : 'still borderless: the border width reaches no border it does not draw',
         aspect: 'border',
-        steps: [
-          {
+        steps: (scoped ? variants.map(v => `variant:${v}`) : [undefined]).map(
+          when => ({
             thing: 'border',
             value: 'var(--border-width) solid var(--color-border)',
             on: p,
-          },
-        ],
+            ...(when ? {when} : {}),
+          }),
+        ),
       });
+    }
+
   // One of each kind first, in the order the kinds are missed most (an
   // inverted surface, a disabled part, a selected state, a status fill,
   // pills, borderless surfaces), then the next of each: six lines reach six

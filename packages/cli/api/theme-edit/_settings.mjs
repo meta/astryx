@@ -8089,10 +8089,55 @@ export async function contrastProblems(ctx, data, res) {
     if (typeof own !== 'string') return null;
     return inMode(own, m);
   };
+  /**
+   * The state a pair is drawn in, when its fill is one its part draws only
+   * in that state (a selected nav item's fill): the census records the pair
+   * without it. Null for a pair at rest.
+   * @param {TextPair} p
+   * @returns {string | null}
+   */
+  const pairState = p => {
+    const t = p.bg.target;
+    const tok = p.bg.tokens?.[0];
+    if (!t || !tok) return null;
+    const states = ctx.project.target.get(t)?.states ?? [];
+    const whens = (ctx.C.partReads(t, 'background') ?? [])
+      .filter((/** @type {any} */ r) => r.token === tok)
+      .flatMap((/** @type {any} */ r) => r.when)
+      .filter((/** @type {string} */ w) => !/:/.test(w));
+    if (!whens.length || whens.includes('')) return null;
+    const found = states.filter((/** @type {string} */ st) =>
+      whens.every((/** @type {string} */ w) =>
+        new RegExp(`(^|[\\s,])${st}=`).test(w),
+      ),
+    );
+    return found.length === 1 ? found[0] : null;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const ofBase = (p, side, m) => {
     const target = p[side].target;
     if (!target) return null;
+    // A pair drawn in a state: the base's own rule for that state (butter
+    // draws its selected nav item with no fill and a darker blue) wins
+    // over its resting look and over Core's state fill.
+    const state = pairState(p);
+    const inState =
+      state && target === p.bg.target
+        ? (baseComponent(
+            base,
+            ctx,
+            target,
+            side === 'fg' ? 'color' : 'backgroundColor',
+            {when: /** @type {any} */ (p).when, state},
+          ) ??
+          (side === 'bg'
+            ? baseComponent(base, ctx, target, 'background', {
+                when: /** @type {any} */ (p).when,
+                state,
+              })
+            : null))
+        : null;
+    if (inState) return inMode(inState, m);
     const own =
       baseComponent(
         base,

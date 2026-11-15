@@ -98,6 +98,6 @@ describe('missed', () => {
     expect(
       items.every(l => / experimental theme editor (set|how) /.test(l)),
     ).toBe(true);
-    expect(text).toMatch(/\nunreached: +\d+ more parts keep the base's fill/);
+    expect(text).toMatch(/\nunreached: +\d+ more (parts?|missed)/);
   }, 240_000);
 });
