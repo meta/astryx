@@ -282,6 +282,20 @@ export function carriesTypedWord(typedName, name) {
 }
 
 /**
+ * How closely `name` matches a typed name when it is a near name (one or two
+ * slips, as the `typos` option of {@link orderByAffinity} counts them) or
+ * carries every typed word; 0 for any other name. Higher is closer, on the
+ * scale {@link orderByAffinity} ranks by.
+ * @param {string} typedName
+ * @param {string} name
+ * @returns {number}
+ */
+export function closeNameScore(typedName, name) {
+  const score = affinityOf(nameWords(typedName), name, {typos: true});
+  return score >= 20 || isNearScore(score) ? score : 0;
+}
+
+/**
  * Docs route suggestions, closest to the typed route first. When every
  * suggestion sits under one namespace the typed route also starts with, that
  * shared part is left out of the comparison: it says nothing about which page
