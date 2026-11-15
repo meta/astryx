@@ -54,14 +54,21 @@ const PARSEABLE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs'];
 /**
  * The grammar a source file is written in, from its name. TypeScript allows
  * JSX only in a `.tsx` file, so a `.ts` file can hold a type assertion
- * (`<Item>value`) or a generic arrow (`<T>(x: T) => x`) that the TSX grammar
- * reads as JSX. A declaration file holds declarations without values
- * (`export const limit: number;`), which code may not.
+ * (`<Item>value`) that the TSX grammar reads as JSX. A declaration file holds
+ * declarations without values (`export const limit: number;`), which code may
+ * not. A declaration file is named as TypeScript names one: it ends in
+ * `.d.ts`, `.d.mts` or `.d.cts`, or it is a `.ts` file whose name holds `.d.`
+ * (an arbitrary-extension declaration file, such as `styles.d.css.ts`).
  * @param {string} filePath
  * @returns {'tsx' | 'ts' | 'dts' | 'babel'}
  */
 export function grammarOf(filePath) {
-  if (/\.d\.[cm]?ts$/.test(filePath)) return 'dts';
+  const name = path.basename(filePath);
+  if (
+    /\.d\.[cm]ts$/.test(name) ||
+    (name.endsWith('.ts') && name.includes('.d.'))
+  )
+    return 'dts';
   const ext = path.extname(filePath);
   if (ext === '.tsx') return 'tsx';
   if (ext === '.ts' || ext === '.mts' || ext === '.cts') return 'ts';

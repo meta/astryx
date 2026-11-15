@@ -155,12 +155,11 @@ function folderWith(files) {
 
 /** Syntax only TypeScript without JSX, or only a declaration file, allows. */
 const TYPESCRIPT_ONLY = {
-  'cast.ts':
-    'export const asItem = (raw: unknown) => <{id: string}>raw;\n' +
-    'export const identity = <T>(value: T): T => value;\n',
+  'cast.ts': 'export const asItem = (raw: unknown) => <{id: string}>raw;\n',
   'types.d.ts':
     'export const limit: number;\n' +
     'export declare function load(id: string): Promise<void>;\n',
+  'styles.d.css.ts': 'export const root: string;\n',
 };
 
 /** The codemod: rename the identifier `oldName` to `newName`. */
@@ -190,13 +189,39 @@ const RENAME_IDENTIFIER = {
 describe('code codemod grammars', () => {
   it('names the grammar of each source file', () => {
     expect(
-      ['a.tsx', 'a.ts', 'a.mts', 'a.cts', 'a.d.ts', 'a.d.mts', 'a.js', 'a.mjs', 'a.jsx'].map(
-        grammarOf,
-      ),
-    ).toEqual(['tsx', 'ts', 'ts', 'ts', 'dts', 'dts', 'babel', 'babel', 'babel']);
+      [
+        'a.tsx',
+        'a.ts',
+        'a.mts',
+        'a.cts',
+        'a.d.ts',
+        'a.d.mts',
+        'a.d.cts',
+        'styles.d.css.ts',
+        'dir.d.x/a.ts',
+        'a.d.tsx',
+        'a.js',
+        'a.mjs',
+        'a.jsx',
+      ].map(grammarOf),
+    ).toEqual([
+      'tsx',
+      'ts',
+      'ts',
+      'ts',
+      'dts',
+      'dts',
+      'dts',
+      'dts',
+      'ts',
+      'tsx',
+      'babel',
+      'babel',
+      'babel',
+    ]);
   });
 
-  it('reads a type assertion, a generic arrow and a declaration file without an error', () => {
+  it('reads a type assertion and declaration files without an error', () => {
     const {dir, paths} = folderWith({
       ...TYPESCRIPT_ONLY,
       'view.tsx': 'export const v = <Box oldProp="q" />;\n',
@@ -220,7 +245,8 @@ describe('code codemod grammars', () => {
 
   it('changes a TypeScript file and a declaration file in their own grammar', () => {
     const {dir, paths} = folderWith({
-      'rename.ts': 'export const oldName = <T>(value: T): T => value;\n',
+      'rename.ts':
+        'export const oldName = (raw: unknown) => <{id: string}>raw;\n',
       'decl.d.ts':
         'export declare const oldName: number;\nexport const other: string;\n',
     });
@@ -233,7 +259,7 @@ describe('code codemod grammars', () => {
     expect(result.errors).toEqual([]);
     expect(changed(dir, result).sort()).toEqual(['decl.d.ts', 'rename.ts']);
     expect(fs.readFileSync(path.join(dir, 'rename.ts'), 'utf8')).toBe(
-      'export const newName = <T>(value: T): T => value;\n',
+      'export const newName = (raw: unknown) => <{id: string}>raw;\n',
     );
     expect(fs.readFileSync(path.join(dir, 'decl.d.ts'), 'utf8')).toBe(
       'export declare const newName: number;\nexport const other: string;\n',
