@@ -406,11 +406,11 @@ describe('arena: cancellation and time', () => {
   });
   it('holds a late input at the clock, and keeps the time it came with', () => {
     const h = createHarness();
-    const seen: {time: number; inputTime: number}[] = [];
+    const seen: {time: number; cameAt: number | undefined}[] = [];
     const r = new Scripted('r', {
       moved: recognizer => {
         const [touch] = recognizer.trackedTouches;
-        seen.push({time: touch.time, inputTime: touch.inputTime});
+        seen.push({time: touch.time, cameAt: touch.inputSamples.at(-1)?.time});
       },
     });
     h.finger(1).down(0, 0, 100, {recognizers: [r]});
@@ -418,8 +418,8 @@ describe('arena: cancellation and time', () => {
     h.finger(1).move(5, 0, 300);
     h.finger(1).move(6, 0, 520);
     expect(seen).toEqual([
-      {time: 500, inputTime: 300},
-      {time: 520, inputTime: 520},
+      {time: 500, cameAt: 300},
+      {time: 520, cameAt: 520},
     ]);
   });
   it('keeps a late move’s coalesced samples at the times they came with', () => {

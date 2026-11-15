@@ -419,10 +419,10 @@ test('a right click opens the menu at once while the touch layer has not loaded'
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
-/** The press counts a move as late when it reaches the page this long after its own time. */
+/** The gesture arena counts a move as late when it reaches the page this long after its own time. */
 const LATE_INPUT_MS = 33;
-/** How long the press waits after a late move that reached the page just before the menu's moment. */
-const LATE_MOVE_GAP_MS = 50;
+/** How long the gesture arena holds the menu's moment after a late move that reached the page just before it. */
+const LATE_INPUT_WAIT_MS = 50;
 
 /** A hold that shifts 3 px once, as the page read it, on the page clock. */
 interface ShiftedHold {
@@ -505,7 +505,7 @@ async function holdWithShift(
   };
 }
 
-/** The shift reached the page before the menu's moment, inside the press's wait. */
+/** The shift reached the page before the menu's moment, inside the arena's wait. */
 function expectShiftInsideWait(
   [, receivedAt]: [number, number],
   moment: number,
@@ -516,8 +516,8 @@ function expectShiftInsideWait(
   ).toBeLessThan(moment);
   expect(
     moment - receivedAt,
-    'the shift reached the page inside the press’s wait before the moment',
-  ).toBeLessThan(LATE_MOVE_GAP_MS);
+    'the shift reached the page inside the arena’s wait before the moment',
+  ).toBeLessThan(LATE_INPUT_WAIT_MS);
 }
 
 test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms when its move reaches the page on time (AST-094 FR12)', async ({
@@ -575,11 +575,11 @@ test('a finger that shifts slightly just before 735 ms gets the menu 50 ms later
   expect(
     (run.decided as number) - moment,
     'the menu waited for moves still coming late',
-  ).toBeGreaterThanOrEqual(LATE_MOVE_GAP_MS - 1);
+  ).toBeGreaterThanOrEqual(LATE_INPUT_WAIT_MS - 1);
   expect(
     (run.decided as number) - moment,
-    'the menu waited no longer than the press allows',
-  ).toBeLessThan(LATE_MOVE_GAP_MS + 20);
+    'the menu waited no longer than the arena allows',
+  ).toBeLessThan(LATE_INPUT_WAIT_MS + 20);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
@@ -800,11 +800,11 @@ test('a drift from before 735 ms that reaches the page behind a block still canc
       receivedAt,
       'the move reached the page after the block',
     ).toBeGreaterThanOrEqual(blockEnd);
-    // The press waits 50 ms for moves still queued.
+    // The arena waits 50 ms for moves still queued.
     expect(
       receivedAt - blockEnd,
-      'the move reached the page within the press’s wait',
-    ).toBeLessThan(50);
+      'the move reached the page within the arena’s wait',
+    ).toBeLessThan(LATE_INPUT_WAIT_MS);
   }
   expect(
     await menuShownAt(page),
