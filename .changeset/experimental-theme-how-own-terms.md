@@ -4,7 +4,7 @@
 
 [experimental] `astryx experimental theme editor how` reads more questions through its shared readers:
 
-- **Lists:** a list of variants or states before a single ask names each one for that ask: "primary, secondary and ghost buttons rounder", "hovered and pressed buttons orange", in an except list too. "except disabled buttons" keeps that state. An except covers the whole ask before it. A prohibition said before the ask ("never round the inputs; make everything rounder", "don't make cards rounder, make everything rounder") is read the same as one said after it.
+- **Lists:** a list of variants or states before a single ask names each one for that ask: "primary and ghost buttons rounder", "hovered and pressed buttons orange", in an except list too. "except disabled buttons" keeps that state. An except covers the whole ask before it. A prohibition said before the ask ("never round the inputs; make everything rounder", "don't make cards rounder, make everything rounder") is read the same as one said after it.
 - **One-mode shadows:**
   - A one-mode shadow on a part reads the shared shadows to their layers.
   - It refuses with the true reason when the other mode is unknown, or when nothing of the part's own is there to remove.
