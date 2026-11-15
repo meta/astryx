@@ -178,10 +178,15 @@ describe('a table, read on its cells', () => {
 
   it("how dense is the table reads its cells' padding", async () => {
     const rs = await how('ne', 'how dense is the table');
-    expect(rs[0].text).toContain(
-      'table-row has padding 0.5rem (on its table-cell and table-header-cell parts, which hold its content) now (nothing is changed)',
+    expect(rs[0].text).toBe(
+      'table-row has padding 0.5rem (on its table-cell and table-header-cell parts, which hold its content) now (nothing is changed); to change it, ask for the change ("table-cell padding 12px")',
     );
     expect(writes(rs)).toEqual([]);
+    expect(rs[0].commands).toEqual(['how table-cell']);
+    // The change it names works as named: on the cells.
+    expect(writes(await how('ne', 'table-cell padding 12px'))).toEqual([
+      'set ne padding 12px --on table-cell',
+    ]);
   }, 120_000);
 });
 

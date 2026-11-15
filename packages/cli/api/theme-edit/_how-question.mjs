@@ -15730,12 +15730,15 @@ export function draftAnswer(ctx, env, question) {
       )?.[1];
     // A part whose padding its inner parts give (a table's, on its
     // cells): theirs, named as theirs.
+    // (The part that holds the value read: the asked part, or the inner
+    // part whose value it is, which the change asked for then names.)
+    let holder = named;
     const insideNow = () => {
       if (!named || asked !== 'padding') return null;
       const inner = drawnInside(named, 'padding');
-      return inner?.value
-        ? `${inner.value} (on its ${inner.parts.join(' and ')} parts, which hold its content)`
-        : null;
+      if (!inner?.value) return null;
+      holder = inner.parts[0];
+      return `${inner.value} (on its ${inner.parts.join(' and ')} parts, which hold its content)`;
     };
     const anyRead = () => {
       if (!named) return null;
@@ -16026,7 +16029,7 @@ export function draftAnswer(ctx, env, question) {
         ? `${env.slug} has only a ${shownModes[0]} mode, so ${named ?? 'it'} has no ${asked} in ${unshown} mode to tell (nothing is changed)`
         : named
           ? now
-            ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${named} ${asked} 12px`}")`
+            ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${holder} ${asked} 12px`}")`
             : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
           : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
       options: [],
@@ -16035,7 +16038,7 @@ export function draftAnswer(ctx, env, question) {
       lookup: pageToken
         ? `${HOW} ${pageToken}`
         : named
-          ? `${HOW} ${named}`
+          ? `${HOW} ${holder}`
           : `${P} show ${env.slug}`,
     });
     return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
