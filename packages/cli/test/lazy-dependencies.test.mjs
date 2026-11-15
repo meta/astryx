@@ -6,8 +6,8 @@
  *   loads on first use, and the public API entry point
  * @output Each resolves to the same file for `require` as for `import`, the
  *   API's exports keep their names and shapes, importing the API loads none
- *   of those dependencies, and the theme build module, which every command
- *   loads, loads no postcss
+ *   of those dependencies, and the theme build module, which `component` and
+ *   the theme commands load, loads no postcss
  */
 
 import {spawnSync} from 'node:child_process';
@@ -136,7 +136,7 @@ describe('lazy dependencies', () => {
     expect(result.stdout, result.stderr).toBe('MODULE_NOT_FOUND');
   }, 60_000);
 
-  it('give the postcss the other modules import, and leave it unloaded by the theme build module every command loads', async () => {
+  it('give the postcss the other modules import, and leave it unloaded by the theme build module', async () => {
     const require = createRequire(
       pathToFileURL(
         path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),

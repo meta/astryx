@@ -71,8 +71,9 @@ export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
 
 /**
- * postcss, for a module every command loads that reads a stylesheet only
- * now and then (render/embedded-imports.mjs). Its ES module entry hands on
+ * postcss, for modules that `component` and the theme commands load and that
+ * read a stylesheet only now and then (render/embedded-imports.mjs,
+ * fonts/font-stylesheet.mjs). Its ES module entry hands on
  * what its CommonJS one exports, so this is the one postcss the modules that
  * import it get. Not in {@link LAZY_PACKAGES}: those modules import it as
  * they load.
