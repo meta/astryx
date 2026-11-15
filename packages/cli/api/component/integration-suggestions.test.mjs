@@ -65,6 +65,9 @@ function scaffold() {
     keywords: ['quandle'],
     usage: {description: 'A card for one zorblet.'},
   });
+  writeComponent(components, 'ZorbletField', {
+    keywords: ['text input', 'number'],
+  });
   writeComponent(components, 'AcmeGadgetPanel', {
     usage: {description: 'A panel of gadgets.'},
   });
@@ -125,6 +128,17 @@ describe('suggestions for an unknown component name', () => {
     "match an integration doc's keywords, but resolve only a Core component",
     async () => {
       expect(await suggested('quandle')).toContain('ZorbletCard');
+    },
+    SLOW,
+  );
+
+  it(
+    "keep the Core component first for a slip of its name typed as words, above an integration doc's keyword",
+    async () => {
+      for (const typo of ['text inptu', 'text-inpu', 'Text Inputt']) {
+        expect((await suggested(typo))[0]).toBe('TextInput');
+      }
+      expect((await suggested('number-inpu'))[0]).toBe('NumberInput');
     },
     SLOW,
   );

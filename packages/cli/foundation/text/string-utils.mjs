@@ -49,6 +49,10 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  *    30  keyword Levenshtein distance 2
  *    20  name edit distance 3
  *
+ * A name typed as words is one edit from the name when its letters are
+ * (`top navv`, `top-navv` for `TopNav`), so a one-edit slip of a name ranks
+ * above every keyword match except an exact keyword.
+ *
  * Each result: { name, score, reason }, plus `keywordAt` when a keyword set
  * the component's score: the position of the keyword that set it.
  *
@@ -76,6 +80,8 @@ export async function searchComponents(
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
+  // The typed name without the separators between its words.
+  const termJoined = term.replace(/[\s_./-]+/g, '');
   const coreNames = Object.values(components).flat();
   /** @type {Map<string, ComponentMatchView | null>} */
   const otherViews = new Map();
@@ -124,8 +130,16 @@ export async function searchComponents(
       }
     }
 
-    // Edit distance on name; two adjacent letters swapped are one slip.
-    const dist = levenshteinDistance(term, compLower, 3, {swaps: true});
+    // Edit distance on name; two adjacent letters swapped are one slip. A
+    // name typed as words (`top navv` for TopNav) is one slip when its
+    // letters are; the same letters are the ranking's call (same words).
+    const letterDist = levenshteinDistance(term, compLower, 3, {swaps: true});
+    const dist =
+      letterDist > 1 &&
+      termJoined !== term &&
+      levenshteinDistance(termJoined, compLower, 1, {swaps: true}) === 1
+        ? 1
+        : letterDist;
     if (dist === 1) addMatch(comp, 80, 'similar name (distance ' + dist + ')');
     else if (dist === 2)
       addMatch(comp, 40, 'similar name (distance ' + dist + ')');

@@ -130,6 +130,38 @@ describe('searchComponents', () => {
     expect(keyword.map(r => [r.name, r.score])).toEqual([['ZorbletCard', 90]]);
   });
 
+  it('ranks a slip of a name typed as separate words above any keyword match', async () => {
+    const components = {group: ['ZorbletCard']};
+    const others = [
+      {name: 'QuillPanel', view: {keywords: ['zorblet card']}},
+      {name: 'QuillBadge', view: {keywords: ['zorblet']}},
+    ];
+    for (const typed of ['zorblet crad', 'zorblet-crd', 'Zorblet_Cardd']) {
+      const results = await searchComponents(typed, NO_CORE, components, [
+        ...others,
+      ]);
+      expect(results[0]).toMatchObject({
+        name: 'ZorbletCard',
+        score: 80,
+        reason: 'similar name (distance 1)',
+      });
+      expect(results.slice(1).every(r => r.score < 80)).toBe(true);
+    }
+  });
+
+  it('keeps an exact keyword above a slip of a name', async () => {
+    const results = await searchComponents(
+      'zorblet crad',
+      NO_CORE,
+      {group: ['ZorbletCard']},
+      [{name: 'QuillPanel', view: {keywords: ['zorblet crad']}}],
+    );
+    expect(results.map(r => [r.name, r.score])).toEqual([
+      ['QuillPanel', 90],
+      ['ZorbletCard', 80],
+    ]);
+  });
+
   it('scores an exact name match 100', async () => {
     const results = await searchComponents('Button', NO_CORE, COMPONENTS);
     expect(results[0]).toEqual({
