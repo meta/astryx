@@ -102,6 +102,7 @@ import {
   cornersPlain,
   radiusAt,
   radioCircle,
+  radioMark,
   radiusTokenOf,
   cornerParts,
   focusStateOf,
@@ -2722,13 +2723,49 @@ function readsToken(C, part, token) {
 }
 
 /**
+ * The radio marks (radioMark) whose circle the installed Core draws with
+ * the pill token (--radius-full), not a knob inside a pill (a switch's
+ * thumb goes with its switch); radioCircle reads a Core that draws it at
+ * 50%. On such a Core, squaring the pills would
+ * square the radios, which then read as checkboxes; the editor keeps the
+ * token at Core's value on them. A Core that draws the circle at 50% gives
+ * none, so this switches off by itself there.
+ * Remove when the minimum supported @astryxdesign/core draws radio circles
+ * at 50%.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function pillDrawnRadios(C) {
+  /** A radio's mark whose corners read --radius-full. @param {string} pt */
+  const pillCircle = pt =>
+    radioMark(C, pt) &&
+    Object.values(C.MAP[pt]?.at?.['border-radius'] ?? {}).some(v =>
+      /--radius-full/.test(String(v)),
+    );
+  /** Inside a pill that is no such mark (a switch's thumb). @param {string} pt */
+  const inPill = pt =>
+    Object.keys(C.MAP).some(
+      p =>
+        (C.MAP[p]?.contains ?? []).includes(pt) &&
+        readsToken(C, p, '--radius-full') &&
+        !pillCircle(p),
+    );
+  return Object.keys(C.MAP).filter(pt => pillCircle(pt) && !inPill(pt));
+}
+
+/**
  * The parts drawn as pills: they read --radius-full, which the corners
- * dial leaves round.
+ * dial leaves round. A radio mark, and what it holds (its dot), is no pill.
  * @param {any} C the part census
  * @returns {string[]}
  */
 export function pillParts(C) {
-  return Object.keys(C.MAP).filter(p => readsToken(C, p, '--radius-full'));
+  const radios = new Set(
+    pillDrawnRadios(C).flatMap(m => [m, ...(C.MAP[m]?.contains ?? [])]),
+  );
+  return Object.keys(C.MAP).filter(
+    p => !radios.has(p) && readsToken(C, p, '--radius-full'),
+  );
 }
 
 /**
@@ -2816,8 +2853,8 @@ export function selectedBoxes(C) {
  * census reads them: the containers, menus and overlays (a part with an
  * elevation shadow, or one the layer runtime places: a tooltip), a framed
  * surface (container or element corners and a fill around other parts: a
- * banner, a segmented control), and
- * every part that draws a fixed line of its own at rest (a popover's 1px,
+ * banner, a segmented control), a label box (an inline box with a fill
+ * and room around its label: a badge, a token), and every part that draws a fixed line of its own at rest (a popover's 1px,
  * a secondary button's edge), whose border reads no border width or
  * border color token. --border-width does not widen any of them. A family
  * member the census does not record is kept.
@@ -2842,6 +2879,21 @@ export function borderlessSurfaces(C) {
     ) &&
     (C.partReads(pt, 'background') ?? []).some(rest) &&
     (C.MAP[pt]?.contains ?? []).length > 0;
+  /** The values a part sets at rest. @param {string} pt @param {string} k */
+  const atRest = (pt, k) =>
+    Object.entries(C.MAP[pt]?.at?.[k] ?? {})
+      .filter(([sel]) => !/:/.test(sel))
+      .map(([, v]) => String(v));
+  // A part that draws its box only when selected takes its border there.
+  const selectedOnly = new Set(selectedBoxes(C));
+  /** An inline box with a fill and room inside it around its label (a badge, a token). @param {string} pt */
+  const labelBox = pt =>
+    !selectedOnly.has(pt) &&
+    atRest(pt, 'display').some(v => /^inline-(?:flex|block)$/.test(v.trim())) &&
+    [...atRest(pt, 'padding-inline'), ...atRest(pt, 'padding')].some(
+      v => !/^\s*0(?:px)?\s*$/.test(v),
+    ) &&
+    (C.partReads(pt, 'background') ?? []).some(rest);
   /** A line of a fixed width at rest (not a token, not 0). @param {string} pt */
   const fixedLine = pt =>
     Object.entries(C.MAP[pt]?.at ?? {}).some(
@@ -2861,6 +2913,7 @@ export function borderlessSurfaces(C) {
       pt =>
         layered(pt) ||
         framed(pt) ||
+        labelBox(pt) ||
         fixedLine(pt) ||
         (C.partReads(pt, 'shadow') ?? []).some(
           (/** @type {any} */ r) => /^--shadow-/.test(r.token) && rest(r),

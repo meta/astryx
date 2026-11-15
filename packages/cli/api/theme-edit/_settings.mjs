@@ -9043,21 +9043,37 @@ export function paddedParts(ctx, part) {
 }
 
 /**
- * Whether a part is a radio's circle, as the part data records it: a part
- * with a checked state, a square box of a fixed size, and corners at 50%
- * that no token reaches, in it and in every part inside it (its dot). The
- * circle marks a radio; it is no corner, so the corners dial leaves it.
+ * Whether a part is drawn as a radio's mark, as the part data records it:
+ * a part with a checked state and a square box of a fixed size.
  * @param {any} C the part census
  * @param {string} part
  * @returns {boolean}
  */
-export function radioCircle(C, part) {
+export function radioMark(C, part) {
   const at = C.MAP[part]?.at ?? {};
   /** A fixed px size at rest. @param {string} k */
   const fixed = k =>
     Object.entries(at[k] ?? {}).find(
       ([sel, v]) => !/:/.test(sel) && /^\s*\d*\.?\d+px\s*$/.test(String(v)),
     )?.[1];
+  const w = fixed('width');
+  return (
+    (C.MAP[part]?.attrs?.checked ?? []).length > 0 &&
+    w != null &&
+    String(w).trim() === String(fixed('height') ?? '').trim()
+  );
+}
+
+/**
+ * Whether a part is a radio's circle: a radio's mark (radioMark) whose
+ * corners are 50% that no token reaches, in it and in every part inside it
+ * (its dot). The circle marks a radio; it is no corner, so the corners
+ * dial leaves it.
+ * @param {any} C the part census
+ * @param {string} part
+ * @returns {boolean}
+ */
+export function radioCircle(C, part) {
   /** The radius values a part draws, in any rule. @param {string} t */
   const radii = t =>
     Object.entries(C.MAP[t]?.at ?? {})
@@ -9074,12 +9090,9 @@ export function radioCircle(C, part) {
       ),
     ];
   };
-  const w = fixed('width');
   const own = radii(part);
   return (
-    (C.MAP[part]?.attrs?.checked ?? []).length > 0 &&
-    w != null &&
-    String(w).trim() === String(fixed('height') ?? '').trim() &&
+    radioMark(C, part) &&
     own.length > 0 &&
     own.every(v => v.trim() === '50%') &&
     within(part).every(k => radii(k).every(v => !/var\(/.test(v)))

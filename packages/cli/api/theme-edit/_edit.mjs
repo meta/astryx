@@ -137,6 +137,7 @@ import {
   coveredPaints,
   dividerParts,
   normalizeEntry,
+  pillDrawnRadios,
   pillParts,
   propertyValueProblem,
   storedProblems,
@@ -2046,10 +2047,24 @@ function leftOutParts(ctx, slug, data, sub, s) {
     !data.settings.some(x => x.thing === '--radius-full' && !x.on)
   ) {
     const pills = pillParts(C).filter(has);
+    // On a Core that draws a radio's circle with the pill token, the radio
+    // marks keep it at Core's value (pillDrawnRadios).
+    const radios = pillDrawnRadios(C).filter(has);
+    const round = String(
+      ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
+    );
+    /** @param {string} m */
+    const only = m =>
+      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
     if (pills.length)
       out.push({
-        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; this squares them:`,
-        run: [`${P} set ${slug} --radius-full 0px`],
+        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; ${radios.length ? `these square them and keep the radio marks round (${radios.join(', ')})` : 'this squares them'}:`,
+        run: [
+          `${P} set ${slug} --radius-full 0px`,
+          ...radios.map(
+            m => `${P} set ${slug} --radius-full ${round} --on ${m}${only(m)}`,
+          ),
+        ],
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {

@@ -15,7 +15,7 @@ import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {parsePoints} from './_adapter.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, pillDrawnRadios} from './_check.mjs';
 import {context} from './_context.mjs';
 import {howTheme} from './_how-commands.mjs';
 import {compileTheme, keyOf} from './_settings.mjs';
@@ -41,10 +41,23 @@ vi.mock('./_preview.mjs', async importOriginal =>
 /** @type {string} */
 let cwd;
 
+/**
+ * The steps that keep the radio marks round when the pills go square, on a
+ * Core that draws a radio's circle with the pill token; none on a Core that
+ * draws it at 50%.
+ */
+let radioPins = '';
+
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
+  radioPins = pillDrawnRadios((await context(cwd)).C)
+    .map(
+      m =>
+        ` && set q --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
+    )
+    .join('');
 }, 120_000);
 
 afterAll(() => {
@@ -465,7 +478,10 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
       adds: /--radius-element=0px/,
     },
   ],
@@ -775,7 +791,9 @@ describe('how answers plain-words questions', () => {
       const top = changes[0];
       expect(top).toBeTruthy();
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1400,7 +1418,9 @@ describe('how answers pass-2 questions', () => {
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1800,7 +1820,9 @@ describe('how answers pass-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       // A step is given once.
       expect(new Set(commands).size).toBe(commands.length);
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
@@ -2133,7 +2155,9 @@ describe('how answers final-pass questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2460,7 +2484,9 @@ describe('how answers final-2 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2757,7 +2783,9 @@ describe('how answers final-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2996,7 +3024,9 @@ describe('how answers final-4 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3112,7 +3142,10 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
       adds: /--radius-element=0px/,
     },
   ],
@@ -3225,7 +3258,9 @@ describe('how answers final-5 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3305,7 +3340,9 @@ describe('how answers final-6 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
     });
 });
 

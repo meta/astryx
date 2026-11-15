@@ -3,8 +3,8 @@
 /**
  * @file The thick borders chain reaches the parts that draw a box only when
  * selected and the indicator lines, read in the compiled stylesheet; and
- * squaring the pills leaves a radio round on a Core that draws its circle
- * at 50% (the circle marks a radio; it is no corner).
+ * squaring the pills leaves a radio round: by a pin on a Core that draws its
+ * circle with the pill token, by Core itself on one that draws it at 50%.
  */
 
 import * as fs from 'node:fs';
@@ -72,31 +72,50 @@ const rule = (css, selector) =>
   ).exec(css)?.[1] ?? '';
 
 describe('no rounding anywhere', () => {
-  it('squares the pills and leaves the radio round, on a Core that draws its circle at 50%', async ({
-    skip,
-  }) => {
-    await themeEditNew('r1', {cwd});
-    // A Core before the fix draws the radio's circle with the pill token,
-    // which squaring the pills squares too.
-    const radius = Object.values(
+  /** Core's radius on the radio's circle. */
+  const radioRadius = async () =>
+    Object.values(
       (await context(cwd)).C.MAP['radio-indicator']?.at?.['border-radius'] ??
         {},
     ).map(String);
+
+  it('on a Core that draws the radio with the pill token, keeps the radio marks round', async ({
+    skip,
+  }) => {
+    await themeEditNew('r0', {cwd});
+    if (!(await radioRadius()).some(v => /--radius-full/.test(v))) skip();
+    const css = await follow('r0', 'no rounding anywhere');
+    expect(css).toMatch(/--radius-full:\s*0px/);
+    expect(rule(css, '.astryx-radio-indicator')).toMatch(
+      /--radius-full:\s*9999px/,
+    );
+    expect(rule(css, '.astryx-dropdown-menu-radio')).toMatch(
+      /--radius-full:\s*9999px/,
+    );
+  }, 240_000);
+
+  it('on a Core that draws the radio at 50%, squares the pills with no radio pin', async ({
+    skip,
+  }) => {
+    await themeEditNew('r1', {cwd});
+    const radius = await radioRadius();
     if (radius.some(v => /--radius-full/.test(v))) skip();
     const css = await follow('r1', 'no rounding anywhere');
     expect(css).toMatch(/--radius-full:\s*0px/);
     expect(radius).toContain('50%');
     expect(css).not.toMatch(/\.astryx-radio-indicator\s*\{/);
+    expect(css).not.toMatch(/\.astryx-dropdown-menu-radio\s*\{/);
   }, 240_000);
 });
 
 describe('thick black borders on everything', () => {
-  it('reaches the segmented control, the selected nav items and segments, and the indicator lines', async () => {
+  it('reaches the segmented control, the label boxes, the selected nav items and segments, and the indicator lines', async () => {
     await themeEditNew('b1', {cwd});
     const css = await follow('b1', 'thick black borders on everything');
-    expect(rule(css, '.astryx-segmented-control')).toMatch(
-      /border:\s*2px solid #000000/,
-    );
+    for (const part of ['segmented-control', 'badge', 'token'])
+      expect(rule(css, `.astryx-${part}`), part).toMatch(
+        /border:\s*2px solid #000000/,
+      );
     for (const part of [
       'side-nav-item',
       'top-nav-item',

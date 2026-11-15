@@ -10,7 +10,7 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting, indicatorLines} from './_check.mjs';
+import {checkSetting, indicatorLines, pillDrawnRadios} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -692,6 +692,11 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       .filter(Boolean)
       .flatMap(x => members(String(x))),
   ]);
+  // A radio mark the editor keeps round on a Core that draws its circle
+  // with the pill token, and its dot: a zero radius ask leaves them.
+  const radios = new Set(
+    pillDrawnRadios(C).flatMap(m => [m, ...(C.MAP[m]?.contains ?? [])]),
+  );
   // An indicator line's thickness (a tab's underline height) is the
   // width of a line it draws, as a border's is.
   const lineSide = new Map(indicatorLines(C).map(x => [x.part, x.side]));
@@ -756,6 +761,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         if (visible && mode !== visible) continue;
         const after = v[mode];
         const before = o?.[mode] ?? null;
+        if (intent.zero && fam === 'radius' && radios.has(part)) continue;
         if (
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
