@@ -4,8 +4,8 @@
  * @file tableColumnWindowing.ts
  * @input A `Table.virtualization` value
  * @output The rows capability, the columns capability with the column
- *   windowing it carries, or why the value cannot window; the mapping between
- *   mounted cells and full-table column positions
+ *   windowing it carries, or why the value cannot window; the column layout
+ *   and render shapes the column window gives BaseTable
  * @position Table's base wiring for column windowing. The column hook puts
  *   its implementation in the capability value, so a Table that never
  *   imports the hook carries only this wiring, not the column planner,
@@ -45,13 +45,32 @@ export interface TableColumnLayout {
   segments: ReadonlyArray<TableColumnSegment>;
   /** Cells in one mounted row: pinned and mounted cells, and spacers. */
   cellCount: number;
-  /** The header width style of the column at a full-table index. */
-  widthOf: (columnIndex: number) => {width: string; minWidth: string};
   /** Builds the cells of one row: mounted cells and native spacers. */
   mapColumns: <C>(
     columns: ReadonlyArray<C>,
     renderCell: (column: C, columnIndex: number) => ReactElement,
   ) => ReactElement[];
+  /**
+   * The table's plugins after the column window's own plugin, which gives
+   * each mounted cell its full-table position and each header its pitch.
+   */
+  plugins: ReadonlyArray<object>;
+  /** Attributes of the table element: its full-table column count. */
+  tableAttributes: {'aria-colcount': number};
+}
+
+/**
+ * What the column window gives BaseTable to render: the column layout while
+ * columns window, and its table handlers while windowing is admitted.
+ */
+export interface TableColumnRender {
+  layout: TableColumnLayout | undefined;
+  /** Chains the column window's handlers after the given handlers. */
+  chainTableHandlers:
+    | ((
+        ...sources: ReadonlyArray<Partial<TableColumnFocusProps>>
+      ) => TableColumnFocusProps)
+    | undefined;
 }
 
 /** What BaseTable gives the column window before it renders the table. */
@@ -89,10 +108,7 @@ export interface TableColumnWindowProps {
   capability: Readonly<TableColumnsCapabilityValue> | undefined;
   input: TableColumnWindowInput;
   /** Renders the table; a windowed table gets its column layout. */
-  render: (
-    layout: TableColumnLayout | undefined,
-    focusProps?: TableColumnFocusProps,
-  ) => ReactNode;
+  render: (columnRender: TableColumnRender) => ReactNode;
 }
 
 /** The column windowing a columns capability carries. */
@@ -153,29 +169,4 @@ export function resolveTableVirtualization(
     }
   }
   return resolved;
-}
-
-/**
- * The full-table column index of a mounted cell. A windowed cell carries its
- * position. An unwindowed row has no spacers, so there the cell index is the
- * column index. A spacer has no column.
- */
-export function getCellColumnIndex(
-  cell: HTMLTableCellElement,
-): number | undefined {
-  if (cell.getAttribute('aria-hidden') === 'true') {
-    return undefined;
-  }
-  const position = cell.getAttribute('aria-colindex');
-  return position == null ? cell.cellIndex : Number(position) - 1;
-}
-
-/** The cell of a mounted row at a full-table column index, if it is mounted. */
-export function getCellAtColumn(
-  row: HTMLTableRowElement,
-  columnIndex: number,
-): HTMLTableCellElement | undefined {
-  return Array.from(row.cells).find(
-    cell => getCellColumnIndex(cell) === columnIndex,
-  );
 }

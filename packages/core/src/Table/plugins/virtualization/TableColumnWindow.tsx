@@ -10,7 +10,12 @@
  *   this module and the column planner, so a Table that never imports the
  *   hook carries none of it.
  */
-import {useMemo, type ReactElement, type ReactNode} from 'react';
+import {
+  useMemo,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useDevWarningPerMessage} from '../../../hooks/useDevWarning';
 import {
@@ -26,6 +31,9 @@ import type {
   TableColumnWindowProps,
   TableColumnsWindowing,
 } from '../../tableColumnWindowing';
+import type {TableColumnFocusProps} from '../../tableColumnWindowing';
+import type {TablePlugin} from '../../types';
+import {chainEventHandlers} from '../../../utils/chainEventHandlers';
 import {useTableColumnWindow} from './useTableColumnWindow';
 
 const styles = stylex.create({
@@ -74,6 +82,38 @@ function getColumnFallbackReason(
   );
 }
 
+/**
+ * The column window's own plugin. Placed before the table's plugins, it gives
+ * each mounted cell its full-table position and each header its pitch in
+ * pixels, so the table's plugins compose over them. A windowed table renders
+ * at its minimum width, so a percentage would resolve against the spacers.
+ */
+function createColumnPositionPlugin(
+  pitches: ReadonlyArray<number>,
+): TablePlugin {
+  return {
+    transformHeaderCell: (props, _column, columnIndex) => {
+      const {style, ...htmlProps} = props.htmlProps;
+      return {
+        ...props,
+        htmlProps: {
+          ...htmlProps,
+          'aria-colindex': columnIndex + 1,
+          style: {
+            width: `${pitches[columnIndex]}px`,
+            minWidth: `${pitches[columnIndex]}px`,
+            ...style,
+          },
+        },
+      };
+    },
+    transformBodyCell: (props, _column, _item, columnIndex) => ({
+      ...props,
+      htmlProps: {'aria-colindex': columnIndex + 1, ...props.htmlProps},
+    }),
+  };
+}
+
 function TableColumnWindow({
   capability,
   input,
@@ -117,6 +157,13 @@ function TableColumnWindow({
     viewport: input.runtime.viewport,
     geometry: input.runtime.geometry,
   });
+  // One plugin list per set of pitches, so mounted cells keep equal props
+  // across a range change.
+  const plugins = useMemo(
+    () => [createColumnPositionPlugin(pitches), ...input.plugins],
+    [pitches, input.plugins],
+  );
+  const columnCount = columns.length;
   // One layout object per mounted range, so rows that keep their range keep
   // their memoized output.
   const layout = useMemo<TableColumnLayout | undefined>(
@@ -130,13 +177,6 @@ function TableColumnWindow({
                 (segment.type === 'gap' ? 1 : segment.end - segment.start),
               0,
             ),
-            // A windowed table renders at its minimum width, so each mounted
-            // column takes its pitch in pixels: a percentage would resolve
-            // against the spacers.
-            widthOf: columnIndex => ({
-              width: `${pitches[columnIndex]}px`,
-              minWidth: `${pitches[columnIndex]}px`,
-            }),
             mapColumns: (rowColumns, renderCell) =>
               segments.flatMap(segment =>
                 segment.type === 'gap'
@@ -147,11 +187,39 @@ function TableColumnWindow({
                         renderCell(column, segment.start + offset),
                       ),
               ),
+            plugins,
+            tableAttributes: {'aria-colcount': columnCount},
           }
         : undefined,
-    [isWindowed, segments, pitches],
+    [isWindowed, segments, plugins, columnCount],
   );
-  return render(layout, focusProps);
+  // The table's own handlers run first, then the caller's, then the column
+  // window's.
+  const chainTableHandlers = useMemo(
+    () =>
+      focusProps == null
+        ? undefined
+        : (...sources: ReadonlyArray<Partial<TableColumnFocusProps>>) => ({
+            onFocus: chainEventHandlers(
+              ...sources.map(source => source.onFocus),
+              focusProps.onFocus,
+            ),
+            onBlur: chainEventHandlers(
+              ...sources.map(source => source.onBlur),
+              focusProps.onBlur,
+            ),
+            onPointerDown: chainEventHandlers(
+              ...sources.map(source => source.onPointerDown),
+              focusProps.onPointerDown,
+            ),
+            onContextMenu: chainEventHandlers(
+              ...sources.map(source => source.onContextMenu),
+              focusProps.onContextMenu,
+            ),
+          }),
+    [focusProps],
+  );
+  return render({layout, chainTableHandlers});
 }
 
 /** The column windowing a columns capability carries; one object for every capability. */

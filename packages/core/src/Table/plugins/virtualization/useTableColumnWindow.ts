@@ -28,10 +28,9 @@ import {
   useInlineListWindow,
   type InlineListWindowGeometrySource,
 } from '../../../virtualization/useInlineListWindow';
-import {
-  getCellColumnIndex,
-  type TableColumnFocusProps,
-  type TableColumnSegment,
+import type {
+  TableColumnFocusProps,
+  TableColumnSegment,
 } from '../../tableColumnWindowing';
 
 export interface UseTableColumnWindowOptions {
@@ -280,5 +279,30 @@ export function useTableColumnWindow({
         : undefined,
     }),
     [segments, isWindowed, canWindow, onFocus, onBlur, onOpenerInput],
+  );
+}
+
+/**
+ * The full-table column index of a mounted cell. A windowed cell carries its
+ * position. An unwindowed row has no spacers, so there the cell index is the
+ * column index. A spacer has no column.
+ */
+export function getCellColumnIndex(
+  cell: HTMLTableCellElement,
+): number | undefined {
+  if (cell.getAttribute('aria-hidden') === 'true') {
+    return undefined;
+  }
+  const position = cell.getAttribute('aria-colindex');
+  return position == null ? cell.cellIndex : Number(position) - 1;
+}
+
+/** The cell of a mounted row at a full-table column index, if it is mounted. */
+export function getCellAtColumn(
+  row: HTMLTableRowElement,
+  columnIndex: number,
+): HTMLTableCellElement | undefined {
+  return Array.from(row.cells).find(
+    cell => getCellColumnIndex(cell) === columnIndex,
   );
 }

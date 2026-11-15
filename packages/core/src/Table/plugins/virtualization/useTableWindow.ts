@@ -31,7 +31,7 @@ import {
   type TableVirtualizationCapability,
   type UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
-import {getCellAtColumn, getCellColumnIndex} from '../../tableColumnWindowing';
+import {getCellAtColumn, getCellColumnIndex} from './useTableColumnWindow';
 
 export type TableWindowGeometry = ListWindowGeometry;
 export type TableWindowGeometrySource = ListWindowGeometrySource;

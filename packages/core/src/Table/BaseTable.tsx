@@ -33,8 +33,8 @@ import {useTableWindow} from './plugins/virtualization/useTableWindow';
 import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
 import {
   resolveTableVirtualization,
-  type TableColumnFocusProps,
   type TableColumnLayout,
+  type TableColumnRender,
 } from './tableColumnWindowing';
 import {TableContext} from './TableContext';
 import {use} from 'react';
@@ -45,7 +45,6 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
-import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -206,8 +205,6 @@ interface TableBodyCellProps<T extends Record<string, unknown>> {
   CellComponent: React.ComponentType<TableCellComponentProps>;
   /** A windowed row renders row numbers from its logical position. */
   hasLogicalPosition: boolean;
-  /** While columns window, a cell carries its full-table column position. */
-  hasColumnPosition: boolean;
 }
 
 /** One body cell. Equal props skip the cell's plugin transforms and render. */
@@ -221,12 +218,9 @@ function TableBodyCell<T extends Record<string, unknown>>({
   textOverflow,
   CellComponent,
   hasLogicalPosition,
-  hasColumnPosition,
 }: TableBodyCellProps<T>): ReactElement {
   // Apply column alignment to body cells
-  const initialCellHtmlProps: Record<string, unknown> = hasColumnPosition
-    ? {'aria-colindex': columnIndex + 1}
-    : {};
+  const initialCellHtmlProps: Record<string, unknown> = {};
   if (col.align) {
     initialCellHtmlProps.style = {textAlign: col.align};
   }
@@ -376,7 +370,6 @@ function TableRowInner<T extends Record<string, unknown>>({
       textOverflow={textOverflow}
       CellComponent={CellComponent}
       hasLogicalPosition={rowHeight != null}
-      hasColumnPosition={columnLayout != null}
     />
   );
   const cells =
@@ -842,11 +835,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const hasData = data != null && data.length > 0;
 
   // Everything that reads the column layout renders inside the column
-  // window, which a columns capability supplies.
-  const renderTable = (
-    columnLayout: TableColumnLayout | undefined,
-    columnFocusProps?: TableColumnFocusProps,
-  ): ReactNode => {
+  // window, which a columns capability supplies. A plain table renders with
+  // no column window.
+  const renderTable = (columnRender?: TableColumnRender): ReactNode => {
+    const columnLayout = columnRender?.layout;
+    // The column window's plugins come first, so the table's own plugins
+    // compose over its cell positions and widths.
+    const renderPlugins = (columnLayout?.plugins ??
+      plugins) as TablePlugin<T>[];
     // --- Plugin pipeline: header cells ---
     const renderHeaderCell = (col: TableColumn<T>, columnIndex: number) => {
       const headerContent = col.header ?? col.key;
@@ -858,7 +854,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
       const initialHeaderHtmlProps: Record<string, unknown> = {
         'data-column-key': col.key,
         scope: 'col',
-        ...(columnLayout == null ? null : {'aria-colindex': columnIndex + 1}),
       };
       if (col.align) {
         initialHeaderHtmlProps.style = {textAlign: col.align};
@@ -874,7 +869,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
         >,
       };
       const cellRenderProps = applyPlugins(
-        plugins,
+        renderPlugins,
         p => p.transformHeaderCell,
         initialHeaderRenderProps,
         col,
@@ -884,12 +879,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
       // Apply pre-computed column width styles on the <th>.
       // With table-layout: fixed, header cell sizing controls column widths.
-      // A windowed table renders at its minimum width, so each mounted column
-      // takes its pitch in pixels: a percentage would resolve against spacers.
-      const widthStyle =
-        columnLayout == null
-          ? (resolvedWidths.columns.get(col.key)?.style ?? {})
-          : columnLayout.widthOf(columnIndex);
+      const widthStyle = resolvedWidths.columns.get(col.key)?.style ?? {};
 
       const existingStyle = cellRenderProps.htmlProps.style;
       const mergedHtmlProps = {
@@ -970,7 +960,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
     // --- Plugin pipeline: header row ---
     const headerRowRenderProps = applyPlugins(
-      plugins,
+      renderPlugins,
       p => p.transformHeaderRow,
       {
         htmlProps: {},
@@ -1013,9 +1003,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
           : ariaRowCount != null
             ? {'aria-rowcount': ariaRowCount}
             : null)}
-        {...(columnLayout == null
-          ? null
-          : {'aria-colcount': resolvedColumns.length})}
+        {...columnLayout?.tableAttributes}
         {...tableRenderProps.htmlProps}
         {...mergeProps(
           themeProps('table'),
@@ -1026,28 +1014,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
           tableStyle,
         )}
         {...rest}
-        {...(columnFocusProps && {
-          onFocus: chainEventHandlers(
-            tableRenderProps.htmlProps.onFocus,
-            rest.onFocus,
-            columnFocusProps.onFocus,
-          ),
-          onBlur: chainEventHandlers(
-            tableRenderProps.htmlProps.onBlur,
-            rest.onBlur,
-            columnFocusProps.onBlur,
-          ),
-          onPointerDown: chainEventHandlers(
-            tableRenderProps.htmlProps.onPointerDown,
-            rest.onPointerDown,
-            columnFocusProps.onPointerDown,
-          ),
-          onContextMenu: chainEventHandlers(
-            tableRenderProps.htmlProps.onContextMenu,
-            rest.onContextMenu,
-            columnFocusProps.onContextMenu,
-          ),
-        })}>
+        {...columnRender?.chainTableHandlers?.(
+          tableRenderProps.htmlProps,
+          rest,
+        )}>
         {children ? (
           children
         ) : (
@@ -1099,7 +1069,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                           contextIdentity={rowIdentity}
                           renderContext={renderContext}
                           columns={resolvedColumns}
-                          plugins={plugins}
+                          plugins={renderPlugins}
                           textOverflow={textOverflow}
                           RowComponent={RowComponent}
                           CellComponent={CellComponent}
@@ -1158,7 +1128,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const ColumnWindow = columnsConfig?.windowing.Window;
   let tableElement: ReactNode =
     ColumnWindow == null ? (
-      renderTable(undefined)
+      renderTable()
     ) : (
       <ColumnWindow
         capability={columnsConfig}
