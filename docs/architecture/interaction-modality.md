@@ -154,10 +154,12 @@ work.
   takes the one shared focus-owner style and owner attribute from
   `privateAttributes/focusOwner.stylex.ts`, so the wrapper rings only while that control
   has keyboard focus, and a nested owner or a sibling control rings itself;
-  no component writes the attribute or its selector itself. Implementation
-  gap: Item, Token, the clickable and selectable cards, Thumbnail,
-  MultiSelector, SideNavItem, and ChatComposer's body write their own ring
-  conditions.
+  no component writes the attribute or its selector itself. When layout puts
+  the control one level down, as in a numbered Item whose own button or link
+  sits in the cell beside its marker, the wrapper marks that cell with the
+  module's group props, so the ring still reaches the control. Implementation
+  gap: the clickable and selectable cards, Thumbnail, MultiSelector,
+  SideNavItem, and ChatComposer's body write their own ring conditions.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as

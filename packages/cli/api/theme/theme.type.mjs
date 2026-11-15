@@ -59,10 +59,13 @@
  * @property {string} displayName
  * @property {string} description
  * @property {boolean} maintained
- * @property {string} [package] source-selector package or local theme root; bundled themes retain @astryxdesign/cli
+ * @property {string} [package] source-selector package or local theme root; bundled themes retain `@astryxdesign/cli` (in backticks: a bare `@` word would end this typedef as a tag)
  * @property {boolean} [added] whether the app module records this theme
  * @property {boolean} [default] whether this is the app's default theme
  * @property {'bundled'|'package'|'local'} [source] where the theme source comes from
+ * @property {{export: string, from: string}} [wiredBy] the provider component
+ *   the owning integration wires its themes with (its manifest's
+ *   `themeProvider`): an app renders `export`, imported from `from`
  */
 
 /**
@@ -109,7 +112,11 @@
  * `change.wireModes` is present when the module lists a theme's one color
  * mode (`themeModes`) for the first time after the app was wired: the app's
  * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true}, notes?: string[]}} data
+ * `change.moduleRemoved` is present when `theme remove` removed the only
+ * added theme and deleted the module at `modulePath`: `themes` is empty,
+ * `default` is `''`, and the app root must drop the module's wiring.
+ * `change.themeModes` is present then when that wiring imported `themeModes`.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[]}} data
  */
 
 /**

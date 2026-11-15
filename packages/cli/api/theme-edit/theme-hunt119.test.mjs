@@ -11,8 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -22,13 +21,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt119-', FIXTURE_PACKAGES);
@@ -42,10 +46,9 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
+const cli = async args => await runCli([...args], cwd);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
 /** @param {string} slug @param {string} body @param {string} [imports] */
 const writeSource = (slug, body, imports = '') =>
   fs.writeFileSync(
@@ -87,7 +90,7 @@ describe('the settings a theme extends', () => {
       'y1',
       "const fake = defineTheme({name: 'y1-settings', tokens: {'--radius-element': '2px'}});\nvoid y1Settings;\nexport const y1Theme = defineTheme({extends: fake, name: 'y1'});",
     );
-    const r = compile('themes/y1/y1.theme.ts');
+    const r = await compile('themes/y1/y1.theme.ts');
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('no longer extends y1Settings');
     await expect(themeEditSet('y1', 'corners', 'pill', {cwd})).rejects.toThrow(
@@ -98,7 +101,7 @@ describe('the settings a theme extends', () => {
       'y1',
       "const mid = defineTheme({extends: y1Settings, name: 'mid'});\nexport const y1Theme = defineTheme({extends: mid, name: 'y1'});",
     );
-    expect(compile('themes/y1/y1.theme.ts').status).toBe(0);
+    expect((await compile('themes/y1/y1.theme.ts')).status).toBe(0);
   }, 240_000);
 });
 
@@ -137,7 +140,7 @@ describe('an extends the build cannot follow', () => {
       path.join(dir, 'p.theme.ts'),
       "import {defineTheme} from '@astryxdesign/core/theme';\nimport {baseTheme} from './base';\nconst pick = (a: any) => a;\nexport const pTheme = defineTheme({extends: pick(baseTheme), name: 'p'});\n",
     );
-    const r = cli(['theme', 'build', 'plain/p.theme.ts']);
+    const r = await cli(['theme', 'build', 'plain/p.theme.ts']);
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('a call to a helper');
     expect(r.stdout + r.stderr).not.toContain('Theme sets an icon registry');
@@ -150,7 +153,7 @@ describe('fonts, family by family', () => {
     const remove = installFont('lora', 'Lora');
     try {
       await themeEditSet('y7', 'font', 'Merriweather, Lora, serif', {cwd});
-      const full = compile('themes/y7/y7.theme.ts', '--detail', 'full');
+      const full = await compile('themes/y7/y7.theme.ts', '--detail', 'full');
       expect(full.stdout).toContain('"Merriweather"');
       expect(full.stdout).not.toContain('"Lora"');
     } finally {
@@ -164,11 +167,11 @@ describe('fonts, family by family', () => {
       'y9',
       "export const y9Theme = defineTheme({extends: y9Settings, name: 'y9', components: {button: {base: {font: '600 14px Lora, serif'}}}});",
     );
-    const missing = compile('themes/y9/y9.theme.ts');
+    const missing = await compile('themes/y9/y9.theme.ts');
     expect(missing.stdout + missing.stderr).toMatch(/not loaded[^\n]*Lora/);
     const remove = installFont('lora', 'Lora');
     try {
-      expect(compile('themes/y9/y9.theme.ts').status).toBe(0);
+      expect((await compile('themes/y9/y9.theme.ts')).status).toBe(0);
       expect(read('src/themes/y9/y9.fonts.css')).toContain(
         '@fontsource/lora/index.css',
       );
@@ -183,30 +186,34 @@ describe('the result says what text says', () => {
     await themeEditNew('y2', {cwd});
     await themeEditNew('y2b', {cwd});
     const named = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/y2/y2.theme.ts',
-        '--out',
-        'out-y2/a.txt',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/y2/y2.theme.ts',
+          '--out',
+          'out-y2/a.txt',
+        ])
+      ).stdout,
     );
     expect(named.data.warnings.join(' ')).toContain('give it a .css name');
     expect(
-      compile('themes/y2/y2.theme.ts', '--out', 'out-y2/a.css').status,
+      (await compile('themes/y2/y2.theme.ts', '--out', 'out-y2/a.css')).status,
     ).toBe(0);
     const replaced = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/y2b/y2b.theme.ts',
-        '--out',
-        'out-y2/a.css',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/y2b/y2b.theme.ts',
+          '--out',
+          'out-y2/a.css',
+        ])
+      ).stdout,
     );
     expect(replaced.data.warnings.join(' ')).toContain(
       'was built from themes/y2/y2.theme.ts',
@@ -240,7 +247,7 @@ describe('the result says what text says', () => {
       "const make = () => defineTheme({extends: y8bSettings, name: 'y8b', icons: myIcons});\nexport const y8bTheme = make();",
       "import myIcons from './icons.mjs';",
     );
-    const r = compile('themes/y8b/y8b.theme.ts');
+    const r = await compile('themes/y8b/y8b.theme.ts');
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('a call to a helper');
     expect(r.stdout + r.stderr).not.toContain('inline registries');
@@ -258,7 +265,7 @@ describe('compile refusals that name the fix', () => {
     const dir = path.join(cwd, 'themes/y8');
     fs.chmodSync(dir, 0o555);
     try {
-      const r = compile('themes/y8/y8.theme.ts');
+      const r = await compile('themes/y8/y8.theme.ts');
       expect(r.status).not.toBe(0);
       expect(r.stdout + r.stderr).toContain('themes/y8 is not writable');
       expect(r.stdout + r.stderr).not.toContain('.tmp-');
@@ -279,7 +286,7 @@ describe('compile refusals that name the fix', () => {
       "export const y11Theme = defineTheme({extends: y11Settings, name: 'y11', icons: myIcons});",
       "import myIcons from './icons.mjs';",
     );
-    const text = compile(
+    const text = await compile(
       'themes/y11/y11.theme.ts',
       '--icons-specifier',
       'my-icons',
@@ -287,15 +294,17 @@ describe('compile refusals that name the fix', () => {
     expect(text.status).toBe(0);
     expect(text.stderr).toContain('without --icons-specifier');
     const json = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/y11/y11.theme.ts',
-        '--icons-specifier',
-        'my-icons',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/y11/y11.theme.ts',
+          '--icons-specifier',
+          'my-icons',
+        ])
+      ).stdout,
     );
     expect(json.data.warnings.join(' ')).toContain('without --icons-specifier');
   }, 240_000);

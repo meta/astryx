@@ -294,8 +294,14 @@ export async function resolveIconImports(
               module.aliases.set(name, original);
           }
           if (item.id.type !== 'Identifier') continue;
+          // A `let` or `var` given a value and never assigned again holds
+          // that value as a `const` does (an assignment marks it mutated,
+          // below); one declared without a value is not followed.
           module.bindings.set(item.id.name, {
-            kind: declaration.kind === 'const' ? 'const' : 'unsupported',
+            kind:
+              declaration.kind === 'const' || item.init
+                ? 'const'
+                : 'unsupported',
             node: item.init,
           });
           if (statement.type === 'ExportNamedDeclaration') {
@@ -368,14 +374,27 @@ export async function resolveIconImports(
     return module;
   }
 
-  /** @param {any} module @param {string} name */
-  function checkedBinding(module, name) {
-    if (module.mutated.has(name))
+  /**
+   * @param {any} module
+   * @param {string} name
+   * @param {'registry' | 'theme'} [role] what the name stands for: a theme
+   *   is refused as a theme the build cannot follow, never as a registry
+   *   the theme sets
+   */
+  function checkedBinding(module, name, role = 'registry') {
+    const binding = module.bindings.get(name);
+    const mutated = module.mutated.has(name);
+    if (role === 'theme' && (mutated || binding?.kind === 'unsupported'))
+      throw new AstryxError(
+        `The build carries a theme's ${field === 'icons' ? 'icon registry' : 'componentIcons'} from the source that writes it, and follows a theme through a binding only while it keeps the value it was declared with; ${name} ${mutated ? 'is assigned again, or passed to code that may change it' : 'is declared without a value'}. Declare it once with its theme (export const ${name} = defineTheme({...})).`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    if (mutated)
       invalidRegistry(
         name,
         'The referenced binding is mutated or passed to unsupported code.',
       );
-    const binding = module.bindings.get(name);
     if (!binding || binding.kind === 'unsupported') invalidRegistry(name);
     return binding;
   }
@@ -736,7 +755,7 @@ export async function resolveIconImports(
     node = unwrap(node);
     if (node?.type === 'Identifier') {
       return guarded(`${module.filename}:fields:${node.name}`, async () => {
-        const binding = checkedBinding(module, node.name);
+        const binding = checkedBinding(module, node.name, 'theme');
         if (binding.kind === 'const') return fields(module, binding.node);
         return referenceFields(importedReference(module, binding));
       });
@@ -799,7 +818,7 @@ export async function resolveIconImports(
     node = unwrap(node);
     if (node?.type === 'Identifier') {
       return guarded(`${module.filename}:theme:${node.name}`, async () => {
-        const binding = checkedBinding(module, node.name);
+        const binding = checkedBinding(module, node.name, 'theme');
         return binding.kind === 'const'
           ? theme(module, binding.node, rejectOpaque)
           : themeReference(importedReference(module, binding), rejectOpaque);

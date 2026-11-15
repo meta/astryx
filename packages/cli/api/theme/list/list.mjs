@@ -86,6 +86,16 @@ export async function themeListAvailable(options = {}) {
         added,
         default: added && state.defaultSlug === theme.slug,
         source: theme.source,
+        // The package wires its themes with its own provider component, not
+        // with Astryx's Theme: the app renders that component.
+        ...(theme.provider
+          ? {
+              wiredBy: {
+                export: theme.provider.export,
+                from: theme.provider.from,
+              },
+            }
+          : {}),
       };
     });
   const upgradeCommand = `${getCliInvocation(state.projectDir)} upgrade --from 0.6.4 --path . --apply`;

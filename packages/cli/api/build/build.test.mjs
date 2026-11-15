@@ -579,6 +579,51 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
+  it('starts a template named in any case or with a neighbour-letter swap where its own words start', async () => {
+    for (const [spacedIdea, others] of [
+      ['a kanban board page', ['a KanbanBoard page', 'a kanbanBoard page', 'a knaban board page']],
+      ['a checkout wizard page', ['a CheckoutWizard page']],
+      ['a theme showcase page', ['a ThemeShowcase page']],
+    ]) {
+      const spaced = await build(spacedIdea, {cwd: REPO});
+      for (const idea of others) {
+        const r = await build(idea, {cwd: REPO});
+        expect(r.type).toBe('build.kit');
+        if (r.type !== 'build.kit' || spaced.type !== 'build.kit') return;
+        expect(r.data.start?.name).toBe(spaced.data.start?.name);
+      }
+    }
+  });
+
+  it('echoes the query as the caller typed it, a joined name included', async () => {
+    const r = await build('a KanbanBoard page', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.query).toBe('a KanbanBoard page');
+  });
+
+  it('picks the blocks for a joined name that its plain words get', async () => {
+    const joined = await build('a ContactForm page', {cwd: REPO});
+    const spaced = await build('a contact form page', {cwd: REPO});
+    if (joined.type !== 'build.kit' || spaced.type !== 'build.kit') {
+      throw new Error('not a kit');
+    }
+    expect(joined.data.blocks.map(b => b.name)).toEqual(
+      spaced.data.blocks.map(b => b.name),
+    );
+  });
+
+  it('never reads an everyday word one letter from a template id as that template', async () => {
+    for (const [idea, name] of [
+      ['a seating chart page', 'dashboard'],
+      ['a sports betting page', 'shell-top-nav'],
+      ['a sitting schedule page', 'shell-top-nav'],
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe(name);
+    }
+  });
+
   it('starts a page in a frame from the template with that frame', async () => {
     // "in a dialog" holds the checkout form, the page the idea names, so the
     // dialog template leads.

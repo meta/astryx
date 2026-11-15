@@ -51,8 +51,20 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
-    // hint's name summaries (kept-tree.mjs) included.
-    expect(plain).toContain("the docs not-found hint's name summaries");
+    // hint's name summaries (kept-tree.mjs) and the CLI's own docs tree
+    // (the docs adapter) included.
+    expect(plain).toContain(
+      "the lookup commands' not-found hint's name summaries",
+    );
+    expect(plain).toContain("the CLI's own docs tree");
+    // The row names the one other command that can make the folder.
+    expect(plain).toContain(
+      "A lookup command's not-found path may also create the folder, for its name index.",
+    );
+    // The CLI's build id stands for its own files' contents.
+    expect(plain).toContain(
+      "the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported)",
+    );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');
     expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
