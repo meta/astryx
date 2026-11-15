@@ -772,7 +772,12 @@ const advance = (ms: number) =>
 function dispatchPointer(
   type: 'pointerdown' | 'pointermove' | 'pointerup',
   target: EventTarget,
-  {pointerId, x, y}: {pointerId: number; x: number; y: number},
+  {
+    pointerId,
+    x,
+    y,
+    isPrimary = false,
+  }: {pointerId: number; x: number; y: number; isPrimary?: boolean},
 ): void {
   const event = new PointerEvent(type, {
     bubbles: true,
@@ -780,6 +785,7 @@ function dispatchPointer(
     composed: true,
     pointerId,
     pointerType: 'touch',
+    isPrimary,
     clientX: x,
     clientY: y,
     button: 0,
@@ -926,6 +932,66 @@ describe.each([
         advance(1);
         expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
         press.up();
+      });
+
+      it('lets a finger held through the load slide onto an item, and its lift selects it', async () => {
+        const onCopy = vi.fn();
+        const onShare = vi.fn();
+        render(
+          <ContextMenu
+            items={[
+              {label: 'Copy', onClick: onCopy},
+              {label: 'Share', onClick: onShare},
+            ]}
+            data-testid="ctx">
+            <div>Long-press me</div>
+          </ContextMenu>,
+        );
+        const trigger = screen.getByTestId('ctx');
+        const contact = {id: 1, x: 20, y: 20};
+        // The finger's pointer and its touch both reach the trigger before
+        // the layer loads.
+        dispatchPointer('pointerdown', trigger, {
+          pointerId: 7,
+          x: 20,
+          y: 20,
+          isPrimary: true,
+        });
+        dispatchTouch('touchstart', trigger, [contact], [contact]);
+        advance(300);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        const share = screen.getByRole('menuitem', {
+          hidden: true,
+          name: 'Share',
+        });
+        for (const y of [30, 45]) {
+          dispatchPointer('pointermove', share, {
+            pointerId: 7,
+            x: 20,
+            y,
+            isPrimary: true,
+          });
+          dispatchTouch(
+            'touchmove',
+            trigger,
+            [{...contact, y}],
+            [{...contact, y}],
+          );
+        }
+        expect(share).toHaveFocus();
+        act(() => {
+          dispatchPointer('pointerup', share, {
+            pointerId: 7,
+            x: 20,
+            y: 45,
+            isPrimary: true,
+          });
+          dispatchTouch('touchend', trigger, [{...contact, y: 45}], []);
+        });
+        expect(onShare).toHaveBeenCalledTimes(1);
+        expect(onCopy).not.toHaveBeenCalled();
       });
 
       it('opens nothing for a finger lifted before the load', async () => {
