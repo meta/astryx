@@ -1207,16 +1207,14 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         return hits.length === 1 ? hits[0] : null;
       };
       const unknown = !generic && !isSystemFamily(cssUnescape(name));
-      const preset = unknown ? oneNear(known) : null;
-      // Only a generic or a preset the editor offers is read as a typo: a
-      // family it does not know near a font a system ships may be a real
-      // family (Corben, Gabriela), so it is kept as typed, with a note.
+      // The presets are read first: a typo of one (Corier is courier,
+      // even beside Corbel) is that preset, refused with its line. Only a
+      // generic or a preset the editor offers is read as a typo: a family
+      // it does not know near a font a system ships may be a real family
+      // (Corben, Gabriela), so it is kept as typed, with a note.
       const editorWord =
-        preset != null &&
-        (GENERIC_FAMILIES.includes(preset) ||
-          (presets &&
-            pieces.length === 1 &&
-            PRESETS.some(p => p.toLowerCase() === preset)));
+        unknown && presets && pieces.length === 1 ? oneNear(PRESETS) : null;
+      const preset = editorWord ?? (unknown ? oneNear(known) : null);
       if (generic || editorWord) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));

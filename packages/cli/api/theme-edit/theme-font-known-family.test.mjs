@@ -55,6 +55,9 @@ describe('a font family', () => {
       ['Verdnaa', 'verdana'],
       ['Tahmoa', 'tahoma'],
       ['Helvetcia', 'helvetica'],
+      // A preset is read before the system fonts near it (Corbel, Menlo).
+      ['Corier', 'courier'],
+      ['Monlo', 'mono'],
     ]) {
       /** @type {any} */
       let err = null;
@@ -69,6 +72,16 @@ describe('a font family', () => {
         typed,
       ).toContainEqual(
         expect.stringMatching(new RegExp(` set k2 font ${meant}$`)),
+      );
+    }
+  }, 240_000);
+
+  it('a font only macOS ships is noted as such', async () => {
+    await themeEditNew('k3', {cwd});
+    for (const family of ['Andale Mono', 'Arial Narrow']) {
+      const r = await themeEditSet('k3', 'font', `${family}, monospace`, {cwd});
+      expect(r.data.notes.join('\n'), family).toContain(
+        `"${family}" ships only on macOS`,
       );
     }
   }, 240_000);
