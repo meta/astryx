@@ -29,6 +29,7 @@ import {
   FONT_ROLES,
   FONTS,
   OPEN_FONTS,
+  appleFaceGeneric,
   isDesktopFamily,
   oneSystemOf,
   P,
@@ -38,7 +39,11 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
-import {assetRef, CSS_URL} from '../../foundation/render/render-page.mjs';
+import {
+  assetRef,
+  CSS_URL,
+  cssUrlRef,
+} from '../../foundation/render/render-page.mjs';
 import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
@@ -54,14 +59,18 @@ import {
   themeFiles,
   refuseThemesNotFolder,
   shown,
+  OPEN_SECTION,
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
   copyFontsCss,
   fontPackageSheets,
+  fontPackageWeights,
+  shownWeight,
   baseFontsSheet,
   newPictureRun,
   renderPreview,
+  renderSheet,
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -598,7 +607,8 @@ export function familiesNothingLoads(ctx, data, packages) {
       loaded.has(key) ||
       packages.some(x => fontKey(x.family) === key) ||
       isDesktopFamily(family) ||
-      oneSystemOf(family)
+      oneSystemOf(family) ||
+      appleFaceGeneric(family)
     );
   });
 }
@@ -628,7 +638,7 @@ export function themeImageNotes(ctx, slug) {
   /** @type {Map<string, string>} */
   const notes = new Map();
   for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
-    const named = assetRef(m[2], at);
+    const named = assetRef(cssUrlRef(m), at);
     if (!named || notes.has(named.ref)) continue;
     if (named.kind === 'remote')
       notes.set(
@@ -644,6 +654,11 @@ export function themeImageNotes(ctx, slug) {
       notes.set(
         named.ref,
         `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else if (named.kind === 'unreadable')
+      notes.set(
+        named.ref,
+        `${shown(ctx.project.cwd, named.file)} cannot be read (no permission), so the previews show the theme without it; make it readable (chmod u+r) to show it.`,
       );
     else {
       const bytes = fs.statSync(named.file).size;
@@ -686,7 +701,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each face the theme's weights show: ${fontPackageSheets(
             ctx,
             data.name,
             pkg,
@@ -733,6 +748,17 @@ export function fontNotes(ctx, data) {
     const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
     const system = oneSystemOf(named);
     const on = s.on ? ` --on ${s.on}` : '';
+    const generic = appleFaceGeneric(named);
+    if (generic) {
+      // Apple systems reach their interface faces only by a generic.
+      const {fallbacks} = fontOf(s.value);
+      const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
+      const value = [generic, fallbacks.trim()].filter(Boolean).join(', ');
+      notes.push(
+        `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
+      );
+      continue;
+    }
     if (system) {
       // A system font, on one system: the others show the next font.
       const next =
@@ -783,9 +809,11 @@ export function fontNotes(ctx, data) {
 }
 
 /**
- * A note for each weight the theme uses that the base theme's font
- * stylesheet does not load for its family (it shows as the nearest weight
- * the sheet loads), unless an installed package loads that family.
+ * A note for each weight the theme uses that a stylesheet loading one of
+ * its families has no face for (it shows as the face CSS font matching
+ * picks): the base theme's font stylesheet, unless an installed package
+ * loads that family, and each installed font package with a stylesheet per
+ * weight.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
@@ -793,28 +821,41 @@ export function fontNotes(ctx, data) {
 export function baseWeightNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  const base = baseFontsSheet(ctx, data);
+  const used = builtFontWeights(ctx, data.name) ?? [];
   const built = builtFontFamilies(ctx, data.name);
   const packages = fontPackages(ctx, data);
-  if (base?.weights.size) {
-    const used = builtFontWeights(ctx, data.name) ?? [];
-    for (const [family, loadedWeights] of base.weights) {
-      if (built && !built.has(family.toLowerCase())) continue;
-      if (
-        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
-      )
-        continue;
-      const missing = used.filter(w => !loadedWeights.includes(w));
-      if (!missing.length) continue;
-      const s = fontsourceSuggestion(family);
-      const nearest = (/** @type {number} */ w) =>
-        loadedWeights.reduce((a, b) =>
-          Math.abs(b - w) < Math.abs(a - w) ? b : a,
-        );
+  /**
+   * @param {string} family @param {string} by what loads it
+   * @param {number[]} faces the weights it loads @param {string} fix
+   */
+  const gap = (family, by, faces, fix) => {
+    const missing = used.filter(w => !faces.includes(w));
+    if (missing.length)
       notes.push(
-        `${family} is loaded by ${base.spec} at ${loadedWeights.join(', ')} only, so ${missing.map(w => `${w} shows as ${nearest(w)}`).join(', ')}${s ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it` : ''}`,
+        `${family} is loaded by ${by} at ${faces.join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, faces)}`).join(', ')}${fix}`,
       );
-    }
+  };
+  const base = baseFontsSheet(ctx, data);
+  for (const [family, faces] of base?.weights ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const s = fontsourceSuggestion(family);
+    gap(
+      family,
+      /** @type {{spec: string}} */ (base).spec,
+      faces,
+      s
+        ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it`
+        : '',
+    );
+  }
+  for (const {pkg, family, installed} of packages) {
+    if (!installed || (built && !built.has(family.toLowerCase()))) continue;
+    const faces = fontPackageWeights(ctx, pkg);
+    if (faces) gap(family, pkg, faces, '');
   }
   return notes;
 }
@@ -946,7 +987,27 @@ export function styledChanges(before, after, base) {
 }
 
 /**
- * Previews after a change: the sample page always, pictures on request.
+ * The page of the theme's open states (every menu, tooltip, popover and
+ * list drawn open: the overlays section of the sheet), made and stamped
+ * with the build it shows, and where its picture goes. The sample page
+ * (preview.png) has no overlay open, and the full sheet is too tall to
+ * read whole, so `--png` takes this picture beside the sample page's.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<{html: string, png: string}>}
+ */
+export async function openStatesPage(ctx, slug, data) {
+  const f = themeFiles(ctx.project.cwd, slug);
+  const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
+  stampSheet(html, slug, ctx.project.cwd);
+  return {html, png: path.join(f.dir, `sheet-${OPEN_SECTION}.png`)};
+}
+
+/**
+ * Previews after a change: the sample page always; on request, pictures of
+ * it and of the open states ({@link openStatesPage}).
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -974,6 +1035,16 @@ export async function previewAfter(ctx, slug, data, png) {
           : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
+  /** The pages photographed: the sample page, and with it the open states. */
+  const shotPages = [{html: f.preview, png: f.previewPng}];
+  // Made before the sections are judged, so it is current, never marked.
+  if (png && preview)
+    try {
+      shotPages.push(await openStatesPage(ctx, slug, data));
+    } catch (e) {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+      // It could not be rendered: the sample page's picture is taken alone.
+    }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -993,11 +1064,7 @@ export async function previewAfter(ctx, slug, data, png) {
   });
   const shots =
     png && preview
-      ? await pictures(
-          ctx.project,
-          [{html: f.preview, png: f.previewPng}],
-          modesOf(data),
-        )
+      ? await pictures(ctx.project, shotPages, modesOf(data))
       : {files: [], problem: null};
   return {
     preview,

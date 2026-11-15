@@ -86,7 +86,9 @@ export const OVERRIDES = [
     /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
     {on: 'inputs'},
   ],
-  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checks'}],
+  // A checkbox is the box itself; the checks group (checkbox and radio)
+  // goes by its own name.
+  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checkbox-indicator'}],
   // "switch off", "switch the buttons to" are the verb, not the part.
   [
     /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
@@ -123,4 +125,28 @@ export function partForWord(word) {
     if (/** @type {RegExp} */ (re).test(w))
       return /** @type {{on: string}} */ (hit).on;
   return null;
+}
+
+/** @type {Map<string, string> | null} */
+let words = null;
+
+/**
+ * The single words the table reads as a part or group, each with what it
+ * names (`sidebar` side-nav, `checkbox` checks, `toggle` switch): the words
+ * a part's typo is read against beside the part names. Taken from the
+ * table's own words, a plural's singular (`toggles?`) included.
+ * @returns {Map<string, string>}
+ */
+export function partWords() {
+  if (words) return words;
+  words = new Map();
+  for (const [re] of OVERRIDES)
+    for (const m of re.source.matchAll(/[a-z]{3,}(\?)?/g)) {
+      const w = m[0].replace(/\?$/, '');
+      for (const each of m[1] ? [w, w.slice(0, -1)] : [w]) {
+        const on = partForWord(each);
+        if (on && !words.has(each)) words.set(each, on);
+      }
+    }
+  return words;
 }

@@ -12,6 +12,7 @@ import {rtlStyles} from '@astryxdesign/core/utils';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
@@ -287,6 +288,7 @@ function getFileExtension(name: string): string {
 }
 
 export default function FileExplorerPage() {
+  const showToast = useToast();
   const [selectedPath, setSelectedPath] = useState<string[]>([
     'applications',
     'chrome-apps',
@@ -433,6 +435,13 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={ShareIcon} size="sm" />}
                 label="Share"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that shares the selection.
+                  showToast({
+                    body: 'Demo: sharing would start here',
+                    uniqueID: 'share',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"

@@ -456,11 +456,11 @@ describe('color dials through the palette generator', () => {
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
     // A theme whose colors are all grays has no color to take out, and
     // says so instead of suggesting a change that does nothing.
-    // (Or refused when the base's faint accent wash would come back as a
-    // solid, more saturated fill: nothing gets more colorful.)
+    // (Or the first vibrancy, in steps of 10, at which the accents it
+    // shows are less saturated than now; or refused when none is.)
     const less = await ask('less saturated');
     expect(`${less.commands}\n${less.text}`).toMatch(
-      new RegExp(`set ${theme} vibrancy less|is a gray|accent wash`),
+      new RegExp(`set ${theme} vibrancy (?:less|\\d+)|is a gray|accent wash`),
     );
     // Explanations name the commands in words and pick no color.
     expect((await ask('dark mode colors')).text).toContain('--mode dark');

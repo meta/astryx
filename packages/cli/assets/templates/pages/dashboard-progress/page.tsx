@@ -598,7 +598,7 @@ function ProgramHeader({
             />
           </HStack>
         </VStack>
-        <HStack gap={2}>
+        <HStack gap={2} wrap="wrap">
           <SegmentedControl
             label="Release phase"
             value={phase}

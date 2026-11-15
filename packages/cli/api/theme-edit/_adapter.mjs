@@ -54,6 +54,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
 import {baseWeightNotes, context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
+import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {
   fontKey,
   importedFontFamilies,
@@ -104,7 +105,9 @@ export {
   newFlagList,
   checkedChangeLine as editorCheckedLine,
   checkedNewLines as editorCheckedNewLines,
+  checkedShowLines as editorCheckedShowLines,
 } from './_edit.mjs';
+export {splitCommand} from './_vet.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -1323,8 +1326,9 @@ export async function editorCompileProblem(
             );
       } catch (e) {
         // A settings file damaged by hand is refused like any refusal,
-        // never as a raw error.
-        if (e instanceof AstryxError) return e;
+        // never as a raw error, with the lines every command gives it.
+        if (e instanceof AstryxError)
+          return edit.editorSavedRefusal(e, root, slug);
         throw e;
       }
       // An own change to the theme source is what compile builds (and what
@@ -1722,6 +1726,9 @@ function outSkipsCopy(root, slug, cwd, {check, out}) {
  * @param {string} file
  */
 function isCopyFile(file) {
+  // A pipe or a device there is never opened: it stands where the copy's
+  // file goes.
+  if (irregularFileKind(file)) return true;
   try {
     const head = fs.readFileSync(file, 'utf8').slice(0, 600);
     return (

@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "cc6829150c7417adc6cc1ef0c45e007441e56a8cefa3f6019baef632ae1790a3",
+      "skeleton": "886d96a28f744f16807376b1b70638d515e9a851e9507809a9d819b938ea3cd3",
       "mentions": []
     },
     "browser-support": {
@@ -265,7 +265,7 @@
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "1909da5648717dc2e7d41c2cc1faded7dbe43f47d50fffc8a4190b91bf0168d5",
+      "skeleton": "cc0657ba26c59c5f44f2daea1e21a53f1e8faeeb36e6dea6a75f5ed6237549aa",
       "mentions": []
     },
     "use-a-theme": {

@@ -345,13 +345,13 @@ let editorThemesHere = () => [];
  * given no value (commander's code says which), which the editor
  * registers: the message and the commands that work, or undefined for a
  * command it does not read.
- * @type {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
+ * @type {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined | Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined>}
  */
 let unknownOptionReader = () => undefined;
 
 /**
  * Register how the theme commands read an option they do not take.
- * @param {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
+ * @param {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined | Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined>} read
  */
 export function setUnknownOptionReader(read) {
   unknownOptionReader = read;
@@ -591,7 +591,9 @@ function patchPrototype(CommandCtor) {
  *   commander.excessArguments
  *
  * @param {unknown} err
- * @returns {boolean} true if handled (caller should not re-throw)
+ * @returns {boolean | Promise<boolean>} true if handled (caller should not
+ *   re-throw); a promise when the answer is written once its suggestions
+ *   are checked
  */
 export function handleCommanderError(err) {
   if (!err || typeof err !== 'object' || !('code' in err)) return false;
@@ -639,6 +641,25 @@ export function handleCommanderError(err) {
     code === 'commander.excessArguments'
       ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND], code)
       : undefined;
+  // The reader checks the commands it offers as the command itself would
+  // (which may take a moment): the answer is written once it has them.
+  if (read instanceof Promise)
+    return read.then(r => finishParseError(err, code, message, exitCode, r));
+  return finishParseError(err, code, message, exitCode, read);
+}
+
+/**
+ * The rest of {@link handleCommanderError} for a parse failure: the message
+ * and suggestions written (the theme reader's answer when it read the
+ * option), and the exit.
+ * @param {unknown} err
+ * @param {string} code
+ * @param {string} message
+ * @param {number} exitCode
+ * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
+ * @returns {boolean}
+ */
+function finishParseError(err, code, message, exitCode, read) {
   const suggestions = read?.suggestions ?? usageSuggestion(err, code);
   // In the theme editor a missing argument names what was given: in
   // `set corners small` the first word is read as the theme, so "value" alone
