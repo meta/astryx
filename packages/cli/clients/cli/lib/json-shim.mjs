@@ -338,6 +338,102 @@ function unknownGroupWord(group) {
 }
 
 /**
+ * Options typed before a group's real subcommand (`preview --theme t list`,
+ * `editor --mode light set t accent red`): the subcommand, the options it
+ * takes (each with its value, where it takes one) and the ones it does not,
+ * and the command with those it takes moved after it; null when no word after
+ * the options is one of the group's subcommands. An option's value is never
+ * read as a subcommand.
+ * @param {any} group
+ * @returns {{sub: string, line: string, moved: string[], dropped: string[]} | null}
+ */
+function optionsBeforeSubcommand(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv).slice(2);
+  // The group's own words, in order, then what follows them.
+  let at = 0;
+  for (const word of chain) {
+    while (at < argv.length && argv[at] !== word) at++;
+    if (at === argv.length) return null;
+    at++;
+  }
+  const rest = argv.slice(at);
+  if (!rest.length || !String(rest[0]).startsWith('-')) return null;
+  const subs = /** @type {any[]} */ (group.commands);
+  const index = rest.findIndex(
+    (w, i) =>
+      i > 0 &&
+      !String(w).startsWith('-') &&
+      subs.some(c => c.name() === w || c.aliases().includes(w)),
+  );
+  if (index < 0) return null;
+  const sub = subs.find(
+    c => c.name() === rest[index] || c.aliases().includes(rest[index]),
+  );
+  /** @type {string[]} */
+  const moved = [];
+  /** @type {string[]} */
+  const dropped = [];
+  // The program's own options (`--json`) are read wherever they are typed:
+  // never moved, named, or carried into the line.
+  const own = (/** @type {string} */ flag) =>
+    (root.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+  const before = rest.slice(0, index);
+  for (let i = 0; i < before.length; i++) {
+    const token = String(before[i]);
+    if (!token.startsWith('-')) continue;
+    const [flag, inline] = token.split(/=(.*)/su);
+    const program = own(flag);
+    if (program) {
+      if ((program.required || program.optional) && inline == null) i++;
+      continue;
+    }
+    const opt = (sub.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+    // The word after an option is its value when the option takes one, or
+    // when no subcommand reads it (it is not an option itself).
+    const next = before[i + 1];
+    const takesValue = opt
+      ? Boolean(opt.required || opt.optional)
+      : next != null && !String(next).startsWith('-');
+    const value =
+      inline ??
+      (takesValue && next != null && !String(next).startsWith('-')
+        ? String(before[++i])
+        : undefined);
+    const typed =
+      value === undefined ? flag : `${flag} ${quoteCommandArgument(value)}`;
+    (opt ? moved : dropped).push(typed);
+  }
+  /** @type {string[]} */
+  const after = [];
+  const tail = rest.slice(index + 1).map(String);
+  for (let i = 0; i < tail.length; i++) {
+    const program = own(tail[i].split('=')[0]);
+    if (program) {
+      if ((program.required || program.optional) && !tail[i].includes('=')) i++;
+      continue;
+    }
+    after.push(quoteCommandArgument(tail[i]));
+  }
+  const line = [
+    getCliInvocation(process.cwd()),
+    ...chain,
+    sub.name(),
+    ...after,
+    ...moved,
+  ].join(' ');
+  return {sub: `${chain.join(' ')} ${sub.name()}`, line, moved, dropped};
+}
+
+/**
  * The usage line of the command a parse error came from, as a suggestion, for
  * an option given without its value.
  * @param {unknown} err
@@ -747,6 +843,31 @@ export function handleCommanderError(err) {
   const chain = [];
   for (let node = group; node?.parent; node = node.parent)
     chain.unshift(node.name());
+  // Options typed before one of the group's subcommands: the subcommand is
+  // what was meant, with the options it takes after it.
+  const early =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? optionsBeforeSubcommand(group)
+      : null;
+  if (early) {
+    const help = `${getCliInvocation(process.cwd())} ${early.sub} --help`;
+    return finishParseError(err, code, message, exitCode, {
+      message: early.dropped.length
+        ? `${early.dropped.join(', ')} ${early.dropped.length > 1 ? 'are' : 'is'} typed before ${early.sub}, which takes no such option.`
+        : `${early.moved.join(', ')} ${early.moved.length > 1 ? 'go' : 'goes'} after the subcommand: ${early.sub} takes ${early.moved.length > 1 ? 'them' : 'it'} there.`,
+      suggestions: [
+        {
+          name: early.line,
+          reason: early.dropped.length
+            ? `do this instead: without ${early.dropped.join(', ')}${early.moved.length ? `, with ${early.moved.join(', ')} after the subcommand` : ''}`
+            : 'do this instead: the options after the subcommand',
+        },
+        {name: help, reason: 'the options it takes'},
+      ],
+    });
+  }
   const word =
     code === 'commander.unknownOption' &&
     group?.commands?.length &&
