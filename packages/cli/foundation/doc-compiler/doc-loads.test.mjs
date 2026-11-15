@@ -65,12 +65,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme-edit/_css.mjs': {
-    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: [
-      'require(@csstools/css-syntax-patches-for-csstree)',
-      'require(css-tree)',
-      'require(mdn-data/css/properties.json)',
-    ],
+    runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
+    sites: ['require(<computed>)'],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
@@ -516,6 +512,10 @@ const RUNNERS = {
   'foundation/release/handoff.mjs': {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
+  },
+  'foundation/runtime/css-tree.mjs': {
+    runs: 'css-tree and the MDN property data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    sites: ['require(<computed>)', 'require(mdn-data/css/properties.json)'],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
     runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',

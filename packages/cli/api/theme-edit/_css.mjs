@@ -10,7 +10,7 @@
 
 import {createRequire} from 'node:module';
 import {wordTable} from './_tables.mjs';
-import {cssTree, cssTreeRequire} from '../../foundation/runtime/css-tree.mjs';
+import {cssTree, mdnCssProperties} from '../../foundation/runtime/css-tree.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -45,10 +45,7 @@ const NOT_IN_MDN_YET = [
 const csstree = cssTree;
 
 /** The MDN property data css-tree reads, at the version css-tree pins. */
-const mdnProperties = () =>
-  /** @type {Record<string, {status?: string, initial?: string | string[]}>} */ (
-    cssTreeRequire('mdn-data/css/properties.json')
-  );
+const mdnProperties = mdnCssProperties;
 
 /** @type {ReadonlySet<string> | null} */
 let names = null;
