@@ -1682,26 +1682,15 @@ export function aliasedOrigin(origin, seen = new Set(), unwrap) {
 }
 
 /**
- * Where the value each `<Name prop={value}>` element of a module passes is
- * declared, one entry per element, read without running anything. `Name` is
- * a runtime import of `name` from one of `sources` (renames included). The
- * value is followed with {@link aliasedOrigin} (passing `unwrap`) from the
- * module-scope binding it names, through local files and installed packages.
- * An entry is null when the value is not an identifier or its origin cannot
- * be proved (a parameter or an import that does not resolve gives the
- * module's own name, and a member or a default import gives null). An element
- * without `prop` gives no entry.
- * @param {string} file
- * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
- * @returns {Array<{file: string, name: string} | null>}
+ * Each `<Name …>` element of a parsed module, where `Name` is a runtime
+ * import of `name` from one of `sources` (renames included). A type-only
+ * import names no element.
+ * @param {any} ast
+ * @param {ReadonlySet<string>} sources
+ * @param {string} name
+ * @returns {any[]}
  */
-export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
-  let ast;
-  try {
-    ast = parseModule(file);
-  } catch {
-    return [];
-  }
+function importedElements(ast, sources, name) {
   /** @type {Set<string>} */
   const locals = new Set();
   for (const node of ast.program.body) {
@@ -1723,15 +1712,52 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
     }
   }
   if (locals.size === 0) return [];
+  return nodesOfType(ast.program, 'JSXOpeningElement').filter(
+    (/** @type {any} */ element) =>
+      element.name?.type === 'JSXIdentifier' && locals.has(element.name.name),
+  );
+}
+
+/**
+ * Whether a module renders `<Name>`, a runtime import of `name` from one of
+ * `sources` (renames included), read without running anything. An import
+ * that is never rendered, or a type-only one, is not.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string}} element
+ * @returns {boolean}
+ */
+export function rendersElement(file, {sources, name}) {
+  try {
+    return importedElements(parseModule(file), sources, name).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where the value each `<Name prop={value}>` element of a module passes is
+ * declared, one entry per element, read without running anything. `Name` is
+ * a runtime import of `name` from one of `sources` (renames included). The
+ * value is followed with {@link aliasedOrigin} (passing `unwrap`) from the
+ * module-scope binding it names, through local files and installed packages.
+ * An entry is null when the value is not an identifier or its origin cannot
+ * be proved (a parameter or an import that does not resolve gives the
+ * module's own name, and a member or a default import gives null). An element
+ * without `prop` gives no entry.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
+ * @returns {Array<{file: string, name: string} | null>}
+ */
+export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
+  let ast;
+  try {
+    ast = parseModule(file);
+  } catch {
+    return [];
+  }
   /** @type {Array<{file: string, name: string} | null>} */
   const origins = [];
-  for (const element of nodesOfType(ast.program, 'JSXOpeningElement')) {
-    if (
-      element.name?.type !== 'JSXIdentifier' ||
-      !locals.has(element.name.name)
-    ) {
-      continue;
-    }
+  for (const element of importedElements(ast, sources, name)) {
     const attribute = (element.attributes ?? []).find(
       (/** @type {any} */ item) =>
         item.type === 'JSXAttribute' && item.name?.name === prop,

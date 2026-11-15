@@ -177,6 +177,72 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
       });
     });
 
+    it.each([
+      [
+        'checked for',
+        'checked.txt',
+        (/** @type {string} */ file) => fs.existsSync(file),
+      ],
+      [
+        'resolved',
+        'resolved.txt',
+        (/** @type {string} */ file) => Boolean(fs.realpathSync(file)),
+      ],
+    ])(
+      'builds on an entry that only %s a file it read, and is gathered again alone when that file is edited',
+      async (_how, name, ask) => {
+        write(name, 'one');
+        write('base-own.txt', 'base');
+        write('reader-own.txt', 'reader');
+        const checked = path.join(DATA, name);
+        const runChecked = async () => {
+          /** @type {string[]} */
+          const gathered = [];
+          const value = await cache.recordRun(async () => {
+            const base = await cache.persistedGather(
+              ['deps-test', 'checks'],
+              async () => {
+                gathered.push('checks');
+                return `${ask(checked)}+${read('base-own.txt')}`;
+              },
+              identity,
+            );
+            const reader = await cache.persistedGather(
+              ['deps-test', 'reads'],
+              async () => {
+                gathered.push('reads');
+                return `${read(name)}+${read('reader-own.txt')}`;
+              },
+              identity,
+            );
+            return {base, reader};
+          });
+          return {...value, gathered};
+        };
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'one+reader',
+          gathered: ['checks', 'reads'],
+        });
+        const reader = entries().get('deps-test/reads');
+        expect(reader?.deps).toHaveLength(1);
+        // It keeps the file it read itself: the entry it builds on holds only
+        // that the file is there, or where it resolves.
+        const own = (reader?.stamps ?? []).map(([file]) => path.basename(file));
+        expect(own).toEqual(expect.arrayContaining([name, 'reader-own.txt']));
+        expect(own).not.toContain('base-own.txt');
+
+        // An edit that keeps the file there: only the entry that read it is
+        // gathered again.
+        write(name, 'two, longer');
+        expect(await runChecked()).toEqual({
+          base: 'true+base',
+          reader: 'two, longer+reader',
+          gathered: ['reads'],
+        });
+      },
+    );
+
     it('is gathered again, then read back, when the entry it builds on is gone', async () => {
       write('base.txt', 'gone-test');
       write('own.txt', 'own');

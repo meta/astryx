@@ -106,11 +106,12 @@ describe('hunt21, R03-05-07 final 11', () => {
     expect(await run('padding', '4 px')).toMatch(/ padding 4px --on card$/);
   }, 240_000);
 
-  it('N11-3: a plain word for a group names the group', async () => {
+  it('N11-3: a plain word for a part names the part', async () => {
     const r = await refusal(() =>
       themeEditSet('v', 'border-color', 'red', {cwd, on: 'checkboxes'}),
     );
-    expect(r.run[0]).toMatch(/ --on checks$/);
+    // (A checkbox is the box itself; the checks group goes by its name.)
+    expect(r.run[0]).toMatch(/ --on checkbox-indicator$/);
   });
 
   it('N11-4: a comparative steps from the value now', async () => {

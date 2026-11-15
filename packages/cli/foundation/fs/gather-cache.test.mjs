@@ -207,6 +207,30 @@ describe('a recorded run', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
+    'notes a module it loads by its stamp, though it only checked for it first',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-hook-'));
+      const checked = path.join(dir, 'checked.cjs');
+      fs.writeFileSync(checked, 'module.exports = 1;\n');
+      try {
+        await recordRun(async () => {
+          fs.existsSync(checked);
+          const reads = recordedRun()?.reads;
+          const presence = reads?.get(checked);
+          withoutRecording(() => createRequire(import.meta.url)(checked));
+          const stamp = reads?.get(checked);
+          expect(stamp).not.toBe(presence);
+          const {size, ino} = fs.statSync(checked);
+          expect(stamp?.startsWith(`${size}:`)).toBe(true);
+          expect(stamp?.endsWith(`:${ino}`)).toBe(true);
+        });
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+  );
+
+  it.skipIf(!hasModuleHooks)(
     'notes the modules a gather loads while it is armed',
     async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-hook-'));

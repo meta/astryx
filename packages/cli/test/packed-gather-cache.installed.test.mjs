@@ -30,7 +30,10 @@ import {
   readKept,
   writeKept,
   docsTreeEntries,
+  themeFactsEntries,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
+import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 
 usePackedCli();
 
@@ -161,6 +164,81 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       }
     },
     120_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps what theme build checks a theme against in Core's docs, and is not used after an edit to a visual-prop value in one of them",
+    () => {
+      const tmp = keptTmp('theme-facts');
+      // A project with an integration, so theme build keeps its gathers, and
+      // its own copies of the CLI and Core: theme build reads the Core
+      // installed beside the CLI that runs.
+      const {dir} = makeProject();
+      const scope = path.join(dir, 'node_modules', '@astryxdesign');
+      const cli = path.join(scope, 'cli');
+      fs.cpSync(packed, cli, {recursive: true, verbatimSymlinks: true});
+      const core = path.join(scope, 'core');
+      fs.unlinkSync(core);
+      copyPublishedCore(core);
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core', 'node_modules'),
+        path.join(core, 'node_modules'),
+        'dir',
+      );
+      fs.mkdirSync(path.join(dir, 'theme'));
+      // A theme with no component overrides.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'plain.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const plainTheme = defineTheme({name: 'plain', tokens: {'--color-accent': '#0b5fcc'}});\n`,
+      );
+      // `quiet` is not a built-in Button variant: the build adds it.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'probe.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const probeTheme = defineTheme({name: 'probe', components: {button: {'variant:quiet': {color: 'red'}}}});\n`,
+      );
+      const ask = ['theme', 'build', 'theme/probe.ts'];
+      try {
+        const plain = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(plain.status, plain.stderr).toBe(0);
+        const kept = themeFactsEntries(tmp);
+        expect(kept.size).toBe(1);
+        // A build after an edit to that theme reads the facts back: they do
+        // not depend on the theme.
+        fs.appendFileSync(path.join(dir, 'theme', 'plain.ts'), '// edited\n');
+        const edited = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(edited.status, edited.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A theme whose overrides name a prop value reads back the same
+        // entry: it holds every fact a build checks a theme against.
+        const first = run(ask, {tmp, cwd: dir, cli});
+        expect(first.status, first.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A warm run reads the facts back: the entry is not written again.
+        const warm = run(ask, {tmp, cwd: dir, cli});
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        expect(warm).toEqual(first);
+        // An in-place edit makes `quiet` a built-in value.
+        const doc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
+        const text = fs.readFileSync(doc, 'utf8');
+        const builtIn = "'primary' | 'secondary' | 'ghost' | 'destructive'";
+        expect(text).toContain(builtIn);
+        fs.writeFileSync(doc, text.replaceAll(builtIn, `${builtIn} | 'quiet'`));
+        const after = run(ask, {tmp, cwd: dir, cli});
+        expect(after).toEqual(run(ask, {tmp: freshTmp(), cwd: dir, cli}));
+        expect(after).not.toEqual(first);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
   );
 
   it.skipIf(!hasModuleHooks)(

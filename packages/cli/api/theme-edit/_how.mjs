@@ -768,6 +768,12 @@ function finish(env, drafts) {
         if (why) unmet.push(why);
         return !why;
       });
+      // One change in growing amounts: the first kept is the answer, and
+      // the smaller amounts that fell short are no reason to tell.
+      if (d.smallest && d.options.length) {
+        d.options = d.options.slice(0, 1);
+        unmet.length = 0;
+      }
       unmetOf.set(d, unmet);
     }
   for (const d of drafts) {
@@ -893,7 +899,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
       C.partReads(key, g).map(r => ({
         token: r.token,
         props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w)))],
+        when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
       })),
     ]),
   );
@@ -946,13 +952,15 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} target
  * @param {string} cond
+ * @param {string[]} [settable] the states set takes on the part (the one
+ *   list its refusals and how name too), when known
  * @returns {string}
  */
-export function condition(ctx, target, cond) {
+export function condition(ctx, target, cond, settable) {
   if (!cond.trim()) return 'always';
   const t = ctx.project.target.get(target);
   const props = t?.props ?? [];
-  const states = [...(t?.states ?? []), ...COMMON_STATES];
+  const states = settable ?? [...(t?.states ?? []), ...COMMON_STATES];
   const values = ctx.C.variantValues(target);
   const words = cond.trim().split(/\s+/);
   const isAttr = (/** @type {string} */ w) => /^[a-z][\w-]*=[^\s]*$/i.test(w);
@@ -964,10 +972,15 @@ export function condition(ctx, target, cond) {
   let why = null;
   for (const kv of attrs) {
     const [k, v] = kv.split('=');
-    if (k === 'selected' && states.includes('selected'))
-      flags.push('--state selected');
+    // A state written as its own name (`checked=checked`) set takes as
+    // --state.
+    if ((v === k || v === 'true') && states.includes(k))
+      flags.push(`--state ${k}`);
     else if (props.includes(k) && (!values[k]?.length || values[k].includes(v)))
       flags.push(`--when ${k}:${v}`);
+    // Another value of a state (a checkbox's `checked="indeterminate"`):
+    // set names it with --when.
+    else if (states.includes(k)) flags.push(`--when ${k}:${v}`);
     else why ??= `${target} has no ${k} prop or state that set can name`;
   }
   if (css) {

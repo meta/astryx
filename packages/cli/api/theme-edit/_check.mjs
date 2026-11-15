@@ -12,9 +12,10 @@
 import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {partForWord} from './_part-words.mjs';
+import {partForWord, partWords} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {
   withFallbacks,
@@ -70,6 +71,7 @@ import {
   COLOR_NAMES,
   colorProblem,
   isColorValue,
+  colorAsCssReads,
   isNumber,
   isSafeValue,
   withoutCssEscapes,
@@ -97,6 +99,7 @@ import {
   lengthPx,
   cornersPlain,
   radiusAt,
+  radioCircle,
   radiusTokenOf,
   cornerParts,
   focusStateOf,
@@ -128,6 +131,7 @@ import {
   withoutDebris,
   typoOf,
   typoNear,
+  stateSpelling,
   modeWord,
   documentTypoWords,
   PROPERTY_WORDS,
@@ -414,7 +418,8 @@ const YES_NO = /^(true|yes|on|none|false|off|no)$/i;
  * @returns {string | null}
  */
 function cornersRead(v) {
-  const lower = String(v).trim().toLowerCase();
+  // A comma between digits as the one comma rule reads it (0,5rem).
+  const lower = commaNumbers(String(v).trim().toLowerCase());
   if (CORNERS.some(([n]) => n === lower)) return lower;
   if (/^(0|none|sharp|zero|flat)$/.test(lower)) return 'square';
   if (/^[+-]?\d*\.?\d+$/.test(lower)) return null;
@@ -592,6 +597,12 @@ function valueMeant(type, value) {
     const listed = familyListMeant(p);
     if (listed && !fams?.length) out.push(listed);
   }
+  // A comma rgb() or hsl() CSS does not take as written: the same channels
+  // in the syntax CSS reads them in.
+  if (type === 'color') {
+    const asRead = colorAsCssReads(p);
+    if (asRead) out.push(asRead);
+  }
   return [...new Set(out)].filter(x => x && x !== value.trim());
 }
 
@@ -634,14 +645,12 @@ function sizeMeant(v, ok) {
     // A unit split off by a space (`16 px`); two numbers (`12 16px`) are
     // never joined into one.
     t.replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
-    t
-      .replace(/^([+-]?\d+),(\d+)/, '$1.$2')
-      .replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
+    // A comma between digits as the one comma rule reads it (a decimal
+    // comma, or a thousands mark in a pixel length: 1,200px).
+    commaNumbers(t).replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
     mathSpaced(t),
   ];
-  const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(
-    t.replace(/^([+-]?\d+),(\d+)/, '$1.$2'),
-  );
+  const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(commaNumbers(t));
   if (m) {
     // A unit typed with a letter too many (pxx, remm, pxs).
     const unit = [...SIZE_UNITS]
@@ -1007,6 +1016,9 @@ const GENERIC_FAMILIES = [
 ];
 documentTypoWords(GENERIC_FAMILIES);
 documentTypoWords([...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)]);
+// The system families the font readers compare a typo with: the gate
+// takes the family they offer.
+documentTypoWords(systemFontFamilies());
 
 /** The theme-wide dial or token for a CSS property typed with no part. */
 const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
@@ -1070,6 +1082,16 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
   const STYLE = /^(italic|oblique)$/i;
   const bare = (/** @type {string} */ w) =>
     w.toLowerCase().replace(/[\s_-]+/g, '');
+  /** The family a preset key or a system family names, by lowercase name. */
+  const familyOfKnown = (/** @type {string} */ k) => {
+    const lower = k.toLowerCase();
+    const named =
+      FONTS[lower]?.[0] ??
+      /** @type {Record<string, {family: string}>} */ (OPEN_FONTS)[lower]
+        ?.family ??
+      k;
+    return bare(named.replace(/["']/g, ''));
+  };
   /** The generic a family the editor does not know is a typo of. */
   const genericOf = (/** @type {string} */ name) => {
     // Written with no dash or a space (sansserif, system ui): that generic.
@@ -1195,26 +1217,38 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         ...(presets && pieces.length === 1 ? PRESETS : []),
         ...systemFontFamilies(),
       ];
-      /** The one name a typo is near, a name listed twice counted once. @param {string[]} names */
-      const oneNear = names => {
-        const hits = [
-          ...new Set(
-            names
-              .filter(k => typoNear(bare(name), bare(k)))
-              .map(k => k.toLowerCase()),
-          ),
-        ];
-        return hits.length === 1 ? hits[0] : null;
-      };
       const unknown = !generic && !isSystemFamily(cssUnescape(name));
-      // The presets are read first: a typo of one (Corier is courier,
-      // even beside Corbel) is that preset, refused with its line. Only a
+      /** The known names a typo is near. @param {string[]} names */
+      const hitsIn = names =>
+        unknown ? names.filter(k => typoNear(bare(name), bare(k))) : [];
+      /** @param {string} k */
+      const distance = k =>
+        levenshteinDistance(bare(name), bare(k), 99, {swaps: true});
+      /** The nearest spelling among names of one family, else null. @param {string[]} hits */
+      const oneReading = hits =>
+        hits.length && new Set(hits.map(familyOfKnown)).size === 1
+          ? hits.reduce((best, hit) =>
+              distance(hit) < distance(best) ? hit : best,
+            )
+          : null;
+      // The presets are read first: a typo of one (Corier is courier, even
+      // beside Corbel) is that preset, refused with its line, offered at
+      // the nearest spelling of the family it names (Segoe IU is Segoe
+      // UI). A preset and the family it names are one reading. Only a
       // generic or a preset the editor offers is read as a typo: a family
       // it does not know near a font a system ships may be a real family
       // (Corben, Gabriela), so it is kept as typed, with a note.
-      const editorWord =
-        unknown && presets && pieces.length === 1 ? oneNear(PRESETS) : null;
-      const preset = editorWord ?? (unknown ? oneNear(known) : null);
+      const presetHit = oneReading(
+        presets && pieces.length === 1 ? hitsIn(PRESETS) : [],
+      );
+      const editorWord = presetHit
+        ? oneReading(
+            hitsIn(known).filter(
+              h => familyOfKnown(h) === familyOfKnown(presetHit),
+            ),
+          )
+        : null;
+      const preset = editorWord ?? oneReading(hitsIn(known));
       if (generic || editorWord) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
@@ -2014,11 +2048,15 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
 }
 
 /**
- * The CSS color name nearest a word typed as a color (`banan` is not one,
- * `rd` is red), or null when none is near.
+ * The color a value typed as one most likely meant: a comma rgb() or hsl()
+ * CSS does not take as written, in the syntax CSS reads its channels in
+ * (`hsl(0, 100, 50)` is `hsl(0 100 50)`), else the CSS color name nearest a
+ * word (`banan` is not one, `rd` is red); null when none is near.
  * @param {string} v
  */
 function nearestColorName(v) {
+  const asRead = colorAsCssReads(v);
+  if (asRead) return asRead;
   const w = v.trim().toLowerCase();
   if (!/^[a-z]+$/.test(w)) return null;
   return nearest(w, COLOR_NAMES)[0] ?? null;
@@ -2141,15 +2179,22 @@ function propertyProblem(prop, value) {
       // Below the property's range (a negative width) is no size of the
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
-      // A comma between two bare numbers that the grammar pairs with a
-      // slash (`aspect-ratio 16,9`, `grid-row 2,4`) separates them: the
-      // pair, never a decimal (16.9), when both are whole numbers of 1 or
-      // more; any other comma between digits (`0,75`) is a decimal comma.
+      // A comma between two whole numbers of 1 or more that the grammar
+      // pairs with a slash separates them (`aspect-ratio 16,9` is 16 / 9,
+      // `grid-row 2,4` is 2 / 4), unless it reads as a decimal comma: written
+      // tight after a 1 (`1,5`) or after one digit with two or more after it
+      // (`1,78`, `2,35`), where the property takes that decimal. Any other
+      // comma between digits (`0,75`) is a decimal comma.
       (() => {
-        const pair = /^\s*([1-9]\d*)\s*,\s*([1-9]\d*)\s*$/.exec(v);
-        return pair && takes(`${pair[1]} / ${pair[2]}`)
-          ? `${pair[1]} / ${pair[2]}`
-          : null;
+        const pair = /^\s*([1-9]\d*)(\s*),(\s*)([1-9]\d*)\s*$/.exec(v);
+        if (!pair) return null;
+        const [, a, before, after, b] = pair;
+        const decimal =
+          !before &&
+          !after &&
+          (a === '1' || (a.length === 1 && b.length >= 2)) &&
+          takes(`${a}.${b}`);
+        return !decimal && takes(`${a} / ${b}`) ? `${a} / ${b}` : null;
       })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
@@ -2536,25 +2581,92 @@ export function drawsLine(C, parts, prop, state) {
 }
 
 /**
- * The states a part (or a group's members) draws a ring of its own in,
- * with its box-shadow (an input's hover and focus rings), or none. A shadow
- * the theme sets on the part's resting rule replaces them in every state:
- * Core's state rules sit under the theme's rules.
- * @param {import('./_settings.mjs').Ctx} ctx
- * @param {string} on
+ * Whether a part reads a token in any of its rules.
+ * @param {any} C the part census
+ * @param {string} part
+ * @param {string} token
+ */
+function readsToken(C, part, token) {
+  return Object.keys(GROUPS).some(g =>
+    (C.partReads(part, g) ?? []).some(
+      (/** @type {{token: string}} */ r) => r.token === token,
+    ),
+  );
+}
+
+/**
+ * The parts drawn as pills: they read --radius-full, which the corners
+ * dial leaves round.
+ * @param {any} C the part census
  * @returns {string[]}
  */
-export function ringStatesOf(ctx, on) {
-  const states = new Set();
-  for (const member of FAMILIES[on] ?? [on]) {
-    const at = ctx.C.MAP[member]?.at?.['box-shadow'] ?? {};
-    for (const [k, v] of Object.entries(at)) {
-      const st = /:(hover|focus|active)/.exec(k)?.[1];
-      if (st && !/^\s*(?:none|var\(\s*--_[^)]*\))\s*$/.test(String(v)))
-        states.add(st === 'active' ? 'pressed' : st);
-    }
-  }
-  return [...states];
+export function pillParts(C) {
+  return Object.keys(C.MAP).filter(p => readsToken(C, p, '--radius-full'));
+}
+
+/**
+ * The surfaces whose border the shared border tokens never reach: the
+ * containers, menus and overlays (a part with an elevation shadow, or one
+ * the layer runtime places: a tooltip) whose border reads no border width
+ * or border color token. Some draw none (a dialog); some draw a fixed
+ * line of their own (a popover's 1px), which --border-width does not
+ * widen. A family member the census does not record is kept.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function borderlessSurfaces(C) {
+  const rest = (/** @type {{when: string[]}} */ r) =>
+    r.when.some(w => !/:|selected/.test(w));
+  /** Whether the layer runtime places the part (its sizes read the layer's inset). @param {string} pt */
+  const layered = pt =>
+    Object.values(C.MAP[pt]?.own ?? {}).some((/** @type {any} */ x) =>
+      (x?.values ?? []).some((/** @type {unknown} */ v) =>
+        /--astryx-layer-/.test(String(v)),
+      ),
+    );
+  const candidates = new Set([
+    ...(FAMILIES.containers ?? []),
+    ...(FAMILIES.menus ?? []),
+    ...Object.keys(C.MAP).filter(
+      pt =>
+        layered(pt) ||
+        (C.partReads(pt, 'shadow') ?? []).some(
+          (/** @type {any} */ r) => /^--shadow-/.test(r.token) && rest(r),
+        ),
+    ),
+  ]);
+  return [...candidates].filter(
+    pt =>
+      !(C.partReads(pt, 'border') ?? []).some(
+        (/** @type {{token: string}} */ r) =>
+          r.token === '--border-width' || /^--color-border/.test(r.token),
+      ),
+  );
+}
+
+/**
+ * The parts that draw a divider with the shared border width: one side's
+ * border (a table cell's bottom rule) or an inner line (a divider's), not
+ * a box around the part. A wider --border-width makes their rules heavy.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function dividerParts(C) {
+  return Object.keys(C.MAP).filter(pt => {
+    const at = C.MAP[pt]?.at ?? {};
+    /** @param {string} k */
+    const reads = k =>
+      Object.values(at[k] ?? {}).some(v => /--border-width/.test(String(v)));
+    if (reads('border-width')) return false;
+    const sides = Object.keys(at).filter(
+      k => /^border-[a-z-]+-width$/.test(k) && reads(k),
+    );
+    const inner = (C.MAP[pt]?.inside?.['--border-width'] ?? []).some(
+      (/** @type {string} */ p) =>
+        /^(height|width|block-size|inline-size)$/.test(p),
+    );
+    return sides.length === 1 || (!sides.length && inner);
+  });
 }
 
 /**
@@ -2617,6 +2729,57 @@ export function settableStates(ctx, slug, data, part) {
   return [...new Set([...t.states, ...COMMON_STATES])].filter(
     state => !plain || takes(state),
   );
+}
+
+/**
+ * The paints of a property Core gives a part in its variants and states at
+ * rest (a primary button's accent fill, a checked box's), which a setting
+ * of that property on the plain part covers in every one of them (the
+ * theme's rules sit over Core's). Each with the condition as set names it
+ * (`--when variant:primary`, `--state checked`) when it can, else as Core's
+ * condition (`checked=checked`, `aria-current=page`); and the token the
+ * plain part reads at rest, if any.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string} prop a background or color property
+ * @returns {{rest: string | null, covered: Array<{token: string, flags: string | null, cond: string}>}}
+ */
+export function coveredPaints(ctx, part, prop) {
+  const C = ctx.C;
+  const group = C.groupOfProp(prop);
+  const props = /^background/.test(prop)
+    ? ['background-color', 'background']
+    : [prop];
+  const t = ctx.project.target.get(part);
+  const reads = (group ? C.partReads(part, group) : []).filter(
+    r => r.props.some(x => props.includes(x)) && !/overlay|tint/.test(r.token),
+  );
+  const rest = reads.find(r => r.when.includes(''))?.token ?? null;
+  /** @type {Array<{token: string, flags: string | null, cond: string}>} */
+  const covered = [];
+  for (const r of reads)
+    for (const w of r.when) {
+      // Only the conditions of the part at rest: a pseudo-class (hover) is
+      // a state set names itself.
+      const cond = w
+        .replace(/^--when /, '')
+        .replace(/\s*\(not settable:.*$/, '')
+        .trim();
+      if (!cond || /(^|\s):|--state/.test(cond)) continue;
+      // One condition set can name: a state of the part's own (written as
+      // its name) with --state, a visual prop of its with --when.
+      const one = /^([\w-]+)[=:]([\w-]+)$/.exec(cond);
+      const [k, v] = one ? [one[1], one[2]] : ['', ''];
+      const flags = !one
+        ? null
+        : t?.states.includes(k) && (v === k || v === 'true')
+          ? `--state ${k}`
+          : t?.props.includes(k)
+            ? `--when ${k}:${v}`
+            : null;
+      covered.push({token: r.token, flags, cond: cond.replace(':', '=')});
+    }
+  return {rest, covered};
 }
 
 /**
@@ -3102,7 +3265,10 @@ export function checkSetting(
           {
             // Only setting names: a part or a state is never a value.
             didYouMean: nearest(label.word, Object.keys(DIALS)),
-            run: [`${P} set ${slug} ${thing} ${q(rest)}${scope}`],
+            // The words after an unknown label are no value the person
+            // gave (a typo before the colon, or a family with a colon in
+            // it): only a known name is ever taken off. What it takes.
+            run: [`${HOW} ${thing}`],
           },
         );
     }
@@ -3393,13 +3559,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
   if (flags.when) s.when = flags.when.trim();
   // A state in any case or spelling of its words (focusVisible,
   // focus_visible, 'focus visible') is the state, written as CSS writes it.
-  if (flags.state)
-    s.state = flags.state
-      .trim()
-      .replace(/^:+/, '')
-      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-      .replace(/[\s_]+/g, '-')
-      .toLowerCase();
+  if (flags.state) s.state = stateSpelling(flags.state);
   if (flags.only) s.only = true;
   if (flags.mode) {
     // Read as any value is: invisible or no-break spaces, quotes around
@@ -3593,10 +3753,31 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       // only the whole value as one word, never one word inside a longer
       // name (nmber-input is no word for inputs).
       const byWord = /^[a-z]+$/.test(lower) ? partForWord(lower) : null;
-      // A typo of one whole part or group name is that name.
-      const typoParts = [...TARGET.keys(), ...Object.keys(FAMILIES)].filter(
-        n => n !== lower && n !== dashed && typoNear(dashed, n),
-      );
+      // A typo of a whole part or group name, or of a word how reads as
+      // one (sidebar, checkbox, toggle), is the part the nearest of them
+      // names, when the nearest name one part.
+      const typoParts = (() => {
+        const words = partWords();
+        const candidates = [
+          ...TARGET.keys(),
+          ...Object.keys(FAMILIES),
+          ...[...words]
+            .filter(([, on]) => TARGET.has(on) || FAMILIES[on])
+            .map(([w]) => w),
+        ].filter(n => n !== lower && n !== dashed);
+        // The one typo ranker (closestOf). A hit that is a part or group
+        // name is that name (`tabel` is table); a word that is no name is
+        // read as its part (`sidebr` is side-nav).
+        const isName = (/** @type {string} */ n) =>
+          TARGET.has(n) || Boolean(FAMILIES[n]);
+        return [
+          ...new Set(
+            closestOf(dashed, candidates).map(n =>
+              isName(n) ? n : (words.get(n) ?? n),
+            ),
+          ),
+        ];
+      })();
       // A plain plural of a part (cards, dialogs, tabs) is that part.
       const singular = [lower, dashed]
         .flatMap(w => [
@@ -4178,7 +4359,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           .trim()
           .toLowerCase()
           .split(/[\s,]+/)
-          .filter(Boolean)
+          .filter(w => w && w !== 'and' && w !== '&')
           .map(w => MORE[w] ?? w);
         const known = (/** @type {string} */ w) =>
           HEADING_WEIGHTS[w] !== undefined || HEADING_TRACKING[w] !== undefined;
@@ -4191,7 +4372,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             words.length > 1
               ? `"${v}" is ${words.length} headings values; headings takes one at a time (a weight and a tracking are two settings).`
               : `"${v}" is the weight ${words[0]}.`,
-            {run: words.map(w => `${P} set ${slug} headings ${w}`)},
+            // Both are wanted: the second line is the next step, not
+            // another choice.
+            {
+              run: words.map((w, i) =>
+                i === 0
+                  ? `${P} set ${slug} headings ${w}`
+                  : {
+                      name: `${P} set ${slug} headings ${w}`,
+                      reason: 'then this: headings takes one value at a time',
+                    },
+              ),
+            },
           );
       }
       if (s.mode)
@@ -4420,7 +4612,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         {run: [setLine(slug, thing, v, {...s, mode: undefined})]},
       );
     if (thing === 'corners') {
-      if (s.on) refuseInvisibleCorners(ctx, slug, s, data);
+      if (s.on) {
+        refuseInvisibleCorners(ctx, slug, s, data);
+        refuseRadioCorners(ctx, slug, s);
+      }
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
       if (step) {
@@ -4510,8 +4705,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
                   (basePartRadiusPx(ctx, base, part, s.when) ??
                   tokenPx(base, token) ??
                   radiusAt(base, 'medium', token));
-        const rungs = CORNERS.map(
-          ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
+        // A step between round and pill (half as round again as round), so
+        // one step more from round is not a pill.
+        const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+        const ladder = CORNERS.flatMap(([n]) =>
+          n === 'pill' ? [`${roundPx * 1.5}px`, n] : [n],
+        );
+        // A size on a part is that radius as written (as the part's own
+        // setting reads); a rung, or a size for the whole theme, is the
+        // radius it gives the part's token.
+        const rungs = ladder.map(
+          n =>
+            /** @type {const} */ ([
+              n,
+              s.on && !isRung(n) ? cornerPxOf(n) : radiusAt(base, n, token),
+            ]),
         );
         const next =
           v === 'more'
@@ -4568,12 +4776,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           // A bare number (0.5, as a pasted --radius: 0.5rem loses its
           // unit) has no unit to read it by: no size is guessed.
           const bareNumber = /^[+-]?\d*\.?\d+$/.test(lower);
+          // A comma between digits as the one comma rule reads it
+          // (0,5rem is 0.5rem).
           const len =
             calcPx != null && Number.isFinite(calcPx)
               ? calcPx
               : bareNumber
                 ? null
-                : lengthPx(lower);
+                : lengthPx(commaNumbers(lower));
           const pct = /^(\d+(?:\.\d+)?)%$/.exec(lower);
           // Tailwind's names, and rounding said with a negation: what they
           // mean (rounded-none and not round are square, rounded-full is
@@ -4666,7 +4876,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       }
       // A scale typed as a number (x0.75, 0.75, 75%) names the rung nearest
       // that factor.
-      const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(v);
+      const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(commaNumbers(v));
       const nearFactor = factor
         ? SPACING.reduce((a, b) =>
             Math.abs(b[1] - Number(factor[1]) / (factor[2] ? 100 : 1)) <
@@ -4939,7 +5149,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           .replace(/^(["'])(.*)\1$/, '$2')
           .trim();
         const word = bare.toLowerCase();
-        const n = cssNumber(bare);
+        // A comma between digits as the one comma rule reads it (0,5).
+        const n = cssNumber(commaNumbers(bare));
         // A fraction of one (0.5) is that share of the scale (50), as a
         // number with no unit from 0 to 1 is read.
         const scaled =
@@ -5272,9 +5483,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (!['both', 'light-only', 'dark-only'].includes(v)) {
         const lower = v.toLowerCase().replace(/^mode\s*[=:]\s*/, '');
+        // The one mode reader: a word that means one mode (night, dark
+        // mode) is that mode only.
+        const oneMode = modeWord(lower);
         const meant =
           DIAL_WORDS.mode[lower] ??
-          (['both', 'light-only', 'dark-only'].includes(lower) ? lower : null);
+          (['both', 'light-only', 'dark-only'].includes(lower)
+            ? lower
+            : oneMode
+              ? `${oneMode}-only`
+              : null);
         const near = meant
           ? [meant]
           : nearest(lower, ['both', 'light-only', 'dark-only']);
@@ -5342,15 +5560,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         word && Object.keys(TOKENS).some(k => k.includes(word))
           ? `${HOW} --list tokens ${word}`
           : `${HOW} --list tokens`;
+      // The token written in another style (`--color_accent`,
+      // `--colorAccent`, `--color accent`), as a dial or a property is read
+      // in any style; else the one token a typo is near.
+      const styled = `--${thing
+        .replace(/^-+/, '')
+        .trim()
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[_\s]+/g, '-')
+        .toLowerCase()}`;
+      const near = nearest(thing, Object.keys(TOKENS));
+      const meant =
+        aliased ??
+        (styled !== thing && styled in TOKENS
+          ? styled
+          : near.length === 1
+            ? near[0]
+            : null);
       refuse(
         E.ERR_THEME_UNKNOWN_TOKEN,
-        `"${thing}" is not a design token.${aliased ? ` The token for that role is ${aliased}.` : ''}`,
+        `"${thing}" is not a design token.${aliased ? ` The token for that role is ${aliased}.` : meant === styled ? ` It reads as ${styled}.` : ''}`,
         {
-          didYouMean: aliased ? [aliased] : nearest(thing, Object.keys(TOKENS)),
-          run: [
-            ...(aliased ? [setLine(slug, aliased, v, s, unset)] : []),
-            listed,
-          ],
+          didYouMean: meant ? [meant] : near,
+          run: [...(meant ? [setLine(slug, meant, v, s, unset)] : []), listed],
         },
       );
     }
@@ -5820,19 +6052,46 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.
+    // So does a part whose text is all in parts inside it that each set
+    // the property themselves (a dialog's title block: its title and
+    // subtitle).
     if (
       !unset &&
       !s.state &&
-      ['font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
-        prop,
-      )
+      [
+        'font-size',
+        'font-weight',
+        'line-height',
+        'letter-spacing',
+        'color',
+      ].includes(prop)
     ) {
       const inner = partsOf(ctx, s)
         .map(t => {
           const rec = ctx.C.MAP[t];
-          const toks = Object.entries(rec?.inside ?? {})
-            .filter(([, props]) => props.includes(prop))
-            .map(([tok]) => tok);
+          // (A color only through the parts inside it: elements inside a
+          // part that read a color token are answered with the tokens on
+          // the part by how.)
+          let toks =
+            prop === 'color'
+              ? []
+              : Object.entries(rec?.inside ?? {})
+                  .filter(([, props]) => props.includes(prop))
+                  .map(([tok]) => tok);
+          const held = (rec?.contains ?? []).map(x => ctx.C.MAP[x]);
+          if (
+            !toks.length &&
+            !Object.keys(rec?.inside ?? {}).length &&
+            held.length &&
+            held.every(x => x?.own?.[prop])
+          )
+            toks = [
+              ...new Set(
+                held.flatMap(x => Object.keys(x.own[prop].tokens ?? {})),
+              ),
+            ]
+              .filter(tok => !/disabled|placeholder|accent/.test(tok))
+              .slice(0, 4);
           return /** @type {const} */ ([
             t,
             rec && !rec.own?.[prop] ? toks : [],
@@ -5852,18 +6111,6 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           },
         );
       }
-    }
-    // A shadow on the resting rule of a part that draws its rings in its
-    // box-shadow (an input's hover and focus rings) would replace them in
-    // every state: refused, with the states named.
-    if (prop === 'box-shadow' && s.on && !s.state && !unset) {
-      const rings = ringStatesOf(ctx, s.on);
-      if (rings.length)
-        refuse(
-          E.ERR_THEME_NO_EFFECT,
-          `${FAMILIES[s.on] ? `${s.on} draw their` : `${s.on} draws its`} ${rings.join(' and ')} rings in ${FAMILIES[s.on] ? 'their' : 'its'} box-shadow, and a shadow set on ${FAMILIES[s.on] ? 'them' : 'it'} would replace them in every state (Core's state rules sit under the theme's), so it is not set. A shadow in one state replaces only that state's ring.`,
-          {run: [`${HOW} ${s.on}`]},
-        );
     }
     // A text property CSS inherits reaches the parts inside the part that
     // do not set it themselves (a side nav section's items): the result
@@ -6213,6 +6460,32 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...cssProperties()]),
     },
+  );
+}
+
+/**
+ * Refuse the corners dial on parts that are all radios' circles
+ * (radioCircle): the dial leaves them, so it changes nothing you see. A
+ * border-radius set on the part itself still changes it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').Setting} s
+ */
+function refuseRadioCorners(ctx, slug, s) {
+  if (ctx.unchecked) return;
+  const parts = partsOf(ctx, s);
+  if (!parts.length || !parts.every(t => radioCircle(ctx.C, t))) return;
+  // A radius set on the part itself overrides the circle: a square radio
+  // is asked of this component, by name.
+  const px = cornerPxOf(String(s.value));
+  const own =
+    Number.isFinite(px) && px < 9999
+      ? setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s)
+      : null;
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.${own ? ` A border-radius on it sets its shape: ${own.replace(`${P} `, '')}.` : ''}`,
+    {run: own ? [own] : [`${HOW} ${s.on}`]},
   );
 }
 

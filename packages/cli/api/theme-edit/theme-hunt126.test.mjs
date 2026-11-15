@@ -183,7 +183,7 @@ describe('a picture run that stops part way', () => {
       const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
       expect(r.data.pictures).toEqual(['themes/t/preview.png']);
       expect(r.data.pictureProblem).toMatch(
-        /^themes\/t\/preview\.png was taken, but themes\/t\/preview-dark\.png, themes\/t\/sheet\.png, themes\/t\/sheet-dark\.png were not: .*crashed on start 2/,
+        /^themes\/t\/preview\.png was taken, but themes\/t\/preview-dark\.png, themes\/t\/sheet-overlays\.png, themes\/t\/sheet-overlays-dark\.png, themes\/t\/sheet\.png, themes\/t\/sheet-dark\.png were not: .*crashed on start 2/,
       );
       expect(r.data.pictureProblem).not.toMatch(/No picture was taken/);
     } finally {
