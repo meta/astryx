@@ -8,19 +8,21 @@
  * values read from another file are blamed on it; a pipe where an output
  * goes is refused at once; fonts: system emoji, Apple's interface faces, a
  * package's weight gaps, other font axes and weights between the hundreds;
- * --out names; a theme with no name is named so.
+ * --out names; a theme with no name is named so. Commands run in process
+ * and pages render through the stand-in, so the file stays fast.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {fontsourceSuggestion} from './_settings.mjs';
 import {oneSystemOf} from './_tables.mjs';
 import {shownWeight} from './_preview.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -30,12 +32,16 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 
+// The assertions are about builds, files and messages, not rendered pages:
+// a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
+
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 const T = 240_000;
 
 beforeAll(() => {
@@ -47,16 +53,10 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+// The real program, in process: no Node start per command.
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
-/** @param {string[]} args */
-const json = args => {
-  const r = cli(['--json', ...args]);
+const json = async args => {
+  const r = await runCli(['--json', ...args], {cwd});
   return {status: r.status, env: JSON.parse(r.stdout)};
 };
 /** @param {string} file @param {string[]} [more] */
@@ -92,7 +92,7 @@ const posix = process.platform !== 'win32';
 describe('a plain theme that gives null', () => {
   it(
     'refuses a null part or style key at its line, and writes nothing',
-    () => {
+    async () => {
       for (const [fields, where, why] of [
         [
           'components: {button: null} as any',
@@ -111,7 +111,7 @@ describe('a plain theme that gives null', () => {
         ],
       ]) {
         plain(fields);
-        const {status, env} = compile('plain/p.ts');
+        const {status, env} = await compile('plain/p.ts');
         expect(status, fields).toBe(1);
         expect(env.code, fields).toBe('ERR_THEME_INVALID');
         expect(env.error, fields).toContain(`${where} (line 4): ${why}`);
@@ -125,7 +125,7 @@ describe('a plain theme that gives null', () => {
 
   it(
     'builds a null value as it is, and warns it at its line',
-    () => {
+    async () => {
       for (const [fields, where, written] of [
         [
           'components: {button: {base: {backgroundColor: null}}} as any',
@@ -139,7 +139,7 @@ describe('a plain theme that gives null', () => {
         ],
       ]) {
         plain(fields);
-        const {status, env} = compile('plain/p.ts');
+        const {status, env} = await compile('plain/p.ts');
         expect(status, fields).toBe(0);
         expect(JSON.stringify(env.data.warnings), fields).toContain(
           `${where} (line 4): `,
@@ -163,7 +163,7 @@ describe('an editor theme that gives null under a style key', () => {
     async () => {
       await themeEditNew('n3', {cwd});
       own('n3', 'components: {button: {base: null}} as any');
-      const r = compileOwn('n3');
+      const r = await compileOwn('n3');
       expect(r.env.error).toContain('gives a value the editor refuses');
       expect(r.env.error).toContain(
         'base holds null, which the build cannot read as a block: give it properties, such as base: {color: …}, or remove it',
@@ -173,7 +173,7 @@ describe('an editor theme that gives null under a style key', () => {
       // line, as a plain theme's is.
       for (const key of [':hover', '@dark']) {
         own('n3', `components: {button: {base: {'${key}': null}}} as any`);
-        const k = compileOwn('n3');
+        const k = await compileOwn('n3');
         expect(k.status, key).toBe(0);
         expect(JSON.stringify(k.env.data.warnings), key).toContain(
           `${key} holds null, so the build writes no block for it`,
@@ -187,11 +187,11 @@ describe('an editor theme that gives null under a style key', () => {
 describe('style keys no element carries', () => {
   it(
     'warns a closed prop value and a pseudo-class written as a style key',
-    () => {
+    async () => {
       plain(
         "components: {button: {'size:xxl': {color: 'red'}, ':hover': {color: 'blue'}, 'variant:primry': {color: 'green'}}}",
       );
-      const {status, env} = compile('plain/p.ts');
+      const {status, env} = await compile('plain/p.ts');
       expect(status).toBe(0);
       const warnings = JSON.stringify(env.data.warnings);
       expect(warnings).toMatch(
@@ -216,19 +216,19 @@ describe('pseudo typos past the first name', () => {
         [':not(:hovr)', ':not(:hover)'],
       ]) {
         own('n8', `components: {button: {base: {'${key}': {color: 'red'}}}}`);
-        const r = compileOwn('n8');
+        const r = await compileOwn('n8');
         expect(r.status, key).toBe(1);
         expect(r.env.error, key).toContain(`did you mean ${fixed}?`);
       }
       own('n8', "components: {button: {base: {hover: {color: 'red'}}}}");
-      expect(compileOwn('n8').env.error).toContain(
+      expect((await compileOwn('n8')).env.error).toContain(
         "a pseudo-class starts with a colon: write it as ':hover'",
       );
       own(
         'n8',
         "components: {button: {base: {'::before': {content: '\"x\"'}}}}",
       );
-      expect(compileOwn('n8').status).toBe(0);
+      expect((await compileOwn('n8')).status).toBe(0);
     },
     T,
   );
@@ -253,7 +253,7 @@ describe('values read from another file', () => {
       ]) {
         write('themes/n9/shared.ts', file);
         own('n9', `tokens: ${value}`, imports);
-        const r = compileOwn('n9');
+        const r = await compileOwn('n9');
         expect(r.env.error, imports).toContain(
           '(in themes/n9/shared.ts, line 3)',
         );
@@ -270,7 +270,7 @@ describe('values read from another file', () => {
         'components: {card: cardStyles}',
         "import {cardStyles} from './brand';",
       );
-      expect(compileOwn('n9').env.error).toContain(
+      expect((await compileOwn('n9')).env.error).toContain(
         '(in themes/n9/brand.ts, line 1)',
       );
       own(
@@ -278,7 +278,7 @@ describe('values read from another file', () => {
         "tokens: {'--color-accent': brand}",
         "import {brand} from './brand';",
       );
-      expect(compileOwn('n9').env.error).toContain(
+      expect((await compileOwn('n9')).env.error).toContain(
         '(in themes/n9/brand.ts, line 2)',
       );
     },
@@ -292,12 +292,12 @@ describe('a part variable in the page tokens', () => {
     async () => {
       await themeEditNew('n13', {cwd});
       own('n13', "tokens: {'--button-focus-offset': '9px'}");
-      const r = compileOwn('n13');
+      const r = await compileOwn('n13');
       expect(r.env.error).toContain(
         "--button-focus-offset is a variable Button sets on its own element, so a value in the page's tokens never reaches it: set it on the part, components: {button: {base: {'--button-focus-offset': \"9px\"}}}",
       );
       own('n13', "tokens: {'--button-focus-ofset': '9px'}");
-      expect(compileOwn('n13').env.error).toContain(
+      expect((await compileOwn('n13')).env.error).toContain(
         'did you mean --button-focus-offset?',
       );
     },
@@ -326,13 +326,13 @@ describe.skipIf(!coreSkipsUndefinedLocal)('local tokens left undefined', () => {
     async () => {
       await themeEditNew('n11', {cwd});
       own('n11', 'localTokens: undefined');
-      const root = compileOwn('n11');
+      const root = await compileOwn('n11');
       expect(root.status).toBe(1);
       expect(root.env.error).toContain(
         'localTokens is undefined: omit the field or pass an object',
       );
       own('n11', "localTokens: {'--brand': 'red', '--brand-2': undefined}");
-      expect(compileOwn('n11').status).toBe(0);
+      expect((await compileOwn('n11')).status).toBe(0);
       expect(
         fs.readFileSync(path.join(cwd, 'themes/n11/n11.css'), 'utf8'),
       ).not.toContain('--brand-2');
@@ -354,7 +354,7 @@ describe.skipIf(!posix)('a named pipe where a file goes', () => {
         ],
       ])) {
         expect(mkfifo(rel)).toBe(true);
-        const r = json(['experimental', 'theme', ...args]);
+        const r = await json(['experimental', 'theme', ...args]);
         expect(r.status, args.join(' ')).toBe(1);
         expect(r.env.error, args.join(' ')).toContain(
           `${rel} is a named pipe, not a file`,
@@ -371,7 +371,7 @@ describe.skipIf(!posix)('a named pipe where a file goes', () => {
       fs.rmSync(path.join(cwd, 'themes/n6/n6.css'));
       plain("tokens: {'--color-accent': 'red'}");
       expect(mkfifo('out/f.css')).toBe(true);
-      const out = compile('plain/p.ts', ['--out', 'out/f.css']);
+      const out = await compile('plain/p.ts', ['--out', 'out/f.css']);
       expect(out.env.error).toContain('out/f.css is a named pipe, not a file');
       fs.rmSync(path.join(cwd, 'out'), {recursive: true});
     },
@@ -382,9 +382,9 @@ describe.skipIf(!posix)('a named pipe where a file goes', () => {
 describe('--out', () => {
   it(
     'names a stylesheet for .css alone, and warns a ~ the shell did not expand while it writes in the project as before',
-    () => {
+    async () => {
       plain("tokens: {'--color-accent': 'red'}");
-      const r = compile('plain/p.ts', ['--out', 'out/.css']);
+      const r = await compile('plain/p.ts', ['--out', 'out/.css']);
       expect(JSON.stringify(r.env.data.warnings)).toContain(
         'give it a name such as out/p.css',
       );
@@ -393,7 +393,7 @@ describe('--out', () => {
         ['experimental', 'theme', 'compile', 'plain/p.ts', '--out', '~/x.css'],
         ['theme', 'build', 'plain/p.ts', '--out', '~/x.css'],
       ]) {
-        const t = json(args);
+        const t = await json(args);
         expect(t.status, args[0]).toBe(0);
         const warnings = JSON.stringify(t.env.data.warnings);
         expect(warnings, args[0]).toContain(
@@ -424,7 +424,7 @@ describe('a theme with no name', () => {
           .readFileSync(src, 'utf8')
           .replace("name: 'n15',", 'name: undefined,'),
       );
-      const r = compileOwn('n15');
+      const r = await compileOwn('n15');
       expect(r.env.error).toContain(
         "is a theme with no name (line 6), and the build names the theme's files after it. Give defineTheme a name, such as name: 'n15'.",
       );
