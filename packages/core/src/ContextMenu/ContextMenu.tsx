@@ -423,8 +423,8 @@ export function ContextMenu({
   const focusOnShowRef = useRef(false);
   const focusFirstRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
-  // A level whose label is not a string is named by the label's text, read
-  // from its row when the level opened.
+  // The row reads a node label's text as the level opens. That text names the
+  // sheet.
   const [submenuTitles, setSubmenuTitles] = useState<(string | undefined)[]>(
     [],
   );
@@ -434,7 +434,7 @@ export function ContextMenu({
   const sheetLabel =
     typeof currentTitle === 'string'
       ? currentTitle
-      : (submenuTitles.at(-1) ?? label);
+      : submenuTitles.at(-1) || label;
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
