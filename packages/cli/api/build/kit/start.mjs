@@ -15,6 +15,7 @@ import {isAppShell, readNames} from './words.mjs';
 import {
   blendOrder,
   blendSummary,
+  namedOutright,
   sharesOwnWord,
   weighStart,
 } from './weights.mjs';
@@ -132,8 +133,9 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
  *
  * `direct` means two independent signals agree: the start is also search's
  * direct match. The ranker sees only ready templates, so a template
- * still marked not ready is never the start; when search matched one directly
- * the reason names it, so the reader knows why the kit starts elsewhere.
+ * still marked not ready is never the start; when the idea names one that
+ * search matched directly, the reason says it is not ready yet and where build
+ * started instead. A not-ready template the idea does not name is never named.
  *
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
@@ -155,20 +157,36 @@ export function chooseStart(
   placeOf = () => null,
 ) {
   const direct = directMatch ? pages[0].name : null;
-  const unready =
+  const unreadyMatch =
     direct && !catalog.some(t => t.name === direct) ? direct : null;
+  // A template that is not ready is named only when the idea names it: the
+  // reader asked for it, so the reason says why build did not start there.
+  const unready =
+    unreadyMatch &&
+    namedOutright([pages[0].name], readNames(idea, [{name: pages[0].name}]), [
+      pages[0],
+    ])[0]
+      ? unreadyMatch
+      : null;
+  const shownDirect = unreadyMatch && !unready ? null : direct;
   // The reason never denies a match the same response reports: a direct
   // match the ranker outweighed is named, and so are the loose page matches
   // search listed when the kit falls back to the shell.
-  const loose = pages.map(p => `\`${p.name}\``).join(', ');
+  const loose = pages
+    .filter(p => catalog.some(t => t.name === p.name))
+    .map(p => `\`${p.name}\``)
+    .join(', ');
+  /** @param {string} startName */
+  const notReady = startName =>
+    `\`${unready}\` isn't ready yet, so build started from \`${startName}\`.`;
   /**
    * A part's or an edit's reason, naming a direct match that is not the start.
    * @param {string} place
    * @param {string} startName
    */
   const placed = (place, startName) =>
-    direct && direct !== startName
-      ? `Search matched \`${direct}\` by name, but ${place}`
+    shownDirect && shownDirect !== startName
+      ? `Search matched \`${shownDirect}\` by name, but ${place}`
       : place[0].toUpperCase() + place.slice(1);
   const proposed = pickStart(ranked, kind);
   // The checked-in word weights (weights.mjs), blended with the ranker's
@@ -199,7 +217,7 @@ export function chooseStart(
     weighed === undefined
       ? proposed
       : weighed === null
-        ? isAppShell(proposed) || (proposed && direct && !unready)
+        ? isAppShell(proposed) || (proposed && direct && !unreadyMatch)
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
@@ -219,13 +237,13 @@ export function chooseStart(
       ...asTemplate(closest, placeOf(closest)),
       basis: agrees ? 'direct' : 'closest',
       reason: unready
-        ? `\`${unready}\` matches but is not ready yet; this is the closest ready template.`
+        ? notReady(closest.name)
         : place
           ? placed(place, closest.name)
           : agrees
             ? 'Matches the idea.'
-            : direct
-              ? `Search matched \`${direct}\` by name, but this template fits more of the idea.`
+            : shownDirect
+              ? `Search matched \`${shownDirect}\` by name, but this template fits more of the idea.`
               : 'The closest template; none is exactly this page.',
     };
   }
@@ -242,13 +260,13 @@ export function chooseStart(
         ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
-          ? `\`${unready}\` matches but is not ready yet, so start from the app shell.`
+          ? notReady(shell.name)
           : place
             ? placed(place, shell.name)
-            : direct
+            : shownDirect
               ? weighed === null
-                ? `Search matched \`${direct}\` by name, but the app shell is the closer start.`
-                : `Search matched \`${direct}\` by name, but too little of the idea fits it, so start from the app shell.`
+                ? `Search matched \`${shownDirect}\` by name, but the app shell is the closer start.`
+                : `Search matched \`${shownDirect}\` by name, but too little of the idea fits it, so start from the app shell.`
               : nearest
                 ? 'No template is a clear match; the app shell is the closest.'
                 : loose

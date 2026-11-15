@@ -74,9 +74,9 @@
  * @property {string} data.query
  * @property {boolean} data.hasResults False when search returned nothing. The kit still names a template in `start`.
  * @property {number} data.matchCount Total ranked search matches for the query — counted before the search `limit`, the kit's score floors, and its per-group caps, so it is never a cap read back.
- * @property {boolean} data.directMatch True when the top page template is a confident direct match.
+ * @property {boolean} data.directMatch True when the first entry of `pages` is search's confident direct match. False when search's direct match is a template build cannot start from (not ready), even if a listed template scores well.
  * @property {BuildStart | null} data.start The page template to start from (see `BuildStart.basis`), else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
- * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search (≤3). Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
+ * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search that build could start from (≤3): a template the catalog holds as not ready is left out. Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.domain Idea-specific components/hooks (≤6), excluding frame/foundation.
  * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them.
