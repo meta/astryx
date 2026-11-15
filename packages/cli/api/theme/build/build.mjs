@@ -1388,12 +1388,12 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, offer?: Array<{name: string, reason: string}>, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, warnUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
  *   them; `rerun`: this build's command with another --out, or without one;
- *   `elsewhere`: the option that moves the outputs; `offer`: the commands a
- *   refusal offers instead of another --out and the build beside the source
- *   (a family build: the same family under a free key); `onEditorFolder`: takes
+ *   `warnUnmarked` (with `refuseUnmarked`): a header-less file is replaced
+ *   with a warning naming it, as a family build has always replaced one;
+ *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
  *   the editor-folder warning instead of the logger (a watcher prints it
  *   once); `onWarning`: each warning's message too, for the result
  */
@@ -1405,8 +1405,8 @@ function assertOutputsReplaceable(
     claimed,
     rerun,
     refuseUnmarked = false,
+    warnUnmarked = false,
     elsewhere = '--out',
-    offer,
     onEditorFolder,
     onWarning,
   } = {},
@@ -1416,6 +1416,8 @@ function assertOutputsReplaceable(
   const seen = new Set();
   /** @type {string | false} */
   let warnedOtherSource = false;
+  /** Header-less files replaced with a warning (`warnUnmarked`). @type {string[]} */
+  const unmarkedReplaced = [];
   // The same build without --out, with its other options.
   const beside = {
     name: rerun ? rerun(null) : buildSuggestion(rel(filePath), {}, cwd),
@@ -1494,7 +1496,7 @@ function assertOutputsReplaceable(
     } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
-        offer ?? [beside],
+        [beside],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
@@ -1505,12 +1507,16 @@ function assertOutputsReplaceable(
       stat.size > 0 &&
       !fileHead(write.dest).includes(GENERATED_MARKER)
     ) {
+      if (warnUnmarked) {
+        unmarkedReplaced.push(rel(write.dest));
+        continue;
+      }
       // Never advice to delete it: it may be the person's file (a settings
       // file, app source). A path that takes every output instead.
       const free = freeOutPath(writes);
       throw new AstryxError(
         `${rel(write.dest)} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another ${elsewhere}.`,
-        offer ?? [
+        [
           ...(free && rerun
             ? [
                 {
@@ -1530,6 +1536,11 @@ function assertOutputsReplaceable(
   if (warnedOtherSource) {
     logger.warn(`Warning: ${warnedOtherSource}`);
     onWarning?.(warnedOtherSource);
+  }
+  if (unmarkedReplaced.length) {
+    const message = `${unmarkedReplaced.join(', ')} ${unmarkedReplaced.length > 1 ? 'have' : 'has'} no build header (an output from a CLI before 0.6.7, or a file of your own or another tool's), and this build of ${rel(filePath)} replaces ${unmarkedReplaced.length > 1 ? 'them' : 'it'}; to keep a file of your own there, build with another ${elsewhere}.`;
+    logger.warn(`Warning: ${message}`);
+    onWarning?.(message);
   }
   if (editorFolder) {
     const dir = path.dirname(writes[0].dest);
@@ -6032,41 +6043,14 @@ export async function themeBuildFamily(
   if (!options.check) {
     confineOutputs(writes, cwd, FAMILY_REMEDY);
     // The family key is a name the person picks, as --out is: the outputs
-    // replace only this build's own earlier outputs, warn over another
-    // source's, and never replace a file the build did not write (a
-    // hand-written index.js or stylesheet at the key's name).
-    const familyCommand = (/** @type {string} */ key) =>
-      buildSuggestion(
-        members.map(member => member.sourceRelative),
-        {iconsSpecifier: options.iconsSpecifier},
-        cwd,
-        handOff.commandWords,
-        {familyKey: key},
-      );
-    /** A key none of whose outputs exists yet. @type {string | null} */
-    let freeKey = null;
-    for (let n = 2; n < 100 && !freeKey; n += 1) {
-      const key = `${baseName}-${n}`;
-      const taken = [
-        `${key}.css`,
-        `${key}.css.d.ts`,
-        `${key}.js`,
-        `${key}.d.ts`,
-      ].some(name => fs.existsSync(path.join(outDir, name)));
-      if (!taken && !members.some(member => member.theme.name === key))
-        freeKey = key;
-    }
+    // replace this build's own earlier outputs, and warn over another
+    // source's. A header-less file there is replaced as a family build has
+    // always replaced one (an output of a CLI before 0.6.7), with a warning
+    // naming it.
     assertOutputsReplaceable(writes, root.filePath, cwd, {
       elsewhere: '--family-key',
       refuseUnmarked: true,
-      offer: freeKey
-        ? [
-            {
-              name: familyCommand(freeKey),
-              reason: 'do this instead: a family key no file uses yet',
-            },
-          ]
-        : [],
+      warnUnmarked: true,
     });
   }
   if (options.check) {

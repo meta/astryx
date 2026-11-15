@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Stable `theme build` batch hunt198: a family key never replaces a
- * file the build did not write and warns over another theme's outputs, as
- * --out does; a family member's registry imported without its extension
+ * @file Stable `theme build` batch hunt198: a family key replaces a
+ * header-less file as released, with a warning naming it, and warns over
+ * another theme's outputs, as --out does; a family member's registry imported without its extension
  * resolves as the single build's does; an icon registry that imports an
  * asset (.svg, .png) builds; a single build with --out in another folder
  * keeps the registry import as written and says when nothing answers to it
@@ -103,69 +103,32 @@ async function captured(run) {
   }
 }
 
-/**
- * The arguments of an offered `theme build` command, after `theme build`.
- * @param {string} line
- */
-const buildArgs = line => {
-  const words = line.split(/\s+/);
-  return words.slice(words.indexOf('build') + 1);
-};
-
-/**
- * Run an offered family build as the CLI would.
- * @param {string} line
- */
-const followFamily = async line => {
-  const args = buildArgs(line);
-  const files = [];
-  /** @type {{familyKey: string, iconsSpecifier?: string}} */
-  const options = {familyKey: ''};
-  for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === '--family') continue;
-    if (args[i] === '--family-key') options.familyKey = args[(i += 1)];
-    else if (args[i] === '--icons-specifier')
-      options.iconsSpecifier = args[(i += 1)];
-    else files.push(args[i]);
-  }
-  return captured(() => themeBuildFamily(files, options, {cwd: dir}));
-};
-
 const OCEAN = `import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n`;
 const CALM = `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean';\nexport default defineTheme({extends: ocean, name: 'ocean-calm'});\n`;
 
-describe('N4: a family key never replaces a file the build did not write', () => {
-  it('refuses a hand-written file at the key, offers a free key that builds, and warns over another theme’s outputs', async () => {
+describe('N4: a family key over a file the build did not write', () => {
+  it('replaces a header-less file as released, with a warning naming it, and warns over another theme’s outputs', async () => {
     write('fam/ocean.ts', OCEAN);
     write('fam/ocean-calm.ts', CALM);
-    const mine = '// my barrel\nexport * from "./ocean";\n';
-    write('fam/index.js', mine);
+    write('fam/index.js', '// my barrel\nexport * from "./ocean";\n');
     const files = ['fam/ocean.ts', 'fam/ocean-calm.ts'];
-    const {err} = await captured(() =>
+    const {err, lines} = await captured(() =>
       themeBuildFamily(files, {familyKey: 'index'}, {cwd: dir}),
     );
-    expect(err?.code).toBe('ERR_FILE_EXISTS');
-    expect(err.message).toContain(
-      'fam/index.js is a file this build did not write',
+    expect(err).toBeUndefined();
+    expect(lines.join('\n')).toContain(
+      'fam/index.js has no build header (an output from a CLI before 0.6.7, or a file of your own or another tool’s), and this build of fam/ocean.ts replaces it; to keep a file of your own there, build with another --family-key.'.replace(
+        '’',
+        "'",
+      ),
     );
-    expect(err.message).toContain('Pick another --family-key.');
-    expect(read('fam/index.js')).toBe(mine);
-    expect(exists('fam/index.css')).toBe(false);
-    // The offered command builds the same family under a free key.
-    const offered = err.suggestions.map((/** @type {any} */ s) => s.name);
-    expect(offered).toHaveLength(1);
-    expect(offered[0]).toMatch(/--family-key index-2$/);
-    const followed = await followFamily(offered[0]);
-    expect(followed.err).toBeUndefined();
-    expect(read('fam/index-2.css')).toContain('@generated');
-    // Built again under its own key: its own outputs are replaced.
-    expect(
-      (
-        await captured(() =>
-          themeBuildFamily(files, {familyKey: 'index-2'}, {cwd: dir}),
-        )
-      ).err,
-    ).toBeUndefined();
+    expect(read('fam/index.js')).toContain('@generated');
+    // Built again under its own key: its own outputs, no warning.
+    const again = await captured(() =>
+      themeBuildFamily(files, {familyKey: 'index'}, {cwd: dir}),
+    );
+    expect(again.err).toBeUndefined();
+    expect(again.lines.join('\n')).not.toContain('no build header');
     // Another theme's outputs at the key: replaced, with a warning naming it.
     write(
       'fam/loner.ts',
