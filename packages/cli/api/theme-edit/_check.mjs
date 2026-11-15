@@ -3031,9 +3031,10 @@ function mediaTextRefusal(ctx, slug, s, v) {
     E.ERR_THEME_NO_EFFECT,
     `${part}'s text sits on Core's media surface inside it (its inverted surface), which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color on ${part} never reaches it; set those on ${part} instead.`,
     {
+      // (The flags the command was given carry over: a mode, a variant.)
       run: ['--color-on-dark', '--color-on-light'].map(
         tok =>
-          `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${part}`,
+          `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`,
       ),
     },
   );

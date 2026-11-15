@@ -1782,6 +1782,52 @@ export function partLexicon(ctx) {
       ]);
     }
   }
+  // (After the phrases above, so a longer one, "dialog header title",
+  // reads first.)
+  // A part's own piece said after a word that names the part ("the empty
+  // state icon", "the popover arrow", "sheet titles", "the alert title"):
+  // the catalog part for it, else the part with the piece named missing.
+  // A piece that is a part of its own the part holds ("button icons")
+  // keeps its own reading.
+  const overrideWords = [
+    ...new Set(
+      OVERRIDES.flatMap(([re]) =>
+        [...re.source.matchAll(/[a-z]{3,}/g)].map(x => singular(x[0])),
+      ),
+    ),
+  ];
+  for (const key of keys) {
+    const names = [
+      key.replace(/-/g, ' '),
+      ...overrideWords.filter(
+        w => OVERRIDES.find(([re]) => re.test(` ${w} `))?.[1].on === key,
+      ),
+    ];
+    for (const word of new Set(names))
+      for (const piece of ['icon', 'arrow', 'description', 'title']) {
+        if (piece === 'title' && !key.includes('-') && word === key) continue;
+        const real =
+          piece === 'title' && keys.has(`${key}-header-title-block`)
+            ? `${key}-header-title-block`
+            : keys.has(`${key}-${piece}`)
+              ? `${key}-${piece}`
+              : null;
+        if (
+          !real &&
+          keys.has(piece) &&
+          (ctx.C.MAP[key]?.contains ?? []).includes(piece)
+        )
+          continue;
+        const phrase = `${word} ${piece}`;
+        if (OVERRIDES.some(([re]) => re.exec(phrase)?.[0] === phrase)) continue;
+        subParts.push([
+          new RegExp(
+            `\\b${word.replace(/ /g, '[\\s-]?')}(?:e?s)?(?:'s)?[\\s-]${piece}s?\\b`,
+          ),
+          real ? {on: real} : {on: key, missing: `${word} ${piece}`},
+        ]);
+      }
+  }
   const lex = {
     parts: [
       ...subParts,
@@ -1918,7 +1964,15 @@ function aspectsOf(text) {
     )
   )
     add('border');
-  if (/\bunderlined?\b|\bunderlines\b/.test(c) && !/\btabs?\b/.test(c))
+  // (A tab's underline is its indicator, read as that part; only its
+  // removal is the underline ask there.)
+  if (
+    /\bunderlined?\b|\bunderlines\b/.test(c) &&
+    (!/\btabs?\b/.test(c) ||
+      /\b(remove|no|without|hide|drop|kill|lose|get rid of)\b|\bunderline[\s-]?less\b/.test(
+        c,
+      ))
+  )
     add('underline');
   if (/\bline ?height|\bleading\b|\bline spacing\b/.test(c)) add('leading');
   if (
@@ -3115,7 +3169,13 @@ export function draftAnswer(ctx, env, question) {
       const namesPart = [1, 2, 3].some(n => {
         if (words.length < n) return false;
         const key = words.slice(-n).join('-').replace(/s$/, '');
-        return TARGET.has(key) || TARGET.has(`${key}-${sub}`);
+        if (TARGET.has(key) || TARGET.has(`${key}-${sub}`)) return true;
+        // A word that names a part ("sheet titles", "the alert title"):
+        // the part's own piece, as the part words read it.
+        const phrase = `${words.slice(-n).join(' ')} ${m.toLowerCase()}`;
+        return partLexicon(ctx).parts.some(
+          ([re, p]) => re.exec(phrase)?.[0] === phrase && p.on !== 'heading',
+        );
       });
       const owned =
         namesPart ||
@@ -6407,12 +6467,26 @@ export function draftAnswer(ctx, env, question) {
     const missing = clauseNow?.parts.find(x => x.missing);
     // A title Core draws as a heading inside the part, with no part of its
     // own: no setting reaches it alone, so nothing is written for it.
+    // (A part that draws its title as its own text, a banner's, is answered
+    // for the whole part, said so.)
     if (
       missing &&
       /\btitle$/.test(String(missing.missing)) &&
+      (C.MAP[missing.on]?.contains ?? []).includes('heading') &&
       options.flat().some(st => st.verb === 'set')
     ) {
       d.text = `Core has no ${missing.missing} part of its own: its title is a heading inside it, which no setting reaches alone (--on heading changes every heading; --on ${missing.on} all of ${missing.on}'s text)`;
+      options.length = 0;
+      d.lookup = `${HOW} ${missing.on}`;
+    } else if (
+      missing &&
+      /\b(icon|arrow|description|label)$/.test(String(missing.missing)) &&
+      options.flat().some(st => st.verb === 'set')
+    ) {
+      // A piece of the part Core draws with no part of its own (a
+      // popover's arrow): nothing reaches it alone, and the whole part is
+      // not what was asked.
+      d.text = `Core has no ${missing.missing} part of its own, so no setting reaches it alone (--on ${missing.on} changes all of ${missing.on})`;
       options.length = 0;
       d.lookup = `${HOW} ${missing.on}`;
     } else if (missing && !d.text.startsWith('Core has no'))
@@ -6873,6 +6947,43 @@ export function draftAnswer(ctx, env, question) {
                   : {}),
               };
             };
+            // A step in another state of the part's own (the checked fill),
+            // kept in this one (disabled): only where both hold (a checked,
+            // disabled box) keeps what Core draws there; the part in this
+            // state alone (an unchecked, disabled box) is not changed.
+            const own = TARGET.get(one(p.on))?.states ?? [];
+            const prop = /^background/.test(st.thing)
+              ? 'background-color'
+              : st.thing;
+            if (
+              st.state &&
+              st.state !== p.state &&
+              own.includes(st.state) &&
+              own.includes(String(p.state)) &&
+              !/^--/.test(prop)
+            ) {
+              const at = C.MAP[one(p.on)]?.at?.[prop] ?? {};
+              const both = Object.entries(at).find(([key]) => {
+                const [attrs, ...rest] = key.split(' ');
+                const list = attrs.split(',');
+                return (
+                  !rest.length &&
+                  list.includes(`${st.state}=${st.state}`) &&
+                  list.includes(`${p.state}=${p.state}`)
+                );
+              })?.[1];
+              if (both == null) return [null];
+              return [
+                set(prop, String(both), {
+                  on: p.on,
+                  state: p.state,
+                  when: `${st.state}:${st.state}`,
+                  ...(st.mode && !/light-dark\(/.test(String(both))
+                    ? {mode: st.mode}
+                    : {}),
+                }),
+              ];
+            }
             const k = inWhen(st.when);
             // A step on the whole part, kept in a state the part draws per
             // variant: each variant keeps, in that state, what it shows.
@@ -10014,6 +10125,120 @@ export function draftAnswer(ctx, env, question) {
       }
       const sc = scope ? {on: scope} : {};
       const scoped = scope ? ` on ${scope} only` : '';
+      // A part that draws no outline and shows focus with a ring in its
+      // box-shadow (an input): its color, width or removal is that ring
+      // while focused, never the outline tokens it does not read. A set of
+      // its renders Core draws no ring for while focused (a status field)
+      // keeps none there, so the ring reaches only what rings now.
+      {
+        const ringPart = scope ? one(scope) : null;
+        const shadows = ringPart
+          ? (C.MAP[ringPart]?.at?.['box-shadow'] ?? {})
+          : {};
+        const ringNow = Object.entries(shadows).find(
+          ([k, x]) =>
+            /\s:focus-within(?![\w-])/.test(k) &&
+            !/\bstatus=/.test(k) &&
+            !/^\s*none\s*$/.test(String(x)),
+        )?.[1];
+        const outlines = ringPart
+          ? Object.values(C.MAP[ringPart]?.at?.outline ?? {})
+          : [];
+        const m = ringNow
+          ? /^\s*inset\s+0\s+0\s+0\s+(\d*\.?\d+)px\s+(.+)$/.exec(
+              String(ringNow),
+            )
+          : null;
+        if (
+          scope &&
+          m &&
+          outlines.length &&
+          outlines.every(x => /^\s*none\b/.test(String(x)))
+        ) {
+          const nowW = Number(m[1]);
+          const nowColor = m[2].trim();
+          const color = colorFor(c, 'fill');
+          const remove = c.neg || /\b(remove|hide|get rid of)\b/.test(c.text);
+          const widthAsk =
+            /\b(thick|thin|width|wide|strength|stronger|weaker|bolder|subtler)/.test(
+              c.text,
+            ) ||
+            (!color && c.lengths.length > 0);
+          const px = c.lengths[0]
+            ? /^(\d*\.?\d+)px$/.exec(c.lengths[0])?.[1]
+            : null;
+          const exact = exactFactor(c.text);
+          const w = px
+            ? Number(px)
+            : widthAsk
+              ? Math.max(
+                  1,
+                  exact != null
+                    ? Math.round(nowW * exact)
+                    : c.dir === 'less' || /\b(thin|weaker|subtler)/.test(c.text)
+                      ? nowW - 1
+                      : nowW + 1,
+                )
+              : nowW;
+          const strength = /\bstrength\b/.test(c.text) && !px;
+          if (remove)
+            return {
+              text: `no focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that box-shadow none while focused. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
+              options: [
+                [
+                  set('box-shadow', 'none', {
+                    on: scope,
+                    state: 'focus-within',
+                  }),
+                ],
+              ],
+            };
+          if (color || widthAsk) {
+            const paint = color ?? nowColor;
+            const value = !c.mode
+              ? paint
+              : c.mode === 'dark'
+                ? `light-dark(${nowColor}, ${paint})`
+                : `light-dark(${paint}, ${nowColor})`;
+            // The statuses that draw no ring while focused: each kept so.
+            const statuses = [
+              ...new Set(
+                Object.keys(shadows)
+                  .map(k => /\bstatus=([\w-]+)/.exec(k)?.[1])
+                  .filter(Boolean),
+              ),
+            ].filter(
+              st =>
+                !Object.entries(shadows).some(
+                  ([k, x]) =>
+                    new RegExp(`\\bstatus=${st}\\b`).test(k) &&
+                    /\s:focus-within(?![\w-])/.test(k) &&
+                    !/^\s*none\s*$/.test(String(x)),
+                ),
+            );
+            return {
+              text: `the focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that ring ${color ? `in ${color}` : ''}${color && w !== nowW ? ' and ' : ''}${w !== nowW ? `${w}px wide (now ${nowW}px)` : ''} while focused${strength ? '; "strength" read as the width of the ring' : ''}${c.mode ? ` in ${c.mode} mode` : ''}${statuses.length ? `; ${statuses.join(', ')} fields draw no ring while focused and keep none` : ''}`,
+              options: [
+                [
+                  set('box-shadow', `inset 0 0 0 ${w}px ${value}`, {
+                    on: scope,
+                    state: 'focus-within',
+                  }),
+                  ...statuses.map(st =>
+                    set('box-shadow', 'none', {
+                      on: scope,
+                      when: `status:${st}`,
+                      state: 'focus-within',
+                    }),
+                  ),
+                ],
+              ],
+              sequence: statuses.length > 0,
+              ...(c.mode ? {modeInValue: true} : {}),
+            };
+          }
+        }
+      }
       // "the focus ring lighter / darker": its color, from the color it has
       // now in each mode; never its width.
       if (
@@ -10095,52 +10320,6 @@ export function draftAnswer(ctx, env, question) {
           text: `the focus ring shows keyboard users where they are; it can be made subtle but not removed${scoped}`,
           options: [[set('--focus-outline-width', '1px', sc)]],
         };
-      // A part that draws no outline and shows focus with a ring in its
-      // box-shadow (an input): that ring, in the color asked, while
-      // focused; never the outline tokens it does not read.
-      const ringPart = scope ? one(scope) : null;
-      const ringNow = ringPart
-        ? Object.entries(C.MAP[ringPart]?.at?.['box-shadow'] ?? {}).find(
-            ([k, x]) =>
-              /\s:focus-within(?![\w-])/.test(k) &&
-              !/\bstatus=/.test(k) &&
-              !/^\s*none\s*$/.test(String(x)),
-          )?.[1]
-        : null;
-      const noOutline =
-        ringPart &&
-        Object.values(C.MAP[ringPart]?.at?.outline ?? {}).length > 0 &&
-        Object.values(C.MAP[ringPart]?.at?.outline ?? {}).every(x =>
-          /^\s*none\b/.test(String(x)),
-        );
-      if (color && scope && ringNow && noOutline) {
-        // The ring's own layer, in the color asked (its width kept); for
-        // one mode, that mode's half of light-dark(), the other keeping the
-        // ring's color now.
-        const m = /^(\s*inset\s+0\s+0\s+0\s+\d*\.?\d+px)\s+(.+)$/.exec(
-          String(ringNow),
-        );
-        const now = m ? m[2].trim() : null;
-        const paint = !c.mode
-          ? color
-          : c.mode === 'dark'
-            ? `light-dark(${now ?? 'transparent'}, ${color})`
-            : `light-dark(${color}, ${now ?? 'transparent'})`;
-        const d = {
-          text: `the focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that ring in ${color} while focused${c.mode ? ` in ${c.mode} mode` : ''}`,
-          options: [
-            [
-              set(
-                'box-shadow',
-                `${m ? m[1].trim() : 'inset 0 0 0 2px'} ${paint}`,
-                {on: scope, state: 'focus-within'},
-              ),
-            ],
-          ],
-          ...(c.mode ? {modeInValue: true} : {}),
-        };
-        return d;
-      }
       return color
         ? {
             text: `the focus ring's color${scoped}: --focus-outline-color`,
@@ -10691,6 +10870,50 @@ export function draftAnswer(ctx, env, question) {
     switch (a) {
       case 'underline': {
         if (!on) return null;
+        // A part that is the underline itself (a tab's selected indicator),
+        // drawn as its fill: removing it is that fill in each state it
+        // paints, made transparent.
+        if (
+          (c.neg || /\bunderline[\s-]?less\b/.test(c.text)) &&
+          /-indicator$/.test(one(on))
+        ) {
+          // Each state the part paints a fill in (its own state written as
+          // its name, `selected=selected`, or a pseudo-class), from what
+          // Core draws.
+          const own = TARGET.get(one(on))?.states ?? [];
+          const fills = Object.entries(
+            C.MAP[one(on)]?.at?.['background-color'] ?? {},
+          ).filter(
+            ([, v]) => !/^\s*(transparent|none|inherit)\s*$/.test(String(v)),
+          );
+          const states = [
+            ...new Set(
+              fills.map(([key]) => {
+                const [attrs, ...rest] = key.split(' ');
+                const pseudo = /^:([\w-]+)/.exec(rest.join(' '))?.[1];
+                if (pseudo) return pseudo;
+                const st = attrs
+                  .split(',')
+                  .map(a => a.split('='))
+                  .find(([k, v]) => own.includes(k) && v === k)?.[0];
+                return st ?? null;
+              }),
+            ),
+          ];
+          if (fills.length)
+            return {
+              text: `no underline${where}: ${one(on)} draws it as its fill${states.some(Boolean) ? ` when ${states.filter(Boolean).join(', ')}` : ''}, made transparent`,
+              options: [
+                states.map(state =>
+                  set('background-color', 'transparent', {
+                    ...f,
+                    ...(state ? {state} : {}),
+                  }),
+                ),
+              ],
+              sequence: states.length > 1,
+            };
+        }
         const value = c.neg ? 'none' : 'underline';
         return {
           text: `${c.neg ? 'no underline' : 'underlined'}${where}: text-decoration`,
@@ -11573,8 +11796,7 @@ export function draftAnswer(ctx, env, question) {
             : [];
           if (
             outlines.length &&
-            outlines.every(x => /^\s*none\b/.test(String(x))) &&
-            !c.neg
+            outlines.every(x => /^\s*none\b/.test(String(x)))
           )
             return null;
           const color = colorFor(c, 'fill');
@@ -14754,14 +14976,37 @@ export function draftAnswer(ctx, env, question) {
             )
           ),
       );
-    result.push({
-      text:
-        all.length > MAX_STEPS
-          ? `the first ${MAX_STEPS} of ${all.length} changes, in order; ask again for the rest`
-          : 'all of it, in order',
-      options: [all.slice(0, MAX_STEPS)],
-      sequence: true,
-    });
+    // At most MAX_STEPS in one sequence, cut only between clauses: a
+    // clause's steps (its write and the keeps it needs, a status's border
+    // written back) run together or not at all. The rest follow as the next
+    // sequences, each runnable in turn.
+    const clauseOf = new Map([...last.values()].map(x => [x.step, x.clause]));
+    /** @type {Step[][]} */
+    const groups = [];
+    for (const st of all) {
+      const g = groups.at(-1);
+      if (g && clauseOf.get(g[0]) === clauseOf.get(st)) g.push(st);
+      else groups.push([st]);
+    }
+    /** @type {Step[][]} */
+    const batches = [];
+    for (const g of groups) {
+      const b = batches.at(-1);
+      if (b && b.length + g.length <= MAX_STEPS) b.push(...g);
+      else batches.push([...g]);
+    }
+    batches.forEach((b, i) =>
+      result.push({
+        text:
+          batches.length === 1
+            ? 'all of it, in order'
+            : i === 0
+              ? `the first ${b.length} of ${all.length} changes, in order (whole asks only); then the next ${batches.length > 2 ? 'sequences' : 'sequence'} below`
+              : `then, after the ${i === 1 ? 'first' : 'one before'}, the next ${b.length} of ${all.length} changes, in order`,
+        options: [b],
+        sequence: true,
+      }),
+    );
   }
   result.push(...drafts.slice(0, clashes.length ? 0 : undefined));
   // A confidence gate: a question, a "tell me", a "but not too" or a typo

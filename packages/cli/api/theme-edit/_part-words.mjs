@@ -76,6 +76,8 @@ export const OVERRIDES = [
   ],
   [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
+  // A sheet is Core's bottom sheet (never a style sheet).
+  [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],
   [/\b(text ?areas?|multi-?line (inputs?|fields?))\b/, {on: 'text-area'}],
   [
     /\b(select (dropdowns?|menus?|box(es)?|inputs?)|selects|dropdowns?|pickers?|select(?! (the|a|an|all|any|one|which|what|it|them)\b))\b/,

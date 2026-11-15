@@ -95,7 +95,9 @@ describe('the corners help', () => {
   it('names the step between round and pill', async ctx => {
     if (needBases(ctx)) return;
     const {data} = await themeEditHow('corners', {cwd});
-    expect(JSON.stringify(data)).toMatch(/between round and pill \(24px\)/);
+    expect(JSON.stringify(data)).toMatch(
+      /24px \(the step between round and pill\), pill/,
+    );
   }, 240_000);
 });
 

@@ -5375,55 +5375,58 @@ export function compileTheme(ctx, data, base) {
   /**
    * A resting shadow on a part that draws rings in its box-shadow in some
    * states (an input's hover and focus rings): for each set of the part's
-   * renders Core styles apart (its plain look, each status), in each state
-   * Core rings any of them in, the theme's shadow with what Core draws for
-   * that set in that state after it (`<shadow>, <ring>`), so every ring
-   * still shows and a status that draws none while focused gets the shadow
-   * alone. A shadow of none leaves the rings alone in their states. States
-   * are written hover first, so a focus rule after it wins while both hold,
-   * as Core's own order does. A state the theme sets a shadow of its own
-   * (for the whole part, or that set) keeps that.
+   * renders Core styles apart (a variant, each status), in each state Core
+   * rings any of them in, the theme's shadow with what Core draws for that
+   * set in that state after it (`<shadow>, <ring>`), so every ring still
+   * shows and a set that draws none there (a focused status input) gets the
+   * shadow alone. A shadow of none puts the rings back in their states and
+   * keeps a set's own none where the ring of the set it refines would
+   * reach it. A write for one set (`--when status:error`) composes that set
+   * only. States are written hover first, so a focus rule after it wins
+   * while both hold, as Core's own order does. A state the theme sets a
+   * shadow of its own (for the whole part, or that set) keeps that.
    * @param {Setting} s @param {string} target @param {string} v
    */
   const withRingStates = (s, target, v) => {
     const none = /^\s*none\s*$/i.test(String(v));
     const tg = ctx.project.target.get(target);
     const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
-    const seen = ctx.C.MAP[target]?.attrs ?? {};
     const ORDER = ['hover', 'active', 'focus', 'focus-visible', 'focus-within'];
-    /** @type {Map<string, {when: string | undefined, rest: string | null, states: Map<string, string>}>} */
+    // The attributes that tell the part's shadow rules apart: a prop the
+    // rules give more than one value, or give in some rules and not in
+    // others (a status); one every rule gives alike (the size drawn) says
+    // nothing.
+    const keyed = Object.keys(at).map(k =>
+      k
+        .split(' ')[0]
+        .split(',')
+        .filter(Boolean)
+        .map(a => a.split('=')),
+    );
+    /** @param {string} key */
+    const tells = key => {
+      const vals = keyed.map(list => list.find(([k]) => k === key)?.[1]);
+      return new Set(vals).size > 1;
+    };
+    /** @type {Map<string, {pairs: string[], rest: string | null, states: Map<string, string>}>} */
     const sets = new Map();
     /** @type {Set<string>} */
     const ringed = new Set();
     for (const [k, value] of Object.entries(at)) {
       const [attrs, ...rest] = k.split(' ');
       const cond = rest.join(' ');
-      // The part's visual props that tell its renders apart (a status, a
-      // file input's mode), as set names them with --when; a prop the part
-      // was drawn with one value of (its default size) says nothing. A
-      // rule under any other attribute (disabled, read-only) is left as
-      // Core draws it.
       const pairs = attrs
         .split(',')
         .filter(Boolean)
         .map(a => a.split('='))
-        .filter(
-          ([key]) => (seen[key]?.length ?? 0) > 1 || !tg?.props.includes(key),
-        );
+        .filter(([key]) => tells(key));
+      // A rule under an attribute set cannot name (disabled, read-only) is
+      // left as Core draws it.
       if (pairs.some(([key]) => !tg?.props.includes(key))) continue;
-      const when =
-        [
-          ...(s.when ? [s.when] : []),
-          ...pairs
-            .map(([key, val]) => `${key}:${val}`)
-            .filter(w => w !== s.when),
-        ].join('+') || undefined;
-      const set = sets.get(when ?? '') ?? {
-        when,
-        rest: null,
-        states: new Map(),
-      };
-      sets.set(when ?? '', set);
+      const names = pairs.map(([key, val]) => `${key}:${val}`).sort();
+      const id = names.join('+');
+      const set = sets.get(id) ?? {pairs: names, rest: null, states: new Map()};
+      sets.set(id, set);
       if (!cond) {
         set.rest = String(value);
         continue;
@@ -5434,45 +5437,63 @@ export function compileTheme(ctx, data, base) {
       if (!/^\s*none\s*$/i.test(String(value))) ringed.add(state);
     }
     if (!ringed.size) return;
-    /** Whether the theme sets a shadow of its own for a state of a set. @param {string} state @param {string | undefined} when */
-    const ownState = (state, when) =>
+    /** The set a set refines (its pairs less one, the most it shares). @param {{pairs: string[]}} set */
+    const parentOf = set =>
+      [...sets.values()]
+        .filter(
+          x =>
+            x !== set &&
+            x.pairs.length < set.pairs.length &&
+            x.pairs.every(p => set.pairs.includes(p)),
+        )
+        .sort((a, b) => b.pairs.length - a.pairs.length)[0] ?? null;
+    /** What Core draws for a set in a state. @param {{pairs: string[], rest: string | null, states: Map<string, string>}} set @param {string} state @returns {string | null} */
+    const coreOf = (set, state) => {
+      const own = set.states.get(state);
+      if (own != null) return own;
+      // A set that refines another and has no rule of its own there keeps
+      // its resting value (a status's none); a set alone draws nothing new.
+      return parentOf(set) ? set.rest : null;
+    };
+    const asked = String(s.when ?? '')
+      .split('+')
+      .filter(Boolean);
+    /** Whether the theme sets a shadow of its own for a state of a set. @param {string} state @param {string[]} pairs */
+    const ownState = (state, pairs) =>
       data.settings.some(
         y =>
           y.source === 'property' &&
           kebab(y.thing) === 'box-shadow' &&
           y.state === state &&
-          (y.when == null || (y.when ?? undefined) === when) &&
+          (y.when == null ||
+            String(y.when)
+              .split('+')
+              .every(p => pairs.includes(p))) &&
           partsOf(ctx, y).includes(target),
       );
-    for (const set of sets.values())
+    for (const set of sets.values()) {
+      // A write for one set composes that set (and the sets refining it).
+      if (!asked.every(p => set.pairs.includes(p))) continue;
+      const parent = parentOf(set);
       for (const state of ORDER.filter(x => ringed.has(x))) {
-        if (ownState(state, set.when)) continue;
-        // What Core draws for the set in the state: its own rule there,
-        // else the set's resting value (a status that draws none, which
-        // Core keeps in every state but its own ring's), else the plain
-        // set's ring.
-        const core =
-          set.states.get(state) ??
-          (set.when !== (s.when ?? undefined) ? set.rest : null) ??
-          sets.get(s.when ?? '')?.states.get(state) ??
-          null;
+        if (ownState(state, set.pairs)) continue;
+        const core = coreOf(set, state);
         if (core == null) continue;
         const coreNone = /^\s*none\s*$/i.test(core);
-        // With no shadow of the theme's, only a ring to put back, and a
-        // set that draws none there kept so (the plain set's ring, written
-        // for the whole part, would reach it).
-        const plainRing = sets.get(s.when ?? '')?.states.get(state);
-        if (
-          none &&
-          coreNone &&
-          (set.when === (s.when ?? undefined) ||
-            !plainRing ||
-            /^\s*none\s*$/i.test(plainRing))
-        )
-          continue;
-        const rb = block({...s, state, when: set.when}, target);
+        if (none && coreNone) {
+          // Only where the ring of the set it refines, written back, would
+          // reach it.
+          const above = parent ? coreOf(parent, state) : null;
+          if (!above || /^\s*none\s*$/i.test(above)) continue;
+          if (!asked.every(p => (parent?.pairs ?? []).includes(p))) continue;
+        }
+        const rb = block(
+          {...s, state, when: set.pairs.join('+') || undefined},
+          target,
+        );
         rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
       }
+    }
   };
   // Palette stops go first, so an exact token setting always wins over them.
   const pal = keepShades(

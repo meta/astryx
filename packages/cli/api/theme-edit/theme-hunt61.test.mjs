@@ -50,8 +50,9 @@ describe('hunt61: scope, state and amount', () => {
     /** @type {Array<[string, RegExp]>} */ ([
       // vibe batch 2: the request that removed every focus ring.
       [
+        // (Inputs draw no outline: their focus ring is the box-shadow ring.)
         'focus ring on inputs only, at half strength',
-        /^set q --focus-outline-width 1px --on inputs$/,
+        /^set q box-shadow 'inset 0 0 0 1px var\(--color-accent-muted\)' --on inputs --state focus-within$/,
       ],
       [
         'thinner focus ring on buttons',
