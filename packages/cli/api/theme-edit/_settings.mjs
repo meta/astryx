@@ -8268,30 +8268,97 @@ export async function outputsDrift(ctx, slug) {
 }
 
 /**
+ * Whether Core's media surface inside a part follows what is painted behind
+ * it (`MediaTheme mode="auto"`): a part that paints the inverted surface
+ * and holds one (a toast), where Core measures the fill to pick the side
+ * (and falls back from the inverted token). A surface on any other ground
+ * (a lightbox's or a scrim's dark overlay) keeps its one side.
+ * @param {Ctx} ctx
+ * @param {string} part
+ */
+export function autoMediaPart(ctx, part) {
+  return Boolean(
+    ctx.C.MAP[part]?.media &&
+    (ctx.C.partReads(part, 'background') ?? []).some(r =>
+      /^--color-background-(error-)?inverted$/.test(r.token),
+    ),
+  );
+}
+
+/**
+ * The side Core's auto media surface takes on a fill, by Core's own rule
+ * (useAutoMediaMode's resolveBackdrop and pickMediaMode, and a toast's
+ * fallback when the backdrop cannot be read): `'off'` when the theme's own
+ * text reads at 3:1 on the backdrop, else whichever on-color reads better.
+ * The backdrop is the fill composited onto the page when it is
+ * see-through; a gradient or an image cannot be read, and the fallback is
+ * taken from the inverted surface token (the error one for an error toast)
+ * the same way with no ambient text, else from the mode. The pictures and
+ * the contrast checks both take the side from here.
+ * @param {string | null | undefined} fill the fill as a color value in the mode
+ * @param {Record<string, string>} tokens the theme's resolved tokens in the mode
+ * @param {{mode: string, error?: boolean}} o
+ * @returns {'off' | 'dark' | 'light'}
+ */
+export function autoMediaSide(fill, tokens, o) {
+  const page = parseColor(String(tokens['--color-background-body'] ?? ''));
+  /** @param {unknown} v @returns {[number, number, number] | null} */
+  const opaque = v => {
+    const c = parseColor(String(v ?? ''));
+    if (!c) return null;
+    const a = alphaOf(String(v));
+    if (a >= 1) return c;
+    return page ? compositeOver(c, a, page) : null;
+  };
+  /** @param {[number, number, number]} back @param {boolean} ambient */
+  const pick = (back, ambient) => {
+    const onDark = opaque(tokens['--color-on-dark']);
+    const onLight = opaque(tokens['--color-on-light']);
+    if (!onDark || !onLight) return null;
+    const text = ambient ? opaque(tokens['--color-text-primary']) : null;
+    if (text && ratio(text, back) >= 3) return 'off';
+    return ratio(onDark, back) >= ratio(onLight, back) ? 'dark' : 'light';
+  };
+  const v = String(fill ?? '').trim();
+  const back = v && !/gradient\(|url\(/.test(v) ? opaque(v) : null;
+  const measured = back ? pick(back, true) : null;
+  if (measured) return measured;
+  const surface = String(
+    tokens[
+      o.error
+        ? '--color-background-error-inverted'
+        : '--color-background-inverted'
+    ] ?? '',
+  );
+  const s = parseColor(surface);
+  const fromTokens = s && alphaOf(surface) >= 1 ? pick(s, false) : null;
+  if (fromTokens && fromTokens !== 'off') return fromTokens;
+  return o.error || o.mode === 'light' ? 'dark' : 'light';
+}
+
+/**
  * The side Core's auto media surface takes inside each part that holds one
- * (a toast): in the app Core measures the fill painted behind it and takes
- * the side whose text reads there, and a static render takes a fallback
- * from the inverted token instead. Here the side comes from the fill the
- * part draws, by the rule the contrast checks use (the text that stands
- * out most on it: dark on a light fill, light on a dark one), for each mode
- * the theme draws and each type the part is drawn in (`type=error`, '' for
- * none): the fill a setting gives it there, else the token it reads.
+ * (a toast), by `autoMediaSide`, for each mode the theme draws and each type
+ * the part is drawn in (`type=error`, '' for none), on the fill the part
+ * draws there: the fill a setting gives it, else the token it reads. A
+ * static render takes Core's fallback from the inverted token, where the
+ * app measures the painted fill: the pictures take this side instead.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @returns {Promise<Record<string, Record<string, Record<string, 'light' | 'dark'>>>>} part -> condition -> mode -> side
+ * @returns {Promise<Record<string, Record<string, Record<string, 'off' | 'light' | 'dark'>>>>} part -> condition -> mode -> side
  */
 export async function mediaSurfaceSides(ctx, slug, data) {
-  /** @type {Record<string, Record<string, Record<string, 'light' | 'dark'>>>} */
+  /** @type {Record<string, Record<string, Record<string, 'off' | 'light' | 'dark'>>>} */
   const out = {};
-  const parts = Object.keys(ctx.C.MAP).filter(t => ctx.C.MAP[t]?.media);
+  const parts = Object.keys(ctx.C.MAP).filter(t => autoMediaPart(ctx, t));
   if (!parts.length) return out;
   const res = await resolvedTokens(ctx, slug).catch(() => null);
   if (!res) return out;
   const fills = data.settings.filter(
     x =>
       x.source === 'property' &&
-      /^background(-color)?$/.test(kebab(x.thing)) &&
+      /^background(-color|-image)?$/.test(kebab(x.thing)) &&
       !x.state &&
       x.on,
   );
@@ -8326,10 +8393,11 @@ export async function mediaSurfaceSides(ctx, slug, data) {
           : read
             ? res[/** @type {'light' | 'dark'} */ (m)][read.token]
             : null;
-        const c = parseColor(String(v ?? ''));
-        if (!c || alphaOf(String(v)) < 1) continue;
-        ((out[t] ??= {})[cond] ??= {})[m] =
-          ratio([255, 255, 255], c) >= ratio([0, 0, 0], c) ? 'dark' : 'light';
+        ((out[t] ??= {})[cond] ??= {})[m] = autoMediaSide(
+          v,
+          res[/** @type {'light' | 'dark'} */ (m)],
+          {mode: m, error: type === 'error'},
+        );
       }
   }
   return out;
@@ -8340,7 +8408,7 @@ export async function mediaSurfaceSides(ctx, slug, data) {
  * `sides` gives it for the type the part is drawn in and the mode it is
  * drawn in (the page's mode, or the light or dark copy it sits in).
  * @param {string} html
- * @param {Record<string, Record<string, Record<string, 'light' | 'dark'>>>} sides
+ * @param {Record<string, Record<string, Record<string, 'off' | 'light' | 'dark'>>>} sides
  * @param {string} mode the page's mode: light, dark or system
  * @returns {string}
  */
@@ -8348,11 +8416,11 @@ export function settleMediaSides(html, sides, mode) {
   const names = Object.keys(sides);
   if (!names.length) return html;
   const re = new RegExp(
-    `class="(cs-light|cs-dark)"|(<[a-z]+\\b[^>]*\\bclass="astryx-(?:${names.join('|')})[ "][^>]*>)|data-astryx-media="(dark|light)"`,
+    `class="(cs-light|cs-dark)"|(<[a-z]+\\b[^>]*\\bclass="astryx-(?:${names.join('|')})[ "][^>]*>)| data-astryx-media="(dark|light)"`,
     'g',
   );
   let at = mode === 'system' ? 'light' : mode;
-  /** @type {Record<string, Record<string, 'light' | 'dark'>> | null} */
+  /** @type {Record<string, Record<string, 'off' | 'light' | 'dark'>> | null} */
   let part = null;
   /** @type {string} */
   let cond = '';
@@ -8370,7 +8438,8 @@ export function settleMediaSides(html, sides, mode) {
     }
     const side = part ? (part[cond] ?? part[''])?.[at] : undefined;
     part = null;
-    return side ? `data-astryx-media="${side}"` : all;
+    // ('off': no media context, as Core draws it: no attribute.)
+    return side === 'off' ? '' : side ? ` data-astryx-media="${side}"` : all;
   });
 }
 
@@ -8852,6 +8921,23 @@ export async function contrastProblems(ctx, data, res) {
     const t = p.fg.target;
     if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
       return p.fg.tokens;
+    // A surface that follows what is painted behind it (a toast's) takes
+    // the side Core's rule takes on the part's fill: the theme's own text
+    // where it reads ('off'), else an on-color; a fixed one, by its ground.
+    if (autoMediaPart(ctx, t)) {
+      const side = autoMediaSide(
+        read(p, 'bg', m),
+        res[/** @type {'light' | 'dark'} */ (m)],
+        {mode: m, error: pairVariant(p) === 'type:error'},
+      );
+      return [
+        side === 'off'
+          ? '--color-text-primary'
+          : side === 'dark'
+            ? '--color-on-dark'
+            : '--color-on-light',
+      ];
+    }
     const ground = parseColor(read(p, 'bg', m));
     if (!ground) return p.fg.tokens;
     return [
@@ -9139,6 +9225,11 @@ export async function contrastProblems(ctx, data, res) {
     const inside = new Set(/** @type {any} */ (rec)?.contains ?? []);
     if (!(/** @type {any} */ (rec)?.media) || !sides.length || !inside.size)
       continue;
+    // The ground the surface draws (a lightbox's dark overlay): a fill of
+    // the text's own that lets it through (a transparent secondary button)
+    // shows that, not the page.
+    const reads = ctx.C.partReads(m, 'background') ?? [];
+    const ground = (reads.find(r => r.when.includes('')) ?? reads[0])?.token;
     for (const q of [...census.pairs, ...variantPairs]) {
       const t = q.fg.target;
       if (
@@ -9164,6 +9255,7 @@ export async function contrastProblems(ctx, data, res) {
               ],
             },
             mediaOf: m,
+            ...(ground ? {over: {target: m, tokens: [ground], raw: null}} : {}),
           }),
         );
       }
@@ -9243,7 +9335,10 @@ export async function contrastProblems(ctx, data, res) {
         // the surface's text colors: a color on the part itself (its
         // variant) reaches it there, and reads the same on its fill
         // everywhere else.
-        if (/** @type {any} */ (pair).mediaOf && x.textPart)
+        // (Text on a toast's own surface takes a color on the toast: a
+        // text token there never reaches it.)
+        const onMedia = /** @type {any} */ (pair).mediaOf;
+        if (x.textPart && (onMedia || autoMediaPart(ctx, x.textPart)))
           return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.

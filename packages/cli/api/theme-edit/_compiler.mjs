@@ -700,6 +700,7 @@ export function makeCompiler(project, parts) {
         // one is measured as the pair itself already is.
         if (
           region &&
+          !(/** @type {any} */ (p).mediaOf) &&
           alphaOf(whole) >= 1 &&
           !/gradient|url\(/.test(String(whole))
         )

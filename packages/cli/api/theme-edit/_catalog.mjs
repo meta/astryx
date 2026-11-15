@@ -425,7 +425,7 @@ export function pageSource({
     'const isEl = v => Boolean(v && typeof v === "object" && !Array.isArray(v) && v.__element);',
   );
   lines.push(
-    'function el(v) { if (Array.isArray(v)) return v.map(el); if (v && typeof v === "object" && v.__element) { const T = C[v.__element]; if (!T) return null; return React.createElement(T, fix(v.props ?? {}), ...[].concat(v.children ?? []).map(el)); } return v; }',
+    'function el(v) { if (Array.isArray(v)) return v.map(el); if (v && typeof v === "object" && v.__element) { const T = C[v.__element] ?? (/^[a-z][a-z0-9]*$/.test(v.__element) ? v.__element : null); if (!T) return null; return React.createElement(T, fix(v.props ?? {}), ...[].concat(v.children ?? []).map(el)); } return v; }',
   );
   // The sample search source a part that requires one gets (a typeahead):
   // the prop names it, the page defines it.
