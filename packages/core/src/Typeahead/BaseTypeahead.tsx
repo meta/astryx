@@ -1976,6 +1976,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle focus
   const handleFocus = useCallback(() => {
     isInputFocusedRef.current = true;
+    // A search the app started while idle that has not run yet runs as a
+    // typed one now that the field is focused.
+    idleSearchRef.current = false;
     if (isDialogFocusReturnRef.current) {
       return;
     }

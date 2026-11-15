@@ -368,6 +368,36 @@ describe('BaseTypeahead', () => {
       expect(announcedResultCount()).toBe(false);
     });
 
+    it('opens the listbox when focus arrives before an idle query is searched', async () => {
+      function App({query}: {query: string}) {
+        return (
+          <>
+            <button type="button">Outside</button>
+            <Typeahead
+              label="Fruit"
+              searchSource={source}
+              value={null}
+              onChange={() => {}}
+              query={query}
+              debounceMs={150}
+            />
+          </>
+        );
+      }
+      const {rerender} = render(<App query="" />);
+      screen.getByRole('button', {name: 'Outside'}).focus();
+      rerender(<App query="Ap" />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'true'),
+      );
+      expect(
+        screen.getByRole('option', {name: 'Apple', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
     it('closes the listbox when the app clears the query while the field is focused', async () => {
       function App({query}: {query: string}) {
         return (
