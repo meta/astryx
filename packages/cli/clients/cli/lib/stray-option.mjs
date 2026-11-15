@@ -376,6 +376,9 @@ export function runParses(program, words) {
       );
       if (!option) return false;
       const next = words[i + 1];
+      // An option that needs a value takes the next word, whatever it is;
+      // with no word left it has none.
+      if (option.required && !word.includes('=') && next == null) return false;
       if (
         takesValue(option) &&
         !word.includes('=') &&

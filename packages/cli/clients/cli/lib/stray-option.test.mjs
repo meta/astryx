@@ -260,6 +260,37 @@ describe('runParses: what a command requires', () => {
   });
 });
 
+describe('runParses: an option that needs a value', () => {
+  it('refuses the option with no value after it', () => {
+    const {root} = program();
+    expect(runParses(root, ['component', 'Table', '--category'])).toBe(false);
+    expect(runParses(root, ['component', 'Table', '--category', 'forms'])).toBe(
+      true,
+    );
+    expect(runParses(root, ['component', '--category=forms'])).toBe(true);
+  });
+
+  it('offers no near name that would need a value the call did not give', () => {
+    const {component, upgrade} = program();
+    expect(
+      runs(
+        answer(
+          component,
+          '--categry',
+          ['component', 'Table', '--categry'],
+          '--category',
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      runs(answer(upgrade, '--frm', ['upgrade', '--frm'], '--from')),
+    ).toEqual([]);
+    expect(
+      runs(answer(upgrade, '--frm', ['upgrade', '--frm', '0.6.8'], '--from')),
+    ).toEqual(['upgrade --from 0.6.8']);
+  });
+});
+
 describe('withoutStray', () => {
   it('replaces the option by the one its value names, else leaves the option word out', () => {
     const {root} = program();
