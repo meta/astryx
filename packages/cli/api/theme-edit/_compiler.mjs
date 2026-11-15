@@ -615,8 +615,7 @@ export function makeCompiler(project, parts) {
       }
     }
     return {
-      problems: out.slice(0, 8),
-      more: Math.max(0, out.length - 8),
+      problems: out,
       unchecked: [...unchecked],
     };
   }

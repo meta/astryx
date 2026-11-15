@@ -7739,7 +7739,7 @@ export async function contrastProblems(ctx, data, res) {
     )
       for (const over of grounds)
         headerPairs.push({...p, text: `${p.text} in the ${HEADER}`, over});
-  const {problems, more, unchecked} = ctx.C.contrast(
+  const {problems, unchecked} = ctx.C.contrast(
     value,
     baseValue,
     modesOf(data),
@@ -7771,9 +7771,6 @@ export async function contrastProblems(ctx, data, res) {
           : null,
     })),
     ...borderContrastProblems(ctx, data, res, base),
-    ...(more
-      ? [plain(`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`)]
-      : []),
     // Pairs styled for one variant or state are not measured yet.
     ...(() => {
       const scoped = data.settings.filter(

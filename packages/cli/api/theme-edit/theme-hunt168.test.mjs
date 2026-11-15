@@ -253,6 +253,36 @@ describe('problems a change makes', () => {
   );
 
   it(
+    'past eight failing pairs, every one is listed and compared, the text counts the rest, and following one fix makes none new',
+    async () => {
+      const r = await cli([
+        ...ED,
+        'set',
+        't',
+        'background-color',
+        '#ffff66',
+        '--on',
+        'badge',
+      ]);
+      const made = r.data.newProblems;
+      expect(made.length).toBeGreaterThan(8);
+      const open = (await cli([...ED, 'show', 't'])).data.openProblems;
+      expect(open.length).toBeGreaterThanOrEqual(made.length);
+      const shown = await text([...ED, 'show', 't']);
+      expect(shown).toContain(
+        `and ${open.length - 8} more (--json lists every one, each with its fix)`,
+      );
+      const first = made.find((/** @type {any} */ p) => p.fix);
+      const after = await follow(first.fix);
+      expect(after.error).toBeUndefined();
+      expect(after.data.newProblems).toEqual([]);
+      const left = (await cli([...ED, 'show', 't'])).data.openProblems;
+      expect(left.length).toBeLessThan(open.length);
+    },
+    T,
+  );
+
+  it(
     'a theme with none lists none, and its JSON list is empty',
     async () => {
       expect(await text([...ED, 'show', 't'])).not.toContain('openProblems');

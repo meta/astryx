@@ -565,8 +565,8 @@ function changeBlocks(r) {
   // the JSON; the status line says the base theme's value is back.
   return [
     status,
-    ...(newProblems.length ? [problemList(newProblems)] : []),
-    ...project(rest),
+    ...(newProblems.length ? problemList(newProblems) : []),
+    ...changeFields(rest),
   ];
 }
 
@@ -575,9 +575,41 @@ function changeBlocks(r) {
  * @param {Array<{problem: string, fix: string | null}>} problems
  */
 function problemList(problems) {
-  return list(
+  return cappedList(
     problems.map(p => (p.fix ? [p.problem, `fix: ${p.fix}`] : p.problem)),
   );
+}
+
+/** How many problems the text shows before it counts the rest. */
+const PROBLEMS_SHOWN = 8;
+
+/**
+ * A list the text cuts after the first few, counting the rest; the JSON has
+ * every item.
+ * @param {Array<string | string[]>} items
+ */
+function cappedList(items) {
+  const rest = items.length - PROBLEMS_SHOWN;
+  return [
+    list(items.slice(0, PROBLEMS_SHOWN)),
+    ...(rest > 0
+      ? [`and ${rest} more (--json lists every one, each with its fix)`]
+      : []),
+  ];
+}
+
+/**
+ * The plain fields of a change's data, with its problems as a cut list.
+ * @param {Record<string, unknown>} data
+ */
+function changeFields(data) {
+  const {problems, ...rest} = /** @type {any} */ (data);
+  return [
+    ...project(rest),
+    ...(Array.isArray(problems) && problems.length
+      ? [section('problems:'), ...cappedList(problems)]
+      : []),
+  ];
 }
 
 /**
@@ -635,7 +667,7 @@ function showBlocks(d) {
           section(
             `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
           ),
-          problemList(openProblems),
+          ...problemList(openProblems),
         ]
       : [],
   ].flat();
@@ -1860,9 +1892,9 @@ export function registerExperimentalTheme(group, program) {
                         return [
                           `[ok] ${rest.theme}: undid ${rest.undid ?? 'the last change'}${rest.refusedBefore ? ` (${rest.refusedBefore})` : ''}${newProblems.length ? `, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:` : ''}`,
                           ...(newProblems.length
-                            ? [problemList(newProblems)]
+                            ? problemList(newProblems)
                             : []),
-                          ...project(rest),
+                          ...changeFields(rest),
                         ];
                       })(),
                     ]
