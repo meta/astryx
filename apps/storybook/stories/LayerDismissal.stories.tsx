@@ -1223,3 +1223,164 @@ function ContinuouslyAnimatingTriggerExample() {
 export const ContinuouslyAnimatingTrigger: Story = {
   render: () => <ContinuouslyAnimatingTriggerExample />,
 };
+
+const inFlowDialogStyles = stylex.create({
+  // A closed `<dialog>` the page displays itself, in the document's flow. It
+  // never opens, so it never enters the top layer.
+  dialog: {
+    position: 'static',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+    margin: 0,
+    padding: 16,
+  },
+  hidden: {
+    display: 'none',
+  },
+});
+
+/**
+ * A native `<dialog>` that stays closed while the page displays it in flow, as
+ * a card. A Popover and a Tooltip anchored to controls inside it open on a
+ * press and on a hover.
+ */
+function LayersInClosedInFlowDialogExample() {
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Text type="body">A closed dialog the page shows in flow</Text>
+      <Popover content={<Text type="body">In-flow popover</Text>}>
+        <Button label="Open in-flow popover" variant="secondary" />
+      </Popover>
+      <Tooltip content="In-flow tip">
+        <Button label="In-flow tip trigger" variant="secondary" />
+      </Tooltip>
+    </dialog>
+  );
+}
+
+export const LayersInClosedInFlowDialog: Story = {
+  render: () => <LayersInClosedInFlowDialogExample />,
+};
+
+/**
+ * The same closed, displayed `<dialog>`, whose card first expands in flow. The
+ * press that opens the Popover comes after it, on a control the expansion
+ * shows.
+ */
+function LayerAfterInlineExpandInClosedDialogExample() {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
+      <Button
+        label={isExpanded ? 'Collapse card' : 'Expand card'}
+        variant="secondary"
+        onClick={() => setIsExpanded(expanded => !expanded)}
+      />
+      {isExpanded ? (
+        <VStack gap={2}>
+          <Text type="body">Card details, shown in flow</Text>
+          <Popover content={<Text type="body">Pinned to the card</Text>}>
+            <Button label="Pin" variant="primary" />
+          </Popover>
+        </VStack>
+      ) : null}
+    </dialog>
+  );
+}
+
+export const LayerAfterInlineExpandInClosedDialog: Story = {
+  render: () => <LayerAfterInlineExpandInClosedDialogExample />,
+};
+
+/**
+ * A controlled Popover held open inside a Dialog that opens. Dialog displays
+ * its element in the render that opens it. It calls `showModal()` in an Effect
+ * after that, so the trigger has a box before the dialog is modal. The Popover
+ * opens after the dialog is in the top layer, anchored to its trigger and
+ * above the dialog.
+ */
+function PinnedPopoverInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setIsPopoverOpen(true);
+          setIsOpen(true);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a pinned popover">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a pinned popover"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Popover
+                isOpen={isPopoverOpen}
+                onOpenChange={setIsPopoverOpen}
+                content={<Text type="body">Pinned popover</Text>}>
+                <Button label="Popover trigger" variant="secondary" />
+              </Popover>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const PinnedPopoverInModal: Story = {
+  render: () => <PinnedPopoverInModalExample />,
+};
+
+/**
+ * A controlled Popover held open inside a closed `<dialog>` that stays hidden
+ * (`display: none`) until a press displays it in flow. While it is hidden, the
+ * trigger has no box, so the Popover waits. Once it is displayed, the Popover
+ * opens anchored to its trigger.
+ */
+function PinnedPopoverInHiddenClosedDialogExample() {
+  const [isShown, setIsShown] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+
+  return (
+    <VStack gap={3}>
+      <Button
+        label="Show the dialog in flow"
+        variant="secondary"
+        onClick={() => setIsShown(true)}
+      />
+      <dialog
+        {...stylex.props(
+          inFlowDialogStyles.dialog,
+          !isShown && inFlowDialogStyles.hidden,
+        )}>
+        <Popover
+          isOpen={isPopoverOpen}
+          onOpenChange={setIsPopoverOpen}
+          content={<Text type="body">Waits for a box</Text>}>
+          <Button label="Hidden dialog trigger" variant="secondary" />
+        </Popover>
+      </dialog>
+    </VStack>
+  );
+}
+
+export const PinnedPopoverInHiddenClosedDialog: Story = {
+  render: () => <PinnedPopoverInHiddenClosedDialogExample />,
+};
