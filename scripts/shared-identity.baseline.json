@@ -49,6 +49,22 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
+    "packages/core/src/ContextMenu/contextMenuTouchLoader.ts:listeners": {
+      "status": "allowed",
+      "reason": "Each copy of Core loads and renders its own touch layer, whose component reads that copy's contexts; a second copy's load changes no result."
+    },
+    "packages/core/src/ContextMenu/contextMenuTouchLoader.ts:pendingLoad": {
+      "status": "allowed",
+      "reason": "Each copy of Core loads and renders its own touch layer, whose component reads that copy's contexts; a second copy's load changes no result."
+    },
+    "packages/core/src/ContextMenu/contextMenuTouchLoader.ts:scheduledViews": {
+      "status": "allowed",
+      "reason": "Each copy of Core loads and renders its own touch layer, whose component reads that copy's contexts; a second copy's load changes no result."
+    },
+    "packages/core/src/ContextMenu/contextMenuTouchLoader.ts:state": {
+      "status": "allowed",
+      "reason": "Each copy of Core loads and renders its own touch layer, whose component reads that copy's contexts; a second copy's load changes no result."
+    },
     "packages/core/src/DateInput/monthGeometry.ts:GREGORIAN_MONTH_MODELS": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
