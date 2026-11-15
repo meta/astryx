@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
+import {cssUnescape} from '../text/css-escape.mjs';
 
 /**
  * postcss, loaded the first time a stylesheet is read: most commands read
@@ -20,7 +21,11 @@ const postcss = () => createRequire(import.meta.url)('postcss');
 
 /** @param {string} family */
 export const fontKey = family =>
-  String(family).replace(/["']/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  // As CSS reads the name: `Gill\ Sans` is Gill Sans.
+  cssUnescape(String(family).replace(/["']/g, ''))
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 
 /**
  * The families a stylesheet `@import` specifier loads, read from `fromDir`:
@@ -35,8 +40,13 @@ export const fontKey = family =>
 export function importedFontFamilies(spec, fromDir, seen = new Set()) {
   /** @type {Set<string>} */
   const out = new Set();
-  const pkg = /^@fontsource(?:-variable)?\/([^/]+)/.exec(spec);
-  if (pkg) out.add(fontKey(pkg[1].replace(/-/g, ' ')));
+  // A Fontsource package names its family: `<name> Variable` for a
+  // variable one.
+  const pkg = /^@fontsource(-variable)?\/([^/]+)/.exec(spec);
+  if (pkg)
+    out.add(
+      fontKey(`${pkg[2].replace(/-/g, ' ')}${pkg[1] ? ' Variable' : ''}`),
+    );
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec)) {
     for (const m of spec.matchAll(/family=([^:&'")]+)/g))
       out.add(fontKey(decodeURIComponent(m[1].replace(/\+/g, ' '))));
@@ -110,6 +120,27 @@ export function declarationValues(css, property) {
       });
   } catch {
     // A stylesheet that does not parse declares nothing known here.
+  }
+  return out;
+}
+
+/**
+ * Every custom property a stylesheet's text sets, with each value it is
+ * given (one per rule that sets it), in source order.
+ * @param {string} css
+ * @returns {Map<string, string[]>}
+ */
+export function customPropertyValues(css) {
+  /** @type {Map<string, string[]>} */
+  const out = new Map();
+  try {
+    postcss()
+      .parse(css)
+      .walkDecls(/^--/, decl => {
+        out.set(decl.prop, [...(out.get(decl.prop) ?? []), decl.value]);
+      });
+  } catch {
+    // A stylesheet that does not parse sets nothing known here.
   }
   return out;
 }

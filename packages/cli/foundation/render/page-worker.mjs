@@ -37,7 +37,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -93,6 +93,56 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
+/** @type {{call: string, file: string, line: number}[]} */
+const screenQueries = [];
+
+/** Core's media query hook, and the entries that export it. */
+const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign/core/hooks']), name: 'useMediaQuery'};
+
+/**
+ * The call a page makes to ask a media query in JavaScript, as the warning
+ * names it: Core's `useMediaQuery`, or `matchMedia` (bare or on an object such
+ * as `window`, optional calls included), with its query.
+ * @param {any} p a call expression
+ * @returns {string | null}
+ */
+function screenQuery(p) {
+  const callee = p.node.callee;
+  /** @param {any} spec the binding's path @param {boolean} namespace */
+  const fromCore = (spec, namespace) =>
+    (namespace ? spec?.isImportNamespaceSpecifier() : spec?.isImportSpecifier()) &&
+    MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value);
+  let name = null;
+  if (callee.type === 'Identifier') {
+    const binding = p.scope.getBinding(callee.name);
+    const spec = binding?.path;
+    if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
+    else if (fromCore(spec, false) && (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  } else if ((callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') && !callee.computed) {
+    if (callee.property.name === 'matchMedia') name = 'matchMedia';
+    // `core.useMediaQuery(…)` through `import * as core from '@astryxdesign/core'`.
+    else if (
+      callee.property.name === MEDIA_QUERY_HOOK.name &&
+      callee.object.type === 'Identifier' &&
+      fromCore(p.scope.getBinding(callee.object.name)?.path, true)
+    ) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  }
+  if (!name) return null;
+  const arg = p.node.arguments[0];
+  const query = !arg
+    ? ''
+    : arg.type === 'StringLiteral'
+      ? JSON.stringify(arg.value).replace(/^"|"$/g, "'")
+      : arg.type === 'TemplateLiteral' && arg.expressions.length === 0
+        ? `'${arg.quasis[0].value.cooked}'`
+        : (p.get('arguments.0')?.getSource?.() ?? '');
+  return `${name}(${query})`;
+}
 
 /** Components that show their content only on demand. */
 const HIDING =
@@ -205,11 +255,15 @@ let InChart = null;
  * @type {'aside' | 'page' | 'alone'}
  */
 let mode = 'aside';
+/** The height each chart's box states, by the chart's place. @type {(number | null)[]} */
+let boxes = [];
+/** The place of the chart drawn by itself. */
+let alonePlace = 0;
 
 /**
  * Wrap a recharts chart, or a ResponsiveContainer, so the server render sets
- * it aside and the drawing pass draws it: a container at the size it starts
- * at, in a box that lets the drawing fit the page's width.
+ * it aside and the drawing pass draws it: a container at each size
+ * chartDrawings gives it, in the box a browser gives it.
  * @param {any} Chart
  * @param {boolean} container
  */
@@ -232,9 +286,16 @@ let mode = 'aside';
       pageCharts[place.current] = props;
       if (committed.current) renderedAfterCommit = true;
     }
-    const drawn = container
-      ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
-      : createElement(Chart, props);
+    let drawn = createElement(Chart, props);
+    if (container) {
+      const at = mode === 'alone' ? alonePlace : inside ? null : place.current;
+      const {sizes, style, follows} = chartDrawings(props, at === null ? null : boxes[at]);
+      drawn = createElement(
+        'div',
+        {className: 'recharts-responsive-container', style, [FOLLOWS_WIDTH]: follows ? '' : undefined},
+        ...sizes.map((size, k) => createElement(Chart, {...props, ...size, key: k})),
+      );
+    }
     if (mode === 'alone' || inside) return drawn;
     return createElement('astryx-chart', null, createElement(InChart.Provider, {value: true}, drawn));
   }
@@ -323,11 +384,17 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
-    if (!error) markLegends(host);
+    if (!error) {
+      foldLegends(host);
+      // Drawn by itself, a chart's place in the page is its own place.
+      separateIds(host, mode === 'alone' ? alonePlace : 0);
+      roundCoordinates(host);
+    }
     const out = error ? null : read(host);
     root.unmount();
     return out;
   };
+  boxes = await boxHeights(markup);
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
@@ -347,7 +414,10 @@ async function drawCharts(markup, Page) {
   }
   if (alone) {
     mode = 'alone';
-    drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
+    drawn = charts.map((chart, i) => {
+      alonePlace = i;
+      return drawIn(chart, host => [host.innerHTML])?.[0] ?? '';
+    });
   }
   let failed = 0;
   // A chart that drew no picture counts as failed, once.
@@ -530,6 +600,10 @@ function pagePlugin(filename) {
             ]),
           );
         }
+      },
+      'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        const call = screenQuery(p);
+        if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
       JSXText(/** @type {any} */ p) {
         const v = cleanText(p.node);
@@ -1032,6 +1106,7 @@ try {
     aliasImports,
     texts,
     fnTexts,
+    screenQueries,
     logs,
   });
 } catch (e) {

@@ -59,8 +59,8 @@ describe('hunt66: parts joined by "and"', () => {
       [
         'red background on buttons and cards on hover',
         [
-          "set t background '#dc2626' --on button --state hover",
-          "set t background '#dc2626' --on card --state hover",
+          "set t background-color '#dc2626' --on button --state hover",
+          "set t background-color '#dc2626' --on card --state hover",
         ],
       ],
       [

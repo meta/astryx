@@ -38,13 +38,13 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {typoNear} from './_normal.mjs';
 import {
   fontOf,
   builtFontFamilies,
   fontPackages,
-  fontsourcePackageOf,
+  fontsourceSuggestion,
   modesOf,
-  nearest,
   refuse,
   editorWrote,
   recordWritten,
@@ -54,12 +54,18 @@ import {
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
+  copyFontsCss,
+  fontPackageSheets,
+  baseFontsSheet,
   newPictureRun,
   renderPreview,
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {
+  fontKey,
+  importedFontFamilies,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 
 const E = ERROR_CODES;
 
@@ -347,6 +353,19 @@ function usesCore(/** @type {any} */ json) {
  * @param {string} message
  */
 export function renderCause(project, message) {
+  const two = reactCopies(project);
+  return two
+    ? `${message} The likely cause: two copies of React, the app's (${two.app}) and the one Core resolves (${two.core}). Make Core resolve the app's React.`
+    : message;
+}
+
+/**
+ * The two copies of React a render saw, when the app's and the one Core
+ * resolves differ; else null.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @returns {{app: string, core: string} | null}
+ */
+export function reactCopies(project) {
   /** @param {(id: string) => string} resolve */
   const reactOf = resolve => {
     try {
@@ -370,9 +389,7 @@ export function renderCause(project, message) {
   } catch {
     // No Core package file: nothing to compare.
   }
-  return app && core && app !== core
-    ? `${message} The likely cause: two copies of React, the app's (${app}) and the one Core resolves (${core}). Make Core resolve the app's React.`
-    : message;
+  return app && core && app !== core ? {app, core} : null;
 }
 
 /**
@@ -407,19 +424,34 @@ export async function pictures(project, shots, modes) {
       ? slug
       : null;
   };
+  /** A link at a path, whether or not what it points to is there. @param {string} p */
+  const isLink = p => {
+    try {
+      return Boolean(
+        fs.lstatSync(p, {throwIfNoEntry: false})?.isSymbolicLink(),
+      );
+    } catch {
+      return false;
+    }
+  };
   // A picture is written only over a picture the editor took, unchanged
   // since: a file of the user's by that name (a screenshot of the same
-  // size included) blocks every picture, and is named.
+  // size included) blocks every picture, and is named. A link at a
+  // picture's name (to a file or to nothing) is never written through or
+  // replaced: that one picture is skipped and named, the others are taken.
   const blocked = shots
     .flatMap(({png}) => modes.map(m => outOf(png, m)))
     .filter(out => {
       const slug = themeOf(out);
       return (
         Boolean(slug) &&
+        !isLink(out) &&
         fs.existsSync(out) &&
         !editorWrote(project.cwd, /** @type {string} */ (slug), out)
       );
     });
+  /** Pictures skipped for a link at their name. @type {string[]} */
+  const linked = [];
   if (blocked.length)
     return {
       files,
@@ -428,6 +460,10 @@ export async function pictures(project, shots, modes) {
   for (const {html, png} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
+      if (isLink(out)) {
+        linked.push(out);
+        continue;
+      }
       // Taken under a name of its own and moved into place once whole: a
       // run stopped while the browser runs leaves no picture at the real
       // name (one the next run would read as a file of yours). A part left
@@ -468,7 +504,18 @@ export async function pictures(project, shots, modes) {
       const r = await screenshot(project, html, part, m, run);
       if (!r.ok) {
         fs.rmSync(part, {force: true});
-        return {files, problem: r.reason};
+        // Said for the whole run: the pictures taken before this one stand,
+        // and this one and every one after it were not taken.
+        const all = shots.flatMap(s => modes.map(mm => outOf(s.png, mm)));
+        const missed = all
+          .slice(all.indexOf(out))
+          .map(f => path.relative(project.cwd, f).split(path.sep).join('/'));
+        return {
+          files,
+          problem: files.length
+            ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r.reason}`
+            : `No picture was taken: ${r.reason}`,
+        };
       }
       try {
         fs.renameSync(part, out);
@@ -499,11 +546,57 @@ export async function pictures(project, shots, modes) {
       if (r.note && !notes.includes(r.note)) notes.push(r.note);
     }
   }
+  if (linked.length) {
+    const rels = linked.map(f =>
+      path.relative(project.cwd, f).split(path.sep).join('/'),
+    );
+    const target = (/** @type {string} */ f) => {
+      try {
+        const to = fs.readlinkSync(f);
+        return fs.existsSync(f)
+          ? ` (to ${to})`
+          : ` (to ${to}, which does not exist)`;
+      } catch {
+        return '';
+      }
+    };
+    notes.unshift(
+      `${linked.map((f, i) => `${rels[i]}${target(f)}`).join(', ')} ${linked.length === 1 ? 'is a link' : 'are links'}, and a picture is never written through or over a link, so ${linked.length === 1 ? 'that picture was' : 'those pictures were'} not taken${files.length ? `; ${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken` : ''}`,
+    );
+  }
   return {
     files,
-    // Pictures were taken; a note says why an earlier browser did not.
+    // Pictures were taken; a note says why an earlier browser did not, and
+    // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
   };
+}
+
+/**
+ * The families the theme's build writes that no package loads: not a
+ * system or desktop font, not loaded by a font stylesheet the app copy
+ * imports (the base's fonts included), and none of `packages` (the font
+ * packages that load it where the fonts go: the project's, or a new app's).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Array<{family: string}>} packages
+ * @returns {string[]}
+ */
+export function familiesNothingLoads(ctx, data, packages) {
+  const built = builtFontFamilies(ctx, data.name);
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const spec of copyFontsCss(ctx, data.name, data))
+    for (const f of importedFontFamilies(spec, ctx.project.cwd)) loaded.add(f);
+  return [...(built?.values() ?? [])].filter(family => {
+    const key = fontKey(family);
+    return !(
+      loaded.has(key) ||
+      packages.some(x => fontKey(x.family) === key) ||
+      isDesktopFamily(family) ||
+      oneSystemOf(family)
+    );
+  });
 }
 
 /**
@@ -518,6 +611,13 @@ export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
   const packages = fontPackages(ctx, data);
+  // A family nothing loads, with the Fontsource package that would load
+  // it, when Fontsource's naming gives one.
+  /** @param {string} family */
+  const unloadedNote = family => {
+    const pkg = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+  };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
       Object.values(OPEN_FONTS).find(f => f.pkg === pkg)?.fallbacks ?? '';
@@ -528,7 +628,13 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews load it; the app loads it with one import: import '${pkg}';`
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+            ctx,
+            data.name,
+            pkg,
+          )
+            .map(x => `import '${x}';`)
+            .join(' ')}`
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
@@ -581,25 +687,38 @@ export function fontNotes(ctx, data) {
       continue;
     }
     notes.push(
-      `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `${unloadedNote(named)}${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
-  // A part's own font (font-family --on a part) loads the same way: an
-  // installed package is in the list above; a missing one is named.
-  for (const s of data.settings) {
-    if (s.thing !== 'font-family' || typeof s.value !== 'string') continue;
-    for (const family of namedFontFamilies(s.value)) {
-      const pkg = fontsourcePackageOf(family);
+  // Every other family the build writes that nothing loads (a part's own
+  // font, a font token, a family the theme's own source sets) is named
+  // once, with the package that would load it: the same built families
+  // the app copy and the previews load fonts for.
+  const dialFamilies = new Set(
+    data.settings
+      .filter(s => s.thing === 'font')
+      .map(s => fontKey(fontOf(s.value).family)),
+  );
+  // A base family the app loads from a remote stylesheet (a Google Fonts
+  // import in the base's fonts.css) is not in the static previews: a page
+  // opened from disk cannot load a remote stylesheet. Unless an installed
+  // package loads it, the previews and pictures show the next font.
+  const base = baseFontsSheet(ctx, data);
+  if (base?.remote.length)
+    for (const family of base.families) {
+      if (built && !built.has(family.toLowerCase())) continue;
       if (
-        packages.some(x => x.pkg === pkg) ||
-        isDesktopFamily(family) ||
-        oneSystemOf(family)
+        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
+      const pkg = fontsourceSuggestion(family);
       notes.push(
-        `"${family}"${s.on ? ` (the font of ${s.on})` : ''} is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
+  for (const family of familiesNothingLoads(ctx, data, packages)) {
+    if (dialFamilies.has(fontKey(family))) continue;
+    notes.push(unloadedNote(family));
   }
   return notes;
 }
@@ -651,21 +770,37 @@ export function styledChanges(before, after, base) {
           typeof baseValue !== 'object' &&
           plain(baseValue) === plain(now);
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
-        // A block (a state, `:hover`) lists each property it changes.
+        // A block (a state, `:hover`, a mode block, a state inside a mode
+        // block) lists each property it changes, under its path.
+        /**
+         * @param {string} path @param {any} xs @param {any} ys @param {any} shownIn
+         */
+        const blockLines = (path, xs, ys, shownIn) => {
+          for (const p of new Set([
+            ...Object.keys(xs ?? {}),
+            ...Object.keys(ys ?? {}),
+          ])) {
+            const was = xs?.[p];
+            const now = ys?.[p];
+            if (JSON.stringify(was) === JSON.stringify(now)) continue;
+            if (
+              (now && typeof now === 'object') ||
+              (was && typeof was === 'object')
+            ) {
+              blockLines(`${path} ${p}`, was ?? {}, now ?? {}, shownIn?.[p]);
+              continue;
+            }
+            if (repeatsBase(was, now, shownIn?.[p])) continue;
+            out.push(
+              `${where} ${path}: ${cssName(p)} ${now === undefined ? '(removed)' : String(now)}`,
+            );
+          }
+        };
         if (
           (y[prop] && typeof y[prop] === 'object') ||
           (x[prop] && typeof x[prop] === 'object')
         ) {
-          const xs = x[prop] ?? {};
-          const ys = y[prop] ?? {};
-          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
-            if (
-              JSON.stringify(xs[p]) !== JSON.stringify(ys[p]) &&
-              !repeatsBase(xs[p], ys[p], shown?.[p])
-            )
-              out.push(
-                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
-              );
+          blockLines(prop, x[prop] ?? {}, y[prop] ?? {}, shown);
           continue;
         }
         if (repeatsBase(x[prop], y[prop], shown)) continue;
@@ -898,24 +1033,37 @@ function markSheetStale(file, slug, cwd) {
  * that is not a section.
  * @param {string | undefined} section
  * @param {string} [theme] the theme the suggestions name
+ * @param {string} [rest] the command's other options as typed (` --png`):
+ *   the offered command keeps them, with only the section fixed
  * @returns {string | undefined}
  */
-export function checkSection(section, theme = 'my') {
+export function checkSection(section, theme = 'my', rest = '') {
+  // A section is offered only when one is within a typo of what was typed;
+  // otherwise the way on is the whole sheet (show with no --section), with
+  // the sections listed in the message. An option where the section
+  // belongs (`--section --png`) was read as its value: it stays an option.
+  const eaten =
+    typeof section === 'string' && /^--[a-z][a-z-]*$/.test(section.trim())
+      ? ` ${section.trim()}`
+      : '';
+  const show = `${P} show ${theme}${rest}${rest.includes(eaten) ? '' : eaten}`;
   if (section === '')
-    refuse(E.ERR_MISSING_ARGUMENT, '--section was given no value.', {
-      run: [`${P} show ${theme} --section ${SHOWCASE_GROUPS[0]}`],
-    });
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `--section was given no value; it takes ${SHOWCASE_GROUPS.join(', ')}, and show with no --section makes the whole sheet.`,
+      {run: [show]},
+    );
   const s = section?.toLowerCase();
-  if (s != null && !SHOWCASE_GROUPS.includes(s))
+  if (s != null && !SHOWCASE_GROUPS.includes(s)) {
+    const near = SHOWCASE_GROUPS.filter(g => typoNear(s, g));
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
+      `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}"${near.length ? '' : '; show with no --section makes the whole sheet'}.`,
       {
-        didYouMean: nearest(s, SHOWCASE_GROUPS),
-        run: [
-          `${P} show ${theme} --section ${nearest(s, SHOWCASE_GROUPS)[0] ?? SHOWCASE_GROUPS[0]}`,
-        ],
+        didYouMean: near,
+        run: [near.length === 1 ? `${show} --section ${near[0]}` : show],
       },
     );
+  }
   return s;
 }

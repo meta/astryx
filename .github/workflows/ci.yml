@@ -155,14 +155,24 @@ jobs:
       next: ${{ steps.room.outputs.next }}
       wide: ${{ steps.room.outputs.wide }}
       attempt: ${{ github.run_attempt }}
+      # The Node leg plan (test-node's matrix and its budget check).
+      leg-widths: ${{ steps.node-legs.outputs.leg-widths }}
+      node-shards: ${{ steps.node-legs.outputs.shards }}
+      node-fits: ${{ steps.node-legs.outputs.fits }}
+      node-reason: ${{ steps.node-legs.outputs.reason }}
     steps:
       - name: Check out the admission action
         uses: actions/checkout@v7
         timeout-minutes: 8
         with:
+          # scripts/lib brings the scripts/ files beside it too: the Node leg
+          # planner, the modules it imports and the recorded Node times;
+          # .github/scripts/lib holds the glob matcher it shares.
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
+            .github/scripts/lib
+            scripts/lib
           path: .ci-admission
           persist-credentials: false
 
@@ -179,6 +189,26 @@ jobs:
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports the checks."
           exit 1
 
+      # The one Node leg count (scripts/vitest-node-legs.mjs): test-node's
+      # matrix, its full width and the jobs this run adds at full width all
+      # read it. A Node suite that does not fit its budget even at the most
+      # legs fails this step with the reason, and every test-node leg stops
+      # with it; the run still waits for room and starts.
+      - name: Plan the Node legs
+        id: node-legs
+        if: github.event_name != 'workflow_dispatch'
+        continue-on-error: true
+        working-directory: .ci-admission
+        run: |
+          node scripts/vitest-node-legs.mjs plan --github-output \
+            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+
+      # Another run's admission reads from this step's name how many jobs this
+      # run adds at full width (count.mjs).
+      - name: Hold ${{ steps.node-legs.outputs.widen }} more jobs at full width
+        if: steps.node-legs.outputs.widen != ''
+        run: echo "At full width the legs add ${{ steps.node-legs.outputs.widen }} jobs."
+
       - name: Wait for room under the CI ceiling
         id: room
         uses: ./.ci-admission/.github/actions/ci-admission
@@ -192,7 +222,7 @@ jobs:
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
           # A dispatch runs neither widening matrix.
-          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
+          leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}
 
       # A run stopped for no room fails here, so a re-run of its failed jobs
       # waits again from this job, not from this look's result.
@@ -252,7 +282,7 @@ jobs:
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
           # A dispatch runs neither widening matrix.
-          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
+          leg-widths: ${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}
 
       # Runs when the widening matrices start at full width, and skips at
       # tight width, so another run's count reads the width this run took
@@ -1189,22 +1219,24 @@ jobs:
 
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [admission, heavy-ci]
+    needs: [room, admission, heavy-ci]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
     strategy:
       fail-fast: false
-      # All five legs run at once when admission found room for them, and
-      # two at a time otherwise, in waves, so many open pull requests cannot
+      # Every leg runs at once when admission found room for them, and two
+      # at a time otherwise, in waves, so many open pull requests cannot
       # flood the shared runner pool. Admission counts the width it picks
       # (its `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
-      # Five legs keep each leg near nine minutes of the fifteen-minute
-      # limit; at four, a leg reached about thirteen and a half minutes of
-      # tests and hit the limit (scripts/vitest-node-durations.json).
+      # As many legs as the recorded Node times need for each leg to finish
+      # inside the job limit, at most eight (room's Node leg plan,
+      # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
+      # gives, applies only when room did not plan, and then every leg stops
+      # at its first step.
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1213,6 +1245,17 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # A Node suite that does not fit its legs fails every leg with room's
+      # reason, before any setup, so the run cannot pass on legs that would
+      # outrun their job limit.
+      - name: Stop when the Node legs do not fit their budget
+        if: needs.room.outputs.node-fits != 'true'
+        env:
+          REASON: ${{ needs.room.outputs.node-reason }}
+        run: |
+          echo "::error title=Node legs over budget::${REASON:-The Node leg plan did not run: see the Plan the Node legs step in room.}"
+          exit 1
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
@@ -1406,6 +1449,16 @@ jobs:
         env:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
+
+      # render.charts.browser.test.mjs shows a rendered page's charts at a
+      # phone's, a tablet's and a desktop's width. The Node legs run without
+      # a browser and skip it; with ASTRYX_RENDER_CHART_BROWSER set, a
+      # missing browser fails it.
+      - name: Render chart browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_CHART_BROWSER: '1'
+        run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
 
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
@@ -5119,7 +5172,7 @@ jobs:
           STORIES: ${{ steps.touched.outputs.changed_stories }}
         run: |
           if [ "$WIDE" = true ]; then
-            echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
+            echo "Wide change ($COUNT components): each label runs only its own full suite: ci:run-visual for Visual, ci:run-a11y for Accessibility, ci:run-rtl for RTL."
           else
             echo "No component changed; no component audit."
           fi
