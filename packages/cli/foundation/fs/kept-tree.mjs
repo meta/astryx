@@ -27,6 +27,7 @@ import {
   listingOf,
   listingStamp,
   recordReads,
+  resolvedNow,
 } from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
@@ -162,6 +163,10 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
         for (const [rel, stamp] of own) {
           stamps.push([rel === '' ? root : root + path.sep + rel, stamp]);
         }
+        // Where the root resolves, beside its listing: two folders can list
+        // the same names (a package's version folders, a link re-pointed
+        // between them), and a listing alone cannot tell them apart.
+        stamps.push([root, resolvedNow(root)]);
         return {
           root,
           folders,
@@ -179,7 +184,12 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
         finish: seen => {
           const walked = new Set(stamps.map(([file]) => file));
           for (const [file, state] of seen) {
-            if (walked.has(file)) continue;
+            // A listed folder the summary also resolved keeps where it
+            // resolves too, beside its listing, which names alone give.
+            if (walked.has(file)) {
+              if (state.startsWith(RESOLVED)) stamps.push([file, state]);
+              continue;
+            }
             // A folder probe, an existence check and a real-path lookup each
             // record less than a stamp, which a stored summary cannot check.
             // The full stamp, taken now, is stricter; a change during the

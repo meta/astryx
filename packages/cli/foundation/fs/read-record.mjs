@@ -343,7 +343,7 @@ function presenceState(file) {
  * @param {string} file
  * @returns {string}
  */
-function resolvedNow(file) {
+export function resolvedNow(file) {
   try {
     return `${RESOLVED}${realpathSyncRaw(file)}`;
   } catch {

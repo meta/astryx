@@ -328,6 +328,76 @@ describe('keptTreeSummary', () => {
     SLOW,
   );
 
+  it.skipIf(process.getuid?.() === 0)(
+    'walks again when a folder it could not read becomes readable, and back',
+    async () => {
+      const root = path.join(TEMP_ROOT, 'permissions');
+      const locked = path.join(root, 'locked');
+      fs.mkdirSync(locked, {recursive: true});
+      fs.writeFileSync(path.join(locked, 'Inner.doc.mjs'), '');
+      fs.chmodSync(locked, 0o000);
+      let made = 0;
+      const names = () =>
+        keptTreeSummary(
+          {kind: 'test-permissions', roots: [root], code: []},
+          trees => {
+            made++;
+            return trees[0].folders
+              .flatMap(({entries}) => entries)
+              .map(entry => entry.name)
+              .sort();
+          },
+        );
+      try {
+        await sleep(SETTLE_WAIT_MS);
+        expect(names()).toEqual(['locked']);
+        expect(names()).toEqual(['locked']);
+        expect(made).toBe(1);
+        fs.chmodSync(locked, 0o755);
+        expect(names()).toEqual(['Inner.doc.mjs', 'locked']);
+        expect(made).toBe(2);
+        fs.chmodSync(locked, 0o000);
+        expect(names()).toEqual(['locked']);
+        expect(made).toBe(3);
+      } finally {
+        fs.chmodSync(locked, 0o755);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'walks again when the link a root goes through is re-pointed between two folders that list the same names',
+    async () => {
+      const base = path.join(TEMP_ROOT, 'versions');
+      for (const version of ['1.0.0', '1.0.1']) {
+        fs.mkdirSync(path.join(base, version), {recursive: true});
+        fs.writeFileSync(path.join(base, version, 'Same.doc.mjs'), 'same');
+      }
+      const link = path.join(base, 'current');
+      fs.symlinkSync(path.join(base, '1.0.0'), link);
+      let made = 0;
+      // A value that names where the root resolves.
+      const where = () =>
+        keptTreeSummary(
+          {kind: 'test-relink', roots: [link], code: []},
+          trees => {
+            made++;
+            return fs.realpathSync(trees[0].root);
+          },
+        );
+      await sleep(SETTLE_WAIT_MS);
+      expect(where()).toBe(fs.realpathSync(path.join(base, '1.0.0')));
+      expect(where()).toBe(fs.realpathSync(path.join(base, '1.0.0')));
+      expect(made).toBe(1);
+      fs.rmSync(link);
+      fs.symlinkSync(path.join(base, '1.0.1'), link);
+      expect(where()).toBe(fs.realpathSync(path.join(base, '1.0.1')));
+      expect(made).toBe(2);
+    },
+    SLOW,
+  );
+
   it('keeps one summary per key', async () => {
     const root = path.join(TEMP_ROOT, 'keyed');
     fs.mkdirSync(root, {recursive: true});

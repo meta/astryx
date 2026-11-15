@@ -79,10 +79,12 @@ import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   LISTED,
   PRESENT,
+  RESOLVED,
   lookedUp,
   fileStamp,
   keepState,
   listingStamp,
+  resolvedNow,
   recordReads,
   recordStates,
   stillInState,
@@ -1094,8 +1096,9 @@ const SUMMARY_SETTLE_MS = 2000;
 function settled(stamps) {
   const limit = Date.now() - SUMMARY_SETTLE_MS;
   return stamps.every(([, stamp]) => {
-    // A folder's listing holds no time.
-    if (stamp === '-' || stamp.startsWith(LISTED)) return true;
+    // A folder's listing and a resolved path hold no time.
+    if (stamp === '-' || stamp.startsWith(LISTED) || stamp.startsWith(RESOLVED))
+      return true;
     const [, mtime, ctime] = stamp.split(':').map(Number);
     return mtime < limit && ctime < limit;
   });
@@ -1198,9 +1201,7 @@ function storedSummary({file, entry}) {
       Array.isArray(stored.stamps) &&
       stored.stamps.every(
         (/** @type {[string, string]} */ [at, stamp]) =>
-          typeof at === 'string' &&
-          (stamp.startsWith(LISTED) ? listingStamp(at) : fileStamp(at)) ===
-            stamp,
+          typeof at === 'string' && summaryStampNow(at, stamp) === stamp,
       )
     ) {
       try {
@@ -1215,6 +1216,20 @@ function storedSummary({file, entry}) {
     // No usable entry: made again.
   }
   return undefined;
+}
+
+/**
+ * What `at` gives now for a stamp of the kind `stamp` is: a folder's listing
+ * (read-record.mjs listingStamp), where a path resolves (resolvedNow), or a
+ * path's full stamp.
+ * @param {string} at
+ * @param {string} stamp
+ * @returns {string}
+ */
+function summaryStampNow(at, stamp) {
+  if (stamp.startsWith(LISTED)) return listingStamp(at);
+  if (stamp.startsWith(RESOLVED)) return resolvedNow(at);
+  return fileStamp(at);
 }
 
 /**
