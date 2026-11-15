@@ -62,6 +62,7 @@ import {
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
+  systemFontFamilies,
   isSystemFamily,
   fontStack,
 } from './_tables.mjs';
@@ -88,6 +89,7 @@ import {
 import {
   camel,
   kebab,
+  closestOf,
   nearest,
   negates,
   partsOf,
@@ -1044,9 +1046,12 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
+ * @param {Array<{name: string, near: string}>} [notes] filled with each family kept as
+ *   typed that is near a font a system ships (a family the editor does not
+ *   know may be a real one: Corben is no typo of Corbel)
  * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
-function fontListProblem(value, ctx, presets = false) {
+function fontListProblem(value, ctx, presets = false, notes = []) {
   // Copy debris (a trailing `;`, `!important`, a comment) is read away
   // first, as it is for any value.
   const pieces = familyPieces(withoutCopyDebris(pastedFont(value) ?? value));
@@ -1183,19 +1188,41 @@ function fontListProblem(value, ctx, presets = false) {
     if (!tail.length) {
       // A family the editor does not know that is a typo of a generic, or
       // (on the font dial, alone) of a preset: that name.
+      // Or a typo of a system family the build knows (arail is Arial,
+      // Menol is Menlo), on any font list: one known-family rule.
       const generic = genericOf(name);
-      const preset =
-        presets && pieces.length === 1 && !generic
-          ? (() => {
-              const hits = PRESETS.filter(k => typoNear(bare(name), bare(k)));
-              return hits.length === 1 ? hits[0] : null;
-            })()
-          : null;
-      if (generic || preset) {
+      const known = [
+        ...(presets && pieces.length === 1 ? PRESETS : []),
+        ...systemFontFamilies(),
+      ];
+      /** The one name a typo is near, a name listed twice counted once. @param {string[]} names */
+      const oneNear = names => {
+        const hits = [
+          ...new Set(
+            names
+              .filter(k => typoNear(bare(name), bare(k)))
+              .map(k => k.toLowerCase()),
+          ),
+        ];
+        return hits.length === 1 ? hits[0] : null;
+      };
+      const unknown = !generic && !isSystemFamily(cssUnescape(name));
+      // The presets are read first: a typo of one (Corier is courier,
+      // even beside Corbel) is that preset, refused with its line. Only a
+      // generic or a preset the editor offers is read as a typo: a family
+      // it does not know near a font a system ships may be a real family
+      // (Corben, Gabriela), so it is kept as typed, with a note.
+      const editorWord =
+        unknown && presets && pieces.length === 1 ? oneNear(PRESETS) : null;
+      const preset = editorWord ?? (unknown ? oneNear(known) : null);
+      if (generic || editorWord) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
         asTyped.set(kept.length - 1, JSON.stringify(name));
-      } else kept.push(name);
+      } else {
+        if (preset) notes.push({name, near: preset});
+        kept.push(name);
+      }
       continue;
     }
     // Words only (no number or size): part of the name unless the whole
@@ -2509,6 +2536,28 @@ export function drawsLine(C, parts, prop, state) {
 }
 
 /**
+ * The states a part (or a group's members) draws a ring of its own in,
+ * with its box-shadow (an input's hover and focus rings), or none. A shadow
+ * the theme sets on the part's resting rule replaces them in every state:
+ * Core's state rules sit under the theme's rules.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} on
+ * @returns {string[]}
+ */
+export function ringStatesOf(ctx, on) {
+  const states = new Set();
+  for (const member of FAMILIES[on] ?? [on]) {
+    const at = ctx.C.MAP[member]?.at?.['box-shadow'] ?? {};
+    for (const [k, v] of Object.entries(at)) {
+      const st = /:(hover|focus|active)/.exec(k)?.[1];
+      if (st && !/^\s*(?:none|var\(\s*--_[^)]*\))\s*$/.test(String(v)))
+        states.add(st === 'active' ? 'pressed' : st);
+    }
+  }
+  return [...states];
+}
+
+/**
  * What a text property CSS inherits, set on a part, also reaches: the parts
  * inside it that set no such property of their own, said in one line; null
  * for any other property or when none does.
@@ -3172,6 +3221,27 @@ export function checkSetting(
   if (!unset && typeof value === 'string' && !s.note) {
     const typo = fallbackVarTypo(value, ctx.project.core.tokenDefaults ?? {});
     if (typo) s.note = typo;
+  }
+  // A family kept as typed that is near a font a system ships: noted, as
+  // the family may be a real one the editor does not know.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    !s.note &&
+    (thing === 'font' ||
+      thing === 'font-family' ||
+      thing.startsWith('--font-family'))
+  ) {
+    /** @type {Array<{name: string, near: string}>} */
+    const near = [];
+    fontListProblem(value, ctx, thing === 'font', near);
+    if (near.length)
+      s.note = near
+        .map(
+          n =>
+            `"${n.name}" is kept as typed: the editor does not know that family, and a font a system ships is spelled near it; if that was meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}`,
+        )
+        .join('; ');
   }
   return s;
 }
@@ -4017,7 +4087,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           ? [lower]
           : meant
             ? [meant]
-            : nearest(lower, ok);
+            : closestOf(lower, ok);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${thing} takes ${DIALS[thing].values}, not "${v}".`,
@@ -4033,7 +4103,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
                     `${P} set ${slug} text-size ${['small', 'medium', 'large', 'larger'].includes(lower) ? lower : textSizePx(lower)}`,
                   ]
                 : near[0]
-                  ? [`${P} set ${slug} ${thing} ${near[0]}`]
+                  ? // Each reading of a typo equally near two values.
+                    near.map(x => `${P} set ${slug} ${thing} ${x}`)
                   : // A type-scale ratio (1.25) is the nearest type preset.
                     thing === 'type' && ratioPreset(lower)
                     ? [`${P} set ${slug} type ${ratioPreset(lower)}`]
@@ -4168,16 +4239,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           : weightWord
             ? Number(weightWord)
             : null;
-        const meant =
-          words.find(w => w === lower) ??
-          (weight != null ? weightRung(weight) : nearest(lower, words)[0]);
+        // A typo equally near two words (tightr: tight, tighter) has each
+        // as a reading.
+        const readings = words.includes(lower)
+          ? [lower]
+          : weight != null
+            ? [weightRung(weight)].filter(Boolean)
+            : closestOf(lower, words);
+        const meant = readings[0];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}`,
+          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}${readings.length > 1 ? ` "${v}" is as near ${readings.join(' as ')}.` : ''}`,
           {
-            didYouMean: meant ? [meant] : [],
-            run: meant
-              ? [setLine(slug, 'headings', meant, s)]
+            didYouMean: readings,
+            run: readings.length
+              ? readings.map(x => setLine(slug, 'headings', x, s))
               : [`${HOW} headings`],
           },
         );
@@ -4690,16 +4766,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             const keyword = CSS_SIZE_KEYWORDS[v.trim().toLowerCase()];
             if (keyword != null && keyword >= 10 && keyword <= 32)
               return {run: [`${P} set ${slug} text-size ${keyword}`]};
-            const near =
-              TEXT_SIZE.find(([n]) => n === v.trim().toLowerCase())?.[0] ??
-              nearest(
-                v.trim().toLowerCase(),
-                TEXT_SIZE.map(([n]) => n),
-              )[0];
-            return near
+            const exact = TEXT_SIZE.find(
+              ([n]) => n === v.trim().toLowerCase(),
+            )?.[0];
+            // A typo equally near two rungs (largr) has each as a reading.
+            const near = exact
+              ? [exact]
+              : closestOf(
+                  v.trim().toLowerCase(),
+                  TEXT_SIZE.map(([n]) => n),
+                );
+            return near.length
               ? {
-                  didYouMean: [near],
-                  run: [`${P} set ${slug} text-size ${near}`],
+                  didYouMean: near,
+                  run: near.map(x => `${P} set ${slug} text-size ${x}`),
                 }
               : (() => {
                   // A size typed full-width or with a trailing dot
@@ -5772,6 +5852,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           },
         );
       }
+    }
+    // A shadow on the resting rule of a part that draws its rings in its
+    // box-shadow (an input's hover and focus rings) would replace them in
+    // every state: refused, with the states named.
+    if (prop === 'box-shadow' && s.on && !s.state && !unset) {
+      const rings = ringStatesOf(ctx, s.on);
+      if (rings.length)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${FAMILIES[s.on] ? `${s.on} draw their` : `${s.on} draws its`} ${rings.join(' and ')} rings in ${FAMILIES[s.on] ? 'their' : 'its'} box-shadow, and a shadow set on ${FAMILIES[s.on] ? 'them' : 'it'} would replace them in every state (Core's state rules sit under the theme's), so it is not set. A shadow in one state replaces only that state's ring.`,
+          {run: [`${HOW} ${s.on}`]},
+        );
     }
     // A text property CSS inherits reaches the parts inside the part that
     // do not set it themselves (a side nav section's items): the result

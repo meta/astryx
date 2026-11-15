@@ -51,7 +51,12 @@ import {
   partRuleTokens,
   positionalCornerToken,
 } from './_settings.mjs';
-import {drawsLine, inheritedReach, settableStates} from './_check.mjs';
+import {
+  drawsLine,
+  inheritedReach,
+  ringStatesOf,
+  settableStates,
+} from './_check.mjs';
 import {NUMBER_WORDS, commaNumbers} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
@@ -441,6 +446,14 @@ const ROLE_COLOR_TOKENS = wordTable(
 );
 
 /**
+ * The page's color named as a value (a gradient's stop): after from, to,
+ * into or and, "the page color" or "the page background" is the color the
+ * page is painted with, not the page as a part to change.
+ */
+const PAGE_COLOR_REF =
+  /(?<=\b(?:from|to|into|and)\s+)(?:the |my )?page(?:'s)? (?:colou?r|background)\b/;
+
+/**
  * The theme colors a clause names, as the colors they are painted with,
  * with where each starts ("the accent", "the danger color", "error").
  * @param {string} c a clause, lower-case
@@ -449,6 +462,9 @@ const ROLE_COLOR_TOKENS = wordTable(
 function roleColorsFound(c) {
   /** @type {Array<[number, string]>} */
   const found = [];
+  // "from the page color to …": the color the page is painted with.
+  for (const m of c.matchAll(new RegExp(PAGE_COLOR_REF.source, 'g')))
+    found.push([m.index ?? 0, 'var(--color-background-body)']);
   // ("primary" names a color only with "color": "primary buttons" is a
   // variant.)
   for (const m of c.matchAll(
@@ -899,15 +915,25 @@ function sharedAsk(q, partWords) {
       // or the end (never inside 0.5rem), a comma only outside parentheses.
       .split(/([;\n]|,(?![^(]*\))|\.(?=\s|$))/)
       .map(seg => {
+        // "A and B and C <ask>": the parts between the first and the last
+        // are said whole; each part takes the ask.
+        const pieces = seg.split(/\s+and\s+/);
+        const middle = pieces.slice(1, -1).map(x => x.trim());
+        const isPart = (/** @type {string} */ x) =>
+          partWords.some(([re]) =>
+            new RegExp(`^(?:[a-z]+\\s+)?(?:${re.source})$`).test(x),
+          );
+        if (pieces.length > 2 && !middle.every(isPart)) return seg;
         const m = /\s+and\s+/.exec(seg);
-        if (!m || /\band\b/.test(seg.slice(m.index + m[0].length))) return seg;
+        if (!m) return seg;
+        const lastAnd = seg.length - pieces[pieces.length - 1].length;
         // "everything rounder except buttons and cards": both are excepted,
         // from one ask.
         if (/\bexcept\b/.test(seg.slice(0, m.index))) return seg;
         // "the card and dialog corners match": one ask about both.
         if (/\b(match|equally|alike|the same)\b/.test(seg)) return seg;
         const left = seg.slice(0, m.index);
-        const right = seg.slice(m.index + m[0].length);
+        const right = seg.slice(lastAnd);
         for (const [re] of partWords) {
           // (A state word before the part, "hovered buttons", goes with it.)
           const lm = new RegExp(`(?:${re.source})\\s*$`).exec(left);
@@ -951,7 +977,9 @@ function sharedAsk(q, partWords) {
               (colorsIn(lead).length || aspectsOf(lead).length)
             )
               return seg;
-            return `${lead}${l[0].trim()}${tail} and ${lead}${r[0].trim()}${tail}${exceptTail}`;
+            return `${[l[0].trim(), ...middle, r[0].trim()]
+              .map(x => `${lead}${x}${tail}`)
+              .join(' and ')}${exceptTail}`;
           }
         }
         return seg;
@@ -1167,6 +1195,24 @@ function boundOf(t) {
     limit: Number(word[2]) * (word[3] === 'rem' ? 16 : 1),
     said: word[0],
   };
+}
+
+/**
+ * The way the words ask a size to move beside a bound they give ("bigger
+ * but no taller than 40px" grows; "no bigger than 12px" alone names none),
+ * or null: a growing or shrinking word outside the bound's own words.
+ * @param {string} t
+ * @returns {'more' | 'less' | null}
+ */
+function ownWay(t) {
+  const bound = boundOf(t);
+  if (!bound) return null;
+  const rest = t.replace(bound.said, ' ');
+  const up =
+    /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier)\b/.test(rest);
+  const down =
+    /\b(smaller|less|sharper|narrower|shorter|thinner|tighter)\b/.test(rest);
+  return up && !down ? 'more' : down && !up ? 'less' : null;
 }
 
 /**
@@ -1714,7 +1760,7 @@ function aspectsOf(text) {
   )
     add('shadow');
   if (
-    /\b(borders?(?![\s-]*radius)|outlines?|strokes?|edges?|frames?|rings?)\b/.test(
+    /\b(borders?(?![\s-]*radius)|bordered|outlines?|outlined|strokes?|stroked|edges?|edged|frames?|framed|rings?|ringed)\b/.test(
       c,
     )
   )
@@ -1856,36 +1902,164 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
   .join('|');
 
 /**
+ * The one list grammar: a list of words joined by commas and "and" / "or"
+ * ("primary, secondary and ghost", "hovered or pressed", "buttons, cards
+ * and inputs") names each of its items once.
+ * - Items that are the variants or states of the part named after them
+ *   ("… buttons", "… ones" for the part said before the list) become one
+ *   part phrase each: "primary buttons and secondary buttons and …".
+ * - States after "when" become "when hovered and when pressed and …".
+ * - Parts, with an ask before or after the list, each take that ask:
+ *   "make buttons rounder and make cards rounder and …".
+ * Any other list is left as written.
+ * @param {string} q
+ * @param {Array<[RegExp, PartRef]>} partWords
+ * @param {(word: string, on: string) => boolean} isVariant
+ * @returns {string}
+ */
+function namedLists(q, partWords, isVariant) {
+  /** @param {string} w */
+  const partOf = w => partWords.find(([re]) => re.test(` ${w} `))?.[1] ?? null;
+  // "primary and ghost buttons blue and cards red", "… a border and a
+  // shadow", "… blue and their text white": a list of a part's variants or
+  // states with asks after its noun. Every ask said of them, up to an
+  // except or an ask that names a part of its own, goes with each item, so
+  // each item is one set of asks of its own.
+  const LIST =
+    /\b((?:the\s+)?[a-z]+(?:\s*,\s*(?:the\s+)?[a-z]+)*\s*,?\s+(?:and|or)\s+(?:the\s+)?[a-z]+)\s+([a-z][a-z-]*)\b/gi;
+  let tailed = '';
+  let from = 0;
+  for (const m of q.matchAll(LIST)) {
+    const at = /** @type {number} */ (m.index);
+    if (at < from) continue;
+    const [whole, list, noun] = m;
+    const before = q.slice(0, at);
+    const on = partOf(String(noun).toLowerCase())?.on;
+    const items = String(list)
+      .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
+      .map(w =>
+        w
+          .trim()
+          .toLowerCase()
+          .replace(/^the\s+/, ''),
+      )
+      .filter(Boolean);
+    if (
+      !on ||
+      items.length < 2 ||
+      /\bexcept\b[^,;.]*$/i.test(before) ||
+      !items.every(w => stateWord(w) != null || isVariant(w, on))
+    )
+      continue;
+    // The asks said of the list: up to a full stop or semicolon, an
+    // except, or an "and" before an ask about a part of its own (one that
+    // does not refer back with "their", "its" or "them").
+    const rest = q.slice(at + whole.length);
+    const stop = /[;.]|\bexcept\b/i.exec(rest);
+    const span = stop ? rest.slice(0, stop.index) : rest;
+    const pieces = span.split(/(\s*,?\s+(?:and|but|then|plus)\s+|\s*,\s*)/);
+    let tail = pieces[0] ?? '';
+    for (let k = 1; k + 1 < pieces.length; k += 2) {
+      const next = pieces[k + 1];
+      const own =
+        !/^\s*(?:their|its|them|they|the same)\b/i.test(next) &&
+        partWords.some(([re]) => re.test(` ${next.toLowerCase()} `));
+      if (own) break;
+      tail += pieces[k] + next;
+    }
+    if (!tail.trim()) continue;
+    tailed +=
+      q.slice(from, at) + items.map(w => `${w} ${noun}${tail}`).join(' and ');
+    from = at + whole.length + tail.length;
+  }
+  tailed += q.slice(from);
+  return tailed
+    .replace(
+      /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\b/gi,
+      (m, list, at, all) => {
+        const items = String(list)
+          .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
+          .map(w => w.trim().toLowerCase())
+          .filter(Boolean);
+        if (items.length < 2) return m;
+        const before = all.slice(0, at);
+        const after = all.slice(at + m.length);
+        const next =
+          /^\s+([a-z][a-z-]*)/i.exec(after)?.[1]?.toLowerCase() ?? '';
+        // The part the items are said of: the noun after them, or for
+        // "ones" the last part said before the list.
+        const nounPart = partOf(next);
+        const ones = /^ones?$/.test(next);
+        const earlier = ones
+          ? [...before.matchAll(/[a-z][a-z-]*/gi)]
+              .map(x => x[0].toLowerCase())
+              .reverse()
+              .find(w => partOf(w))
+          : undefined;
+        const noun = nounPart ? next : earlier;
+        const on = nounPart?.on ?? (earlier ? partOf(earlier)?.on : null);
+        if (noun && on) {
+          const modifies = (/** @type {string} */ w) =>
+            stateWord(w) != null || isVariant(w, on);
+          if (items.every(modifies))
+            return (
+              items.map(w => `${w} ${noun}`).join(' and ') +
+              (ones ? ' X_ONES' : '')
+            );
+        }
+        // States after "when": in an except, each one excepted; else the
+        // ask said before them is said for each ("make buttons orange when
+        // hovered and make buttons orange when pressed").
+        if (
+          /\bwhen\s*$/.test(before) &&
+          items.every(w => stateWord(w) != null)
+        ) {
+          const lead = before.slice(
+            Math.max(...[';', ',', '.', '\n'].map(x => before.lastIndexOf(x))) +
+              1,
+          );
+          const tail = /^[^;,.\n]*/.exec(after)?.[0] ?? '';
+          return /\bexcept\b/.test(lead)
+            ? items.map((w, i) => (i ? `when ${w}` : w)).join(' and ')
+            : items
+                .map((w, i) =>
+                  i === 0
+                    ? `${w}${tail}`
+                    : i === items.length - 1
+                      ? `${lead.trim()} ${w}`
+                      : `${lead.trim()} ${w}${tail}`,
+                )
+                .join(' and ');
+        }
+        // Parts, each taking the ask said before or after the list.
+        if (!nounPart && items.every(w => partOf(w))) {
+          const segStart = Math.max(
+            before.lastIndexOf(';'),
+            before.lastIndexOf('\n'),
+            before.search(/\.\s[^.]*$/),
+          );
+          const lead = before.slice(segStart + 1);
+          if (/\bexcept\s*$|\b(?:match|equally|alike|the same)\b/.test(lead))
+            return m;
+          return items.join(' and ');
+        }
+        return m;
+      },
+    )
+    .replace(/ X_ONES ones?\b/g, '');
+}
+
+/**
  * Read a question into clauses.
  * @param {string} q lower-case, translated, corrected
  * @param {Array<[RegExp, PartRef]>} partWords
  * @returns {Clause[]}
  */
 function clausesOf(q, partWords) {
-  // "primary, secondary and ghost buttons", "hovered or pressed buttons":
-  // a list of the part's variants or states before its noun names the part
-  // once for each ("primary buttons and secondary buttons …"), so every
-  // reader below sees each one.
-  const named = q.replace(
-    /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\s+([a-z][a-z-]*)\b/gi,
-    (m, list, noun) => {
-      const words = String(list)
-        .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
-        .map(w => w.trim().toLowerCase())
-        .filter(Boolean);
-      const isNoun = partWords.some(([re]) => re.test(` ${noun} `));
-      const modifies = (/** @type {string} */ w) =>
-        stateWord(w) != null ||
-        partWords.some(([re, x]) => x.when && re.test(` ${w} ${noun} `));
-      return isNoun && words.length > 1 && words.every(modifies)
-        ? words.map(w => `${w} ${noun}`).join(' and ')
-        : m;
-    },
-  );
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
-  const lists = named.replace(/\bexcept\b[^,;.]*/gi, m =>
+  const lists = q.replace(/\bexcept\b[^,;.]*/gi, m =>
     m.replace(
       /\s+(?:and|or)\s+(?!(?:make|set|give|turn|add|remove|keep|use|change|put)\b)/gi,
       ' & ',
@@ -1917,6 +2091,9 @@ function clausesOf(q, partWords) {
       )
       // "when I tab to a link": the key, not the tab part.
       .replace(/\b(i |we |you )?tab(bing)? (to|through|into)\b/g, ' ')
+      // "from the page color to …": the page's color as a value (a stop),
+      // never the page as a part to change (PAGE_COLOR_REF).
+      .replace(PAGE_COLOR_REF, ' ')
       .replace(/\bvar\([^)]*\)|--[a-z][\w-]*/g, ' ')
       .replace(/\b[a-z]+(?:-[a-z]+)+\b/g, m =>
         cssProperties().has(m) ? ' ' : m,
@@ -2446,6 +2623,7 @@ export function draftAnswer(ctx, env, question) {
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
   const lex = partLexicon(ctx);
+
   // "focus-ring", "table_row": a word of the editor's vocabulary written
   // with hyphens or underscores reads as the same words with spaces, for
   // every reader below (a CSS property, a token or a function keeps its
@@ -2453,15 +2631,29 @@ export function draftAnswer(ctx, env, question) {
   question = question.replace(
     /(?<![\w(-])([a-z]+(?:[-_][a-z]+)+)(?![\w(-])/gi,
     word => {
-      const spaced = word.replace(/[-_]+/g, ' ').toLowerCase();
       if (cssProperties().has(word.toLowerCase())) return word;
-      return lex.parts.some(
-        ([re]) => re.exec(` ${spaced} `)?.[0]?.trim() === spaced,
-      )
-        ? spaced
-        : word;
+      // (Written as one word when the vocabulary has it so, "drop-down" as
+      // "dropdown", so no part of it reads as a word of its own.)
+      const said = (/** @type {string} */ w) =>
+        lex.parts.some(([re]) => re.exec(` ${w} `)?.[0]?.trim() === w);
+      const joined = word.replace(/[-_]+/g, '').toLowerCase();
+      const spaced = word.replace(/[-_]+/g, ' ').toLowerCase();
+      return said(joined) ? joined : said(spaced) ? spaced : word;
     },
   );
+  // "Without changing buttons" is a prohibition, read as one.
+  question = question.replace(
+    /(\s*,?\s*)\bwithout (?:changing|touching) /gi,
+    (_m, sep, at) => (at > 0 ? ", don't change " : `${sep}don't change `),
+  );
+  // Every list names each of its items, before any reader splits at a
+  // comma.
+  question = namedLists(question, lex.parts, (word, on) =>
+    (FAMILIES[on] ?? [on]).some(m =>
+      (C.variantValues(m)?.variant ?? []).includes(word),
+    ),
+  );
+
   // "corners NaNpx": not a number; never a guess. After a CSS property the
   // property's own check says why.
   const notNumber = /\b(nan|-?infinity)(px|rem|em|%)?(?![a-z])/i.exec(question);
@@ -3137,6 +3329,15 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bless (?:big|large)\b/gi, 'smaller')
     .replace(/\bless (?:small|tiny)\b/gi, 'bigger')
     .replace(/\bless dark\b/gi, 'lighter')
+    // "less roomy", "less padded": tighter; "less cramped": roomier.
+    .replace(
+      new RegExp(`\\bless (?:${densityWords('roomy')})\\b`, 'gi'),
+      'tighter',
+    )
+    .replace(
+      new RegExp(`\\bless (?:${densityWords('dense', 'crowded')})\\b`, 'gi'),
+      'roomier',
+    )
     // "less light", "less heavy", "less tight", "less thin": one step back on
     // the same aspect.
     .replace(
@@ -3519,6 +3720,12 @@ export function draftAnswer(ctx, env, question) {
       /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|no (?:more|less|bigger|smaller|larger|wider|taller|rounder) than|not (?:more|less) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
       ' ',
     )
+    // "the accent color but lighter": a way after "but" with nothing else
+    // is a way of the value before it, in the same clause.
+    .replace(
+      /\s*,?\s*\bbut\s+(?=(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[,;.!]))/gi,
+      ' ',
+    )
     // "cards, buttons or inputs": a comma list of parts ending in "or" names
     // every one of them, as the "and" list does.
     .replace(
@@ -3755,11 +3962,42 @@ export function draftAnswer(ctx, env, question) {
       /\b([a-z]+) (header|footer|title)s? and (header|footer|title)s?\b/g,
       '$1 $2 and $1 $3',
     )
-    // "all buttons except primary ones rounder": the ask before the except.
-    .replace(
-      /^(.*?)\s+except\s+((?:the\s+)?(?:primary|secondary|ghost|destructive|danger)(?:\s+ones?|\s+buttons?)?)\s+(?!and\b|or\b|buttons?\b|ones?\b)(\S.*)$/i,
-      '$1 $3 except $2',
-    )
+    // "all buttons except primary ones rounder", "make everything except
+    // headings bold": the except said before the ask is read after it. The
+    // except list is its parts, variants, states and list words; the ask
+    // is what follows them.
+    .replace(/^(.*?)\s+except\s+(.+)$/i, (m, head, rest) => {
+      const words = String(rest).split(/\s+/);
+      // (A variant counts for a part said in the question: "bold" is a
+      // text variant, not a list word, in "except headings bold".)
+      const said = lex.parts
+        .filter(([re]) => re.test(` ${String(m).toLowerCase()} `))
+        .flatMap(([, x]) => FAMILIES[x.on] ?? [x.on]);
+      const listWord = (/** @type {string} */ w) =>
+        /^(?:and|or|the|my|our|all|ones?)$/i.test(w) ||
+        stateWord(w.toLowerCase()) != null ||
+        said.some(on =>
+          (C.variantValues(on)?.variant ?? []).includes(w.toLowerCase()),
+        ) ||
+        lex.parts.some(([re]) => re.test(` ${w.toLowerCase()} `));
+      let n = 0;
+      while (n < words.length && listWord(words[n])) n++;
+      const ask = words.slice(n).join(' ');
+      // (Only when the words before the except ask for nothing yet.)
+      if (
+        n === 0 ||
+        !ask ||
+        colorsIn(String(head)).length > 0 ||
+        aspectsOf(String(head)).length > 0 ||
+        /^(?:and|or)$/i.test(words[n - 1]) ||
+        /^(?:please\s+)?(?:make|set|give|turn|add|remove|keep|use|change|put)\b/i.test(
+          ask,
+        ) ||
+        /^(?:when|on|in|while|if|unless)\b/i.test(ask)
+      )
+        return m;
+      return `${head} ${ask} except ${words.slice(0, n).join(' ')}`;
+    })
     .replace(
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
       'except',
@@ -4507,6 +4745,26 @@ export function draftAnswer(ctx, env, question) {
         // "headings red", "the top nav heading white": a part that is only
         // text has a text color. "Card headings white": the heading inside
         // the card is what is colored, not the card.
+        // A title said of a part ("card titles", "dialog titles") is the
+        // text part it holds: a title Core has no part for, or a title
+        // block that paints no fill of its own, colors its heading.
+        c.parts = c.parts.map(p => {
+          const titled =
+            /title/.test(String(p.missing ?? '')) ||
+            (/title/.test(p.on) && !textOnlyPart(p.on));
+          if (!titled) return p;
+          const fills = Object.entries(
+            C.MAP[p.on]?.at?.['background-color'] ?? {},
+          ).some(
+            ([k, v]) =>
+              !/:/.test(k) &&
+              !/^(?:transparent|inherit|none|initial|unset)$/.test(
+                String(v).trim(),
+              ),
+          );
+          const text = (C.MAP[p.on]?.contains ?? []).find(x => textOnlyPart(x));
+          return text && (p.missing || !fills) ? {on: text} : p;
+        });
         const tp = c.parts.find(p => textOnlyPart(p.on));
         const inside =
           tp &&
@@ -5129,8 +5387,16 @@ export function draftAnswer(ctx, env, question) {
         shadowWhy = `this shadow has a layer with no color of its own (${plain}: it paints the text color), so it cannot be kept to one mode; give each layer a color`;
         return st;
       }
-      if (!asked.length && !nowLayers.length) {
-        shadowWhy = `${one(st.on)} shows no shadow of its own to take out in ${mode} mode (a shadow it gets from Core, such as an elevated card's, is the same in both modes); no shadow on ${one(st.on)} removes it in both`;
+      // Nothing of the part's own to take out or soften in that mode: a
+      // shadow it shows comes from Core (an elevated card's elevation), drawn
+      // from the shared shadows, which a shadow on the part cannot change
+      // for one mode.
+      const weaker =
+        /\b(?:lighter|softer|weaker|subtler|smaller|fainter|less)\b/.test(
+          noMode(c.text),
+        );
+      if (!nowLayers.length && (!asked.length || weaker)) {
+        shadowWhy = `${one(st.on)} draws no shadow of its own at rest to ${asked.length ? 'soften' : 'take out'} in ${mode} mode; a shadow it shows comes from Core (an elevated card's elevation is a shared shadow), so "${asked.length ? 'softer' : 'no'} shadows in ${mode} mode" changes the shared shadows in ${mode} mode, for every part that uses them`;
         return st;
       }
       const v = [
@@ -5297,18 +5563,21 @@ export function draftAnswer(ctx, env, question) {
             ? 'more'
             : null,
       // A bound gives the way to move, unless the clause moves by an amount
-      // ("2 steps rounder but at most 12px"), which the bound only limits.
+      // ("2 steps rounder but at most 12px") or names its own way beside
+      // the bound ("bigger but no taller than 40px"), which the bound only
+      // limits.
       dir:
         boundOf(c0.text) &&
         !/\b(?:\w+ steps?|\d*\.?\d+\s*(?:px|rem))\s+(?:more|less|\w+er)\b/.test(
           c0.text,
-        )
+        ) &&
+        !ownWay(c0.text)
           ? boundOf(c0.text)?.up
             ? /** @type {'more'} */ ('more')
             : /** @type {'less'} */ ('less')
           : comparing
             ? null
-            : c0.dir,
+            : (ownWay(c0.text) ?? c0.dir),
       // (A bound such as "no bigger than 4px" is a target, never a
       // removal.)
       zero:
@@ -5357,21 +5626,54 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} on
    * @returns {string[]}
    */
-  const ringStates = on => {
-    const states = new Set();
-    for (const member of FAMILIES[on] ?? [on]) {
-      const at = C.MAP[member]?.at?.['box-shadow'] ?? {};
-      for (const [k, v] of Object.entries(at)) {
-        const st = /:(hover|focus|active)/.exec(k)?.[1];
-        if (st && !/^\s*(?:none|var\(\s*--_[^)]*\))\s*$/.test(String(v)))
-          states.add(st === 'active' ? 'pressed' : st);
-      }
-    }
-    return [...states];
+  const ringStates = (/** @type {string} */ on) => ringStatesOf(ctx, on);
+  /**
+   * A corners step on a group ("checkboxes", the checks) leaves out the
+   * members already at that end (a radio is fully round, so it cannot get
+   * rounder): each other member takes the step on its own.
+   * @param {Draft} d
+   * @returns {Draft}
+   */
+  const groupCornerEnds = d => {
+    /** @type {string[]} */
+    const skipped = [];
+    const options = d.options.map(o =>
+      o.flatMap(st => {
+        const members = st.on ? FAMILIES[st.on] : undefined;
+        if (
+          !members ||
+          st.verb !== 'set' ||
+          st.thing !== 'corners' ||
+          (st.value !== 'more' && st.value !== 'less')
+        )
+          return [st];
+        const atEnd = (/** @type {string} */ m) => {
+          const tok = C.partReads(m, 'corners')?.[0]?.token;
+          const v = /^(\d*\.?\d+)(px|rem)$/.exec(
+            String(tok ? resolvedValue(tok) || '' : ''),
+          );
+          const px = v ? Number(v[1]) * (v[2] === 'rem' ? 16 : 1) : null;
+          return px != null && (st.value === 'more' ? px >= 999 : px === 0);
+        };
+        const ends = members.filter(atEnd);
+        if (!ends.length || ends.length === members.length) return [st];
+        skipped.push(...ends);
+        return members
+          .filter(m => !ends.includes(m))
+          .map(m => ({...st, on: m, only: true}));
+      }),
+    );
+    return skipped.length
+      ? {
+          ...d,
+          options,
+          text: `${d.text} (${[...new Set(skipped)].join(', ')} is ${d.options.flat().some(st => st.value === 'more') ? 'fully round already' : 'square already'}, so it is left as it is)`,
+        }
+      : d;
   };
   /** @param {Draft} input */
   const push = input => {
-    const d0 = withMode(input, clauseNow);
+    const d0 = groupCornerEnds(withMode(input, clauseNow));
     // A resting shadow on a part that rings itself in its shadow would wipe
     // those rings: not offered, and said.
     const ringed = d0.options
@@ -5583,6 +5885,16 @@ export function draftAnswer(ctx, env, question) {
 
   for (const c of clauses) {
     clauseNow = c;
+    // "side nav selected items": a state the part does not take, that a
+    // part it holds does (its items), is that part's state.
+    if (c.state && !c.except)
+      c.parts = c.parts.map(p => {
+        if (stateFor(p.on, /** @type {string} */ (c.state))) return p;
+        const held = (C.MAP[one(p.on)]?.contains ?? []).find(x =>
+          stateFor(x, /** @type {string} */ (c.state)),
+        );
+        return held ? {on: held} : p;
+      });
     // "but don't make buttons rounder": a prohibition inside the question
     // changes nothing; it says what stays.
     if (PROHIBITION.test(c.text)) {
@@ -6032,13 +6344,22 @@ export function draftAnswer(ctx, env, question) {
           if (cannotKeep) dr.options = [];
         }
       push({
-        text: `${prior.clause.text}, except ${said.join('; ')}`,
+        // (The whole ask the except belongs to, every clause of it.)
+        text: `${[...new Set(span.map(x => x.clause.text))].join(', and ')}, except ${said.join('; ')}`,
         options: cannotKeep ? [] : [[...priorSteps, ...keeps]],
         sequence: true,
         intent: intentOf(prior.clause, exceptKeep),
       });
-      // The whole ask comes first, before the change alone.
-      drafts.unshift(/** @type {Draft} */ (drafts.pop()));
+      // The whole ask comes first. The change alone is not offered beside
+      // it: it would change what the except keeps.
+      const whole = /** @type {Draft} */ (drafts.pop());
+      const spanClauses = new Set(span.map(x => x.clause));
+      for (let i = drafts.length - 1; i >= 0; i--) {
+        const own = draftClause.get(drafts[i]);
+        if (own && spanClauses.has(own) && drafts[i].options.length)
+          drafts.splice(i, 1);
+      }
+      drafts.unshift(whole);
       tops.splice(exceptFloor);
       exceptFloor = tops.length;
       continue;
@@ -6497,12 +6818,41 @@ export function draftAnswer(ctx, env, question) {
       // (Steps with a bound are held to it by the steps answer.)
       if (bound && prop && c.parts.length && !/\b\w+ steps?\b/.test(c.text)) {
         const {up, strict, limit, said} = bound;
+        // The direction the words ask, beside the bound (ownWay).
+        const way = ownWay(c.text);
+        const grows = way === 'more';
+        const shrinks = way === 'less';
         for (const p of c.parts) {
           seenPart(p.on);
-          const now = partPropNow(p.on, prop);
+          // The body text is the base text size, which text-size sets (as
+          // the unbounded answer reads it), never a part named body.
+          const bodyText = p.on === 'body' && prop === 'font-size';
+          const now = bodyText
+            ? current('--font-size-base')
+            : partPropNow(p.on, prop);
           const m = /^(\d*\.?\d+)(px|rem)?/.exec(String(now ?? ''));
           const nowPx = m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
           const {noState: _n, ...f} = flagsFor(c, p);
+          /** The step that writes a px value for this part. @param {number} px */
+          const write = px =>
+            bodyText ? set('text-size', String(px)) : set(prop, `${px}px`, f);
+          const name = bodyText ? 'the body text size' : `${prop} on ${p.on}`;
+          // Already past the bound the way the words ask ("rounder but at
+          // most 16px" at 42px): nothing is written, never a move the
+          // other way.
+          const wantsUp = grows && !shrinks;
+          const wantsDown = shrinks && !grows;
+          if (
+            nowPx != null &&
+            ((wantsUp && !up && nowPx >= limit) ||
+              (wantsDown && up && nowPx <= limit))
+          ) {
+            push({
+              text: `${bodyText ? `the body text size is ${now}` : `${p.on} has ${prop} ${now}`} now, already ${nowPx === limit ? 'at' : wantsUp ? 'past' : 'below'} ${limit}px, so ${wantsUp ? 'growing' : 'shrinking'} it ${said} leaves nothing to change`,
+              options: [],
+            });
+            continue;
+          }
           // An amount with the bound ("8px more but at most 20px"): the
           // amount, held to the bound.
           const amt =
@@ -6527,8 +6877,8 @@ export function draftAnswer(ctx, env, question) {
             }
             const v = `${target}px`;
             const d = {
-              text: `${prop} on ${p.on} ${amt[0]} ${said}: ${v} (now ${now})`,
-              options: [[set(prop, v, f)]],
+              text: `${name} ${amt[0]} ${said}: ${v} (now ${now})`,
+              options: [[write(target)]],
             };
             push(d);
             recordTop(c, d.options[0] ?? []);
@@ -6545,15 +6895,9 @@ export function draftAnswer(ctx, env, question) {
                 : nowPx <= limit);
           // A direction with a bound the other way ("bigger but no more than
           // 20px"): the next value of the theme's own scale for it in the
-          // asked direction, held to the bound.
-          const grows =
-            /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier)\b/.test(
-              c.text,
-            );
-          const shrinks =
-            /\b(smaller|less|sharper|narrower|shorter|thinner|tighter)\b/.test(
-              c.text,
-            );
+          // asked direction, held to the bound; a property with no scale of
+          // the theme's own (height) goes to the bound itself, the most the
+          // ask allows.
           if (inside && nowPx != null && (up ? shrinks : grows)) {
             const scale = /** @type {Record<string, RegExp>} */ ({
               padding: /^--spacing-/,
@@ -6578,16 +6922,20 @@ export function draftAnswer(ctx, env, question) {
                   ),
                 ].sort((x, y) => x - y)
               : [];
-            const next = up
-              ? rungs.filter(x => x < nowPx).pop()
-              : rungs.find(x => x > nowPx);
+            const next = !scale
+              ? limit
+              : up
+                ? rungs.filter(x => x < nowPx).pop()
+                : rungs.find(x => x > nowPx);
             if (next != null) {
               const target = up ? Math.max(next, limit) : Math.min(next, limit);
               if (target !== nowPx) {
                 const v = `${target}px`;
                 const d = {
-                  text: `${prop} on ${p.on}, one step ${up ? 'down' : 'up'} the theme's scale ${said}: ${v} (now ${now})`,
-                  options: [[set(prop, v, f)]],
+                  text: scale
+                    ? `${name}, one step ${up ? 'down' : 'up'} the theme's scale ${said}: ${v} (now ${now})`
+                    : `${name} ${said}: ${v}, the most the ask allows, as ${prop} has no scale of the theme's own (now ${now})`,
+                  options: [[write(target)]],
                 };
                 push(d);
                 recordTop(c, d.options[0] ?? []);
@@ -6602,10 +6950,13 @@ export function draftAnswer(ctx, env, question) {
             });
             continue;
           }
-          const v = `${Math.max(0, Math.round(strict ? (up ? limit * 1.25 : limit * 0.8) : limit))}px`;
+          const px = Math.max(
+            0,
+            Math.round(strict ? (up ? limit * 1.25 : limit * 0.8) : limit),
+          );
           const d = {
-            text: `${prop} on ${p.on} ${said}: ${v}${now ? ` (now ${now})` : ''}`,
-            options: [[set(prop, v, f)]],
+            text: `${name} ${said}: ${px}px${now ? ` (now ${now})` : ''}`,
+            options: [[write(px)]],
           };
           push(d);
           recordTop(c, d.options[0] ?? []);
@@ -6674,9 +7025,11 @@ export function draftAnswer(ctx, env, question) {
     // same color as the button background", "dialog background match the
     // card background": that color property of the other part, onto the
     // first part's property the words name; the other part is not changed.
+    // ("the dialog background the same as cards": a color property named
+    // before "the same as" is the color compared.)
     {
       const cmp =
-        /\b(?:(?:the )?same colou?r as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
+        /\b(?:(?:the )?same (?:colou?r )?as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
           c.text,
         );
       const ordered = cmp ? inOrder() : [];
@@ -8107,9 +8460,12 @@ export function draftAnswer(ctx, env, question) {
         reads[0];
       // The base theme's own radius for the part, written out, comes before
       // the token it reads.
-      const baseOwn = /** @type {any} */ (env.base).components?.[one(p.on)]?.[
-        p.when ?? 'base'
-      ]?.borderRadius;
+      // (A kept variant with no radius of its own has the plain rule's: a
+      // pill base's ghost buttons are pills too.)
+      const baseRules = /** @type {any} */ (env.base).components?.[one(p.on)];
+      const baseOwn =
+        baseRules?.[p.when ?? 'base']?.borderRadius ??
+        (p.when ? baseRules?.base?.borderRadius : undefined);
       // A part that shows a radius how cannot read (a part it renders, such
       // as a selectable card's card) has no pin: never an invented value.
       if (!partValue(p.on, 'border-radius') && !baseOwn && !read) return null;
@@ -8165,17 +8521,33 @@ export function draftAnswer(ctx, env, question) {
       st.thing === 'font-weight'
     ) {
       // The weight it has now: its own, else the token it reads for it.
+      // A kept state reads the weight the part has in that state (a
+      // selected tab's own weight), before any other.
       const wantW = p.when?.replace(':', '=');
       const reads = C.partReads(one(p.on), 'font').filter(r =>
         r.props.includes('font-weight'),
       );
+      /** Whether a read's condition is the kept state. @param {string} w */
+      const inKeptState = w =>
+        !!p.state &&
+        (w.includes(`:${p.state}`) ||
+          w
+            .split(/[\s,]+/)
+            .some(c => c.split('=')[0] === p.state && !c.endsWith('=false')));
       const read =
+        (p.state ? reads.find(r => r.when.some(inKeptState)) : undefined) ??
         (wantW ? reads.find(r => r.when.includes(wantW)) : undefined) ??
         reads[0];
-      // The base theme's own weight for that variant or level comes first.
-      const ownW = /** @type {any} */ (env.base).components?.[one(p.on)]?.[
-        p.when ?? 'base'
-      ]?.fontWeight;
+      // The base theme's own weight for that variant or level (in the kept
+      // state, its own state rule) comes first.
+      const baseRules = /** @type {any} */ (env.base).components?.[one(p.on)];
+      const ownW = p.state
+        ? (baseRules?.[p.state]?.fontWeight ??
+          baseRules?.[p.when ?? 'base']?.[`:${p.state}`]?.fontWeight ??
+          (read?.when.some(inKeptState)
+            ? undefined
+            : baseRules?.[p.when ?? 'base']?.fontWeight))
+        : baseRules?.[p.when ?? 'base']?.fontWeight;
       if (typeof ownW === 'string' && !partValue(p.on, 'font-weight')) {
         const v = ownW.replace(
           /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
@@ -9409,7 +9781,25 @@ export function draftAnswer(ctx, env, question) {
         );
         const glow = /\bglow/.test(c.text);
         if (/\blift/.test(c.text) && !f.state && on) f.state = 'hover';
-        const shared = `var(${soft ? '--shadow-low' : strong || /\blift/.test(c.text) ? '--shadow-high' : '--shadow-med'})`;
+        // A softer shadow on a part the editor never saw drawn (a popover,
+        // a menu, a tooltip) has nothing measured to start from: Core may
+        // draw the lowest shared shadow there already. (A stronger one is
+        // the highest shared shadow.)
+        if (
+          soft &&
+          on &&
+          !C.MAP[one(on)] &&
+          !partValue(on, 'box-shadow') &&
+          !c.colors.length
+        )
+          return {
+            text: `what ${one(on)} draws now is unknown (the editor has not seen it drawn), and Core may already draw the lowest shared shadow there, so how cannot tell a softer shadow from the one it has; give the shadow (for example "${one(on)} shadow 0 1px 2px #0000001a")`,
+            options: [],
+          };
+        // (A shared shadow typed by name is the one asked for.)
+        const shared =
+          /\bvar\(\s*--shadow-[a-z0-9-]+\s*\)/.exec(c.text)?.[0] ??
+          `var(${soft ? '--shadow-low' : strong || /\blift/.test(c.text) ? '--shadow-high' : '--shadow-med'})`;
         // A typed color is the shadow's color: with typed offsets (in any
         // order) that layer, else the shared shadow's offsets in that color.
         const typedColor = !glow && !design ? c.colors[0] : undefined;
@@ -10747,6 +11137,34 @@ export function draftAnswer(ctx, env, question) {
             Boolean(roleTok && c.dir)) &&
           !/#[0-9a-f]{3,8}\b|\(/.test(c.text);
         const color = recolor ? null : colorFor(c, 'text');
+        // A theme color with a way ("the accent color but lighter"): that
+        // color as it is in each mode, made lighter or darker there, on
+        // the part (a link: the accent text token it reads, as "darker
+        // links" steps it).
+        const ref = /^var\((--[a-z0-9-]+)\)$/.exec(color ?? '')?.[1];
+        if (ref && /\b(light|dark)er\b/.test(noMode(c.text))) {
+          const lighter = /\blighter\b/.test(noMode(c.text));
+          const amount = colorAmount(c.text, 0.2);
+          const viaLink = on === 'link' && ref === '--color-text-accent';
+          const steps = perMode(
+            ref,
+            viaLink ? ref : 'color',
+            viaLink ? (f.state ? {on, state: f.state} : {}) : f,
+            (now, m) =>
+              shiftKeepAlpha(
+                now,
+                lighter ? amount : -amount,
+                current('--color-background-body', m),
+              ),
+            c,
+          );
+          if (steps.length)
+            return {
+              text: `text color${where}: ${ref} made ${lighter ? 'lighter' : 'darker'}${viaLink ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         const tok =
           roleTok ??
           (/\bsecondary\b/.test(c.text)
@@ -11690,7 +12108,20 @@ export function draftAnswer(ctx, env, question) {
       };
     if (/\b(dark|light)\b/.test(t) && /\b(mode|theme|only)\b/.test(t))
       seenAspect('mode');
+    // Whether the clause asks only about the theme's modes: "make the
+    // accent darker in dark mode only" scopes an accent ask, never the
+    // theme's mode. (A lead before a colon, "like Linear:", is a
+    // reference.)
+    const onlyModes = !noMode(t.replace(/^[^:]*:\s*/, ''))
+      .replace(/\bdark\b|\blight\b/g, ' ')
+      .replace(
+        /\b(support|supports|add|enable|want|need|needs|give|turn on|make|it|the|a|an|my|our|this|theme|app|site|please|to|also|too|with|have|has|i|we|only|both|mode|modes|by|default|defaults|always|switch|go|use|just|be|is|should|set)\b/g,
+        ' ',
+      )
+      .replace(/[^a-z]+/g, ' ')
+      .trim();
     if (
+      onlyModes &&
       /\bdark[- ]?(mode|theme)? only\b|\bonly dark\b|\bdark-only\b|\bdark by default\b|\bdefault(s)? to dark\b|\balways dark\b/.test(
         t,
       ) &&
@@ -11712,6 +12143,7 @@ export function draftAnswer(ctx, env, question) {
         options: [[set('mode', 'dark-only')]],
       };
     if (
+      onlyModes &&
       /\blight[- ]?(mode|theme)? only\b|\bonly light\b|\blight-only\b/.test(
         t,
       ) &&
@@ -12170,11 +12602,15 @@ export function draftAnswer(ctx, env, question) {
             current('--color-background-body', m),
           ),
         );
+        // Each of the color's own tokens moves the way asked, its text and
+        // icons too (the color is what was named): the check reads them as
+        // written, never by contrast with the page.
         if (steps.length)
           return {
             text: `${dial}, ${lighter ? 'lighter' : 'darker'}: each of its colors in each mode ${env.slug} shows, from its own value (${ownWhy})`,
             options: [steps],
             sequence: steps.length > 1,
+            intent: {...intentOf(c, []), literal: true},
           };
       }
       if (c.mode && modal) {
@@ -12632,8 +13068,37 @@ export function draftAnswer(ctx, env, question) {
         ? `${v}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`
         : null;
     };
+    // The page is painted with the body tokens, as the change path reads
+    // it (--color-background-body for its background, the main text token
+    // for its text), in each mode it shows.
+    const pageToken =
+      named === 'page'
+        ? asked === 'color'
+          ? '--color-text-primary'
+          : /color|background/.test(asked)
+            ? '--color-background-body'
+            : null
+        : null;
+    const pageNow = () => {
+      if (!pageToken) return null;
+      const modes = /** @type {Array<'light' | 'dark'>} */ (
+        qMode
+          ? [qMode]
+          : env.data.mode === 'dark-only'
+            ? ['dark']
+            : env.data.mode === 'light-only'
+              ? ['light']
+              : ['light', 'dark']
+      );
+      const vals = modes
+        .map(m => [m, current(pageToken, m)])
+        .filter(([, v]) => v);
+      return vals.length
+        ? `${vals.map(([m, v]) => `${v}${modes.length > 1 || qMode ? ` in ${m} mode` : ''}`).join(', ')} (${pageToken}, which paints the page)`
+        : null;
+    };
     const now = named
-      ? (variantNow() ?? partPropNow(named, asked) ?? anyRead())
+      ? (pageNow() ?? variantNow() ?? partPropNow(named, asked) ?? anyRead())
       : null;
     result.splice(0, result.length, {
       text: named
@@ -12642,7 +13107,13 @@ export function draftAnswer(ctx, env, question) {
           : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
         : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
       options: [],
-      lookup: named ? `${HOW} ${named}` : `${P} show ${env.slug}`,
+      // (The page's lookup is the token it is painted with: `how page` is
+      // the CSS property page.)
+      lookup: pageToken
+        ? `${HOW} ${pageToken}`
+        : named
+          ? `${HOW} ${named}`
+          : `${P} show ${env.slug}`,
     });
     return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
   }

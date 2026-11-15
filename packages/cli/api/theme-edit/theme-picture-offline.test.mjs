@@ -15,7 +15,10 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {screenshot} from './_preview.mjs';
-import {LOCAL_URL} from '../../foundation/render/offline.mjs';
+import {
+  LOCAL_URL,
+  QUIET_BROWSER_ARGS,
+} from '../../foundation/render/offline.mjs';
 
 /** A Chrome on this machine, for the test that needs a real one. */
 const chrome = (process.env.PATH ?? '')
@@ -92,16 +95,36 @@ describe('a picture never waits on a network', () => {
         fs.writeFileSync(html, page());
         const png = path.join(dir, 'p.png');
         const started = Date.now();
-        const r = await screenshot(
-          {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
-          html,
-          png,
-          'light',
-        );
+        // A proxy that is the silent server: a request the browser makes
+        // of its own (an update or time check) would reach it.
+        const saved = {
+          http: process.env.http_proxy,
+          https: process.env.https_proxy,
+        };
+        process.env.http_proxy = `http://127.0.0.1:${port}`;
+        process.env.https_proxy = `http://127.0.0.1:${port}`;
+        /** @type {Awaited<ReturnType<typeof screenshot>>} */
+        let r;
+        try {
+          r = await screenshot(
+            {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+            html,
+            png,
+            'light',
+          );
+        } finally {
+          for (const [k, v] of /** @type {const} */ ([
+            ['http_proxy', saved.http],
+            ['https_proxy', saved.https],
+          ]))
+            if (v == null) delete process.env[k];
+            else process.env[k] = v;
+        }
         expect(r.ok).toBe(true);
         expect(fs.existsSync(png)).toBe(true);
         // Far inside the run's time limit, which a waited-on request reaches.
         expect(Date.now() - started).toBeLessThan(30_000);
+        // No connection at all: neither the page's nor the browser's own.
         expect(connections).toBe(0);
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
@@ -109,6 +132,48 @@ describe('a picture never waits on a network', () => {
     },
     90_000,
   );
+
+  it('a Chrome is started with its own network off', async () => {
+    for (const flag of [
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-sync',
+      '--no-first-run',
+      '--disable-default-apps',
+      '--metrics-recording-only',
+      '--no-proxy-server',
+      '--host-resolver-rules=MAP * ~NOTFOUND',
+    ])
+      expect(QUIET_BROWSER_ARGS).toContain(flag);
+    // A stand-in Chrome on PATH that records the flags it was started with.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-quiet-'));
+    const savedPath = process.env.PATH;
+    try {
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      const argsFile = path.join(dir, 'args.txt');
+      fs.writeFileSync(
+        path.join(bin, 'chromium'),
+        `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a"; done > ${JSON.stringify(argsFile)}\nexit 1\n`,
+        {mode: 0o755},
+      );
+      fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+      const html = path.join(dir, 'p.html');
+      fs.writeFileSync(html, '<p>x</p>');
+      process.env.PATH = `${bin}${path.delimiter}${path.dirname(process.execPath)}`;
+      await screenshot(
+        {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+        html,
+        path.join(dir, 'p.png'),
+        'light',
+      );
+      const args = fs.readFileSync(argsFile, 'utf8').split('\n');
+      for (const flag of QUIET_BROWSER_ARGS) expect(args).toContain(flag);
+    } finally {
+      process.env.PATH = savedPath;
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 60_000);
 
   it('Playwright blocks every request but the page before it loads', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-offline-pw-'));
@@ -125,7 +190,8 @@ describe('a picture never waits on a network', () => {
       fs.writeFileSync(
         path.join(pw, 'index.js'),
         `const fs = require('fs');
-         exports.chromium = {async launch() {
+         exports.chromium = {async launch(options) {
+           fs.writeFileSync(${JSON.stringify(log)} + '.launch', JSON.stringify(options));
            let rule = null;
            return {
              async newPage() { return {
@@ -169,6 +235,9 @@ describe('a picture never waits on a network', () => {
         [true, 'blockedbyclient'],
         [false, null],
       ]);
+      // The browser itself starts with its network off.
+      const launched = JSON.parse(fs.readFileSync(`${log}.launch`, 'utf8'));
+      expect(launched.args).toEqual([...QUIET_BROWSER_ARGS]);
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

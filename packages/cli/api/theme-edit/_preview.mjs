@@ -286,7 +286,9 @@ export function baseFontsCss(ctx, data) {
  * Null when the base ships none or the build names none of its families.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {{spec: string, families: string[], remote: string[]} | null}
+ * With the weights it loads of each family (`weights`, by family; none
+ * for a family whose weights it does not say, such as a variable face).
+ * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>} | null}
  */
 export function baseFontsSheet(ctx, data) {
   if (!data.like) return null;
@@ -333,7 +335,26 @@ export function baseFontsSheet(ctx, data) {
       /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
     ),
   ].map(m => m[1]);
-  return {spec: sheet, families, remote};
+  // The weights a font service request names (`Figtree:wght@400;500`, or
+  // `ital,wght@0,400;1,400`): the last number of each tuple.
+  /** @type {Map<string, number[]>} */
+  const weights = new Map();
+  for (const m of text.matchAll(
+    /family=([^:&'")]+):(?:ital,)?wght@([0-9;,.]+)/g,
+  )) {
+    const family = decodeURIComponent(m[1].replace(/\+/g, ' '));
+    const list = m[2]
+      .split(';')
+      .map(t => Number(t.split(',').pop()))
+      .filter(n => Number.isInteger(n));
+    // A range (`wght@100..900`) is a variable face: every weight in it.
+    if (!m[2].includes('..') && list.length)
+      weights.set(
+        family,
+        [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  return {spec: sheet, families, remote, weights};
 }
 
 /**

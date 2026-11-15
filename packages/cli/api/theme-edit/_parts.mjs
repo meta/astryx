@@ -432,6 +432,20 @@ export async function renderGenerated(project, file, source, extra = []) {
     const end = body.indexOf('<script type=');
     return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
+    // A theme file too large for a page to carry is the file's size, not
+    // React: it is named with its size and where it is.
+    if (e instanceof RenderError && e.code === 'ERR_RENDER_ASSET_TOO_LARGE') {
+      const d = /** @type {{file?: string, bytes?: number, limit?: number}} */ (
+        e.detail ?? {}
+      );
+      throw new AstryxError(
+        d.file && d.bytes && d.limit
+          ? `${path.relative(project.cwd, d.file).split(path.sep).join('/')} is ${(d.bytes / 1048576).toFixed(1)} MB, more than the ${d.limit / 1048576} MB a preview page carries per file: use a smaller copy of it (the app itself can keep the large one).`
+          : e.message,
+        [],
+        ERROR_CODES.ERR_RENDER_ASSET_TOO_LARGE,
+      );
+    }
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
       // A render stopped by its time limit on the editor's own page is the

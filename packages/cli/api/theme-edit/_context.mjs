@@ -38,10 +38,13 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {assetRef, CSS_URL} from '../../foundation/render/render-page.mjs';
+import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
   builtFontFamilies,
+  builtFontWeights,
   fontPackages,
   fontsourceSuggestion,
   modesOf,
@@ -163,7 +166,8 @@ async function derivedVars(coreDir) {
 const isRenderFailure = e =>
   e instanceof AstryxError &&
   (e.code === E.ERR_RENDER_FAILED ||
-    e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
+    e.code === E.ERR_RENDER_MISSING_DEPENDENCY ||
+    e.code === E.ERR_RENDER_ASSET_TOO_LARGE);
 
 /**
  * The app a folder belongs to: the nearest folder at or above it whose
@@ -600,6 +604,60 @@ export function familiesNothingLoads(ctx, data, packages) {
 }
 
 /**
+ * What the previews (preview.html, sheet.html and their pictures) cannot
+ * show of the images and files the theme's built stylesheet names: a
+ * remote file (a page opened from disk loads no network), a file that is
+ * not there, one that is not a regular file, and one too large to carry.
+ * Read from the built stylesheet with the renderer's own reader, so a
+ * preview rendered before says it too.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function themeImageNotes(ctx, slug) {
+  const file = themeFiles(ctx.project.cwd, slug).css;
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const at = {dir: path.dirname(file), root: ctx.project.cwd};
+  const where = shown(ctx.project.cwd, at.dir);
+  /** @type {Map<string, string>} */
+  const notes = new Map();
+  for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
+    const named = assetRef(m[2], at);
+    if (!named || notes.has(named.ref)) continue;
+    if (named.kind === 'remote')
+      notes.set(
+        named.ref,
+        `${named.ref} is loaded from the network: the app loads it, but the previews (preview.html, sheet.html and their pictures) cannot, and show the theme without it.`,
+      );
+    else if (named.kind === 'missing')
+      notes.set(
+        named.ref,
+        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+      );
+    else if (named.kind === 'not-file')
+      notes.set(
+        named.ref,
+        `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else {
+      const bytes = fs.statSync(named.file).size;
+      if (bytes > MAX_ASSET_BYTES)
+        notes.set(
+          named.ref,
+          `${shown(ctx.project.cwd, named.file)} is ${(bytes / 1048576).toFixed(1)} MB, more than the ${MAX_ASSET_BYTES / 1048576} MB a preview page carries per file; a smaller copy shows in the previews too.`,
+        );
+    }
+  }
+  return [...notes.values()];
+}
+
+/**
  * Font notes for the families the theme builds: the import line for an
  * open font, the install line when its package is missing, and a warning
  * for a family no package loads, naming the closest open font.
@@ -615,8 +673,8 @@ export function fontNotes(ctx, data) {
   // it, when Fontsource's naming gives one.
   /** @param {string} family */
   const unloadedNote = family => {
-    const pkg = fontsourceSuggestion(family);
-    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+    const s = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${s ? ` ${s.known ? '' : 'If Fontsource publishes it, '}${installLine(ctx.project.cwd, [s.pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
   };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
@@ -711,14 +769,52 @@ export function fontNotes(ctx, data) {
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
-      const pkg = fontsourceSuggestion(family);
+      const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
+  notes.push(...baseWeightNotes(ctx, data));
   for (const family of familiesNothingLoads(ctx, data, packages)) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
+  }
+  return notes;
+}
+
+/**
+ * A note for each weight the theme uses that the base theme's font
+ * stylesheet does not load for its family (it shows as the nearest weight
+ * the sheet loads), unless an installed package loads that family.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseWeightNotes(ctx, data) {
+  /** @type {string[]} */
+  const notes = [];
+  const base = baseFontsSheet(ctx, data);
+  const built = builtFontFamilies(ctx, data.name);
+  const packages = fontPackages(ctx, data);
+  if (base?.weights.size) {
+    const used = builtFontWeights(ctx, data.name) ?? [];
+    for (const [family, loadedWeights] of base.weights) {
+      if (built && !built.has(family.toLowerCase())) continue;
+      if (
+        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+      )
+        continue;
+      const missing = used.filter(w => !loadedWeights.includes(w));
+      if (!missing.length) continue;
+      const s = fontsourceSuggestion(family);
+      const nearest = (/** @type {number} */ w) =>
+        loadedWeights.reduce((a, b) =>
+          Math.abs(b - w) < Math.abs(a - w) ? b : a,
+        );
+      notes.push(
+        `${family} is loaded by ${base.spec} at ${loadedWeights.join(', ')} only, so ${missing.map(w => `${w} shows as ${nearest(w)}`).join(', ')}${s ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it` : ''}`,
+      );
+    }
   }
   return notes;
 }
