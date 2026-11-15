@@ -396,7 +396,7 @@ export const doc = {
     {
       value: 'theme.list',
       description:
-        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, owner package or local root, source, added, and default fields. Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
+        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, package (the package that provides it, or the local root), source, added, and default fields, plus owner (the package the app imports the built theme from, such as the bundled theme package @astryxdesign/theme-<slug>, or the local root) and installed (whether that owner is installed). Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
     },
     {
       value: 'theme.app',

@@ -77,10 +77,11 @@ export function themeRecordOwner(theme) {
 }
 
 /**
- * Whether the app can import a theme now, by the rule `theme add` applies
+ * Whether a theme's owner is installed, by the rule `theme add` applies
  * (`themePackageDir`): a local theme is in the project, and a package
  * theme's package (a bundled theme's own, such as
- * `@astryxdesign/theme-neutral`) is installed.
+ * `@astryxdesign/theme-neutral`) is installed. A local theme `theme add`
+ * still refuses until it is built.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} projectDir
  */
