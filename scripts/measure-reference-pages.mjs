@@ -325,9 +325,11 @@ export function parseArgs(argv) {
     json: false,
     help: false,
   };
+  if (argv.includes('--help') || argv.includes('-h')) {
+    return {...args, help: true};
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
-    if (flag === '--help' || flag === '-h') return {...args, help: true};
     if (flag === '--base') args.base = argv[++index];
     else if (flag === '--head') args.head = argv[++index];
     else if (flag === '--unused-on') {

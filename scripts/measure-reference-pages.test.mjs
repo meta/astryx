@@ -154,6 +154,8 @@ describe('parseArgs', () => {
   it('asks for help with --help or -h, before any other check', () => {
     expect(parseArgs(['--help']).help).toBe(true);
     expect(parseArgs(['-h', '--fast']).help).toBe(true);
+    expect(parseArgs(['--fast', '--help']).help).toBe(true);
+    expect(parseArgs(['--base', 'main', '--fsat', '-h']).help).toBe(true);
     expect(parseArgs(['--base', 'main']).help).toBe(false);
   });
 
