@@ -170,6 +170,26 @@ describe('intlDefaults', () => {
         'the timezone file edited',
         () => fs.writeFileSync(TIMEZONE_FILE, 'Europe/Paris\n'),
       ],
+      [
+        'the link pointed at a second link to a zone',
+        () => {
+          fs.symlinkSync(
+            path.join(ZONES, 'America/New_York'),
+            path.join(ZONES, 'Current'),
+          );
+          pointLocaltime(path.join(ZONES, 'Current'));
+        },
+      ],
+      [
+        'that second link moved to another name for the same zone file',
+        () => {
+          fs.rmSync(path.join(ZONES, 'Current'));
+          fs.symlinkSync(
+            path.join(ZONES, 'US/Eastern'),
+            path.join(ZONES, 'Current'),
+          );
+        },
+      ],
     ];
     let previous = first?.ino;
     for (const [what, change] of changes) {
