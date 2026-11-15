@@ -93,16 +93,6 @@ export function missedSteps(ctx, data, res, base) {
         .map((/** @type {any} */ r) => /** @type {string} */ (r.token)),
     ),
   ];
-  /** The parts drawn at rest on the inverted surface. */
-  const onInverted = Object.keys(C.MAP).filter(
-    q =>
-      has(q) &&
-      fills(q).some(
-        (/** @type {any} */ r) =>
-          r.token === '--color-background-inverted' &&
-          r.when.some((/** @type {string} */ w) => !/:|selected/.test(w)),
-      ),
-  );
   // The status colors, by the word their tokens carry, and the dial that
   // generates each with the text that reads on it.
   // Whether the theme's vibrancy differs from the base's: only then does a
@@ -148,12 +138,12 @@ export function missedSteps(ctx, data, res, base) {
      * The text on the theme's surface in a mode: the theme's text color
      * where it reads there (4.5:1), else the plain black or white that
      * does (a theme whose surface stays light in dark mode).
-     * @param {string} m
+     * @param {string} m @param {string} [ground] the token the text sits on
      */
-    const readableOn = m => {
+    const readableOn = (m, ground = '--color-background-surface') => {
       const text = String(res[m]?.['--color-text-primary']);
       const t = parseColor(text);
-      const g = parseColor(String(res[m]?.['--color-background-surface']));
+      const g = parseColor(String(res[m]?.[ground]));
       if (!t || !g || ratio(t, g) >= 4.5) return text;
       return ratio([0, 0, 0], g) >= ratio([255, 255, 255], g)
         ? '#000000'
@@ -164,27 +154,52 @@ export function missedSteps(ctx, data, res, base) {
      * named, with its text readable on it.
      * @param {string[]} ms
      */
+    // Another variant with a fill of its own (an error toast's red) keeps
+    // text readable on that fill: its own text step, scoped to it, after
+    // the text step for the part.
+    const otherFills = reads.flatMap((/** @type {any} */ r) =>
+      r.token === inverted
+        ? []
+        : r.when
+            .map((/** @type {string} */ w) =>
+              /^([\w-]+)=([\w-]+)$/.exec(w)?.slice(1).join(':'),
+            )
+            .filter(Boolean)
+            .map((/** @type {string} */ when) => ({when, token: r.token})),
+    );
+    /** @param {string[]} ms */
     const surfaceSteps = ms =>
       inverted === '--color-background-inverted'
-        ? // The theme's inverted surface turns to its surface (as the color
-          // it is: a part may read the surface token for its text), and the
-          // text of each part drawn on it that reads a token (a tooltip's)
-          // turns to the text color; a toast picks its own text from the
-          // surface.
+        ? // The inverted surface turns to the theme's surface on this part
+          // alone (as the color it is: a part may read the surface token
+          // for its text; the lightbox and the scrim keep theirs), with its
+          // text readable on it: a toast's color (the two colors its media
+          // surface gives its text), else each token its text reads.
           ms.flatMap(m => [
             {
               thing: '--color-background-inverted',
               value: String(res[m]?.['--color-background-surface']),
+              on: p,
               mode: m,
             },
-            ...onInverted.flatMap(q =>
-              textTokensOf(q).map(thing => ({
-                thing,
-                value: readableOn(m),
-                on: q,
-                mode: m,
-              })),
-            ),
+            ...(C.MAP[p]?.media || !textTokens.length
+              ? ['color']
+              : textTokens
+            ).map(thing => ({
+              thing,
+              value: readableOn(m),
+              on: p,
+              mode: m,
+            })),
+            ...(C.MAP[p]?.media || !textTokens.length
+              ? otherFills.map((/** @type {any} */ o) => ({
+                  thing: 'color',
+                  value: readableOn(m, o.token),
+                  on: p,
+                  mode: m,
+                  when: o.when,
+                }))
+              : []),
           ])
         : // The surface and the text as the colors they are in that mode (a
           // tooltip's text reads the surface token itself, so a token
@@ -420,12 +435,83 @@ export function missedSteps(ctx, data, res, base) {
           {thing: 'border-radius', value: 'var(--radius-element)', on: p},
         ],
       });
+  // The theme changed one of its corner sizes and left the other (its
+  // element corners, not its container corners): the parts whose corners
+  // read the one it left (a popover's, a dialog's, at the container size)
+  // keep the base's shape beside the theme's. One line sets the size it
+  // left to the size it changed (as the value it has), when that differs
+  // from what they draw.
+  const RADII = ['--radius-element', '--radius-container'];
+  const changedRadius = RADII.find(t => changed(t));
+  const keptRadius = RADII.find(t => !changed(t));
+  if (
+    changedRadius &&
+    keptRadius &&
+    !data.settings.some(x => x.thing === keptRadius) &&
+    modes.some(
+      m => String(res[m]?.[keptRadius]) !== String(res[m]?.[changedRadius]),
+    )
+  ) {
+    const kept = Object.keys(C.MAP)
+      .filter(has)
+      .filter(
+        p =>
+          !covers(p, /^(border-radius|corners|--radius-[\w-]+)$/) &&
+          (C.partReads(p, 'corners') ?? []).some(
+            (/** @type {any} */ r) =>
+              r.token === keptRadius &&
+              r.when.some(
+                (/** @type {string} */ w) =>
+                  w === '' || !/:|aria-|selected|\[/.test(w),
+              ),
+          ),
+      );
+    const lead = ['popover', 'dialog', 'hover-card'].find(p =>
+      kept.includes(p),
+    );
+    if (kept.length) {
+      const values = modes.map(m => String(res[m]?.[changedRadius]));
+      found.push({
+        kind: 4,
+        part: lead ?? kept[0],
+        why: `still the base's corners (${keptRadius}), beside the theme's ${changedRadius}: ${kept.length} parts read it (${kept.slice(0, 4).join(', ')}${kept.length > 4 ? ', …' : ''})`,
+        aspect: 'corners',
+        steps: values.every(v => v === values[0])
+          ? [{thing: keptRadius, value: values[0]}]
+          : modes.map((m, k) => ({
+              thing: keptRadius,
+              value: values[k],
+              mode: m,
+            })),
+      });
+    }
+  }
   // A square or outlined look (square corners, or a border width the
   // theme set) beside a soft shadow the base draws (a popover's, a menu's,
   // a dialog's): the shadow with no blur matches it.
   const square = modes.every(m =>
     /^0(px|rem)?$/.test(String(res[m]?.['--radius-element']).trim()),
   );
+  // The same look beside the base's focus ring, drawn outside the part with
+  // a gap: a ring drawn inside the part's edge matches it.
+  const offsets = modes.map(m =>
+    String(res[m]?.['--focus-outline-offset'] ?? ''),
+  );
+  if (
+    (square || borders) &&
+    !changed('--focus-outline-offset') &&
+    !data.settings.some(x => x.thing === '--focus-outline-offset') &&
+    offsets.every(
+      o => /^\d*\.?\d+(px|rem)?$/.test(o.trim()) && parseFloat(o) > 0,
+    )
+  )
+    found.push({
+      kind: 7,
+      part: 'focus-ring',
+      why: `the focus ring is still drawn ${offsets[0]} outside each part, beside the theme's ${square ? 'square corners' : 'border'}`,
+      aspect: 'ring',
+      steps: [{thing: '--focus-outline-offset', value: '-2px'}],
+    });
   if (square || borders)
     for (const p of Object.keys(C.MAP).filter(has)) {
       if (covers(p, /^(box-shadow|--shadow-[\w-]+)$/)) continue;

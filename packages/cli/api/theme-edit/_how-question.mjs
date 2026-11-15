@@ -15415,19 +15415,6 @@ export function draftAnswer(ctx, env, question) {
           }
         }
         if (!color) return null;
-        // A part whose text sits on Core's media surface inside it (a
-        // toast's inverted surface): that surface sets its text from the
-        // on-dark and on-light colors, so those go on the part.
-        if (C.MAP[one(on)]?.media && !f.state && !f.when)
-          return {
-            text: `the text color${where}: --color-on-dark and --color-on-light on ${on} (its text sits on Core's media surface, which takes the on-dark color where that surface is dark and the on-light color where it is light)`,
-            options: [
-              ['--color-on-dark', '--color-on-light'].map(tok =>
-                set(tok, color, {on, ...modeOf(c)}),
-              ),
-            ],
-            sequence: true,
-          };
         // A title block (a dialog's): its title and subtitle set their own
         // color from the text tokens, so the tokens go on the block.
         if (/-title-block$/.test(one(on)) && !f.state && !f.when) {

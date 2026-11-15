@@ -3131,17 +3131,21 @@ function noOutlineRefusal(ctx, slug, data, s, prop, v) {
 }
 
 /**
- * Refuses a text color for a part whose text sits on Core's media surface
- * inside it (a toast's inverted surface): that surface sets the text color
- * of what it holds from --color-on-dark where it is dark and
- * --color-on-light where it is light, so the part's own text color never
- * shows. The lines that do reach it set those on the part.
+ * Refuses a text color token for a part whose text sits on Core's media
+ * surface inside it (a toast's inverted surface): that surface sets the
+ * text tokens of what it holds from --color-on-dark where it is dark and
+ * --color-on-light where it is light, so a text token on the part never
+ * shows. Its `color` reaches the text (it goes into those two on the part),
+ * and so do those two.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').Setting} s
  * @param {string} v
  */
 function mediaTextRefusal(ctx, slug, s, v) {
+  // (A `color` on the part is its text color: written into the two colors
+  // the surface gives its text, on the part alone.)
+  if (s.source === 'property' && s.thing === 'color') return;
   const parts = partsOf(ctx, s);
   const held = parts.filter(
     t => ctx.C.MAP[t]?.media && !ctx.C.MAP[t]?.own?.color,
@@ -3150,13 +3154,12 @@ function mediaTextRefusal(ctx, slug, s, v) {
   const part = held[0];
   refuse(
     E.ERR_THEME_NO_EFFECT,
-    `${part}'s text sits on Core's media surface inside it (its inverted surface), which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color on ${part} never reaches it; set those on ${part} instead.`,
+    `${part}'s text sits on Core's media surface inside it (its inverted surface), which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color token on ${part} never reaches it; set its color on ${part} instead.`,
     {
       // (The flags the command was given carry over: a mode, a variant.)
-      run: ['--color-on-dark', '--color-on-light'].map(
-        tok =>
-          `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`,
-      ),
+      run: [
+        `${P} set ${slug} color ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`,
+      ],
     },
   );
 }

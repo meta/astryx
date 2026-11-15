@@ -6203,6 +6203,18 @@ export function compileTheme(ctx, data, base) {
         // A part whose text is drawn by elements inside it that read a text
         // color token themselves (a top nav heading's title) takes the color
         // in those tokens too, on the part alone, so that text shows it.
+        // A part whose text sits on Core's media surface inside it (a
+        // toast's inverted surface) shows the color that surface gives its
+        // text: --color-on-dark where it is dark, --color-on-light where it
+        // is light. Its text color goes into both, on the part alone.
+        if (
+          kebab(s.thing) === 'color' &&
+          ctx.C.MAP[t]?.media &&
+          !ctx.C.MAP[t]?.own?.color
+        )
+          for (const tok of ['--color-on-dark', '--color-on-light'])
+            if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
+              putComp(s, t, tok, s.value);
         if (kebab(s.thing) === 'color')
           for (const tok of innerTextTokens(ctx.C, t))
             if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
@@ -8485,6 +8497,18 @@ export async function contrastProblems(ctx, data, res) {
     const t = p.fg.target;
     const token = p.fg.tokens[0];
     if (!t || !token) return null;
+    // A fill its part draws under one condition alone (an error toast's
+    // red, `type=error`): the text on it is drawn in that condition.
+    if (p.bg.target === t) {
+      const conds = new Set(
+        ctx.C.partReads(t, 'background')
+          .filter(r => r.token === p.bg.tokens[0])
+          .flatMap(r => r.when),
+      );
+      const one =
+        conds.size === 1 ? /^([\w-]+)=([\w-]+)$/.exec([...conds][0]) : null;
+      if (one) return `${one[1]}:${one[2]}`;
+    }
     /** @param {string[]} when */
     const atRest = when =>
       when.map(w => /^variant=([\w-]+)$/.exec(w)?.[1]).filter(v => v != null);
