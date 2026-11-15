@@ -60,6 +60,7 @@ import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
 
 /**
  * A search candidate gathered from one content domain. Extra underscore-
@@ -150,14 +151,31 @@ export function rankLexical(query, options, catalog) {
   // neither reading may add near siblings beside it.
   const spelled = spellIdentifiers(String(query).trim());
   const exact = all.some(candidate => namesWhole(candidate, term));
-  // One identifier is read as its words only when, read whole, it matches
-  // nothing: a prop or hook name a doc already mentions keeps the
-  // entries that mention it.
+  // One identifier is read as its words when, read whole, it matches
+  // nothing: a prop or hook name (camelCase) a doc already mentions keeps
+  // the entries that mention it. An identifier written as entries are
+  // named (PascalCase, a component's name) is read as its words also when
+  // all it matches is text that mentions it: that text keeps its entry,
+  // and the words find the entries it names.
+  /** The entries the identifier, read whole, matches. @type {Set<Candidate>} */
+  const mentioned = new Set();
+  let onlyMentions = true;
+  for (const candidate of all) {
+    const hit = scoreCandidate(term, candidate);
+    if (!hit) continue;
+    mentioned.add(candidate);
+    if (!hit.inText) onlyMentions = false;
+  }
   const split =
     !exact &&
     !/\s/.test(term) &&
     spelled !== term &&
-    !all.some(candidate => scoreCandidate(term, candidate));
+    (mentioned.size === 0 ||
+      (COMPONENT_NAME_RE.test(String(query).trim()) && onlyMentions));
+  // Read as its words, the identifier still answers the text that mentions
+  // it whole: that entry keeps the better of the two readings.
+  const wholeTokens = split ? tokenizeQuery(term) : null;
+  const wholeWords = split ? phraseWords(term) : null;
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact
@@ -224,7 +242,20 @@ export function rankLexical(query, options, catalog) {
   /** @type {{result: any, priority: 0 | 1 | 2, key: number, alias: 'partial' | 'keyword' | false, aliasWords: number, candidate: Candidate, span: [number, number] | null, word: [number, number] | null}[]} */
   const ranked = [];
   for (const candidate of all) {
-    const hit = scoreQuery(term, tokens, candidate, words);
+    const asWords = scoreQuery(term, tokens, candidate, words);
+    const asWhole =
+      wholeTokens && mentioned.has(candidate)
+        ? scoreQuery(
+            term,
+            wholeTokens,
+            candidate,
+            /** @type {string[]} */ (wholeWords),
+          )
+        : null;
+    const hit =
+      asWhole && (!asWords || asWhole.score > asWords.score)
+        ? asWhole
+        : asWords;
     if (hit)
       ranked.push({
         result: toResult(

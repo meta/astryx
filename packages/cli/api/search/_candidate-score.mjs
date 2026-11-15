@@ -212,8 +212,10 @@ function weakKeywordScore(t, kw) {
  * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
  * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
  * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
- * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword'} | null}
- *   `alias` marks a hit that read the query's words joined.
+ * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true} | null}
+ *   `alias` marks a hit that read the query's words joined; `inText`, a hit
+ *   that is the term mentioned in the description, docs or guidance, not a
+ *   name or keyword.
  */
 export function scoreCandidate(
   term,
@@ -235,17 +237,21 @@ export function scoreCandidate(
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
   let alias = false;
+  /** Whether the best hit is a mention in text, not a name or keyword. */
+  let inText = false;
   /**
    * @param {number} score
    * @param {string} why
    * @param {'partial' | 'keyword' | false} [byAlias] - the hit reads the
    *   query's words joined, into part of a name or into a keyword
+   * @param {boolean} [mention] - the hit is the term mentioned in text
    */
-  const consider = (score, why, byAlias = false) => {
+  const consider = (score, why, byAlias = false, mention = false) => {
     if (score > best) {
       best = score;
       reason = why;
       alias = byAlias;
+      inText = mention;
     }
   };
 
@@ -388,12 +394,12 @@ export function scoreCandidate(
   if (term.length >= 3) {
     const re = mentionPattern(term, t);
     if (description && re.test((p.description ??= description.toLowerCase()))) {
-      consider(50, `description mentions "${term}"`);
+      consider(50, `description mentions "${term}"`, false, true);
     } else {
       let matchedProse = false;
       for (let i = 0; i < prose.length; i++) {
         if (prose[i] && re.test(loweredAt(p.prose, prose, i))) {
-          consider(50, `docs mention "${term}"`);
+          consider(50, `docs mention "${term}"`, false, true);
           matchedProse = true;
           break;
         }
@@ -404,7 +410,7 @@ export function scoreCandidate(
       if (!matchedProse) {
         for (let i = 0; i < guidance.length; i++) {
           if (guidance[i] && re.test(loweredAt(p.guidance, guidance, i))) {
-            consider(45, `guidance mentions "${term}"`);
+            consider(45, `guidance mentions "${term}"`, false, true);
             break;
           }
         }
@@ -412,5 +418,12 @@ export function scoreCandidate(
     }
   }
 
-  return best > 0 ? {score: best, reason, ...(alias ? {alias} : {})} : null;
+  return best > 0
+    ? {
+        score: best,
+        reason,
+        ...(alias ? {alias} : {}),
+        ...(inText ? {inText: true} : {}),
+      }
+    : null;
 }
