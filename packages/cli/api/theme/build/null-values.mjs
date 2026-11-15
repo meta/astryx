@@ -40,12 +40,24 @@ const holdsBlock = key => /^[:@&[]/.test(key);
  */
 
 /**
- * What a null value builds, and the fix. Null has a meaning, unlike a
- * boolean or NaN: it leaves the value unset, so it is warned, never refused.
+ * What a null property builds, and the fix. Null has a meaning, unlike a
+ * boolean or NaN: it leaves the property unset, so it is warned, never
+ * refused. The browser drops the declaration, so the base theme's value
+ * stays.
  * @param {string} key
  */
 const written = key =>
   `${key} holds null; null leaves it unset: the build writes it as it is (${key}: null), which no browser reads, so the base theme's value stays; to set it, give it a CSS value, or leave it undefined to write nothing`;
+
+/**
+ * What a null token builds, and the fix. A custom property takes any text,
+ * so a browser keeps `--token: null` as the token's value: what reads it gets
+ * no usable value (a background reading it is transparent), not the base
+ * theme's value.
+ * @param {string} key
+ */
+const writtenToken = key =>
+  `${key} holds null; the build writes it as it is (${key}: null), and a browser keeps that as the token's value, so what reads ${key} gets no usable value (a color reading it is transparent), not the base theme's value: to keep the base theme's value, leave it undefined; to set it, give it a CSS value`;
 
 /**
  * Every place a theme gives null where the build reads a part, a style key's
@@ -67,7 +79,7 @@ export function nullThemeValues(theme) {
           if (v === null)
             out.push({
               path: [...at, map, k],
-              why: written(k),
+              why: writtenToken(k),
               unbuildable: false,
             });
     if (!isBlock(block.components)) return;
@@ -104,7 +116,9 @@ export function nullThemeValues(theme) {
           path: [...at, k],
           why: holdsBlock(k)
             ? `${k} holds null, so the build writes no block for it: give it properties, or remove it`
-            : written(k),
+            : k.startsWith('--')
+              ? writtenToken(k)
+              : written(k),
           unbuildable: false,
         });
       else part(v, [...at, k], depth + 1);

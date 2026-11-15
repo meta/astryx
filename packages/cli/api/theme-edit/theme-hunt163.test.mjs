@@ -126,16 +126,18 @@ describe('a plain theme that gives null', () => {
   it(
     'builds a null value as it is, and warns it at its line',
     async () => {
-      for (const [fields, where, written] of [
+      for (const [fields, where, written, why] of [
         [
           'components: {button: {base: {backgroundColor: null}}} as any',
           'components.button.base.backgroundColor',
           'background-color: null;',
+          "null leaves it unset: the build writes it as it is (backgroundColor: null), which no browser reads, so the base theme's value stays",
         ],
         [
           "tokens: {'--color-accent': null} as any",
           'tokens.--color-accent',
           '--color-accent: null;',
+          "a browser keeps that as the token's value, so what reads --color-accent gets no usable value",
         ],
       ]) {
         plain(fields);
@@ -144,9 +146,7 @@ describe('a plain theme that gives null', () => {
         expect(JSON.stringify(env.data.warnings), fields).toContain(
           `${where} (line 4): `,
         );
-        expect(JSON.stringify(env.data.warnings), fields).toContain(
-          'holds null; null leaves it unset: the build writes it as it is',
-        );
+        expect(JSON.stringify(env.data.warnings), fields).toContain(why);
         expect(
           fs.readFileSync(path.join(cwd, 'plain/p.css'), 'utf8'),
           fields,

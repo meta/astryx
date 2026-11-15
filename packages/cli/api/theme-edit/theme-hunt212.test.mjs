@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
-import {partKeyProblem} from '../theme/build/style-keys.mjs';
+import {partKeyProblem, pseudoKeyNotes} from '../theme/build/style-keys.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -173,25 +173,45 @@ describe('pseudo-elements', () => {
       [':not(::before)', '(the browser drops it)'],
       [':has(::before)', '(the browser drops it)'],
       ['::highlight(x):hover', 'which takes only :window-inactive after it'],
-      ['::nopey', 'names ::nopey, a pseudo-element no browser knows'],
       ['::befor', 'did you mean ::before?'],
     ])
       expect(partKeyProblem(key, {}, 'style'), key).toContain(why);
+    // Missing from the selector data and near no known name: browser
+    // support moves faster than the data, so it is only noted.
+    for (const key of [
+      '::nopey',
+      '::scroll-button(*)',
+      '::column',
+      '::column:hover',
+    ]) {
+      expect(partKeyProblem(key, {}, 'style'), key).toBeNull();
+      expect(pseudoKeyNotes(key), key).toEqual([
+        expect.stringContaining("which is not in the CLI's selector data"),
+      ]);
+    }
+    expect(pseudoKeyNotes('::before:hover')).toEqual([]);
   });
 
   it(
-    'that no browser knows are warned by theme build and refused by the editor',
+    'missing from the selector data are warned by theme build and by the editor, which builds them',
     async () => {
       await themeEditNew('k37', {cwd});
-      const fields =
-        "components: {button: {base: {'::nopey': {color: 'red'}}}}";
-      plain(fields);
-      const p = json(['theme', 'build', 'plain/p.ts']);
-      expect(p.status).toBe(0);
-      expect(JSON.stringify(p.env.data.warnings)).toContain(
-        'a pseudo-element no browser knows',
-      );
-      own('k37', fields);
+      for (const key of ['::nopey', '::scroll-button(*)', '::column']) {
+        const fields = `components: {button: {base: {${JSON.stringify(key)}: {color: 'red'}}}}`;
+        plain(fields);
+        const p = json(['theme', 'build', 'plain/p.ts']);
+        expect(p.status, key).toBe(0);
+        expect(JSON.stringify(p.env.data.warnings), key).toContain(
+          "is not in the CLI's selector data: it may be newer than this CLI, or a typo",
+        );
+        own('k37', fields);
+        const e = compileOwn('k37');
+        expect(e.status, key).toBe(0);
+        expect(JSON.stringify(e.env.data.warnings), key).toContain(
+          "is not in the CLI's selector data",
+        );
+      }
+      own('k37', "components: {button: {base: {'::befor': {color: 'red'}}}}");
       expect(compileOwn('k37').status).toBe(1);
     },
     T,

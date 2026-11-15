@@ -180,6 +180,38 @@ const nearPseudoElement = name =>
       (name.length > 5 ? 2 : 1),
   ) ?? null;
 
+/**
+ * Notes on a pseudo key the build writes but cannot judge: a pseudo-element
+ * missing from the CLI's selector data and near no known one. Browser
+ * support moves faster than the data, so it is noted, never refused.
+ * @param {string} key
+ * @returns {string[]}
+ */
+export function pseudoKeyNotes(key) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = cssTree().parse(`.p${key}`, {context: 'selectorList'});
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const notes = [];
+  cssTree().walk(ast, (/** @type {any} */ node) => {
+    if (
+      node.type === 'PseudoElementSelector' &&
+      !node.name.startsWith('-') &&
+      !node.name.includes('\\') &&
+      !knownPseudoElements().has(node.name.toLowerCase()) &&
+      !nearPseudoElement(node.name)
+    )
+      notes.push(
+        `${key} names ::${node.name}, which is not in the CLI's selector data: it may be newer than this CLI, or a typo; the build writes it as it is`,
+      );
+  });
+  return notes;
+}
+
 /** The pseudo-classes whose argument is a selector list. */
 const SELECTOR_LIST_PSEUDO_CLASSES = ['is', 'where', 'not', 'has'];
 
@@ -189,7 +221,8 @@ const SELECTOR_LIST_PSEUDO_CLASSES = ['is', 'where', 'not', 'has'];
  * @returns {{classes: true | string[], elements: boolean}}
  */
 const afterPseudoElement = element =>
-  element.name.startsWith('-')
+  element.name.startsWith('-') ||
+  !knownPseudoElements().has(element.name.toLowerCase())
     ? {classes: true, elements: true}
     : element.children
       ? (AFTER_FUNCTIONAL_PSEUDO_ELEMENT[element.name.toLowerCase()] ?? {
@@ -230,13 +263,17 @@ function compoundProblem(key, ast) {
     )
       return;
     const colons = node.type === 'PseudoElementSelector' ? '::' : ':';
+    // A pseudo-element missing from the selector data is a typo when it is
+    // near a known one; one near none may be newer than the data, so it is
+    // only noted (`pseudoKeyNotes`).
     if (
       node.type === 'PseudoElementSelector' &&
       !node.name.startsWith('-') &&
       !node.name.includes('\\') &&
-      !knownPseudoElements().has(node.name.toLowerCase())
+      !knownPseudoElements().has(node.name.toLowerCase()) &&
+      nearPseudoElement(node.name)
     )
-      why ??= `${key} names ::${node.name}, a pseudo-element no browser knows, so the browser drops the rule${nearPseudoElement(node.name) ? `; did you mean ::${nearPseudoElement(node.name)}?` : ''}`;
+      why ??= `${key} names ::${node.name}, a pseudo-element no browser knows, so the browser drops the rule; did you mean ::${nearPseudoElement(node.name)}?`;
     else if (node.name.includes('\\'))
       why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
     else if (
@@ -422,8 +459,14 @@ export function styleKeyProblems(theme) {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
       const why = partKeyProblem(k, v, kind);
-      if (why) out.push({path: [...at, k], why});
-      else block(v, [...at, k], innerBlock(k, kind), depth + 1);
+      if (why) {
+        out.push({path: [...at, k], why});
+        continue;
+      }
+      if (k.startsWith(':') && isBlock(v))
+        for (const note of pseudoKeyNotes(k))
+          out.push({path: [...at, k], why: note});
+      block(v, [...at, k], innerBlock(k, kind), depth + 1);
     }
   };
   /** @param {any} surface @param {string[]} at */
