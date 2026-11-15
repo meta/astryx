@@ -579,32 +579,40 @@ async function drawOpenLayers(elements, React) {
     return '';
   }
   const g = /** @type {any} */ (globalThis);
-  const host = g.document.createElement('div');
-  g.document.body.appendChild(host);
-  const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
-  /** @type {string[]} */
-  let layers = [];
-  try {
-    class Alone extends React.Component {
-      state = {failed: false};
-      static getDerivedStateFromError() {
-        return {failed: true};
-      }
-      render() {
-        return this.state.failed ? null : this.props.children;
-      }
+  class Alone extends React.Component {
+    state = {failed: false};
+    static getDerivedStateFromError() {
+      return {failed: true};
     }
-    flushSync(() => root.render(createElement(React.Fragment, null, ...elements.map((e, i) => createElement(Alone, {key: i}, e)))));
-    layers = await openLayerMarkup(host, flushSync);
-  } catch {
-    // A page that cannot be drawn there adds no overlays.
+    render() {
+      return this.state.failed ? null : this.props.children;
+    }
   }
-  try {
-    root.unmount();
-  } catch {
-    // Unmounting a page that failed to draw changes nothing.
+  // Each part is drawn on its own, then taken down before the next: the
+  // listeners a drawn part puts on the document (a typeahead's or a menu's
+  // outside press) then hear only the presses on its own controls, never
+  // every other part's, as in a window that shows that part alone.
+  /** @type {string[]} */
+  const layers = [];
+  for (const element of elements) {
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+    try {
+      flushSync(() => root.render(createElement(Alone, null, element)));
+      // (What presses open, as when the parts were drawn together: a right
+      // click is for a part drawn in its own place, the sheet's.)
+      layers.push(...(await openLayerMarkup(host, flushSync, {rightClick: false})));
+    } catch {
+      // A part that cannot be drawn there adds no overlays.
+    }
+    try {
+      root.unmount();
+    } catch {
+      // Unmounting a part that failed to draw changes nothing.
+    }
+    host.remove();
   }
-  host.remove();
   return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 
