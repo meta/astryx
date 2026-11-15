@@ -51,85 +51,209 @@ const GENERIC_KEYWORDS = new Set([
   'revert-layer',
 ]);
 
-// Families a clean machine already has: the members of core's own default
-// stacks (tokens.stylex.ts typographyDefaults) plus the classic web-safe
-// macOS/Windows set. Deliberately short — an unknown family warns, and for a
-// preinstalled rarity that is a one-line false alarm, not a broken theme.
-const SYSTEM_FAMILIES = new Set([
-  '-apple-system',
-  'blinkmacsystemfont',
-  'segoe ui',
-  'segoe ui emoji',
-  'segoe ui symbol',
-  // The weights Windows ships as families of their own.
-  'segoe ui light',
-  'segoe ui semilight',
-  'segoe ui semibold',
-  'segoe ui black',
-  'roboto',
-  'helvetica',
-  'helvetica neue',
-  'arial',
-  'arial black',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'monaco',
-  'consolas',
-  'menlo',
-  'courier',
-  'courier new',
-  'georgia',
-  'times',
-  'times new roman',
-  'verdana',
-  'tahoma',
-  'trebuchet ms',
-  'impact',
-  'palatino',
-  'cambria',
-  'calibri',
-  'lucida grande',
-  'lucida console',
-  'gill sans',
-  'brush script mt',
-  'snell roundhand',
-  'old english text mt',
+/**
+ * The fonts the systems ship, by the platform that ships them, as their
+ * own font lists name them, by lowercase name: `everywhere` for a family
+ * macOS and Windows both ship (a theme may name it as its font), else the
+ * one platform that has it. The one table: the build's font notice, the
+ * editor's "ships only on" notes and its install lines all read it. A
+ * family both a system ships and Fontsource publishes (Roboto, Cascadia
+ * Code) stays where the editor's open-font table names its package.
+ */
+export const SYSTEM_FONTS_BY_PLATFORM = {
+  everywhere: [
+    'helvetica',
+    'arial',
+    'arial black',
+    'courier',
+    'courier new',
+    'georgia',
+    'times',
+    'times new roman',
+    'verdana',
+    'tahoma',
+    'trebuchet ms',
+    'impact',
+    'comic sans ms',
+  ],
+  macOS: [
+    'arial narrow',
+    'andale mono',
+    '-apple-system',
+    'blinkmacsystemfont',
+    'helvetica neue',
+    'apple color emoji',
+    'monaco',
+    'menlo',
+    'palatino',
+    'lucida grande',
+    'gill sans',
+    'snell roundhand',
+    'avenir',
+    'avenir next',
+    'avenir next condensed',
+    'optima',
+    'futura',
+    'geneva',
+    'didot',
+    'baskerville',
+    'big caslon',
+    'bodoni 72',
+    'hoefler text',
+    'iowan old style',
+    'american typewriter',
+    'cochin',
+    'copperplate',
+    'athelas',
+    'seravek',
+    'skia',
+    'superclarendon',
+    'rockwell',
+    'marker felt',
+    'noteworthy',
+    'chalkboard',
+    'chalkboard se',
+    'chalkduster',
+    'apple chancery',
+    'zapfino',
+    'papyrus',
+    'herculanum',
+    'phosphate',
+    'trattatello',
+    'arial rounded mt bold',
+    'pingfang sc',
+    'pingfang tc',
+    'pingfang hk',
+    'hiragino sans',
+    'hiragino sans gb',
+    'hiragino kaku gothic pron',
+    'hiragino mincho pron',
+    'apple sd gothic neo',
+  ],
+  Windows: [
+    'segoe ui',
+    'segoe ui emoji',
+    'segoe ui symbol',
+    'segoe ui historic',
+    // The weights Windows ships as families of their own.
+    'segoe ui light',
+    'segoe ui semilight',
+    'segoe ui semibold',
+    'segoe ui black',
+    'segoe ui variable',
+    'segoe ui variable display',
+    'segoe ui variable text',
+    'segoe ui variable small',
+    'segoe print',
+    'segoe script',
+    'segoe fluent icons',
+    'segoe mdl2 assets',
+    'consolas',
+    'cambria',
+    'cambria math',
+    'calibri',
+    'calibri light',
+    'candara',
+    'corbel',
+    'constantia',
+    'bahnschrift',
+    'sitka',
+    'sitka text',
+    'sitka small',
+    'sitka heading',
+    'sitka display',
+    'sitka banner',
+    'sitka subheading',
+    'franklin gothic medium',
+    'gabriola',
+    'ebrima',
+    'gadugi',
+    'ink free',
+    'javanese text',
+    'leelawadee ui',
+    'lucida console',
+    'lucida sans unicode',
+    'microsoft sans serif',
+    'mv boli',
+    'myanmar text',
+    'nirmala ui',
+    'palatino linotype',
+    'sylfaen',
+    'symbol',
+    'webdings',
+    'wingdings',
+    'marlett',
+    'brush script mt',
+    'old english text mt',
+    'microsoft yahei',
+    'microsoft yahei ui',
+    'microsoft jhenghei',
+    'microsoft jhenghei ui',
+    'simsun',
+    'simhei',
+    'nsimsun',
+    'meiryo',
+    'yu gothic',
+    'yu mincho',
+    'ms gothic',
+    'ms mincho',
+    'malgun gothic',
+    // The same Windows fonts by their Chinese names.
+    '微软雅黑',
+    '宋体',
+    '黑体',
+  ],
+  'Android and ChromeOS': ['roboto', 'noto color emoji'],
   // Linux staples — the shipped themes' fallback stacks name these on
   // purpose (e.g. neutral's code stack ends in Liberation Mono).
-  'liberation mono',
-  'liberation sans',
-  'liberation serif',
-  'dejavu sans',
-  'dejavu sans mono',
-  // The interface and text fonts the systems ship for Chinese, Japanese and
-  // Korean, which CJK stylesheets name.
-  'pingfang sc',
-  'pingfang tc',
-  'pingfang hk',
-  'hiragino sans',
-  'hiragino sans gb',
-  'hiragino kaku gothic pron',
-  'hiragino mincho pron',
-  'apple sd gothic neo',
-  'microsoft yahei',
-  'microsoft yahei ui',
-  'microsoft jhenghei',
-  'microsoft jhenghei ui',
-  'simsun',
-  'simhei',
-  'nsimsun',
-  'meiryo',
-  'yu gothic',
-  'yu mincho',
-  'ms gothic',
-  'ms mincho',
-  'malgun gothic',
-  // The same Windows fonts by their Chinese names.
-  '微软雅黑',
-  '宋体',
-  '黑体',
+  Linux: [
+    'liberation mono',
+    'liberation sans',
+    'liberation serif',
+    'dejavu sans',
+    'dejavu sans mono',
+  ],
+};
+
+/**
+ * Apple's own interface faces, by lowercase name, with the generic family
+ * that reaches each. Apple systems hide them from a lookup by family name,
+ * so a page reaches them only through these generics: by name, every
+ * system shows the next font in the stack. No package loads them.
+ */
+export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
+  'sf pro': 'system-ui',
+  'sf pro text': 'system-ui',
+  'sf pro display': 'system-ui',
+  'sf pro rounded': 'ui-rounded',
+  'sf compact': 'system-ui',
+  'sf compact text': 'system-ui',
+  'sf compact display': 'system-ui',
+  'sf compact rounded': 'ui-rounded',
+  'sf mono': 'ui-monospace',
+  'new york': 'ui-serif',
+});
+
+/**
+ * The generic family that reaches one of Apple's interface faces, or null
+ * for any other family.
+ * @param {string} family without quotes
+ * @returns {string | null}
+ */
+export function appleFaceGeneric(family) {
+  return (
+    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
+    null
+  );
+}
+
+/**
+ * Every family a system ships, by lowercase name, and Apple's interface
+ * faces: nothing loads those either, and no install line applies to them.
+ */
+const SYSTEM_FAMILIES = new Set([
+  ...Object.values(SYSTEM_FONTS_BY_PLATFORM).flat(),
+  ...Object.keys(APPLE_FACE_GENERICS),
 ]);
 
 /**
@@ -161,6 +285,15 @@ function splitFamilies(value) {
     families.push(name);
   }
   return families;
+}
+
+/**
+ * The system families the build counts as loaded (the one list), lower
+ * case: what a typed family is checked against for a typo.
+ * @returns {string[]}
+ */
+export function systemFontFamilies() {
+  return [...SYSTEM_FAMILIES];
 }
 
 /**

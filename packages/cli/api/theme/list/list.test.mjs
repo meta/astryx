@@ -3,11 +3,7 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  themeList,
-  themeListAvailable,
-  themeListCopySources,
-} from './list.mjs';
+import {themeList, themeListAvailable, themeListCopySources} from './list.mjs';
 import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
@@ -133,6 +129,36 @@ describe('themeListAvailable (project-aware API)', () => {
       added: false,
       default: false,
       source: 'package',
+      owner: '@acme/themes',
+      installed: true,
+    });
+  });
+
+  it("names a bundled theme's own package as its owner, installed or not", async () => {
+    // The app imports a bundled theme's built output from its own package,
+    // so that package is what the list reports, as `theme add` records it.
+    const neutralDir = path.join(
+      tmpDir,
+      'node_modules',
+      '@astryxdesign',
+      'theme-neutral',
+    );
+    fs.mkdirSync(neutralDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(neutralDir, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/theme-neutral', version: '0.7.16'}),
+    );
+    const {data} = await themeListAvailable({cwd: tmpDir});
+    expect(data.find(theme => theme.slug === 'neutral')).toMatchObject({
+      package: '@astryxdesign/cli',
+      source: 'bundled',
+      owner: '@astryxdesign/theme-neutral',
+      installed: true,
+    });
+    expect(data.find(theme => theme.slug === 'butter')).toMatchObject({
+      source: 'bundled',
+      owner: '@astryxdesign/theme-butter',
+      installed: false,
     });
   });
 
@@ -152,6 +178,8 @@ describe('themeListAvailable (project-aware API)', () => {
         added: false,
         default: false,
         source: 'package',
+        owner: '@acme/themes',
+        installed: true,
       },
     ]);
   });
@@ -197,6 +225,8 @@ describe('themeListAvailable (project-aware API)', () => {
         source: 'local',
         added: false,
         default: false,
+        owner: './src/themes',
+        installed: true,
       }),
       expect.objectContaining({
         package: '@acme/themes',
@@ -263,7 +293,9 @@ describe('themeListAvailable (project-aware API)', () => {
       'default',
       'description',
       'displayName',
+      'installed',
       'maintained',
+      'owner',
       'package',
       'slug',
       'source',

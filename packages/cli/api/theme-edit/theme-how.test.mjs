@@ -246,8 +246,8 @@ const QUESTIONS = [
   [
     'checkbox checked color pink',
     {
-      parts: ['checks'],
-      top: /--on checks --state checked$/,
+      parts: ['checkbox-indicator'],
+      top: /--on checkbox-indicator --state checked --only$/,
       adds: /checkbox-indicator\.checked\.backgroundColor=#db2777/,
     },
   ],
@@ -391,7 +391,7 @@ const QUESTIONS = [
     'remove shadows from cards',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -464,7 +464,10 @@ const QUESTIONS = [
   ],
   [
     'square corners everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: /^set q corners square && set q --radius-full 0px$/,
+      adds: /--radius-element=0px/,
+    },
   ],
   [
     'no rounded corners',
@@ -718,7 +721,7 @@ const QUESTIONS = [
     'Schatten auf Karten entfernen',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -801,7 +804,7 @@ describe('how commands, run by set', () => {
     for (const [question, want] of /** @type {Array<[string, RegExp]>} */ ([
       [
         'remove shadows from cards',
-        /\.astryx-card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
+        /\.astryx-card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\);/,
       ],
       [
         'make the toggle switch blue when on',
@@ -1004,7 +1007,7 @@ const QUESTIONS_2 = [
     'turn off the shadow on hover for cards',
     {
       top: /^set q box-shadow none --on card --state hover$/,
-      adds: /card\.base\.:hover\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /card\.base\.:hover\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1291,8 +1294,8 @@ const QUESTIONS_2 = [
   [
     'swap the accent and the danger colors',
     {
-      // (Dark mode swaps too: each dark token takes the other's.)
-      top: /^set q accent '#[0-9a-f]{6}' && set q danger '#[0-9a-f]{6}'( && set q --color-accent '#[0-9a-f]{6}' --mode dark && set q --color-error '#[0-9a-f]{6}' --mode dark)?$/i,
+      // (Each mode swaps too: every color of each role takes the other's.)
+      top: /^set q accent '#[0-9a-f]{6}' && set q danger '#[0-9a-f]{6}'( && set q --color-[a-z-]+ '#[0-9a-f]{6,8}'( --mode (light|dark))?)*$/i,
       adds: /--color-accent/,
     },
   ],
@@ -1532,7 +1535,7 @@ const QUESTIONS_3 = [
     '- rounder buttons\n- no shadow on cards',
     {
       top: /^set q corners more --on button && set q box-shadow none --on card$/,
-      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1659,14 +1662,14 @@ const QUESTIONS_3 = [
     'replace the shadow on cards with a border',
     {
       top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
-      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)[\s\S]*card\.base\.border=1px solid/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)[\s\S]*card\.base\.border=1px solid/,
     },
   ],
   [
     'switch off the shadow on cards with a border',
     {
       top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
-      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1693,9 +1696,18 @@ const QUESTIONS_3 = [
   ],
   [
     'Can you please make the tooltip darker? Thanks!',
-    // A color ask never answers with a filter, which dims the text too; the
-    // tooltip's fill is not read, so the answer asks for a color.
-    {top: null, text: /has not read the fill of tooltip/},
+    // A color ask never answers with a filter, which dims the text too: the
+    // tooltip's fill, read from it drawn open, is made darker.
+    {
+      top: /^set q background-color '#[0-9a-f]{6}' --on tooltip/,
+      text: /a darker background on tooltip/,
+    },
+  ],
+  [
+    'Can you please make the context menu darker? Thanks!',
+    // A part Core draws only once a press opens it has no fill read: the
+    // answer asks for a color.
+    {top: null, text: /has not read the fill of context-menu/},
   ],
   [
     'make inputs taller (44px)',
@@ -1834,9 +1846,7 @@ describe('how answers pass-3 questions', () => {
       ],
       [
         '- rounder buttons\n- no shadow on cards',
-        [
-          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
-        ],
+        [/card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\);/],
       ],
       [
         'buttons have letter-spacing 0.02em and font-weight 500',
@@ -1899,7 +1909,7 @@ const QUESTIONS_F = [
     'flat cards',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -2203,9 +2213,7 @@ describe('how answers final-pass questions', () => {
     for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
       [
         'flat cards',
-        [
-          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
-        ],
+        [/card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\);/],
       ],
       ['Use 0.75rem border radius everywhere', [/--radius-element:\s*12px/]],
       ['Make the link color #2563eb', [/--color-text-accent:[^;]*#2563eb/i]],
@@ -2299,7 +2307,7 @@ const QUESTIONS_G = [
   ],
   [
     'checkbox accent-color #db2777',
-    {top: /^set q accent-color '#db2777' --on checks$/},
+    {top: /^set q accent-color '#db2777' --on checkbox-indicator --only$/},
   ],
   [
     'badges font-variant-numeric: tabular-nums',
@@ -2720,7 +2728,7 @@ const QUESTIONS_H = [
   ],
   [
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checks has no unchecked state/},
+    {top: null, text: /checkbox-indicator has no unchecked state/},
   ],
   [
     'heading color red',
@@ -2874,7 +2882,9 @@ const QUESTIONS_I = [
   // a layer's opacity
   [
     'shadow opacity 0.2 on cards',
-    {top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.2\)' --on card$/},
+    // The shadow's colors at that alpha, in every layer (a card that shows
+    // none takes the shared shadow a card shadow ask gives).
+    {top: /^set q box-shadow '[^']*(?:\/ 20%\)|, 0\.2\))[^']*' --on card$/},
   ],
   [
     'card background opacity 0.5',
@@ -2904,7 +2914,8 @@ const QUESTIONS_I = [
   ],
   [
     'faster hover transitions on buttons',
-    {top: /^set q transition-duration 100ms --on button --state hover$/},
+    // (From the time the button's transition takes now.)
+    {top: /^set q transition-duration [1-9]\d*ms --on button --state hover$/},
   ],
   ['spinner in the accent color', {top: null, text: /spinner reads no fill/}],
   [
@@ -3051,7 +3062,7 @@ describe('how answers final-4 questions', () => {
       [
         'shadow opacity 0.2 on cards',
         [
-          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), 0 1px 3px rgb\(0 0 0 \/ 0\.2\)/,
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), [^;}]*(?:\/ 20%\)|, 0\.2\))/,
         ],
       ],
       [
@@ -3100,7 +3111,10 @@ const QUESTIONS_J = [
   // numbers written as words
   [
     'zero radius everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: /^set q corners square && set q --radius-full 0px$/,
+      adds: /--radius-element=0px/,
+    },
   ],
   ['twelve pixel corners', {top: /^set q corners 12px$/}],
   [
@@ -3147,7 +3161,7 @@ const QUESTIONS_J = [
   [
     'after I check a checkbox it should be green',
     {
-      top: /^set q background-color '#16a34a' --on checks --state checked$/,
+      top: /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
     },
   ],
   ['once a tab is picked make it bold', {top: null}],
@@ -3546,7 +3560,12 @@ const QUESTIONS_O = [
     /^set q border-radius 10px --on button$/,
   ],
   ['make buttons 2px sharper', /^set q border-radius 6px --on button$/],
-  ['make buttons 4px wider', null, /not a change by 4px/],
+  [
+    'make buttons 4px wider',
+    // Wider by a length: the inline padding, half on each side.
+    /^set q padding '\S+ \S+' --on button$/,
+    /inline padding up by 2px on each side/,
+  ],
   [
     'all corners like the buttons',
     /^set q --radius-inner 'var\(--radius-element\)' && set q --radius-container 'var\(--radius-element\)'/,
@@ -3624,7 +3643,8 @@ const QUESTIONS_P = [
     'shrink headings by 20%',
     /^set q --text-heading-1-size [\d.]+rem && .*--text-heading-6-size [\d.]+rem$/,
   ],
-  ['fade in tooltips', null, /no motion of its own/],
+  // A fade is an effect, not a speed: the tooltip fades in already.
+  ['fade in tooltips', null, /tooltip fades in already/],
   ['why are my buttons black', null, /how button says/],
   ['radius lg', /^set q corners 12px$/],
   ['setRadius(4)', /^set q corners 4px$/],
@@ -3642,7 +3662,7 @@ const QUESTIONS_P = [
   ['dropdown shadow', /--on dropdown-menu$/],
   [
     'checkboxes green',
-    /^set q background-color '#16a34a' --on checks --state checked$/,
+    /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
   ],
   ['is my theme valid', null, /show builds q/],
 ];
@@ -4246,11 +4266,13 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('tooltip', {cwd, theme: 'q'});
+    const {data} = await themeEditHow('context-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
-    expect(data.unrecorded.reason).toMatch(/what tooltip reads is unknown/);
+    expect(data.unrecorded.reason).toMatch(
+      /what context-menu reads is unknown/,
+    );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on tooltip",
+      "set q background-color '#f3f4f6' --on context-menu",
     );
   });
 

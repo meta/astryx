@@ -390,7 +390,15 @@ describe('themeBuild() — dropped declarations reach the receipt', () => {
     expect(css).toContain('--color-background-body: null;');
     expect(css).toContain('--spacing-4: 12;');
     expect(css).toContain('border-radius: 4px;');
-    expect(result?.data.warnings).toEqual([]);
+    // A null value keeps its meaning; the build names where it is.
+    expect(result?.data.warnings).toEqual([
+      expect.stringMatching(
+        /^tokens\.--color-background-body \(line 3\): --color-background-body holds null, which the build writes as it is/,
+      ),
+      expect.stringMatching(
+        /^onDark\.tokens\.--color-background-body \(line 4\): /,
+      ),
+    ]);
   });
 
   it('keeps valid CSS that carries semicolons, and reports nothing', async () => {

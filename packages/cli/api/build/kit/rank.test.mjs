@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ideaKind} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
+import {readNames} from './words.mjs';
 import {loadComponents, loadPageTemplates} from '../_adapter.mjs';
 
 // api/build/kit/ -> up 5 = repo root (has packages/core and the templates).
@@ -211,6 +212,60 @@ describe('rankPages on any catalog', () => {
     expect(rankPages('weather widget with radar', catalog)[0].name).toBe(
       'widget-weather',
     );
+  });
+
+  it('reads a template named in any case, separator or with a neighbour-letter swap', () => {
+    const catalog = [
+      page('kanban-board', 'Tools - Kanban', 'Cards in columns of a board.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    for (const idea of [
+      'a KanbanBoard page',
+      'a kanbanBoard',
+      'a knaban board page',
+    ]) {
+      expect(rankPages(idea, catalog)[0]?.name).toBe('kanban-board');
+    }
+  });
+
+  it('never respells a real word into a template name', () => {
+    const catalog = [
+      page('detail-page', 'Content - Detail', 'One record with its fields.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    expect(readNames('a list with a detail pane', catalog)).toBe(
+      'a list with a detail pane',
+    );
+    expect(readNames('a DetailPage, please', catalog)).toBe(
+      'a detail page, please',
+    );
+  });
+
+  it('reads only a swap of two neighbouring letters as a slip', () => {
+    const catalog = [
+      page('settings', 'Settings - Basic', 'Preferences in sections.'),
+      page('table-page', 'Table - Basic', 'Rows of records.'),
+    ];
+    for (const idea of [
+      'a seating chart page',
+      'a sports betting page',
+      'a sitting schedule page',
+      'a cable page',
+      'a setings page',
+    ]) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
+    expect(readNames('a stetings page', catalog)).toBe('a settings page');
+  });
+
+  it('never reads a real word in a longer name as a slip', () => {
+    const catalog = [
+      page('classic-gallery', 'Gallery - Classic', 'A grid of images.'),
+      page('centered-hero', 'Content - Hero', 'A centered headline.'),
+    ];
+    for (const idea of ['a classic galley page', 'an entered hero page']) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
   });
 
   it('weighs a word by how rare it is among page templates', () => {
@@ -423,6 +478,25 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     expect(await start('an empty state for a settings page')).toBe('settings');
     expect(await start('a date range picker')).toBeNull();
     expect(await start('compact status pill with a tooltip')).toBeNull();
+  });
+
+  it('never takes a template kept off the gallery as the app shell for a part', () => {
+    const pages = [
+      page('frame-top', 'Shell - Top Nav', 'An app frame with top navigation.'),
+      {
+        ...page(
+          'frame-preview',
+          'Shell - Top Nav',
+          'Sample product screens for a theme preview, with top navigation.',
+          ['theme preview'],
+        ),
+        hidden: true,
+      },
+    ];
+    const shellFor = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages), 'part')?.name ?? null;
+    expect(shellFor('a theme preview frame with top navigation')).toBeNull();
+    expect(shellFor('an app frame with top navigation')).toBe('frame-top');
   });
 
   it('starts an edit of an existing page or part from the app shell', async () => {

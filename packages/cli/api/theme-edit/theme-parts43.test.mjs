@@ -669,9 +669,7 @@ describe('runs and notes', () => {
     );
     expect(border.code).toBe('ERR_THEME_NO_MODE');
     expect(border.run).toContainEqual(
-      expect.stringMatching(
-        /border-color '#ff0000' --on card --when variant:[\w-]+ --mode dark/,
-      ),
+      expect.stringMatching(/border-color '#ff0000' --on card --mode dark/),
     );
     await themeEditSet(
       'r3',

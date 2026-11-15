@@ -66,7 +66,7 @@ const CASES =
       [/ set b font-family 'Inter, "Serifa"' --on heading$/],
       null,
     ],
-    // A ratio's comma separates its numbers.
+    // A ratio's comma between two whole numbers separates them.
     [
       'aspect-ratio',
       '16,9',
