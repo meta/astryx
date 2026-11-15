@@ -70,6 +70,11 @@ import {
   findProjectCoreDir,
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
+import {
+  filesOnDisk,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
@@ -131,8 +136,9 @@ export function keptFileCheck(
   check,
   codec = CHECK_CODEC,
 ) {
-  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
-  // hosted run names its commands its own way, so it always checks.
+  // Only a recorded run (`doctor` from the bin, with or without `--built`)
+  // reads or keeps one: a hosted run names its commands its own way, so it
+  // always checks.
   if (!recordedRun()) return check();
   return persistedGather(
     // With the command name the checks print commands with.
@@ -282,7 +288,7 @@ export function findIconPlaceholders(projectDir) {
       uses: uses.length,
     });
   }
-  return found.sort((a, b) => a.file.localeCompare(b.file));
+  return found.sort((a, b) => compareText(a.file, b.file));
 }
 
 /** @param {string} projectDir */
@@ -298,6 +304,38 @@ export async function discoverDoctorThemes(projectDir) {
  */
 export function resolveDoctorThemeImports(theme, options) {
   return resolveThemeImports(theme, options);
+}
+
+/**
+ * A finding for each relative import of a package theme's built module and
+ * stylesheets that names no file its package ships (see
+ * `shippedImportFindings`). A local theme is no package: none.
+ * @param {import('../../foundation/config/theme-state.mjs').ResolvedAppTheme} theme
+ * @returns {import('../../foundation/integrations/shipped-imports.mjs').ShippedImportFinding[]}
+ */
+export function themeShippedImportFindings(theme) {
+  if (theme.source === 'local') return [];
+  const moduleFile = realDoctorFile(theme.moduleFile);
+  if (!moduleFile) return [];
+  // The package that ships the module: the nearest package.json with a name
+  // (a build folder may hold one that only sets "type").
+  let packageDir = path.dirname(moduleFile);
+  for (;;) {
+    const name = readPackageJson(path.join(packageDir, 'package.json'))?.name;
+    if (typeof name === 'string' && name !== '') break;
+    const parent = path.dirname(packageDir);
+    if (parent === packageDir) return [];
+    packageDir = parent;
+  }
+  // The app's bundler builds from the package's files where they are,
+  // installed or linked, so those files are what it ships here; doctor never
+  // asks npm.
+  return shippedImportFindings(packageDir, {
+    files: filesOnDisk(packageDir),
+    entries: [theme.moduleFile, theme.stylesheetFile, theme.fontStylesheetFile]
+      .filter(file => typeof file === 'string')
+      .map(file => realDoctorFile(file) ?? file),
+  }).findings;
 }
 
 /** @param {string} projectDir */
@@ -796,7 +834,7 @@ export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
     } catch {
       continue;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    entries.sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {

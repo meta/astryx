@@ -316,6 +316,26 @@ function printIntegrationValidation(data, seen) {
           }),
         ]
       : []),
+    ...(data.shippedImports && data.shippedImports.unchecked.length > 0
+      ? [
+          text(
+            `[info] Relative imports whose packing was not checked: ${data.shippedImports.unchecked.length}:`,
+          ),
+          records(data.shippedImports.unchecked, {
+            fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.exampleCode && data.exampleCode.unchecked.length > 0
+      ? [
+          text(
+            `[info] Examples not checked: ${data.exampleCode.unchecked.length}:`,
+          ),
+          records(data.exampleCode.unchecked, {
+            fields: ['file', 'example', 'reason'],
+          }),
+        ]
+      : []),
   );
 }
 

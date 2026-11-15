@@ -31,6 +31,7 @@ import type {ThemeMotionConfig, ThemeMotionKnobs} from './themeMotion';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
+import {withoutUnsetComponents} from './mergeComponents';
 import {assertNoTokenCycles, resolveAdaptationLocalTokens} from './localTokens';
 
 // =============================================================================
@@ -1077,7 +1078,8 @@ export function resolveThemeAdaptationRules(
         ? omitRootTypeScaleDefaults(
             resolved.components,
             rootComponents,
-            rule.value.components,
+            // A value the rule leaves undefined is no write of its own.
+            withoutUnsetComponents(rule.value.components),
           )
         : resolved.components,
     };

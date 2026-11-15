@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {validateIntegration} from './validate-integration.mjs';
 import {integrationCheck} from './check/check.mjs';
-import {outsideFiles} from '../../foundation/integrations/validate-contributions.mjs';
+import {outsideFiles} from '../../foundation/integrations/pack-state.mjs';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../../foundation/release/cache.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
@@ -365,6 +365,31 @@ describe('showcase_not_standalone', () => {
     expect(notes[0].message).toContain(
       'Fetching live data through the app is fine',
     );
+  });
+
+  it('reads a Node built-in that only devDependencies install as server-only', async () => {
+    write({
+      'package.json': JSON.stringify({
+        name: '@acme/kit',
+        version: '1.0.0',
+        devDependencies: {events: '^3.3.0'},
+      }),
+      'templates/card.doc.mjs': blockDoc(
+        'card',
+        ", exampleFor: 'AcmeCard', isShowcase: true",
+      ),
+      'templates/card.tsx': [
+        "import {EventEmitter} from 'events';",
+        'export default function Card() {',
+        '  return new EventEmitter() && null;',
+        '}',
+        '',
+      ].join('\n'),
+    });
+
+    const notes = await notesOf(['showcase_not_standalone']);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].message).toContain("imports 'events'");
   });
 
   it('lists a block that shows components only through alsoShowcaseFor', async () => {

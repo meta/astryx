@@ -26,6 +26,7 @@ import {discoverIntegrationCodemods} from '../../assets/codemods/integration-dis
 import {discoverIntegrationDocs} from '../discovery/docs-discovery.mjs';
 import {discoverIconSetDirectory} from '../discovery/icon-set-discovery.mjs';
 import {generatedTypesPath} from '../discovery/icon-set-paths.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 // ── File-walk helpers (no module imports, no execution) ──────────
 
@@ -314,7 +315,7 @@ export async function collectIdentities(loaded) {
       );
       identities.themes = themes
         .map(t => ({slug: t.slug, exportName: t.exportName}))
-        .sort((a, b) => a.slug.localeCompare(b.slug));
+        .sort((a, b) => compareText(a.slug, b.slug));
     } catch (err) {
       errors.push({
         kind: 'themes',
@@ -367,7 +368,7 @@ export async function collectIdentities(loaded) {
           name: t.name,
           ...(t.replaces == null ? {} : {replaces: t.replaces}),
         }))
-        .sort((a, b) => a.id.localeCompare(b.id));
+        .sort((a, b) => compareText(a.id, b.id));
     } catch (err) {
       errors.push({
         kind: 'templates',
@@ -385,7 +386,7 @@ export async function collectIdentities(loaded) {
         for (const cm of codemods) entries.push({version, id: cm.id});
       }
       identities.codemods = entries.sort((a, b) =>
-        `${a.version}/${a.id}`.localeCompare(`${b.version}/${b.id}`),
+        compareText(`${a.version}/${a.id}`, `${b.version}/${b.id}`),
       );
     } catch (err) {
       errors.push({

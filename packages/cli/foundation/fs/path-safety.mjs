@@ -25,11 +25,14 @@ export class PathSafetyError extends Error {
   /**
    * @param {string} message
    * @param {string} code
+   * @param {{viaSymlink?: boolean}} [details]
    */
-  constructor(message, code = 'PATH_UNSAFE') {
+  constructor(message, code = 'PATH_UNSAFE', {viaSymlink = false} = {}) {
     super(message);
     this.name = 'PathSafetyError';
     this.code = code;
+    /** True when the path is inside the root but a symlink in it leads out. */
+    this.viaSymlink = viaSymlink;
   }
 }
 
@@ -41,7 +44,11 @@ export class PathSafetyError extends Error {
  *     better to fail loudly. Pass `{allowAbsolute: true}` to opt in.
  *   - Paths that escape via `..` segments or a symlink, dangling or not.
  *
- * Returns the resolved absolute path on success.
+ * With `allowAbsolute`, an absolute path is read as the place it names inside
+ * `rootDir`, also when it reaches that place through a symlink on either side
+ * (a symlinked project folder), and is then checked as that relative form.
+ *
+ * Returns the resolved absolute path on success, spelled from `rootDir`.
  *
  * @param {string} targetPath - User-provided path (relative or absolute).
  * @param {string} rootDir - Absolute path of the directory to constrain into.
@@ -58,25 +65,36 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   const {allowAbsolute = false, label = 'path'} = options;
 
   if (typeof targetPath !== 'string' || targetPath.length === 0) {
-    throw new PathSafetyError(`Invalid ${label}: must be a non-empty string`, 'PATH_INVALID');
+    throw new PathSafetyError(
+      `Invalid ${label}: must be a non-empty string`,
+      'PATH_INVALID',
+    );
   }
 
   // A NUL byte can't be a real path; reject it up front rather than letting it
   // reach the fs layer (defense in depth, matches sanitizeName).
   if (targetPath.includes('\0')) {
-    throw new PathSafetyError(`Invalid ${label}: contains a NUL byte`, 'PATH_INVALID');
-  }
-
-  if (path.isAbsolute(targetPath) && !allowAbsolute) {
     throw new PathSafetyError(
-      `Invalid ${label} "${targetPath}": absolute paths are not allowed. ` +
-        `Use a path relative to the project root.`,
-      'PATH_ABSOLUTE',
+      `Invalid ${label}: contains a NUL byte`,
+      'PATH_INVALID',
     );
   }
 
   const absRoot = path.resolve(rootDir);
-  const resolved = path.resolve(absRoot, targetPath);
+  let relativeTarget = targetPath;
+  if (path.isAbsolute(targetPath)) {
+    if (!allowAbsolute) {
+      throw new PathSafetyError(
+        `Invalid ${label} "${targetPath}": absolute paths are not allowed. ` +
+          `Use a path relative to the project root.`,
+        'PATH_ABSOLUTE',
+      );
+    }
+    // Outside the root, the lexical check below refuses the absolute path.
+    relativeTarget =
+      relativeInsideRoot(path.resolve(targetPath), absRoot) ?? targetPath;
+  }
+  const resolved = path.resolve(absRoot, relativeTarget);
 
   // Canonicalize for the "is inside" comparison. Use normalized paths
   // with a trailing separator so /root/foo doesn't match /rootbar.
@@ -97,12 +115,15 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   try {
     const realRoot = canonicalPath(absRoot);
     const realTarget = canonicalPath(resolved);
-    const realRootWithSep = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+    const realRootWithSep = realRoot.endsWith(path.sep)
+      ? realRoot
+      : realRoot + path.sep;
     if (realTarget !== realRoot && !realTarget.startsWith(realRootWithSep)) {
       throw new PathSafetyError(
         `Invalid ${label} "${targetPath}": resolves outside the project root ` +
           `(${absRoot}) via a symlink. Path traversal is not allowed.`,
         ERROR_CODES.ERR_PATH_TRAVERSAL,
+        {viaSymlink: true},
       );
     }
   } catch (err) {
@@ -112,6 +133,55 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   }
 
   return resolved;
+}
+
+/**
+ * Where the absolute path `target` sits inside `root`, relative to `root`, or
+ * null when it is outside. The path is first compared as written. Then each
+ * ancestor, deepest first, is compared by its real location, so a path that
+ * reaches the root through a symlink is inside, and the rest of the path is
+ * kept as written: a symlink below that point is the caller's escape check.
+ *
+ * @param {string} target absolute, normalized
+ * @param {string} root absolute, normalized
+ * @returns {string | null}
+ */
+function relativeInsideRoot(target, root) {
+  const lexical = relativeInside(root, target);
+  if (lexical !== null) return lexical;
+  let realRoot;
+  try {
+    realRoot = canonicalPath(root);
+  } catch {
+    return null;
+  }
+  /** @type {string[]} */
+  const rest = [];
+  for (let at = target; ; at = path.dirname(at)) {
+    try {
+      const inside = relativeInside(realRoot, canonicalPath(at));
+      if (inside !== null) return path.join(inside, ...rest);
+    } catch {
+      // A symlink loop or a permission error: this ancestor is not known to
+      // be inside the root; try the next one up.
+    }
+    if (path.dirname(at) === at) return null;
+    rest.unshift(path.basename(at));
+  }
+}
+
+/**
+ * @param {string} root absolute
+ * @param {string} target absolute
+ * @returns {string | null} `target` relative to `root`, or null when outside
+ */
+function relativeInside(root, target) {
+  const relative = path.relative(root, target);
+  const escapes =
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative);
+  return escapes ? null : relative;
 }
 
 /** Linux's MAXSYMLINKS; a longer chain is treated as a loop. */
@@ -141,12 +211,17 @@ function canonicalPath(target, hops = 0) {
     return path.join(canonicalPath(parent, hops), path.basename(target));
   }
   try {
-    return fs.realpathSync(target);
+    // The native form spells a path as the disk does (its own case on a
+    // case-insensitive disk), so two spellings of one place compare equal.
+    return fs.realpathSync.native(target);
   } catch (err) {
     if (!stat.isSymbolicLink()) throw err;
   }
   const link = fs.readlinkSync(target);
-  return canonicalPath(path.resolve(fs.realpathSync(path.dirname(target)), link), hops + 1);
+  return canonicalPath(
+    path.resolve(fs.realpathSync.native(path.dirname(target)), link),
+    hops + 1,
+  );
 }
 
 /**
@@ -168,11 +243,17 @@ export function sanitizeName(name, options = {}) {
   const {label = 'name'} = options;
 
   if (typeof name !== 'string' || name.length === 0) {
-    throw new PathSafetyError(`Invalid ${label}: must be a non-empty string`, 'NAME_INVALID');
+    throw new PathSafetyError(
+      `Invalid ${label}: must be a non-empty string`,
+      'NAME_INVALID',
+    );
   }
 
   if (name.includes('\0')) {
-    throw new PathSafetyError(`Invalid ${label}: contains a NUL byte`, 'NAME_INVALID');
+    throw new PathSafetyError(
+      `Invalid ${label}: contains a NUL byte`,
+      'NAME_INVALID',
+    );
   }
 
   // Reject any path-segment characters. We don't try to rewrite — silent
@@ -204,8 +285,17 @@ export function sanitizeName(name, options = {}) {
 }
 
 const FILE_EXTENSIONS = new Set([
-  '.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs',
-  '.css', '.scss', '.json', '.md', '.html',
+  '.tsx',
+  '.ts',
+  '.jsx',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.css',
+  '.scss',
+  '.json',
+  '.md',
+  '.html',
 ]);
 
 /**

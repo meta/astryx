@@ -29,6 +29,7 @@ import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
+import {isWordModel} from './kit/word-model.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -49,6 +50,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
+ * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
  */
 
 /**
@@ -56,6 +58,8 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @typedef {object} ComponentWords
  * @property {string} name The component's name, e.g. `DateRangeInput`.
  * @property {string[]} keywords The keywords its own doc declares.
+ * @property {string} [category] The category its own doc files it under,
+ *   e.g. `Table & List`.
  */
 
 /**
@@ -110,6 +114,7 @@ export async function loadTemplates(cwd) {
           package: t.package ?? '@astryxdesign/core',
           category: t.category || '',
           keywords: t.keywords ?? [],
+          hidden: t.hidden === true,
           filePath: t.filePath,
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
@@ -268,28 +273,7 @@ export function loadBlockPicker() {
  */
 export function isWeightsFile(file) {
   const n = Array.isArray(file?.candidates) ? file.candidates.length : 0;
-  return (
-    n > 0 &&
-    Array.isArray(file.tables) &&
-    file.tables.length > 0 &&
-    file.tables.every(
-      (/** @type {any} */ t) =>
-        Array.isArray(t?.words) &&
-        Array.isArray(t.rows) &&
-        t.rows.length === t.words.length &&
-        t.rows.every(
-          (/** @type {any} */ r) => typeof r === 'string' && r.length === n,
-        ) &&
-        Array.isArray(t.bias) &&
-        t.bias.length === n &&
-        t.bias.every((/** @type {any} */ b) => Number.isFinite(b)) &&
-        Number.isFinite(t.clip) &&
-        Number.isFinite(t.step),
-    ) &&
-    Array.isArray(file.blend) &&
-    file.blend.length === 3 * (file.tables.length + 1) + 1 &&
-    file.blend.every((/** @type {any} */ x) => Number.isFinite(x))
-  );
+  return isWordModel(file, n);
 }
 
 /** The ranking coefficients the picker reads. */

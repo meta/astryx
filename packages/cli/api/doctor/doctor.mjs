@@ -1996,7 +1996,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+        "Update check: none recorded here, so the newest release is not known. Only a copy installed for the computer checks, in the background once a day after a command; a project's own copy changes only when the project upgrades it, and a tool that runs its own copy chooses its release.",
     };
   }
   if (
@@ -2310,9 +2310,10 @@ async function runComputerChecks(cwd) {
 }
 
 /**
- * Where `search` and `build` keep their gathered catalog between runs, and
- * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
- * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
+ * Where `search` and `build` keep their gathered catalog between runs, how
+ * much it holds, and the most it and jiti's transpile cache hold; and, in a
+ * run under Yarn Plug'n'Play's loader, that the run keeps none
+ * (runsUnderPnp). Left out of a checkout, which keeps none.
  * @returns {DoctorCheck | null}
  */
 export function checkGatherCache() {
@@ -2323,7 +2324,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, the docs not-found hint's name summaries, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, the lookup commands' not-found hint's name summaries, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A lookup command's not-found path may create the folder to keep its name index. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB and removes its oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written in the last day, or read in the last day where the file system records reads.`,
   };
 }
 

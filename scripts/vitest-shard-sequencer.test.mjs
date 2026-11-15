@@ -4,18 +4,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
-  LEG_PARALLELISM,
   mergeRecord,
   partitionByDuration,
-  readLegOneSeconds,
-  recordLegOneSteps,
   readDurations,
   recordDurations,
   idleSwizzleSlices,
+  durationsFile,
 } from './vitest-shard-sequencer.mjs';
+import {splitByDuration} from './lib/duration-split.mjs';
+import {
+  PER_FILE_SECONDS,
+  nodeFileCost,
+  nodeLegFiles,
+} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -24,13 +27,9 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
-  // The Node shard step sets the leg-one switch, and Main's release re-check
-  // sets SWIZZLE_PROOF_ALL, for their own runs; these tests set both
-  // themselves, so they read the same in those runs as anywhere else.
-  beforeEach(() => {
-    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0');
-    vi.stubEnv('SWIZZLE_PROOF_ALL', '');
-  });
+  // Main's release re-check sets SWIZZLE_PROOF_ALL for its own run; these
+  // tests set it themselves, so they read the same there as anywhere else.
+  beforeEach(() => vi.stubEnv('SWIZZLE_PROOF_ALL', ''));
   afterEach(() => vi.unstubAllEnvs());
 
   it('balances a slow changed test with the guards when one run lists both', () => {
@@ -72,24 +71,10 @@ describe('duration-balanced Node legs', () => {
   });
 
   it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
-    // The `node` project's own include and exclude lists, read from
-    // vitest.config.ts so this check never drifts from what the project runs.
-    const config = fs
-      .readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8')
-      .replace(/\/\/[^\n]*/g, '');
-    const block =
-      /name:\s*'node'[\s\S]*?include:\s*\[([\s\S]*?)\][\s\S]*?exclude:\s*\[([\s\S]*?)\]/.exec(
-        config,
-      );
-    expect(block, 'vitest.config.ts: no node project include list').not.toBe(
-      null,
-    );
-    const globs = list =>
-      [...list.matchAll(/'([^']+)'/g)].map(([, glob]) => glob);
-    const nodeFiles = fs.globSync(globs(block[1]), {
-      cwd: ROOT,
-      exclude: [...configDefaults.exclude, ...globs(block[2])],
-    });
+    // The `node` project's files, from the globs vitest.config.ts reads
+    // (vitest-node-files.test.mjs), so this check never drifts from what the
+    // project runs.
+    const nodeFiles = nodeLegFiles();
     const missing = nodeFiles.filter(file => !(file in recorded));
     expect(nodeFiles.length).toBeGreaterThan(500);
     expect(
@@ -141,19 +126,21 @@ describe('duration-balanced Node legs', () => {
     },
   );
 
-  it('counts a file with no recorded time as the median', () => {
+  it('counts a file with no recorded time as the ninetieth percentile, as the leg planner does', () => {
     const seconds = {'a.test.mjs': 10, 'b.test.mjs': 6, 'c.test.mjs': 1};
-    const legs = partitionByDuration(
-      ['a.test.mjs', 'b.test.mjs', 'c.test.mjs', 'new.test.mjs'],
-      2,
-      seconds,
-    );
-    // new counts as 6, the median: a (10) and c (1) share one leg, b and new
-    // (6 each) the other. Counted as 1 or as 10 it would land elsewhere.
+    const files = ['a.test.mjs', 'b.test.mjs', 'c.test.mjs', 'new.test.mjs'];
+    const legs = partitionByDuration(files, 2, seconds);
+    // new counts as 10, the ninetieth percentile: a and new (10 each) take a
+    // leg each, b (6) joins a, c (1) joins new. At the median, 6, it would
+    // share a leg with a instead.
     expect(legs).toEqual([
-      ['a.test.mjs', 'c.test.mjs'],
-      ['b.test.mjs', 'new.test.mjs'],
+      ['a.test.mjs', 'b.test.mjs'],
+      ['c.test.mjs', 'new.test.mjs'],
     ]);
+    // The planner books the same cost per file.
+    const cost = nodeFileCost(files, seconds);
+    expect(cost('new.test.mjs')).toBe(10 + PER_FILE_SECONDS);
+    expect(splitByDuration(files, 2, cost)).toEqual(legs);
   });
 
   it('splits only the node project; other projects keep Vitest’s split', async () => {
@@ -189,31 +176,6 @@ describe('duration-balanced Node legs', () => {
           .sort(),
       ).toEqual(expected[index]);
       expect(leg.filter(item => item.project.name === 'ui')).toHaveLength(3);
-    }
-  });
-
-  it("gives the first leg its own steps' recorded time when the switch is set", async () => {
-    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '1');
-    expect(readLegOneSeconds()).toBeGreaterThan(0);
-    const node = slowest.slice(0, 40).map(file => ({
-      project: {name: 'node'},
-      moduleId: path.join(ROOT, file),
-    }));
-    const count = 5;
-    const files = node.map(item => path.relative(ROOT, item.moduleId));
-    const expected = partitionByDuration(files, count, recorded, {
-      legOneSeconds: readLegOneSeconds(),
-      idle: await idleSwizzleSlices(files),
-    });
-    for (let index = 1; index <= count; index += 1) {
-      const sequencer = new DurationShardSequencer({
-        config: {root: ROOT, shard: {index, count}},
-      });
-      expect(
-        (await sequencer.shard(node))
-          .map(item => path.relative(ROOT, item.moduleId))
-          .sort(),
-      ).toEqual(expected[index - 1]);
     }
   });
 
@@ -373,6 +335,22 @@ describe('duration-balanced Node legs', () => {
     expect([...(await idleSwizzleSlices(files))]).toEqual([]);
   });
 
+  it('reads the record a workflow names in VITEST_DURATIONS_FILE, and the main record otherwise', () => {
+    expect(durationsFile()).toBe(DURATIONS);
+    vi.stubEnv(
+      'VITEST_DURATIONS_FILE',
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(durationsFile()).toBe(
+      path.join(path.dirname(DURATIONS), 'vitest-node-durations.min-node.json'),
+    );
+    const other = readDurations();
+    expect(Object.keys(other).length).toBeGreaterThan(100);
+    expect(other).not.toEqual(readDurations(DURATIONS));
+    vi.unstubAllEnvs();
+    expect(durationsFile()).toBe(DURATIONS);
+  });
+
   it('reads no swizzle-proof scope when no slice is in the run', async () => {
     expect([...(await idleSwizzleSlices(['a.test.mjs']))]).toEqual([]);
   });
@@ -393,38 +371,18 @@ describe('duration-balanced Node legs', () => {
     });
   });
 
-  it("leaves the first leg its own steps' time, in file time", () => {
-    const files = Array.from({length: 60}, (_, i) => `f${i}.test.mjs`);
-    const seconds = Object.fromEntries(files.map(f => [f, 20]));
-    const sum = leg => leg.reduce((total, f) => total + seconds[f], 0);
-    const even = partitionByDuration(files, 5, seconds).map(sum);
-    expect(Math.max(...even) - Math.min(...even)).toBeLessThanOrEqual(20);
-    const legs = partitionByDuration(files, 5, seconds, {
-      legOneSeconds: 100,
-    }).map(sum);
-    const others = legs.slice(1).reduce((a, b) => a + b, 0) / 4;
-    // 100 s of steps is 100 x LEG_PARALLELISM s of file time, within a file.
-    expect(others - legs[0]).toBeGreaterThan(100 * LEG_PARALLELISM - 40);
-    expect(others - legs[0]).toBeLessThan(100 * LEG_PARALLELISM + 40);
-  });
-
-  it("records the seconds of the first leg's own steps from a job log", () => {
+  it('books the slice files from the swizzle-proof legs, where they run, and nothing else there', () => {
     const log = [
-      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:41:58.0000000Z ##[group]Run npx playwright install chromium',
-      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:42:07.0000000Z done',
-      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:42:24.0000000Z ##[group]Run',
-      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:43:06.0000000Z Theme family cascade guard passed.',
-      'test-node (2/5)\tRun the theme-family contract\t2026-11-13T18:00:00.0000000Z another leg',
+      'swizzle-proof (3/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs (1 test) 338400ms',
+      'swizzle-proof (5/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs ^[[2m(1 test)^[[22m^[[33m 122349^[[2mms^[[22m^[[39m',
+      // Any other file in that job is no Node leg's time.
+      'swizzle-proof (5/8)\tBuild core package\t2026-11-14T11:01:57.18Z  ✓  node  packages/cli/other.test.mjs (2 tests) 5000ms',
+      'test-node (1/5)\tRun tests\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
     ].join('\n');
-    expect(
-      recordLegOneSteps(log, [
-        'Install Playwright for theme-family contract',
-        'Run the theme-family contract',
-        'Offline-media browser cases',
-      ]),
-    ).toEqual({
-      'Install Playwright for theme-family contract': 9,
-      'Run the theme-family contract': 42,
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs': 338.4,
+      'packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs': 122.3,
+      'packages/cli/a.test.mjs': 1.2,
     });
   });
 
