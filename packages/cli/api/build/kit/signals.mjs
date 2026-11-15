@@ -23,6 +23,7 @@ import {CORE_PROVIDER_ID} from '../../../foundation/identity/providers.mjs';
 import {
   loadComponents,
   loadTemplates,
+  pageDestination,
   requireBuildCoreDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
@@ -246,8 +247,18 @@ export async function kitSignals(query, options = {}) {
     ? (searchedComponents(result) ?? (await loadComponents(cwd)))
     : [];
   const kind = wantsPages ? ideaKind(query, catalog, components) : 'page';
+  /** @param {import('../_adapter.mjs').PageTemplate} t */
+  const placeOf = t => pageDestination(t.name, cwd);
   const chosen = wantsPages
-    ? chooseStart(ranked, kind, matchedPages, directMatch, catalog, query)
+    ? chooseStart(
+        ranked,
+        kind,
+        matchedPages,
+        directMatch,
+        catalog,
+        query,
+        placeOf,
+      )
     : null;
   // Name the ranker's next two templates beside the start: the reader judges
   // meaning better than keywords do, and an acceptable template is in these
@@ -263,7 +274,7 @@ export async function kitSignals(query, options = {}) {
       query,
     ).flatMap(r => {
       const t = catalog.find(c => c.name === r.name);
-      return t ? [asTemplate(t)] : [];
+      return t ? [asTemplate(t, placeOf(t))] : [];
     }),
   };
 
