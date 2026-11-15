@@ -5716,7 +5716,7 @@ export function draftAnswer(ctx, env, question) {
     // "the menus' separators", "the menu's separators": the owner named
     // first is the place, as "separators in menus" says it.
     const poss = /\b([a-z]+?)(?:'s|s'|’s|s’)\s/.exec(c.text);
-    if (poss && c.parts.length >= 2) {
+    if (poss && c.parts.length >= 1) {
       // (The owner's words end at the possessive: "the dropdown menu's".)
       const possEnd = poss.index + poss[1].length;
       const owner = c.parts.find(x =>
@@ -5732,6 +5732,27 @@ export function draftAnswer(ctx, env, question) {
         }),
       );
       const rest = c.parts.filter(x => x !== owner);
+      // (The owner's own element named after it, "the dropdown menu's
+      // items": that catalog part, which draws its own look.)
+      {
+        const child = /^\s*([a-z]+)/.exec(
+          c.text.slice(poss.index + poss[0].length),
+        )?.[1];
+        const own = owner && child ? `${owner.on}-${singular(child)}` : null;
+        if (
+          own &&
+          C.MAP[own] &&
+          Object.keys(C.MAP[own].at ?? {}).some(k =>
+            /^(?:background(?:-color)?|color|border.*|font-size|padding.*)$/.test(
+              k,
+            ),
+          )
+        ) {
+          c.parts = [{on: own}];
+          continue;
+        }
+      }
+      if (c.parts.length < 2) continue;
       if (owner && rest.length && rest.every(y => C.MAP[y.on])) {
         c.parts = rest;
         c.container = owner.on;
@@ -6789,14 +6810,24 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} on
    * @param {number} delta
    * @param {number} [to]
+   * @param {string} [size] one size value named (sm, md, lg)
    * @returns {{steps: Step[], toks: string[]} | null}
    */
-  const sizeSteps = (on, delta, to) => {
+  const sizeSteps = (on, delta, to, size) => {
+    // (One size named, "the small buttons": only the control height that
+    // size reads.)
     const toks = [
       ...new Set(
         [one(on), ...(FAMILIES[on] ?? [])].flatMap(m =>
           (C.partReads(m, 'size') ?? [])
-            .filter(r => /^--size-/.test(r.token) && r.props.includes('height'))
+            .filter(
+              r =>
+                /^--size-/.test(r.token) &&
+                r.props.includes('height') &&
+                (!size ||
+                  r.token.endsWith(`-${size}`) ||
+                  r.when.some(w => w.split(/[\s,]/).includes(`size=${size}`))),
+            )
             .map(r => r.token),
         ),
       ),
@@ -10888,8 +10919,9 @@ export function draftAnswer(ctx, env, question) {
         });
         // A height by a length: each control height the part reads, on
         // the part, so every size keeps its own and a text area its rows.
-        if (prop === 'height' && !pf.state && !pf.when) {
-          const sized = sizeSteps(on, down ? -n : n);
+        const sizeNamed = /^size:([\w-]+)$/.exec(String(pf.when ?? ''))?.[1];
+        if (prop === 'height' && !pf.state && (!pf.when || sizeNamed)) {
+          const sized = sizeSteps(on, down ? -n : n, undefined, sizeNamed);
           if (sized?.steps.length) {
             const d = {
               text: `${on} ${down ? 'shorter' : 'taller'} by ${n}px: each control height it reads (${sized.toks.join(', ')}) ${down ? 'down' : 'up'} by ${n}px, on ${on} only (a part sized by its content or rows keeps its height)`,
@@ -18515,7 +18547,9 @@ export function draftAnswer(ctx, env, question) {
     const bare = !next || /^colou?r$/.test(next) || !aspectsOf(next).length;
     return (
       (bare && (ROLE_WORDS.test(subject) || Object.hasOwn(DIALS, subject))) ||
-      /^the\s+text\b(?!-)/.test(c.text)
+      // ("and the shadows softer", "and the corners rounder": the
+      // theme's, said as their own subject.)
+      /^the\s+(?:text|shadows|corners)\b(?!-)/.test(c.text)
     );
   }
 
