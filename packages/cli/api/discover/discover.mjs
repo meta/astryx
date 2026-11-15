@@ -194,9 +194,9 @@ export async function discover(query, options = {}) {
   const {packages: scanned, configured, project} = await discoverPackages();
   // The official list is always read, so discover always has a source.
   const official = officialList({project});
-  // The list asks every source for its catalog, which needs nothing the
-  // installed packages' descriptions give, so a source that answers slowly,
-  // such as a remote catalog, answers while they are read.
+  // The list asks every source for its catalog. A catalog needs nothing the
+  // installed packages' descriptions give, so a slow source, such as a remote
+  // catalog, answers while they are read.
   const listCatalog = query
     ? undefined
     : callSources(project, undefined, {official});
