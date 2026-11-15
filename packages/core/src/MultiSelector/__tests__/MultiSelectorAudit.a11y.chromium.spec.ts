@@ -441,8 +441,8 @@ for (const mode of ['light', 'dark'] as const) {
         }
         const openAxe = await axe(page);
         checkAxe(check, openAxe);
-        // Recorded, not checked: the active option's fill is an open
-        // finding of this audit, so it must not fail the receipt.
+        // The active option's fill is under 3:1. The receipt records it
+        // and does not fail on it.
         await frame('open-keyboard', {open, axe: openAxe});
 
         await page.keyboard.press('Enter');
@@ -791,9 +791,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
       check(emptyShown, 'no empty-search state');
       const result = await axe(page);
       // The empty-panel message is presentational, so the listbox has no
-      // option children here and axe flags that one listbox. Only that node
-      // is set aside; it is reported as an open finding. Any other violation
-      // fails.
+      // option children here and axe flags that one listbox. The receipt
+      // records that node and does not fail on it; any other violation fails.
       const listboxId = await search.getAttribute('aria-controls');
       const expected = result.violations.filter(v =>
         v.startsWith(`aria-required-children #${listboxId}:`),
