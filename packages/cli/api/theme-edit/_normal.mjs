@@ -1483,6 +1483,16 @@ export function readsTyped({
       }
       if (at.length === part.length) return at;
     }
+  // A family name the editor knows, typed with a typo, at the start of a
+  // family with words after it (`georgia` for `Georiga Bold`): its tokens,
+  // the words after carried by the refusal's other lines.
+  if (/^font(-family)?$|^--font-family/.test(key) && TYPO_WORDS.has(o))
+    for (let k = T.length - 1; k >= 1; k -= 1) {
+      const head = T.slice(0, k).join(' ');
+      const bare = (/** @type {string} */ x) => x.replace(/[\s_-]+/g, '');
+      if (typoNear(head, o) || typoNear(bare(head), bare(o)))
+        return Array.from({length: k}, (_, j) => j);
+    }
   // A documented reading of a run of its tokens (`extra bold` in `Inter
   // extra bold` is heavy).
   if (T.length > 1)

@@ -1121,6 +1121,7 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
   let style = null;
   let quotedGeneric = false;
   let misspelled = false;
+  let joined = false;
   for (const p of pieces) {
     const name = p.name.trim();
     if (!name) continue;
@@ -1154,6 +1155,18 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     // (Arial Black, Source Serif 4).
     if (knownFamily(ctx, name)) {
       kept.push(name);
+      continue;
+    }
+    // Two or more families the editor knows with no comma between them
+    // (Georgia Verdana): the browser reads one family named that, which no
+    // system has. Read as the list, with the name kept as typed in quotes.
+    const run = knownFamilyRun(name);
+    if (run) {
+      joined = true;
+      for (const [i, family] of run.entries()) {
+        kept.push(family);
+        asTyped.set(kept.length - 1, i === 0 ? JSON.stringify(name) : '');
+      }
       continue;
     }
     // Weight, style, size and number words after the name, read from the
@@ -1209,23 +1222,28 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       }
       continue;
     }
-    if (!tail.length) {
-      // A family the editor does not know that is a typo of a generic, or
-      // (on the font dial, alone) of a preset: that name.
-      // Or a typo of a system family the build knows (arail is Arial,
-      // Menol is Menlo), on any font list: one known-family rule.
-      const generic = genericOf(name);
+    /**
+     * A family name read for a typo: of a generic, or (on the font dial,
+     * alone) of a preset: that name; or of a font a system ships (arail
+     * is Arial, Menol is Menlo), on any font list: one known-family rule.
+     * Only a generic or a preset the editor offers is a typo (`editor`): a
+     * family it does not know near a font a system ships may be a real
+     * family (Corben, Gabriela), kept as typed, with a note.
+     * @param {string} n
+     */
+    const typoOf = n => {
+      const generic = genericOf(n);
       const known = [
         ...(presets && pieces.length === 1 ? PRESETS : []),
         ...systemFontFamilies(),
       ];
-      const unknown = !generic && !isSystemFamily(cssUnescape(name));
+      const unknown = !generic && !isSystemFamily(cssUnescape(n));
       /** The known names a typo is near. @param {string[]} names */
       const hitsIn = names =>
-        unknown ? names.filter(k => typoNear(bare(name), bare(k))) : [];
+        unknown ? names.filter(k => typoNear(bare(n), bare(k))) : [];
       /** @param {string} k */
       const distance = k =>
-        levenshteinDistance(bare(name), bare(k), 99, {swaps: true});
+        levenshteinDistance(bare(n), bare(k), 99, {swaps: true});
       /** The nearest spelling among names of one family, else null. @param {string[]} hits */
       const oneReading = hits =>
         hits.length && new Set(hits.map(familyOfKnown)).size === 1
@@ -1234,32 +1252,75 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
             )
           : null;
       // The presets are read first: a typo of one (Corier is courier, even
-      // beside Corbel) is that preset, refused with its line, offered at
-      // the nearest spelling of the family it names (Segoe IU is Segoe
-      // UI). A preset and the family it names are one reading. Only a
-      // generic or a preset the editor offers is read as a typo: a family
-      // it does not know near a font a system ships may be a real family
-      // (Corben, Gabriela), so it is kept as typed, with a note.
+      // beside Corbel) is that preset, offered at the nearest spelling of
+      // the family it names (Segoe IU is Segoe UI). A preset and the family
+      // it names are one reading.
       const presetHit = oneReading(
         presets && pieces.length === 1 ? hitsIn(PRESETS) : [],
       );
-      const editorWord = presetHit
+      const presetWord = presetHit
         ? oneReading(
             hitsIn(known).filter(
               h => familyOfKnown(h) === familyOfKnown(presetHit),
             ),
           )
         : null;
-      const preset = editorWord ?? oneReading(hitsIn(known));
-      if (generic || editorWord) {
+      const editor = generic ?? presetWord;
+      const near = presetWord ?? oneReading(hitsIn(known));
+      return {editor, near};
+    };
+    if (!tail.length) {
+      const {editor, near} = typoOf(name);
+      if (editor) {
         misspelled = true;
-        kept.push(/** @type {string} */ (generic ?? preset));
+        kept.push(editor);
         asTyped.set(kept.length - 1, JSON.stringify(name));
       } else {
-        if (preset) notes.push({name, near: preset});
+        if (near) notes.push({name, near});
         kept.push(name);
       }
       continue;
+    }
+    // A name with words after it that no family the editor knows starts
+    // with: the whole name and the family before the words are read for
+    // a typo by the same rule (Arail Black is near Arial Black; Georiga
+    // Bold is Georgia and a weight).
+    if (!knownFamily(ctx, base)) {
+      const whole = typoOf(name);
+      if (whole.editor) {
+        misspelled = true;
+        kept.push(whole.editor);
+        asTyped.set(kept.length - 1, JSON.stringify(name));
+        continue;
+      }
+      if (whole.near) {
+        notes.push({name, near: whole.near});
+        kept.push(name);
+        continue;
+      }
+      const head = typoOf(base);
+      if (head.editor) {
+        misspelled = true;
+        for (const t of tail) {
+          if (t.kind === 'weight') weight ??= t.value ?? null;
+          else if (t.kind === 'style') style ??= t.text;
+          else if (t.kind === 'size') {
+            size = true;
+            sizeTyped ??= t.text;
+          } else number = true;
+        }
+        kept.push(head.editor);
+        asTyped.set(kept.length - 1, JSON.stringify(name));
+        continue;
+      }
+      if (head.near) {
+        notes.push({
+          name,
+          near: `${head.near} ${tail.map(t => t.text).join(' ')}`,
+        });
+        kept.push(name);
+        continue;
+      }
     }
     // Words only (no number or size): part of the name unless the whole
     // name is unknown and the name without them is known.
@@ -1289,7 +1350,8 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     !style &&
     !number &&
     !quotedGeneric &&
-    !misspelled
+    !misspelled &&
+    !joined
   )
     return null;
   const rung =
@@ -1312,11 +1374,17 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
               ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
               : quotedGeneric
                 ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
-                : 'is near a generic family or font the editor knows; a family the editor does not know is kept as written when it is quoted',
+                : joined && !misspelled
+                  ? 'names families the editor knows with no comma between them, so the browser reads one family named that, which no system has; a family the editor does not know is kept as written when it is quoted'
+                  : 'is near a generic family or font the editor knows; a family the editor does not know is kept as written when it is quoted',
     families: kept.join(', '),
-    asTyped: misspelled
-      ? kept.map((k, i) => asTyped.get(i) ?? k).join(', ')
-      : null,
+    asTyped:
+      misspelled || joined
+        ? kept
+            .map((k, i) => asTyped.get(i) ?? k)
+            .filter(Boolean)
+            .join(', ')
+        : null,
     rung,
     size,
     textSize: sizeTyped ? textSizePx(sizeTyped) : null,
@@ -2463,6 +2531,38 @@ const ownLabel = (thing, word) =>
   (thing.startsWith('--font-family') &&
     (word === 'font-family' || word === 'font')) ||
   (thing === 'text-size' && word === 'font-size');
+
+/**
+ * The families the editor knows that a name is made of, written with no
+ * comma between them (`Georgia Verdana`, `Times New Roman Arial`), longest
+ * first at each word; null unless it is two or more of them. Only family
+ * names count, never a preset's key: `Roboto Mono` is one family, not
+ * Roboto and the mono preset.
+ * @param {string} name
+ * @returns {string[] | null}
+ */
+function knownFamilyRun(name) {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return null;
+  /** @param {string} span */
+  const known = span =>
+    isSystemFamily(span) ||
+    [
+      ...Object.values(OPEN_FONTS).map(f => f.family),
+      ...Object.values(FONTS).map(f => f[0]),
+    ].some(f => f.replace(/["']/g, '').toLowerCase() === span.toLowerCase());
+  /** @type {string[]} */
+  const out = [];
+  let at = 0;
+  while (at < words.length) {
+    let end = words.length;
+    while (end > at && !known(words.slice(at, end).join(' '))) end--;
+    if (end === at) return null;
+    out.push(words.slice(at, end).join(' '));
+    at = end;
+  }
+  return out.length > 1 ? out : null;
+}
 
 /**
  * Whether a family is one the editor knows: a system family on the theme
