@@ -158,7 +158,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Named controls.** Every rendered copy and disclosure control has a non-empty accessible name, including when title text is empty or whitespace-only.
 - **AR2 — Disclosure.** The collapsible header exposes expanded state and its controlled region, toggles with pointer, Enter, and Space, and makes collapsed descendants inert without removing the controlled region.
-- **AR3 — Copy feedback.** Copy success updates the control name and emits one localized polite announcement; the visible purpose remains available through the tooltip.
+- **AR3 — Copy feedback.** Copy success updates the control name and emits one localized polite announcement; a failed write emits one localized assertive announcement, because it is an error (`spec:AST-086` FR5); the visible purpose remains available through the tooltip.
 - **AR4 — Scroll access.** A named viewport enters the tab order only for effective overflow and retains native Arrow/Page access, per `spec:AST-025/FR12–FR13`.
 
 ## Design relationships

@@ -182,7 +182,7 @@ export const y2kTheme = defineTheme({
 
     // Text
     '--color-text-primary': [neutral.light[15], neutral.dark[95]],
-    '--color-text-secondary': [neutral.light[40], neutral.dark[70]],
+    '--color-text-secondary': [neutral.light[35], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[80], neutral.dark[35]],
     '--color-text-accent': [neutral.light[15], neutral.dark[95]],
     '--color-on-dark': neutral.light[100],

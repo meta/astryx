@@ -4,10 +4,11 @@
  * @file selfRegistration.test.ts
  * @input vitest (jsdom); each touch table imported in a fresh module graph,
  *   with no call to its register function
- * @output Checks that each spring role row, and the navigation, paging and
- *   picker tables, register at import, so a role plays at the theme's tempo
- * @position Testing; validates uikit/springs.ts, navigation.ts, paging.ts and
- *   picker.ts
+ * @output Checks that each spring role row, and the navigation, paging,
+ *   picker and zoom tables, register at import, so a role plays at the
+ *   theme's tempo
+ * @position Testing; validates uikit/springs.ts, navigation.ts, paging.ts,
+ *   picker.ts and zoomMedia.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -69,6 +70,32 @@ describe('the touch tables register at import', () => {
     );
   });
 
+  it('a page that imports only the zoom table plays its dismissal at the tempo', async () => {
+    const {zoomMedia} = await import('./zoomMedia');
+    const {resolveMotion} = await import('../resolveMotion');
+    const {solveSpring, toSpring} = await import('../spring');
+    const target = element();
+    for (const spring of [
+      zoomMedia.dismiss.dismissPositionSpring,
+      zoomMedia.dismiss.dismissSizeSpring,
+    ]) {
+      tempo = '';
+      expect(resolveMotion(target, spring)).toBe(spring);
+      const base = solveSpring(toSpring(spring), {from: 0, to: 1});
+      for (const scale of [0.75, 1.5]) {
+        tempo = String(scale);
+        const played = solveSpring(toSpring(resolveMotion(target, spring)), {
+          from: 0,
+          to: 1,
+        });
+        expect(played.settleTime(0.001)).toBeCloseTo(
+          base.settleTime(0.001) * scale,
+          6,
+        );
+      }
+    }
+  });
+
   it('each role row and table registers itself, at import', async () => {
     const registered: string[] = [];
     vi.doMock('../roles', async importOriginal => {
@@ -87,10 +114,16 @@ describe('the touch tables register at import', () => {
     await import('./navigation');
     await import('./paging');
     await import('./picker');
+    const {zoomMedia} = await import('./zoomMedia');
     const {motionRoleOf} = await import('../roles');
     expect(motionRoleOf(SETTLE_SPRING)?.id).toBe('springs.settle');
     // The keyboard's spring is a measured constant, not a role.
     expect(motionRoleOf(KEYBOARD_SPRING)).toBeUndefined();
-    expect(registered).toEqual(['navigation', 'paging', 'picker']);
+    expect(motionRoleOf(zoomMedia.dismiss.dismissSizeSpring)?.id).toBe(
+      'zoomMedia.dismiss.dismissSizeSpring',
+    );
+    // The zoom's give past its limits plays as measured.
+    expect(motionRoleOf(zoomMedia.overshoot)).toBeUndefined();
+    expect(registered).toEqual(['navigation', 'paging', 'picker', 'zoomMedia']);
   });
 });

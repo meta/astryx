@@ -5,7 +5,7 @@
 /**
  * @file outsidePress.ts
  * @input Pointer presses on a document and on the shadow roots around a
- *   given root; with closesOnPan, pan moves from core's input stream
+ *   given root; with closesOnPan or onPan, pan moves from core's input stream
  * @output watchOutsidePress, and useOutsidePress, one watch per component.
  *   noteOutsideDismissal and outsideDismissalCount keep a per-document count
  *   of layers that an outside press or focus move closed. The inside tests
@@ -19,6 +19,8 @@ import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isElement, isNode} from '../utils/nodeType';
+import {touchActionAllowsPan} from '../utils/scrollView';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */
@@ -30,6 +32,16 @@ export interface OutsidePressOptions {
    */
   readonly closesOnPan?: boolean;
   /**
+   * Called as a press outside begins a pan that the browser could take as a
+   * scroll: `touch-action` from the press's target up leaves the pan's axis
+   * to the browser. A pan on a control that takes the touch itself (a
+   * resize handle, a swiped row) is not reported. The watch then judges that
+   * press no more, and it calls `onOutside` for no press: an owner whose
+   * layer the browser light-dismisses learns only of pans. Ignored with
+   * `closesOnPan`.
+   */
+  readonly onPan?: () => void;
+  /**
    * The shadow root the layer renders in. The document sees a press inside a
    * closed root as a press on its host. So each root from this one out to the
    * document judges presses too, and an inner root's judgment stands.
@@ -39,7 +51,10 @@ export interface OutsidePressOptions {
 
 // A modal host's backdrop press reads this. A press that closed a layer above
 // the host is that layer's, so the host stays open.
-const outsideDismissals = new WeakMap<Document, number>();
+const outsideDismissals = sharedWeakMap<Document, number>(
+  'layer/outside-press/outside-dismissals',
+  1,
+);
 
 /** Records that a layer in `doc` is closing because a press or focus went outside it. */
 export function noteOutsideDismissal(doc: Document): void {
@@ -67,9 +82,16 @@ export function watchOutsidePress(
   owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
   onOutside: () => void,
-  {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
+  {
+    pointerTypes,
+    closesOnPan = false,
+    onPan,
+    root = null,
+  }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
+  const reportPan = closesOnPan ? undefined : onPan;
+  const followsPans = closesOnPan || reportPan != null;
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
@@ -98,7 +120,7 @@ export function watchOutsidePress(
       return;
     }
     startedOutside = !isInside(event.composedPath());
-    if (closesOnPan) {
+    if (followsPans) {
       panStart = startedOutside
         ? {id: event.pointerId, x: event.clientX, y: event.clientY}
         : null;
@@ -112,11 +134,29 @@ export function watchOutsidePress(
         Math.abs(event.clientY - panStart.y),
       ) >= UIKIT_PAN.hysteresis.value
     ) {
+      if (reportPan != null) {
+        const axis =
+          Math.abs(event.clientX - panStart.x) >=
+          Math.abs(event.clientY - panStart.y)
+            ? 'x'
+            : 'y';
+        const target = event.composedPath()[0];
+        startedOutside = false;
+        panStart = null;
+        if (isElement(target) && touchActionAllowsPan(target, axis)) {
+          reportPan();
+        }
+        return;
+      }
       close();
     }
   };
   const judgeUp = (event: PointerEvent) => {
-    if (!follows(event) || (closesOnPan && panStart?.id !== event.pointerId)) {
+    if (
+      reportPan != null ||
+      !follows(event) ||
+      (closesOnPan && panStart?.id !== event.pointerId)
+    ) {
       return;
     }
     const wasOutside = startedOutside;
@@ -161,6 +201,7 @@ export function watchOutsidePress(
       close();
     } else if (!closesOnPan) {
       startedOutside = false;
+      panStart = null;
     }
   };
 
@@ -173,7 +214,7 @@ export function watchOutsidePress(
   }
   const view = doc.defaultView;
   const stopMoves =
-    closesOnPan && view != null
+    followsPans && view != null
       ? subscribeInput(view, 'pointermove', handleMove)
       : null;
   doc.addEventListener('pointerup', handleUp, true);

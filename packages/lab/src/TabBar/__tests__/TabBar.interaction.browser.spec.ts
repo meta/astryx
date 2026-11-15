@@ -20,18 +20,23 @@ import type {TouchScript} from '@astryxdesign/interaction-harness';
 import {
   advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
+  compareCurve,
   CONTROL_RGB,
   countBetween,
+  cubicBezier,
   drag,
+  FRAME_STARVATION_MS,
   freezePage,
   freezePageOn,
   holdAnimations,
   installPageFreeze,
   installTimerGate,
   markElement,
+  MARKER_RGB,
   merge,
   openStory,
   PARTIAL_LIFT_SKIP,
@@ -49,9 +54,10 @@ import {
   touchDriver,
   touchStoryboard,
   traceRendering,
-  trackMarker,
+  trackMarkers,
   waitForAnimation,
   waitForRest,
+  watchAnimations,
   webInputDriver,
   withFinger,
   withStorybook,
@@ -119,13 +125,15 @@ async function liftedScale(page: Page) {
  */
 function animationLog(): void {
   const w = window as unknown as {
-    __tabBarMade?: {animation: Animation; at: number}[];
+    __tabBarMade?: {animation: Animation; at: number; wall: number}[];
     __tabBarLifted?: number;
   };
   if (w.__tabBarMade != null) {
     return;
   }
-  const made: {animation: Animation; at: number}[] = [];
+  // `at` is the document time, which stands still within a frame. `wall`
+  // is the real time the animator made the run.
+  const made: {animation: Animation; at: number; wall: number}[] = [];
   w.__tabBarMade = made;
   w.__tabBarLifted = 0;
   const now = () => Number(document.timeline.currentTime ?? 0);
@@ -135,7 +143,7 @@ function animationLog(): void {
     ...args: Parameters<Element['animate']>
   ) {
     const animation = animate.apply(this, args);
-    made.push({animation, at: now()});
+    made.push({animation, at: now(), wall: performance.now()});
     if (made.length > 5000) {
       made.splice(0, made.length - 5000);
     }
@@ -148,6 +156,17 @@ function animationLog(): void {
     },
     true,
   );
+  // A press can replace the touched element, as the selected look's icon is.
+  // The touch's pointerup still reaches the window; its touchend does not.
+  window.addEventListener(
+    'pointerup',
+    event => {
+      if (event.pointerType === 'touch') {
+        w.__tabBarLifted = now();
+      }
+    },
+    true,
+  );
 }
 
 /** When a finger last lifted on the page, on the document timeline (0: never). */
@@ -156,9 +175,9 @@ const liftedAt = (page: Page) =>
     () => (window as unknown as {__tabBarLifted?: number}).__tabBarLifted ?? 0,
   );
 
-async function openBar(page: Page, story = 'default') {
+async function openBar(page: Page, story = 'default', title = 'lab-tabbar') {
   await page.addInitScript(animationLog);
-  await openStory(page, storybook(), `lab-tabbar--${story}`);
+  await openStory(page, storybook(), `${title}--${story}`);
   const driver = await touchDriver(page);
   const bar = page.getByRole('tablist', {name: 'Sections'});
   await expect(bar).toBeVisible();
@@ -198,6 +217,47 @@ async function lensCenterX(page: Page) {
     throw new Error('no lens');
   }
   return box.x + box.width / 2;
+}
+
+/**
+ * Each animation that ran on the lens itself since `mark`, a page time. That
+ * is its body, its clip or the copy, never their `::before`: the glass and
+ * its shadow. It reads the recorder's page log, which `watchAnimations`
+ * arms. The log keeps `animate()` runs and CSS transitions alike. The read
+ * changes nothing in it. In WebKit, a CSS run that starts and ends between
+ * two frames never reaches the log. No drawn frame shows it either, and the
+ * case judges every drawn frame.
+ */
+async function lensRuns(page: Page, mark: number) {
+  return lensBody(page).evaluate((body, from) => {
+    const log =
+      (
+        window as unknown as {
+          __harnessAnimations?: {
+            log: {animation: Animation; seenAt: number}[];
+          };
+        }
+      ).__harnessAnimations?.log ?? [];
+    return log
+      .filter(({animation, seenAt}) => {
+        const effect = animation.effect as KeyframeEffect | null;
+        const target = effect?.target;
+        return (
+          seenAt >= from &&
+          target != null &&
+          body.contains(target) &&
+          effect?.pseudoElement == null
+        );
+      })
+      .map(({animation}) => {
+        const frames = (animation.effect as KeyframeEffect).getKeyframes();
+        const keys = Object.keys(frames[0] ?? {}).filter(
+          key =>
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(key),
+        );
+        return `${animation.constructor.name} ${keys.join(' ')}`;
+      });
+  }, mark);
 }
 
 /** How strongly a tab's press paint shows: its layer's opacity, 0 when off. */
@@ -325,6 +385,54 @@ async function setExitDuration(page: Page, value: string) {
         element.style.setProperty('--duration-exit', duration),
       value,
     );
+}
+
+/** A scroller's scroll offset, by test id. */
+async function scrollTopOf(page: Page, testId: string) {
+  return page.getByTestId(testId).evaluate(element => element.scrollTop);
+}
+
+/** Scrolls a scroller to `top` at once, by test id. */
+async function setScrollTop(page: Page, testId: string, top: number) {
+  await page
+    .getByTestId(testId)
+    .evaluate((element, offset) => element.scrollTo({top: offset}), top);
+  await expect.poll(() => scrollTopOf(page, testId)).toBe(top);
+}
+
+/**
+ * Starts recording a scroller's offset every frame, from now until it has
+ * read 0 or 2 s have passed. The returned function waits for the end and
+ * gives the offsets.
+ */
+async function recordScrollTop(page: Page, testId: string) {
+  await page.getByTestId(testId).evaluate(element => {
+    const record = {offsets: [] as number[], isDone: false};
+    (window as unknown as {__scrollRecord: typeof record}).__scrollRecord =
+      record;
+    const start = performance.now();
+    const sample = () => {
+      record.offsets.push(element.scrollTop);
+      if (element.scrollTop === 0 || performance.now() - start > 2000) {
+        record.isDone = true;
+        return;
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  return async () => {
+    await page.waitForFunction(
+      () =>
+        (window as unknown as {__scrollRecord: {isDone: boolean}})
+          .__scrollRecord.isDone,
+    );
+    return page.evaluate(
+      () =>
+        (window as unknown as {__scrollRecord: {offsets: number[]}})
+          .__scrollRecord.offsets,
+    );
+  };
 }
 
 /** How long a tab's paint takes to change now, in ms. */
@@ -1241,6 +1349,64 @@ test('a finger’s release fades only its paint layer’s opacity, which the com
   expect(fades).toEqual([{property: 'opacity', layer: '::before'}]);
 });
 
+test('choosing the selected tab again scrolls its own panel to the top, and no other scroller moves', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 1 times');
+  await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+});
+
+test('the panel glides back to the top over several frames', async ({page}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  // A glide passes through offsets between where it started and the top.
+  expect(read.some(offset => offset > 0 && offset < 800)).toBe(true);
+});
+
+test('with Reduce Motion the panel jumps to the top at once', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  const offsets = await recordScrollTop(page, 'scroller-home');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home));
+  const read = await offsets();
+  expect(read.at(-1)).toBe(0);
+  expect(read.filter(offset => offset > 0 && offset < 800)).toEqual([]);
+});
+
+test('choosing another tab switches without scrolling any panel', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'scroll-to-top');
+  await setScrollTop(page, 'scroller-home', 800);
+  await setScrollTop(page, 'scroller-library', 300);
+  await setScrollTop(page, 'other-scroller', 100);
+  const library = await itemCenter(page, 'Library');
+  await driver.play(tapScript(library));
+  await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
+  await page.waitForTimeout(500);
+  expect(await scrollTopOf(page, 'scroller-home')).toBe(800);
+  expect(await scrollTopOf(page, 'scroller-library')).toBe(300);
+  expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+  await expect(page.getByTestId('reselects')).toHaveText('Reselected 0 times');
+});
+
 test('past the last item, still on the bar, the lens rubber-bands beyond it and the lift commits the last item; past the bar’s end the lift chooses nothing', async ({
   page,
 }) => {
@@ -1325,8 +1491,9 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
   const block = await blocking;
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+  const [tracked, control] = await trackMarkers(page, castFrames, {
+    colors: [MARKER_RGB, CONTROL_RGB],
+  });
   const proof = busyWindowProof(
     tracked,
     {from: block.from, to: block.to},
@@ -1552,6 +1719,13 @@ function assertCrossFade(
   ).toBe(true);
   assertOpacityOnly(animations);
 }
+
+/**
+ * The animator's cross-fade under Reduce Motion on a touch screen: 200 ms on
+ * UIKit's easeInEaseOut, as core's `reducedMotionCrossFade` sets it. The
+ * design rule asks only for opacity, within 200 ms.
+ */
+const REDUCED_MOTION_FADE = {ms: 200, curve: [0.42, 0, 0.58, 1]} as const;
 
 /**
  * design:reduced-motion DR2 on animations already read, the fade itself not
@@ -1863,20 +2037,180 @@ test('with Reduce Motion the settle back from a disabled tab cross-fades', async
 });
 
 test.describe('with Reduce Motion (design:reduced-motion)', () => {
-  test('on a touch screen a tap cross-fades the lens: opacity only, within 200 ms', async ({
+  test('on a touch screen a tap shows the lifted look at once, as UIKit’s does, and fades it only at the lift: opacity only, within 200 ms', async ({
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Browse');
+    const glass = page.locator('[data-tab-bar-lens-clip]');
+    // Every frame from here: the lifted look's opacity, the glass (the
+    // clip's ::before) and its shadow (the body's ::before).
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __liftFrames: {t: number; glass: number; shadow: number}[];
+        __liftDown: number;
+        __liftUp: number;
+      };
+      w.__liftFrames = [];
+      w.__liftDown = 0;
+      w.__liftUp = 0;
+      window.addEventListener(
+        'touchstart',
+        () => {
+          w.__liftDown = performance.now();
+        },
+        {capture: true, once: true},
+      );
+      // The press ends at the touch's pointerup, before its touchend. The
+      // lens dates its lowering from there.
+      const lifted = (event: Event) => {
+        if (
+          w.__liftUp === 0 &&
+          (!(event instanceof PointerEvent) || event.pointerType === 'touch')
+        ) {
+          w.__liftUp = performance.now();
+        }
+      };
+      window.addEventListener('pointerup', lifted, {capture: true});
+      window.addEventListener('touchend', lifted, {capture: true});
+      const opacityOf = (selector: string) => {
+        const element = document.querySelector(selector);
+        return element == null
+          ? NaN
+          : Number(getComputedStyle(element, '::before').opacity);
+      };
+      const step = () => {
+        w.__liftFrames.push({
+          t: performance.now(),
+          glass: opacityOf('[data-tab-bar-lens-clip]'),
+          shadow: opacityOf('[data-tab-bar-lens-body]'),
+        });
+        if (w.__liftFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
     const since = await timelineNow(page);
-    await driver.tap(to);
-    // The fade starts with the touch; the selection follows the lift a few
-    // frames later.
-    await expectCrossFade(page, since);
+    // The lowering's course is read held, at set moments. A press under
+    // Reduce Motion only sets the lifted look. So the first new runs on the
+    // glass and its shadow are the lowering's, and the page holds them as
+    // they start.
+    const hold = await armHold(page, lensBody(page), {
+      judges: [
+        {target: glass, property: 'opacity', pseudoElement: '::before'},
+        {
+          target: lensBody(page),
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+      ],
+      count: 2,
+      newOnly: true,
+    });
+    await driver.play(tapScript(to, {holdMs: 500}));
+    await hold.held();
+    const times = Array.from({length: 16}, (_, i) => (i * 1000) / 60);
+    const glassAt = await samplePseudoOpacity(glass, times);
+    const shadowAt = await samplePseudoOpacity(lensBody(page), times);
+    await releaseAnimations(page, {finish: true});
     await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
-    assertOpacityOnly(await runningAnimations(page, since));
     await waitForRest(lensBody(page));
+    const {frames, down, up, lowerings} = await page.evaluate(from => {
+      const w = window as unknown as {
+        __liftFrames: {t: number; glass: number; shadow: number}[];
+        __liftDown: number;
+        __liftUp: number;
+        __tabBarMade?: {animation: Animation; at: number; wall: number}[];
+      };
+      const layers = [
+        document.querySelector('[data-tab-bar-lens-clip]'),
+        document.querySelector('[data-tab-bar-lens-body]'),
+      ];
+      return {
+        frames: w.__liftFrames,
+        down: w.__liftDown,
+        up: w.__liftUp,
+        // When the animator made each fade of the glass and its shadow. A
+        // set is a run of one value, which is no fade.
+        lowerings: (w.__tabBarMade ?? [])
+          .filter(({animation, at}) => {
+            const effect = animation.effect as KeyframeEffect | null;
+            const values = new Set(
+              effect?.getKeyframes().map(frame => frame.opacity),
+            );
+            values.delete(undefined);
+            return (
+              at >= from &&
+              effect?.pseudoElement === '::before' &&
+              layers.includes(effect.target) &&
+              values.size > 1
+            );
+          })
+          .map(({wall}) => wall),
+      };
+    }, since);
+    expect(down, 'no touch reached the page').toBeGreaterThan(0);
+    expect(up, 'no lift reached the page').toBeGreaterThan(down);
+    // The first frame drawn after the touch shows the lifted look. It must
+    // come while one starvation threshold of a fade is still left to draw.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame =>
+        frame.t > down &&
+        frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
+    });
+    const isLifted = (frame: {glass: number; shadow: number}) =>
+      frame.glass >= 0.99 && frame.shadow >= 0.99;
+    expect(isLifted(first), 'the first frame after the touch').toBe(true);
+    // Every frame drawn from it to the lift shows the lifted look too.
+    expect(
+      frames
+        .filter(frame => frame.t >= first.t && frame.t < up)
+        .filter(frame => !isLifted(frame))
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each held frame without the lifted look',
+    ).toEqual([]);
+    // The animator makes the two fades in the lift's own event: after the
+    // pointerup, and before the page draws its next frame.
+    const [next] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the lift',
+      where: frame => frame.t > up,
+    });
+    expect(lowerings, 'the fades of the glass and its shadow').toHaveLength(2);
+    expect(
+      lowerings
+        .filter(wall => wall < up || wall > next.t)
+        .map(wall => Math.round(wall - up)),
+      'ms after the lift of each fade made outside its event',
+    ).toEqual([]);
+    // Each held moment follows the animator's cross-fade.
+    const fade = cubicBezier(...REDUCED_MOTION_FADE.curve);
+    const fading = (t: number) =>
+      1 - fade(Math.min(1, Math.max(0, t / REDUCED_MOTION_FADE.ms)));
+    for (const [layer, values] of [
+      ['glass', glassAt],
+      ['shadow', shadowAt],
+    ] as const) {
+      const curve = compareCurve(
+        times.map((t, index) => ({t, value: values[index]})),
+        fading,
+        0.02,
+      );
+      expect(
+        curve.maxError,
+        `the ${layer}'s fade: ${JSON.stringify(curve.worst)}`,
+      ).toBeLessThanOrEqual(0.02);
+      // Past 200 ms the held fade reads its end value exactly.
+      expect(
+        values[values.length - 1],
+        `the ${layer} at the end of the lift`,
+      ).toBeLessThanOrEqual(0.01);
+    }
+    assertOpacityOnly(await runningAnimations(page, since));
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
 
@@ -1886,12 +2220,10 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openBar(page);
     const to = await itemCenter(page, 'Profile');
-    // Every frame from here: the lens's own opacity, and how many opacity
-    // animations run on the lens itself. Its glass and shadow are
-    // pseudo-elements, with animations of their own.
+    // Every frame from here: the lens's own opacity.
     await lensBody(page).evaluate(body => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       w.__lensFrames = [];
@@ -1907,13 +2239,6 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         w.__lensFrames.push({
           t: performance.now(),
           opacity: Number(getComputedStyle(body).opacity),
-          fades: body
-            .getAnimations()
-            .filter(animation =>
-              (animation.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(frame => frame.opacity != null),
-            ).length,
         });
         if (w.__lensFrames.length < 600) {
           requestAnimationFrame(step);
@@ -1921,28 +2246,347 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
       };
       requestAnimationFrame(step);
     });
+    // The recorder logs each animation from its first frame, CSS
+    // transitions too. The watch arms it before the tap.
+    await watchAnimations(lensBody(page));
+    const mark = await page.evaluate(() => performance.now());
+    const opacity = () =>
+      lensBody(page).evaluate(body => Number(getComputedStyle(body).opacity));
+    expect(await opacity(), 'the lens before the tap').toBe(1);
     await driver.play(tapScript(to, {holdMs: 150}));
     await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
     await waitForRest(lensBody(page));
     const {frames, down} = await page.evaluate(() => {
       const w = window as unknown as {
-        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensFrames: {t: number; opacity: number}[];
         __lensDown: number;
       };
       return {frames: w.__lensFrames, down: w.__lensDown};
     });
     expect(down, 'no touch reached the page').toBeGreaterThan(0);
-    // The tap's own window: its 150 ms hold and the 200 ms a settle takes.
-    const tap = requireFrames(frames, {
-      min: 12,
-      during: 'the tap and its settle',
-      where: frame => frame.t >= down && frame.t <= down + 350,
+    // The first frame drawn after the touch shows the lens. It must come
+    // while one starvation threshold of a fade is still left to draw.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame =>
+        frame.t > down &&
+        frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
     });
     expect(
-      tap.filter(frame => frame.opacity < 0.9 || frame.fades > 0),
-      'a frame with the lens faded, or fading',
+      first.opacity,
+      'the lens in the first frame after the touch',
+    ).toBeGreaterThanOrEqual(0.9);
+    // Every frame drawn after the touch shows the lens.
+    expect(
+      frames
+        .filter(frame => frame.t > down && !(frame.opacity >= 0.9))
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each drawn frame with the lens faded',
     ).toEqual([]);
+    // No animation ran on the lens itself, even one that ended between two
+    // frames.
+    expect(
+      await lensRuns(page, mark),
+      'each animation that ran on the lens itself',
+    ).toEqual([]);
+    expect(await opacity(), 'the lens at rest').toBe(1);
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
+  });
+
+  test('on a touch screen a held lens shows the touched tab in its selected look, as UIKit’s does, through the lift to rest', async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page);
+    const to = await itemCenter(page, 'Profile');
+    // Every frame from here: whether Profile shows its selected look. Either
+    // the lens holds the opaque selected copy with Profile's at its centre, or
+    // the copy is gone and Profile's own item draws the look.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __copyFrames: {t: number; selected: boolean; copy: boolean}[];
+        __copyDown: number;
+        __copyUp: number;
+      };
+      w.__copyFrames = [];
+      w.__copyDown = 0;
+      w.__copyUp = 0;
+      window.addEventListener(
+        'touchstart',
+        () => {
+          w.__copyDown = performance.now();
+        },
+        {capture: true, once: true},
+      );
+      // The press ends at the touch's pointerup, before its touchend.
+      const lifted = (event: Event) => {
+        if (
+          w.__copyUp === 0 &&
+          (!(event instanceof PointerEvent) || event.pointerType === 'touch')
+        ) {
+          w.__copyUp = performance.now();
+        }
+      };
+      window.addEventListener('pointerup', lifted, {capture: true});
+      window.addEventListener('touchend', lifted, {capture: true});
+      const centre = (element: Element | null) => {
+        const box = element?.getBoundingClientRect();
+        return box == null ? NaN : box.left + box.width / 2;
+      };
+      const step = () => {
+        const copy = document.querySelector('[data-tab-bar-copy]');
+        const item = copy?.querySelector('[data-tab-bar-copy-item="profile"]');
+        const lens = document.querySelector('[data-tab-bar-lens-body]');
+        const label = Array.from(
+          document.querySelectorAll(
+            '[role="tab"][data-tab-bar-value="profile"] span',
+          ),
+        ).find(
+          span => span.children.length === 0 && span.textContent === 'Profile',
+        );
+        const inLens =
+          copy != null &&
+          Number(getComputedStyle(copy).opacity) >= 0.99 &&
+          Math.abs(centre(item ?? null) - centre(lens)) < 1;
+        // Its effective opacity: its own and its ancestors', multiplied.
+        let opacity = 1;
+        for (
+          let node = label ?? null;
+          node != null;
+          node = node.parentElement
+        ) {
+          opacity *= Number(getComputedStyle(node).opacity);
+        }
+        const own =
+          copy == null &&
+          label != null &&
+          Number(getComputedStyle(label).fontWeight) >= 600 &&
+          opacity >= 0.99;
+        w.__copyFrames.push({
+          t: performance.now(),
+          selected: inLens || own,
+          copy: copy != null,
+        });
+        if (w.__copyFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    await driver.play(tapScript(to, {holdMs: 300}));
+    await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
+    await waitForRest(lensBody(page));
+    await expect(lensCopy(page)).toHaveCount(0);
+    // At rest from here. The trace goes on until it holds a frame drawn
+    // after this.
+    const rested = await page.evaluate(() => performance.now());
+    await page.waitForFunction(
+      at => {
+        const frames = (window as unknown as {__copyFrames: {t: number}[]})
+          .__copyFrames;
+        return frames.length > 0 && frames[frames.length - 1].t > at;
+      },
+      rested,
+      {timeout: 2000},
+    );
+    const {frames, down, up} = await page.evaluate(() => {
+      const w = window as unknown as {
+        __copyFrames: {t: number; selected: boolean; copy: boolean}[];
+        __copyDown: number;
+        __copyUp: number;
+      };
+      return {frames: w.__copyFrames, down: w.__copyDown, up: w.__copyUp};
+    });
+    expect(down, 'no touch reached the page').toBeGreaterThan(0);
+    expect(up, 'no lift reached the page').toBeGreaterThan(down);
+    // Every frame drawn from the touch to rest shows Profile's selected look.
+    const drawn = frames.filter(frame => frame.t > down);
+    testInfo.annotations.push({
+      type: 'drawn frames',
+      description: `${drawn.length} from the touch to rest`,
+    });
+    expect(
+      drawn
+        .filter(frame => !frame.selected)
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each frame whose Profile shows no selected look',
+    ).toEqual([]);
+    // Three moments must be drawn, or the run proves nothing. First, the
+    // frame after the touch holds the copy. It must come while one
+    // starvation threshold of a fade is still left to draw.
+    const [first] = requireFrames(frames, {
+      min: 1,
+      during: 'the frame after the touch',
+      where: frame =>
+        frame.t > down &&
+        frame.t <= down + REDUCED_MOTION_FADE.ms - FRAME_STARVATION_MS,
+    });
+    expect(first.copy, 'the first frame after the touch').toBe(true);
+    // Second, the hand-off: the last frame with the copy, and the next frame,
+    // which has none, within one starvation threshold.
+    let handOff = 0;
+    for (let index = 0; index < drawn.length; index += 1) {
+      if (drawn[index].copy) {
+        handOff = index;
+      }
+    }
+    requireFrames(drawn, {
+      min: 2,
+      during: 'the hand-off from the copy to the item’s own look',
+      where: frame =>
+        frame.t >= drawn[handOff].t &&
+        frame.t <= drawn[handOff].t + FRAME_STARVATION_MS,
+    });
+    // Third, a frame at rest.
+    requireFrames(frames, {
+      min: 1,
+      during: 'rest',
+      where: frame => frame.t > rested,
+    });
+  });
+  test('on a touch screen a drag from a disabled tab onto an enabled one lifts the lens with that tab in its selected look', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page, 'disabled-tab');
+    const browse = await itemCenter(page, 'Browse');
+    const profile = await itemCenter(page, 'Profile');
+    // Every frame from here: how lifted the lens is, by its glass (the clip's
+    // ::before). Also whether it holds the opaque selected copy, with
+    // Profile's at its centre. The lift is dated by the touch's pointerup,
+    // which reaches the window whatever the press replaced.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __dragFrames: {
+          t: number;
+          glass: number;
+          copy: boolean;
+          atProfile: boolean;
+        }[];
+        __dragUp: number;
+      };
+      w.__dragFrames = [];
+      w.__dragUp = 0;
+      window.addEventListener(
+        'pointerup',
+        event => {
+          if (event.pointerType === 'touch') {
+            w.__dragUp = performance.now();
+          }
+        },
+        true,
+      );
+      const centre = (element: Element | null) => {
+        const box = element?.getBoundingClientRect();
+        return box == null ? NaN : box.left + box.width / 2;
+      };
+      const step = () => {
+        const copy = document.querySelector('[data-tab-bar-copy]');
+        const item = copy?.querySelector('[data-tab-bar-copy-item="profile"]');
+        const lens = document.querySelector('[data-tab-bar-lens-body]');
+        const clip = document.querySelector('[data-tab-bar-lens-clip]');
+        w.__dragFrames.push({
+          t: performance.now(),
+          glass:
+            clip == null
+              ? 0
+              : Number(getComputedStyle(clip, '::before').opacity),
+          copy: copy != null && Number(getComputedStyle(copy).opacity) >= 0.99,
+          atProfile: Math.abs(centre(item ?? null) - centre(lens)) < 1,
+        });
+        if (w.__dragFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    await driver.play(drag(browse, profile, {durationMs: 400, restMs: 300}));
+    await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
+    const {frames, up} = await page.evaluate(() => {
+      const w = window as unknown as {
+        __dragFrames: {
+          t: number;
+          glass: number;
+          copy: boolean;
+          atProfile: boolean;
+        }[];
+        __dragUp: number;
+      };
+      return {frames: w.__dragFrames, up: w.__dragUp};
+    });
+    expect(up, 'no lift reached the page').toBeGreaterThan(0);
+    // The lens lifts once the finger leaves the disabled tab. Every frame it
+    // shows lifted before the finger lifts holds the opaque copy.
+    const isLifted = (frame: {t: number; glass: number}) =>
+      frame.t < up && frame.glass > 0.01;
+    expect(frames.some(isLifted), 'a frame whose lens is lifted').toBe(true);
+    const lifted = requireFrames(frames, {
+      min: 8,
+      during: 'the lifted drag',
+      where: isLifted,
+    });
+    expect(
+      lifted
+        .filter(frame => !frame.copy)
+        .map(frame => Math.round(up - frame.t)),
+      'ms before the lift of each lifted frame without the opaque copy',
+    ).toEqual([]);
+    // At the lift, Profile's selected look sits at the lens centre.
+    expect(
+      lifted[lifted.length - 1].atProfile,
+      'Profile at the lens at the lift',
+    ).toBe(true);
+  });
+
+  test('on a touch screen a finger on the selected tab’s icon, which the copy replaces, still drags the lens, and its lift chooses the tab under it', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page);
+    // Home is selected, so its icon is the selected one. The copy's mount
+    // replaces it while the finger is on it.
+    const box = await tab(page, 'Home').locator('svg').first().boundingBox();
+    if (box == null) {
+      throw new Error('Home has no icon');
+    }
+    const start = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const library = await itemCenter(page, 'Library');
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __swapTarget: EventTarget | null;
+        __swapAttached: boolean | null;
+      };
+      w.__swapTarget = null;
+      w.__swapAttached = null;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          w.__swapTarget = event.target;
+        },
+        {capture: true, once: true},
+      );
+      window.addEventListener(
+        'pointerup',
+        event => {
+          if (event.pointerType === 'touch' && w.__swapTarget instanceof Node) {
+            w.__swapAttached = document.contains(w.__swapTarget);
+          }
+        },
+        true,
+      );
+    });
+    await driver.play(drag(start, library, {durationMs: 400, restMs: 300}));
+    // The lift chooses Library, so the press saw the finger's moves and its
+    // lift, after the element it landed on left the document.
+    await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
+    const attached = await page.evaluate(
+      () =>
+        (window as unknown as {__swapAttached: boolean | null}).__swapAttached,
+    );
+    expect(attached, 'the touched icon is in the document at the lift').toBe(
+      false,
+    );
   });
 
   test('a press neither lifts nor flexes, and a drag’s release cross-fades the settle', async ({
@@ -2037,6 +2681,22 @@ async function expectCssSlide(page: Page, {isRunning = true} = {}) {
 test.describe('touch work costs nothing under a fine pointer', () => {
   test.describe('under a mouse', () => {
     test.use({hasTouch: false, isMobile: false});
+
+    test('a click on the selected tab scrolls its own panel to the top, and nothing else', async ({
+      page,
+    }) => {
+      await expectFinePointer(page);
+      await openStory(page, storybook(), 'lab-tabbar--scroll-to-top');
+      await expect(page.getByRole('tablist', {name: 'Sections'})).toBeVisible();
+      await setScrollTop(page, 'scroller-home', 800);
+      await setScrollTop(page, 'other-scroller', 100);
+      await tab(page, 'Home').click();
+      await expect(page.getByTestId('reselects')).toHaveText(
+        'Reselected 1 times',
+      );
+      await expect.poll(() => scrollTopOf(page, 'scroller-home')).toBe(0);
+      expect(await scrollTopOf(page, 'other-scroller')).toBe(100);
+    });
 
     test('a click chooses a tab, and so do the keys', async ({page}) => {
       await expectFinePointer(page);
@@ -2490,5 +3150,171 @@ test.describe('a disabled tab under a mouse', () => {
     await tab(page, 'Library').focus();
     await page.keyboard.press('ArrowRight');
     await expect(tab(page, 'Profile')).toBeFocused();
+  });
+});
+
+/** Flips the story to right to left: the tab bar's own direction ancestor. */
+async function rightToLeft(page: Page) {
+  await page.evaluate(() => {
+    document
+      .querySelector('[role="tablist"]')
+      ?.closest('[dir]')
+      ?.setAttribute('dir', 'rtl');
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+/** The More tab's stories live under TabBarMoreList's own title. */
+const MORE_LIST = 'lab-tabbarmorelist';
+
+test.describe('More tab', () => {
+  test('six tabs: the bar shows the first four and More at the five-tab layout, as UIKit does', async ({
+    page,
+  }) => {
+    await openBar(page, 'more-tab', MORE_LIST);
+    const tabs = page.getByRole('tab');
+    await expect(tabs).toHaveCount(5);
+    await expect(tabs.last()).toHaveAccessibleName('More');
+    // iOS 26.2 on a 402 pt screen: five 77 pt items at x 25, 93.75, 162.5,
+    // 231.25 and 300.
+    const viewport = page.viewportSize();
+    const lefts: number[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const box = await tabs.nth(index).locator('span').first().boundingBox();
+      if (box == null) {
+        throw new Error('no item');
+      }
+      // Within the item-width fit's 1 px (tabBar.ts `itemWidth`).
+      expect(Math.abs(box.width - 77)).toBeLessThan(1);
+      lefts.push(box.x);
+    }
+    if (viewport?.width === 402) {
+      [25, 93.75, 162.5, 231.25, 300].forEach((x, index) => {
+        expect(Math.abs(lefts[index] - x)).toBeLessThan(1);
+      });
+    }
+  });
+
+  test('with Reduce Motion a tap on More changes the lens by opacity only, with no slide', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    const more = await itemCenter(page, 'More');
+    const since = await timelineNow(page);
+    await driver.tap(more);
+    // The fade starts with the input; what it changes follows a few
+    // frames later.
+    await expectCrossFade(page, since);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    assertOpacityOnly(await runningAnimations(page, since));
+    // Nothing travels, so the lens carries no copy: it lands on More, and
+    // More draws its own selected look.
+    await waitForRest(lensBody(page));
+    await expect(lensCopy(page)).toHaveCount(0);
+    expect(Math.abs((await lensCenterX(page)) - more.x)).toBeLessThan(0.5);
+    expect(await labelWeight(page, 'More')).toBe('600');
+  });
+
+  test('a section chosen in More opens inside it, More staying selected; More again returns to the list', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    const more = await itemCenter(page, 'More');
+    await driver.tap(more);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const settings = page.getByRole('button', {name: /Settings/});
+    await expect(settings).toBeVisible();
+    await settings.click();
+    await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    await waitForRest(page.getByRole('tablist'));
+    expect(Math.abs((await lensCenterX(page)) - more.x)).toBeLessThan(0.5);
+    await driver.tap(more);
+    await expect(page.getByRole('heading', {name: 'More'})).toBeVisible();
+  });
+
+  test('a disabled tab past the fourth stays disabled in the More list: a tap on its row chooses nothing (spec:AST-085 FR2)', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-disabled-row', MORE_LIST);
+    await driver.tap(await itemCenter(page, 'More'));
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const help = page.getByRole('button', {name: /Help/});
+    await expect(page.locator('.astryx-item', {has: help})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    const box = await help.boundingBox();
+    if (box == null) {
+      throw new Error('no Help row');
+    }
+    await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    // The list stays: no section opened inside More.
+    await expect(page.getByRole('heading', {name: 'More'})).toBeVisible();
+    await expect(page.getByRole('heading', {name: 'Help'})).toHaveCount(0);
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    // Its enabled neighbour still opens.
+    await page.getByRole('button', {name: /Settings/}).click();
+    await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+  });
+
+  test('right to left, the More list’s disclosure chevrons point left, as Core’s disclosure rows’ do', async ({
+    page,
+  }) => {
+    const {driver} = await openBar(page, 'more-tab', MORE_LIST);
+    await rightToLeft(page);
+    await driver.tap(await itemCenter(page, 'More'));
+    await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+    const settings = page.getByRole('button', {name: /Settings/});
+    await expect(settings).toBeVisible();
+    // On screen first: the row's chevron.
+    await expectPainted(
+      page.locator('li', {has: settings}).locator('svg').last(),
+    );
+    // The row's last glyph is its chevron (beside the label's button): flipped
+    // on it or a wrapper.
+    const transform = await settings.evaluate(button => {
+      const row = button.closest('li') ?? button;
+      const glyphs = [...row.querySelectorAll('svg')];
+      for (
+        let node: Element | null = glyphs[glyphs.length - 1] ?? null;
+        node != null && node !== row;
+        node = node.parentElement
+      ) {
+        const value = getComputedStyle(node).transform;
+        if (value !== 'none') {
+          return value;
+        }
+      }
+      return 'none';
+    });
+    expect(transform).toBe('matrix(-1, 0, 0, 1, 0, 0)');
+  });
+
+  test.describe('under a mouse', () => {
+    test.use({hasTouch: false, isMobile: false});
+
+    test('More works the same, the lens on the theme’s motion', async ({
+      page,
+    }) => {
+      await expectFinePointer(page);
+      await openStory(page, storybook(), `${MORE_LIST}--more-tab`);
+      const more = await itemCenter(page, 'More');
+      await tab(page, 'More').click();
+      await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+      await page.getByRole('button', {name: /Settings/}).click();
+      await expect(page.getByRole('heading', {name: 'Settings'})).toBeVisible();
+      await expect(tab(page, 'More')).toHaveAttribute('aria-selected', 'true');
+      await expect
+        .poll(async () => Math.abs((await lensCenterX(page)) - more.x))
+        .toBeLessThan(0.5);
+      await expectCssSlide(page, {isRunning: false});
+    });
   });
 });

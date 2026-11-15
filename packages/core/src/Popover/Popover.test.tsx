@@ -85,9 +85,6 @@ describe('usePopover public return type', () => {
     const hasKeepOpenProps: 'keepOpenProps' extends keyof UsePopoverReturn
       ? true
       : false = false;
-    const hasDismissalGuard: 'wasJustDismissed' extends keyof UsePopoverReturn
-      ? true
-      : false = false;
     type PublicToggleParameters = Parameters<UsePopoverReturn['toggle']>;
     const publicToggleTakesNoOptions: PublicToggleParameters extends []
       ? true
@@ -99,7 +96,6 @@ describe('usePopover public return type', () => {
       ? true
       : false = false;
     expect(hasKeepOpenProps).toBe(false);
-    expect(hasDismissalGuard).toBe(false);
     expect(publicToggleTakesNoOptions).toBe(true);
     expect(hasInternalFocusTarget).toBe(false);
   });
@@ -954,6 +950,32 @@ describe('Popover', () => {
       }
     });
 
+    it('focuses the first content control in document order, a field before its buttons', () => {
+      render(
+        <Popover
+          content={
+            <div>
+              <input aria-label="URL" />
+              <button type="button">Apply</button>
+              <button type="button">Cancel</button>
+            </div>
+          }
+          label="Link">
+          <button type="button">Open link</button>
+        </Popover>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Open link'}), {
+          detail: 1,
+        });
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'URL', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('still focuses the content when the opening handler swaps it in', async () => {
       function Swapped() {
         const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -1199,6 +1221,47 @@ describe('Popover', () => {
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+
+    it('keeps the trigger as the return target when show() runs again with focus inside', async () => {
+      // A controlled popover's sync can call show() again after initial focus
+      // moved inside. That call comes before the open state turns on, so
+      // before the focus trap activates. It must keep the trigger as the
+      // opener, so a close returns focus to it.
+      const popoverRef: {current: UsePopoverReturn | null} = {current: null};
+      function Harness() {
+        const popover = usePopover({hasAutoFocus: true});
+        popoverRef.current = popover;
+        return (
+          <>
+            <button type="button" ref={popover.triggerRef}>
+              Open hook
+            </button>
+            {popover.render(<button type="button">Inside hook</button>)}
+          </>
+        );
+      }
+      render(<Harness />);
+      const trigger = screen.getByRole('button', {name: 'Open hook'});
+      // Mount the content once, so it is in the document as the layer shows.
+      act(() => popoverRef.current?.show());
+      act(() => popoverRef.current?.hide());
+      const inside = screen.getByRole('button', {
+        name: 'Inside hook',
+        hidden: true,
+      });
+      trigger.focus();
+
+      act(() => {
+        popoverRef.current?.show();
+        // Initial focus moves inside as the layer shows.
+        inside.focus();
+        popoverRef.current?.show();
+      });
+      expect(inside).toHaveFocus();
+      act(() => popoverRef.current?.hide());
+
+      await waitFor(() => expect(trigger).toHaveFocus());
     });
 
     it('leaves focus on a control inside that took it before the first frame', () => {
@@ -1778,14 +1841,21 @@ describe('Popover touch presentation', () => {
   it('under a finger, grows the popover out of its trigger in place of the layer\u2019s entrance', () => {
     isCoarse = true;
     const layer = open();
-    expect(layer.style.getPropertyValue('animation-name')).toBe('none');
-    expect(layer.style.getPropertyValue('transform-origin')).not.toBe('');
+    const surface = screen.getByRole('dialog', {name: 'Filters', hidden: true});
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    expect(surface.style.getPropertyValue('transform-origin')).not.toBe('');
     const scale = recorded.find(
       animation =>
-        animation.target === layer && 'scale' in animation.keyframes[0],
+        animation.target === surface && 'scale' in animation.keyframes[0],
     );
     expect(scale).toBeDefined();
     expect(String(scale!.keyframes[0].scale).split(' ')[0]).toBe('0.01');
+    // The growth plays on the surface. Chromium lays the anchored layer out
+    // again each time it restyles it, so nothing animates the layer.
+    expect(recorded.filter(animation => animation.target === layer)).toEqual(
+      [],
+    );
+    expect(layer.style.getPropertyValue('transform-origin')).toBe('');
   });
 
   it('under a finger, shrinks back into its trigger on a copy that outlives the close', () => {

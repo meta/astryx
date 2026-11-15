@@ -62,6 +62,14 @@ export const doc = {
       example: "'./themes'",
     },
     {
+      name: 'themeProvider',
+      type: '{ export: string; from: string; themeProp?: string; modeProp?: string }',
+      description:
+        "The one provider component that wires every theme under `themes` into an app, when your package wires its themes itself rather than through Astryx's Theme. `export` is the component's named export and `from` the module an app imports it from. `themeProp`, when the provider takes a theme object, names that prop: `{@command theme add}` then shows the wiring that passes the added theme to it. `modeProp`, only beside `themeProp`, names the prop that takes a color mode: for a theme with one color mode, that wiring passes the mode too. The field is a hint: a part this CLI cannot use (an export that is no component name, a prop that names no prop, a `modeProp` with no `themeProp`) is dropped with an `ignored_manifest_field` warning, and the rest of the manifest loads. `{@command doctor}` counts a theme as wired when the app renders that component, and `{@command theme list}` names it beside each of your themes. Each theme's stylesheet stays the one your package exports for it. A CLI older than this field ignores it with a warning and keeps the rest of the manifest.",
+      example:
+        "{export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme', modeProp: 'themeMode'}",
+    },
+    {
       name: 'experimental',
       type: '{ iconSets?: string }',
       stability: 'experimental',
@@ -98,6 +106,14 @@ export const doc = {
       description:
         "Link to this integration's docs site, such as its home page. Catalogs that list the package may show it.",
       example: "'https://widgets.acme.dev'",
+    },
+    {
+      name: 'logo',
+      type: '{ light: string; dark?: string }',
+      description:
+        "The square logo catalogs show beside your package's name: paths, relative to the package root, to images the package ships. Each is a PNG, JPEG or WebP image, or a shapes-only SVG, of at most 512 KB, whose extension (`.png`, `.jpg`, `.jpeg`, `.webp`, `.svg`) names its format. Set `dark` for a version drawn for dark backgrounds; without it, `light` is used everywhere. `{@command integration check}` notes a logo that is missing, not one of those images, or not packed. In an SVG, no attribute value may hold `<`, `>`, `&` or `\\`, so write `and` rather than `&amp;` in a label. A package.json `marketplace.logo` is also read when this field is not set.",
+      example:
+        "{ light: './marketplace/logo.svg', dark: './marketplace/logo-dark.svg' }",
     },
     {
       name: 'cliCommand',

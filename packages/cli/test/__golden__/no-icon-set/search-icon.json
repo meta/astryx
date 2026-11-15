@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 233,
+    "matchCount": 234,
     "results": [
       {
         "domain": "component",
@@ -138,6 +138,18 @@
       },
       {
         "domain": "template",
+        "name": "BaseTypeaheadMenu",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BaseTypeaheadMenu --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
         "name": "BottomSheetSnapPoints",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -230,18 +242,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterInsideACard --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerShowcase",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerShowcase --type block",
         "mentions": []
       }
     ]

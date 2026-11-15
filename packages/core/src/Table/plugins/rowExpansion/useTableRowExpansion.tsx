@@ -911,6 +911,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'detail',
       // One colour-mode watch per table for the open panels' dividers.
       transformTableContext(children: ReactNode): ReactNode {
         return (

@@ -831,6 +831,31 @@ describe('Button', () => {
     }
   });
 
+  describe('default size geometry (FR4)', () => {
+    const callerStyles = stylex.create({
+      short: {height: '20px', paddingBlock: 0},
+    });
+
+    // A caller's height decides a labelled button's height, as before the
+    // button grew with its label: no minimum holds it at the element size.
+    it("keeps a caller's height on a labelled button", () => {
+      render(<Button label="More" size="sm" xstyle={callerStyles.short} />);
+      const button = screen.getByRole('button', {name: 'More'});
+      const computed = getComputedStyle(button);
+      expect(computed.height).toBe('20px');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
+
+    it('pads a labelled button by its block padding, as before', () => {
+      render(<Button label="Save" size="sm" />);
+      const computed = getComputedStyle(
+        screen.getByRole('button', {name: 'Save'}),
+      );
+      expect(computed.paddingBlock).toBe('var(--spacing-2)');
+      expect(['', '0px', 'auto']).toContain(computed.minHeight);
+    });
+  });
+
   describe('in a narrow row', () => {
     // jsdom has no layout, so these assert the computed declarations that
     // produce the behavior. The real-browser widths are in the PR evidence.

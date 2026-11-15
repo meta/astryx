@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "delete-confirmation",
+  "source": "fwc-4",
+  "title": "Delete confirmation dialog",
+  "prompt": "Show a list of three files: \"Q1 report.pdf\", \"Q2 report.pdf\" and \"Q3 report.pdf\". Each row has a delete button whose accessible name is \"Delete\" followed by the file name, for example \"Delete Q2 report.pdf\". Pressing it opens a confirmation dialog titled \"Delete file?\" with the text \"Are you sure you want to delete Q2 report.pdf?\" (using the chosen file's name) and two buttons, \"Cancel\" and \"Delete\". The dialog's Delete button is styled as a destructive action. Cancel or the Escape key closes the dialog, keeps the file, and moves keyboard focus back to the button that opened the dialog. Confirming with Delete removes that file from the list and closes the dialog."
+}

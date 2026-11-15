@@ -54,7 +54,6 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexShrink: 0,
     overflow: 'clip',
-    // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingInlineEnd: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingBlockStart: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
@@ -64,21 +63,23 @@ const styles = stylex.create({
     '--container-padding-block-start': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
     '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
   },
-  // Start panel: outer-x on left edge
+  // An edge on the Layout's boundary takes the Layout-edge inset. Each edge
+  // publishes the padding it applies, so full-bleed children line up with it.
   startPanel: {
     paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // End panel: outer-x on right edge
   endPanel: {
     paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
   },
-  // When no header: outer-y on top
   noHeader: {
     paddingBlockStart: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-start': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
-  // When no footer: outer-y on bottom
   noFooter: {
     paddingBlockEnd: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-end': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
   },
   fullBleed: {
     paddingInlineStart: 0,
@@ -142,7 +143,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
    * Adds a themed border on the appropriate edge.
    * - Start panel: border on end edge (right in LTR)
    * - End panel: border on start edge (left in LTR)
-   * When false, spacing collapse is applied automatically for seamless visual flow.
+   * When false and `padding` is unset, the panel and the content share one gap.
    *
    * Note: When using `resizable` with an adjacent `ResizeHandle hasDivider`,
    * set this to `false` to avoid a double-line artifact.
@@ -151,9 +152,10 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   hasDivider?: boolean;
 
   /**
-   * Internal padding of the panel using the spacing scale.
+   * Internal padding of the panel on every edge, using the spacing scale.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
-   * Overrides the default padding from the layout container.
+   * Replaces the automatic inset and the gap shared with the content.
+   * `0` is full bleed.
    */
   padding?: SpacingStep;
 
@@ -214,7 +216,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <LayoutContainer variant="card">
+ * <Card>
  *   <Layout
  *     start={
  *       <LayoutPanel hasDivider role="navigation">
@@ -228,7 +230,7 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
  *       </LayoutPanel>
  *     }
  *   />
- * </LayoutContainer>
+ * </Card>
  * ```
  */
 export function LayoutPanel({

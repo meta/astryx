@@ -16,11 +16,16 @@ import {useRef, useState} from 'react';
 import {createPager, type PagerAnimator} from '../hooks/usePager';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {animatorFor, type MotionHandle} from '../motion/animator';
+import {
+  animatorFor,
+  type MotionCurve,
+  type MotionHandle,
+} from '../motion/animator';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {
   type HeldRowListener,
+  itemsSpan,
   makeSnapPaging,
   rowScale,
   type SnapPages,
@@ -95,6 +100,13 @@ function viewPages(
   return pages;
 }
 
+/**
+ * How often a settle's curve is read to find how far it moves the row. Its
+ * extremes lie at its ends, which are read exactly, or where it turns and
+ * moves slowly.
+ */
+const SHOWS_SAMPLES_PER_S = 120;
+
 /** One handle for the same motion on every child. */
 function combined(handles: ReadonlyArray<MotionHandle>): MotionHandle {
   const [lead] = handles;
@@ -140,6 +152,13 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   let heldWidth = 0;
   // The row's own inline snap type, back at the hand-back.
   let ownSnapType = '';
+  // Each child's start and end along the row, in the position's terms, and
+  // the row's outer width, read at the takeover.
+  let spans: {start: number; end: number}[] = [];
+  let heldOuterWidth = 0;
+  // The children the running settle leaves out. Each keeps the translate it
+  // had when the settle began.
+  let leftOut: HTMLElement[] = [];
   const children = () =>
     Array.from(element.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement,
@@ -180,21 +199,42 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     followFrame = requestAnimationFrame(follow);
   }
 
-  // Every child carries the same translate, so a held row's span is its
-  // layout's.
   function span(): number {
-    const items = children();
-    if (items.length === 0) {
-      return 0;
-    }
-    let start = Infinity;
-    let end = -Infinity;
-    for (const child of items) {
+    return itemsSpan(element, isMoving);
+  }
+
+  // Each child's start and end along the row, in the position's terms, with
+  // the row shown at `at`. Every child carries the same translate.
+  function spansOf(
+    items: ReadonlyArray<HTMLElement>,
+    at: number,
+  ): {start: number; end: number}[] {
+    const box = element.getBoundingClientRect();
+    const scale = rowScale(element, box);
+    const rtl = isRtl();
+    return items.map(child => {
       const rect = child.getBoundingClientRect();
-      start = Math.min(start, rect.left);
-      end = Math.max(end, rect.right);
+      const start =
+        (rtl ? box.right - rect.right : rect.left - box.left) / scale + at;
+      return {start, end: start + rect.width / scale};
+    });
+  }
+
+  // A child the settle left out takes the lead's translate before a
+  // measure. Its box then reads as the other children's do.
+  function alignLeftOut(): void {
+    const first = children()[0];
+    if (leftOut.length === 0 || first == null) {
+      return;
     }
-    return (end - start) / rowScale(element, element.getBoundingClientRect());
+    const x = animatorFor(first).get('x');
+    for (const child of leftOut) {
+      const animator = animatorFor(child);
+      if (animator.get('x') !== x) {
+        animator.set({x});
+      }
+    }
+    leftOut = [];
   }
 
   // A resize while the row is held moves its travel with the row's width and
@@ -203,9 +243,12 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     if (!isMoving) {
       return;
     }
+    alignLeftOut();
     const nextSpan = span();
     const nextWidth = element.clientWidth;
     const native = nativePosition();
+    spans = spansOf(children(), position());
+    heldOuterWidth = element.offsetWidth;
     // WebKit truncates a fractional scroll offset, so the travel stays a whole
     // number of pixels, as the scroll width is. It rounds once, from the
     // takeover, so a resize over many frames adds up no rounding.
@@ -233,10 +276,11 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   }
 
   function pages(): SnapPages {
-    return snapPages(element, position(), travel());
+    return snapPages(element, nativePosition(), travel(), isMoving);
   }
 
   function stops(): number[] {
+    alignLeftOut();
     return pages().stops;
   }
 
@@ -269,12 +313,15 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     const items = children();
     const rowSpan = span();
     const rowWidth = element.clientWidth;
+    const itemSpans = spansOf(items, offset);
     heldOffset = offset;
     heldTravel = rowTravel;
     takeoverTravel = rowTravel;
     heldSpan = rowSpan;
     heldWidth = rowWidth;
     heldSign = rowSign;
+    heldOuterWidth = element.offsetWidth;
+    spans = itemSpans;
     lead = items[0] ?? null;
     isMoving = true;
     // A snap type would snap the row again as its children move.
@@ -300,6 +347,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       animator.set({x: 0});
       child.style.removeProperty('translate');
     }
+    leftOut = [];
     isMoving = false;
     beforeSnap?.();
     if (ownSnapType === '') {
@@ -313,6 +361,26 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       onHeld({offset: at, travel: heldTravel});
       onHeld(null);
     }
+  }
+
+  // Whether the child at `index` can show in the row's view at any point of
+  // the track curve `curve`, read from the curve's own values. A child that
+  // cannot keeps its place, and the hand-back places every child.
+  function showsDuring(curve: MotionCurve): (index: number) => boolean {
+    let from = Infinity;
+    let to = -Infinity;
+    const steps = Math.max(1, Math.ceil(curve.duration * SHOWS_SAMPLES_PER_S));
+    for (let i = 0; i <= steps; i++) {
+      const at = -heldSign * curve.at((curve.duration * i) / steps);
+      from = Math.min(from, at);
+      to = Math.max(to, at);
+    }
+    return index => {
+      const span = spans[index];
+      return (
+        span == null || (span.end > from && span.start < to + heldOuterWidth)
+      );
+    };
   }
 
   const animator: PagerAnimator = {
@@ -339,6 +407,9 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       for (const child of children()) {
         animatorFor(child).set(shifted, options);
       }
+      if (values.x != null) {
+        leftOut = [];
+      }
     },
     stop(properties) {
       if (!isMoving) {
@@ -346,6 +417,13 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       }
       for (const child of children()) {
         animatorFor(child).stop(properties);
+      }
+      // Each child's animation stops on its own clock, and a child the
+      // settle left out kept its place. Every child of a held row moves to
+      // where the lead stopped.
+      if (isMoving && (properties == null || properties.includes('x'))) {
+        place(position());
+        leftOut = [];
       }
     },
     play(curves, options) {
@@ -359,11 +437,20 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
               ...curves,
               x: {...x, at: (t: number) => x.at(t) + offset},
             };
-      const items = children();
-      const handles = (items.length > 0 ? items : [element]).map(child =>
-        animatorFor(child).play(shifted, options),
+      const [first, ...rest] = children();
+      if (first == null) {
+        return animatorFor(element).play(shifted, options);
+      }
+      // The first child always plays: the row's position is read from it.
+      const shows = x == null ? () => true : showsDuring(x);
+      const players = [first];
+      leftOut = [];
+      for (const [index, child] of rest.entries()) {
+        (shows(index + 1) ? players : leftOut).push(child);
+      }
+      return combined(
+        players.map(child => animatorFor(child).play(shifted, options)),
       );
-      return combined(handles);
     },
   };
 

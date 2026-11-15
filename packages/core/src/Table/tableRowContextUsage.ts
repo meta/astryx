@@ -11,6 +11,7 @@
 import type {TablePlugin, TableRowContext} from './types';
 import {warnOnce} from '../utils/devWarning';
 
+const countIndependentPlugins = new WeakSet<object>();
 const indexReadingPlugins = new WeakSet<object>();
 const countReadingPlugins = new WeakSet<object>();
 const trackedContexts = new WeakMap<
@@ -46,6 +47,17 @@ function warnIfLate(plugin: object, field: string): void {
   }
 }
 
+/**
+ * Skips row-context tracking for a core plugin that never reads the row index
+ * or count. A later read is not tracked, so its rows can go stale.
+ */
+export function registerCountIndependentPlugin<
+  T extends Record<string, unknown>,
+>(plugin: TablePlugin<T>): TablePlugin<T> {
+  countIndependentPlugins.add(plugin);
+  return plugin;
+}
+
 /** Whether a transform of the plugin has read a row's `logicalIndex`. */
 export function readsRowIndex<T extends Record<string, unknown>>(
   plugin: TablePlugin<T>,
@@ -57,7 +69,9 @@ export function readsRowIndex<T extends Record<string, unknown>>(
 export function readsRowCount<T extends Record<string, unknown>>(
   plugin: TablePlugin<T>,
 ): boolean {
-  return countReadingPlugins.has(plugin);
+  return (
+    countReadingPlugins.has(plugin) && !countIndependentPlugins.has(plugin)
+  );
 }
 
 /**
@@ -69,6 +83,9 @@ export function trackRowContext<T extends Record<string, unknown>>(
   plugin: TablePlugin<T>,
   context: TableRowContext,
 ): TableRowContext {
+  if (countIndependentPlugins.has(plugin)) {
+    return context;
+  }
   let byPlugin = trackedContexts.get(context);
   if (byPlugin == null) {
     byPlugin = new WeakMap();

@@ -1,0 +1,72 @@
+{
+  "version": {
+    "modules": 231,
+    "moduleBytes": 2605551,
+    "fileReads": 53,
+    "folderReads": 0,
+    "pathChecks": 113
+  },
+  "help": {
+    "modules": 231,
+    "moduleBytes": 2605551,
+    "fileReads": 58,
+    "folderReads": 0,
+    "pathChecks": 176
+  },
+  "component": {
+    "modules": 299,
+    "moduleBytes": 3932146,
+    "fileReads": 97,
+    "folderReads": 226,
+    "pathChecks": 3933
+  },
+  "component-json": {
+    "modules": 270,
+    "moduleBytes": 3242852,
+    "fileReads": 73,
+    "folderReads": 225,
+    "pathChecks": 1151
+  },
+  "docs": {
+    "modules": 253,
+    "moduleBytes": 2889208,
+    "fileReads": 624,
+    "folderReads": 133,
+    "pathChecks": 3520
+  },
+  "search": {
+    "modules": 301,
+    "moduleBytes": 3486779,
+    "fileReads": 145,
+    "folderReads": 0,
+    "pathChecks": 8315
+  },
+  "template": {
+    "modules": 254,
+    "moduleBytes": 2964066,
+    "fileReads": 85,
+    "folderReads": 0,
+    "pathChecks": 5952
+  },
+  "build": {
+    "modules": 312,
+    "moduleBytes": 3574530,
+    "fileReads": 142,
+    "folderReads": 0,
+    "pathChecks": 9496
+  },
+  "upgrade-list": {
+    "modules": 439,
+    "moduleBytes": 3894503,
+    "fileReads": 130,
+    "folderReads": 0,
+    "pathChecks": 217
+  },
+  "doctor": {
+    "modules": 370,
+    "moduleBytes": 4864888,
+    "fileReads": 859,
+    "folderReads": 147,
+    "pathChecks": 23039
+  }
+}

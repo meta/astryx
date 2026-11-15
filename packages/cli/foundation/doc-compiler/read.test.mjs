@@ -303,9 +303,9 @@ export const docsZh = {get props() { throw new TypeError('bad translation'); }};
     ).rejects.toThrow(/received null/);
   });
 
-  it('keeps the unchecked readers on a plain import', () => {
+  it('reads an installed TypeScript doc through the unchecked reader too', () => {
     // Outside vitest's own loader: a plain import cannot strip types under
-    // node_modules, and the checked loader (jiti) can, as on main.
+    // node_modules, so every reader takes a `.ts` doc through jiti.
     const dir = path.join(tmpDir, 'node_modules', 'kit');
     fs.mkdirSync(dir, {recursive: true});
     const file = path.join(dir, 'Typed.doc.ts');
@@ -329,7 +329,7 @@ catch (e) { console.log('threw', e.message.split('\\n')[0]); }`,
         ],
         {encoding: 'utf8'},
       ).stdout.trim();
-    expect(run('loadDocs')).toMatch(/^threw .*node_modules/);
+    expect(run('loadDocs')).toBe('ok Typed');
     expect(run('loadComponentDoc')).toMatch(/^(ok Typed|threw .*is invalid)/);
   });
 });
@@ -358,19 +358,18 @@ describe('an edited doc file, read again in the same process', () => {
     expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
   });
 
-  it('gives each importer its own read of an edited TypeScript doc, as a new process would', async () => {
+  it('reads an edited TypeScript doc again, one jiti read shared by every importer', async () => {
     const file = write('Pair.doc.ts', doc('First'));
-    const nativeBefore = await importNativeModule(file);
-    expect(await importDocModule(file)).not.toBe(nativeBefore);
+    const before = await importNativeModule(file);
+    expect(before.default.displayName).toBe('First');
     fs.writeFileSync(file, doc('Second, longer'));
-    // The unchecked reader (a plain import) first, then the checked one (jiti).
+    // The unchecked reader first, then the checked one: both read the edit.
     expect((await loadDocs(file)).displayName).toBe('Second, longer');
     expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
-    const nativeAfter = await importNativeModule(file);
-    const docAfter = await importDocModule(file);
-    expect(docAfter).not.toBe(nativeAfter);
-    expect(await importNativeModule(file)).toBe(nativeAfter);
-    expect(await importDocModule(file)).toBe(docAfter);
+    const after = await importNativeModule(file);
+    expect(after).not.toBe(before);
+    expect(await importDocModule(file)).toBe(after);
+    expect(await importNativeModule(file)).toBe(after);
   });
 
   it('lowers an edited file again for a whole-project compile', async () => {
@@ -389,4 +388,106 @@ describe('an edited doc file, read again in the same process', () => {
     fs.writeFileSync(file, doc('Fixed again'));
     expect((await loadDocs(file)).displayName).toBe('Fixed again');
   });
+
+  it.each([
+    ['a CommonJS doc', 'Edited.doc.js', {type: 'commonjs'}],
+    [
+      'a CommonJS doc in a package without a "type"',
+      'Edited.doc.js',
+      {name: 'kit'},
+    ],
+    ['an ES module doc', 'Edited.doc.mjs', {name: 'kit'}],
+  ])(
+    'reads %s again with each importer, in a real Node process',
+    (_what, name, packageJson) => {
+      const cjs = name.endsWith('.js');
+      const source = (/** @type {string} */ displayName) =>
+        cjs
+          ? doc(displayName).replace('export default', 'module.exports =')
+          : doc(displayName);
+      const dir = path.join(tmpDir, 'kit');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify(packageJson),
+      );
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, source('First'));
+      const importers = pathToFileURL(
+        path.join(CLI_ROOT, 'foundation/doc-compiler/import.mjs'),
+      ).href;
+      const run = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs';
+const m = await import(${JSON.stringify(importers)});
+const names = ['importNativeModule', 'importTemplateModule', 'importDocModule'];
+const file = process.env.DOC_FILE;
+const inOrder = async () => {
+  const mods = [];
+  for (const n of names) mods.push(await m[n](file));
+  return mods;
+};
+const atOnce = async () => {
+  try {
+    return await Promise.all(names.map(n => m[n](file)));
+  } catch (error) {
+    return names.map(() => ({default: {displayName: error.code ?? error.name}}));
+  }
+};
+const before = await inOrder();
+fs.writeFileSync(file, process.env.EDITED);
+const after = await inOrder();
+fs.writeFileSync(file, process.env.EDITED_AGAIN);
+const again = await atOnce();
+const racing = file.replace('Edited', 'Racing');
+fs.writeFileSync(racing, process.env.FIRST);
+const firstRead = m.importNativeModule(racing);
+fs.writeFileSync(racing, process.env.EDITED);
+let race;
+try {
+  const [first, fresh] = await Promise.all([firstRead, m.importTemplateModule(racing)]);
+  race = {first: first.default.displayName, fresh: fresh.default.displayName};
+} catch (error) {
+  race = {error: error.code ?? error.name};
+}
+const shown = mods => Object.fromEntries(names.map((n, i) => [n, mods[i].default.displayName]));
+const keys = mod => Object.keys(mod).sort().join();
+process.stdout.write(JSON.stringify({before: shown(before), after: shown(after), again: shown(again), race, sameExports: before.every((mod, i) => keys(mod) === keys(after[i]))}));`,
+        ],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            DOC_FILE: file,
+            FIRST: source('First'),
+            EDITED: source('Second, longer'),
+            EDITED_AGAIN: source('Third, the longest'),
+          },
+        },
+      );
+      expect(run.stderr).not.toMatch(/Error/);
+      const all = (/** @type {string} */ displayName) => ({
+        importNativeModule: displayName,
+        importTemplateModule: displayName,
+        importDocModule: displayName,
+      });
+      // `after` reads one importer at a time, so no other importer's read
+      // changes what it sees. `again` reads with all three at once. `race`
+      // starts a fresh read while a first read of the same file still
+      // imports; that first read can show either version.
+      expect(JSON.parse(run.stdout)).toEqual({
+        before: all('First'),
+        after: all('Second, longer'),
+        again: all('Third, the longest'),
+        race: {
+          first: expect.stringMatching(/^(First|Second, longer)$/),
+          fresh: 'Second, longer',
+        },
+        sameExports: true,
+      });
+    },
+  );
 });

@@ -204,6 +204,18 @@ const TARGETS = [
     guards:
       'the caret follows the last token at its inline end, and a too-full row stays one row at rest and while read-only, under RTL as well',
   },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls',
+    guards:
+      'in an InputGroup, overflowing tokens scroll beside the clear button and end content, never under them, and the end controls stay put while the row scrolls',
+  },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls-rtl',
+    guards:
+      'the grouped token row and its end controls stay separate in RTL as well',
+  },
   // spec:AST-059 — the layer runtime's viewport inset. Each story is one
   // claim of the record; the guard is its rendered evidence, at a desktop
   // viewport and at a phone's, because a cap that holds only where the
@@ -370,6 +382,20 @@ const TARGETS = [
       'the rendered RTL wrapper mirrors fixed-track item order while responsive and span geometry remain bounded',
   },
   {
+    component: 'DialogHeroHeader',
+    story: 'lab-dialogheroheader--media-bleed-geometry',
+    guards:
+      'media reaches the dialog edges at theme-default, 0/2/8 padding, a ' +
+      'theme override, and RTL while the title keeps the cancelled inset',
+  },
+  {
+    component: 'DialogHeroHeader',
+    story: 'lab-dialogheroheader--custom-heading-focus-after-rerender',
+    guards:
+      'a custom heading keeps focus and keeps naming the open modal while ' +
+      'the header re-renders with a new title element',
+  },
+  {
     component: 'TabList',
     story: 'core-tablist--full-bleed-geometry',
     guards:
@@ -405,6 +431,13 @@ const TARGETS = [
     story: 'core-typeahead--incremental-results-resting-pointer',
     guards:
       'rows appended under a resting pointer do not take the highlight; Enter selects the highlighted row (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Timer',
+    story: 'core-timer--default',
+    guards:
+      'the display ticks live from the runtime clock, so a regression that ' +
+      'freezes it at 0s fails CI (#6483 audit layer 2)',
   },
 ];
 

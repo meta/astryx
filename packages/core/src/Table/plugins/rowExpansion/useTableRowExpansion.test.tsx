@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
@@ -181,6 +181,21 @@ describe('useTableRowExpansion (detail panel)', () => {
       ).toHaveAttribute('aria-expanded', 'true');
     },
   );
+  it('retains the original focused chevron and row across expansion and collapse', () => {
+    render(<Harness />);
+    const trigger = screen.getAllByRole('button', {name: /expand row/i})[1];
+    const row = trigger.closest('tr');
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    expect(row?.isConnected).toBe(true);
+    expect(trigger.isConnected).toBe(true);
+    expect(screen.getByRole('button', {name: /collapse row/i})).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    expect(trigger.closest('tr')).toBe(row);
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
+  });
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(

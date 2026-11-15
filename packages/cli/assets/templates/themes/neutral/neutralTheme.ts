@@ -361,7 +361,13 @@ export const neutralTheme = defineTheme({
         padding: 'var(--spacing-1)',
       },
     },
+    // An unselected label sits on the translucent track, which lifts the
+    // page under it. In dark mode secondary text falls under 4.5:1 on the
+    // track over the surface, so it takes the same next stop.
     'segmented-control-item': {
+      base: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
       'size:sm': {
         height: 'calc(var(--size-element-sm) - 8px)',
       },

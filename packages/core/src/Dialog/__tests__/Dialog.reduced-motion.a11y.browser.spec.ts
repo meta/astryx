@@ -15,7 +15,8 @@
  * so a short cross-fade is caught however late the test looks. When a loaded
  * machine runs the listener after a short fade has already finished, the
  * fade is read from its `@keyframes` rule and the computed animation
- * longhands instead of the live Animation.
+ * longhands instead of the live Animation. A script animation, such as the
+ * touch motion's, is read as its script starts it.
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -65,7 +66,10 @@ const cases: Case[] = [
 ];
 
 interface Entrance {
-  /** Each animation the dialog ran as it opened, read when it started. */
+  /**
+   * Each animation the dialog ran as it opened, read when it started. Its
+   * duration runs until its last change of value.
+   */
   animations: {properties: string[]; durationMs: number; delayMs: number}[];
   /** The dialog's computed opacity at the first frame after it opened. */
   firstFrameOpacity: number;
@@ -133,6 +137,52 @@ async function openDialog(
       };
     }
 
+    /**
+     * Reads a live animation's animated properties and timing. Its duration
+     * ends at its last change: keyframes that only hold the end value, as
+     * the animator's do, change nothing.
+     */
+    function entranceOf(animation: Animation): Entrance['animations'][number] {
+      const effect = animation.effect as KeyframeEffect;
+      const timing = effect.getComputedTiming();
+      const keyframes = effect.getKeyframes();
+      const properties = new Set<string>();
+      for (const keyframe of keyframes) {
+        for (const key of Object.keys(keyframe)) {
+          if (
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(key)
+          ) {
+            properties.add(key);
+          }
+        }
+      }
+      const last = keyframes[keyframes.length - 1];
+      const holdsEnd = (keyframe: ComputedKeyframe) =>
+        [...properties].every(key => keyframe[key] === last[key]);
+      let changesUntil = 1;
+      for (let i = keyframes.length - 2; i >= 0; i -= 1) {
+        if (!holdsEnd(keyframes[i])) {
+          break;
+        }
+        changesUntil = keyframes[i].computedOffset;
+      }
+      return {
+        properties: [...properties].sort(),
+        durationMs: Number(timing.duration) * changesUntil,
+        delayMs: timing.delay ?? 0,
+      };
+    }
+
+    // A script animation fires no `animationstart`. Each one on the dialog,
+    // its backdrop included, is read as the script starts it.
+    const scripted = new WeakSet<Animation>();
+    const noteScripted = (animation: Animation) => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      if (target?.tagName === 'DIALOG' && !scripted.has(animation)) {
+        scripted.add(animation);
+        seen.push(entranceOf(animation));
+      }
+    };
     document.addEventListener(
       'animationstart',
       event => {
@@ -150,29 +200,30 @@ async function openDialog(
           return;
         }
         for (const animation of live) {
-          const effect = animation.effect as KeyframeEffect;
-          const timing = effect.getComputedTiming();
-          const properties = new Set<string>();
-          for (const keyframe of effect.getKeyframes()) {
-            for (const key of Object.keys(keyframe)) {
-              if (
-                !['offset', 'computedOffset', 'easing', 'composite'].includes(
-                  key,
-                )
-              ) {
-                properties.add(key);
-              }
-            }
+          if (!scripted.has(animation)) {
+            seen.push(entranceOf(animation));
           }
-          seen.push({
-            properties: [...properties].sort(),
-            durationMs: Number(timing.duration),
-            delayMs: timing.delay ?? 0,
-          });
         }
       },
       true,
     );
+
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      noteScripted(animation);
+      return animation;
+    };
+    const play = Animation.prototype.play;
+    Animation.prototype.play = function (this: Animation) {
+      play.call(this);
+      if (!(this instanceof CSSAnimation || this instanceof CSSTransition)) {
+        noteScripted(this);
+      }
+    };
   });
   await page.getByRole('button', {name: opener}).click();
   const dialog = page.getByRole(role, {name});

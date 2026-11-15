@@ -71,10 +71,12 @@ const styles = stylex.create({
     flex: '1 1 0%',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
+  // The heading shrinks only to its own narrowest width. TopNavHeading keeps
+  // its logo there.
   heading: {
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0,
+    flexShrink: 1,
   },
   startContent: {
     display: 'flex',
@@ -130,6 +132,14 @@ const styles = stylex.create({
     alignItems: 'center',
     flex: '0 1 auto',
     minWidth: 0,
+  },
+  // Plain text has no box that can clip it. This box clips it to one line,
+  // so the bar keeps its height.
+  mobileBarHeadingText: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   mobileBarEnd: {
     display: 'flex',
@@ -256,7 +266,15 @@ export function TopNav({
         )}
         {...props}>
         {isRenderable(heading) && (
-          <div {...stylex.props(styles.mobileBarHeading)}>{heading}</div>
+          <div {...stylex.props(styles.mobileBarHeading)}>
+            {typeof heading === 'string' || typeof heading === 'number' ? (
+              <span {...stylex.props(styles.mobileBarHeadingText)}>
+                {heading}
+              </span>
+            ) : (
+              heading
+            )}
+          </div>
         )}
         <div {...stylex.props(styles.mobileBarEnd)}>
           {endContent}

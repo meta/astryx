@@ -135,7 +135,8 @@ const styles = stylex.create({
     minInlineSize: 0,
     gap: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-4'],
-    paddingBlockStart: spacingVars['--spacing-6'],
+    // The sheet keeps the band under its grab bar.
+    paddingBlockStart: 0,
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
   wheels: {
@@ -454,7 +455,8 @@ export function TouchTimeField({
         onOpenChange={setIsSheetOpen}
         label={label}
         height="hug"
-        // sheetBody owns the inset, including the band under the grab handle.
+        // sheetBody owns the inset; the sheet keeps the band under its grab
+        // bar.
         padding={0}>
         <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
           <div {...stylex.props(styles.wheels)}>

@@ -2,12 +2,59 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  matchWholeName,
   nameWords,
   orderByAffinity,
   orderRouteSuggestions,
   rankComponentSuggestions,
   synonymMatches,
 } from './suggest-order.mjs';
+
+describe('matchWholeName', () => {
+  const names = ['kanban-board', 'dashboard', 'detail-page', 'ide', 'editor'];
+
+  it('reads a name in any case or separator as that name', () => {
+    expect(matchWholeName('KanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanban_board', names)).toBe('kanban-board');
+    expect(matchWholeName('Kanban Boards', names)).toBe('kanban-board');
+  });
+
+  it('reads one slip in a long name as that name', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('kanban bord', names)).toBe('kanban-board');
+  });
+
+  it('allows no slip in a short name', () => {
+    expect(matchWholeName('ida', names)).toBeNull();
+    expect(matchWholeName('edito', names)).toBeNull();
+  });
+
+  it('reads a separator, a plural or a singular as the same words', () => {
+    expect(matchWholeName('kanban-board', names)).toBe('kanban-board');
+    expect(matchWholeName('detail pages', names)).toBe('detail-page');
+    expect(matchWholeName('setting', ['settings'])).toBe('settings');
+  });
+
+  it('counts a swap, a missing letter and a wrong letter as one slip', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('dashoard', names)).toBe('dashboard');
+    expect(matchWholeName('dashbeard', names)).toBe('dashboard');
+    expect(matchWholeName('dshbaord', names)).toBeNull();
+  });
+
+  it('answers null when two names share the exact words', () => {
+    expect(
+      matchWholeName('data table', ['data-table', 'DataTable']),
+    ).toBeNull();
+  });
+
+  it('answers null when more than one name is that close', () => {
+    expect(
+      matchWholeName('detail pane', ['detail-page', 'detail-pine']),
+    ).toBeNull();
+  });
+});
 
 describe('nameWords', () => {
   it('reads every spelling of a name as the same words', () => {
@@ -308,5 +355,45 @@ describe('orderRouteSuggestions', () => {
     expect(names(orderRouteSuggestions('theme/quick-start', roots))[0]).toBe(
       'theme',
     );
+  });
+});
+
+describe('orderByAffinity with typos', () => {
+  const items = [
+    {name: 'AvatarGroup'},
+    {name: 'AvatarGroupShowcase'},
+    {name: 'ButtonGroup'},
+    {name: 'HStackShowcase'},
+    {name: 'VStackShowcase'},
+    {name: 'Badge'},
+  ];
+  /** @param {{name: string}[]} list */
+  const names = list => list.map(i => i.name);
+  /** @param {string} typed @param {boolean} typos */
+  const order = (typed, typos) =>
+    names(orderByAffinity(typed, items, i => [i.name], {closest: true, typos}));
+
+  it('puts a name one slip away first', () => {
+    expect(order('ButonGroup', false)[0]).toBe('AvatarGroup');
+    expect(order('ButonGroup', true)[0]).toBe('ButtonGroup');
+  });
+
+  it('counts two swapped letters as one slip', () => {
+    // Five letters allow one slip, so `Bagde` is a near name of Badge only
+    // when the swap counts as one edit rather than two.
+    expect(order('Bagde', false)[0]).not.toBe('Badge');
+    expect(order('Bagde', true)[0]).toBe('Badge');
+  });
+
+  it('puts the name with fewer slips first', () => {
+    expect(order('VStxckShowcase', true)[0]).toBe('VStackShowcase');
+  });
+
+  it('never lists more than without typos', () => {
+    for (const typed of ['ButonGroup', 'VStxckShowcase', 'Group', 'zzz']) {
+      expect(order(typed, true).length).toBeLessThanOrEqual(
+        order(typed, false).length,
+      );
+    }
   });
 });

@@ -4,7 +4,8 @@
 
 /**
  * @file ToggleButtonGroup.tsx
- * @input Layer-scoped React context, ToggleButton children
+ * @input Layer-scoped React context, ToggleButton children, and the shared
+ *   group press tracking (hooks/useGroupPressTracking)
  * @output Exports ToggleButtonGroup component and types
  * @position Groups toggle buttons for single or multi-select behavior
  *
@@ -18,12 +19,24 @@
  * - /packages/cli/assets/templates/blocks/components/ToggleButton/ (showcase blocks)
  */
 
-import {useCallback, use, useMemo, type ReactNode} from 'react';
+import {
+  useCallback,
+  use,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
+import {PressGroupContext} from '../hooks/pressGroupContext';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {useGroupPressTracking} from '../hooks/useGroupPressTracking';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
@@ -41,6 +54,8 @@ interface ToggleButtonGroupContextValue {
   size?: ButtonSize;
   /** Group disabled state. */
   isDisabled?: boolean;
+  /** The group tracks a press across its toggles that have a value. */
+  tracksPress?: boolean;
 }
 
 const ToggleButtonGroupContext =
@@ -72,6 +87,11 @@ const styles = stylex.create({
   vertical: {
     flexDirection: 'column',
     alignItems: 'stretch',
+  },
+  // While the group tracks presses, its hit layer is the root's `::before`,
+  // below its toggles, so the root is the layer's containing block.
+  tracking: {
+    position: 'relative',
   },
 });
 
@@ -237,15 +257,28 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
     [isMultiple, props.value, props.onChange],
   );
 
+  // Only under the touch presentation does a press slide across the toggles.
+  // A desktop press stays the native toggle's.
+  const {isTouch} = useTouchPresentation();
+  const tracksPress = !isDisabled && isTouch;
   const contextValue = useMemo(
-    () => ({selectedValues, toggle, size, isDisabled}),
-    [selectedValues, toggle, size, isDisabled],
+    () => ({selectedValues, toggle, size, isDisabled, tracksPress}),
+    [selectedValues, toggle, size, isDisabled, tracksPress],
   );
+  const groupRef = useRef<HTMLDivElement>(null);
+  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  // A caller's `ref` reaches the root, like the other host props. The
+  // group's own refs join it.
+  const callerRef = (
+    props as ToggleButtonGroupProps & {ref?: Ref<HTMLDivElement>}
+  ).ref;
+  const mergedRef = useMergedRefs(callerRef, groupRef, hitAreaRef);
 
   return (
     <ToggleButtonGroupContext value={contextValue}>
       <div
         {...hostProps}
+        ref={mergedRef}
         role="group"
         aria-label={label}
         data-testid={testId}
@@ -253,13 +286,17 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
           themeProps('toggle-button-group'),
           stylex.props(
             styles.group,
+            tracksPress && styles.tracking,
+            tracksPress && touchHitAreaStyles.layerBelowChildren,
             orientation === 'vertical' && styles.vertical,
             xstyle,
           ),
           className,
           style,
         )}>
-        {children}
+        {/* Only a ToggleButton with a value joins the tracking (ToggleButton
+            reads the group). Any other child keeps its own press. */}
+        <PressGroupContext value={null}>{children}</PressGroupContext>
       </div>
     </ToggleButtonGroupContext>
   );

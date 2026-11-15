@@ -34,7 +34,8 @@ type Story =
   | 'spacious-rows'
   | 'align-first-line'
   | 'contact-list';
-type Interaction = 'none' | 'tab' | 'hover-rest' | 'hover-disabled';
+type Interaction =
+  'none' | 'tab' | 'tab-disabled' | 'hover-rest' | 'hover-disabled';
 
 type RowState = {
   label: string;
@@ -115,6 +116,7 @@ add('states');
 add('states', {theme: 'butter', modes: ['light']});
 add('states', {direction: 'rtl', modes: ['light']});
 add('states', {interaction: 'tab'});
+add('states', {interaction: 'tab-disabled', modes: ['light']});
 add('states', {interaction: 'hover-rest', modes: ['light']});
 add('states', {interaction: 'hover-disabled', modes: ['light']});
 add('compact-menu', {modes: ['light']});
@@ -272,6 +274,7 @@ async function observe(page: Page) {
               ? null
               : (action as HTMLButtonElement).disabled ||
                 action.getAttribute('aria-disabled') === 'true',
+          actionNativeDisabled: action?.hasAttribute('disabled') ?? null,
           background: style.backgroundColor,
           contentOpacity: content ? getComputedStyle(content).opacity : null,
           cursor: style.cursor,
@@ -340,6 +343,13 @@ for (const item of cases) {
     const rest = await observe(page);
     if (item.interaction === 'tab') {
       await page.keyboard.press('Tab');
+    }
+    if (item.interaction === 'tab-disabled') {
+      // The first three rows are enabled; the fourth is disabled but remains
+      // in the same Tab sequence under spec:AST-085 FR1.
+      for (let index = 0; index < 4; index++) {
+        await page.keyboard.press('Tab');
+      }
     }
     if (item.interaction === 'hover-rest') {
       await page.getByText('Rest', {exact: true}).hover();
@@ -541,6 +551,31 @@ for (const item of cases) {
           `focused row outline ${focused?.outlineStyle} ${focused?.outlineWidth}`,
         );
       }
+      if (item.interaction === 'tab-disabled') {
+        const disabled = observed.rows[3];
+        check(
+          observed.active.tag === 'BUTTON' &&
+            observed.active.rowIndex === 3 &&
+            observed.active.focusVisible,
+          `disabled Tab stop ${JSON.stringify(observed.active)}, expected the fourth row's button`,
+        );
+        check(
+          disabled?.actionNativeDisabled === false &&
+            disabled.actionDisabled === true &&
+            disabled.ariaDisabled === 'true',
+          `disabled action semantics ${JSON.stringify(disabled)}`,
+        );
+        check(
+          disabled != null &&
+            disabled.outlineStyle !== 'none' &&
+            near(
+              disabled.outlineWidth,
+              disabled.tokens.focusOutlineWidth,
+              0.01,
+            ),
+          `disabled focused row outline ${disabled?.outlineStyle} ${disabled?.outlineWidth}`,
+        );
+      }
       if (item.interaction === 'hover-rest') {
         const hovered = observed.rows[0];
         check(
@@ -584,11 +619,11 @@ for (const item of cases) {
         states:
           'states: data-highlighted, data-selected and data-disabled on the astryx-item root match each row; a selected role-less row has aria-current="true"; selected rows paint accent-muted and highlighted rows overlay-hover at rest, resolved in the row scope',
         disabled:
-          'disabled rows: a native disabled button, aria-disabled on the root, content at half opacity, pointer-events none; enabled interactive rows answer with a pointer cursor',
+          'disabled rows: a focusable aria-disabled button, aria-disabled on the root, content at half opacity, pointer-events none; enabled interactive rows answer with a pointer cursor',
         padding:
           'block padding spacing-1 (compact), spacing-2 (balanced), spacing-3 (spacious); inline padding spacing-2, spacing-3 when spacious',
         focus:
-          "tab: the first Tab stop is the first row's button, focus-visible, and the row root draws an outline of the theme focus outline width",
+          "tab: the first Tab stop is the first row's button; tab-disabled: the fourth, disabled row remains a Tab stop and draws the focus outline",
         hover:
           'hover-rest: the rest row paints a hover background; hover-disabled: the disabled row paints nothing new',
         layout:

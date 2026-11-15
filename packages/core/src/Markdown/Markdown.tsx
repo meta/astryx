@@ -94,7 +94,6 @@ import type {
   MarkdownPluginEntry,
   PreparedMarkdownPlugins,
 } from './plugins/protocol';
-import {sanitizeMarkdownLinkUrl, sanitizeMarkdownUrl} from './url';
 import {
   projectMarkdownHeadings,
   type MarkdownHeadingProjection,
@@ -260,7 +259,9 @@ function sourceLineAttributes(lines: MarkdownSourceLines | undefined):
 export interface MarkdownProps<
   Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly [],
 > extends BaseProps<HTMLElement> {
+  /** Reaches the root element: a `div` in block display, a `span` in inline display. */
   ref?: React.Ref<HTMLDivElement> | React.Ref<HTMLSpanElement>;
+  /** The Markdown source to render. */
   children: string;
   /**
    * Display type. Markdown defaults to block.
@@ -268,6 +269,10 @@ export interface MarkdownProps<
    * @default 'block'
    */
   display?: TextDisplay;
+  /**
+   * Spacing between block-level elements. Each block target reflects it.
+   * @default 'default'
+   */
   density?: 'default' | 'compact';
   /**
    * The HTML heading level that markdown `#` maps to.
@@ -277,7 +282,19 @@ export interface MarkdownProps<
    * @default 1
    */
   headingLevelStart?: 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+   * Streaming mode: parses incrementally and fades in each newly arrived
+   * chunk. Under reduced motion the text shows at once.
+   * @default false
+   */
   isStreaming?: boolean;
+  /**
+   * Called when a default link is clicked. Return `false` to prevent the
+   * default navigation. A custom `link` renderer replaces the default link
+   * and does not receive this handler. A destination that the shared navigation rule
+   * rejects, and every `data:` URL, renders as plain text and never reaches
+   * this handler.
+   */
   onLinkClick?: (
     href: string,
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -298,6 +315,7 @@ export interface MarkdownProps<
    * Max width for prose content (paragraphs, headings, lists, blockquotes).
    * Tables and code blocks are unconstrained and can expand to the full
    * container width. Use for readable line lengths in wide layouts.
+   * @default 680
    *
    * @example
    * ```
@@ -308,22 +326,24 @@ export interface MarkdownProps<
   /**
    * Alignment of prose content within the container when `contentWidth`
    * is narrower than the available space.
-   * - 'start': left-aligned (default)
+   * - 'start': aligned to the inline start (the right edge in right-to-left)
    * - 'center': centered
    * @default 'start'
    */
   contentAlign?: 'start' | 'center';
-  components?: Partial<MarkdownComponents>;
   /**
-   * Plugins that transform text patterns into custom React elements.
-   * Applied to text nodes after parsing — code blocks, inline code, and math
-   * are unaffected. Patterns are matched in order; first match wins
-   * for overlapping ranges.
+   * Custom renderers for rendered Markdown parts. Supplying `math` opts into
+   * `$…$` and `$$…$$` parsing. Each renderer owns its own output and
+   * accessible semantics.
    */
+  components?: Partial<MarkdownComponents>;
   /** Ordered syntax, immutable transforms, and typed extension renderers. */
   plugins?: Plugins;
   /**
-   * Legacy text-match renderers. Unchanged and independent from `plugins`.
+   * Legacy text-match renderers, independent from `plugins`. Each turns
+   * matches in parsed prose text into custom React elements. Code blocks,
+   * inline code, and math are unaffected. Patterns are matched in order;
+   * the first match wins for overlapping ranges.
    */
   inlinePlugins?: MarkdownInlinePlugin[];
   /**
@@ -915,6 +935,8 @@ function useStableMarkdownSyntaxEntries(
   plugins: PreparedMarkdownPlugins | undefined,
 ): ReadonlyArray<MarkdownPluginEntry> | undefined {
   const identity = plugins?.syntaxIdentity ?? '';
+  // A discarded render can leave an entry here. The hook uses an entry only
+  // while its identity matches, so it replaces that entry.
   const syntaxEntriesRef = useRef<
     | {
         identity: string;
@@ -1114,9 +1136,10 @@ function renderInline(
       return <MathComp key={index} value={node.value} display="inline" />;
     }
     case 'link': {
-      const safeHref = sanitizeMarkdownLinkUrl(node.url);
-      if (safeHref == null) {
-        // Unsafe URL — render as plain text
+      // The parser keeps only safe destinations, so the renderer checks no
+      // scheme. An empty destination still renders as text.
+      const safeHref = node.url;
+      if (safeHref === '') {
         return (
           <span key={index}>
             {node.children.map((c, i) =>
@@ -1195,8 +1218,8 @@ function renderInline(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return <span key={index}>[{node.alt}]</span>;
       }
       const ImageComp = components?.image;
@@ -2173,8 +2196,8 @@ function renderBlock(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return (
           <div
             key={index}
@@ -2318,6 +2341,10 @@ export function Markdown<
   // When not streaming, the hook returns children unchanged (no-op).
   const smoothedText = useStreamingText(children, isStreaming);
 
+  // A discarded render can change this cache, as it can change the option
+  // flags below. The parser reuses settled blocks only while the input starts
+  // with their text. So the output never shows text that only a discarded
+  // render had (Markdown.test.tsx: "a streamed render that React discards").
   const incrementalStateRef = useRef<IncrementalState<boolean>>(
     createIncrementalState<boolean>(),
   );
@@ -2472,6 +2499,10 @@ export function Markdown<
     return Math.min(Math.ceil(duration / tickMs), 12);
   }, [token]);
 
+  // Render writes these fade-in refs on purpose, an accepted exception to the
+  // runtime's ref rule. Text comes only from `smoothedText`. A render that
+  // React discards shifts the fade spans by the text it added. The "streamed
+  // text after a render React discards" tests pin why it is harmless.
   const prevBlocksRef = useRef<ReadonlyArray<RenderBlockNode>>([]);
   const prevInlineNodesRef = useRef<ReadonlyArray<RenderInlineNode>>([]);
   const boundariesRef = useRef<number[]>([]);
@@ -2483,6 +2514,7 @@ export function Markdown<
         ? countInlineTextLength(prevInlineNodesRef.current)
         : countBlockTextLength(prevBlocksRef.current);
     const next = computeBoundaries(boundariesRef.current, prevLen, maxSpans);
+    // Render writes this on purpose: see the fade-in refs' note above.
     boundariesRef.current = next;
     return next;
   }, [display, smoothedLen, maxSpans]);
@@ -2596,6 +2628,7 @@ export function Markdown<
     );
 
     // Store current inline nodes for next render's boundary calculation.
+    // Render writes this on purpose: see the fade-in refs' note above.
     prevInlineNodesRef.current = inlineNodes;
     prevBlocksRef.current = [];
 
@@ -2624,6 +2657,7 @@ export function Markdown<
   // Store current blocks for next render's boundary calculation.
   // This ref write is safe under StrictMode: both invocations produce the same
   // blocks (same smoothedText → same useMemo result), so both write the same value.
+  // Render writes this on purpose: see the fade-in refs' note above.
   prevBlocksRef.current = blocks;
   prevInlineNodesRef.current = [];
 

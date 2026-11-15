@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {docs} from './docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -79,7 +80,7 @@ function scaffoldTwoOwners() {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-child-route-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-child-route-test-'));
 });
 
 afterEach(() => {

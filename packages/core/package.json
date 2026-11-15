@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.12",
+  "version": "0.7.17",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -604,6 +604,11 @@
       "types": "./dist/Stepper/index.d.ts",
       "default": "./dist/Stepper/index.js"
     },
+    "./Swipe": {
+      "source": "./src/Swipe/index.ts",
+      "types": "./dist/Swipe/index.d.ts",
+      "default": "./dist/Swipe/index.js"
+    },
     "./Switch": {
       "source": "./src/Switch/index.ts",
       "types": "./dist/Switch/index.d.ts",
@@ -834,6 +839,11 @@
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
     },
+    "./internal/reorder": {
+      "source": "./src/internal/reorder.ts",
+      "types": "./dist/internal/reorder.d.ts",
+      "default": "./dist/internal/reorder.js"
+    },
     "./internal/touchHitArea.stylex": {
       "source": "./src/internal/touchHitArea.stylex.ts",
       "types": "./dist/internal/touchHitArea.stylex.d.ts",
@@ -868,6 +878,36 @@
       "source": "./src/internal/scroll-anchoring.ts",
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
+    },
+    "./internal/page-scroller": {
+      "source": "./src/internal/page-scroller.ts",
+      "types": "./dist/internal/page-scroller.d.ts",
+      "default": "./dist/internal/page-scroller.js"
+    },
+    "./internal/line-clamp": {
+      "source": "./src/internal/line-clamp.ts",
+      "types": "./dist/internal/line-clamp.d.ts",
+      "default": "./dist/internal/line-clamp.js"
+    },
+    "./internal/virtualization": {
+      "source": "./src/internal/virtualization.ts",
+      "types": "./dist/internal/virtualization.d.ts",
+      "default": "./dist/internal/virtualization.js"
+    },
+    "./internal/committed-ref": {
+      "source": "./src/internal/committed-ref.ts",
+      "types": "./dist/internal/committed-ref.d.ts",
+      "default": "./dist/internal/committed-ref.js"
+    },
+    "./internal/clipboard-copy": {
+      "source": "./src/internal/clipboard-copy.ts",
+      "types": "./dist/internal/clipboard-copy.d.ts",
+      "default": "./dist/internal/clipboard-copy.js"
+    },
+    "./internal/shared-context": {
+      "source": "./src/internal/shared-context.ts",
+      "types": "./dist/internal/shared-context.d.ts",
+      "default": "./dist/internal/shared-context.js"
     }
   },
   "files": [
@@ -895,7 +935,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",

@@ -26,6 +26,7 @@ import {
   type KeyboardProfile,
   type KeyboardTransition,
 } from './keyboardModel';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * Whose keyboard schedule the guide reads: `chromium` where the browser has
@@ -113,7 +114,10 @@ export function hidesField(target: Element): boolean {
   );
 }
 
-const guides = new WeakMap<Window, KeyboardLayoutGuide>();
+const guides = sharedWeakMap<Window, KeyboardLayoutGuide>(
+  'keyboard/keyboard-layout-guide/guides',
+  1,
+);
 
 /**
  * The window's keyboard layout guide, created on first use.

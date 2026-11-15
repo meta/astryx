@@ -8,7 +8,9 @@
  *   on a page with a callback on every frame. Chromium lays an anchored
  *   element out again each time its own style changes, so the entrance runs
  *   on the surface inside the layer. The surface is the layer's only child
- *   and fills its box, so it scales about the same center
+ *   and fills its box, so it scales about the same center. A failure names
+ *   the task that ran each counted layout and each invalidation before it,
+ *   and saves that entrance's trace
  * @position Interaction proofs for layerAnimations.stylex.ts, run in
  *   Chromium, the engine with a rendering trace
  */
@@ -20,11 +22,14 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
-  countBetween,
+  layoutSources,
   openStory,
+  RENDERING_EVENTS,
   traceRendering,
   waitForRest,
   withStorybook,
+  writeEvidence,
+  type RenderingTrace,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -39,8 +44,14 @@ test.use({
 
 const OPENS = 3;
 
+// The entrance's `animationstart` and `animationend` each leave a mark in the
+// trace, named with this prefix and `-start` or `-end`.
+const ENTRANCE_MARK = 'layer-entrance';
+
 interface EntranceWindow {
   __entrance: {start: number; end: number};
+  // The page's events during an entrance, to explain a counted layout.
+  __events: {type: string; t: number; target: string; name: string}[];
 }
 
 interface EntranceRoute {
@@ -96,22 +107,75 @@ const routes: ReadonlyArray<EntranceRoute> = [
 ];
 
 // A callback on every frame, as on a page with frame work of its own, makes
-// each frame a main-thread one. The entrance's window runs from its
-// `animationstart` to its `animationend`, on any element in an anchored layer.
+// each frame a main-thread one. The entrance is the animation of any element
+// in an anchored layer.
 async function watchEntrances(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate(mark => {
     const w = window as unknown as EntranceWindow;
     w.__entrance = {start: 0, end: 0};
+    w.__events = [];
     const tick = () => requestAnimationFrame(tick);
     requestAnimationFrame(tick);
     const inLayer = (target: EventTarget | null) =>
       target instanceof Element &&
       target.closest('[data-layer-anchored]') != null;
+    // Names a target without a layout read.
+    const nameOf = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) {
+        return target === window ? 'window' : 'document';
+      }
+      const role = target.getAttribute('role');
+      const layer = target.closest('[data-layer-anchored]');
+      const tag = `${target.tagName.toLowerCase()}${role == null ? '' : `[${role}]`}`;
+      if (layer == null) {
+        return `page ${tag}`;
+      }
+      if (target === layer) {
+        return 'layer';
+      }
+      return target === layer.firstElementChild ? 'surface' : `layer ${tag}`;
+    };
+    for (const type of [
+      'animationstart',
+      'animationend',
+      'animationcancel',
+      'transitionrun',
+      'transitionend',
+      'transitioncancel',
+      'beforetoggle',
+      'toggle',
+      'focusin',
+      'focusout',
+      'pointerover',
+      'scroll',
+      'resize',
+    ]) {
+      addEventListener(
+        type,
+        event => {
+          w.__events.push({
+            type,
+            t: performance.timeOrigin + event.timeStamp,
+            target: nameOf(event.target),
+            name:
+              (event as AnimationEvent).animationName ??
+              (event as TransitionEvent).propertyName ??
+              (event as ToggleEvent).newState ??
+              '',
+          });
+          if (w.__events.length > 200) {
+            w.__events.shift();
+          }
+        },
+        true,
+      );
+    }
     addEventListener(
       'animationstart',
       event => {
         if (inLayer(event.target) && w.__entrance.start === 0) {
           w.__entrance.start = performance.timeOrigin + event.timeStamp;
+          performance.mark(`${mark}-start`);
         }
       },
       true,
@@ -121,11 +185,12 @@ async function watchEntrances(page: Page): Promise<void> {
       event => {
         if (inLayer(event.target)) {
           w.__entrance.end = performance.timeOrigin + event.timeStamp;
+          performance.mark(`${mark}-end`);
         }
       },
       true,
     );
-  });
+  }, ENTRANCE_MARK);
 }
 
 async function closeAll(page: Page): Promise<void> {
@@ -136,48 +201,150 @@ async function closeAll(page: Page): Promise<void> {
   await expect(open).toHaveCount(0);
 }
 
-// The rendering work inside one entrance's window.
+// The entrance's whole frames in the trace: from the frame that fires
+// `animationstart` through the last frame before the one that fires
+// `animationend`. That last frame draws the final keyframe. The frame that
+// fires `animationend` removes the animation, and its cleanup can lay the
+// layer out. Frame bounds keep that work out, and no layout's time meets the
+// event's coarse timestamp at a bound. A frame starts where Chromium's
+// rendering update (`AnimationFrame::Render`) starts. That update dispatches
+// the animation events, then runs the frame callbacks, style and layout.
+function entranceFrames(trace: RenderingTrace): {
+  counts: Record<string, number>;
+  start: number;
+  end: number;
+} {
+  const main = trace.mainThread ?? [];
+  const marks = (name: string) =>
+    main.flatMap((event, index) => (event.name === name ? [index] : []));
+  const frameOf = (index: number) => {
+    let frame = index;
+    while (
+      frame >= 0 &&
+      !(main[frame].name === 'AnimationFrame::Render' && main[frame].ph === 'b')
+    ) {
+      frame--;
+    }
+    return frame;
+  };
+  const startMark = marks(`${ENTRANCE_MARK}-start`)[0];
+  const endMark = marks(`${ENTRANCE_MARK}-end`).at(-1);
+  if (startMark == null || endMark == null) {
+    throw new Error('The trace has no mark for an entrance event');
+  }
+  const from = frameOf(startMark);
+  const to = frameOf(endMark);
+  if (from < 0 || to <= from) {
+    throw new Error('The trace has no frame for an entrance event');
+  }
+  const counts: Record<string, number> = {};
+  for (const event of main.slice(from, to)) {
+    if ((RENDERING_EVENTS as ReadonlyArray<string>).includes(event.name)) {
+      counts[event.name] = (counts[event.name] ?? 0) + 1;
+    }
+  }
+  return {counts, start: main[from].t, end: main[to].t};
+}
+
+interface TracedEntrance {
+  readonly counts: Record<string, number>;
+  readonly start: number;
+  readonly end: number;
+  readonly trace: RenderingTrace;
+  readonly events: EntranceWindow['__events'];
+}
+
+// The rendering work inside one entrance's window. The trace keeps its
+// events, so a counted layout can be explained.
 async function traceEntrance(
   page: Page,
   route: EntranceRoute,
-): Promise<Record<string, number>> {
+): Promise<TracedEntrance> {
   await route.prepare?.(page);
   await page.evaluate(() => {
-    (window as unknown as EntranceWindow).__entrance = {start: 0, end: 0};
+    const w = window as unknown as EntranceWindow;
+    w.__entrance = {start: 0, end: 0};
+    w.__events = [];
   });
-  const trace = await traceRendering(page, async () => {
-    await route.open(page);
-    await expect(route.shown(page)).toBeVisible();
-    await page.waitForFunction(
-      () => (window as unknown as EntranceWindow).__entrance.end > 0,
-    );
-  });
-  const {start, end} = await page.evaluate(
-    () => (window as unknown as EntranceWindow).__entrance,
+  const trace = await traceRendering(
+    page,
+    async () => {
+      await route.open(page);
+      await expect(route.shown(page)).toBeVisible();
+      await page.waitForFunction(
+        () => (window as unknown as EntranceWindow).__entrance.end > 0,
+      );
+    },
+    {keepEvents: true},
   );
+  const {
+    __entrance: {start},
+    __events: events,
+  } = await page.evaluate(() => {
+    const w = window as unknown as EntranceWindow;
+    return {__entrance: w.__entrance, __events: w.__events};
+  });
   expect(start).toBeGreaterThan(0);
-  return countBetween(trace, start, end);
+  return {...entranceFrames(trace), trace, events};
+}
+
+// Each counted layout of an entrance, with the task that ran it and the
+// invalidations before it. Times are ms from the entrance's start.
+function explainLayouts(entrance: TracedEntrance, open: number): string {
+  const {start, end, trace, events} = entrance;
+  const rel = (t: number) => `${(t - start).toFixed(1)} ms`;
+  const lines = [`Entrance ${open + 1} (${rel(end)} long):`];
+  for (const source of layoutSources(trace, start, end)) {
+    lines.push(`  Layout at ${rel(source.t)}, in: ${source.task.join(' > ')}`);
+    for (const invalidation of source.invalidations) {
+      lines.push(
+        `    after ${invalidation.what} at ${rel(invalidation.t)}, in: ${invalidation.task.join(' > ')}`,
+      );
+    }
+  }
+  lines.push(
+    `  Page events: ${events
+      .filter(event => event.t >= start - 50 && event.t <= end)
+      .map(e => `${rel(e.t)} ${e.type} ${e.target} ${e.name}`.trim())
+      .join('; ')}`,
+  );
+  return lines.join('\n');
 }
 
 for (const route of routes.filter(route => !route.hasOwnTransition)) {
   test(`${route.name}: the entrance runs no layout while it plays`, async ({
     page,
     browserName,
-  }) => {
+  }, testInfo) => {
     test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
     await openStory(page, storybook(), route.story);
     await watchEntrances(page);
     const layouts: number[] = [];
     const restyles: number[] = [];
+    const explanations: string[] = [];
     for (let open = 0; open < OPENS; open++) {
       const during = await traceEntrance(page, route);
-      layouts.push(during.Layout ?? 0);
-      restyles.push(during.UpdateLayoutTree ?? 0);
+      layouts.push(during.counts.Layout ?? 0);
+      restyles.push(during.counts.UpdateLayoutTree ?? 0);
+      if ((during.counts.Layout ?? 0) > 0) {
+        explanations.push(explainLayouts(during, open));
+        await writeEvidence(
+          `layer-entrance-layout/${route.story}`,
+          {
+            [`entrance-${open + 1}.json`]: JSON.stringify({
+              window: {start: during.start, end: during.end},
+              events: during.events,
+              mainThread: during.trace.mainThread,
+            }),
+          },
+          testInfo,
+        );
+      }
       await closeAll(page);
     }
     // The entrance played across frames: its element restyled on several.
     expect(Math.min(...restyles)).toBeGreaterThanOrEqual(3);
-    expect(layouts).toEqual(Array(OPENS).fill(0));
+    expect(layouts, explanations.join('\n')).toEqual(Array(OPENS).fill(0));
   });
 }
 

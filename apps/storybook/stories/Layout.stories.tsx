@@ -15,6 +15,7 @@ import {
   VStack,
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
+import {Divider} from '@astryxdesign/core/Divider';
 import {
   colorVars,
   spacingVars,
@@ -124,6 +125,9 @@ const styles = stylex.create({
     borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
     overflow: 'hidden',
+  },
+  wideFrame: {
+    inlineSize: 2400,
   },
   cwContainerMatrix: {
     height: 240,
@@ -1430,6 +1434,39 @@ export const ContentWidthWider: Story = {
   ),
 };
 
+/**
+ * A Layout with no `contentWidth` in a frame wider than the viewport: the
+ * header and footer span the frame, as the content does.
+ */
+export const WiderThanViewport: Story = {
+  name: 'No Content Width — Frame Wider Than the Viewport',
+  render: () => (
+    <div {...stylex.props(styles.wideFrame)} data-testid="wide-frame">
+      <Layout
+        defaultHasDividers
+        header={
+          <LayoutHeader data-testid="wide-header">
+            <h3 {...stylex.props(styles.heading)}>Header</h3>
+          </LayoutHeader>
+        }
+        content={
+          <LayoutContent data-testid="wide-content">
+            <p {...stylex.props(styles.bodyText)}>
+              The frame is 2400px wide, wider than the viewport. With no
+              contentWidth, nothing caps the regions.
+            </p>
+          </LayoutContent>
+        }
+        footer={
+          <LayoutFooter data-testid="wide-footer">
+            <p {...stylex.props(styles.bodyText)}>Footer</p>
+          </LayoutFooter>
+        }
+      />
+    </div>
+  ),
+};
+
 export const ContentWidthResponsive: Story = {
   name: 'Content Width — Responsive Panels',
   render: () => (
@@ -1845,6 +1882,697 @@ export const ContentInsets: Story = {
                 />
               </LayoutContent>
             }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
+};
+
+/**
+ * LayoutFooter in each configuration, in plain frames with no padding
+ * container: the inner inset is spacing step 4, and `padding={6}` sets the
+ * Layout-edge inset. Each case names its footer with `data-footer-case`. The
+ * nested case puts a Layout with a divided footer above an outer footer
+ * without a divider. The caller-attribute case passes its own `data-divider`,
+ * which must not replace the value the footer reflects.
+ */
+export const FooterStates: Story = {
+  name: 'Footer States',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const tallBody = (
+      <VStack gap={2}>
+        {Array.from({length: 12}, (_, index) => (
+          <p key={index} {...stylex.props(styles.bodyText)}>
+            Row {index + 1}
+          </p>
+        ))}
+        {/* A focusable control keeps the scrolling content keyboard-reachable. */}
+        <Button label="Load more" variant="secondary">
+          Load more
+        </Button>
+      </VStack>
+    );
+    const footerText = <p {...stylex.props(styles.bodyText)}>Footer</p>;
+    const cases = [
+      {
+        id: 'automatic',
+        label: 'No divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter data-footer-case="automatic">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'divider',
+        label: 'hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider data-footer-case="divider">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'layout-default',
+        label: 'Layout defaultHasDividers',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter data-footer-case="layout-default">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'explicit-off',
+        label: 'Layout defaultHasDividers, hasDivider={false}',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider={false} data-footer-case="explicit-off">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'padding-2',
+        label: 'hasDivider, footer padding=2',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider padding={2} data-footer-case="padding-2">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'full-bleed',
+        label: 'hasDivider, footer padding=0',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter
+                hasDivider
+                padding={0}
+                data-footer-case="full-bleed">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'height',
+        label: 'hasDivider, height=72 below overflowing content',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{tallBody}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider height={72} data-footer-case="height">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'content-width',
+        label: 'hasDivider, Layout contentWidth=240',
+        layout: (
+          <Layout
+            padding={6}
+            contentWidth={240}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider data-footer-case="content-width">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'nested',
+        label: 'Nested Layout above an outer footer without divider',
+        layout: (
+          <Layout
+            padding={6}
+            content={
+              <LayoutContent padding={0}>
+                <Layout
+                  content={<LayoutContent>{body}</LayoutContent>}
+                  footer={
+                    <LayoutFooter hasDivider data-footer-case="nested">
+                      {footerText}
+                    </LayoutFooter>
+                  }
+                />
+              </LayoutContent>
+            }
+            footer={<LayoutFooter>{footerText}</LayoutFooter>}
+          />
+        ),
+      },
+      {
+        id: 'caller-attribute',
+        label: 'No divider, caller data-divider="false"',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter
+                data-divider="false"
+                data-footer-case="caller-attribute">
+                {footerText}
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
+};
+
+/**
+ * LayoutHeader in each configuration, in plain frames with no padding
+ * container: the inner inset is spacing step 4, and `padding={6}` sets the
+ * Layout-edge inset. Each case names its header with `data-header-case`. The
+ * nested case puts a Layout with a divided header below an outer header
+ * without a divider. The caller-attribute case passes its own `data-divider`,
+ * which must not replace the value the header reflects.
+ */
+export const HeaderStates: Story = {
+  name: 'Header States',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const tallBody = (
+      <VStack gap={2}>
+        {Array.from({length: 12}, (_, index) => (
+          <p key={index} {...stylex.props(styles.bodyText)}>
+            Row {index + 1}
+          </p>
+        ))}
+        {/* A focusable control keeps the scrolling content keyboard-reachable. */}
+        <Button label="Load more" variant="secondary">
+          Load more
+        </Button>
+      </VStack>
+    );
+    const headerText = <p {...stylex.props(styles.bodyText)}>Header</p>;
+    const cases = [
+      {
+        id: 'automatic',
+        label: 'No divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader data-header-case="automatic">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'divider',
+        label: 'hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader hasDivider data-header-case="divider">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'layout-default',
+        label: 'Layout defaultHasDividers',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader data-header-case="layout-default">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'explicit-off',
+        label: 'Layout defaultHasDividers, hasDivider={false}',
+        layout: (
+          <Layout
+            padding={6}
+            defaultHasDividers
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader hasDivider={false} data-header-case="explicit-off">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'padding-2',
+        label: 'hasDivider, header padding=2',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader hasDivider padding={2} data-header-case="padding-2">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'full-bleed',
+        label: 'hasDivider, header padding=0',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader
+                hasDivider
+                padding={0}
+                data-header-case="full-bleed">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'height',
+        label: 'hasDivider, height=72 above overflowing content',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{tallBody}</LayoutContent>}
+            header={
+              <LayoutHeader hasDivider height={72} data-header-case="height">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'content-width',
+        label: 'hasDivider, Layout contentWidth=240',
+        layout: (
+          <Layout
+            padding={6}
+            contentWidth={240}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader hasDivider data-header-case="content-width">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'padding-block-end',
+        label: 'hasDivider, paddingBlockEnd=0',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader
+                hasDivider
+                paddingBlockEnd={0}
+                data-header-case="padding-block-end">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+      {
+        id: 'nested',
+        label: 'Nested Layout below an outer header without divider',
+        layout: (
+          <Layout
+            padding={6}
+            content={
+              <LayoutContent padding={0}>
+                <Layout
+                  content={<LayoutContent>{body}</LayoutContent>}
+                  header={
+                    <LayoutHeader hasDivider data-header-case="nested">
+                      {headerText}
+                    </LayoutHeader>
+                  }
+                />
+              </LayoutContent>
+            }
+            header={<LayoutHeader>{headerText}</LayoutHeader>}
+          />
+        ),
+      },
+      {
+        id: 'caller-attribute',
+        label: 'No divider, caller data-divider="false"',
+        layout: (
+          <Layout
+            padding={6}
+            content={<LayoutContent>{body}</LayoutContent>}
+            header={
+              <LayoutHeader
+                data-divider="false"
+                data-header-case="caller-attribute">
+                {headerText}
+              </LayoutHeader>
+            }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
+};
+
+export const PanelStates: Story = {
+  name: 'Panel States',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const panelText = <p {...stylex.props(styles.bodyText)}>Panel</p>;
+    const rows = Array.from({length: 12}, (_, index) => (
+      <p key={index} {...stylex.props(styles.bodyText)}>
+        Item {index + 1}
+      </p>
+    ));
+    const cases = [
+      {
+        id: 'start-automatic',
+        label: 'Start, no divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={120} data-panel-case="start-automatic">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'start-divider',
+        label: 'Start, hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                data-panel-case="start-divider">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'end-automatic',
+        label: 'End, no divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            end={
+              <LayoutPanel width={120} data-panel-case="end-automatic">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'end-divider',
+        label: 'End, hasDivider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            end={
+              <LayoutPanel width={120} hasDivider data-panel-case="end-divider">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'header-footer',
+        label: 'Start, hasDivider, with header and footer',
+        layout: (
+          <Layout
+            padding={6}
+            header={
+              <LayoutHeader hasDivider>
+                <p {...stylex.props(styles.bodyText)}>Header</p>
+              </LayoutHeader>
+            }
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                data-panel-case="header-footer">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider>
+                <p {...stylex.props(styles.bodyText)}>Footer</p>
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'bleed-child',
+        label: 'Start, hasDivider, full-bleed Divider inside',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={160} hasDivider data-panel-case="bleed-child">
+                {panelText}
+                <Divider isFullBleed />
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'padding-2',
+        label: 'Start, hasDivider, panel padding=2',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                padding={2}
+                data-panel-case="padding-2">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'full-bleed',
+        label: 'Start, hasDivider, panel padding=0',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                padding={0}
+                data-panel-case="full-bleed">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'width-string',
+        label: 'Start, hasDivider, width="10rem"',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width="10rem"
+                hasDivider
+                data-panel-case="width-string">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'landmark',
+        label: 'Start, role="navigation", label="Sections"',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                role="navigation"
+                label="Sections"
+                data-panel-case="landmark">
+                {panelText}
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'scrolling',
+        label: 'Start, overflowing content',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel width={120} hasDivider data-panel-case="scrolling">
+                <VStack gap={2}>
+                  {rows}
+                  {/* A focusable control keeps the scrolling content keyboard-reachable. */}
+                  <Button label="More" variant="secondary">
+                    More
+                  </Button>
+                </VStack>
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
+          />
+        ),
+      },
+      {
+        id: 'not-scrollable',
+        label: 'Start, overflowing content, isScrollable={false}',
+        layout: (
+          <Layout
+            padding={6}
+            start={
+              <LayoutPanel
+                width={120}
+                hasDivider
+                isScrollable={false}
+                data-panel-case="not-scrollable">
+                <VStack gap={2}>{rows}</VStack>
+              </LayoutPanel>
+            }
+            content={<LayoutContent>{body}</LayoutContent>}
           />
         ),
       },

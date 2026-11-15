@@ -74,6 +74,7 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
       <div
         {...stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           styles.field,
           status && inputStatusBorderStyles[status.type],
         )}>

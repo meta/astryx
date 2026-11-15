@@ -202,13 +202,27 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Two commits: the swizzle proof diffs main's squash-merged commit
+      # against its parent to prove only the copies that change affects
+      # (spec:AST-110 FR7).
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup
 
+      # A release re-check also renders every swizzle copy in Chromium.
+      - name: Install Chromium for the swizzle proof
+        if: inputs.recheck
+        run: npx playwright install chromium
+
       - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        env:
+          # A release re-check proves every swizzle target, in Chromium too
+          # (spec:AST-110 FR7).
+          SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
+          SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its

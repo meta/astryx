@@ -554,7 +554,7 @@ export async function swizzleCopy(component, options = {}) {
       for (const dir of [...createdDirs].reverse()) {
         fs.rmSync(dir, {recursive: true, force: true});
       }
-      if (!outputDirExisted) {
+      if (!outputDirExisted && fs.existsSync(outputDir)) {
         fs.rmSync(outputDir, {recursive: true, force: true});
       }
       throw writeFailed(output.dest, cwd, err, unrestored);

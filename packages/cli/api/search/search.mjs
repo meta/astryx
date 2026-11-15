@@ -11,7 +11,11 @@
  * block), and themes. The adapter gathers every candidate (_adapter.mjs),
  * and search's tree (tree.mjs) picks the searcher that answers.
  * `searchCore(query)` is the lexical ranker alone (_lexical.mjs); `build`
- * reads it, so build's output does not move when search's tree does.
+ * reads it, so build's output does not move when search's tree does. A doc
+ * keyword that is another entry's name is not a match (_named-keywords.mjs)
+ * in three places: `search`, `rankSearchIndex` (search-index.mjs), and
+ * `searchCore` with `ownKeywords`. `searchCore` without it, which build
+ * reads, reads every keyword as gathered.
  */
 
 import {
@@ -21,6 +25,7 @@ import {
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
+import {searchView} from './_named-keywords.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
 import {SEARCH_TREE} from './tree.mjs';
@@ -73,7 +78,10 @@ async function searchRead(query, options) {
               SEARCH_TREE,
               {query, options},
               {
-                ...(await gatherCandidatesReused(options)),
+                // A keyword that names another entry is not a match here
+                // (_named-keywords.mjs); searchCore, which build reads,
+                // keeps every keyword.
+                ...(await searchCatalog(options)),
                 data: loadSearchData(),
               },
             )
@@ -85,13 +93,40 @@ async function searchRead(query, options) {
 }
 
 /**
+ * The other declaring domain, whose names a search for one `type` still reads.
+ * @type {Record<string, string>}
+ */
+const NAMING_DOMAIN = {component: 'hook', hook: 'component'};
+
+/**
+ * The gathered catalog for `options`, with keywords as search reads them
+ * (_named-keywords.mjs). The names come from every component and hook, so a
+ * search for one `type` keeps and drops the keywords an open search does.
+ * @param {{cwd?: string, type?: string}} options
+ */
+async function searchCatalog(options) {
+  const gathered = await gatherCandidatesReused(options);
+  const other = options.type == null ? null : NAMING_DOMAIN[options.type];
+  return searchView(
+    gathered,
+    other == null
+      ? []
+      : [await gatherCandidatesReused({cwd: options.cwd, type: other})],
+  );
+}
+
+/**
  * The lexical ranker alone: keyword and fuzzy scoring of every candidate.
  * `build` ranks from it. It ranks the candidates search gathers, reused the
  * same way. A later query in the same folder, for the same `type`, gathers
  * again only when an input changed.
  *
+ * `ownKeywords` ranks as `search` reads keywords: a doc keyword that is
+ * another entry's name is not a match (_named-keywords.mjs). Only search's own
+ * comparisons set it; build never does, so build reads every keyword.
+ *
  * @param {string} query
- * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number}} [options]
+ * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number, ownKeywords?: boolean}} [options]
  * @returns {Promise<import('./search.type.mjs').SearchResponse>}
  */
 export async function searchCore(query, options = {}) {
@@ -108,10 +143,16 @@ export async function searchCore(query, options = {}) {
  * @param {any} options
  */
 async function searchCoreRead(query, options) {
-  return withListingCache(async () =>
-    linkSearchResponse(
-      rankLexical(query, options, await gatherCandidatesReused(options)),
+  return withListingCache(async () => {
+    return linkSearchResponse(
+      rankLexical(
+        query,
+        options,
+        options.ownKeywords
+          ? await searchCatalog(options)
+          : await gatherCandidatesReused(options),
+      ),
       options.cwd ?? process.cwd(),
-    ),
-  );
+    );
+  });
 }

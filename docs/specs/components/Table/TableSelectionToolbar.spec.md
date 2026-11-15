@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/core/src/Table/TableSelectionToolbar.test.tsx,
+    apps/storybook/stories/TableSelection.stories.tsx,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
   ]
@@ -84,6 +85,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Toolbar layout, size, and variant — owned by `component:Toolbar`.
 - The selection state — owned by useTableSelectionState.
 - Bulk actions in `startContent` — owned by the caller.
+- A selection of every row matching a query across server pages — owned by
+  the app, which passes its own count and label (DEC-1).
 
 ## Public concepts
 
@@ -154,7 +157,21 @@ so no anatomy-theming block is declared here.
 
 ## Decision log
 
-None recorded. The record describes shipped behavior.
+### DEC-1 — A selection of every matching row stays with the app
+
+**Reference:** `component:TableSelectionToolbar/DEC-1`
+**Decider:** `cixzhang`, `2026-11-06`
+
+When a person selects every row that matches a query across server pages,
+the app keeps that selection ("every matching row minus exclusions") and
+passes the toolbar its own `selectedCount` and `renderSelectionLabel`. In this
+mode `selectedKeys` holds only the loaded rows, because the full set is not on
+the client. A Core model for such a selection is decided together with
+Table's server-pagination contract, since both need a total that is not
+loaded.
+
+Rejected: an all-matching mode in `useTableSelectionState` before the
+server-pagination contract exists.
 
 ## Open questions
 

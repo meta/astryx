@@ -30,7 +30,7 @@ import {templateShow} from './show/show.mjs';
 import {templateSkeleton} from './skeleton/skeleton.mjs';
 import {templateCopy} from './copy/copy.mjs';
 import {templateCdn} from './cdn/cdn.mjs';
-import {loadTemplateIconSets} from './_adapter.mjs';
+import {loadTemplateIconSets, withOtherCommandHint} from './_adapter.mjs';
 
 // Re-export the shared discovery/IO + cross-command helpers so this module
 // stays the single import surface for the template family (same exports as
@@ -189,14 +189,24 @@ export async function template(name, options = {}) {
   }
 
   if (name && candidates.length === 0) {
+    /** @param {{dirName: string, name?: string}} t */
+    const namesOf = t => [t.dirName, t.name];
+    const ordered = orderByAffinity(name, templates, namesOf, {
+      closest: true,
+      typos: true,
+    });
+    const suggestions = ordered.map(t => ({
+      name: t.dirName,
+      reason: `${t.type} template`,
+    }));
+    /** @type {Map<import('../../foundation/response/base').Suggestion, (typeof ordered)[number]>} */
+    const matched = new Map(suggestions.map((s, i) => [s, ordered[i]]));
     throw new AstryxError(
       `Unknown template "${name}"`,
-      orderByAffinity(name, templates, t => [t.dirName, t.name], {
-        closest: true,
-      }).map(t => ({
-        name: t.dirName,
-        reason: `${t.type} template`,
-      })),
+      await withOtherCommandHint(name, suggestions, cwd, s => {
+        const template = matched.get(s);
+        return template ? namesOf(template) : [s.name];
+      }),
       ERROR_CODES.ERR_UNKNOWN_TEMPLATE,
     );
   }
@@ -223,5 +233,12 @@ export async function template(name, options = {}) {
     return templateShow(match, {iconSets});
   }
 
-  return templateCopy(match, {targetPath, cwd, overwrite, iconSets});
+  // The command as typed selects the same template again, an integration
+  // replacement included.
+  const command = [
+    `astryx template ${name}`,
+    type ? ` --type ${type}` : '',
+    packageFilter ? ` --package ${packageFilter}` : '',
+  ].join('');
+  return templateCopy(match, {targetPath, cwd, overwrite, iconSets, command});
 }

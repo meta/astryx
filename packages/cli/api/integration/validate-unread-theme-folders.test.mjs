@@ -16,11 +16,12 @@ import * as path from 'node:path';
 import {validateLocalIntegration} from './validate-integration.mjs';
 import {integrationAddTheme} from './add-theme.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-unread-theme-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-unread-theme-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({name: '@acme/kit', version: '1.0.0'}),

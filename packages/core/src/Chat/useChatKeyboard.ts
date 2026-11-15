@@ -39,7 +39,11 @@ import {
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import {
+  useInteractionModalityTrackingFor,
+  type InteractionModality,
+} from '../utils/interactionModality';
+import {focusForLastInputTemporarily} from '../utils/focusReturn';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -149,20 +153,18 @@ export function editableToClaim(target: unknown): HTMLElement | null {
  * region gives the focus stop up as soon as focus leaves it. It shows the
  * focus ring only after keyboard input, as other script focus does.
  */
-function parkFocus(region: HTMLElement, showsRing: boolean): void {
-  region.setAttribute('tabindex', '-1');
-  if (!showsRing) {
+function parkFocus(region: HTMLElement, modality: InteractionModality): void {
+  // WebKit ignores `focusVisible: false`, so a park after touch input also
+  // hides the ring inline until focus leaves.
+  if (modality !== 'keyboard') {
     region.style.setProperty('outline', 'none');
+    region.addEventListener(
+      'blur',
+      () => region.style.removeProperty('outline'),
+      {once: true},
+    );
   }
-  region.addEventListener(
-    'blur',
-    () => {
-      region.removeAttribute('tabindex');
-      region.style.removeProperty('outline');
-    },
-    {once: true},
-  );
-  region.focus({preventScroll: true});
+  focusForLastInputTemporarily(region, {preventScroll: true}, modality);
 }
 
 /**
@@ -463,7 +465,7 @@ export function useChatKeyboard({
       claim: destination => findTextEntryControl(destination, composer),
       park: origin => {
         if (findTextEntryControl(origin, composer) != null) {
-          parkFocus(composer, readModality() === 'keyboard');
+          parkFocus(composer, readModality());
         }
       },
     });

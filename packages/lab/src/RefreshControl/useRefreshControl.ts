@@ -204,7 +204,10 @@ export function useRefreshControl({
     },
     [run],
   );
-  dispatchRef.current = dispatch;
+  // Syncs the touch layer's ref with the committed dispatch.
+  useLayoutEffect(() => {
+    dispatchRef.current = dispatch;
+  });
 
   // -- Programmatic control -------------------------------------------------
 
