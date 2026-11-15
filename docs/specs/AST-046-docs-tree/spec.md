@@ -198,12 +198,12 @@ and references from other packages are an open question (OQ2).
   adds to whatever answers the name or route it extends, so the order
   integrations are configured in never decides whether its sections show. A
   topic or guide read in text MUST name, at its top, the sections each other
-  package adds to it, one line per package (`sections from <package>: <section
-keys>`), and only when another package adds one; the JSON read is unchanged,
-  since each of its sections already names its package. A replaced topic or
-  guide MUST name the package it replaced as `replacedPackage`, beside
-  `replaces`. A `replaces` or `extends` that names no topic and no guide,
-  such as a namespace, changes nothing.
+  package adds to it, one line per package
+  (`sections from <package>: <section keys>`), and only when another package
+  adds one; the JSON read already names each section's package. A replaced
+  topic or guide MUST name the package it replaced as `replacedPackage`,
+  beside `replaces`. A `replaces` or `extends` that names no topic and no
+  guide, such as a namespace, changes nothing.
   When two providers claim one route, the CLI's own docs MUST keep it,
   including its flat topics' names and the generated topic levels, then integrations
   in configured order; between integrations a namespace keeps its route over a
