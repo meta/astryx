@@ -30,6 +30,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {
+  modeValue,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -41,26 +46,7 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-/** @param {string} rel */
-const exists = rel => fs.existsSync(path.join(cwd, rel));
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read, exists} = projectFiles(() => cwd);
 
 /** @param {string[]} args */
 const cli = async args => {
@@ -116,7 +102,9 @@ describe('a refused change writes nothing', () => {
 
 describe('names', () => {
   it('every name the check accepts builds, and the suggested name does too', async () => {
-    for (const name of ['b-2', 'x--y', 'brand-']) {
+    // ("x--y" and "brand-" are refused since hunt62: the theme commands'
+    // own discovery skips them.)
+    for (const name of ['b-2', 'x-y', 'brand']) {
       await themeEditNew(name, {cwd});
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});
@@ -141,6 +129,9 @@ describe('names', () => {
     expect(
       (await refusal(() => themeEditNew('My Theme', {cwd}))).run[0],
     ).toMatch(/new my-theme$/);
+    expect(
+      (await refusal(() => themeEditNew('Theme Park', {cwd}))).run[0],
+    ).toMatch(/new theme-park$/);
     expect((await refusal(() => themeEditNew('q', {cwd, like: ''}))).code).toBe(
       'ERR_THEME_BAD_VALUE',
     );
@@ -184,7 +175,8 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
+    // No stock color is put in for the vibrancy: the color is the user's.
+    expect(r.run.join(' ')).not.toMatch(/#7c3aed/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -276,7 +268,8 @@ describe('exact tokens', () => {
     for (const [token, value] of [
       ['--radius-element', '2ch'],
       ['--radius-element', 'clamp(4px, 1vw, 12px)'],
-      ['--text-body-leading', 'normal'],
+      // A line-height token takes a number: Core multiplies it in calc().
+      ['--text-body-leading', '1.5'],
       ['--color-syntax-keyword', 'red'],
       ['--text-display-1-size', '80px'],
       ['--color-icon-pink', 'red'],
@@ -290,7 +283,12 @@ describe('exact tokens', () => {
     const r = await refusal(() =>
       themeEditSet('h', '--color-accnt', 'red', {cwd}),
     );
-    expect(r.run[0]).toMatch(/how --list tokens accnt$/);
+    // The one token the typo is near, then the whole list (no token
+    // holds "accnt"), never one that shows nothing.
+    expect(r.run[0]).toMatch(/ set h --color-accent red$/);
+    expect(
+      r.run.some((/** @type {string} */ x) => /how --list tokens$/.test(x)),
+    ).toBe(true);
   });
 
   it('accepts Core own shadows and a negative offset, and undo removes a shadow saved for one mode', async () => {
@@ -389,6 +387,12 @@ describe('where commands act', () => {
         JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
       );
       fs.mkdirSync(path.join(app, 'src/app'), {recursive: true});
+      // A routes folder has a root layout, which loads Core's stylesheet.
+      if (!fs.existsSync(path.join(app, 'src/app/layout.tsx')))
+        fs.writeFileSync(
+          path.join(app, 'src/app/layout.tsx'),
+          "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+        );
       expect(projectRoot(path.join(app, 'src/app'))).toBe(app);
       // A folder with no Core above it stays where it is.
       expect(projectRoot(cwd)).toBe(cwd);
@@ -478,7 +482,7 @@ describe('rollback and recovery', () => {
     fs.mkdirSync(path.join(cwd, 'themes/w1/w1.history.json'));
     expect(
       (await refusal(() => themeEditSet('w1', 'corners', 'pill', {cwd}))).code,
-    ).toBe('ERR_WRITE_FAILED');
+    ).toBe('ERR_THEME_INVALID'); // a folder in the history's place is refused before any write (hunt25)
     expect(read('themes/w1/w1.css')).toBe(css);
     expect(read('themes/w1/w1.settings.json')).toBe(settings);
     fs.rmSync(path.join(cwd, 'themes/w1'), {recursive: true, force: true});
@@ -544,7 +548,7 @@ describe('rollback and recovery', () => {
 });
 
 describe('fix3', () => {
-  it('never picks the home folder, even with Core installed there', () => {
+  it('picks the home folder only when its package.json lists Core, never out of another repo', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home-'));
     const saved = process.env.HOME;
     try {
@@ -558,10 +562,10 @@ describe('fix3', () => {
       const code = path.join(home, 'code/app');
       fs.mkdirSync(path.join(code, '.git'), {recursive: true});
       process.env.HOME = home;
+      // A repository below home is its own project.
       expect(projectRoot(code)).toBe(code);
-      expect(projectRoot(path.join(home, 'code'))).toBe(
-        path.join(home, 'code'),
-      );
+      // A plain folder of a home that lists Core: the home app (hunt36b F1).
+      expect(projectRoot(path.join(home, 'code'))).toBe(home);
     } finally {
       process.env.HOME = saved;
       fs.rmSync(home, {recursive: true, force: true});
@@ -587,9 +591,11 @@ describe('fix3', () => {
 
   it('no command removes a file it did not write in that run', async () => {
     const dir = path.join(cwd, 'themes/h');
+    // A live process's temp file (this test's parent runs); a dead
+    // process's editor temp file is swept, and that is tested elsewhere.
     const mine = [
       'notes.4194311.tmp',
-      '.h.settings.json.astryx-4194311-abc.tmp',
+      `.h.settings.json.astryx-${process.ppid}-abc.tmp`,
     ];
     for (const f of mine) fs.writeFileSync(path.join(dir, f), 'mine');
     await themeEditShow('h', {cwd});
@@ -649,9 +655,15 @@ describe('fix3: links, rollback, locks, paths', () => {
 
   it('show finds a build that does not match the settings and builds again', async () => {
     await themeEditNew('k3', {cwd});
+    // A build left by another CLI than wrote the settings module (a build
+    // stopped part way); file times alone never count.
     const css = path.join(cwd, 'themes/k3/k3.css');
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(css, old, old);
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf8')
+        .replace(/(\* CLI: @astryxdesign\/cli@)\S+/, '$10.0.1'),
+    );
     const r = await themeEditShow('k3', {cwd});
     expect(r.data.notes.join(' ')).toContain('built again');
     const again = await themeEditShow('k3', {cwd});
@@ -681,6 +693,7 @@ describe('fix3: links, rollback, locks, paths', () => {
   it('from a subfolder, the reply paths are absolute', async () => {
     const sub = path.join(cwd, 'src/deep');
     fs.mkdirSync(sub, {recursive: true});
+    const kept = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
     fs.writeFileSync(
       path.join(cwd, 'package.json'),
       JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
@@ -689,7 +702,7 @@ describe('fix3: links, rollback, locks, paths', () => {
       const r = await themeEditShow('h', {cwd: sub});
       expect(JSON.stringify(r.data)).toContain(path.join(cwd, 'themes/h'));
     } finally {
-      fs.rmSync(path.join(cwd, 'package.json'));
+      fs.writeFileSync(path.join(cwd, 'package.json'), kept);
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
     }
   }, 120_000);
@@ -720,7 +733,7 @@ describe('hunt2: order and scope', () => {
     fs.rmSync(path.join(cwd, 'themes/o1'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants is refused', async () => {
+  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants goes to each variant', async () => {
     await themeEditNew('o2', {cwd});
     await themeEditSet('o2', '--color-background-surface', '#ff0000', {
       cwd,
@@ -738,17 +751,19 @@ describe('hunt2: order and scope', () => {
     expect(
       JSON.parse(read('themes/o2/o2.settings.json')).settings,
     ).toHaveLength(1);
+    await themeEditSet('o2', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
     expect(
-      (
-        await refusal(() =>
-          themeEditSet('o2', 'background-color', '#00ff00', {
-            cwd,
-            on: 'button',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+      modeValue(
+        read('themes/o2/o2.css'),
+        '.astryx-button[data-variant="primary"]',
+        'background-color',
+        'light',
+      ),
+    ).toBe('#00ff00');
     fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
   }, 240_000);
 
@@ -786,7 +801,8 @@ describe('hunt2: order and scope', () => {
     expect(r.data.setting.value).toBe('round');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
     expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
-    expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
+    // Inner corners at pill stay as round makes them (a rounded square).
+    expect(read('themes/o3/o3.css')).not.toMatch(/--radius-inner: 9999px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);
 });

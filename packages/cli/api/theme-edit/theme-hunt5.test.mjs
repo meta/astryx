@@ -11,7 +11,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -32,27 +32,22 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug @param {(d: any) => void} edit */
 const editSettings = (slug, edit) => {
@@ -83,8 +78,8 @@ describe('corners', () => {
     expect(read('themes/t/t.css')).toContain(`${container}`);
     await themeEditUndo('t', {cwd});
     const pill = await themeEditSet('t', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toMatch(
-      /--radius-inner: [^>]*-> 6px/,
+    expect(pill.data.changedTokens.join(' ')).not.toMatch(
+      /--radius-inner: [^>]*-> 9999px/,
     );
     await themeEditUndo('t', {cwd});
   }, 240_000);
@@ -101,10 +96,11 @@ describe('corners', () => {
       expect(r.data.setting.value, typed).toBe(stored);
       await themeEditUndo('t', {cwd});
     }
+    // A rem is that many 16px, saved in px.
     expect(
-      (await refusal(() => themeEditSet('t', 'corners', '1.5rem', {cwd})))
-        .run[0],
-    ).toMatch(/corners 24px$/);
+      (await themeEditSet('t', 'corners', '1.5rem', {cwd})).data.setting.value,
+    ).toBe('24px');
+    await themeEditUndo('t', {cwd});
     expect(
       (await refusal(() => themeEditSet('t', 'corners', '50%', {cwd}))).run[0],
     ).toMatch(/corners pill$/);
@@ -116,14 +112,13 @@ describe('corners', () => {
       on: 'text-input',
       only: true,
     });
-    const r = await themeEditSet('t', 'corners', 'more', {
-      cwd,
-      on: 'text-input',
-    });
-    // It stays on the member alone, at the roundest rung it already shows.
-    expect(r.data.setting.only).toBe(true);
-    expect(r.data.setting.value).toBe('pill');
-    // The step changed nothing, so one undo removes the first setting.
+    // At the roundest rung it already shows, the step writes nothing (and
+    // its run keeps the member alone).
+    const r = await refusal(() =>
+      themeEditSet('t', 'corners', 'more', {cwd, on: 'text-input'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.run[0]).toMatch(/--on text-input --only$/);
     await themeEditUndo('t', {cwd});
   }, 240_000);
 
@@ -152,7 +147,7 @@ describe('spacing and scope', () => {
     expect(
       (
         await refusal(() =>
-          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'divider'}),
+          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'status-dot'}),
         )
       ).code,
     ).toBe('ERR_THEME_NO_EFFECT');
@@ -189,6 +184,11 @@ describe('spacing and scope', () => {
     });
     const r = await refusal(() => themeEditShow('m', {cwd}));
     expect(r.run[0]).toMatch(/set m mode both$/);
+    // The base that reads as no theme is refused with its own line, never
+    // dropped on the way.
+    const base = await refusal(() => themeEditSet('m', 'mode', 'both', {cwd}));
+    expect(base.run[0]).toMatch(/set m base neutral$/);
+    await themeEditSet('m', 'base', 'neutral', {cwd});
     await themeEditSet('m', 'mode', 'both', {cwd});
     await themeEditShow('m', {cwd});
     fs.rmSync(path.join(cwd, 'themes/m'), {recursive: true, force: true});
@@ -235,10 +235,16 @@ describe('locks', () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'silent-lock-'));
       const lock = path.join(dir, 'x.lock');
       fs.mkdirSync(lock);
-      // A live holder this run cannot judge (pid 1), that never renews.
+      // A holder this run cannot judge (pid 1 in another container's
+      // process space), that never renews.
       fs.writeFileSync(
         path.join(lock, 'owner.json'),
-        JSON.stringify({pid: 1, host: os.hostname(), at: Date.now()}),
+        JSON.stringify({
+          pid: 1,
+          host: os.hostname(),
+          at: Date.now(),
+          ns: 'pid:[1]',
+        }),
       );
       const started = Date.now();
       await withFolderLock(lock, async () => undefined, {
@@ -267,14 +273,20 @@ describe('astracat on #11262', () => {
     fs.rmSync(big, {force: true});
   }, 240_000);
 
-  it('a one-mode color on a part keeps the other mode as a color, never inherit', async () => {
+  it('a one-mode color on a part writes nothing in the other mode, never inherit', async () => {
     await themeEditSet('t', 'background-color', '#00ff00', {
       cwd,
       on: 'tab',
       mode: 'dark',
     });
-    expect(read('themes/t/t.css')).not.toMatch(/light-dark\(inherit/);
-    expect(read('themes/t/t.css')).toMatch(/light-dark\([^,]+, #00ff00\)/);
+    const css = read('themes/t/t.css');
+    expect(css).not.toMatch(/light-dark\(inherit/);
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'dark')).toBe(
+      '#00ff00',
+    );
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'light')).toBe(
+      undefined,
+    );
     await themeEditUndo('t', {cwd});
   }, 240_000);
 });
@@ -309,8 +321,14 @@ describe('chaos round 3', () => {
     const left = path.join(cwd, 'themes/.astryx-render-999999-abcdef');
     fs.mkdirSync(left, {recursive: true});
     fs.writeFileSync(path.join(left, 'preview-t.mjs'), '');
-    await themeEditSet('t', 'corners', 'small', {cwd});
-    await themeEditUndo('t', {cwd});
+    // A leftover is one more than ten minutes old.
+    const old = new Date(Date.now() - 11 * 60_000);
+    fs.utimesSync(left, old, old);
+    // The render itself clears a stopped render's folder.
+    await withRealRenders(async () => {
+      await themeEditSet('t', 'corners', 'small', {cwd});
+      await themeEditUndo('t', {cwd});
+    });
     expect(fs.existsSync(left)).toBe(false);
   }, 240_000);
 
@@ -324,12 +342,13 @@ describe('chaos round 3', () => {
     fs.rmSync(path.join(cwd, 'themes/zz'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a one-mode theme changes the build', async () => {
+  it("a one-mode theme keeps its build; its mode is the app's <Theme mode>", async () => {
     await themeEditNew('mo', {cwd, like: 'neutral'});
     const css = () => read('themes/mo/mo.css');
     const before = css();
-    await themeEditSet('mo', 'mode', 'dark-only', {cwd});
-    expect(css()).not.toBe(before);
+    const r = await themeEditSet('mo', 'mode', 'dark-only', {cwd});
+    expect(css()).toBe(before);
+    expect(r.data.notes.join(' ')).toContain('mode="dark"');
     await themeEditUndo('mo', {cwd});
     expect(css()).toBe(before);
     fs.rmSync(path.join(cwd, 'themes/mo'), {recursive: true, force: true});

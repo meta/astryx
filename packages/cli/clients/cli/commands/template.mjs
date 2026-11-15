@@ -4,7 +4,9 @@
  * @file template command — thin CLI wrapper around api/template.mjs
  */
 
+import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
+import {isFilePathArg} from '../../../foundation/fs/path-safety.mjs';
 import {
   emit,
   section,
@@ -18,6 +20,7 @@ import {template as templateApi} from '../../../api/template/template.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as templateCommand} from './template.doc.mjs';
@@ -236,12 +239,13 @@ export function registerTemplate(program) {
 
             // Project each entry to its JSON-mirroring fields; the WIP marker is
             // folded into `name` (as before) and the package is shown only when it
-            // isn't the built-in core package.
+            // isn't the built-in core package. The text keeps a description's
+            // first sentence; --json keeps it whole.
             /** @param {import('../../../api/template/template.type.mjs').TemplateListEntry} t */
             const toRow = t => ({
               id: t.id,
               name: t.isReady ? t.name : `${t.name} (WIP)`,
-              description: t.description,
+              description: firstSentence(t.description ?? ''),
               package:
                 t.package && t.package !== '@astryxdesign/core'
                   ? t.package
@@ -317,11 +321,20 @@ export function registerTemplate(program) {
               demoContentReplaced,
               notes,
               icons,
+              givenPath,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
+            const givenRelative =
+              givenPath !== undefined && isFilePathArg(givenPath)
+                ? path.join(outputDir, fileName)
+                : outputDir;
             const iconText = iconLines(icons);
             emit(
               text(`Copied template to ${file}`),
+              givenPath !== undefined &&
+                text(
+                  `${givenPath} is inside the project, so it was written as its relative path, ${givenRelative}.`,
+                ),
               record({package: result.package}),
               demoMediaReplaced > 0 &&
                 text(

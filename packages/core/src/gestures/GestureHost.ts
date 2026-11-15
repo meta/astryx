@@ -130,7 +130,11 @@ import {
   resolvePresented,
   watchPresentedElements,
 } from '../motion/presentation';
-import {UIKIT_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
+import {
+  UIKIT_LONG_PRESS,
+  UIKIT_PRESS,
+  UIKIT_TAP,
+} from '../motion/uikit/gestures';
 import {
   browserClock,
   GestureArena,
@@ -794,6 +798,13 @@ export class GestureHost {
    */
   private readonly layoutWatched = new Set<Element>();
   private layoutObserver: ResizeObserver | null = null;
+  /** Where and when the last pen hold the host tracked ended. */
+  private lastPenLift: {target: unknown; time: number} | null = null;
+  /**
+   * Arena ids of the pen contacts that left the long press's tolerance
+   * before its duration. No such contact is a hold.
+   */
+  private readonly driftedPens = new Set<number>();
   /** Fingers whose first uncancelable `touchmove` was already judged. */
   private readonly judgedUncancelable = new Set<number>();
   /**
@@ -1428,6 +1439,37 @@ export class GestureHost {
     return this.fingerTargets.some(target =>
       containsAlongFlatTree(node, target),
     );
+  }
+
+  /**
+   * @internal Whether a pen that went down inside `node` is down now,
+   * whichever participant keeps it. A pen's own menu event is that hold's
+   * (contextRequest.ts).
+   */
+  isPenDownIn(node: Node): boolean {
+    return this.arena.touches.some(
+      touch =>
+        touch.pointerType === 'pen' &&
+        // A lifted pen that a recognizer still decides on is no longer down.
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        touch.target instanceof Node &&
+        containsAlongFlatTree(node, touch.target),
+    );
+  }
+
+  /**
+   * @internal When a pen hold that went down inside `node` last ended, at
+   * its lift or a cancel. The time is on the host's clock: negative infinity
+   * when none did.
+   */
+  lastPenLiftIn(node: Node): number {
+    const lift = this.lastPenLift;
+    return lift != null &&
+      lift.target instanceof Node &&
+      containsAlongFlatTree(node, lift.target)
+      ? lift.time
+      : Number.NEGATIVE_INFINITY;
   }
 
   private registrationFor(element: Element): Registration {
@@ -2987,6 +3029,33 @@ export class GestureHost {
   }
 
   /**
+   * @internal Whether a press consumer that keeps its press (a hold-repeat
+   * control, `keepsTouch`) sits on the path from `target` up to `boundary`,
+   * both included. Such a control keeps its long press its own. Its right
+   * click and Shift+F10 still reach a context request around it
+   * (contextRequest.ts).
+   */
+  keepsPressBetween(target: unknown, boundary: Element): boolean {
+    for (
+      let node: Node | null = target instanceof Node ? target : null;
+      node != null;
+      node = parentAcrossShadow(node)
+    ) {
+      if (!(node instanceof Element)) {
+        continue;
+      }
+      const consumer = this.registry.get(node)?.consumer;
+      if (consumer?.keepsTouch != null && consumer.isEnabled?.() !== false) {
+        return true;
+      }
+      if (node === boundary) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  /**
    * How many fingers are on the screen: the length of `touches` in the last
    * touch event the host's listeners heard (`touchstart`, `touchmove`,
    * `touchend`, `touchcancel`), whatever its target, so a finger on an
@@ -3834,6 +3903,14 @@ export class GestureHost {
     }
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
+      if (event.pointerType === 'pen') {
+        this.notePenDrift(
+          id,
+          event.clientX,
+          event.clientY,
+          eventTime(event, this.timing),
+        );
+      }
       this.arena.moved([
         {
           id,
@@ -3876,6 +3953,11 @@ export class GestureHost {
     this.pointerKinds.delete(event.pointerId);
     const hold = this.claimHolds.get(id);
     this.unlockSelection(id);
+    const target = this.arena.getTouch(id)?.target;
+    const isPenHold =
+      event.pointerType === 'pen' &&
+      this.isPenHold(id, eventTime(event, this.timing));
+    this.driftedPens.delete(id);
     const dispositions = this.arena.ended([
       {
         id,
@@ -3886,6 +3968,9 @@ export class GestureHost {
     ]);
     // A selection the lift's own handlers made stays, as a click's does.
     hold?.keepLiftSelection();
+    if (isPenHold) {
+      this.lastPenLift = {target, time: this.arena.now()};
+    }
     // A retargeted tap's own click arms the click guard for the engine's.
     const landed = this.retargeted.get(id);
     this.retargeted.delete(id);
@@ -3993,9 +4078,47 @@ export class GestureHost {
       this.pointerKinds.delete(event.pointerId);
       this.unlockSelection(id, true);
       this.retargeted.delete(id);
+      const target = this.arena.getTouch(id)?.target;
+      const isPenHold =
+        event.pointerType === 'pen' &&
+        this.isPenHold(id, eventTime(event, this.timing));
+      this.driftedPens.delete(id);
       this.arena.cancelled([id], eventTime(event, this.timing));
+      if (isPenHold) {
+        this.lastPenLift = {target, time: this.arena.now()};
+      }
     }
   };
+
+  /**
+   * Whether a pen contact is a hold: it stays within the long press's
+   * tolerance for its duration. Only such a hold fires the platform's own
+   * menu event, so the host notes no other pen's lift.
+   */
+  private isPenHold(id: number, time: number): boolean {
+    const touch = this.arena.getTouch(id);
+    return (
+      touch != null &&
+      !this.driftedPens.has(id) &&
+      time - touch.startTime >= UIKIT_LONG_PRESS.minimumPressDuration.value
+    );
+  }
+
+  /**
+   * A pen contact that leaves the long press's tolerance before its duration
+   * is no hold, so its lift arms no menu refusal.
+   */
+  private notePenDrift(id: number, x: number, y: number, time: number): void {
+    const touch = this.arena.getTouch(id);
+    if (
+      touch != null &&
+      time - touch.startTime < UIKIT_LONG_PRESS.minimumPressDuration.value &&
+      Math.hypot(x - touch.startX, y - touch.startY) >
+        UIKIT_LONG_PRESS.allowableMovement.value
+    ) {
+      this.driftedPens.add(id);
+    }
+  }
 
   /**
    * Which live finger a touch `pointercancel` is about. The pointer keeps
@@ -4272,6 +4395,7 @@ export class GestureHost {
     }
     this.pointerIds.clear();
     this.pointerKinds.clear();
+    this.driftedPens.clear();
     this.retargeted.clear();
     this.fingerPointers.clear();
     this.pendingPointers.clear();

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
+  RENDER_WRITE_EXCEPTIONS,
   SHARED_OWNERS,
   addsDocumentListener,
   authoredLineCount,
@@ -151,10 +152,10 @@ describe('sharedOwnerFindings', () => {
 describe('effectFindings', () => {
   const file = 'packages/core/src/Tooltip/useTooltip.ts';
 
-  function findingsFor(source) {
+  function findingsFor(source, at = file) {
     const sourceLines = source.split('\n');
-    return effectFindings(addedLinesOf(file, sourceLines), name =>
-      name === file ? source : null,
+    return effectFindings(addedLinesOf(at, sourceLines), name =>
+      name === at ? source : null,
     ).map(f => [f.line, f.rule]);
   }
 
@@ -191,27 +192,93 @@ describe('effectFindings', () => {
     ).toEqual([]);
   });
 
-  it('flags an Effect that only copies a value into a ref', () => {
+  it('flags an Effect of any kind that only copies a value into a ref', () => {
+    const copy = 'The Effect only copies a value into a ref';
     expect(
       findingsFor(
         [
+          '// Keeps the committed handler for the gesture callbacks.',
+          'useIsomorphicLayoutEffect(() => {',
+          '  onPanRef.current = onPan;',
+          '});',
+          'useInsertionEffect(() => {',
+          '  // Keeps the committed getter for the key handlers.',
+          '  getPartsRef.current = props.getParts;',
+          '});',
           '// Keeps the latest handler.',
           'useEffect(() => {',
           '  onChangeRef.current = onChange;',
           '});',
         ].join('\n'),
       ),
-    ).toEqual([[2, 'The Effect only copies a value into a ref']]);
+    ).toEqual([
+      [2, copy],
+      [5, copy],
+      [10, copy],
+    ]);
+  });
+
+  it('points a ref copy at the shared committed-ref hooks', () => {
+    const [finding] = effectFindings(
+      addedLinesOf(file, [
+        'useLayoutEffect(() => {',
+        '  onPanRef.current = onPan;',
+        '});',
+      ]),
+      () =>
+        ['useLayoutEffect(() => {', '  onPanRef.current = onPan;', '});'].join(
+          '\n',
+        ),
+    );
+    expect(finding.fix).toContain('useCommittedRef');
+    expect(finding.fix).toContain('useCommittedRefInto');
+    expect(finding.fix).toContain('packages/core/src/hooks/useCommittedRef.ts');
+  });
+
+  it("accepts the committed-ref hook's own insertion Effect", () => {
     expect(
       findingsFor(
         [
-          '// Keeps the getter current for gesture callbacks.',
-          'useIsomorphicLayoutEffect(() => {',
-          '  getPartsRef.current = getParts;',
-          '});',
+          '  // Stores values only. Refs to DOM nodes are not attached yet when this runs.',
+          '  useInsertionEffect(() => {',
+          '    ref.current = value;',
+          '  });',
+        ].join('\n'),
+        'packages/core/src/hooks/useCommittedRef.ts',
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a committed ref read during render or in useMemo', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Panel({onPan, label}: Props) {',
+          '  const onPanRef = useCommittedRef(onPan);',
+          '  const labelRef = useRef(label);',
+          '  useCommittedRefInto(labelRef, label);',
+          '  const text = labelRef.current;',
+          '  const trimmed = useMemo(() => labelRef.current.trim(), []);',
+          '  const upper = useMemo(() => {',
+          '    return labelRef.current.toUpperCase();',
+          '  }, []);',
+          '  const onClick = () => onPanRef.current(labelRef.current);',
+          '  useEffect(() => {',
+          '    // Subscribes to the window pan stream.',
+          '    return listen(() => onPanRef.current());',
+          '  }, [onPanRef]);',
+          '  return null;',
+          '}',
         ].join('\n'),
       ),
-    ).toEqual([[2, 'The Effect only copies a value into a ref']]);
+    ).toEqual([
+      [5, '`labelRef.current` is read during render'],
+      [6, '`labelRef.current` is read during render'],
+      [8, '`labelRef.current` is read during render'],
+    ]);
+  });
+
+  it('accepts an Effect that sets a ref and also syncs an external system', () => {
     expect(
       findingsFor(
         [
@@ -220,6 +287,227 @@ describe('effectFindings', () => {
           '  onChangeRef.current = onChange;',
           "  node.addEventListener('input', onInput);",
           '}, [onChange]);',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags an Effect that only copies a prop into state', () => {
+    expect(
+      findingsFor(
+        [
+          '// Mirrors the value.',
+          'useEffect(() => {',
+          '  setDraft(value);',
+          '}, [value]);',
+        ].join('\n'),
+      ),
+    ).toEqual([[2, 'The Effect only copies a value into state']]);
+  });
+
+  it('flags a ref write in a component or hook body', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Button({label}: Props) {',
+          '  labelRef.current = label;',
+          '  return null;',
+          '}',
+          'export const useLatest = <T,>(value: T) => {',
+          '  if (value !== previousRef.current) {',
+          '    previousRef.current = value;',
+          '  }',
+          '};',
+          'function useCache(input) {',
+          '  return useMemo(() => {',
+          '    cacheRef.current = input;',
+          '    return input;',
+          '  }, [input]);',
+          '}',
+          'function useCount(reducer, arg) {',
+          '  rendersRef.current += 1;',
+          '  ++passesRef.current;',
+          '  return useReducer(reducer, arg, init => {',
+          '    seedRef.current = init;',
+          '    return init;',
+          '  });',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      [2, '`labelRef.current` is written during render'],
+      [7, '`previousRef.current` is written during render'],
+      [12, '`cacheRef.current` is written during render'],
+      [17, '`rendersRef.current` is written during render'],
+      [18, '`passesRef.current` is written during render'],
+      [20, '`seedRef.current` is written during render'],
+    ]);
+  });
+
+  it('reports only the lines a change adds, not existing ones in a touched file', () => {
+    const source = [
+      'export function Panel({label, next, onPan}: Props) {',
+      '  labelRef.current = label;',
+      '  const onPanRef = useCommittedRef(onPan);',
+      '  const text = onPanRef.current;',
+      '  // Keeps the latest handler.',
+      '  useLayoutEffect(() => {',
+      '    handlerRef.current = onPan;',
+      '  });',
+      '  nextRef.current = next;',
+      '  return null;',
+      '}',
+    ].join('\n');
+    const added = [{file, line: 9, text: '  nextRef.current = next;'}];
+
+    expect(
+      effectFindings(added, name => (name === file ? source : null)).map(f => [
+        f.line,
+        f.rule,
+      ]),
+    ).toEqual([[9, '`nextRef.current` is written during render']]);
+  });
+
+  it('exempts the render-time writes a current record allows, and only those', () => {
+    const at = (path, lines) =>
+      effectFindings(addedLinesOf(path, lines), () => lines.join('\n')).map(
+        f => [f.line, f.rule],
+      );
+    const markdown = 'packages/core/src/Markdown/Markdown.tsx';
+    const sortable =
+      'packages/core/src/Table/plugins/sortable/useTableSortable.tsx';
+    expect(
+      at(markdown, [
+        'export function Markdown({children}: Props) {',
+        '  boundariesRef.current = next;',
+        '  prevBlocksRef.current = blocks;',
+        '  prevInlineNodesRef.current = nodes;',
+        '  prevMathRef.current = hasMath;',
+        '}',
+      ]),
+    ).toEqual([[5, '`prevMathRef.current` is written during render']]);
+    expect(
+      at(sortable, [
+        'export function useTableSortable(config: Config) {',
+        '  configRef.current = config;',
+        '}',
+      ]),
+    ).toEqual([]);
+    // The same writes elsewhere stay findings.
+    expect(
+      at('packages/core/src/List/List.tsx', [
+        'export function List({config}: Props) {',
+        '  boundariesRef.current = next;',
+        '  configRef.current = config;',
+        '}',
+      ]),
+    ).toEqual([
+      [2, '`boundariesRef.current` is written during render'],
+      [3, '`configRef.current` is written during render'],
+    ]);
+  });
+
+  it('names a committed-ref module that exists', () => {
+    expect(
+      fs.existsSync(
+        path.join(repoRoot, 'packages/core/src/hooks/useCommittedRef.ts'),
+      ),
+    ).toBe(true);
+  });
+
+  it('names an exception only where its record clause names the site', () => {
+    const records = {
+      'component:Markdown': 'docs/specs/components/Markdown/Markdown.spec.md',
+      'architecture:react-component-runtime':
+        'docs/architecture/react-component-runtime.md',
+    };
+    for (const {file: site, record} of RENDER_WRITE_EXCEPTIONS) {
+      const [id, clause] = record.split('/');
+      const text = fs.readFileSync(path.join(repoRoot, records[id]), 'utf8');
+      expect(text).toMatch(new RegExp(`\\b${clause}\\b`));
+      expect(fs.existsSync(path.join(repoRoot, site))).toBe(true);
+    }
+    const runtime = fs.readFileSync(
+      path.join(repoRoot, records['architecture:react-component-runtime']),
+      'utf8',
+    );
+    expect(runtime).toMatch(/INV17[\s\S]*useTableSortable/);
+    expect(runtime).toMatch(/INV17[\s\S]*`component:Markdown` DEC-7/);
+  });
+
+  it("does not flag Toast's earlier-sibling commit sync", () => {
+    const toast = 'packages/core/src/Toast/ToastViewport.tsx';
+    const lines = [
+      'function ToastRefSync({onCommit}: {onCommit: () => void}): null {',
+      "  // Syncs the viewport's rendered list with the committed render.",
+      '  useInsertionEffect(() => {',
+      '    onCommit();',
+      '  });',
+      '  return null;',
+      '}',
+      'export function ToastViewport() {',
+      '  const syncRendered = useCallback(() => {',
+      '    renderedToastsRef.current = toasts;',
+      '  }, [toasts]);',
+      '  return null;',
+      '}',
+    ];
+    expect(
+      effectFindings(addedLinesOf(toast, lines), () => lines.join('\n')),
+    ).toEqual([]);
+  });
+
+  it('accepts lazy initialization of a ref during render', () => {
+    expect(
+      findingsFor(
+        [
+          'export function useStore() {',
+          '  if (storeRef.current == null) {',
+          '    storeRef.current = createStore();',
+          '  }',
+          '  if (!cacheRef.current) cacheRef.current = new Map();',
+          '  idsRef.current ??= new Set();',
+          '  namesRef.current ||= [];',
+          '  if (countRef.current >= 1 && countRef.current <= 9) count();',
+          '  if (storeRef.current === null) {',
+          '    otherRef.current = createStore();',
+          '  }',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([[10, '`otherRef.current` is written during render']]);
+  });
+
+  it('accepts a ref write in a handler, a callback ref, or outside a component', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Button({label}: Props) {',
+          '  const onClick = () => {',
+          '    countRef.current += 1;',
+          '    pressedRef.current = true;',
+          '  };',
+          '  const setNode = useCallback(node => {',
+          '    nodeRef.current = node;',
+          '  }, []);',
+          '  const handlers = {',
+          '    onKeyDown() {',
+          '      keyRef.current = label;',
+          '    },',
+          '  };',
+          '  return (',
+          '    <button',
+          '      onBlur={() => (blurredRef.current = true)}',
+          '      ref={node => {',
+          '        elementRef.current = node;',
+          '      }}>',
+          "      Don't {`${label} {`}",
+          '    </button>',
+          '  );',
+          '}',
+          'function createStore() {',
+          '  storeRef.current = new Map();',
+          '}',
         ].join('\n'),
       ),
     ).toEqual([]);

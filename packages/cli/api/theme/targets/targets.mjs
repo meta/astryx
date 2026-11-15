@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {requireThemeCoreDir} from '../_adapter.mjs';
 import {collectThemingTargets} from '../../../foundation/discovery/theming-targets.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {AstryxError, coreDirOrThrow} from '../../error.mjs';
 
 /**
@@ -74,10 +75,16 @@ export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
       .filter(name => name.toLowerCase().startsWith(needle.slice(0, 3)))
       .sort()
       .slice(0, 5)
-      .map(name => ({name, reason: 'has theming targets'}));
+      .map(name => ({
+        name: formatCliCommand(`theme targets ${name}`, cwd),
+        reason: 'has theming targets',
+      }));
+    const listAll = formatCliCommand('theme targets', cwd);
     throw new AstryxError(
-      `No theming target matches "${filter}". Run \`theme targets\` with no filter for the whole list.`,
-      near.length > 0 ? near : undefined,
+      `No theming target matches "${filter}". Run \`${listAll}\` with no filter for the whole list.`,
+      near.length > 0
+        ? near
+        : [{name: listAll, reason: 'every theming target'}],
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,
     );
   }

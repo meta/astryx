@@ -1,14 +1,23 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The page template a kit starts from: the page ranker's pick when it has
- * the evidence to lead, the template a part lives in, else the app shell.
+ * @file The page template a kit starts from: for a whole page, the page the
+ * word weights and the page-pick model choose from the ranker's list; for a
+ * part or an edit, where the ranker's placement rules put it; else the app
+ * shell.
  */
 
 import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
-import {blendOrder, weighStart} from './weights.mjs';
+import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
+import {isAppShell, readNames} from './words.mjs';
+import {
+  blendOrder,
+  blendSummary,
+  sharesOwnWord,
+  weighStart,
+} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -27,16 +36,17 @@ const FALLBACK_STARTS = ['shell-top-nav', 'blank'];
 
 /**
  * A page template as the kit names it: the command that selects exactly that
- * template, scaffolding into `<path>`, a placeholder for the file or folder to
- * write it to.
+ * template and scaffolds it to `to`, or to the `<path>` placeholder when no
+ * path is known.
  * @param {PageTemplate} t
+ * @param {string | null} [to] the path, quoted for a shell
  */
-export const asTemplate = t => ({
+export const asTemplate = (t, to = null) => ({
   name: t.name,
   package: t.package,
   displayName: t.displayName,
   description: t.description,
-  command: `${t.command} <path>`,
+  command: `${t.command} ${to ?? '<path>'}`,
 });
 
 /**
@@ -58,12 +68,70 @@ function placement(kind, inPage) {
 }
 
 /**
- * The template to start from: the ready page the ranker puts first when it
- * has the evidence to lead, else the first fallback shell the project can
+ * Fixed coefficients of a logistic decision over build's own numbers: bias,
+ * whole page, edit, blend margin over the shell, the shell's blend score, the
+ * gap to the blend's second template, the idea's comma count, the text score
+ * (shellcall.mjs) and its edit-word flag. Fixed constants; nothing is trained
+ * at run time. An edit phrase keeps the shell before the decision runs, so the
+ * two edit inputs are 0 whenever it runs; they stay because the constants were
+ * fit with them.
+ */
+const LIFT = [
+  -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
+];
+
+/** The decision replaces the shell with a page when p >= 0.30. */
+const LIFT_AT = 0.3;
+
+/**
+ * The page template that replaces an app-shell start, or null to keep the
+ * shell. The blend's best template takes the start when the decision's
+ * whole-page probability is at least 0.30.
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').IdeaKind} kind
+ * @param {PageTemplate[]} catalog
+ * @param {string} idea
+ * @param {string | null} [unsupported] a page the weights chose that shares no
+ *   word with the idea; the lift may not bring it back
+ * @returns {PageTemplate | null}
+ */
+function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
+  const b = blendSummary(
+    idea,
+    ranked,
+    pickStart(ranked, 'page'),
+    catalog,
+    loadWeights(),
+  );
+  if (!b || !b.best) return null;
+  // A change to a page or app the builder already has keeps its shell.
+  if (hasEditPhrase(idea)) return null;
+  const text = shellCallScore(idea, kind, ranked);
+  const x = [
+    1,
+    kind === 'page' ? 1 : 0,
+    kind === 'edit' ? 1 : 0,
+    b.bestScore - b.shell,
+    b.shell,
+    b.bestScore - b.secondScore,
+    (String(idea).match(/,/g) ?? []).length,
+    text?.score ?? 0,
+    text?.edit ? 1 : 0,
+  ];
+  const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
+  if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  if (b.best === unsupported) return null;
+  return catalog.find(t => t.name === b.best) ?? null;
+}
+
+/**
+ * The template to start from: for a whole page, the ready page the word
+ * weights and the page-pick model choose (weighStart); for a part or an edit,
+ * the ranker's placement; else the first fallback shell the project can
  * scaffold. Null only when the project has no page template to offer at all.
  *
- * `direct` means two independent signals agree: the ranker's pick is also
- * search's direct match. The ranker sees only ready templates, so a template
+ * `direct` means two independent signals agree: the start is also search's
+ * direct match. The ranker sees only ready templates, so a template
  * still marked not ready is never the start; when search matched one directly
  * the reason names it, so the reader knows why the kit starts elsewhere.
  *
@@ -73,9 +141,19 @@ function placement(kind, inPage) {
  * @param {boolean} directMatch
  * @param {PageTemplate[]} catalog
  * @param {string} idea
+ * @param {(t: PageTemplate) => string | null} [placeOf] the path a template
+ *   is scaffolded to, quoted for a shell; null when none is known
  * @returns {Omit<BuildStart, 'alternatives'> | null}
  */
-export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
+export function chooseStart(
+  ranked,
+  kind,
+  pages,
+  directMatch,
+  catalog,
+  idea,
+  placeOf = () => null,
+) {
   const direct = directMatch ? pages[0].name : null;
   const unready =
     direct && !catalog.some(t => t.name === direct) ? direct : null;
@@ -94,31 +172,51 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
       : place[0].toUpperCase() + place.slice(1);
   const proposed = pickStart(ranked, kind);
   // The checked-in word weights (weights.mjs), blended with the ranker's
-  // scores, decide the start of a whole page. A part or an edit starts where
-  // the ranker's placement rules put it (spec:AST-048/FR3).
-  const weighed =
+  // scores, decide the start of a whole page, so it can differ from the
+  // ranker's own pick, its head-noun family included. A part or an edit starts
+  // where the ranker's placement rules put it (spec:AST-048/FR3).
+  const weighedPage =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
           weights: loadWeights(),
           newPage: asksForNewPage(idea, catalog),
         })
       : undefined;
+  // When the ranker proposes no page, a page the word weights lean to but
+  // whose own docs share no word with the idea is no start; the shell lift
+  // may not bring that same page back.
+  const unsupported =
+    weighedPage &&
+    !directMatch &&
+    !proposed &&
+    !sharesOwnWord(weighedPage, readNames(idea, catalog), catalog)
+      ? weighedPage
+      : null;
+  const weighed = unsupported ? null : weighedPage;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
   const pick =
     weighed === undefined
       ? proposed
       : weighed === null
-        ? proposed?.family === 'Shell' || (proposed && direct && !unready)
+        ? isAppShell(proposed) || (proposed && direct && !unready)
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
-  const closest = pick && catalog.find(t => t.name === pick.name);
-  if (pick && closest) {
+  // An idea that would start on the app shell starts from the blend's best page
+  // when the decision's whole-page probability is at least 0.30. A direct match,
+  // ready or not, keeps the start and reason it already has.
+  const lifted =
+    !direct && (!pick || pick.family === 'Shell')
+      ? liftFromShell(ranked, kind, catalog, idea, unsupported)
+      : null;
+  const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
+  if (closest) {
     const agrees = closest.name === direct;
-    const place = placement(kind, pick.base && pick.familyNamed);
+    const place =
+      lifted || !pick ? null : placement(kind, pick.base && pick.familyNamed);
     return {
-      ...asTemplate(closest),
+      ...asTemplate(closest, placeOf(closest)),
       basis: agrees ? 'direct' : 'closest',
       reason: unready
         ? `\`${unready}\` matches but is not ready yet; this is the closest ready template.`
@@ -141,7 +239,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
         (weighed === null && !!proposed && proposed.family !== 'Shell');
       const place = placement(kind, false);
       return {
-        ...asTemplate(shell),
+        ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
           ? `\`${unready}\` matches but is not ready yet, so start from the app shell.`

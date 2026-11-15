@@ -11,7 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -27,27 +27,20 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt4-', FIXTURE_PACKAGES);
@@ -108,14 +101,14 @@ describe('words and values', () => {
       ['surfaces', 'frosted', 'glass'],
       ['buttons', 'uppercase', 'caps'],
       ['mode', 'auto', 'both'],
-      ['base', 'NEUTRAL', 'neutral'],
     ]) {
       const r = await refusal(() => themeEditSet('z', thing, word, {cwd}));
       expect(r.run[0], word).toMatch(new RegExp(`set z ${thing} ${want}$`));
     }
+    // A word that means none of the values gets no guess at one.
     expect(
       (await refusal(() => themeEditSet('z', 'surfaces', 'zzzz', {cwd}))).run,
-    ).toEqual([]);
+    ).toEqual([expect.stringMatching(/ how surfaces$/)]);
   });
 
   it('how base names only installed bases, with the line for the rest', async () => {
@@ -185,7 +178,10 @@ describe('builds', () => {
     const preview = path.join(cwd, 'themes/z/preview.html');
     fs.rmSync(preview, {force: true});
     fs.mkdirSync(preview);
-    const r = await refusal(() => themeEditShow('z', {cwd}));
+    // The page write itself refuses the folder.
+    const r = await withRealRenders(() =>
+      refusal(() => themeEditShow('z', {cwd})),
+    );
     expect(r.code).toBe('ERR_WRITE_FAILED');
     expect(r.message).toContain('is a folder');
     fs.rmdirSync(preview);

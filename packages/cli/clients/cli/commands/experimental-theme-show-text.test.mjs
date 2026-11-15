@@ -35,6 +35,12 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-show-text-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+  // A routes folder has a root layout, which loads Core's stylesheet.
+  if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/layout.tsx'),
+      "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
   await themeEditNew('brand', {cwd, like: 'neutral'});
   await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
   const args = ['experimental', 'theme', 'editor', 'show', 'brand'];
@@ -82,7 +88,9 @@ describe('experimental theme editor show text output', () => {
 
   it('says colors, never palette or family, before the file names', () => {
     const words = text.slice(0, text.indexOf('colorFiles:'));
-    expect(words).not.toMatch(/palette|(?<!font-)famil/i);
+    // As words: a name that holds one (the part command-palette-item, the
+    // token --font-family-body) is a name, not the word.
+    expect(words).not.toMatch(/(?<![\w-])(palette|famil)/i);
   });
 });
 

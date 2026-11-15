@@ -5,10 +5,12 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from './build.mjs';
 import {search, searchedComponents} from '../search/search.mjs';
+import {template} from '../template/template.mjs';
 
 // api/build/ -> up 3 = packages/cli, up 4 = repo root (has packages/core).
 const REPO = path.resolve(
@@ -276,7 +278,8 @@ describe('build kit — a thin kit says what to try next', () => {
     expect(r.data.start).toMatchObject({
       name: 'dashboard-scorecard',
       basis: 'closest',
-      command: 'astryx template dashboard-scorecard --type page <path>',
+      command:
+        'astryx template dashboard-scorecard --type page src/pages/dashboard-scorecard',
     });
   });
 
@@ -328,7 +331,8 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start).toMatchObject({
       name: 'shell-top-nav',
       basis: 'fallback',
-      command: 'astryx template shell-top-nav --type page <path>',
+      command:
+        'astryx template shell-top-nav --type page src/pages/shell-top-nav',
     });
     expect(r.data.start?.description).toBeTruthy();
   });
@@ -454,7 +458,9 @@ describe('build kit — every page starts from a template', () => {
       for (const alt of alternatives) {
         expect(alt.name).not.toBe(r.data.start?.name);
         expect(alt.description).toBeTruthy();
-        expect(alt.command).toBe(`astryx template ${alt.name} --type page <path>`);
+        expect(alt.command).toBe(
+          `astryx template ${alt.name} --type page src/pages/${alt.name}`,
+        );
       }
     }
   });
@@ -539,9 +545,38 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
+  it('starts a whole-page idea that would start on the shell from a page template', async () => {
+    const r = await build('a support inbox', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'table-inbox', basis: 'closest'});
+  });
+
+  it('starts a part that reads as a whole page from a page template', async () => {
+    const r = await build('a sortable list of tasks with priority and assignee', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'table-page', basis: 'closest'});
+  });
+
+  it('keeps the shell for a part and for a change to an existing page', async () => {
+    for (const idea of [
+      'a tooltip on the save button',
+      'existing support inbox with filters, tags, assignees, and saved views',
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe('shell-top-nav');
+    }
+  });
+
+  it('names an unready direct match instead of lifting the start', async () => {
+    const r = await build('a list of incidents with severity and owners', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready/);
+  });
+
   it('starts a page the words describe from its template', async () => {
     for (const [idea, name] of [
-      ['a weekly report of sales by region', 'dashboard-scorecard'],
+      ['a weekly report of sales by region', 'dashboard'],
       ['a pricing page with three plans and a comparison table', 'table-comparison'],
     ]) {
       const r = await build(idea, {cwd: REPO});
@@ -550,13 +585,67 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('starts a component in a container from a template with that frame', async () => {
-    // "in a modal": the modal is the frame, so the dialog template leads
-    // instead of the app shell.
+  it('starts a template named in any case or with a neighbour-letter swap where its own words start', async () => {
+    for (const [spacedIdea, others] of [
+      ['a kanban board page', ['a KanbanBoard page', 'a kanbanBoard page', 'a knaban board page']],
+      ['a checkout wizard page', ['a CheckoutWizard page']],
+      ['a theme showcase page', ['a ThemeShowcase page']],
+      ['a library for a book club', ['a lbirary for a book club']],
+    ]) {
+      const spaced = await build(spacedIdea, {cwd: REPO});
+      for (const idea of others) {
+        const r = await build(idea, {cwd: REPO});
+        expect(r.type).toBe('build.kit');
+        if (r.type !== 'build.kit' || spaced.type !== 'build.kit') return;
+        expect(r.data.start?.name).toBe(spaced.data.start?.name);
+      }
+    }
+  });
+
+  it('echoes the query as the caller typed it, a joined name included', async () => {
+    const r = await build('a KanbanBoard page', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.query).toBe('a KanbanBoard page');
+  });
+
+  it('picks the blocks for a joined name that its plain words get', async () => {
+    const joined = await build('a ContactForm page', {cwd: REPO});
+    const spaced = await build('a contact form page', {cwd: REPO});
+    if (joined.type !== 'build.kit' || spaced.type !== 'build.kit') {
+      throw new Error('not a kit');
+    }
+    expect(joined.data.blocks.map(b => b.name)).toEqual(
+      spaced.data.blocks.map(b => b.name),
+    );
+  });
+
+  it('never reads an everyday word one letter from a template id as that template', async () => {
+    for (const [idea, name] of [
+      ['a seating chart page', 'dashboard'],
+      ['a sports betting page', 'shell-top-nav'],
+      ['a sitting schedule page', 'shell-top-nav'],
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe(name);
+    }
+  });
+
+  it('starts a page in a frame from the template with that frame', async () => {
+    // "in a dialog" holds the checkout form, the page the idea names, so the
+    // dialog template leads.
+    const r = await build('a checkout form in a dialog', {cwd: REPO});
+    expect(r.type).toBe('build.kit');
+    if (r.type !== 'build.kit') return;
+    expect(r.data.start?.name).toBe('form-wizard-dialog');
+  });
+
+  it('starts a part in a frame from the app shell', async () => {
+    // The modal holds saved drafts, a part, not a page family.
     const r = await build('saved drafts in a modal with resume and delete row actions', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
-    expect(r.data.start?.name).toBe('settings-dialog');
+    expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
   it('does not start from a template named only by a word that modifies another', async () => {
@@ -566,4 +655,158 @@ describe('build kit — every page starts from a template', () => {
     if (r.type !== 'build.kit') return;
     expect(r.data.start?.name).not.toMatch(/^product-/);
   });
+});
+
+// A host locale moves names only when Node carries that locale's collation
+// data (official builds do; an English-only ICU build does not).
+const HOST_LOCALES = ['cs_CZ.UTF-8', 'haw_US.UTF-8', 'tr_TR.UTF-8'];
+const hasLocaleData =
+  Intl.Collator.supportedLocalesOf(['cs', 'haw', 'tr']).length === 3;
+
+describe('build kit — the start names where it goes in the project', () => {
+  /**
+   * A folder inside the repository, so build reads the workspace Core.
+   * @param {object | null} pkg its package.json, or none
+   * @param {string[]} [layouts] folders that each get a root layout
+   */
+  const project = (pkg, layouts = []) => {
+    const dir = fs.mkdtempSync(path.join(REPO, '.astryx-build-dest-'));
+    if (pkg)
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+    for (const folder of layouts) {
+      fs.mkdirSync(path.join(dir, folder), {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, folder, 'layout.tsx'),
+        'export default function Layout() {}\n',
+      );
+    }
+    return dir;
+  };
+  const nextApp = {dependencies: {next: '^16.0.0'}};
+
+  it('names the App Router folder of a Next app, and the command writes there as printed', async () => {
+    const dir = project(nextApp, ['app']);
+    try {
+      const r = await build('quarterly revenue dashboard', {cwd: dir});
+      if (r.type !== 'build.kit' || !r.data.start)
+        throw new Error('expected a start');
+      const {start} = r.data;
+      for (const t of [start, ...start.alternatives])
+        expect(t.command).toBe(
+          `astryx template ${t.name} --type page app/${t.name}`,
+        );
+      const written = await template(start.name, {
+        type: 'page',
+        targetPath: `app/${start.name}`,
+        cwd: dir,
+      });
+      expect(written.data.outputDir).toBe(path.join('app', start.name));
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('names the page file in a Next app with only the Pages Router', async () => {
+    const dir = project(nextApp);
+    fs.mkdirSync(path.join(dir, 'pages'));
+    try {
+      const r = await build('contact form', {cwd: dir});
+      if (r.type !== 'build.kit') throw new Error('expected build.kit');
+      expect(r.data.start?.command).toBe(
+        'astryx template contact-form --type page pages/contact-form.tsx',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('quotes a route group folder, so a shell runs the command as printed', async () => {
+    const dir = project(nextApp, ['app/(marketing)', 'app/(shop)']);
+    try {
+      const r = await build('contact form', {cwd: dir});
+      if (r.type !== 'build.kit') throw new Error('expected build.kit');
+      expect(r.data.start?.command).toBe(
+        "astryx template contact-form --type page 'app/(marketing)/contact-form'",
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('keeps the <path> placeholder in a folder that is not a project', async () => {
+    const dir = project(null);
+    try {
+      const r = await build('contact form', {cwd: dir});
+      if (r.type !== 'build.kit') throw new Error('expected build.kit');
+      expect(r.data.start?.command).toBe(
+        'astryx template contact-form --type page <path>',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('build is deterministic', () => {
+  // Made-up phrases. Several are close to exact ties between templates, and
+  // "data table" and "checkout page" order differently under a Hawaiian
+  // collation when names sort by the host locale.
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+    'yearly report with charts',
+    'data table',
+    'checkout page',
+  ];
+  /** @param {any} r */
+  const answer = r => ({
+    start: r.data?.start?.name ?? null,
+    basis: r.data?.start?.basis ?? null,
+    alternatives: (r.data?.start?.alternatives ?? []).map(a => a.name),
+    blocks: (r.data?.blocks ?? []).map(b => b.name),
+  });
+  const answers = async () => {
+    const out = [];
+    for (const idea of ideas) out.push(answer(await build(idea, {cwd: REPO})));
+    return out;
+  };
+
+  it('gives the same answers twice in one process', async () => {
+    const first = await answers();
+    expect(await answers()).toEqual(first);
+  }, 120000);
+
+  it.skipIf(!hasLocaleData)(
+    'gives the same answers under every host locale',
+    async () => {
+      const {spawnSync} = await import('node:child_process');
+      const url = new URL('./build.mjs', import.meta.url).href;
+      const script = `import {build} from ${JSON.stringify(url)};
+        const out = [];
+        for (const idea of ${JSON.stringify(ideas)}) {
+          const d = (await build(idea, {cwd: ${JSON.stringify(REPO)}})).data ?? {};
+          out.push({start: d.start?.name ?? null, basis: d.start?.basis ?? null,
+            alternatives: (d.start?.alternatives ?? []).map(a => a.name),
+            blocks: (d.blocks ?? []).map(b => b.name)});
+        }
+        console.log(JSON.stringify(out));`;
+      /** @param {string} lang */
+      const under = lang => {
+        const res = spawnSync(
+          process.execPath,
+          ['--input-type=module', '-e', script],
+          {encoding: 'utf8', env: {...process.env, LANG: lang, LC_ALL: lang}},
+        );
+        expect(res.status, res.stderr).toBe(0);
+        return JSON.parse(res.stdout.trim().split('\n').pop() ?? '[]');
+      };
+      const expected = under('en_US.UTF-8');
+      for (const lang of HOST_LOCALES) expect(under(lang), lang).toEqual(expected);
+    },
+    180000,
+  );
 });

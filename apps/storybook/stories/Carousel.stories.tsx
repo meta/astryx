@@ -15,6 +15,7 @@ import {
   typographyVars,
   radiusVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const styles = stylex.create({
   pageWrapper: {
@@ -84,14 +85,14 @@ const styles = stylex.create({
 });
 
 const IMAGES = [
-  {id: 1, src: 'https://picsum.photos/id/1042/200/200', label: 'dark.jpg'},
-  {id: 2, src: 'https://picsum.photos/id/1043/200/200', label: 'light.jpg'},
-  {id: 3, src: 'https://picsum.photos/id/1044/200/200', label: 'warm.jpg'},
-  {id: 4, src: 'https://picsum.photos/id/1047/200/200', label: 'mixed.jpg'},
-  {id: 5, src: 'https://picsum.photos/id/1050/200/200', label: 'nature.jpg'},
-  {id: 6, src: 'https://picsum.photos/id/1055/200/200', label: 'city.jpg'},
-  {id: 7, src: 'https://picsum.photos/id/1060/200/200', label: 'ocean.jpg'},
-  {id: 8, src: 'https://picsum.photos/id/1069/200/200', label: 'forest.jpg'},
+  {id: 1, src: SAMPLE_IMAGES.dark200x200, label: 'dark.jpg'},
+  {id: 2, src: SAMPLE_IMAGES.light200x200, label: 'light.jpg'},
+  {id: 3, src: SAMPLE_IMAGES.warm200x200, label: 'warm.jpg'},
+  {id: 4, src: SAMPLE_IMAGES.mixed200x200, label: 'mixed.jpg'},
+  {id: 5, src: SAMPLE_IMAGES.meadow200x200, label: 'nature.jpg'},
+  {id: 6, src: SAMPLE_IMAGES.city200x200, label: 'city.jpg'},
+  {id: 7, src: SAMPLE_IMAGES.beach200x200, label: 'ocean.jpg'},
+  {id: 8, src: SAMPLE_IMAGES.forest200x200, label: 'forest.jpg'},
 ];
 
 const meta: Meta<typeof Carousel> = {

@@ -84,7 +84,7 @@ import {
   PowerSearchValueEditor,
 } from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
@@ -599,7 +599,9 @@ export function PowerSearch({
   style,
   components: componentOverrides,
   presentation = 'adaptive',
+  ...rest
 }: PowerSearchProps) {
+  const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
@@ -1567,11 +1569,12 @@ export function PowerSearch({
                 </React.Fragment>
               ))}
               <button
+                {...dataAttributes}
                 type="button"
                 id={triggerId}
                 ref={triggerRef}
-                // The field's primary control: `data-testid` lands here, as it
-                // lands on the combobox input in the popover presentation.
+                // The field's primary control: `data-*` attributes land here, as
+                // they land on the combobox input in the popover presentation.
                 data-testid={testId}
                 autoFocus={autoFocusOnMount}
                 onClick={openSheet}
@@ -1673,6 +1676,7 @@ export function PowerSearch({
               containerXstyle={xstyle}
               containerClassName={className}
               containerStyle={style}
+              {...dataAttributes}
               data-testid={testId}
               presentation="popover"
             />

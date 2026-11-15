@@ -84,6 +84,14 @@ export const doc = {
           example: "['@acme/outline-icons/outline', '@acme/brand-icons/brand']",
         },
         {
+          name: 'experimental.iconVariant',
+          type: 'string',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The look every icon of the project draws, such as `outline` or `filled`, by the variant name the icon sets declare. Each set in `experimental.iconSet` that declares a variant of that name draws it: copied templates import that variant's icons, and a theme takes that look's theme map (`themeIconsFilled`). A set that declares no variant of that name draws its default look. The main set must declare it, and it needs `experimental.iconSet`. `astryx experimental icon use <main> --variant <variant>` writes it; without `--variant` that command removes it.",
+          example: "'filled'",
+        },
+        {
           name: 'experimental.xle.components',
           type: 'Record<string, XleComponent>',
           description:

@@ -9,32 +9,39 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {MultiSelector} from './MultiSelector';
+import {InputGroup} from '../InputGroup/InputGroup';
+import {MultiSelector, type MultiSelectorProps} from './MultiSelector';
 
-type Handler = () => void;
-function Harness(props: {
-  isDisabled: boolean;
-  variant?: 'input' | 'secondary' | 'ghost';
-  onClick?: Handler;
-  onKeyDown?: Handler;
-  onMouseDown?: Handler;
-  onDoubleClick?: Handler;
-}) {
+function Harness({
+  grouped = false,
+  isDisabled,
+  ...props
+}: Partial<MultiSelectorProps> & {isDisabled: boolean; grouped?: boolean}) {
+  const selector = (
+    <MultiSelector
+      label="Fruit"
+      htmlName="fruit"
+      options={['Apple', 'Banana']}
+      value={['Banana']}
+      onChange={() => {}}
+      isDisabled={grouped ? undefined : isDisabled}
+      {...props}
+    />
+  );
   return (
     <form aria-label="Form">
       <button type="button">Before</button>
-      <MultiSelector
-        label="Fruit"
-        htmlName="fruit"
-        options={['Apple', 'Banana']}
-        value={['Banana']}
-        onChange={() => {}}
-        {...props}
-      />
+      {grouped ? (
+        <InputGroup label="Fruit group" isDisabled={isDisabled}>
+          {selector}
+        </InputGroup>
+      ) : (
+        selector
+      )}
       <button type="button">After</button>
     </form>
   );
@@ -118,4 +125,53 @@ describe('MultiSelector disabled (spec:AST-085)', () => {
       expect(getComputedStyle(wrapper).cursor).toBe('default');
     },
   );
+});
+
+describe('MultiSelector disabled caller trigger', () => {
+  const renderTrigger: MultiSelectorProps['renderTrigger'] = props => (
+    <button type="button" {...props}>
+      Pick fruit
+    </button>
+  );
+
+  it('blocks disabled caller trigger events even when read-only', () => {
+    const handlers = {
+      onClick: vi.fn(),
+      onClickCapture: vi.fn(),
+      onKeyDown: vi.fn(),
+      onPointerDown: vi.fn(),
+    };
+    const onAncestorClick = vi.fn();
+    render(
+      <div onClick={onAncestorClick}>
+        <Harness
+          isDisabled
+          isReadOnly
+          renderTrigger={renderTrigger}
+          {...handlers}
+        />
+      </div>,
+    );
+    const opener = screen.getByRole('button', {name: 'Pick fruit'});
+    fireEvent.pointerDown(opener);
+    expect(fireEvent.click(opener)).toBe(false);
+    expect(fireEvent.keyDown(opener, {key: 'Enter'})).toBe(false);
+    expect(fireEvent.keyDown(opener, {key: ' '})).toBe(false);
+    fireEvent.keyDown(opener, {key: 'ArrowDown'});
+    for (const handler of [...Object.values(handlers), onAncestorClick]) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+    expect(opener).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('lets InputGroup disablement override caller ARIA', () => {
+    const props = {grouped: true, renderTrigger, 'aria-disabled': false};
+    const {rerender} = render(<Harness isDisabled={false} {...props} />);
+    const opener = screen.getByRole('button', {name: 'Pick fruit'});
+    expect(opener).toHaveAttribute('aria-disabled', 'false');
+
+    rerender(<Harness isDisabled {...props} />);
+
+    expect(opener).toHaveAttribute('aria-disabled', 'true');
+  });
 });

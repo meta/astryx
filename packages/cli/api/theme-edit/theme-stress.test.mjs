@@ -32,6 +32,11 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {
+  appPackages,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -40,38 +45,11 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-/** The packages the template pages import, so ranked pages can be added. */
-const APP_PACKAGES = {
-  name: 'app',
-  private: true,
-  type: 'module',
-  dependencies: {
-    '@heroicons/react': '*',
-    'lucide-react': '*',
-    recharts: '*',
-  },
-};
+const APP_PACKAGES = appPackages();
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-stress-', [
@@ -176,13 +154,13 @@ describe('colors', () => {
     ).toBeUndefined();
   }, 180_000);
 
-  it('neutral leaves the page background to the base theme', async () => {
+  it('neutral reaches the page background with the surfaces', async () => {
     await themeEditSet('s', 'neutral', '#425466', {cwd});
     const source = read('themes/s/s.settings.ts');
     expect(source).toMatch(
       /"--color-background-surface": \[\s*palette\.neutral/,
     );
-    expect(source).not.toContain('"--color-background-body"');
+    expect(source).toMatch(/"--color-background-body": \[\s*palette\.neutral/);
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 120_000);
 
@@ -260,15 +238,21 @@ describe('how', () => {
       "color 'var(--color-text-accent)' --on button --when variant:secondary",
     );
     expect(commands).toContain(
-      "background '#ffffff' --on button --when variant:secondary",
+      "background-color '#ffffff' --on button --when variant:secondary",
     );
-    expect(commands).not.toContain("color '#ffffff'");
+    expect(commands).not.toMatch(/(^|\s)color '#ffffff'/);
   });
 });
 
 describe('preview pages', () => {
   it('leaves app frames out of a description and says what it matched', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(
       'a light fintech landing page: announcement bar, nav with sign-in buttons, big two-tone headline, two CTA buttons, and a customer logo strip',
       {cwd, theme: 's'},
@@ -398,15 +382,17 @@ describe('round 3', () => {
   }, 120_000);
 
   it('names parts inside the part a token is set on', async () => {
+    // (A toast's text sits on Core's media surface, which sets its own text
+    // tokens: a banner holds a button that reads the token.)
     const r = await themeEditSet('s', '--color-text-primary', '#ffffff', {
       cwd,
-      on: 'toast',
+      on: 'banner',
     });
-    expect(r.data.notes.join(' ')).toContain('on button inside toast');
+    expect(r.data.notes.join(' ')).toContain('on button inside banner');
     await themeEditUndo('s', {
       cwd,
       thing: '--color-text-primary',
-      on: 'toast',
+      on: 'banner',
     });
   }, 120_000);
 
@@ -420,8 +406,10 @@ describe('round 3', () => {
       ).data
     );
     const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
+    // (A secondary button draws no border now: a width alone shows
+    // nothing, so the whole line.)
     expect(b.join('\n')).toContain(
-      'set s border-width 1px --on button --when variant:secondary',
+      "set s border '1px solid var(--color-border)' --on button --when variant:secondary",
     );
     expect(b.join('\n')).toContain("color 'var(--color-text-accent)'");
     const fill = /** @type {any} */ (
@@ -436,7 +424,7 @@ describe('round 3', () => {
     );
     expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
-    expect(f.join('\n')).toContain("background '#e5e7eb' --on button");
+    expect(f.join('\n')).toContain("background-color '#e5e7eb' --on button");
     expect(f.join('\n')).toContain("color '#111827' --on button");
   });
 
@@ -546,10 +534,12 @@ describe('round 4', () => {
   }, 240_000);
 
   it('says which tokens a token feeds instead of claiming it changes nothing', async () => {
+    // (A success field status reads it now that the part data draws every
+    // type, so it changes that, and no note claims otherwise.)
     const r = await themeEditSet('s', '--color-success-muted', '#dcfce7', {
       cwd,
     });
-    expect(r.data.notes.join(' ')).toContain('--color-syntax-added');
+    expect(r.data.notes.join(' ')).not.toMatch(/changes nothing/);
     await themeEditUndo('s', {cwd, thing: '--color-success-muted'});
   }, 120_000);
 
@@ -619,7 +609,11 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
+    // The folder name is no plain URL segment: the way on names one that is,
+    // with the description quoted.
+    expect(r.run[0]).toMatch(
+      /add 'a weather widget' --theme s --path src\/app\/my-preview$/,
+    );
   }, 120_000);
 });
 
@@ -749,7 +743,7 @@ describe('review fixes', () => {
     240_000,
   );
 
-  it("a one-mode theme leaves the other mode's settings out and names them", async () => {
+  it("a one-mode theme keeps the other mode's settings for the regions Core draws in that mode, and names them", async () => {
     await themeEditNew('om', {
       cwd,
       like: 'neutral',
@@ -761,16 +755,20 @@ describe('review fixes', () => {
     });
     const r = await themeEditSet('om', 'mode', 'dark-only', {cwd});
     expect(r.data.notes.join(' ')).toContain(
-      'not applied in a dark-only theme',
+      'a dark-only theme shows the other mode only where Core draws it (a toast, a lightbox), so these apply there',
     );
-    expect(r.data.changedTokens.join(' ')).not.toContain('#bbbbbb');
+    // The light half keeps the light setting, for a toast or a lightbox.
+    expect(read('themes/om/om.css')).toMatch(
+      /--color-text-primary:\s*light-dark\(#bbbbbb,/,
+    );
+    // Both halves stay: the mode is the one the app's <Theme> is given.
     expect(read('themes/om/om.settings.ts')).toMatch(
-      /"--color-accent": palette\.accent\.dark\[\d+\],/,
+      /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]/,
     );
     const show = await themeEditShow('om', {cwd});
     expect(
       show.data.settings.find(x => x.thing === '--color-text-primary')?.masked,
-    ).toContain('does not apply');
+    ).toBeUndefined();
     await themeEditPreviewAdd(undefined, {
       cwd,
       theme: 'om',
@@ -789,7 +787,9 @@ describe('review fixes', () => {
     const before = read('themes/hi/hi.settings.json');
     const u = await refusal(() => themeEditUndo('hi', {cwd}));
     expect(u.code).toBe('ERR_THEME_INVALID');
-    expect(u.message).toContain('delete themes/hi/hi.history.json');
+    expect(u.message).toContain(
+      'move themes/hi/hi.history.json out of the theme folder',
+    );
     expect(read('themes/hi/hi.settings.json')).toBe(before);
     const r = await themeEditSet('hi', 'spacing', 'roomy', {cwd});
     expect(r.data.notes.join(' ')).toContain('a new undo history starts');
@@ -867,8 +867,23 @@ describe('review fixes', () => {
     const line = show.data.partValues.find(x =>
       x.startsWith('corners = large on checks'),
     );
-    expect(line).toContain('--radius-inner');
-    expect(line).toContain('unknown for radio-indicator');
+    expect(line).toContain('--radius-inner 4px for checkbox-indicator');
+    // A radio's circle is no corner: the dial leaves it.
+    expect(line).toContain("a radio's circle, 50% for radio-indicator");
+    expect(line).toContain(
+      "none (a radio's circle stays 50%) on radio-indicator",
+    );
+    await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
+  }, 120_000);
+
+  it("leaves a radio's circle out of a corners dial on its group", async () => {
+    await themeEditSet('s', 'corners', 'square', {cwd, on: 'checks'});
+    const css = read('themes/s/s.css');
+    const rules = [
+      ...css.matchAll(/\.astryx-radio-indicator\b[^{]*\{([^}]*)\}/g),
+    ].map(m => m[1]);
+    expect(rules.some(r => /radius/.test(r))).toBe(false);
+    expect(css).toMatch(/\.astryx-checkbox-indicator[^{]*\{[^}]*radius/);
     await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
   }, 120_000);
 

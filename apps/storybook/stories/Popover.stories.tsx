@@ -11,6 +11,7 @@ import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
 import {Token} from '@astryxdesign/core/Token';
 import {Link} from '@astryxdesign/core/Link';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Switch} from '@astryxdesign/core/Switch';
@@ -369,6 +370,19 @@ function ResizablePanel() {
  * handle and rows with swipe actions. On a touch screen each follows the
  * finger while the Popover is open.
  */
+/** The message rows' swipe actions, defined once at module scope. */
+const messageSwipe = createSwipe({
+  trailing: [
+    {id: 'archive', label: 'Archive', onActivate: () => {}, variant: 'neutral'},
+    {
+      id: 'delete',
+      label: 'Delete',
+      onActivate: () => {},
+      variant: 'destructive',
+    },
+  ],
+});
+
 export const OverPageControls: Story = {
   tags: ['!autodocs'],
   render: () => (
@@ -388,16 +402,7 @@ export const OverPageControls: Story = {
             key={label}
             label={label}
             onClick={() => {}}
-            swipeActions={{
-              trailing: [
-                {label: 'Archive', onActivate: () => {}, variant: 'neutral'},
-                {
-                  label: 'Delete',
-                  onActivate: () => {},
-                  variant: 'destructive',
-                },
-              ],
-            }}
+            swipe={messageSwipe}
           />
         ))}
       </List>
@@ -468,6 +473,46 @@ function FilterContent({onApply}: {onApply?: () => void}) {
     </VStack>
   );
 }
+
+/**
+ * A controlled Popover that a separate button also opens and closes. A press
+ * on that button while the popover is open closes it, and the button's label
+ * follows the state.
+ */
+export const ToggledByAnotherControl: Story = {
+  render: function ToggledByAnotherControlStory() {
+    const [isOpen, setIsOpen] = React.useState(false);
+    return (
+      <HStack gap={3}>
+        <Popover
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Details"
+          width={260}
+          placement="below"
+          content={
+            <VStack gap={2}>
+              <Heading level={4} tabIndex={-1}>
+                Details
+              </Heading>
+              <Text type="body">
+                The button beside the trigger also opens and closes this
+                popover.
+              </Text>
+            </VStack>
+          }>
+          <Button label="Details">Details</Button>
+        </Popover>
+        <Button
+          label={isOpen ? 'Hide details' : 'Show details'}
+          variant="secondary"
+          onClick={() => setIsOpen(value => !value)}>
+          {isOpen ? 'Hide details' : 'Show details'}
+        </Button>
+      </HStack>
+    );
+  },
+};
 
 export const FilterPanel: Story = {
   render: function FilterPanelStory() {

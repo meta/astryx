@@ -82,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {linearEasing, sampleCount} from './linearEasing';
 import {
   sharedKey,
   sharedMap,
@@ -117,8 +118,6 @@ import {
 const MIN_SHIFT_PX = 0.5;
 /** The touch cross-fade's cap (`design:reduced-motion` DR2). */
 const CROSS_FADE_CAP_MS = 200;
-/** Keyframes per second the motion is sampled at. */
-const SAMPLES_PER_SECOND = 60;
 
 // ---------------------------------------------------------------------------
 // Motion
@@ -206,21 +205,11 @@ export function springGlide(
     settlingDuration(physics, {initialVelocity: velocity}) * 1000;
   const remaining = (t: number) =>
     t >= durationMs ? 0 : 1 - curve.value(t / 1000);
-  return {durationMs, easing: linearEasing(durationMs, remaining), remaining};
-}
-
-/** A move's remaining fraction over time as CSS `linear()` easing text. */
-function linearEasing(
-  durationMs: number,
-  remaining: (t: number) => number,
-): string {
-  const count = sampleCount(durationMs);
-  const stops: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const done = 1 - remaining((i / (count - 1)) * durationMs);
-    stops.push(String(Math.round(done * 10000) / 10000));
-  }
-  return `linear(${stops.join(', ')})`;
+  return {
+    durationMs,
+    easing: linearEasing(durationMs, t => 1 - remaining(t)),
+    remaining,
+  };
 }
 
 function releaseGlideFor(area: Element): GlideProgress | undefined {
@@ -254,10 +243,6 @@ function layoutMotion(area: Element): LayoutMotion {
   }
   const progress = releaseGlideFor(area) ?? glideProgress(area);
   return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
-}
-
-function sampleCount(durationMs: number): number {
-  return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
 }
 
 /** Linear keyframes over `durationMs`, one per frame, from `frame(t ms)`. */

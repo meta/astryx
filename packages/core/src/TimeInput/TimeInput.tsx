@@ -4,8 +4,9 @@
 
 /**
  * @file TimeInput.tsx
- * @input Uses React, Field, NativeTimeSegment, InputGroupContext, pointer media queries, and shared time utilities
- * @output Exports TimeInput, TimeInputProps, and TimeInputNativePicker
+ * @input Uses React, Field, NativeTimeSegment, useTypedTime, useEntryErrorBehavior, InputGroupContext, pointer media queries, and shared time utilities
+ * @output Exports TimeInput, TimeInputProps, TimeInputNativePicker,
+ *   TimeInputEntryError, and EntryErrorBehavior
  * @position Core implementation; consumed by index.ts, tested by TimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -32,6 +33,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
   sizeVars,
@@ -59,6 +62,7 @@ import {
   mergeProps,
   getInputARIA,
 } from '../utils';
+import {type TimeInputEntryError, useTypedTime} from './useTypedTime';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -79,11 +83,7 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
-import {
-  formatLocaleTime,
-  parseLocaleTime,
-  resolveHourFormat,
-} from '../utils/timeFormat';
+import {formatLocaleTime, resolveHourFormat} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';
@@ -176,6 +176,8 @@ export type {
   InputStatus as TimeInputStatus,
   InputStatusType as TimeInputStatusType,
 } from '../Field';
+export type {TimeInputEntryError} from './useTypedTime';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 
 export interface TimeInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
@@ -364,8 +366,68 @@ export interface TimeInputProps extends Omit<
    * Status indicator for the input.
    * When set, displays a colored border and status icon.
    * If message is provided, displays below the input.
+   *
+   * For a typed time the field rejects, and for an edit of the native time
+   * control outside `min` or `max`, the field shows its own error message in
+   * place of `status`. An `error` status with a message shows instead, and
+   * the rejection is still announced. A `warning` or `success` status never
+   * replaces a rejection.
    */
   status?: InputStatus;
+
+  /**
+   * Called each time the field's rejection of typed text changes, with `null`
+   * when the rejection ends. `kind` is `'unreadable'` (text that is not a
+   * time) or `'outOfRange'` (a time before `min` or after `max`). `text` is
+   * the typed text, and `value` is the ISO time the text names, for
+   * `'outOfRange'`.
+   *
+   * A rejection shows when `entryErrorBehavior` shows it. The callback also
+   * runs when a new `min`, `max`, or `value`, or disabling the field, changes
+   * the rejection, and never twice for the same rejection. It reports `null` when the field unmounts while its rejection
+   * stands. The native and bottom-sheet surfaces take no typed text, so they
+   * report no rejection.
+   *
+   * @example
+   * ```
+   * const [entryError, setEntryError] = useState<TimeInputEntryError | null>(null);
+   * <TimeInput
+   *   label="Start time"
+   *   value={time}
+   *   onChange={setTime}
+   *   min="09:00"
+   *   max="17:00"
+   *   onEntryErrorChange={setEntryError}
+   *   status={
+   *     entryError?.kind === 'outOfRange'
+   *       ? {type: 'error', message: 'Pick a time during office hours'}
+   *       : undefined
+   *   }
+   * />
+   * ```
+   */
+  onEntryErrorChange?: (error: TimeInputEntryError | null) => void;
+
+  /**
+   * When the field shows its own entry error: a typed time that it rejects,
+   * which `onEntryErrorChange` reports, or a native edit outside `min` or
+   * `max`. It sets when the error shows, not when validation runs, so it is
+   * not React Aria's `validationBehavior` (native versus ARIA validation). It
+   * does not change a caller's `status`.
+   *
+   * - `'complete'` — a complete typed time outside `min` or `max` shows at
+   *   once, as does a native edit outside them. Other rejected text shows at
+   *   Enter or blur.
+   * - `'blur-or-enter'` — every rejection waits for Enter or blur. The
+   *   message, `aria-invalid`, the invalid styling, the announcement, and the
+   *   `onEntryErrorChange` report then appear together. An edit that the
+   *   field accepts or empties clears the error at once. An edit that leaves
+   *   the entry wrong keeps the shown error until the next Enter or blur.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
+
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -423,6 +485,8 @@ function TimeField({
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
+  onEntryErrorChange,
+  entryErrorBehavior,
   statusVariant = 'attached',
   labelTooltip,
   width,
@@ -448,8 +512,15 @@ function TimeField({
     onFocus: onFocusProp,
     onBlur: onBlurProp,
     onKeyDown: onKeyDownProp,
-    ...controlProps
+    ...restControlProps
   } = rest;
+  // `name` and `form` are not typed props. Form libraries spread them, and a
+  // form posts the named input.
+  const {name, ...controlProps} =
+    restControlProps as typeof restControlProps & {
+      name?: string;
+      form?: string;
+    };
   const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
@@ -515,10 +586,32 @@ function TimeField({
     isEnabled: showsDisabledMessage,
   });
 
+  const resolvedEntryErrorBehavior = useEntryErrorBehavior(entryErrorBehavior);
+  const typedTime = useTypedTime({
+    value,
+    hourFormat,
+    hasSeconds,
+    min,
+    max,
+    isDisabled,
+    isLocked: isDisabled || isBusy,
+    hasTypedField: !usesNativeTimePicker,
+    errorMessage: t('@astryx.timeInput.invalidTime'),
+    // Inside an InputGroup the field shows no status of its own; the group's
+    // status channel announces a caller status message.
+    isStatusAnnounced:
+      !inputGroup || (status?.type === 'error' && !!status.message),
+    status,
+    onEntryErrorChange,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
+  });
+  const {pendingInput} = typedTime;
+  const fieldStatus = inputGroup ? status : typedTime.fieldStatus;
+
   // Status icon mapping
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
-      status,
+      status: fieldStatus,
       statusVariant,
       isInGroup: !!inputGroup,
     });
@@ -527,7 +620,9 @@ function TimeField({
     inputLabelID,
     [
       description ? descriptionID : null,
-      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      statusVariant !== 'tooltip' && fieldStatus?.message
+        ? statusMessageID
+        : null,
       // The tooltip variant renders no message box; describe the input by the
       // tooltip's content instead so the status is still announced.
       statusTooltipDescribedBy,
@@ -543,8 +638,6 @@ function TimeField({
       ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
       : ariaLabelledBy;
 
-  // Pending input while user is typing (null = show formatted value)
-  const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
   const formatDisplayTime = useCallback(
@@ -577,20 +670,6 @@ function TimeField({
       : '';
   }, [pendingInput, optimisticValue, formatDisplayTime, hasSeconds]);
 
-  // Check if current input is valid (for styling purposes)
-  const isInputValid = useMemo(() => {
-    // Only check pending input for validity styling
-    if (pendingInput === null || !pendingInput.trim()) {
-      return true;
-    }
-    const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
-    if (!parsed) {
-      return false;
-    }
-    // Also check min/max range
-    return isTimeInRange(parsed, min, max);
-  }, [pendingInput, locale, hasSeconds, min, max]);
-
   // Placeholder that shows format hint when focused and empty
   const displayPlaceholder = useMemo(() => {
     if (isFocused && !displayValue) {
@@ -601,25 +680,12 @@ function TimeField({
     return placeholder;
   }, [isFocused, displayValue, hourFormat, placeholder, t]);
 
-  // Handle input text change - update immediately if valid
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      // The input is never natively disabled (spec:AST-085 FR1), so guard
-      // value mutation explicitly (readOnly also blocks typing).
-      if (isDisabled) {
-        return;
-      }
-      const newValue = e.target.value;
-      setPendingInput(newValue);
-
-      // If the input is valid, update immediately (don't wait for blur)
-      const parsed = parseLocaleTime(newValue, locale, hasSeconds);
-      if (parsed && isTimeInRange(parsed, min, max) && parsed !== value) {
-        fireChange(parsed);
-      }
-    },
-    [locale, hasSeconds, min, max, value, fireChange, isDisabled],
-  );
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = typedTime.handleChange(e.target.value);
+    if (time != null) {
+      fireChange(time);
+    }
+  };
 
   // Handle focus
   const handleFocus = useCallback(() => {
@@ -632,41 +698,14 @@ function TimeField({
     setIsFocused(true);
   }, [isDisabled]);
 
-  // Handle blur - validate and clear pending input
-  const handleBlur = useCallback(
-    (_e: FocusEvent<HTMLInputElement>) => {
-      setIsFocused(false);
-
-      if (pendingInput === null) {
-        return;
-      }
-      // Disabled: keep the value, drop the draft (spec:AST-085 FR2).
-      if (isDisabled) {
-        setPendingInput(null);
-        return;
-      }
-
-      if (!pendingInput.trim()) {
-        // Empty input clears the value
-        if (value !== undefined) {
-          fireChange(undefined);
-        }
-        setPendingInput(null);
-        return;
-      }
-
-      const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
-      if (parsed && isTimeInRange(parsed, min, max)) {
-        // Valid time - update if different
-        if (parsed !== value) {
-          fireChange(parsed);
-        }
-      }
-      // Clear pending input - display will revert to formatted value
-      setPendingInput(null);
-    },
-    [pendingInput, isDisabled, value, fireChange, locale, hasSeconds, min, max],
-  );
+  // Blur commits the draft; a rejected draft stays in the field.
+  const handleBlur = (_e: FocusEvent<HTMLInputElement>) => {
+    setIsFocused(false);
+    const time = typedTime.commit('blur');
+    if (time !== null) {
+      fireChange(time);
+    }
+  };
 
   // Handle keyboard navigation on input
   // Enter in a focused disabled field would submit a surrounding form (FR2).
@@ -687,6 +726,14 @@ function TimeField({
       }
       // Arrow-key adjustment mutates the value; block it while disabled.
       if (isDisabled) {
+        return;
+      }
+      // Enter commits the draft without preventing a form's submission.
+      if (e.key === 'Enter') {
+        const time = typedTime.commit('enter');
+        if (time !== null) {
+          fireChange(time);
+        }
         return;
       }
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -714,7 +761,7 @@ function TimeField({
           // The step is the committed value now: drop any typed draft so the
           // box shows the stepped time and blur cannot re-commit stale text
           // over it.
-          setPendingInput(null);
+          typedTime.reset();
           fireChange(newTime);
           // Stepping programmatically rewrites a plain textbox's value, and
           // screen readers do not announce programmatic textbox changes — the
@@ -734,6 +781,7 @@ function TimeField({
       isDisabled,
       announce,
       formatDisplayTime,
+      typedTime,
     ],
   );
 
@@ -780,7 +828,7 @@ function TimeField({
       {...mergeProps(
         themeProps('time-input', {
           size,
-          status: status?.type ?? null,
+          status: fieldStatus?.type ?? null,
           disabled: isDisabled ? 'disabled' : null,
         }),
         stylex.props(
@@ -789,9 +837,11 @@ function TimeField({
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.withinRing,
-          status && inputStatusBorderStyles[status.type],
-          status && !isDisabled && inputStatusHoverShadowStyles[status.type],
-          status && inputStatusFocusWithinStyles[status.type],
+          fieldStatus && inputStatusBorderStyles[fieldStatus.type],
+          fieldStatus &&
+            !isDisabled &&
+            inputStatusHoverShadowStyles[fieldStatus.type],
+          fieldStatus && inputStatusFocusWithinStyles[fieldStatus.type],
           inputGroup && groupStyles.inGroup,
           controlXstyle,
         ),
@@ -826,10 +876,14 @@ function TimeField({
           isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
-          statusType={status?.type}
+          statusType={fieldStatus?.type}
           ariaDescribedBy={ariaDescribedBy}
+          isRejected={typedTime.isSurfaceRejectionShown}
+          onRejectedChange={typedTime.setSurfaceRejected}
+          onCommit={typedTime.commitSurface}
+          alertMessage={typedTime.alertMessage}
           controlProps={{
-            ...controlProps,
+            ...restControlProps,
             onFocus: onFocusProp,
             onBlur: onBlurProp,
             onKeyDown: chainEventHandlers(preventDisabledEnter, onKeyDownProp),
@@ -846,6 +900,9 @@ function TimeField({
             ref={mergedInputRef}
             id={id}
             type="text"
+            // While blur keeps a rejected draft, the hidden input below posts
+            // the committed time in its place.
+            name={typedTime.isNameOnHiddenInput ? undefined : name}
             value={displayValue}
             onChange={handleInputChange}
             onFocus={chainEventHandlers(handleFocus, onFocusProp)}
@@ -866,23 +923,36 @@ function TimeField({
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={
-              status?.type === 'error' || !isInputValid ? 'true' : undefined
+              fieldStatus?.type === 'error' || typedTime.isRejected
+                ? 'true'
+                : undefined
             }
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}
             {...stylex.props(
               styles.input,
               isDisabled && styles.inputDisabled,
-              !isInputValid && styles.inputInvalid,
+              typedTime.isRejected && styles.inputInvalid,
             )}
           />
+          {name != null && typedTime.isNameOnHiddenInput && (
+            <input
+              type="hidden"
+              name={name}
+              form={controlProps.form}
+              value={
+                optimisticValue
+                  ? formatDisplayTime(optimisticValue, hasSeconds)
+                  : ''
+              }
+            />
+          )}
           {/*
-              Live region announcing invalid typed input to assistive technology.
-              The value silently reverts on blur, so without this a screen-reader
-              user would get no feedback that their entry was rejected (WCAG 3.3.1).
+              Announces the rejection message that the field status does not
+              announce. The field status announces the rest.
             */}
           <VisuallyHidden as="div" role="alert" aria-live="assertive">
-            {!isInputValid ? t('@astryx.timeInput.invalidTime') : ''}
+            {typedTime.alertMessage}
           </VisuallyHidden>
         </>
       )}
@@ -920,11 +990,11 @@ function TimeField({
       isRequired={isRequired}
       isDisabled={isDisabled}
       status={
-        status
+        fieldStatus
           ? {
-              type: status.type,
-              message: status.message,
-              messageID: status.message ? statusMessageID : undefined,
+              type: fieldStatus.type,
+              message: fieldStatus.message,
+              messageID: fieldStatus.message ? statusMessageID : undefined,
             }
           : undefined
       }
@@ -997,8 +1067,15 @@ export function TimeInput(props: TimeInputProps) {
       return (
         <TimeField {...rest} isDisabled={isDisabled} nativeMode="adaptive" />
       );
-    case 'sheet':
-      return <TouchTimeField {...rest} isDisabled={isDisabled} />;
+    case 'sheet': {
+      // The sheet takes no typed text.
+      const {
+        onEntryErrorChange: _onEntryErrorChange,
+        entryErrorBehavior: _entryErrorBehavior,
+        ...sheetProps
+      } = rest;
+      return <TouchTimeField {...sheetProps} isDisabled={isDisabled} />;
+    }
     case 'text-input':
     case 'desktop':
       return <TimeField {...rest} isDisabled={isDisabled} />;

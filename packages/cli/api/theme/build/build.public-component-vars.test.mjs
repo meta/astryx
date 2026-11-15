@@ -139,13 +139,18 @@ describe('documented component vars build cleanly', () => {
     expect(privateVarWarnings(result)).toEqual([]);
   });
 
-  it('still reports a private var, so the rule this relies on is real', async () => {
-    // The negative control: if the builder stopped reporting `--_*`, the test
+  it('still refuses a private var, so the rule this relies on is real', async () => {
+    // The negative control: if the builder stopped refusing `--_*`, the test
     // above would pass for the wrong reason.
-    const result = await buildTheme('privatevar', {
-      spinner: {'size:xl': {'--_spinner-diameter': '40px'}},
+    await expect(
+      buildTheme('privatevar', {
+        spinner: {'size:xl': {'--_spinner-diameter': '40px'}},
+      }),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringMatching(/1 private var error/),
     });
-
-    expect(privateVarWarnings(result)).toHaveLength(1);
+    // Nothing was written.
+    expect(fs.existsSync(path.join(tmpDir, 'privatevar.css'))).toBe(false);
   });
 });
