@@ -1785,35 +1785,74 @@ function entryFieldOf(k) {
 }
 
 /**
- * The keys of an entry that write a field it already holds the editor's
- * way (`Value` beside `value`), each with that field.
+ * Whether a saved entry is a twin, in other letters only, of a setting the
+ * theme holds (`Accent` beside `accent`) with a value that setting takes:
+ * that setting listed twice, which a change of it fixes, rather than
+ * damage its own undo removes (a twin in another form, `var(--x)`, or with
+ * a value the setting does not take).
+ * @param {any} s
+ * @param {string} read the setting's name as the editor writes it
+ * @param {any} data
+ */
+function twinInLetters(s, read, data) {
+  return (
+    s.thing.toLowerCase() === read.toLowerCase() &&
+    entryProblem({...s, thing: read}, data) == null
+  );
+}
+
+/**
+ * The keys of an entry grouped by the field each writes, in the order
+ * written; `setting` (the thing as the editor prints it) is the thing.
  * @param {any} entry
- * @returns {Array<{key: string, field: string}>}
+ * @returns {Map<string, string[]>}
+ */
+function entryFieldGroups(entry) {
+  /** @type {Map<string, string[]>} */
+  const groups = new Map();
+  for (const key of Object.keys(entry)) {
+    const field = entryFieldOf(key);
+    if (!field) continue;
+    const as = field === 'setting' ? 'thing' : field;
+    groups.set(as, [...(groups.get(as) ?? []), key]);
+  }
+  return groups;
+}
+
+/**
+ * The keys of an entry that write a field it writes another way too
+ * (`Value` beside `value`, `On` beside `--on`, `setting` beside `thing`),
+ * each with that field and the key that is read: the editor's own
+ * spelling, else the first written.
+ * @param {any} entry
+ * @returns {Array<{key: string, field: string, read: string}>}
  */
 export function entryFieldTwins(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-  return Object.keys(entry).flatMap(key => {
-    const field = entryFieldOf(key);
-    return field && field !== key && field in entry ? [{key, field}] : [];
+  return [...entryFieldGroups(entry)].flatMap(([field, keys]) => {
+    if (keys.length < 2) return [];
+    const read = keys.includes(field) ? field : keys[0];
+    return keys.filter(k => k !== read).map(key => ({key, field, read}));
   });
 }
 
 /**
  * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
  * or spelled as their flags (`--on`) read as those fields, as setting
- * names are read in any case; a field written both ways keeps the editor's
- * own, and the other spelling is dropped (entryFieldTwins names it).
+ * names are read in any case; a field written several ways is read once,
+ * from the key entryFieldTwins names, and the others are dropped.
  * Anything else as it is. The one reader for a typed entry and a saved one.
  * @param {any} entry
  * @returns {any}
  */
 export function entryFieldNames(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const dropped = new Set(entryFieldTwins(entry).map(t => t.key));
   return Object.fromEntries(
     Object.entries(entry).flatMap(([k, x]) => {
+      if (dropped.has(k)) return [];
       const field = entryFieldOf(k);
-      if (!field || field === k) return [[k, x]];
-      return field in entry ? [] : [[field, x]];
+      return [[field ?? k, x]];
     }),
   );
 }
@@ -1858,20 +1897,43 @@ function readTypedEntries(data, notes) {
     // A field written both ways is read the editor's way, and said; the
     // next save writes the entry once.
     const twins = entryFieldTwins(saved);
-    for (const {key, field} of twins)
+    const named =
+      typeof fields?.thing === 'string'
+        ? fields.thing
+        : typeof fields?.setting === 'string'
+          ? fields.setting
+          : JSON.stringify(saved);
+    for (const {key, read} of twins)
       notes.push(
-        `${typeof saved.thing === 'string' ? saved.thing : JSON.stringify(saved)} writes both "${field}" and "${key}"; "${field}" is read (${JSON.stringify(saved[field])}, not ${JSON.stringify(saved[key])})`,
+        `${named} writes both "${read}" and "${key}"; "${read}" is read (${JSON.stringify(saved[read])}, not ${JSON.stringify(saved[key])})`,
       );
     const renamed = Object.keys(
       saved && typeof saved === 'object' ? saved : {},
     ).some(k => {
       const field = entryFieldOf(k);
-      return field != null && field !== k && !(field in saved);
+      return (
+        field != null &&
+        field !== k &&
+        !twins.some(t => t.key === k) &&
+        !(field in saved)
+      );
     });
     if (renamed)
       notes.push(
         `${JSON.stringify(saved)} writes its field names in other letters, read as ${JSON.stringify(fields)}`,
       );
+    // A field the editor does not read (`modes`, `part`) is not used, and
+    // said, with the field it is a typo of; the editor's own result fields
+    // (show's `parts`) are no part of a setting.
+    if (typeof fields?.thing === 'string')
+      for (const k of Object.keys(fields)) {
+        if (ENTRY_FIELDS.includes(k) || ['parts', 'masked', 'note'].includes(k))
+          continue;
+        const near = ENTRY_FIELDS.filter(f => typoNear(k.toLowerCase(), f));
+        notes.push(
+          `${named} has "${k}", a field the editor does not read${near.length === 1 ? ` (it reads "${near[0]}")` : ''}, so it is not used`,
+        );
+      }
     const s = printedEntry(fields);
     if (s !== fields)
       notes.push(
@@ -1986,19 +2048,26 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
-      // Not when the theme holds that dial already: the entry is then
-      // damage its own undo removes, never a second copy of the dial.
+      // When the theme holds that dial already, the entry is damage its
+      // own undo removes, never a second copy of the dial; but a twin in
+      // other letters with a value the dial takes is that dial listed
+      // twice (twinInLetters), which a change of it fixes.
       const held = data.settings.some(
         (/** @type {any} */ x) => x !== s && x?.thing === read && !x.on,
       );
-      if (read !== s.thing && DIALS[read] && !held) {
+      if (
+        read !== s.thing &&
+        DIALS[read] &&
+        (!held || twinInLetters(s, read, data))
+      ) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
     }
     // A CSS property saved in another form on a part (`Background-Color`,
     // `background color`) is that property, as set reads the name typed
-    // (the one property-name reader), unless the part holds it already.
+    // (the one property-name reader), unless the part holds it already
+    // (then a twin in other letters is that property listed twice).
     if (
       s.on &&
       !s.thing.startsWith('--') &&
@@ -2010,10 +2079,29 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         (/** @type {any} */ x) =>
           x !== s && x && keyOf(x) === keyOf({...s, thing: read}),
       );
-      if (read && !held) {
+      if (read && (!held || twinInLetters(s, read, data))) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
+    }
+    // A token saved in other letters (`--Color-Accent`) is that token, as
+    // set reads the name typed; with the theme holding it already, the two
+    // are that token listed twice.
+    if (
+      s.thing.startsWith('--') &&
+      s.thing !== s.thing.toLowerCase() &&
+      ['token', undefined, null, ''].includes(s.source) &&
+      (!data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s &&
+          x?.thing === s.thing.toLowerCase() &&
+          (x.on ?? null) === (s.on ?? null),
+      ) ||
+        twinInLetters(s, s.thing.toLowerCase(), data))
+    ) {
+      const read = s.thing.toLowerCase();
+      notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+      s.thing = read;
     }
     // A token saved in another form (`var(--color-accent)`) is that token,
     // as set reads the name typed (the one thing reader).
@@ -2026,6 +2114,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
+      // Not when the theme holds that token already: the entry is then
+      // damage its own undo removes.
       const held = data.settings.some(
         (/** @type {any} */ x) =>
           x !== s && x?.thing === read && (x.on ?? null) === (s.on ?? null),

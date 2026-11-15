@@ -4768,7 +4768,12 @@ async function change(sub, slug, thing, value, options) {
     // The saved form is read by its thing and value; a key beside them the
     // editor does not write (`comment`, `id`) is left out, and said.
     const SAVED = ['thing', 'value', 'source', 'axis'];
-    const savedForm = typeof obj?.thing === 'string' && 'value' in obj;
+    // An entry in the saved form names its thing under `thing`, with its
+    // value or (an undo needs none) without one: never a setting named
+    // "thing".
+    const savedForm =
+      typeof obj?.thing === 'string' &&
+      ('value' in obj || rest.every(k => SAVED.includes(k)));
     const unread = savedForm ? rest.filter(k => !SAVED.includes(k)) : [];
     const scoped =
       !savedForm &&
