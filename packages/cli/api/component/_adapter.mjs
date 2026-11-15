@@ -905,11 +905,13 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
 
 /**
  * When `error` is the unknown-component error for a name that matches a hook,
- * template or docs topic (exact, folded or last segment, as
- * foundation/suggest/other-command.mjs ranks it), returns the same error with the command that
- * reads that entry among its suggestions, in the place
- * foundation/suggest/other-command.mjs gives it. Returns `error` unchanged
- * otherwise, and when the check fails.
+ * template or docs topic (exact, folded or last segment, or a hook it nearly
+ * spells or whose keyword it is, as foundation/suggest/other-command.mjs
+ * ranks it), returns the same error with the command that reads that entry
+ * among its suggestions, in the place foundation/suggest/other-command.mjs
+ * gives it: a hook keyword hint stays behind a suggested component that
+ * declares the same keyword or synonym. Returns `error` unchanged otherwise,
+ * and when the check fails.
  * @param {unknown} error
  * @param {string} dirName
  * @param {{coreDir: string, cwd: string, loadedIntegrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} context
@@ -928,11 +930,13 @@ export async function withOtherCommandHint(
   }
   try {
     // The hint's modules load only on this path.
-    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
-      await Promise.all([
-        import('../../foundation/suggest/other-command.mjs'),
-        import('../docs/_entry-names-lazily.mjs'),
-      ]);
+    const [
+      {findOtherCommand, withOtherCommand, MATCH_TIER},
+      {docsRoutesLazily},
+    ] = await Promise.all([
+      import('../../foundation/suggest/other-command.mjs'),
+      import('../docs/_entry-names-lazily.mjs'),
+    ]);
     const hint = await findOtherCommand(dirName, {
       from: 'component',
       cwd,
@@ -941,16 +945,51 @@ export async function withOtherCommandHint(
       docsRoutes: docsRoutesLazily,
     });
     if (!hint) return error;
+    const declared =
+      hint.tier === MATCH_TIER.keyword
+        ? await declaredNames(error.suggestions ?? [], coreDir)
+        : new Map();
     return new AstryxError(
       error.message,
       withOtherCommand(error.suggestions, hint, dirName, {
         from: 'component',
+        keywordsOf: suggestion => declared.get(suggestion.name) ?? [],
       }),
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,
     );
   } catch {
     return error;
   }
+}
+
+/**
+ * The keywords and synonyms each suggested Core component declares: its
+ * doc's `keywords` and its search card's `synonyms`.
+ * @param {Array<{name: string}>} suggestions
+ * @param {string} coreDir
+ * @returns {Promise<Map<string, string[]>>}
+ */
+async function declaredNames(suggestions, coreDir) {
+  const {readDocView} = await import('../../foundation/doc-compiler/read.mjs');
+  /** @type {Map<string, string[]>} */
+  const declared = new Map();
+  for (const {name} of suggestions) {
+    const docPath = findComponentReadme(coreDir, name);
+    /** @type {{keywords?: unknown} | null} */
+    const doc = docPath
+      ? await readDocView(docPath, {
+          root: 'components',
+          loader: 'native',
+          exports: ['docs'],
+        }).catch(() => null)
+      : null;
+    const keywords = Array.isArray(doc?.keywords) ? doc.keywords : [];
+    declared.set(name, [
+      ...keywords.filter(keyword => typeof keyword === 'string'),
+      ...(searchCards()[name]?.synonyms ?? []),
+    ]);
+  }
+  return declared;
 }
 
 /**

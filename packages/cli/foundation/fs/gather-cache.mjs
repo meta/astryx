@@ -21,7 +21,9 @@
  *   the component list (api/component/list/list.mjs) and component
  *   replacement (foundation/discovery/component-replacement.mjs), by theme
  *   discovery (foundation/discovery/theme-discovery.mjs) for each
- *   integration's themes,
+ *   integration's themes, by theme build
+ *   (foundation/discovery/core-theme-facts.mjs) for what it checks a theme
+ *   against in Core's component docs,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
  *   the CLI's own docs tree, which `docs` and `search` read,

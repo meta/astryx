@@ -101,7 +101,20 @@ owns response fields and compatibility.
   exact or folded); word cover (the name carries every word of the argument).
   When the argument matches an entry another of the four commands reads at one
   of the first three tiers, the command that reads that entry, by its full id
-  (`astryx hook useHotkeys`), joins the list. A better tier wins; inside a
+  (`astryx hook useHotkeys`), joins the list. When no entry matches at those
+  three tiers and `astryx component` or `astryx template` misses, one hook can
+  join the same way at two more tiers, ranked after segment. Near hook: an
+  argument shaped like a hook name (`use`, then a capital letter or a digit)
+  means the closest hook whose name it nearly spells (one slip from five
+  letters, two from eight; an edit or two swapped neighboring letters count as
+  one slip) or whose name carries every word of the argument. Hook keyword, for
+  `astryx component` only: any other argument of two or more words means the one
+  hook whose doc declares a keyword with exactly those words. A tie, or a
+  keyword that more than one hook declares, means no hook. At these two tiers, a
+  suggestion also matches as well when one of its names is a near name or
+  carries every word of the argument, or, at hook keyword, when its doc's
+  keywords or its search card's synonyms hold the same keyword. A better tier
+  wins; inside a
   tier, a component wins over a hook, a hook over a template, and a template
   over a docs topic; among docs routes, the route with the fewest segments
   wins, then the first in tree order. That command goes right after the last
@@ -126,14 +139,14 @@ owns response fields and compatibility.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                      | Representative states                                                                                     | Mutation or failure expectation                                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | `api/search/_order.test.mjs` against the lexical ranker; a replay over every real and synthetic query                                             | multi-word queries, doc sections, domain-priority merges                                                  | a non-lexical result, a changed score, reason, or count, a cross-band move, or extra results fail                                                     |
-| FR3      | `api/search/_main-searcher.test.mjs` whole-name cases                                                                                             | exact names, names typed with spaces for dashes                                                           | an answer that differs from the lexical ranker's fails                                                                                                |
-| FR4      | `api/build/blocks/blocks.test.mjs`, `api/build/tree.test.mjs`                                                                                     | exactly named blocks, integration blocks, unfitted blocks                                                 | a block outside the catalog, a repeated block, a changed entry, an entry without a score and reason, a moved exactly named block, or more blocks fail |
-| FR5      | `_main-searcher.test.mjs` and `tree.test.mjs` offline and repeat checks; `component.host-locale.test.mjs` and `build.test.mjs` host-locale checks | network stubbed to throw; repeated runs; the same commands under English, Czech and Hawaiian host locales | a network call or a differing repeat fails; an order that differs between host locales fails                                                          |
-| FR6      | measured comparison on the evaluation sets, reported in the change's description                                                                  | held-out, fresh, synthetic, cold-start                                                                    | a row whose paired CI lies below zero blocks the change                                                                                               |
-| FR7      | `foundation/text/suggest-order.test.mjs`; the component, docs and template command tests; a replay over every labeled failed lookup               | compound names, other libraries' names, routes under a namespace                                          | a longer list, a suggestion that is not an entry, a changed resolution, or a worse measured row fails                                                 |
+| Contract | Verification                                                                                                                                                                             | Representative states                                                                                     | Mutation or failure expectation                                                                                                                       |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2 | `api/search/_order.test.mjs` against the lexical ranker; a replay over every real and synthetic query                                                                                    | multi-word queries, doc sections, domain-priority merges                                                  | a non-lexical result, a changed score, reason, or count, a cross-band move, or extra results fail                                                     |
+| FR3      | `api/search/_main-searcher.test.mjs` whole-name cases                                                                                                                                    | exact names, names typed with spaces for dashes                                                           | an answer that differs from the lexical ranker's fails                                                                                                |
+| FR4      | `api/build/blocks/blocks.test.mjs`, `api/build/tree.test.mjs`                                                                                                                            | exactly named blocks, integration blocks, unfitted blocks                                                 | a block outside the catalog, a repeated block, a changed entry, an entry without a score and reason, a moved exactly named block, or more blocks fail |
+| FR5      | `_main-searcher.test.mjs` and `tree.test.mjs` offline and repeat checks; `component.host-locale.test.mjs` and `build.test.mjs` host-locale checks                                        | network stubbed to throw; repeated runs; the same commands under English, Czech and Hawaiian host locales | a network call or a differing repeat fails; an order that differs between host locales fails                                                          |
+| FR6      | measured comparison on the evaluation sets, reported in the change's description                                                                                                         | held-out, fresh, synthetic, cold-start                                                                    | a row whose paired CI lies below zero blocks the change                                                                                               |
+| FR7      | `foundation/text/suggest-order.test.mjs`; the shared hint's tests under `foundation/suggest/`; the component, docs and template command tests; a replay over every labeled failed lookup | compound names, other libraries' names, routes under a namespace                                          | a longer list, a suggestion that is not an entry, a changed resolution, or a worse measured row fails                                                 |
 
 ## Decision log
 
