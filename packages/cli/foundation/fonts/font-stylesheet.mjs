@@ -40,8 +40,13 @@ export const fontKey = family =>
 export function importedFontFamilies(spec, fromDir, seen = new Set()) {
   /** @type {Set<string>} */
   const out = new Set();
-  const pkg = /^@fontsource(?:-variable)?\/([^/]+)/.exec(spec);
-  if (pkg) out.add(fontKey(pkg[1].replace(/-/g, ' ')));
+  // A Fontsource package names its family: `<name> Variable` for a
+  // variable one.
+  const pkg = /^@fontsource(-variable)?\/([^/]+)/.exec(spec);
+  if (pkg)
+    out.add(
+      fontKey(`${pkg[2].replace(/-/g, ' ')}${pkg[1] ? ' Variable' : ''}`),
+    );
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec)) {
     for (const m of spec.matchAll(/family=([^:&'")]+)/g))
       out.add(fontKey(decodeURIComponent(m[1].replace(/\+/g, ' '))));

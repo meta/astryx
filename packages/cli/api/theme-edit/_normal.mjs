@@ -18,7 +18,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
-import {sameKindValues} from './_css.mjs';
+import {sameKindValues, takesWholeNumbersOnly} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -841,11 +841,18 @@ export function commaNumbers(text, thousands = false) {
 }
 
 /**
- * Whether a setting's numbers are weights (whole hundreds up to 1000).
+ * Whether a comma between a setting's digits groups thousands: its numbers
+ * are weights (whole hundreds up to 1000) or the property takes only whole
+ * numbers (z-index, order), so no comma there can be a decimal one.
  * @param {string} thing
  */
-export const weightSetting = thing =>
-  /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+export const thousandsSetting = thing => {
+  const t = String(thing).toLowerCase();
+  return (
+    /^(font-weight|headings)$|^--font-weight/.test(t) ||
+    (/^[a-z][a-z-]*$/.test(t) && takesWholeNumbersOnly(t))
+  );
+};
 
 /**
  * The one mode a word names, or null: light or dark, written as a mode
@@ -1144,7 +1151,9 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * other than the one typed (a keep or unlock line); (4) the setting's
  * documented fallback, or a step (`more`, `less`) on a dial with a scale,
  * offered for that dial or one of its tokens; (5) the correction of a
- * typo (typoOf). Several values of one kind typed for a setting that takes
+ * typo (typoOf); (6) the typed value with each color written as one mode's
+ * half of `light-dark()` (a shadow's color for one mode, which no color
+ * longhand holds), the other half anything. Several values of one kind typed for a setting that takes
  * one (`1.5 2`) may be read as the first.
  * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
  * @returns {true | number[] | {oneOf: number[]} | false}
@@ -1163,7 +1172,7 @@ export function readsTyped({
     .toLowerCase();
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
-  const t = typedReading(typed, {thousands: weightSetting(typedKey)});
+  const t = typedReading(typed, {thousands: thousandsSetting(typedKey)});
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1173,6 +1182,21 @@ export function readsTyped({
     O.every((w, i) => sameToken(w, T[i]))
   )
     return true;
+  // (6) The typed color as one mode's half of light-dark(), every pair
+  // read as the same mode's half.
+  for (const side of [0, 1]) {
+    const halves = o.replace(
+      /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^,()]+(?:\([^()]*\))?)\s*\)/g,
+      (_, light, dark) => String(side === 0 ? light : dark).trim(),
+    );
+    const H = halves === o ? [] : tokensOf(halves);
+    if (
+      H.length &&
+      H.length === T.length &&
+      H.every((w, i) => sameToken(w, T[i]))
+    )
+      return true;
+  }
   // Words joined into one name (`dark red` is darkred); numbers are never
   // joined (`12 16px` is two sizes, not 1216px).
   if (
@@ -1425,7 +1449,7 @@ export function readsTyped({
  * @param {string} [thing] the setting typed (its numbers' reading)
  */
 export function coversTyped(reads, typed, thing = '') {
-  const T = tokensOf(typedReading(typed, {thousands: weightSetting(thing)}));
+  const T = tokensOf(typedReading(typed, {thousands: thousandsSetting(thing)}));
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */

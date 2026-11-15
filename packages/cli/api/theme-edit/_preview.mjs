@@ -36,6 +36,7 @@ import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
   camel,
   folderIsEmpty,
+  builtFontWeights,
   fontPackages,
   modesOf,
   shown,
@@ -44,7 +45,13 @@ import {
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
+import {
+  COLOR_PROP_PARTS,
+  DIRECT,
+  P,
+  SHOWCASE_GROUPS,
+  wordTable,
+} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
@@ -57,17 +64,14 @@ const TEMPLATES_DIR = path.resolve(
 );
 
 /** The groups of the theme-building page, in order. */
-export const SHOWCASE_GROUPS = [
-  'actions',
-  'inputs',
-  'selection',
-  'navigation',
-  'feedback',
-  'data',
-  'containers',
-  'overlays',
-  'pages',
-];
+export {SHOWCASE_GROUPS};
+
+/**
+ * Packages whose output is drawn in the browser once the page runs (a
+ * recharts chart measures and draws itself after it mounts): a server
+ * render, which the sheet is, has none of it.
+ */
+const DRAWN_IN_BROWSER = Object.freeze(['recharts']);
 
 /** Real template pages the theme-building page shows in full. */
 const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
@@ -101,7 +105,7 @@ function groupOf(name, category) {
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
- * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[]}}
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
@@ -139,6 +143,8 @@ export function showcaseItems(project, group) {
   });
   /** @type {string[]} */
   const skipped = [];
+  /** What a page in the sheet cannot show, said in the result. @type {string[]} */
+  const notes = [];
   /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const templateImports = {};
   for (const t of PAGE_TEMPLATES) {
@@ -154,6 +160,13 @@ export function showcaseItems(project, group) {
       );
       continue;
     }
+    const drawn = [...extractImportedPackages(src)].filter(pkg =>
+      DRAWN_IN_BROWSER.includes(pkg),
+    );
+    if (drawn.length && (!group || group === 'pages'))
+      notes.push(
+        `the ${t} page's charts are drawn in the browser (${drawn.join(', ')}), so sheet.html and its pictures show the page with their space empty; the in-app preview draws them (astryx experimental theme preview add --template ${t})`,
+      );
     const local = `Template_${t.replace(/-/g, '_')}`;
     // A template page is its file's default export.
     templateImports[local] = {from: `./templates/${t}.tsx`, export: 'default'};
@@ -185,6 +198,7 @@ export function showcaseItems(project, group) {
     items: chosen,
     imports,
     skipped: !group || group === 'pages' ? skipped : [],
+    notes,
   };
 }
 
@@ -323,6 +337,35 @@ export function baseFontsSheet(ctx, data) {
 }
 
 /**
+ * The stylesheets of an installed font package that load the theme's
+ * fonts in every weight it uses: a variable package's one stylesheet
+ * (every weight); for a package with a stylesheet per weight, as
+ * Fontsource ships them, each weight the theme's build uses that the
+ * package has; else its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {string} pkg
+ * @returns {string[]}
+ */
+export function fontPackageSheets(ctx, slug, pkg) {
+  const index = `${pkg}/index.css`;
+  if (pkg.startsWith('@fontsource-variable/')) return [index];
+  /** @param {string} spec */
+  const has = spec => {
+    try {
+      ctx.project.req.resolve(spec);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const weights = (builtFontWeights(ctx, slug) ?? [400])
+    .map(w => `${pkg}/${w}.css`)
+    .filter(has);
+  return weights.length ? weights : [index];
+}
+
+/**
  * How a generated page imports the theme: its built module, its stylesheet,
  * and the stylesheets of open fonts the project has installed.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -340,7 +383,7 @@ export function themeImports(ctx, slug, data, fromDir) {
   const modes = modesOf(data);
   const fonts = fontPackages(ctx, data)
     .filter(x => x.installed)
-    .map(x => `${x.pkg}/index.css`);
+    .flatMap(x => fontPackageSheets(ctx, slug, x.pkg));
   return {
     module: rel(f.js),
     css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
@@ -564,11 +607,14 @@ export async function renderPreview(ctx, slug, data) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {{group?: string, out?: string}} [options]
- * @returns {Promise<{file: string, components: number, skipped: string[]}>}
+ * @returns {Promise<{file: string, components: number, skipped: string[], notes: string[]}>} `notes`: what a page in the sheet cannot show
  */
 export async function renderSheet(ctx, slug, data, options = {}) {
   const {project} = ctx;
-  const {items, imports, skipped} = showcaseItems(project, options.group);
+  const {items, imports, skipped, notes} = showcaseItems(
+    project,
+    options.group,
+  );
   const source = pageSource({
     items,
     imports,
@@ -588,6 +634,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
   // Rendered from the same inputs before: the sheet is as it would be.
   if (renderedFrom(out, key)) return result;
@@ -604,6 +651,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
 }
 
