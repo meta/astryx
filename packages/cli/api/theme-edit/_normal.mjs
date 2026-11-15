@@ -1617,6 +1617,7 @@ export function readsTyped({
       if (
         i > 0 &&
         /^font(-family)?$|^--font-family/.test(typedKey) &&
+        !READINGS.has(w) &&
         Object.keys(WEIGHT_WORDS).some(
           x => typoNear(w, x) && (x === o || READINGS.get(x)?.has(o)),
         )

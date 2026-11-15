@@ -1110,6 +1110,14 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
   const STYLE = /^(italic|oblique)$/i;
   /** The one weight or style word a typo is near, else null. @param {string} w */
   const wordTypo = w => {
+    // A word the editor knows as itself (tight is a headings tracking
+    // word, as in Inter Tight) is no typo of another word.
+    if (HEADING_TRACKING[w.toLowerCase()] !== undefined) return null;
+    // A weight number typed with a letter O for a zero (6OO) is that number.
+    if (/^\d[\dOo]{2,3}$/.test(w) && /[Oo]/.test(w)) {
+      const n = w.replace(/[Oo]/g, '0');
+      return weightOf(n) != null ? n : null;
+    }
     const hits = [
       ...new Set(
         [
@@ -1264,6 +1272,17 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         end -= 1;
       } else if (NUMBERISH.test(w) && /[a-z%]$/i.test(w)) {
         tail.unshift({kind: 'size', text: w});
+        end -= 1;
+      } else if (
+        end >= 2 &&
+        /^\d{3,4}$/.test(w) &&
+        Number(w) >= 1 &&
+        Number(w) <= 1000 &&
+        familyBefore(end - 1)
+      ) {
+        // Any weight number after a family the editor knows (Inter 650) is
+        // a weight, as CSS reads it; the rung offered is the nearest.
+        tail.unshift({kind: 'weight', text: w, value: Number(w)});
         end -= 1;
       } else if (end >= 2 && wordTypo(w) && familyBefore(end - 1)) {
         // A weight or style word with a typo after a family the editor
@@ -1432,7 +1451,10 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     }
     kept.push(base);
     // A word read through a typo keeps the name as typed on offer too.
-    if (tail.some(t => t.typo)) {
+    // A word read through a typo keeps the name as typed on offer too;
+    // with a style word, which no font line sets, it is answered as the
+    // exact words are.
+    if (tail.some(t => t.typo) && !tail.some(t => t.kind === 'style')) {
       misspelled = true;
       asTyped.set(kept.length - 1, JSON.stringify(name));
     }
@@ -3401,6 +3423,18 @@ export function checkSetting(
         },
       );
   }
+  // A value that holds NaN or undefined (a script's empty value pasted)
+  // is no CSS value, and Core refuses a theme that resolves to one.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    /\b(?:NaN|undefined)\b/.test(value)
+  )
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `"${value.trim()}" holds ${/\bNaN\b/.test(value) ? 'NaN' : 'undefined'}, which is no CSS value: Core refuses a theme that resolves to it.`,
+      {run: [`${HOW} ${thing}`]},
+    );
   // One reader for a family list, on the font dial, a family token and a
   // part's font-family: a weight or a size in it, alone or after a
   // family, is no family, and a quoted generic is a family named that.
