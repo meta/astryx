@@ -13,7 +13,7 @@ import {
   NEW_FILE_S,
   unrecorded,
   parseNameStatus,
-  notices,
+  annotations,
   main,
 } from './node-time-drift.mjs';
 
@@ -32,7 +32,7 @@ function leg(count, seconds, scale) {
 }
 
 describe('the recorded-time check for the test files a change touches', () => {
-  it('names a changed file that runs far past its record while its leg runs at its record', () => {
+  it('fails a changed file that runs far past its record while its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[CHANGES] = 207.8;
     measured[CHANGES] = 337.9;
@@ -54,7 +54,7 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted(measured, recorded, [RECORDS])).toEqual([]);
   });
 
-  it('names a changed file 2× slow when the rest of its leg runs at its record', () => {
+  it('fails a changed file 2× slow when the rest of its leg runs at its record', () => {
     const {recorded, measured} = leg(8, 40, 1);
     recorded[RECORDS] = 107.3;
     measured[RECORDS] = 228.4;
@@ -259,46 +259,78 @@ describe('judging every file, for a scheduled run', () => {
   });
 });
 
-describe('notice mode: the check reports and never fails the leg', () => {
+describe('a drifted file fails the leg; an unrecorded file only gets a notice', () => {
   const {recorded, measured} = leg(8, 40, 1);
   recorded[CHANGES] = 207.8;
   measured[CHANGES] = 337.9;
   measured[RECORDS] = 120;
 
-  it('reports a drifted and an unrecorded changed file as notices, never errors', () => {
-    const lines = notices(measured, recorded, [CHANGES, RECORDS]);
+  it('reports a drifted changed file as an error and an unrecorded one as a notice', () => {
+    const {lines, failed} = annotations(measured, recorded, [CHANGES, RECORDS]);
+    expect(failed).toBe(true);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(
-      /^::notice file=.*title=Recorded Node test time is stale::/,
+      /^::error file=.*title=Recorded Node test time is stale::/,
     );
     expect(lines[0]).toContain(`"${CHANGES}": 337.9`);
     expect(lines[1]).toMatch(
       /^::notice file=.*title=Node test file has no recorded time::/,
     );
     expect(lines[1]).toContain(`"${RECORDS}": 120`);
-    expect(lines.join('\n')).not.toContain('::error');
   });
 
-  it('exits 0 for a leg with a drifted and an unrecorded changed file', () => {
-    // A path the repository's record has no entry for.
-    const NEW = 'packages/cli/test/not-yet-recorded.test.mjs';
+  it('does not fail for an unrecorded changed file alone', () => {
+    expect(annotations(measured, recorded, [RECORDS]).failed).toBe(false);
+  });
+
+  /** Runs main over one leg's times with the given changed paths. */
+  function run(times, nameStatus) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-time-drift-'));
-    const times = path.join(dir, 'times.json');
-    fs.writeFileSync(times, JSON.stringify({[NEW]: 600}));
+    const file = path.join(dir, 'times.json');
+    fs.writeFileSync(file, JSON.stringify(times));
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      expect(
-        main(['--times', times, '--changed', 'base'], {
-          diff: () => `A\t${NEW}\n`,
-        }),
-      ).toBe(0);
-      expect(log.mock.calls.flat().join('\n')).toContain(
-        `::notice file=${NEW},title=Node test file has no recorded time::`,
-      );
+      const status = main(['--times', file, '--changed', 'base'], {
+        diff: () => nameStatus,
+      });
+      return {status, output: log.mock.calls.flat().join('\n')};
     } finally {
       log.mockRestore();
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  }
+
+  it('exits 0 for a leg whose only finding is an unrecorded changed file', () => {
+    // A path the repository's record has no entry for.
+    const NEW = 'packages/cli/test/not-yet-recorded.test.mjs';
+    const {status, output} = run({[NEW]: 600}, `A\t${NEW}\n`);
+    expect(status).toBe(0);
+    expect(output).toContain(
+      `::notice file=${NEW},title=Node test file has no recorded time::`,
+    );
+  });
+
+  it('exits 1 for a leg with a recorded changed file far past its entry', () => {
+    const repoRecord = JSON.parse(
+      fs.readFileSync(
+        path.resolve(
+          import.meta.dirname,
+          '../../scripts/vitest-node-durations.json',
+        ),
+        'utf8',
+      ),
+    ).seconds;
+    const [file, seconds] = Object.entries(repoRecord).find(
+      ([, value]) => value >= 10,
+    );
+    const {status, output} = run(
+      {[file]: seconds * RATIO + MARGIN_S + 100},
+      `M\t${file}\n`,
+    );
+    expect(status).toBe(1);
+    expect(output).toContain(
+      `::error file=${file},title=Recorded Node test time is stale::`,
+    );
   });
 
   it('exits 2 only for missing arguments', () => {

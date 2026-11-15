@@ -3,10 +3,12 @@
 
 /**
  * @file Keeps the recorded Node test times fresh from `main`'s own runs. The
- * record (scripts/vitest-node-durations.json) only balances the Node legs: a
- * file with no recorded time is booked at the ninetieth percentile, so a stale
- * record never drops a file or breaks a leg's time budget. Pull requests
- * therefore never fail on it. This check runs on a schedule instead. When
+ * record (scripts/vitest-node-durations.json) balances the Node legs: a file
+ * with no recorded time is booked at the ninetieth percentile, so a missing
+ * entry never drops a file, but it costs leg balance and can make a leg run
+ * long until the record is refreshed. A pull request that adds a test file
+ * cannot produce a CI-comparable time, so no pull request fails on a missing
+ * entry; this check runs on a schedule instead. When
  * fewer than MIN_RECORDED_SHARE of the Node project's test files have a
  * recorded time, the workflow regenerates the record from the Node legs of
  * main's latest successful full unit run, and this script opens or refreshes
@@ -62,7 +64,7 @@ export function percent(share) {
 export function prBody({before, after, runUrl}) {
   return `## Maintainer impact
 
-The recorded Node test times covered ${percent(before)} of the Node project's test files, below the ${percent(MIN_RECORDED_SHARE)} bar. The Node legs book an unrecorded file at the ninetieth percentile, so this costs leg balance only.
+The recorded Node test times covered ${percent(before)} of the Node project's test files, below the ${percent(MIN_RECORDED_SHARE)} bar. The Node legs book an unrecorded file at the ninetieth percentile, so it costs leg balance and can make a leg run long until the record is refreshed.
 
 ## Intended invariant
 

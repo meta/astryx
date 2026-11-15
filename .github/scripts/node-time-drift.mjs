@@ -2,30 +2,33 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Notes, on a Node leg, each test file the pull request changes that now
- * runs far past its recorded time or has no recorded time, so the author can
- * bring the record up to date. It never fails the leg: the legs book a file
- * with no recorded time at the ninetieth percentile, so a stale record costs
- * balance only, and a scheduled job on `main` regenerates the record from
- * main's own Node legs (node-record-refresh.mjs).
+ * @file Checks, on a Node leg, each test file the pull request changes. A
+ * recorded file that now runs far past its recorded time fails the leg, so the
+ * pull request that slows it updates its entry before a later pull request's
+ * leg, planned from the low entry, runs over its job limit. A file with no
+ * recorded time only gets a notice: the legs book it at the ninetieth
+ * percentile, a contributor cannot produce a CI-comparable time, and a
+ * scheduled job on `main` records new files from main's own Node legs
+ * (node-record-refresh.mjs). Until then such a file costs leg balance and can
+ * make its leg run long.
  *
  * The legs balance by `scripts/vitest-node-durations.json`. A loaded runner
  * slows every file, so a file is compared with its own leg: the leg factor is
  * the median of measured ÷ recorded over the files the change does not touch,
  * never below 1, so a fast runner does not tighten the bar. With fewer than
  * MIN_PEERS such files there is no baseline in the leg: the factor is 1, and
- * the output says so. A changed file is noted when it ran
+ * the output says so. A changed file fails when it ran
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
  * seconds over that. A changed file with no recorded time under its own path
- * is noted when it ran more than NEW_FILE_S × the leg factor. That includes a
- * renamed file, whose old entry the note asks to move. Each note names the one
- * entry to add, move or update.
+ * gets a notice when it ran more than NEW_FILE_S × the leg factor. That
+ * includes a renamed file, whose old entry the notice asks to move. Each line
+ * names the one entry to add, move or update.
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
  *   --changed <base> (the merge commit's first parent)
- * @output one notice line per drifted or unrecorded file; always exit 0 once
- *   the arguments are valid. `drifted` also judges every file, with a margin,
- *   for a scheduled run.
+ * @output exit 1 and one error line per drifted file; one notice line per
+ *   unrecorded file, which never fails. `drifted` also judges every file,
+ *   with a margin, for a scheduled run.
  * @position .github/scripts — run by ci.yml's Node legs after their tests;
  *   cli-minimum-node.mjs imports `drifted` for the minimum-Node legs
  */
@@ -169,15 +172,16 @@ export function parseNameStatus(text) {
 }
 
 /**
- * The notice lines for one leg: the baseline note, then one line per changed
- * file past its record or with no record. Notices never fail the leg.
+ * The lines for one leg: the baseline note, an error per changed file past its
+ * record, and a notice per changed file with no record. Only the errors fail
+ * the leg.
  * @param {Record<string, number>} measured seconds per test file, this leg
  * @param {Record<string, number>} recorded seconds per test file, the record
  * @param {string[]} changed
  * @param {Array<[string, string]>} [renames]
- * @returns {string[]}
+ * @returns {{lines: string[], failed: boolean}}
  */
-export function notices(measured, recorded, changed, renames = []) {
+export function annotations(measured, recorded, changed, renames = []) {
   const lines = [];
   const leg = legFactor(measured, recorded, new Set(changed));
   if (!leg.baseline)
@@ -196,7 +200,7 @@ export function notices(measured, recorded, changed, renames = []) {
       : 'its measured time';
   for (const {file, recorded: before, measured: now, suggested} of late) {
     lines.push(
-      `::notice file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so you may set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
+      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
     );
   }
   const unseen = unrecorded(measured, recorded, changed, renames);
@@ -211,13 +215,13 @@ export function notices(measured, recorded, changed, renames = []) {
   }
   if (late.length === 0 && unseen.length === 0)
     lines.push('The changed Node test files run within their recorded times.');
-  return lines;
+  return {lines, failed: late.length > 0};
 }
 
 /**
  * @param {string[]} args
  * @param {{diff?: (base: string) => string}} [io] `git diff --name-status -M <base> HEAD`
- * @returns {number} 2 for bad arguments; else 0, whatever the notices say
+ * @returns {number} 2 for bad arguments, 1 when a changed file drifted, else 0
  */
 export function main(
   args,
@@ -249,9 +253,9 @@ export function main(
   const recorded = JSON.parse(
     fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
   ).seconds;
-  for (const line of notices(measured, recorded, changed, renames))
-    console.log(line);
-  return 0;
+  const {lines, failed} = annotations(measured, recorded, changed, renames);
+  for (const line of lines) console.log(line);
+  return failed ? 1 : 0;
 }
 
 if (

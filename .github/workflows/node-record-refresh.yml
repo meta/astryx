@@ -2,8 +2,9 @@
 
 # Keeps the recorded Node test times (scripts/vitest-node-durations.json)
 # fresh from main's own runs. The Node legs book a file with no recorded time
-# at the ninetieth percentile, so a stale record costs leg balance only, and
-# no pull request fails on it. When fewer than nine in ten of the Node
+# at the ninetieth percentile, so a missing entry costs leg balance and can
+# make a leg run long until the record is refreshed; no pull request fails on
+# a missing entry. When fewer than nine in ten of the Node
 # project's test files have a recorded time, this regenerates the record from
 # the Node legs of main's latest successful full unit run and opens one
 # durations-only pull request on a fixed branch, or force-updates that branch
@@ -78,7 +79,14 @@ jobs:
           BEFORE: ${{ steps.check.outputs.share }}
           RUN_URL: ${{ steps.record.outputs.run_url }}
         run: |
-          git add scripts/vitest-node-durations.json
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit --quiet -m 'ci: refresh the recorded Node test times'
-          git push --force origin HEAD:refs/heads/ci/node-durations-refresh
+          # A branch that already carries this record keeps its commit, so a
+          # CI run on the open pull request stays current.
+          if git fetch --quiet origin refs/heads/ci/node-durations-refresh &&
+            git diff --quiet FETCH_HEAD -- scripts/vitest-node-durations.json; then
+            echo "The refresh branch already carries this record."
+          else
+            git add scripts/vitest-node-durations.json
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit --quiet -m 'ci: refresh the recorded Node test times'
+            git push --force origin HEAD:refs/heads/ci/node-durations-refresh
+          fi
           node .github/scripts/node-record-refresh.mjs pr --run-url "$RUN_URL" --before "$BEFORE"

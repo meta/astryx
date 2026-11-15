@@ -78,11 +78,16 @@ describe('the Node record refresh workflow', () => {
     expect(publish.if).toBe("steps.record.outputs.changed == 'true'");
     const pushes = publish.run
       .split('\n')
-      .filter(line => line.includes('git push'));
+      .filter(line => line.includes('git push'))
+      .map(line => line.trim());
     expect(pushes).toEqual([
       `git push --force origin HEAD:refs/heads/${BRANCH}`,
     ]);
     expect(publish.run).toContain("user.name='github-actions[bot]'");
+    // A branch that already carries the record is not pushed again.
+    expect(publish.run).toMatch(
+      /git fetch --quiet origin refs\/heads\/ci\/node-durations-refresh &&\s+git diff --quiet FETCH_HEAD -- scripts\/vitest-node-durations\.json; then[\s\S]*else[\s\S]*git push --force[\s\S]*fi/,
+    );
     expect(publish.run).toContain('git add scripts/vitest-node-durations.json');
     expect(publish.run).toContain(
       'node .github/scripts/node-record-refresh.mjs pr',
@@ -216,7 +221,7 @@ describe('the one refresh pull request', () => {
   });
 });
 
-describe('pull requests never fail on an unrecorded test file', () => {
+describe('pull requests never fail on a missing recorded time', () => {
   it('runs every Node file in exactly one leg with no record at all', () => {
     const legs = partitionByDuration(nodeFiles, 6, {});
     expect(legs.flat().sort()).toEqual([...nodeFiles].sort());
