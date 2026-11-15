@@ -11,14 +11,17 @@
  * each full unit run of `main`, this compares the record with that run's
  * measured times. When fewer than MIN_RECORDED_SHARE of the Node project's
  * test files have a recorded time, or a recorded file ran far past its entry,
- * the workflow regenerates the record from that run's Node legs, and this
- * script opens or refreshes the one pull request on BRANCH that carries it.
+ * the workflow regenerates the record from that run's Node legs with each
+ * leg's slowdown taken out (`regenerate`), and this script opens or refreshes
+ * the one pull request on BRANCH that carries it.
  *
- * @input `check --log <run log> --reasons <file>`: a Main run's log
+ * @input `regenerate --log <run log>`: a Main run's log and the record.
+ *   `check --log <run log> --reasons <file>`: a Main run's log
  *   (`gh run view --log`), the record and the Node project's tracked test
  *   files. `pr --run-url <url> --reasons <file>`: the regenerated record, the
  *   check's reasons, and `gh`.
- * @output `check` writes the reasons and prints them; with `--github-output`
+ * @output `regenerate` rewrites the record's new and far-off entries.
+ *   `check` writes the reasons and prints them; with `--github-output`
  *   it also writes `refresh`. `pr` opens the pull request, or edits the one
  *   that is open.
  * @position .github/scripts — run by node-record-refresh.yml
@@ -26,10 +29,15 @@
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
 import {nodeLegFiles, readDurations} from '../../scripts/vitest-node-legs.mjs';
-import {recordDurations} from '../../scripts/vitest-shard-sequencer.mjs';
-import {MARGIN_S, drifted} from './node-time-drift.mjs';
+import {
+  durationsFile,
+  recordDurations,
+} from '../../scripts/vitest-shard-sequencer.mjs';
+import {MARGIN_S, RATIO, drifted, legFactor} from './node-time-drift.mjs';
 
 /** The least share of Node test files the record must time: nine in ten. */
 export const MIN_RECORDED_SHARE = 0.9;
@@ -43,8 +51,32 @@ export const DRIFT_MARGIN_S = MARGIN_S;
 export const BRANCH = 'ci/node-durations-refresh';
 export const TITLE = 'ci: refresh the recorded Node test times';
 
+/**
+ * Seconds a regenerated time must differ from its entry, as well as RATIO
+ * times either way, before it replaces the entry: smaller moves are noise
+ * between runs.
+ */
+export const RETIME_MIN_S = 5;
+
+const ROOT = path.resolve(import.meta.dirname, '../..');
+
 /** A Main run's Node leg, as its log names each line's job. */
 const NODE_LEG_JOB = /^test-node \(\d+\)$/;
+
+/**
+ * A Main run's log lines per Node leg.
+ * @param {string} log
+ * @returns {string[]} each leg's lines, joined
+ */
+function nodeLegLogs(log) {
+  /** @type {Map<string, string[]>} */
+  const legs = new Map();
+  for (const line of log.split('\n')) {
+    const job = line.split('\t')[0];
+    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
+  }
+  return [...legs.values()].map(lines => lines.join('\n'));
+}
 
 /**
  * How much of the Node project the record times.
@@ -75,15 +107,9 @@ export function coverage(nodeFiles, recorded) {
  * @returns {{file: string, recorded: number, measured: number}[]}
  */
 export function driftedEntries(log, recorded) {
-  /** @type {Map<string, string[]>} */
-  const legs = new Map();
-  for (const line of log.split('\n')) {
-    const job = line.split('\t')[0];
-    if (NODE_LEG_JOB.test(job)) legs.set(job, [...(legs.get(job) ?? []), line]);
-  }
-  return [...legs.values()]
-    .flatMap(lines =>
-      drifted(recordDurations(lines.join('\n')), recorded, [], {
+  return nodeLegLogs(log)
+    .flatMap(leg =>
+      drifted(recordDurations(leg), recorded, [], {
         all: true,
         margin: DRIFT_MARGIN_S,
       }),
@@ -94,6 +120,38 @@ export function driftedEntries(log, recorded) {
       measured,
     }))
     .sort((a, b) => a.file.localeCompare(b.file));
+}
+
+/**
+ * The entries a Main run's Node legs give the record. Each leg's times are
+ * divided by that leg's own slowdown (node-time-drift.mjs `legFactor`: the
+ * median measured ÷ recorded over its recorded files, never below 1), so a
+ * slow runner does not raise the record. A file the record lacks takes its
+ * time. A recorded file takes it only when it is RATIO times off its entry,
+ * either way, and at least RETIME_MIN_S seconds away; a lower time is taken
+ * only after that division. Every other entry keeps its value.
+ * @param {string} log a Main run's log
+ * @param {Record<string, number>} recorded
+ * @returns {{seconds: Record<string, number>, legs: {files: number, factor: number}[]}}
+ */
+export function normalizedTimes(log, recorded) {
+  /** @type {Record<string, number>} */
+  const seconds = {};
+  const legs = nodeLegLogs(log).map(leg => {
+    const measured = recordDurations(leg);
+    const {factor} = legFactor(measured, recorded, new Set());
+    for (const [file, raw] of Object.entries(measured)) {
+      const time = Math.round((raw / factor) * 10) / 10;
+      const before = recorded[file];
+      const farOff =
+        typeof before === 'number' &&
+        Math.abs(time - before) >= RETIME_MIN_S &&
+        (time >= before * RATIO || time * RATIO <= before);
+      if (typeof before !== 'number' || farOff) seconds[file] = time;
+    }
+    return {files: Object.keys(measured).length, factor};
+  });
+  return {seconds, legs};
 }
 
 /**
@@ -144,12 +202,12 @@ The Node legs split by recorded time; which files run never depends on the recor
 
 ## Change
 
-Regenerates \`scripts/vitest-node-durations.json\` from the Node legs of main's full unit run (${runUrl}) with \`node scripts/vitest-shard-sequencer.mjs record\`. Durations only.
+Regenerates \`scripts/vitest-node-durations.json\` from the Node legs of main's full unit run (${runUrl}). Each leg's times are divided by that leg's slowdown (the median measured ÷ recorded time over its recorded files, never below 1). A file the record lacks takes its time; a recorded file takes it only when it is ${RATIO} times off its entry, either way, and at least ${RETIME_MIN_S} s away. Durations only.
 
 ## Evidence
 
 - Failure before the change: the entries above.
-- Success after the change: ${after.recorded} of ${after.total} Node test files recorded (${percent(after.share)}); every measured file takes that run's time.
+- Success after the change: ${after.recorded} of ${after.total} Node test files recorded (${percent(after.share)}); new and far-off files take that run's time, every other entry keeps its own.
 - Product/runtime behavior verified unchanged: only the record changes.
 - CI impact (for a change to workflows, actions or CI scripts): none; the Node legs balance better.
 
@@ -238,6 +296,24 @@ function main(args) {
       );
     return 0;
   }
+  if (command === 'regenerate' && option('--log')) {
+    const file = durationsFile();
+    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const current = record.seconds ?? {};
+    const {seconds, legs} = normalizedTimes(
+      fs.readFileSync(/** @type {string} */ (option('--log')), 'utf8'),
+      current,
+    );
+    record.seconds = mergeRecord(current, seconds, each =>
+      fs.existsSync(path.join(ROOT, each)),
+    );
+    fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+    const added = Object.keys(seconds).filter(each => !(each in current));
+    console.log(
+      `Recorded ${added.length} new Node test files and re-timed ${Object.keys(seconds).length - added.length}; leg slowdowns ${legs.map(({factor}) => factor.toFixed(2)).join(', ')}.`,
+    );
+    return 0;
+  }
   const runUrl = option('--run-url');
   if (command === 'pr' && runUrl && reasonsFile) {
     const gh = (/** @type {string[]} */ ghArgs) =>
@@ -254,7 +330,7 @@ function main(args) {
     return 0;
   }
   console.error(
-    'usage: node-record-refresh.mjs check --log <run log> --reasons <file> [--github-output] | pr --run-url <url> --reasons <file>',
+    'usage: node-record-refresh.mjs regenerate --log <run log> | check --log <run log> --reasons <file> [--github-output] | pr --run-url <url> --reasons <file>',
   );
   return 2;
 }

@@ -16,9 +16,11 @@ import {
   BRANCH,
   DRIFT_MARGIN_S,
   MIN_RECORDED_SHARE,
+  RETIME_MIN_S,
   TITLE,
   coverage,
   driftedEntries,
+  normalizedTimes,
   openOrRefresh,
   prBody,
   refreshReasons,
@@ -102,7 +104,7 @@ describe('the Node record refresh workflow', () => {
     const regenerate = step('Regenerate the record from that run');
     expect(regenerate.if).toBe("steps.check.outputs.refresh == 'true'");
     expect(regenerate.run).toContain(
-      'node scripts/vitest-shard-sequencer.mjs record "$RUNNER_TEMP/main-run.log"',
+      'node .github/scripts/node-record-refresh.mjs regenerate --log "$RUNNER_TEMP/main-run.log"',
     );
   });
 
@@ -156,7 +158,7 @@ describe('the coverage check', () => {
 });
 
 describe('regenerating the record from a run log', () => {
-  it("records the Node legs' files from a Main run log and lifts the share over the bar", () => {
+  it("records the Node legs' files from a Main run log, each leg's slowdown taken out, and lifts the share over the bar", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-refresh-'));
     try {
       const record = path.join(dir, 'durations.json');
@@ -182,7 +184,12 @@ describe('regenerating the record from a run log', () => {
       fs.writeFileSync(logFile, log);
       execFileSync(
         process.execPath,
-        ['scripts/vitest-shard-sequencer.mjs', 'record', logFile],
+        [
+          '.github/scripts/node-record-refresh.mjs',
+          'regenerate',
+          '--log',
+          logFile,
+        ],
         {
           cwd: ROOT,
           env: {...process.env, VITEST_DURATIONS_FILE: record},
@@ -191,7 +198,10 @@ describe('regenerating the record from a run log', () => {
       );
       const after = JSON.parse(fs.readFileSync(record, 'utf8'));
       expect(after.$comment).toBe('kept');
-      expect(after.seconds[nodeFiles[1]]).toBe(2.5);
+      // Every leg measured its recorded files at 2.5 times their 1 s entry,
+      // so a new file's 2.5 s is booked at 1 s and the kept entries stay.
+      expect(after.seconds[nodeFiles[1]]).toBe(1);
+      expect(after.seconds[kept[0]]).toBe(1);
       expect(coverage(nodeFiles, after.seconds)).toMatchObject({
         fresh: true,
         missing: [],
@@ -199,6 +209,62 @@ describe('regenerating the record from a run log', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+});
+
+describe("each leg's slowdown taken out of the regenerated times", () => {
+  // Leg 1 holds files 0, 6, 12, …; leg 2 holds files 1, 7, 13, ….
+  const inLeg = leg => nodeFiles.filter((_, i) => i % 6 === leg - 1);
+  const recorded = Object.fromEntries(nodeFiles.map(file => [file, 20]));
+  const logOf = time =>
+    nodeFiles.map((file, i) => legLine(file, i, time(file, i))).join('\n');
+
+  it('books a slow leg at its own pace, and keeps entries that only ran slow with it', () => {
+    const [first, second] = inLeg(2);
+    const unrecorded = {...recorded};
+    delete unrecorded[first];
+    // Leg 2 ran everything twice as slow; the unrecorded file took 40 s there.
+    const log = logOf((file, i) => (i % 6 === 1 ? 40 : 20));
+    const {seconds, legs} = normalizedTimes(log, unrecorded);
+    expect(seconds).toEqual({[first]: 20});
+    expect(legs.find(({factor}) => factor > 1)?.factor).toBe(2);
+    expect(seconds[second]).toBeUndefined();
+  });
+
+  it('re-times a file that is RATIO times off its entry either way, never a small move', () => {
+    const [up, down, small] = inLeg(1);
+    const log = logOf(file =>
+      file === up ? 20 * RATIO + 1 : file === down ? 20 / RATIO - 1 : 20,
+    );
+    expect(normalizedTimes(log, recorded).seconds).toEqual({
+      [up]: 20 * RATIO + 1,
+      [down]: Math.round((20 / RATIO - 1) * 10) / 10,
+    });
+    // A file recorded at 2 s that ran 6 s is three times off but under
+    // RETIME_MIN_S away, so it keeps its entry.
+    const tiny = {...recorded, [small]: 2};
+    const tinyLog = logOf(file => (file === small ? 2 + RETIME_MIN_S - 1 : 20));
+    expect(normalizedTimes(tinyLog, tiny).seconds).toEqual({});
+  });
+
+  it('takes a lower time from a slow leg only after its slowdown is taken out', () => {
+    const [heavy] = inLeg(3);
+    // Leg 3 ran twice as slow, but its heavy file measured only 30 s against
+    // a 40 s entry: at that leg's pace it took 15 s.
+    const withHeavy = {...recorded, [heavy]: 40};
+    const log = logOf((file, i) =>
+      file === heavy ? 30 : i % 6 === 2 ? 40 : 20,
+    );
+    expect(normalizedTimes(log, withHeavy).seconds).toEqual({[heavy]: 15});
+  });
+
+  it("never divides by less than 1, so a fast leg's times are taken as measured", () => {
+    const log = logOf((file, i) => (i % 6 === 3 ? 10 : 20));
+    const fast = normalizedTimes(log, recorded);
+    // Leg 4 ran at half its entries. Its factor stays 1, so each file there
+    // is booked at the 10 s it took: RATIO times under and 10 s away.
+    expect(fast.legs.every(({factor}) => factor >= 1)).toBe(true);
+    expect(Object.values(fast.seconds).every(time => time === 10)).toBe(true);
   });
 });
 
