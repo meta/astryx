@@ -324,9 +324,10 @@ export function registerTemplate(program) {
               givenPath,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
-            const givenRelative = isFilePathArg(givenPath)
-              ? path.join(outputDir, fileName)
-              : outputDir;
+            const givenRelative =
+              givenPath !== undefined && isFilePathArg(givenPath)
+                ? path.join(outputDir, fileName)
+                : outputDir;
             const iconText = iconLines(icons);
             emit(
               text(`Copied template to ${file}`),
