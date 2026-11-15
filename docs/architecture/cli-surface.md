@@ -285,7 +285,13 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands'
   not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
-  anything the CLI did not create.
+  anything the CLI did not create. A template that
+  `astryx template <name> <path>` writes may also go, as a scratch copy, to a
+  path the caller names in the system temp folder (`os.tmpdir()`, or `/tmp` on
+  a POSIX system; never a temp folder that is a disk's root or holds the home
+  folder), under the checks a write in the project has: no link carries it out
+  of that folder, and an existing file is replaced only with `--overwrite`
+  (DEC-15).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
   command or its programmatic API) to a root, a change that makes the operation
@@ -990,6 +996,22 @@ or React cannot be read beside the package, is listed as not checked
 Rejected: every export of the package in scope without an import (an app
 that copies the example needs the import), and stand-in values for names
 an example leaves undefined (they hide what the preview shows).
+
+### DEC-15 — A scratch copy of a template may go to the system temp folder
+
+**Decider:** `josephfarina`, `2026-11-15`
+
+People and agents keep a copy of a template outside the project to read it in
+parts before they scaffold it. The system temp folder is the place made for
+such files, so `astryx template <name> <path>` writes a scratch copy to a path
+in it instead of refusing the path (INV10). The checks a write in the project
+has apply there too, so the copy cannot follow a link out of the temp folder
+or replace a file without `--overwrite`. A temp folder that is a disk's root or
+holds the home folder is not one, so a misset `TMPDIR` cannot open the whole
+disk or the home folder to scratch copies.
+
+Rejected: keeping scratch copies inside the project (they land in folders the
+app builds, typechecks and lints).
 
 ## Verification
 
