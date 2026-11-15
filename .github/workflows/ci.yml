@@ -5860,12 +5860,12 @@ jobs:
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
-  # A leg without a share runs on a slim runner and only says so. The `test`
-  # join reads the legs' result, so a failing audit blocks the merge.
+  # A plan that owes no audit starts no leg. A plan that did not succeed
+  # starts one leg on a slim runner, which fails with an error that says to
+  # re-run. The `test` join reads the legs' result, so a failing audit blocks
+  # the merge.
   pr-a11y-dependent-audits:
-    # A failed plan starts one leg, named for what to do, so the run stays red
-    # with one clear failure instead of a failing leg per planned share.
-    name: "${{ needs.a11y-dependent-audits-plan.result == 'success' && format('Dependent audits ({0}/{1})', matrix.leg, strategy.job-total) || 'Dependent audits (plan did not run: re-run)' }}"
+    name: Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})
     needs:
       [room, admission, heavy-ci, a11y-dependent-audits-plan, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && (needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0'))) }}

@@ -417,10 +417,14 @@ describe('the dependent-audits jobs', () => {
     expect(legs.if).toContain(
       "(needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0')",
     );
-    // The leg a failed plan starts says what to do; planned legs keep the
-    // "Dependent audits (n/N)" names merge-guard reads.
+    // The name has no condition: GitHub shows a skipped job's name
+    // unevaluated, and a skipped job is the usual case when nothing is owed.
+    // The failing step's error says to re-run.
     expect(legs.name).toBe(
-      "${{ needs.a11y-dependent-audits-plan.result == 'success' && format('Dependent audits ({0}/{1})', matrix.leg, strategy.job-total) || 'Dependent audits (plan did not run: re-run)' }}",
+      'Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      '::error title=Dependent-audit plan did not run::',
     );
     expect(step(legs, 'Require the dependent-audit plan').run).toContain(
       'Re-run all jobs.',

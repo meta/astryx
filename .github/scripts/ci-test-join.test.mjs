@@ -111,10 +111,15 @@ describe('pull-request test join', () => {
     // A plan that did not succeed fails the join, whatever its one leg did,
     // and the message says to re-run.
     for (const plan of ['failure', 'cancelled', 'skipped', null]) {
-      for (const legs of ['failure', 'success', 'skipped']) {
+      for (const [legs, count] of [
+        ['failure', ''],
+        ['success', '2'],
+        ['skipped', '0'],
+        ['failure', '3'],
+      ]) {
         const outcome = run({
           A11Y_DEPENDENT_AUDITS_PLAN_RESULT: plan,
-          A11Y_DEPENDENT_AUDITS_COUNT: plan === 'success' ? '0' : '',
+          A11Y_DEPENDENT_AUDITS_COUNT: count,
           PR_A11Y_DEPENDENT_AUDITS_RESULT: legs,
         });
         expect(outcome, `plan ${plan}, legs ${legs}`).toMatchObject({
