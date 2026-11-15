@@ -621,17 +621,18 @@ function themeNextSteps(run, words = THEME_WORDS) {
 }
 
 /**
- * A theme as the list's text shows it: one its package's provider wires
- * says so where `added` and `default` stand, which are about the generated
- * theme module and read as "not in use" for it. The JSON keeps the fields.
+ * The list's `wiredBy` line: the provider a theme's package wires it with,
+ * and the file that renders it when doctor's scan found one.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry} theme
  */
-function providerWiredText(theme) {
-  if (!theme.wiredBy || theme.added) return theme;
+function wiredByLine(theme) {
+  if (!theme.wiredBy) return theme;
+  const by = `wired by ${theme.wiredBy.export} from ${theme.wiredBy.from}`;
   return {
     ...theme,
-    added: `in use through ${theme.wiredBy.export} wherever the app renders it (theme add does not manage it)`,
-    default: `the app's ${theme.wiredBy.export} picks it, not the generated theme module`,
+    wiredBy: theme.renderedIn
+      ? `${by}, rendered in ${theme.renderedIn}`
+      : `${by} when the app renders it`,
   };
 }
 
@@ -642,23 +643,37 @@ function providerWiredText(theme) {
  * @param {import('../../../api/theme/theme.type.mjs').ThemeUnmigratedCopy[]} [unmigratedCopies]
  * @param {ThemeCommandWords} [words]
  * @param {Array<{slug: string, path: string, reason: string}>} [skippedThemes]
+ * @param {Array<{wiredBy: string, file: string, themes: string[]}>} [appTheme] where the app renders a package's provider, and the theme it wires
  */
 function printThemeList(
   themes,
   unmigratedCopies = [],
   words = THEME_WORDS,
   skippedThemes = [],
+  appTheme = [],
 ) {
   const run = getCliInvocation();
   const more = text(
     `More themes in packages you could add: ${run} discover theme`,
   );
+  // The theme the app has, when doctor's scan found the provider that wires
+  // it rendered: first, so "added: no" is not read as "no theme".
+  const using = appTheme.map(x =>
+    x.themes.length === 1
+      ? `This app's theme comes from ${x.wiredBy} (${x.themes[0]}), rendered in ${x.file}.`
+      : `This app's theme comes from ${x.wiredBy}, rendered in ${x.file}: one of ${x.themes.join(', ')}.`,
+  );
   if (themes.length === 0) {
-    emit(text('No themes are available in this project.'), more);
+    emit(
+      ...using.map(line => text(line)),
+      text('No themes are available in this project.'),
+      more,
+    );
   } else {
     emit(
+      ...using.map(line => text(line)),
       section('Themes', `${themes.length} available`),
-      records(themes.map(providerWiredText), {
+      records(themes.map(wiredByLine), {
         fields: [
           'slug',
           'displayName',
@@ -672,13 +687,9 @@ function printThemeList(
         ],
         layout: 'stacked',
         format: {
-          wiredBy: (/** @type {{export: string, from: string}} */ value) =>
-            `${value.export} from ${value.from}`,
           maintained: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
-          added: (/** @type {boolean | string} */ value) =>
-            typeof value === 'string' ? value : value ? 'yes' : 'no',
-          default: (/** @type {boolean | string} */ value) =>
-            typeof value === 'string' ? value : value ? 'yes' : 'no',
+          added: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
+          default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
         },
       }),
       text(themeNextSteps(run, words)),
@@ -1808,6 +1819,7 @@ function registerThemeCommands(theme, program, docs, words) {
         result.meta?.unmigratedCopies,
         words,
         result.meta?.skippedThemes,
+        result.meta?.appTheme,
       );
       return answered;
     },

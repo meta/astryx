@@ -189,6 +189,13 @@ export function parseCliCommandField(input, label) {
 export const KNOWN_INTEGRATION_KEYS = Object.keys(integrationSchema.shape);
 
 /**
+ * The known keys whose inner keys this CLI reports when it does not know
+ * them: an object whose fields the docs describe one by one, so a later
+ * CLI may add one. Other objects keep an unknown inner key unreported.
+ */
+const INNER_KEYS_REPORTED = new Set(['themeProvider']);
+
+/**
  * The object schema a known key holds, or null when it holds no object.
  * @param {string} key
  * @returns {Record<string, unknown> | null}
@@ -222,6 +229,7 @@ export function unknownIntegrationKeys(input) {
   }
   return Object.entries(input).flatMap(([key, value]) => {
     if (!KNOWN_INTEGRATION_KEYS.includes(key)) return [key];
+    if (!INNER_KEYS_REPORTED.has(key)) return [];
     const inner = objectShape(key);
     if (!inner || value == null || typeof value !== 'object') return [];
     return Object.keys(value)

@@ -95,6 +95,11 @@ describe('parseIntegration (load boundary)', () => {
     expect(unknownIntegrationKeys(manifest)).toEqual([
       'themeProvider.stylesheet',
     ]);
+    // Only themeProvider's inner keys are reported: a key inside logo is
+    // stripped as it always was, with no new warning.
+    expect(
+      unknownIntegrationKeys({logo: {light: './l.svg', size: 32}}),
+    ).toEqual([]);
   });
 
   it('still rejects a known key of the wrong type', () => {

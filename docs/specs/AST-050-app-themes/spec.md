@@ -230,7 +230,12 @@ described.
   is bundled, from a package, or local. These fields are additive, and local
   themes join the list as additional entries. A theme whose package names the
   provider that wires its themes (`spec:AST-039/FR15`) carries `wiredBy`: that
-  provider's export and module.
+  provider's export and module, and `renderedIn`, the project file that
+  renders it for that theme as doctor finds it (FR11). The added and default
+  marks stay as they are for every theme; the text names the provider, and
+  where it is rendered or that it applies where the app renders it, on the
+  `wiredBy` line. When doctor finds the provider rendered, the list first
+  names the theme the app has through it.
 - **FR11 — Doctor proves the setup.** In a project with a theme module, doctor
   MUST check, and pass each check only on positive evidence:
   1. every added theme's owner is installed and its module and stylesheet
@@ -261,7 +266,8 @@ described.
   when project source imports the provider its package names
   (`spec:AST-039/FR15`) by name from the named module and renders it as an
   element. That theme is the one whose stylesheet the app imports (its
-  export, or any stylesheet of the package that is that theme's file), or the
+  export, or a stylesheet of the package that only that theme claims: its
+  file, a file in its own folder, or a file its stylesheet imports), or the
   package's only theme. With several, doctor reports that one of them is
   wired and that it cannot tell which, naming each stylesheet of the package
   the app imports; it never calls a stylesheet missing when the app imports

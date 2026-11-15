@@ -245,6 +245,37 @@ describe('a theme its integration wires with its own provider', () => {
     expect(check.message).not.toContain('imports none');
   });
 
+  it('names the theme a stylesheet of the package belongs to: in its folder, or imported by its stylesheet', async () => {
+    const dir = app(['brand', 'night'], {
+      './themes/night/night.extra.css': './themes/night/night.extra.css',
+      './base.css': './dist/base.css',
+    });
+    const pkg = path.join(dir, 'node_modules/@acme/ui');
+    // A stylesheet in night's own folder.
+    write(path.join(pkg, 'themes/night/night.extra.css'), 'x {}\n');
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      `import '@acme/ui/themes/night/night.extra.css';\n${RENDERS}`,
+    );
+    expect((await themeImportWiring(dir)).wired).toMatchObject([
+      {slug: 'night', wiredBy: 'AcmeThemeProvider from @acme/ui/theme'},
+    ]);
+
+    // A stylesheet only brand's stylesheet imports.
+    write(path.join(pkg, 'dist/base.css'), 'y {}\n');
+    write(
+      path.join(pkg, 'dist/brand.css'),
+      '@import \'./base.css\';\n[data-astryx-theme="brand"] {}\n',
+    );
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      `import '@acme/ui/base.css';\n${RENDERS}`,
+    );
+    expect((await themeImportWiring(dir)).wired).toMatchObject([
+      {slug: 'brand', wiredBy: 'AcmeThemeProvider from @acme/ui/theme'},
+    ]);
+  });
+
   it('theme list names the provider beside each of its themes', async () => {
     const dir = app();
     const {data} = await themeListAvailable({cwd: dir, package: '@acme/ui'});
@@ -255,15 +286,43 @@ describe('a theme its integration wires with its own provider', () => {
         wiredBy: PROVIDER,
       }),
     ]);
-    // The JSON keeps added and default as they are.
+    // The JSON keeps added and default as they are, and so does the text.
     expect(data[0]).toMatchObject({added: false, default: false});
-    // The text says the theme is in use through the provider, where it
-    // would say "added: no".
     const text = (await runCli(['theme', 'list', '--package', '@acme/ui'], dir))
       .stdout;
+    expect(text).toMatch(/added:\s+no/);
+    // The app does not render the provider: the line says when it would.
     expect(text).toContain(
-      'added:       in use through AcmeThemeProvider wherever the app renders it (theme add does not manage it)',
+      'wiredBy:     wired by AcmeThemeProvider from @acme/ui/theme when the app renders it',
     );
-    expect(text).not.toMatch(/added:\s+no/);
+    expect(text).not.toContain("This app's theme");
+  });
+
+  it('theme list says where the app renders the provider, and which theme that is', async () => {
+    const dir = app();
+    write(path.join(dir, 'app/layout.tsx'), RENDERS);
+    const r = await themeListAvailable({cwd: dir});
+    expect(r.data.find(t => t.slug === 'brand')).toMatchObject({
+      renderedIn: 'app/layout.tsx',
+      added: false,
+    });
+    expect(r.meta?.appTheme).toEqual([
+      {
+        wiredBy: 'AcmeThemeProvider from @acme/ui/theme',
+        file: 'app/layout.tsx',
+        themes: ['brand'],
+      },
+    ]);
+    const text = (await runCli(['theme', 'list'], dir)).stdout;
+    expect(text).toContain(
+      "This app's theme comes from AcmeThemeProvider from @acme/ui/theme (brand), rendered in app/layout.tsx.",
+    );
+    expect(text.indexOf("This app's theme")).toBeLessThan(
+      text.indexOf('Themes'),
+    );
+    expect(text).toContain(
+      'wiredBy:     wired by AcmeThemeProvider from @acme/ui/theme, rendered in app/layout.tsx',
+    );
+    expect(text).toMatch(/added:\s+no/);
   });
 });

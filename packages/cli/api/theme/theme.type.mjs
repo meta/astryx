@@ -66,6 +66,8 @@
  * @property {{export: string, from: string}} [wiredBy] the provider component
  *   the owning integration wires its themes with (its manifest's
  *   `themeProvider`): an app renders `export`, imported from `from`
+ * @property {string} [renderedIn] the project file that renders that provider
+ *   for this theme, as doctor's wiring scan finds it
  */
 
 /**
@@ -83,7 +85,7 @@
  * @typedef {object} ThemeListResponse
  * @property {'theme.list'} type
  * @property {ThemeListEntry[]} data
- * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
+ * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>, appTheme?: Array<{wiredBy: string, file: string, themes: string[]}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken; `appTheme`: where the app renders the provider a package wires its theme with (`<export> from <module>`), and the theme it wires, or the themes it may be when doctor cannot tell which
  */
 
 /**

@@ -712,6 +712,11 @@ export async function themeImportWiring(cwd) {
    * @type {Map<ResolvedAppTheme, {export: string, from: string}>}
    */
   const providerOf = new Map();
+  /**
+   * The folder each such theme's descriptor is in, links resolved.
+   * @type {Map<ResolvedAppTheme, string>}
+   */
+  const folderOf = new Map();
   for (const theme of available) {
     let resolved;
     try {
@@ -725,7 +730,13 @@ export async function themeImportWiring(cwd) {
     }
     if (resolved.source === 'local' || installedDir(resolved.owner)) {
       themes.push(resolved);
-      if (theme.provider) providerOf.set(resolved, theme.provider);
+      if (theme.provider) {
+        providerOf.set(resolved, theme.provider);
+        folderOf.set(
+          resolved,
+          realDoctorFile(theme.sourceDir) ?? theme.sourceDir,
+        );
+      }
     }
   }
   if (themes.length === 0) return none;
@@ -799,7 +810,8 @@ export async function themeImportWiring(cwd) {
       // A stylesheet the app imports from the provider's package: the
       // package's theme stylesheet, wherever the package keeps it.
       for (const owner of new Set(entry.themes.map(theme => theme.owner))) {
-        if (!source.includes(`${owner}/`)) continue;
+        // Only text that names the package and a stylesheet is parsed.
+        if (!source.includes(`${owner}/`) || !source.includes('.css')) continue;
         let specifiers;
         try {
           specifiers =
@@ -887,10 +899,43 @@ export async function themeImportWiring(cwd) {
         x.target ? [realDoctorFile(x.target) ?? x.target] : [],
       ),
     );
+    // A stylesheet of the package is a theme's when it is that theme's
+    // stylesheet export, a file inside that theme's own folder, or a file
+    // that stylesheet imports; it names a theme only when one theme claims
+    // it.
+    /** The files a theme's own stylesheet is or imports. @param {ResolvedAppTheme} theme */
+    const ownFiles = theme => {
+      const sheet = theme.stylesheetFile;
+      const real = realDoctorFile(sheet) ?? sheet;
+      const css = readTextFileIfExists(sheet) ?? '';
+      return [
+        real,
+        ...[...doctorStylesheetImports(css)].flatMap(spec => {
+          const target = doctorStylesheetImportFile(spec, sheet);
+          return target ? [realDoctorFile(target) ?? target] : [];
+        }),
+      ];
+    };
+    const claims = new Map(
+      owned.map(theme => {
+        const folder = folderOf.get(theme);
+        const own = new Set(ownFiles(theme));
+        return [
+          theme,
+          [...files].filter(
+            f =>
+              own.has(f) ||
+              (folder != null && f.startsWith(`${folder}${path.sep}`)),
+          ),
+        ];
+      }),
+    );
+    const claimedBy = (/** @type {string} */ f) =>
+      owned.filter(theme => claims.get(theme)?.includes(f));
     const imported = owned.filter(
       theme =>
         wired.has(keyOf(theme)) ||
-        files.has(realDoctorFile(theme.stylesheetFile) ?? theme.stylesheetFile),
+        (claims.get(theme) ?? []).some(f => claimedBy(f).length === 1),
     );
     if (imported.length > 0) {
       for (const theme of imported)
