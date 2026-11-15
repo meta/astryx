@@ -3,10 +3,11 @@
 /**
  * @file A one-identifier query that docs only mention: written as an entry's
  * name (PascalCase), it is also read as its words, and the doc that mentions
- * it comes before entries the words only match, after an entry a word names
- * outright; written as a prop's name (camelCase), it keeps only the entries
+ * it, and an entry a word names outright, come before entries the words only
+ * match; written as a prop's name (camelCase), it keeps only the entries
  * that mention it. A code term or table cell a doc's keywords gather is a
- * mention; a keyword the doc declares is not. All entries here are made up.
+ * mention; a keyword the doc declares, and a guide's route written with
+ * spaces, are not. All entries here are made up.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -15,6 +16,8 @@ import {requireNatively} from '../../test-utils/native-require.mjs';
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./_lexical.mjs')} */
 const {rankLexical, readsMentionAsWords} = require('./_lexical.mjs');
+/** @type {typeof import('./_doc-text.mjs')} */
+const {codeTerms, sectionProse} = require('./_doc-text.mjs');
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -43,16 +46,23 @@ const Shelf = entry('component', 'Shelf', {
   keywords: ['keeper'],
   description: 'Holds things in a row.',
 });
-// A field reference shaped as gathered: its section's code terms are
-// keywords (`lanternKeeper`), beside its title, and it declares none.
+// A field reference section, gathered as the docs gatherer gathers one: its
+// title and its ticked identifiers are its keywords, and it declares none.
+const fields = {
+  title: 'Manifest fields',
+  content: [
+    {
+      type: 'prose',
+      text: 'Name the component that lights your parts as `lanternKeeper`. A part with `glowOnHover` lights when hovered.',
+    },
+  ],
+};
 const manifest = entry('doc', 'manifest-fields', {
-  keywords: ['Manifest fields', 'lanternKeeper', 'glowOnHover'],
-  titles: ['Manifest fields'],
+  keywords: [fields.title, ...codeTerms(fields)],
+  titles: [fields.title],
   _topic: 'manifest-fields',
   description: 'Every field of the manifest.',
-  prose: [
-    'Name the component that lights your parts as lanternKeeper. A part with glowOnHover lights when hovered.',
-  ],
+  prose: sectionProse(fields),
 });
 
 /** @param {Candidate[]} all */
@@ -102,6 +112,21 @@ describe('an identifier only docs mention', () => {
     expect(names('LanternKeeper', [Lamp, page, Lantern])).toEqual([
       'lantern-page',
       'Lamp',
+    ]);
+  });
+
+  it("a guide's route typed as one identifier answers only that guide", () => {
+    // A placed guide answers to its route's last part written with spaces.
+    const guide = entry('doc', 'authoring/tokens-border', {
+      keywords: ['tokens border', 'Borders from tokens'],
+      titles: ['Borders from tokens'],
+      description: 'Draw a border from the theme tokens.',
+    });
+    const Border = entry('component', 'Border', {
+      description: 'A line around a part.',
+    });
+    expect(names('TokensBorder', [guide, Border, Lantern])).toEqual([
+      'authoring/tokens-border',
     ]);
   });
 

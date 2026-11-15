@@ -146,22 +146,23 @@ const prepared = new WeakMap();
  * Whether a doc's keyword is a word its text mentions rather than one it is
  * named or declared by: a code term or a table cell its keywords gather
  * (`issuesUrl`), not the author's declared keywords, its title or headings,
- * or its name. Another domain's keywords are all its own.
+ * or its name, including its route's last part written with spaces (a
+ * placed guide answers to `tokens border`). Another domain's keywords are
+ * all its own.
  * @param {any} candidate
  * @param {string} lower the keyword, lowercased
  */
 function mentionKeyword(candidate, lower) {
   if (candidate.domain !== 'doc') return false;
+  const leaves = [candidate.name, candidate._topic]
+    .map(n => String(n ?? ''))
+    .map(n => n.slice(n.lastIndexOf('/') + 1));
   const own = [
     ...(candidate._declared ?? []),
     ...(candidate.titles ?? []),
     candidate.name,
-    String(candidate.name ?? '').slice(
-      String(candidate.name ?? '').lastIndexOf('/') + 1,
-    ),
-    String(candidate._topic ?? '').slice(
-      String(candidate._topic ?? '').lastIndexOf('/') + 1,
-    ),
+    ...leaves,
+    ...leaves.map(leaf => leaf.replaceAll('-', ' ')),
   ];
   return !own.some(x => x != null && String(x).toLowerCase() === lower);
 }
