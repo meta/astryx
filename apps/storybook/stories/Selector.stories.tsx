@@ -1138,11 +1138,12 @@ export const OverlayBesideKeyboard: Story = {
 };
 
 /**
- * A text field above a Selector whose field ends 300 px above the screen's
- * end. On a phone, focus the field so that its software keyboard rises, then
- * open the Selector. Its list flips above the Selector and ends above the
- * keyboard. The keyboard must be shorter than 300 px, as an iPhone's is with
- * its predictive bar off.
+ * Overlay Beside Keyboard with nine options, so the open list must rise to
+ * end above a software keyboard. On a phone, focus the field so that its
+ * keyboard rises, then open the Selector. The list ends above the keyboard.
+ * The trigger sits where Overlay Beside Keyboard's does. On an iPhone with the
+ * keyboard up, a tap on a trigger just above Safari's bottom bars closed the
+ * keyboard and opened nothing.
  */
 export const FlippedOverlayBesideKeyboard: Story = {
   parameters: {layout: 'fullscreen'},
@@ -1158,24 +1159,23 @@ export const FlippedOverlayBesideKeyboard: Story = {
           padding: '96px 24px 0',
         }}>
         <TextInput label="Name" value={name} onChange={setName} />
-        <div style={{position: 'fixed', insetInline: 24, insetBlockEnd: 300}}>
-          <Selector
-            label="Fruit"
-            options={[
-              'Apple',
-              'Banana',
-              'Cherry',
-              'Date',
-              'Elderberry',
-              'Fig',
-              'Grape',
-              'Honeydew',
-              'Kiwi',
-            ]}
-            value={value}
-            onChange={v => setValue(v)}
-          />
-        </div>
+        <div style={{height: 64}} />
+        <Selector
+          label="Fruit"
+          options={[
+            'Apple',
+            'Banana',
+            'Cherry',
+            'Date',
+            'Elderberry',
+            'Fig',
+            'Grape',
+            'Honeydew',
+            'Kiwi',
+          ]}
+          value={value}
+          onChange={v => setValue(v)}
+        />
       </div>
     );
   },

@@ -4,7 +4,7 @@
 /**
  * @file SelectorFlippedOverlayKeyboard.a11y.browser.spec.ts
  * @input The Flipped Overlay Beside Keyboard story at a phone viewport, its
- *   Selector's field 300 px above the viewport's end. A stand-in
+ *   Selector's field fixed 300 px above the viewport's end. A stand-in
  *   `window.visualViewport` shrinks from the bottom as a 291 px software
  *   keyboard does.
  * @output Browser proof that the list opens above the keyboard at its height
@@ -89,11 +89,19 @@ test('a list beside a field 300 px above the end opens above a 291 px keyboard a
     {waitUntil: 'load'},
   );
   const trigger = page.getByRole('combobox');
-  const field = await trigger.evaluate(
-    combobox =>
-      combobox.closest('.astryx-selector')?.getBoundingClientRect().bottom ??
-      Number.NaN,
-  );
+  // The field, fixed 300 px above the viewport's end. The list is taller than
+  // the room below the field, so the browser can flip it above.
+  const field = await trigger.evaluate(combobox => {
+    const box = combobox.closest<HTMLElement>('.astryx-selector');
+    if (box == null) {
+      throw new Error('the Selector field must be in the document');
+    }
+    box.style.position = 'fixed';
+    box.style.insetInline = '24px';
+    box.style.insetBlockStart = 'auto';
+    box.style.insetBlockEnd = '300px';
+    return box.getBoundingClientRect().bottom;
+  });
   expect(VIEWPORT.height - field).toBeCloseTo(300, 0);
   // Without the keyboard, the list's height.
   await trigger.click();
