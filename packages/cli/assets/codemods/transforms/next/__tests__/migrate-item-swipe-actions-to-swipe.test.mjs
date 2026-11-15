@@ -13,6 +13,34 @@ async function applyTransform(source) {
 /** Collapse whitespace so assertions ignore the printer's line breaks. */
 const flat = text => text.replace(/\s+/g, ' ');
 
+/**
+ * Each swipe the output defines, as the key a row compares when its swipe
+ * changes (`idsKeyOf` in `SwipeActionsLayer.tsx`). It holds the leading ids,
+ * then the trailing ids, an entry with none as ''. An open row closes only
+ * when its key changes.
+ */
+async function swipeKeys(output) {
+  const jscodeshift = (await import('jscodeshift')).default;
+  const j = jscodeshift.withParser('tsx');
+  const keyOf = property => property.key?.name ?? property.key?.value;
+  return j(output)
+    .find(j.CallExpression, {callee: {name: 'createSwipe'}})
+    .nodes()
+    .map(call => {
+      const options = call.arguments[0];
+      const ids = side => {
+        const list = options.properties.find(p => keyOf(p) === side)?.value;
+        return (list?.elements ?? [])
+          .map(entry => {
+            const id = entry.properties.find(p => keyOf(p) === 'id');
+            return id == null ? '' : id.value.value;
+          })
+          .join('\u0000');
+      };
+      return `${ids('leading')}\u0001${ids('trailing')}`;
+    });
+}
+
 /** The output parses as TSX, and a second run changes nothing. */
 async function expectStable(output) {
   expect(await applyTransform(output)).toBe(output);
@@ -233,6 +261,49 @@ const a = <Item label="A" swipeActions={{leading: [{label: 'Mark as read', onAct
     // The `t(…)` labels run at render, so the swipe stays on the row.
     expect(output).toContain('swipe={createSwipe({');
     expect(output).toContain('an Item passes no itemKey to onActivate');
+    await expectStable(raw);
+  });
+
+  it('gives the entries at one side and place in both branches of a condition one id, so an open row stays open when the condition flips', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {markRead, markUnread} from './actions';
+const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read', onActivate: markRead}]} : {leading: [{label: 'Unread', onActivate: markUnread}]}} />;`);
+    const keys = await swipeKeys(raw);
+    expect(keys).toHaveLength(2);
+    // Before the migration, both branches keyed their one leading entry as ''.
+    expect(keys[0]).toBe(keys[1]);
+    const output = flat(raw);
+    expect(output.split("id: 'leading-0'")).toHaveLength(3);
+    expect(output).toContain(
+      'Give it the same id at the same side and place in both branches of the condition.',
+    );
+    await expectStable(raw);
+  });
+
+  it("shares the handler's id across the branches when only the labels differ, and a label's id when the labels match", async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {remove, toggleRead} from './actions';
+const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read', onActivate: toggleRead}], trailing: [{label: 'Delete', onActivate: remove}]} : {leading: [{label: 'Unread', onActivate: toggleRead}], trailing: [{label: 'Delete', onActivate: remove}]}} />;`);
+    const keys = await swipeKeys(raw);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+    const output = flat(raw);
+    expect(output.split("id: 'toggle-read'")).toHaveLength(3);
+    expect(output.split("id: 'delete'")).toHaveLength(3);
+    expect(output).not.toContain('TODO');
+    await expectStable(raw);
+  });
+
+  it('keeps each branch its own ids when a side has more entries in one branch, which changed the key before too', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {markRead, markUnread, pin} from './actions';
+const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read', onActivate: markRead}]} : {leading: [{label: 'Unread', onActivate: markUnread}, {label: 'Pin', onActivate: pin}]}} />;`);
+    const keys = await swipeKeys(raw);
+    expect(keys).toEqual(['read\u0001', 'unread\u0000pin\u0001']);
+    expect(flat(raw)).not.toContain('TODO');
     await expectStable(raw);
   });
 

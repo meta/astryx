@@ -16,11 +16,14 @@
  * instead. Where it cannot move the options, `createSwipe` stays on the row
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
- * its side and place with a TODO. Rows with the same options in one place
- * share one definition. A `swipeBehavior={B}` joins the options; a static
- * `'reveal'`, the default, is dropped. On a row that already sets `swipe`, the
- * deprecated props do nothing, so they are removed, and so is a lone
- * `swipeBehavior`. The `ItemSwipe*` types stay as they are.
+ * its side and place with a TODO. Where a conditional's two branches have as
+ * many entries on each side, the entries at each place share one id. So an
+ * open row stays open when the condition changes, as before. Rows with the
+ * same options in one place share one definition. A `swipeBehavior={B}`
+ * joins the options; a static `'reveal'`, the default, is dropped. On a row
+ * that already sets `swipe`, the deprecated props do nothing, so they are
+ * removed, and so is a lone `swipeBehavior`. The `ItemSwipe*` types stay as
+ * they are.
  *
  * It does not follow helpers, wrappers, or types. Where it cannot see every
  * entry, it keeps the old props and leaves a TODO instead of guessing. That
@@ -68,6 +71,12 @@ const NAME_COMMENT =
   ' TODO(astryx upgrade): give each action here an id of its own instead ' +
   "of its side and place, such as 'trailing-0': a row keys its swipe on the " +
   'ids (AST-057 DEC-10). ';
+const BRANCH_NAME_COMMENT =
+  ' TODO(astryx upgrade): give each action here an id of its own instead ' +
+  "of its side and place, such as 'leading-0'. Give it the same id at the " +
+  'same side and place in both branches of the condition. A row keys its ' +
+  'swipe on the ids, and an open row closes when they change (AST-057 ' +
+  'DEC-10). ';
 const PLACE_COMMENT =
   ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
   'useMemo, and read the row from the itemKey that onActivate receives ' +
@@ -405,42 +414,152 @@ function handlerId(node) {
   return slug(verb.replace(/([a-z0-9])([A-Z])/g, '$1 $2'));
 }
 
+/** An entry's `id` property, or undefined. @param {any} entry */
+function idPropertyOf(entry) {
+  return entry.properties.find((/** @type {any} */ p) => keyOf(p) === 'id');
+}
+
+/**
+ * The id an entry's label gives, else the one its handler gives, or null.
+ * @param {any} entry @param {'label' | 'onActivate'} from
+ */
+function derivedId(entry, from) {
+  const value = entry.properties.find(
+    (/** @type {any} */ p) => keyOf(p) === from,
+  )?.value;
+  if (from === 'onActivate') {
+    return handlerId(value);
+  }
+  const label = staticString(value);
+  return label == null ? null : slug(label);
+}
+
+/**
+ * The ids a conditional's two branches share, by entry. Entries with no `id`
+ * all key as '' in the deprecated props. So where each side has as many
+ * entries in both branches, an open row stayed open when the condition
+ * changed. Each place there whose entries have no `id` gets one id in both.
+ * It is their label's when the labels give the same one, else their
+ * handler's, else their side and place. Empty when the keys differed anyway:
+ * a side with more entries in one branch, or ids that differ at one place.
+ * @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * @returns {Map<any, {id: string, positional: boolean}>}
+ */
+function sharedIds(objects) {
+  /** @type {Map<any, {id: string, positional: boolean}>} */
+  const shared = new Map();
+  if (objects.length !== 2) {
+    return shared;
+  }
+  const [first, second] = objects;
+  const on = (
+    /** @type {Array<[string, any[]]>} */ sides,
+    /** @type {string} */ side,
+  ) => sides.find(([name]) => name === side)?.[1] ?? [];
+  const sideNames = [
+    ...new Set(objects.flatMap(({sides}) => sides.map(([name]) => name))),
+  ];
+  const taken = new Set();
+  for (const side of sideNames) {
+    const a = on(first.sides, side);
+    const b = on(second.sides, side);
+    if (a.length !== b.length) {
+      return shared;
+    }
+    for (let index = 0; index < a.length; index++) {
+      const [x, y] = [idPropertyOf(a[index]), idPropertyOf(b[index])];
+      if ((x == null) !== (y == null)) {
+        return shared;
+      }
+      const [idX, idY] = [x, y].map(id =>
+        id == null ? null : staticString(id.value),
+      );
+      if (idX != null && idY != null && idX !== idY) {
+        return shared;
+      }
+      for (const id of [idX, idY]) {
+        if (id != null) {
+          taken.add(id);
+        }
+      }
+    }
+  }
+  for (const side of sideNames) {
+    const b = on(second.sides, side);
+    on(first.sides, side).forEach((entry, index) => {
+      const other = b[index];
+      if (idPropertyOf(entry) != null) {
+        return;
+      }
+      const same = (/** @type {'label' | 'onActivate'} */ from) => {
+        const id = derivedId(entry, from);
+        return id != null && id === derivedId(other, from) ? id : null;
+      };
+      const common = same('label') ?? same('onActivate');
+      const id = common ?? `${side}-${index}`;
+      let unique = id;
+      for (let n = 2; taken.has(unique); n++) {
+        unique = `${id}-${n}`;
+      }
+      taken.add(unique);
+      const assigned = {id: unique, positional: common == null};
+      shared.set(entry, assigned);
+      shared.set(other, assigned);
+    });
+  }
+  return shared;
+}
+
 /**
  * Gives each entry with no `id` one: from its static label, then from its
  * handler, then from its side and place. `createSwipe` needs an `id` on every
- * action, and the ids stay unique in the swipe.
+ * action, and the ids stay unique in the swipe. An entry in `shared` takes
+ * the id its conditional's branches share (`sharedIds`); `branchPositional`
+ * says one of those is its side and place.
  * @param {any} j @param {Array<[string, any[]]>} sides
- * @returns {{ids: Array<string | null>, positional: boolean}}
+ * @param {Map<any, {id: string, positional: boolean}>} [shared]
+ * @returns {{
+ *   ids: Array<string | null>,
+ *   positional: boolean,
+ *   branchPositional: boolean,
+ * }}
  */
-function entryIds(j, sides) {
-  const idOf = (/** @type {any} */ entry) =>
-    entry.properties.find((/** @type {any} */ p) => keyOf(p) === 'id');
+function entryIds(j, sides, shared = new Map()) {
   const taken = new Set();
   for (const [, entries] of sides) {
     for (const entry of entries) {
-      const id = idOf(entry);
+      const id = idPropertyOf(entry);
       if (id != null && staticString(id.value) != null) {
         taken.add(staticString(id.value));
+      }
+      const preset = shared.get(entry);
+      if (preset != null) {
+        taken.add(preset.id);
       }
     }
   }
   /** @type {Array<string | null>} */
   const ids = [];
   let positional = false;
+  let branchPositional = false;
   for (const [side, entries] of sides) {
     entries.forEach((entry, index) => {
-      const existing = idOf(entry);
+      const existing = idPropertyOf(entry);
       if (existing != null) {
         ids.push(staticString(existing.value));
         return;
       }
-      const valueOf = (/** @type {string} */ name) =>
-        entry.properties.find((/** @type {any} */ p) => keyOf(p) === name)
-          ?.value;
-      const label = staticString(valueOf('label'));
-      let id =
-        (label == null ? null : slug(label)) ??
-        handlerId(valueOf('onActivate'));
+      const preset = shared.get(entry);
+      if (preset != null) {
+        positional ||= preset.positional;
+        branchPositional ||= preset.positional;
+        ids.push(preset.id);
+        entry.properties.unshift(
+          j.objectProperty(j.identifier('id'), j.stringLiteral(preset.id)),
+        );
+        return;
+      }
+      let id = derivedId(entry, 'label') ?? derivedId(entry, 'onActivate');
       if (id == null) {
         positional = true;
         id = `${side}-${index}`;
@@ -456,7 +575,7 @@ function entryIds(j, sides) {
       );
     });
   }
-  return {ids, positional};
+  return {ids, positional, branchPositional};
 }
 
 /**
@@ -1816,6 +1935,7 @@ export default function transformer(file, api) {
       rewrites.push(() => {
         const create = ensureCreateImport(j, root);
         let expression = unwrap(value);
+        const shared = sharedIds(objects);
         for (const {object, sides, replace} of objects) {
           const objectPath = j(rowPath)
             .find(j.ObjectExpression)
@@ -1824,7 +1944,14 @@ export default function transformer(file, api) {
           if (keyAttribute != null) {
             readItemKey(j, rowPath, objectPath, sides, keyAttribute, created);
           }
-          const {ids, positional} = entryIds(j, sides);
+          const {ids, positional, branchPositional} = entryIds(
+            j,
+            sides,
+            shared,
+          );
+          const nameComment = branchPositional
+            ? BRANCH_NAME_COMMENT
+            : NAME_COMMENT;
           if (behaviorValue != null && behaviorText !== 'reveal') {
             optionsOf(
               j,
@@ -1847,7 +1974,7 @@ export default function transformer(file, api) {
             replacement = j.callExpression(j.identifier(create), [object]);
             addComment(j, actions, placeComment);
             if (positional) {
-              addComment(j, actions, NAME_COMMENT);
+              addComment(j, actions, nameComment);
             }
           } else {
             const key = `${ownerKey(placement)}\u0000${shapeOf(object)}`;
@@ -1882,7 +2009,7 @@ export default function transformer(file, api) {
                 ),
               ]);
               if (positional) {
-                addComment(j, declaration, NAME_COMMENT);
+                addComment(j, declaration, nameComment);
               }
               insertDefinition(j, root, placement, rowPath, declaration);
               definitionNodes.set(name, declaration);

@@ -3466,6 +3466,58 @@ describe('swipe', () => {
       return {row};
     }
 
+    it('keep an open row open through a condition that relabels its entry, and so does the codemod’s output for it: one id at that place in both swipes', async () => {
+      // The codemod's output for `isUnread ? {leading: [{label: 'Read', …}]}
+      // : {leading: [{label: 'Unread', …}]}`. With no id, both branches keyed
+      // their entry as '', so the row stayed open as the label changed.
+      const migrated = {
+        read: createSwipe({
+          leading: [{id: 'leading-0', label: 'Read', onActivate: vi.fn()}],
+        }),
+        unread: createSwipe({
+          leading: [{id: 'leading-0', label: 'Unread', onActivate: vi.fn()}],
+        }),
+      };
+      function Row({isUnread, form}: {isUnread: boolean; form: string}) {
+        return form === 'deprecated' ? (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipeActions={
+              isUnread
+                ? {leading: [{label: 'Read', onActivate: vi.fn()}]}
+                : {leading: [{label: 'Unread', onActivate: vi.fn()}]}
+            }
+          />
+        ) : (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipe={isUnread ? migrated.read : migrated.unread}
+          />
+        );
+      }
+      for (const form of ['deprecated', 'migrated']) {
+        const {rerender, unmount} = render(<Row isUnread form={form} />);
+        const row = screen.getByTestId('row');
+        layOut(row);
+        dragLeading(row, 45);
+        await settled();
+        expect(xOf(row), form).toBe(72);
+        expect(screen.getByRole('button', {name: 'Read'})).toBeInTheDocument();
+        rerender(<Row isUnread={false} form={form} />);
+        await settled();
+        expect(xOf(row), `${form}: open after the flip`).toBe(72);
+        expect(
+          screen.getByRole('button', {name: 'Unread'}),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Read'})).toBeNull();
+        unmount();
+      }
+    });
+
     it('still rest a row open and fire a tapped entry, as released', async () => {
       const onActivate = vi.fn();
       const {row} = renderDeprecatedRow({
