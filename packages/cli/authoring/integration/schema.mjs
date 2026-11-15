@@ -25,6 +25,63 @@ const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 const PROVIDER_ID_RE =
   /^(?:@[a-z0-9][a-z0-9._~!*'()-]*\/)?[a-z0-9][a-z0-9._~!*'()-]*$/u;
 
+/** A JavaScript identifier, as a component export or a prop is written. */
+const PROP_NAME_RE = /^[A-Za-z_$][\w$]*$/u;
+
+/**
+ * A manifest's themeProvider as this CLI can use it, with each field it
+ * drops and why: a provider whose export is no component name or whose
+ * module is blank is dropped whole; a themeProp that names no prop, or a
+ * modeProp that names no prop or has no themeProp beside it, is dropped
+ * alone. Other fields pass through (the schema strips unknown ones).
+ * @param {unknown} value
+ * @returns {{value: unknown, dropped: Array<{field: string, why: string}>}}
+ */
+function readThemeProvider(value) {
+  if (value === undefined) return {value, dropped: []};
+  if (value == null || typeof value !== 'object' || Array.isArray(value))
+    return {
+      value: undefined,
+      dropped: [{field: 'themeProvider', why: 'it is not an object'}],
+    };
+  const v = /** @type {Record<string, unknown>} */ (value);
+  if (typeof v.export !== 'string' || !/^[A-Z_$][\w$]*$/u.test(v.export))
+    return {
+      value: undefined,
+      dropped: [
+        {field: 'themeProvider', why: 'its export does not name a component'},
+      ],
+    };
+  if (typeof v.from !== 'string' || v.from.trim() === '')
+    return {
+      value: undefined,
+      dropped: [{field: 'themeProvider', why: 'its from is blank'}],
+    };
+  /** @type {Array<{field: string, why: string}>} */
+  const dropped = [];
+  const out = {...v};
+  const names = (/** @type {unknown} */ x) =>
+    typeof x === 'string' && PROP_NAME_RE.test(x);
+  if (out.themeProp !== undefined && !names(out.themeProp)) {
+    delete out.themeProp;
+    dropped.push({field: 'themeProvider.themeProp', why: 'it names no prop'});
+  }
+  if (out.modeProp !== undefined) {
+    if (!names(out.modeProp)) {
+      delete out.modeProp;
+      dropped.push({field: 'themeProvider.modeProp', why: 'it names no prop'});
+    } else if (out.themeProp === undefined) {
+      // A mode passed alone means nothing: the theme goes with it.
+      delete out.modeProp;
+      dropped.push({
+        field: 'themeProvider.modeProp',
+        why: 'it needs themeProp beside it',
+      });
+    }
+  }
+  return {value: out, dropped};
+}
+
 /**
  * @param {string} value
  * @returns {string|null}
@@ -94,35 +151,22 @@ export const integrationBaseSchema = z.object({
   docs: z.string().optional(),
   themes: z.string().optional(),
   // One provider component that wires every theme under `themes` into an
-  // app. Each theme's stylesheet stays the one its package exports. An
-  // unknown key inside is stripped, as unknown top-level keys are.
-  themeProvider: z
-    .object({
-      export: z
-        .string()
-        .regex(
-          /^[A-Z_$][\w$]*$/u,
-          'themeProvider.export must name a component export',
-        ),
-      from: z.string().min(1, 'themeProvider.from must not be blank'),
-      themeProp: z
-        .string()
-        .regex(
-          /^[A-Za-z_$][\w$]*$/u,
-          'themeProvider.themeProp must name a prop',
-        )
-        .optional(),
-      modeProp: z
-        .string()
-        .regex(/^[A-Za-z_$][\w$]*$/u, 'themeProvider.modeProp must name a prop')
-        .optional(),
-    })
-    // A mode passed alone means nothing: the theme goes with it.
-    .refine(p => p.modeProp == null || p.themeProp != null, {
-      message: 'themeProvider.modeProp needs themeProp beside it',
-      path: ['modeProp'],
-    })
-    .optional(),
+  // app. Each theme's stylesheet stays the one its package exports. It is
+  // a hint, so it never stops the manifest loading: a field that cannot be
+  // used is dropped (the whole block when the provider itself cannot be
+  // named), and ignoredIntegrationFields says why. An unknown key inside is
+  // stripped, as unknown top-level keys are.
+  themeProvider: z.preprocess(
+    value => readThemeProvider(value).value,
+    z
+      .object({
+        export: z.string(),
+        from: z.string(),
+        themeProp: z.string().optional(),
+        modeProp: z.string().optional(),
+      })
+      .optional(),
+  ),
   // Experimental roots (spec:AST-017 FR27). An unknown key inside is
   // stripped, as unknown top-level keys are, so a newer CLI's experiment
   // never fails an older CLI's parse.
@@ -222,8 +266,12 @@ function objectShape(key) {
     integrationSchema.shape[
       /** @type {keyof typeof integrationSchema.shape} */ (key)
     ];
-  while (type && !type.shape && typeof type.unwrap === 'function')
-    type = type.unwrap();
+  // Through optional wrappers and a preprocess (whose output is the object).
+  while (type && !type.shape) {
+    if (typeof type.unwrap === 'function') type = type.unwrap();
+    else if (type.out) type = type.out;
+    else break;
+  }
   return type?.shape ?? null;
 }
 
@@ -252,4 +300,18 @@ export function unknownIntegrationKeys(input) {
       .filter(name => !Object.hasOwn(inner, name))
       .map(name => `${key}.${name}`);
   });
+}
+
+/**
+ * The manifest fields this CLI drops because it cannot use them, each with
+ * why, for callers that report them as warnings: the manifest still loads.
+ * @param {unknown} input
+ * @returns {Array<{field: string, why: string}>}
+ */
+export function ignoredIntegrationFields(input) {
+  if (input == null || typeof input !== 'object' || Array.isArray(input))
+    return [];
+  return readThemeProvider(
+    /** @type {Record<string, unknown>} */ (input).themeProvider,
+  ).dropped;
 }

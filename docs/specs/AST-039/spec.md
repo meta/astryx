@@ -147,7 +147,9 @@ change.
   not through Astryx's `Theme`, MAY declare `themeProvider: {export, from}` in
   its manifest: the component's named export and the module an app imports it
   from, and MAY name `themeProp`, the provider's prop that takes a theme
-  object, and, only beside it, `modeProp`, the prop that takes a color mode. It is an integration-level fact that covers every theme under the
+  object, and, only beside it, `modeProp`, the prop that takes a color mode.
+  The field is a hint and never stops the manifest loading: a part a CLI
+  cannot use is dropped with a warning that says why. It is an integration-level fact that covers every theme under the
   package's themes root, so it MUST NOT be repeated in a theme's descriptor or
   keyed by theme. Each theme's stylesheet stays the one the package exports
   for it (`spec:AST-050/FR7`). A CLI that does not know the key ignores it

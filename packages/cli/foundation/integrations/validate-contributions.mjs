@@ -2174,6 +2174,13 @@ async function allLoadedIntegrationIssues(loaded) {
     return [issueError('integration_error', loaded.__loadError)];
   }
   checkUnknownKeys(loaded, issues);
+  for (const {field, why} of loaded.__ignoredFields ?? [])
+    issues.push(
+      issueWarning(
+        'ignored_manifest_field',
+        `This CLI ignores the manifest field "${field}" because ${why}; the rest of ${manifestName(loaded)} loads.`,
+      ),
+    );
   if (loaded.__agentDocsError) {
     issues.push(issueError(INVALID_AGENT_DOCS, loaded.__agentDocsError));
   }
