@@ -146,7 +146,8 @@ import {
   paletteMapping,
   paletteDialOf,
   paletteNotes,
-  paletteProblems,
+  paletteFailures,
+  paletteFailedKeys,
   lockHeld,
   refuseIfLockLost,
   writeWhole,
@@ -4649,6 +4650,30 @@ async function changeOnce(
   // The build notes the theme had before this change: only new ones are
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
+  // The color contrast checks the theme failed before this change (read
+  // before anything is written): a check that already failed is no new
+  // problem of this change, whatever ratio it reaches now.
+  const paletteFailedBefore =
+    sub === 'set'
+      ? (() => {
+          try {
+            return paletteFailedKeys(
+              paletteMapping(
+                cwd,
+                slug,
+                data,
+                base,
+                ctx.project.core.tokenDefaults,
+              ),
+            );
+          } catch {
+            return new Set();
+          }
+        })()
+      : new Set();
+  /** The failures of a dial's colors this change made. @param {Array<{key: string, text: string}>} found */
+  const newFailures = found =>
+    found.filter(x => !paletteFailedBefore.has(x.key)).map(x => x.text);
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
@@ -5497,7 +5522,9 @@ async function changeOnce(
       ? paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults)
       : null;
   if (dialPal)
-    colorFails.push(...paletteProblems(dialPal, s.thing, modesOf(data)));
+    colorFails.push(
+      ...newFailures(paletteFailures(dialPal, s.thing, modesOf(data))),
+    );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
       ...paletteNotes(dialPal, s.thing, slug, modesOf(data))
@@ -5546,7 +5573,9 @@ async function changeOnce(
           n => !n.startsWith('the generated colors are in '),
         ),
       );
-      colorFails.push(...paletteProblems(pal, dialOfToken, modesOf(data)));
+      colorFails.push(
+        ...newFailures(paletteFailures(pal, dialOfToken, modesOf(data))),
+      );
     }
   }
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')

@@ -2663,18 +2663,41 @@ function checkNote(c, dial) {
 }
 
 /**
- * The contrast checks a dial's colors fail, as their notes say them: the
- * problems a color change leaves.
+ * A contrast check's identity: its token, its mode and what it is measured
+ * on, whatever ratio or shade it reaches. The same check before and after a
+ * change has the same key, as a text or border problem's key does.
+ * @param {ContrastCheck} c
+ */
+export function paletteCheckKey(c) {
+  return `palette|${c.token}|${c.mode}|${c.against}`;
+}
+
+/**
+ * The contrast checks a dial's colors fail, as their notes say them, each
+ * with its identity ({@link paletteCheckKey}), to tell the checks a change
+ * made fail from the ones that failed before it.
  * @param {PaletteMapping | null} pal
  * @param {string} dial
  * @param {Mode[]} [modes] the modes the theme has
- * @returns {string[]}
+ * @returns {Array<{key: string, text: string}>}
  */
-export function paletteProblems(pal, dial, modes = ['light', 'dark']) {
+export function paletteFailures(pal, dial, modes = ['light', 'dark']) {
   if (!pal) return [];
   return dialChecks(pal, dial, modes)
     .filter(c => !c.pass)
-    .map(c => checkNote(c, dial));
+    .map(c => ({key: paletteCheckKey(c), text: checkNote(c, dial)}));
+}
+
+/**
+ * The identities of every contrast check a palette fails, whatever its
+ * dial: what a change compares its own failures with.
+ * @param {PaletteMapping | null} pal
+ * @returns {Set<string>}
+ */
+export function paletteFailedKeys(pal) {
+  return new Set(
+    (pal?.contrast ?? []).filter(c => !c.pass).map(paletteCheckKey),
+  );
 }
 
 /**

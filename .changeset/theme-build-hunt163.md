@@ -9,6 +9,6 @@
 - A named pipe, a device or a socket where an output or `--out` goes is refused at once, never opened.
 - `--out out/.css` is told to give the stylesheet a name. An `--out` that starts with an unexpanded `~` is warned: the build writes in the project's `~` folder, as before, and the warning names that folder and the home folder path to give instead.
 - A theme with no name is refused as one, at its line.
-- Apple Color Emoji and Noto Color Emoji count as the systems' own fonts, and Apple's interface faces (SF Pro, SF Mono, New York) get no install line.
+- Apple Color Emoji and Noto Color Emoji count as the systems' own fonts.
 
 @josephfarina

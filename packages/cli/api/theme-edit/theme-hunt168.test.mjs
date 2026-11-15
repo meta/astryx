@@ -240,6 +240,19 @@ describe('problems a change makes', () => {
   );
 
   it(
+    'a color check that failed before the change is no new problem',
+    async () => {
+      // The accent's own check fails at #FFEE00 and still fails at #FFE600
+      // (a better ratio): only a check that passed before is new.
+      const first = await cli([...ED, 'set', 't', 'accent', '#FFEE00']);
+      expect(first.data.newProblems.length).toBeGreaterThan(0);
+      const r = await cli([...ED, 'set', 't', 'accent', '#FFE600']);
+      expect(r.data.newProblems).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'a theme with none lists none, and its JSON list is empty',
     async () => {
       expect(await text([...ED, 'show', 't'])).not.toContain('openProblems');
