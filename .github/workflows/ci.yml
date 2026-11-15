@@ -120,10 +120,10 @@ jobs:
   # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
   # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
-  # of the run unless it already fit. Every job here but build-storybook and
-  # ci-full needs admission, directly or through the jobs it needs, so a
-  # waiting run holds only its one waiting job, a build that found room, and
-  # for its first minute the superseded-runs sweep.
+  # of the run unless it already fit. Every job here but build-storybook,
+  # ci-full and superseded-runs needs admission, directly or through the jobs
+  # it needs, so a waiting run holds only its one waiting job, a build that
+  # found room, and the superseded-runs sweep while it runs.
   # Like every other job both skip for a draft or an unlabelled fork, which run
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,

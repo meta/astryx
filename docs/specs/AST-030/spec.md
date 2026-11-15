@@ -1151,11 +1151,14 @@ CI can still pass ninety in five bounded ways, the first three rare:
   jobs until its next look.
 - A run starts when the GitHub API cannot be read, a rate limit included. It is
   over by at most its own jobs.
-- A waiting run's own waiting job starts before it finds room; its Storybook
+- A waiting run's own waiting job starts before it finds room, and so does a
+  same-repository pull-request run's `superseded-runs` sweep; its Storybook
   build starts only once there is room for it. CI is over by at most one
   waiting job per waiting run, pull requests, merge-queue entries and `main`
   runs alike, with no limit on how many wait, for at most a wait (twelve
-  minutes for a pull request, two hours for `main`).
+  minutes for a pull request, two hours for `main`), and by at most one sweep
+  job per such pull-request run, for at most the sweep's five-minute job
+  limit (it usually ends within seconds).
 - Small workflows can run more jobs at once than the eighteen counted for them:
   they peaked at twenty in a day's runs, two over, while their jobs ran.
 
