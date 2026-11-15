@@ -875,6 +875,22 @@ function printThemeApp(result) {
   // theme's (none for a two-mode theme, which follows the system).
   const modes = result.data.themes.some(t => t.mode);
   const appProvider = result.data.appProvider;
+  // A provider that takes the theme (its manifest's themeProp) is the
+  // wiring: the generated module's theme passed to it, with no Theme wrap.
+  const taking = appProvider?.themeProp
+    ? appProvider.wiredBy.find(p => p.themeProp === appProvider.themeProp)
+    : undefined;
+  if (appProvider && taking) {
+    emit(
+      text(appProvider.wire),
+      code(
+        `import {${taking.export}} from '${taking.from}';\n` +
+          `import {themes, defaultThemeSlug} from './${stem}';\n\n` +
+          `${appProvider.line}\n  <App />\n</${taking.export}>`,
+      ),
+    );
+    return;
+  }
   emit(
     ...(appProvider ? [text(appProvider.wire)] : []),
     text('Wire the generated module once in the app root:'),

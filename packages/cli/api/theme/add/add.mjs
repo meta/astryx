@@ -66,10 +66,14 @@ export async function themeAdd(slug, options = {}) {
   const line = taking
     ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}>`
     : null;
+  // With a provider that takes the theme, the wiring the text shows is that
+  // provider's, in place of a Theme wrap: one instruction, not two.
   const sentences = found.map(({provider, owner}) => {
     const from = `This app may already get its theme from ${provider.export} (from ${provider.from}, declared by ${owner}).`;
+    if (provider === taking?.provider)
+      return `${from} Pass this theme to it in the app root:`;
     return provider.themeProp
-      ? `${from} Pass this theme to it: <${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}>.`
+      ? from
       : `${from} Replacing ${provider.export} applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps.`;
   });
   return {

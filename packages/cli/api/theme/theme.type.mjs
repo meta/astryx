@@ -126,11 +126,12 @@
  * the provider that wires its themes (its manifest's `themeProvider`): each
  * such provider (`wiredBy`, each `{export, from}` as `theme list` names
  * it, with `themeProp` when the provider takes a theme object), and `wire`,
- * what the text prints: the app may already get its theme from it, then the
- * one change that passes the added theme to it, or what replacing it costs
- * and what a Theme inside it covers. `themeProp` and `line` (that change,
- * as JSX) are present when a provider takes a theme object. The add reads
- * no app source.
+ * what the text prints: the app may already get its theme from it, then,
+ * when it takes a theme object, that the theme is passed to it in the app
+ * root (the text's wiring is then that provider, with `line` as its opening
+ * JSX, in place of a Theme wrap), else what replacing it costs and what a
+ * Theme inside it covers. `themeProp` and `line` are present when a
+ * provider takes a theme object. The add reads no app source.
  * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 

@@ -318,6 +318,9 @@ describe('theme add with an installed package that names its provider', () => {
     expect(text).toMatch(
       /This app may already get its theme from AcmeThemeProvider \(from @acme\/ui\/theme, declared by @acme\/ui\)\. Replacing AcmeThemeProvider applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps\./,
     );
+    // Without a themeProp the usual Theme wiring follows.
+    expect(text).toContain('Wire the generated module once in the app root:');
+    expect(text).toContain('<Theme theme={themes[defaultThemeSlug]}');
 
     // In JSON, on the first add only.
     const again = app();
@@ -340,8 +343,16 @@ describe('theme add with an installed package that names its provider', () => {
       await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
     ).stdout;
     expect(text).toContain(
-      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui). Pass this theme to it: <AcmeThemeProvider theme={themes[defaultThemeSlug]}>.',
+      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui). Pass this theme to it in the app root:',
     );
+    // The wiring is the provider's, with the module's theme passed to it:
+    // one instruction, no Theme wrap beside it.
+    expect(text).toContain("import {AcmeThemeProvider} from '@acme/ui/theme';");
+    expect(text).toContain(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>\n  <App />\n</AcmeThemeProvider>',
+    );
+    expect(text).not.toContain('<Theme ');
+    expect(text).not.toContain('Wire the generated module');
     expect(text).not.toContain('Replacing');
 
     const again = app();
