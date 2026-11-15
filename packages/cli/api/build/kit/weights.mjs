@@ -21,6 +21,7 @@
  *   (`ownWords`), so a new template can start a build.
  */
 
+import {readNames} from './words.mjs';
 import {STOPWORDS} from '../../search/search.mjs';
 import {keywordUnits, keywordWordsFor} from './words.mjs';
 import {isWordModel} from './word-model.mjs';
@@ -376,7 +377,9 @@ function blend(idea, ranked, pick, catalog, weights) {
     .filter(n => !shellIds.has(n) && !weights.candidates.includes(n));
   const cands = [...listed, ...extra];
   const position = new Map(weights.candidates.map((c, i) => [c, i]));
-  const words = new Set(weightWords(idea).map(stem));
+  // A template named in any case, separator or one slip reads as its id's
+  // words, as the page ranker reads it (readNames).
+  const words = new Set(weightWords(readNames(idea, catalog)).map(stem));
   /** @type {(number | undefined)[][]} */
   const members = weights.tables.map(table => {
     const index = new Map(table.words.map((w, i) => [w, i]));

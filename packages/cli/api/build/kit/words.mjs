@@ -12,6 +12,10 @@
  */
 
 import {stem, STOPWORDS, SYNONYMS} from '../../search/search.mjs';
+import {
+  matchWholeName,
+  nameWords as foldWords,
+} from '../../../foundation/text/suggest-order.mjs';
 
 /**
  * Words search drops that name layout: "side navigation", "side by side".
@@ -225,6 +229,100 @@ export function framesOf(query) {
     }
   }
   return held;
+}
+
+/**
+ * An idea with every run of its words that names a page template written as
+ * that template's own words: "a KanbanBoard page", "a kanban-board page" and a
+ * one-slip "a kanban bord page" read as the template id's words. Only a whole
+ * name counts (matchWholeName), a run never crosses punctuation, and a slip
+ * counts only in a word the templates' own descriptors never use, so a real
+ * word ("pane", "three") is never respelled into a name. A run already
+ * written as the name's words is left as it is.
+ * @param {string} idea
+ * @param {import('./words.mjs').PageTemplate[]} pages the project's page templates
+ * @returns {string}
+ */
+export function readNames(idea, pages) {
+  const text = String(idea ?? '');
+  const names = pages.map(p => p.name);
+  const known = descriptorWordsOf(pages);
+  const tokens = [...text.matchAll(/[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*/g)];
+  const longest = Math.max(1, ...names.map(n => n.split('-').length));
+  const plain = (/** @type {string} */ s) =>
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  let out = '';
+  let at = 0;
+  for (let i = 0; i < tokens.length;) {
+    let matched = 0;
+    let name = null;
+    for (let n = Math.min(longest, tokens.length - i); n >= 1 && !name; n--) {
+      const run = tokens.slice(i, i + n);
+      const gaps = run.slice(1).every((t, k) => {
+        const prev = run[k];
+        return /^\s+$/.test(text.slice(prev.index + prev[0].length, t.index));
+      });
+      if (!gaps) continue;
+      const typed = run.map(t => t[0]).join(' ');
+      const found = matchWholeName(typed, names);
+      if (!found) continue;
+      const nameWords = found.split('-');
+      const words = plain(typed);
+      const sameWords =
+        words.length === nameWords.length &&
+        foldWords(typed).join('') === foldWords(found).join('');
+      if (sameWords) continue;
+      const slipped = words.filter(w => !nameWords.includes(w));
+      const joined = words.length < nameWords.length;
+      if (!joined && slipped.some(w => known.has(stem(w)))) continue;
+      name = found;
+      matched = n;
+    }
+    if (!name) {
+      i++;
+      continue;
+    }
+    const first = tokens[i];
+    const last = tokens[i + matched - 1];
+    out += text.slice(at, first.index) + name.split('-').join(' ');
+    at = /** @type {number} */ (last.index) + last[0].length;
+    i += matched;
+  }
+  return out + text.slice(at);
+}
+
+/** @type {WeakMap<object, Set<string>>} */
+const descriptorWordCache = new WeakMap();
+
+/**
+ * Every stemmed word the page templates' own descriptors use: ids, display
+ * names, categories, keywords and descriptions.
+ * @param {import('./words.mjs').PageTemplate[]} pages
+ * @returns {Set<string>}
+ */
+function descriptorWordsOf(pages) {
+  let set = descriptorWordCache.get(pages);
+  if (!set) {
+    set = new Set();
+    for (const p of pages) {
+      const text = [
+        p.name,
+        p.displayName,
+        p.category,
+        ...(p.keywords ?? []),
+        p.description,
+      ].join(' ');
+      for (const w of String(text)
+        .toLowerCase()
+        .match(/[a-z0-9]+/g) ?? [])
+        set.add(stem(w));
+    }
+    descriptorWordCache.set(pages, set);
+  }
+  return set;
 }
 
 /** @param {string} text */

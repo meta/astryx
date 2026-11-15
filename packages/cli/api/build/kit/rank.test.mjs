@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ideaKind} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
+import {readNames} from './words.mjs';
 import {loadComponents, loadPageTemplates} from '../_adapter.mjs';
 
 // api/build/kit/ -> up 5 = repo root (has packages/core and the templates).
@@ -210,6 +211,33 @@ describe('rankPages on any catalog', () => {
     // Two: the variant.
     expect(rankPages('weather widget with radar', catalog)[0].name).toBe(
       'widget-weather',
+    );
+  });
+
+  it('reads a template named in any case, separator or one slip', () => {
+    const catalog = [
+      page('kanban-board', 'Tools - Kanban', 'Cards in columns of a board.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    for (const idea of [
+      'a KanbanBoard page',
+      'a kanbanBoard',
+      'a kanban bord page',
+    ]) {
+      expect(rankPages(idea, catalog)[0]?.name).toBe('kanban-board');
+    }
+  });
+
+  it('never respells a real word into a template name', () => {
+    const catalog = [
+      page('detail-page', 'Content - Detail', 'One record with its fields.'),
+      page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),
+    ];
+    expect(readNames('a list with a detail pane', catalog)).toBe(
+      'a list with a detail pane',
+    );
+    expect(readNames('a DetailPage, please', catalog)).toBe(
+      'a detail page, please',
     );
   });
 

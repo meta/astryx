@@ -579,6 +579,16 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
+  it('starts a template named in any case or with one slip where its own words start', async () => {
+    const spaced = await build('a kanban board page', {cwd: REPO});
+    for (const idea of ['a KanbanBoard page', 'a kanbanBoard page', 'a kanban bord page']) {
+      const r = await build(idea, {cwd: REPO});
+      expect(r.type).toBe('build.kit');
+      if (r.type !== 'build.kit' || spaced.type !== 'build.kit') return;
+      expect(r.data.start?.name).toBe(spaced.data.start?.name);
+    }
+  });
+
   it('starts a page in a frame from the template with that frame', async () => {
     // "in a dialog" holds the checkout form, the page the idea names, so the
     // dialog template leads.
