@@ -3,7 +3,7 @@
 /**
  * @file LayerDismissal.stories.tsx
  * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
- *   BottomSheet, Button, Layout from @astryxdesign/core
+ *   BottomSheet, TextInput, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -34,6 +34,7 @@ import {
 } from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import type {Meta, StoryObj} from '@storybook/react-vite';
 import {SAMPLE_IMAGES} from './assets/samples/samples';
 
@@ -1244,13 +1245,21 @@ const inFlowDialogStyles = stylex.create({
 /**
  * A native `<dialog>` that stays closed while the page displays it in flow, as
  * a card. A Popover and a Tooltip anchored to controls inside it open on a
- * press and on a hover.
+ * press and on a hover. The Popover's field takes focus within the press.
  */
 function LayersInClosedInFlowDialogExample() {
+  const [note, setNote] = useState('');
+
   return (
     <dialog {...stylex.props(inFlowDialogStyles.dialog)}>
       <Text type="body">A closed dialog the page shows in flow</Text>
-      <Popover content={<Text type="body">In-flow popover</Text>}>
+      <Popover
+        content={
+          <VStack gap={2}>
+            <Text type="body">In-flow popover</Text>
+            <TextInput label="In-flow note" value={note} onChange={setNote} />
+          </VStack>
+        }>
         <Button label="Open in-flow popover" variant="secondary" />
       </Popover>
       <Tooltip content="In-flow tip">

@@ -4829,7 +4829,7 @@ describe('show() anchor readiness (#5398)', () => {
     }
   });
 
-  it('opens on a press in a closed dialog that renders and stays closed through the next commit', () => {
+  it('opens within the press on a trigger in a closed dialog that renders and stays closed through the next commit', () => {
     // A `<dialog>` the page displays in flow while it stays closed never
     // enters the top layer, so its trigger is a valid anchor.
     function InFlowDialogHarness() {
@@ -4854,18 +4854,17 @@ describe('show() anchor readiness (#5398)', () => {
     boxes.set(getByTestId('a'), {width: 80, height: 24});
 
     fireEvent.click(getByTestId('a'));
-    // The commit after the press finds the dialog still closed. The settle
-    // frame comes next, and the layer opens after it.
-    expect(getByTestId('state')).toHaveTextContent('closed');
-    flushFrame();
+    // The commit after the press runs within the press. It finds the dialog
+    // still closed, so the layer opens there, with no frame.
     expect(getByTestId('state')).toHaveTextContent('open');
+    expect(frames).toHaveLength(0);
     expect(getByTestId('dialog')).not.toHaveAttribute('open');
   });
 
   it('keeps one wait for a controlled layer that calls show() on each render inside a closed dialog', () => {
     // Popover's controlled sync calls show() in a layout Effect on each render
-    // while the layer is closed. The wait in a closed dialog asks for a
-    // render, so a show() that restarted it would ask again on each render.
+    // while the layer is closed. The commit that the wait asks for runs that
+    // Effect again, and the layer opens in that commit.
     let renders = 0;
     function ControlledInFlowHarness({isOpen}: {isOpen: boolean}) {
       renders += 1;
@@ -4894,10 +4893,71 @@ describe('show() anchor readiness (#5398)', () => {
     const rendersBefore = renders;
 
     rerender(<ControlledInFlowHarness isOpen />);
-    expect(getByTestId('state')).toHaveTextContent('closed');
-    // One render for the new prop, and one for the commit the wait asked for.
-    expect(renders - rendersBefore).toBe(2);
+    // One render for the new prop, one for the commit the wait asked for, and
+    // one for the open that commit decided. No frame runs before it.
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(renders - rendersBefore).toBe(3);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('keeps the settle wait when a controlled layer calls show() again as its dialog opens', async () => {
+    // As Dialog does, an Effect opens the dialog after the trigger's layout
+    // Effect. The commit that the wait asks for calls show() again, as
+    // Popover's controlled sync does. A restart there would find the dialog
+    // open and skip the wait for the dialog's entry animation.
+    let finish = () => {};
+    function OpeningControlledHarness({isOpen}: {isOpen: boolean}) {
+      const layer = useLayerInternal({mode: 'context'});
+      useLayoutEffect(() => {
+        if (isOpen && !layer.isOpen) {
+          layer.show();
+        }
+      });
+      useEffect(() => {
+        if (isOpen) {
+          document
+            .querySelector('[data-testid="dialog"]')
+            ?.setAttribute('open', '');
+        }
+      }, [isOpen]);
+      return (
+        <>
+          <dialog data-testid="dialog">
+            <button type="button" data-testid="a" ref={layer.ref}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <OpeningControlledHarness isOpen={false} />,
+    );
+    const trigger = getByTestId('a');
+    boxes.set(trigger, {width: 80, height: 24});
+    animations.push({
+      effect: new FakeKeyframeEffect(getByTestId('dialog')),
+      timeline: document.timeline,
+      playState: 'running',
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    });
+
+    rerender(<OpeningControlledHarness isOpen />);
+    await act(async () => {
+      await Promise.resolve();
+    });
     flushFrame();
+    // The dialog is open, and its entry animation still runs.
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
     expect(getByTestId('state')).toHaveTextContent('open');
   });
 
@@ -4929,9 +4989,11 @@ describe('show() anchor readiness (#5398)', () => {
     expect(getByTestId('state')).toHaveTextContent('closed');
 
     // The page displays it, closed: the next signal sees the box, and the
-    // commit after it opens the layer.
+    // commit after it decides. The box came after show(), so the settle frame
+    // comes next, and the layer opens after it.
     boxes.set(getByTestId('a'), {width: 80, height: 24});
     signal();
+    expect(getByTestId('state')).toHaveTextContent('closed');
     flushFrame();
     expect(getByTestId('state')).toHaveTextContent('open');
   });

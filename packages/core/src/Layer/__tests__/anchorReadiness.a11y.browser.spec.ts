@@ -230,6 +230,46 @@ test('a Popover inside a closed dialog shown in flow opens on a press, anchored 
   expect(await gapBetween(popover, trigger)).toBeLessThan(MAX_ANCHOR_GAP_PX);
 });
 
+test('a click in a closed dialog shown in flow opens the Popover with its field focused within the click', async ({
+  page,
+}) => {
+  // iOS raises its keyboard only for a focus made while the tap is handled. A
+  // frame callback asked for during the click runs before any frame the layer
+  // asks for, so it reads the state that the click itself left.
+  await openStory(
+    page,
+    'core-layer-dismissal--layers-in-closed-in-flow-dialog',
+  );
+  const root = page.locator('#storybook-root');
+  await page.evaluate(() => {
+    window.addEventListener(
+      'click',
+      () => {
+        requestAnimationFrame(() => {
+          const layer = document.querySelector(':popover-open');
+          const active = document.activeElement;
+          document.body.dataset.firstFrame = JSON.stringify({
+            isOpen: layer != null,
+            isFieldFocused:
+              layer != null &&
+              active instanceof HTMLInputElement &&
+              layer.contains(active),
+          });
+        });
+      },
+      {capture: true, once: true},
+    );
+  });
+
+  await root.getByRole('button', {name: 'Open in-flow popover'}).click();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.body.dataset.firstFrame ?? null),
+    )
+    .toBe(JSON.stringify({isOpen: true, isFieldFocused: true}));
+});
+
 test('a Tooltip inside a closed dialog shown in flow opens on a hover, anchored to its trigger', async ({
   page,
 }) => {

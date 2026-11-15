@@ -1711,7 +1711,7 @@ function useLayerImplementation(
   ]);
 
   // A wait for the trigger to get a layout box, started by a show() that
-  // found none. Cancelled by the next show()/hide() or by
+  // found none. Cancelled by hide(), by a show() for another trigger, or by
   // unmount, so a stale wait from a closed-then-reopened layer never fires
   // openNow() after the fact.
   const pendingAnchorWaitRef = useRef<(() => void) | null>(null);
@@ -1826,6 +1826,7 @@ function useLayerImplementation(
     // use one) resolves exactly as fast as it always did. Environments with no
     // real layout ever are excluded before this point.
     const anchorElement: HTMLElement = anchor;
+    const hadBoxAtShow = anchor.getClientRects().length > 0;
     const dialog = anchor.closest('dialog');
     let cancelSettleWait: () => void = () => {};
     let resolved = false;
@@ -1854,10 +1855,23 @@ function useLayerImplementation(
     // opens it. Astryx's dialogs open it in the Effects of the commit that
     // displayed them. React runs a commit's Effects before it renders again,
     // so the next commit decides. A dialog still closed then is one the page
-    // shows in flow. Its trigger is a valid anchor.
+    // shows in flow. Its trigger is a valid anchor. A trigger that had its box
+    // when show() ran opens at once, as it does anywhere else. For a press,
+    // that commit runs before the press's task ends, so the layer's initial
+    // focus lands within the press. A trigger that got its box later, as the
+    // page displayed its dialog, takes the settle wait: the dialog can still
+    // be animating in.
     const decideInNextCommit = () => {
       closedDialogDecisionRef.current = () => {
-        if (!resolved && isInClosedDialog(anchorElement)) {
+        if (resolved || !isInClosedDialog(anchorElement)) {
+          return;
+        }
+        if (hadBoxAtShow) {
+          resolved = true;
+          release();
+          finishAnchorWait();
+          openNow();
+        } else {
           resolve();
         }
       };
