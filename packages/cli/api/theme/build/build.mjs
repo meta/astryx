@@ -5989,8 +5989,30 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
+/**
+ * Build a theme family. The members share one module cache while they load,
+ * so a theme they extend is one module; the modules the build loaded from
+ * outside installed packages are forgotten when it ends, so a later build
+ * in the same process reads each member as it is then, never as it was.
+ * @param {string[]} files
+ * @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options
+ * @param {{cwd?: string}} [ctx]
+ * @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint
+ */
+export async function themeBuildFamily(files, options, ctx = {}, handOff = {}) {
+  const cache = createRequire(import.meta.url).cache;
+  const before = new Set(Object.keys(cache));
+  try {
+    return await buildFamily(files, options, ctx, handOff);
+  } finally {
+    for (const id of Object.keys(cache))
+      if (!before.has(id) && !id.split(/[\\/]/).includes('node_modules'))
+        delete cache[id];
+  }
+}
+
 /** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options @param {{cwd?: string}} [ctx] @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint */
-export async function themeBuildFamily(
+async function buildFamily(
   files,
   options,
   {cwd = process.cwd()} = {},
