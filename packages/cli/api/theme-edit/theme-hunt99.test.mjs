@@ -183,13 +183,16 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'an except on a part how cannot pin is said, never invented',
+    'an except on a part keeps the radius it reads now',
     async test => {
       needsBase(test);
       const r = await answer('make containers rounder except selectable cards');
-      expect(r.commands.some(c => /selectable-card/.test(c))).toBe(false);
-      expect(r.commands.some(c => /--on containers/.test(c))).toBe(false);
-      expect(r.text).toMatch(/cannot be kept apart/);
+      expect(r.commands.some(c => /corners more --on containers/.test(c))).toBe(
+        true,
+      );
+      expect(
+        r.commands.some(c => /border-radius \S+ --on selectable-card/.test(c)),
+      ).toBe(true);
     },
     T,
   );
@@ -213,7 +216,7 @@ describe('wrong writes that are no longer accepted', () => {
     async test => {
       needsBase(test);
       expect((await answer('blue card background')).first[0]).toBe(
-        "set t background '#2563eb' --on card",
+        "set t background-color '#2563eb' --on card",
       );
     },
     T,
@@ -260,7 +263,9 @@ describe('clear asks it used to drop', () => {
       needsBase(test);
       const {commands} = await answer('bold white text in the header');
       expect(commands.some(c => /font-weight 700/.test(c))).toBe(true);
-      expect(commands.some(c => /color '#ffffff'/.test(c))).toBe(true);
+      expect(
+        commands.some(c => /color(-text-primary)? '#ffffff'/.test(c)),
+      ).toBe(true);
     },
     T,
   );
@@ -305,8 +310,8 @@ describe('clear asks it used to drop', () => {
         (await answer('card background: light mode #eee, dark mode #222'))
           .first,
       ).toEqual([
-        "set t background '#eee' --on card --mode light",
-        "set t background '#222' --on card --mode dark",
+        "set t background-color '#eee' --on card --mode light",
+        "set t background-color '#222' --on card --mode dark",
       ]);
     },
     T,

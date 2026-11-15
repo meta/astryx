@@ -341,6 +341,38 @@ function editorMissingMessage(err, message) {
 let editorThemesHere = () => [];
 
 /**
+ * How the theme commands read an option commander does not know, which the
+ * editor registers: the message and the commands that work, or undefined
+ * for a command it does not read.
+ * @type {(cmd: any) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
+ */
+let unknownOptionReader = () => undefined;
+
+/**
+ * Register how the theme commands read an option they do not take.
+ * @param {(cmd: any) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
+ */
+export function setUnknownOptionReader(read) {
+  unknownOptionReader = read;
+}
+
+/**
+ * The theme name the editor offers `new` here, the one its own refusals
+ * offer: the name asked for when its folder is free, else name-2, name-3…
+ * The editor registers it, so this module reads no theme files.
+ * @type {(cwd: string, name: string) => string}
+ */
+let editorFreeName = (_cwd, name) => name;
+
+/**
+ * Register the theme name the editor offers `new` here.
+ * @param {(cwd: string, name: string) => string} free
+ */
+export function setEditorFreeName(free) {
+  editorFreeName = free;
+}
+
+/**
  * Register how the theme editor lists the themes of the app a command runs
  * in, for the missing-theme suggestions.
  * @param {(cwd: string) => string[]} list
@@ -365,10 +397,12 @@ function editorMissingSuggestions(cmd) {
   const wants = (cmd?.registeredArguments ?? []).filter(
     (/** @type {any} */ a) => a.required,
   );
+  // (`new` names a theme that does not exist yet: never the one here.)
   if (
     !(cmd?.args ?? []).length &&
     wants.length === 1 &&
-    wants[0].name() === 'theme'
+    wants[0].name() === 'theme' &&
+    cmd.name() !== 'new'
   ) {
     const themes = editorThemesHere(process.cwd());
     if (themes.length === 1)
@@ -382,6 +416,17 @@ function editorMissingSuggestions(cmd) {
           reason: 'what each argument is',
         },
       ];
+  }
+  // `new` with no name: a name no theme here has.
+  if (!(cmd?.args ?? []).length && cmd.name() === 'new') {
+    const free = editorFreeName(process.cwd(), 'my-theme');
+    return [
+      {
+        name: `${invocation} ${words} ${free}`,
+        reason: 'do this instead: a name for the new theme',
+      },
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
   }
   return [
     {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
@@ -585,12 +630,19 @@ export function handleCommanderError(err) {
 
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
-  const suggestions = usageSuggestion(err, code);
+  // An option a theme command does not take is read by the editor's one
+  // option reader: the option meant, with the command that works.
+  const read =
+    code === 'commander.unknownOption'
+      ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND])
+      : undefined;
+  const suggestions = read?.suggestions ?? usageSuggestion(err, code);
   // In the theme editor a missing argument names what was given: in
   // `set corners small` the first word is read as the theme, so "value" alone
   // would name the wrong thing.
-  const cleaned =
-    suggestions?.length === 2
+  const cleaned = read
+    ? read.message
+    : code === 'commander.missingArgument' && suggestions?.length === 2
       ? editorMissingMessage(err, message)
       : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {

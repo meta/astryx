@@ -142,7 +142,7 @@ describe('the own-token check judges what the build writes', () => {
       'fb',
       "  typography: {body: {family: 'Georgia', fallbacks: '12px'}},",
     );
-    await refused('fb', /typography\.body \(builds --font-family-body\)/);
+    await refused('fb', /typography\.body\.\w+ \(builds --font-family-body\)/);
   }, 240_000);
 
   it('refuses a three-value pair from an imported file, naming that file and line', async () => {

@@ -72,10 +72,6 @@ const RUNNERS = {
       'require(mdn-data/css/properties.json)',
     ],
   },
-  'api/theme-edit/_playwright-picture.mjs': {
-    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
-    sites: ['import(<computed>)'],
-  },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
     sites: ['child_process.spawn'],
@@ -445,6 +441,14 @@ const RUNNERS = {
       'module.register',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/picture-chrome.mjs': {
+    runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
+    sites: ['child_process.spawn'],
+  },
+  'foundation/render/picture-playwright.mjs': {
+    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
+    sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
     runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',

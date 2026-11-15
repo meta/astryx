@@ -190,6 +190,188 @@ describe('generateThemeRules', () => {
     }
   });
 
+  it('writes nothing for a part or surface value left undefined, as for a page token', () => {
+    const theme = defineTheme({
+      name: 'unset-values',
+      tokens: {'--radius-element': undefined},
+      components: {
+        button: {
+          base: {
+            '--radius-element': undefined as unknown as string,
+            padding: undefined as unknown as string,
+            ':hover': {color: undefined as unknown as string},
+          },
+        },
+      },
+      onDark: {
+        tokens: {'--color-accent': undefined},
+        components: {
+          button: {base: {padding: undefined as unknown as string}},
+          card: undefined as unknown as Record<string, Record<string, string>>,
+        },
+      },
+    });
+    const warnings: string[] = [];
+    const css = [
+      ...generateThemeRules(theme, warnings),
+      generateOnMediaCSS(theme, warnings),
+    ].join('\n');
+    expect(css).not.toMatch(/:\s*undefined;/);
+    expect(css).not.toContain('.astryx-card');
+    // A block left with no value writes no empty rule.
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps an inherited part value a child leaves undefined, in a style key and a color-mode block', () => {
+    const base = defineTheme({
+      name: 'unset-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'unset-child',
+      components: {
+        button: {
+          base: {
+            padding: undefined as unknown as string,
+            '@dark': {color: undefined as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBe('8px');
+    expect(merged['@dark']).toEqual({color: 'white'});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: 8px;/);
+    expect(css).toMatch(/color: white;/);
+    expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('writes nothing for a component or style key a rule source leaves undefined', () => {
+    const plain = generateThemeRules({
+      tokens: {},
+      components: {link: {base: {color: 'red'}}},
+    });
+    const unset = generateThemeRules({
+      tokens: {},
+      components: {
+        link: {base: {color: 'red'}},
+        card: {base: undefined as unknown as Record<string, string>},
+        text: undefined as unknown as Record<string, Record<string, string>>,
+      },
+    });
+    expect(unset).toEqual(plain);
+  });
+
+  it('writes no Text, Heading or Link override for a component whose every value is left undefined', () => {
+    const plain = generateThemeRules({tokens: {}});
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {base: undefined as unknown as Record<string, string>},
+          link: {
+            base: {color: undefined as unknown as string},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    const defined = defineTheme({
+      name: 'unset-text',
+      components: {
+        text: {base: undefined as unknown as Record<string, string>},
+      },
+    });
+    expect(defined.components?.text).toBeUndefined();
+    // A color-mode block whose every value is undefined is not set either,
+    // so its component writes no override rules.
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          heading: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          link: {
+            base: {'@light': {color: undefined as unknown as string}},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    // A pseudo-class block whose every value is undefined stays, empty: it
+    // is restated, so its component is themed and writes exactly what a
+    // component given an empty style key writes (its prop override rules),
+    // and the block itself writes nothing.
+    const hover = generateThemeRules({
+      tokens: {},
+      components: {
+        text: {base: {':hover': {color: undefined as unknown as string}}},
+        heading: {base: {':hover': {color: undefined as unknown as string}}},
+        link: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    const themed = generateThemeRules({
+      tokens: {},
+      components: {text: {base: {}}, heading: {base: {}}, link: {base: {}}},
+    });
+    expect(hover).toEqual(themed);
+    expect(themed).not.toEqual(plain);
+  });
+
+  it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
+    const base = defineTheme({
+      name: 'hover-base',
+      components: {
+        button: {base: {':hover': {color: 'red', borderColor: 'blue'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'hover-child',
+      components: {
+        button: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    expect(child.components?.button?.base?.[':hover']).toStrictEqual({});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).not.toMatch(/border-color: blue/);
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+  });
+
+  it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
+    const base = defineTheme({
+      name: 'null-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'null-child',
+      components: {
+        button: {
+          base: {
+            padding: null as unknown as string,
+            '@dark': {color: null as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBeNull();
+    expect(merged['@dark']).toEqual({color: null});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: null;/);
+    expect(css).not.toMatch(/padding: 8px;/);
+  });
+
   it('includes explicit component overrides', () => {
     const buttonRule = rules.find(r =>
       r.includes('.astryx-button[data-variant="secondary"]'),
@@ -420,6 +602,44 @@ describe('generateThemeRules', () => {
           r.includes('color: inherit'),
       ),
     ).toBe(true);
+  });
+
+  it("keeps a link's hover tint of its color prop when a theme styles the link", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-pins',
+        components: {link: {base: {textDecoration: 'underline'}}},
+      }),
+    );
+    const pins = linkRules.join('\n');
+    // At rest the prop's color; on hover Core's tint of it, for the colors
+    // Core tints.
+    for (const name of ['primary', 'secondary', 'accent']) {
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"] { color: var(--color-text-${name}); }`,
+      );
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(in srgb, var(--color-text-${name}), var(--color-tint-hover) 15%); }`,
+      );
+    }
+    expect(pins).not.toContain('[data-color="disabled"]:where(:hover)');
+  });
+
+  it("lets a theme's hover color on a link color key win over the hover pin", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-hover',
+        components: {link: {'color:accent': {':hover': {color: '#0000ff'}}}},
+      }),
+    ).join('\n');
+    // The theme's rule carries :hover itself; the pin's :hover sits in
+    // :where(), so the theme's rule is the heavier one.
+    expect(linkRules).toMatch(
+      /\.astryx-link\[data-color="accent"\]:hover[^{]*\{\s*color: #0000ff;/,
+    );
+    expect(linkRules).toContain(
+      '.astryx-link[data-color="accent"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(',
+    );
   });
 
   // --- Size-prop overrides (so `size` beats a themed `type`) ---

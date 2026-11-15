@@ -25,6 +25,7 @@
  *   beyond the CLI invocation the human help names (formatCliCommand), so the
  *   `--json` receipt and the human output share one source of truth.
  */
+import {cssUnescape} from '../../../foundation/text/css-escape.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 // font-family values that never need loading: CSS generic families, the ui-*
@@ -127,7 +128,8 @@ function splitFamilies(value) {
     // /s: a quoted name may span lines (template-literal theme sources).
     const quoted = /^(["']).*\1$/s.test(name);
     if (quoted) name = name.slice(1, -1);
-    name = name.trim().replace(/\s+/g, ' ');
+    // The name as CSS reads it (`Gill\ Sans` is Gill Sans).
+    name = cssUnescape(name).trim().replace(/\s+/g, ' ');
     if (!name || (!quoted && /[()]/.test(name))) continue;
     families.push(name);
   }
@@ -135,37 +137,110 @@ function splitFamilies(value) {
 }
 
 /**
- * The font families a CSS font-family value names that something has to
- * load: its names without generics, CSS-wide keywords, `var()` references
- * or known system families.
+ * The font families a CSS font-family value names, without generics,
+ * CSS-wide keywords or `var()` references (system families included).
  * @param {string} value
  * @returns {string[]}
  */
-export function loadableFontFamilies(value) {
-  return splitFamilies(value).filter(family => {
-    const key = family.toLowerCase();
-    return !GENERIC_KEYWORDS.has(key) && !SYSTEM_FAMILIES.has(key);
-  });
+export function namedFontFamilies(value) {
+  return splitFamilies(value).filter(
+    family => !GENERIC_KEYWORDS.has(family.toLowerCase()),
+  );
+}
+
+/**
+ * The family list of a CSS `font` shorthand: what follows its size (and
+ * line height), as the shorthand's grammar puts it last. A system font
+ * keyword (`caption`, `menu`, ...) or a value with no size names none.
+ * @param {string} value
+ * @returns {string}
+ */
+export function fontShorthandFamilyList(value) {
+  // A size has a unit (a bare number is a weight); a line height may
+  // follow it after a slash.
+  const size =
+    /(?<=^|\s)(?:[+-]?(?:\d+\.?\d*|\.\d+)(?:[a-z]+|%)|xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|larger|smaller|(?:calc|clamp|min|max|var)\([^)]*\))(?:\s*\/\s*\S+)?\s+(?=\S)/i;
+  // The first size: a family name after it may hold anything.
+  const m = size.exec(String(value));
+  return m ? String(value).slice(m.index + m[0].length) : '';
+}
+
+/**
+ * A font value with each `var(--x, ...)` it reads replaced by the values
+ * `lookup` gives for `--x` (each of them, when several places set it): the
+ * family lists the theme's own values make it show. A `var()` the theme
+ * gives no value reads as nothing, its fallback included (the property may
+ * come from the app, so the fallback is not a family this theme declares).
+ * @param {string} value
+ * @param {(name: string) => string[]} lookup
+ * @param {number} [depth]
+ * @returns {string[]}
+ */
+export function expandFontVars(value, lookup, depth = 0) {
+  const text = String(value);
+  const at = text.search(/var\(\s*--/i);
+  if (at < 0 || depth > 8) return [text];
+  // The var() call, to its matching parenthesis.
+  let level = 0;
+  let end = -1;
+  for (let i = at + 3; i < text.length; i++) {
+    if (text[i] === '(') level++;
+    else if (text[i] === ')' && --level === 0) {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) return [text];
+  const inner = text.slice(at + 4, end);
+  const comma = inner.indexOf(',');
+  const name = (comma < 0 ? inner : inner.slice(0, comma)).trim();
+  // A fallback is not a family this theme declares: the property may come
+  // from the app.
+  const given = lookup(name);
+  const choices = given.length > 0 ? given : [''];
+  return choices
+    .flatMap(choice =>
+      expandFontVars(
+        text.slice(0, at) + choice + text.slice(end + 1),
+        lookup,
+        depth + 1,
+      ),
+    )
+    .slice(0, 32);
 }
 
 /**
  * Collect the font families a resolved theme names but does not load —
- * every `--font-family-*` token plus every component-override `fontFamily`,
- * minus generics, CSS-wide keywords, `var()` references, and known system
+ * every `--font-family-*` token plus every component-override `fontFamily`
+ * and the families of a `font` shorthand, each `var()` of the theme's own
+ * properties read as their values,
+ * minus generics, CSS-wide keywords, other `var()` references, and known system
  * families. Source order, first-seen casing, deduped case-insensitively.
  *
- * @param {{tokens?: Record<string, string>, components?: object, typography?: {body?: {family?: string, fallbacks?: string}, heading?: {family?: string, fallbacks?: string}, code?: {family?: string, fallbacks?: string}}}} resolvedTheme
+ * @param {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object, typography?: {body?: {family?: string, fallbacks?: string}, heading?: {family?: string, fallbacks?: string}, code?: {family?: string, fallbacks?: string}}}} resolvedTheme
+ * @param {{tokens?: Record<string, string>, localTokens?: Record<string, string>}} [outer]
+ *   the theme a rule's values sit in, whose own properties they read too
  * @returns {string[]}
  */
-export function collectUnloadedFonts(resolvedTheme) {
+export function collectUnloadedFonts(resolvedTheme, outer = undefined) {
   const seen = new Set();
   /** @type {string[]} */
   const unloaded = [];
+  // A family the theme holds in one of its own properties, read by var(),
+  // is a family it names.
+  /** @param {string} name @returns {string[]} */
+  const lookup = name =>
+    [resolvedTheme, outer].flatMap(at =>
+      [at?.tokens?.[name], at?.localTokens?.[name]].filter(
+        v => typeof v === 'string',
+      ),
+    );
 
   /** @param {unknown} value */
   const consider = value => {
     if (typeof value !== 'string') return;
-    for (const family of splitFamilies(value)) {
+    const families = expandFontVars(value, lookup).flatMap(splitFamilies);
+    for (const family of families) {
       const key = family.toLowerCase();
       if (GENERIC_KEYWORDS.has(key) || SYSTEM_FAMILIES.has(key)) continue;
       if (seen.has(key)) continue;
@@ -204,6 +279,9 @@ export function collectUnloadedFonts(resolvedTheme) {
     if (!node || typeof node !== 'object') return;
     for (const [key, value] of Object.entries(node)) {
       if (key === 'fontFamily') consider(value);
+      // A `font` shorthand names its families last.
+      else if (key === 'font' && typeof value === 'string')
+        consider(fontShorthandFamilyList(value));
       else walk(value);
     }
   };
@@ -219,13 +297,19 @@ export function collectUnloadedFonts(resolvedTheme) {
  *
  * @param {string} themeName
  * @param {string[]} families
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatFontLoadingHelp(themeName, families) {
+export function formatFontLoadingHelp(
+  themeName,
+  families,
+  recipe = fontLoadingRecipe,
+) {
   const named = families.map(f => `"${f}"`).join(', ');
   return `
 [note] Theme "${themeName}" names fonts it does not load: ${named}
-${fontLoadingRecipe(families)}`;
+${recipe(families)}`;
 }
 
 /**
@@ -233,16 +317,21 @@ ${fontLoadingRecipe(families)}`;
  * do not load, with the themes that name it, then one recipe for all of them.
  *
  * @param {Array<{family: string, themes: string[]}>} entries
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatBatchFontLoadingHelp(entries) {
+export function formatBatchFontLoadingHelp(
+  entries,
+  recipe = fontLoadingRecipe,
+) {
   const named = entries
     .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
     .join('\n');
   return `
 [note] The built themes name fonts they do not load:
 ${named}
-${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+${recipe(entries.map(entry => entry.family))}`;
 }
 
 /**
