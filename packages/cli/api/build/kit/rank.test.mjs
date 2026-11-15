@@ -258,6 +258,16 @@ describe('rankPages on any catalog', () => {
     expect(readNames('a stetings page', catalog)).toBe('a settings page');
   });
 
+  it('never reads a real word in a longer name as a slip', () => {
+    const catalog = [
+      page('classic-gallery', 'Gallery - Classic', 'A grid of images.'),
+      page('centered-hero', 'Content - Hero', 'A centered headline.'),
+    ];
+    for (const idea of ['a classic galley page', 'an entered hero page']) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
+  });
+
   it('weighs a word by how rare it is among page templates', () => {
     const catalog = [
       page('alpha', 'Dashboard - Alpha', 'Status tiles.', ['status overview']),
