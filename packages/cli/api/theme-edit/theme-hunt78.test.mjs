@@ -542,6 +542,28 @@ describe('the answer that joins every clause is measured too', () => {
           only: true,
         }),
       ).rejects.toThrow(/a radio's circle \(border-radius 50%\), not a corner/);
+      // A square radio is asked of the radio by name: its own border-radius.
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditSet('q', 'corners', 'square', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(
+        err.suggestions.map((/** @type {{name: string}} */ x) => x.name),
+      ).toContainEqual(
+        expect.stringMatching(
+          / set q border-radius 0 --on radio-indicator --only$/,
+        ),
+      );
+      expect((await answer('make radios square')).commands).toEqual([
+        'set q border-radius 0 --on radio-indicator --only',
+      ]);
     },
     T,
   );

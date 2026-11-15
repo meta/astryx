@@ -25,6 +25,7 @@ import {
   densityWords,
   HEADING_WEIGHTS,
   P,
+  CORNERS,
   FAMILIES,
   FONTS,
   HOW,
@@ -5638,8 +5639,25 @@ export function draftAnswer(ctx, env, question) {
   const groupCornerEnds = d => {
     /** @type {string[]} */
     const skipped = [];
+    /** @type {string[]} */
+    const circles = [];
     const options = d.options.map(o =>
       o.flatMap(st => {
+        // A radio's circle is no corner: a corner size asked of radios alone
+        // sets their own border-radius, which overrides the circle.
+        if (
+          st.verb === 'set' &&
+          st.thing === 'corners' &&
+          st.on &&
+          (FAMILIES[st.on] ?? [st.on]).every(m => radioCircle(C, m))
+        ) {
+          const px = CORNERS.find(([n]) => n === st.value)?.[1];
+          if (px == null || px >= 9999) return [st];
+          circles.push(st.on);
+          return [
+            {...st, thing: 'border-radius', value: px === 0 ? '0' : `${px}px`},
+          ];
+        }
         const members = st.on ? FAMILIES[st.on] : undefined;
         if (
           !members ||
@@ -5677,7 +5695,13 @@ export function draftAnswer(ctx, env, question) {
             )
             .join(', ')}, so it is left as it is)`,
         }
-      : d;
+      : circles.length
+        ? {
+            ...d,
+            options,
+            text: `${d.text}: ${circles.join(', ')} is a radio's circle, not a corner, so its own border-radius sets its shape`,
+          }
+        : d;
   };
   /** @param {Draft} input */
   const push = input => {

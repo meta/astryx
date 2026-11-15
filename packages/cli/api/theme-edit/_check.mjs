@@ -4423,7 +4423,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     if (thing === 'corners') {
       if (s.on) {
         refuseInvisibleCorners(ctx, slug, s, data);
-        refuseRadioCorners(ctx, s);
+        refuseRadioCorners(ctx, slug, s);
       }
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
@@ -6225,16 +6225,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
  * (radioCircle): the dial leaves them, so it changes nothing you see. A
  * border-radius set on the part itself still changes it.
  * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
  * @param {import('./_settings.mjs').Setting} s
  */
-function refuseRadioCorners(ctx, s) {
+function refuseRadioCorners(ctx, slug, s) {
   if (ctx.unchecked) return;
   const parts = partsOf(ctx, s);
   if (!parts.length || !parts.every(t => radioCircle(ctx.C, t))) return;
+  // A radius set on the part itself overrides the circle: a square radio
+  // is asked of this component, by name.
+  const px = cornerPxOf(String(s.value));
+  const own =
+    Number.isFinite(px) && px < 9999
+      ? setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s)
+      : null;
   refuse(
     E.ERR_THEME_NO_EFFECT,
-    `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.`,
-    {run: [`${HOW} ${s.on}`]},
+    `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.${own ? ` A border-radius on it sets its shape: ${own.replace(`${P} `, '')}.` : ''}`,
+    {run: own ? [own] : [`${HOW} ${s.on}`]},
   );
 }
 
