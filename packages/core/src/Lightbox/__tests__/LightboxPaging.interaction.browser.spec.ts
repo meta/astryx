@@ -2221,10 +2221,12 @@ for (const {name, story, expectedReads} of SHRINK_CASES) {
 // element. A flex row and a clipped block have a sweep of their own below.
 // Last, room under the last line of text: bottom padding, a bottom rule, two
 // line breaks, an empty inline-block.
-// WebKit sweeps five of these shapes: plain text in each direction, a drop
-// cap's first letter, generated words and bottom padding. A sweep of every
-// shape takes WebKit longer than its CI leg allows, so the other shapes run in
-// Chromium only.
+// WebKit sweeps eight of these shapes. They are plain text right to left, a
+// drop cap and generated words. They add one ending of each kind the fit rules
+// tell apart. Those are bottom padding, a bottom rule, two line breaks, an empty
+// inline-block and an image. Each of those endings follows plain text left to
+// right. A sweep of every shape takes WebKit longer than its CI leg allows, so
+// the other shapes run in Chromium only.
 const CAPTION_FIT_CASES: {
   name: string;
   story: string;
@@ -2232,10 +2234,7 @@ const CAPTION_FIT_CASES: {
   isRtl?: boolean;
   isInWebKit?: boolean;
 }[] = [
-  ...CAPTION_STORIES.map(caption => ({
-    ...caption,
-    isInWebKit: caption.name === 'a plain caption',
-  })),
+  ...CAPTION_STORIES,
   {
     name: 'a plain caption in a second document',
     story: 'core-lightbox--gallery-with-captions-in-frame-fixture',
@@ -2244,6 +2243,7 @@ const CAPTION_FIT_CASES: {
   {
     name: 'a caption ending in an image',
     story: 'core-lightbox--gallery-with-image-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a caption ending in a block image',
@@ -2343,15 +2343,18 @@ const CAPTION_FIT_CASES: {
   {
     name: 'a paragraph caption with bottom padding and a bottom rule',
     story: 'core-lightbox--gallery-with-bottom-rule-paragraph-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a caption ending in two line breaks',
     story: 'core-lightbox--gallery-with-trailing-break-caption-fixture',
+    isInWebKit: true,
   },
   {
     name: 'a caption ending in an empty inline-block',
     story:
       'core-lightbox--gallery-with-trailing-empty-inline-block-caption-fixture',
+    isInWebKit: true,
   },
 ];
 
@@ -2368,7 +2371,7 @@ for (const {
   }) => {
     test.skip(
       browserName === 'webkit' && !isInWebKit,
-      'WebKit sweeps the five shapes CAPTION_FIT_CASES marks; Chromium sweeps this one',
+      'WebKit sweeps only the shapes CAPTION_FIT_CASES marks; Chromium sweeps this one',
     );
     await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
       const id =
