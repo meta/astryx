@@ -2046,4 +2046,28 @@ describe('local tokens left undefined', () => {
     expect(theme.localTokens).toEqual({'--brand': 'red'});
     expect(generateThemeTestCSS(theme)).not.toContain('--brand-2');
   });
+
+  it.each([
+    ['a localTokens field that holds undefined', undefined],
+    ['a local token that holds undefined', {'--brand': undefined}],
+  ])(
+    'with %s, an adaptation rule that writes that local token still fails with its name',
+    (_, localTokens) => {
+      expect(() =>
+        defineTheme({
+          name: 'lost-local',
+          // @ts-expect-error an undefined value, as a failed import gives
+          localTokens,
+          adaptations: {
+            rules: [
+              {
+                when: {pointer: 'coarse'},
+                value: {localTokens: {'--brand': 'blue'}},
+              },
+            ],
+          },
+        }),
+      ).toThrow(/localTokens\["--brand"\] cannot enroll a theme-local token/);
+    },
+  );
 });

@@ -129,7 +129,9 @@ A component, style key, or value left `undefined` in a component block,
 pseudo-class block, color-mode block, surface, or adaptation rule is not set: in
 a style key or a color-mode block the inherited value stays, and a restated
 pseudo-class block replaces the inherited one whole. `null` keeps its existing
-meaning.
+meaning. Root `localTokens: undefined`, or a local token left `undefined`,
+declares nothing: an adaptation rule that writes that local token still fails
+with its name, and a `var()` reference to it stays external (INV8).
 An explicit icon, indicator, or `componentIcons` entry replaces the inherited
 entry for the same key whole. An explicit `iconVariants` list replaces the
 inherited list; an omitted list is inherited. An inherited function entry keeps
