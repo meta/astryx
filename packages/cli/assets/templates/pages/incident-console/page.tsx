@@ -519,7 +519,20 @@ export default function IncidentConsolePage() {
       : searched.filter(incident => incident.status === statusFilter);
   }, [filters, applyFilters, statusFilter, incidents]);
 
-  const selected = visible.find(incident => incident.id === selectedId) ?? null;
+  // The selection comes from the full list, so moving an incident out of the
+  // filtered view keeps its details open instead of removing them mid-read.
+  const selected =
+    incidents.find(incident => incident.id === selectedId) ?? null;
+
+  // The sheet exists only on a narrow screen. Widening the window closes it,
+  // so narrowing again later does not re-open it without a tap.
+  const [wasNarrow, setWasNarrow] = useState(isNarrow);
+  if (wasNarrow !== isNarrow) {
+    setWasNarrow(isNarrow);
+    if (!isNarrow) {
+      setIsSheetOpen(false);
+    }
+  }
 
   const openCount = incidents.filter(
     incident => incident.status === 'investigating',
