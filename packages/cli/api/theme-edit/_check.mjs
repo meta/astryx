@@ -127,6 +127,7 @@ import {
   partState,
   partStates,
   readSavedStates,
+  propertySpelling,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -6630,10 +6631,7 @@ function checkOne(
   // A property in camel case, or with `_` or spaces for its dashes
   // (backgroundColor, font_size, "border radius"), is that property: one
   // reading, so each form gets the same answer.
-  const spelled = kebab(thing.trim())
-    .replace(/[_\s]+/g, '-')
-    .replace(/-+/g, '-');
-  const prop = cssProperties().has(spelled) ? spelled : kebab(thing);
+  const prop = propertySpelling(thing) ?? kebab(thing);
   // A token typed without its leading dashes (color-accent,
   // text-body-size): the token, when no CSS property has that name.
   if (

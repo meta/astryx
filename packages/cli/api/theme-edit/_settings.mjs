@@ -216,6 +216,20 @@ export const slugFor = name =>
 export const kebab = s =>
   s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 /**
+ * The CSS property a name typed or saved in another form names: camel case,
+ * other letters, or `_` or spaces for its dashes (backgroundColor,
+ * Background-Color, font_size, "border radius"); null when it names none.
+ * The one property-name reader, for `set` and the settings file alike.
+ * @param {string} thing
+ * @returns {string | null}
+ */
+export function propertySpelling(thing) {
+  const spelled = kebab(String(thing).trim())
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
+  return cssProperties().has(spelled) ? spelled : null;
+}
+/**
  * A theme name as an identifier: each dash goes, and the letter after it is
  * capitalized (`brand-2` → `brand2`, `x--y` → `xY`).
  * @param {string} s
@@ -1919,6 +1933,25 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         s.thing = read;
       }
     }
+    // A CSS property saved in another form on a part (`Background-Color`,
+    // `background color`) is that property, as set reads the name typed
+    // (the one property-name reader), unless the part holds it already.
+    if (
+      s.on &&
+      !s.thing.startsWith('--') &&
+      !cssProperties().has(s.thing) &&
+      ['property', undefined, null, ''].includes(s.source)
+    ) {
+      const read = propertySpelling(s.thing);
+      const held = data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s && x && keyOf(x) === keyOf({...s, thing: read}),
+      );
+      if (read && !held) {
+        notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+        s.thing = read;
+      }
+    }
     // A token saved in another form (`var(--color-accent)`) is that token,
     // as set reads the name typed (the one thing reader).
     if (
@@ -1972,20 +2005,25 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
     // CSS writes that way: a part's own state is written as its census
     // names it (toggle-button's isPressed), which set saves and the build
     // reads, so that spelling is kept.
+    // A state that is no state name as written (`IsPressed`, `is pressed`)
+    // is put in its words (is-pressed) for the census half of the reader
+    // (readSavedStates), which reads them as the part's own state and says
+    // so, with the spelling saved.
     const stateRead =
       typeof s.state === 'string' ? stateSpelling(s.state) : null;
-    if (
-      typeof s.state === 'string' &&
-      stateRead &&
-      stateRead !== s.state &&
-      (COMMON_STATES.includes(stateRead) ||
-        stateRead === s.state.trim().replace(/^:+/, '').toLowerCase())
-    ) {
-      const read = stateRead;
-      notes.push(
-        `${s.thing} was saved with state ${JSON.stringify(s.state)}, read as ${read}`,
-      );
-      s.state = read;
+    if (typeof s.state === 'string' && stateRead && stateRead !== s.state) {
+      if (
+        COMMON_STATES.includes(stateRead) ||
+        stateRead === s.state.trim().replace(/^:+/, '').toLowerCase()
+      ) {
+        notes.push(
+          `${s.thing} was saved with state ${JSON.stringify(s.state)}, read as ${stateRead}`,
+        );
+        s.state = stateRead;
+      } else if (!STATE_NAME.test(s.state)) {
+        SAVED_STATE.set(s, s.state);
+        s.state = stateRead;
+      }
     }
     // A dial saved for one mode is refused as set refuses --mode on it
     // (settingsProblem): it is never built for a mode it does not name.
@@ -3957,6 +3995,20 @@ export function ownSourceTokenValues(cwd, slug) {
 }
 
 /**
+ * A state name as the editor saves one: a part's own state as its census
+ * names it (isPressed), a CSS state in its words (focus-visible), several
+ * joined by +.
+ */
+const STATE_NAME = /^[a-z][a-zA-Z-]*(\+[a-z][a-zA-Z-]*)*$/;
+
+/**
+ * The state an entry was saved with, when the loader put it in its words
+ * for the census half of the state reader (which names it in its note).
+ * @type {WeakMap<object, string>}
+ */
+const SAVED_STATE = new WeakMap();
+
+/**
  * What is wrong with where a setting applies, or null: names only, as
  * `set` takes them.
  * @param {any} s
@@ -3966,7 +4018,7 @@ function scopeProblem(s) {
   if (s.on != null && !/^[a-z][a-z0-9-]*$/.test(s.on))
     return `${s.thing} is set on "${s.on}", which is not a part or group name`;
   // (Several states at once are joined by +: `checked+disabled`.)
-  if (s.state != null && !/^[a-z][a-zA-Z-]*(\+[a-z][a-zA-Z-]*)*$/.test(s.state))
+  if (s.state != null && !STATE_NAME.test(s.state))
     return `${s.thing} has state "${s.state}", which is not a state name`;
   if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
     return `${s.thing} has --when "${s.when}", which is not prop:value`;
@@ -10391,6 +10443,15 @@ export function partState(ctx, part, state) {
   // `aria-pressed`, names the state too.)
   const bare = (/** @type {string} */ x) =>
     flat(x.replace(/^is(?=[A-Z])|^is-(?=[a-z])/, '').replace(/^aria-/i, ''));
+  /**
+   * Each way a state is written, its letters only: as the part names it,
+   * and as its prop or ARIA name (`ispressed`, `ariapressed`), so a name
+   * typed in one case (ISPRESSED) is read too. The bare word of a state
+   * the part names with its prop (toggle-button's isPressed) is no name of
+   * it: `pressed` there is offered the part's own name.
+   * @param {string} x
+   */
+  const forms = x => [flat(x), `is${bare(x)}`, `aria${bare(x)}`];
   // (Several at once in one order, the part's own, so either spelling is
   // one setting.)
   const pieces = state
@@ -10399,6 +10460,7 @@ export function partState(ctx, part, state) {
       p =>
         states.find(x => flat(x) === flat(p)) ??
         states.find(x => flat(x) === bare(p)) ??
+        states.find(x => forms(x).includes(flat(p))) ??
         p,
     );
   const at = (/** @type {string} */ p) =>
@@ -10430,7 +10492,7 @@ export function readSavedStates(ctx, data) {
     if (read === s.state || !read.split('+').every(p => states.includes(p)))
       continue;
     ENTRY_NOTES.get(data)?.push(
-      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(s.state)}, read as ${read}`,
+      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(SAVED_STATE.get(s) ?? s.state)}, read as ${read}`,
     );
     s.state = read;
   }
