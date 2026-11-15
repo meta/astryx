@@ -247,6 +247,45 @@ describe('useScrollableArea', () => {
         .map(({change}) => change);
   }
 
+  it('does not render again when a content change leaves the measured geometry unchanged', async () => {
+    let renders = 0;
+    function Counted() {
+      renders++;
+      return <Fixture />;
+    }
+    function Area() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Rows', role: 'region'},
+      });
+      renders++;
+      return (
+        <div data-testid="counted" {...area.getViewportProps()}>
+          <div {...area.getContentProps()}>
+            <span data-testid="row">Row</span>
+          </div>
+        </div>
+      );
+    }
+    void Counted;
+    render(<Area />);
+    const viewport = screen.getByTestId('counted');
+    makeMeasurable(viewport);
+    flushFrame();
+    // The content starts to overflow: the area renders its new state.
+    setInlineOverflow(viewport, true);
+    renders = 0;
+
+    // A mounted row below the content root asks for a measurement that finds
+    // the same geometry.
+    await act(async () => {
+      screen.getByTestId('row').append(document.createElement('b'));
+    });
+    flushFrame();
+
+    expect(renders).toBe(0);
+  });
+
   it('reports a change below the content root as content only and an outer change as layout', async () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');

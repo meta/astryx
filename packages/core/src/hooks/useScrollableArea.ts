@@ -295,6 +295,10 @@ export function useScrollableArea({
   const [isViewportFocused, setViewportFocused] = useState(false);
   const viewportFocusedRef = useRef(false);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
+  // The last overflow and axis mapping set as state, so a measurement that
+  // finds them unchanged sets nothing.
+  const overflowRef = useRef<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
+  const mappingRef = useRef<LogicalAxisMapping>(INITIAL_MAPPING);
   const measureRef = useRef<(() => void) | null>(null);
 
   const viewportRef = useCallback((node: HTMLElement | null) => {
@@ -348,12 +352,15 @@ export function useScrollableArea({
     let measuredMapping = INITIAL_MAPPING;
     let measuredOverflow = INITIAL_OVERFLOW;
 
+    // An unchanged state sets nothing: React renders a component again for a
+    // same-value update that follows its own update (see setIfChanged).
     const publish = (nextState: ScrollableAreaState) => {
+      const isChanged = !statesEqual(stateRef.current, nextState);
       stateRef.current = nextState;
       registerScrollOwner(viewport, nextState);
-      setMeasured(current =>
-        statesEqual(current, nextState) ? current : nextState,
-      );
+      if (isChanged) {
+        setMeasured(nextState);
+      }
     };
     let hasContentInvalidation = true;
     let hasLayoutInvalidation = true;
@@ -411,9 +418,10 @@ export function useScrollableArea({
       measuredOverflow = nextOverflow;
       // Measured DOM geometry decides whether the viewport becomes a CSS
       // scroll container.
-      setOverflow(current =>
-        overflowEqual(current, nextOverflow) ? current : nextOverflow,
-      );
+      if (!overflowEqual(overflowRef.current, nextOverflow)) {
+        overflowRef.current = nextOverflow;
+        setOverflow(nextOverflow);
+      }
       // The measured DOM state is the hook's output.
       publish(nextState);
       publishScrollGeometry(
@@ -424,9 +432,10 @@ export function useScrollableArea({
       hasContentInvalidation = false;
       hasLayoutInvalidation = false;
       // A writing-mode change remaps the behavior-owned physical CSS.
-      setMapping(current =>
-        mappingsEqual(current, nextMapping) ? current : nextMapping,
-      );
+      if (!mappingsEqual(mappingRef.current, nextMapping)) {
+        mappingRef.current = nextMapping;
+        setMapping(nextMapping);
+      }
     };
 
     const measure = () => {
