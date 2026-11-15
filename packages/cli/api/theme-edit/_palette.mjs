@@ -924,16 +924,17 @@ function tools(
   const rawOf = (token, m) => colorIn(settingOf(token, m), m);
   /**
    * Which column of a `[light, dark]` mapping a mode takes: the light one
-   * on a light page and the dark one on a dark page, by the page the theme
-   * keeps (its exact page color, else the base theme's). A base whose
-   * light page is dark, such as Gothic, gets dark-page shades in light.
+   * on a light page and the dark one on a dark page, by the base theme's
+   * page, the one its surfaces were made for. A base whose light page is
+   * dark, such as Gothic, gets dark-page shades in light. A page color the
+   * theme writes is that one color: it never moves every other surface to
+   * the other column (a teal page keeps white cards and popovers), and the
+   * colors that must read on it are held to it where they are picked.
    * @param {Mode} m
    * @returns {0 | 1}
    */
   const side = m => {
-    const page =
-      rawOf('--color-background-body', m) ??
-      base?.[m]?.['--color-background-body'];
+    const page = base?.[m]?.['--color-background-body'];
     const rgb = page ? parseColor(page) : null;
     if (!rgb || alphaOf(page) < 1) return m === 'light' ? 0 : 1;
     return ratio(rgb, [255, 255, 255]) > ratio(rgb, [0, 0, 0]) ? 1 : 0;
