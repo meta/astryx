@@ -408,16 +408,7 @@ for (const mode of ['light', 'dark'] as const) {
       check((await trigger.count()) === 1, 'no Acme Suite heading button');
       const restAxe = await axe(page);
       checkAxe(check, restAxe);
-      // Recorded, not checked: what a pointer at the trigger's center hits.
-      const hit = await trigger.evaluate(el => {
-        const r = el.getBoundingClientRect();
-        const top = document.elementFromPoint(
-          r.left + r.width / 2,
-          r.top + r.height / 2,
-        );
-        return {onTrigger: top != null && el.contains(top), tag: top?.tagName};
-      });
-      await frame('rest', {restAxe, hit});
+      await frame('rest', {restAxe});
       await trigger.focus();
       await page.keyboard.press('Enter');
       await page.locator('.astryx-nav-heading-menu').waitFor();
@@ -425,9 +416,16 @@ for (const mode of ['light', 'dark'] as const) {
       const open = await readMenu(page, 'body');
       checkRows(check, open, 'md');
       const openAxe = await axe(page);
-      // Recorded, not checked: the menu sits inside the heading's own menu
-      // and has no name of its own. The receipt records both.
-      await frame('open', {open, focus: focusedRow(open), axe: openAxe});
+      checkAxe(check, openAxe);
+      // The menu sits inside the heading's own menu and has no name of its
+      // own. The receipt records both facts and does not fail on them.
+      await frame('open', {
+        open,
+        focus: focusedRow(open),
+        nested: open.nestedInMenu,
+        name: open.name,
+        axe: openAxe,
+      });
       await page.keyboard.press('Escape');
       await page.locator('.astryx-nav-heading-menu').waitFor({state: 'hidden'});
       await settle(page);

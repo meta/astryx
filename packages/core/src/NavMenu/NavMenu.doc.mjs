@@ -158,7 +158,7 @@ export const docs = {
           name: 'href',
           type: 'string',
           description:
-            'Destination. The row renders as the LinkProvider link (else an anchor) when provided, and as a div otherwise.',
+            'Destination. An enabled row renders as the LinkProvider link (else an anchor) when provided, and a row without it renders as a div.',
         },
         {
           name: 'onClick',
@@ -217,7 +217,7 @@ export const docsDense = {
         label: 'primary label; string = one line of body text',
         description: 'one-line secondary text below label',
         icon: 'icon before label',
-        href: 'destination; LinkProvider link (else a), div without',
+        href: 'destination; enabled row = LinkProvider link (else a), div without',
         onClick: 'called when an enabled row is chosen, before close',
         isDisabled:
           'focusable + reachable, aria-disabled, no href, no onClick, no close',
