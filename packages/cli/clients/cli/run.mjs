@@ -160,8 +160,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     // A theme module's callback that throws after its load: said, never
     // the command's crash.
     const told = themeModuleException(error);
-    if (told) tellOnce(told);
-    else handleFatal(error);
+    if (told === null) handleFatal(error);
+    else if (told) tellOnce(told);
   });
 
   // Pick up the project's `debug` function before parsing, so parse errors

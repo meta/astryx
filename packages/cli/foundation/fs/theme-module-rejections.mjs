@@ -42,28 +42,36 @@ export function themeModuleRejection(reason, promise) {
   return `Warning: a theme module left a promise that rejected and was never handled (${what}); the theme was read as the module exported it.`;
 }
 
-/** Whether code runs in a theme module's callback after its load. */
-let inThemeModuleCallback = () => false;
+/**
+ * Where an uncaught exception was thrown, as the module loader knows it
+ * from its async context: in a theme module's callback after its load
+ * (`after`), while it loads (`during`: the loader refuses that load with
+ * it), or elsewhere (null).
+ * @type {(error: unknown) => 'after' | 'during' | null}
+ */
+let thrownIn = () => null;
 
 /**
- * Set how to tell a theme module's callback after its load (the module
- * loader knows its async context).
- * @param {() => boolean} check
+ * Set how to tell where an uncaught exception was thrown.
+ * @param {(error: unknown) => 'after' | 'during' | null} check
  */
 export function tellThemeModuleCallbacks(check) {
-  inThemeModuleCallback = check;
+  thrownIn = check;
 }
 
 /**
- * What to tell for an uncaught exception thrown from a callback a theme
- * module left running after its load, or null for any other: the theme was
- * read as the module exported it, and a late throw does not fail the
- * command.
+ * What to tell for an uncaught exception a theme module's code threw, or
+ * null for any other. From a callback after its load: a warning (the theme
+ * was read as the module exported it, and a late throw does not fail the
+ * command). While it loads: '' (the load is refused with it, and that
+ * refusal is the command's answer).
  * @param {unknown} error
  * @returns {string | null}
  */
 export function themeModuleException(error) {
-  if (!inThemeModuleCallback()) return null;
+  const where = thrownIn(error);
+  if (where === null) return null;
+  if (where === 'during') return '';
   const what =
     error instanceof Error
       ? error.message

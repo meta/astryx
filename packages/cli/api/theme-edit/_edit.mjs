@@ -4050,7 +4050,17 @@ function pseudoTypo(key, states) {
  * @returns {Promise<AstryxError | null>}
  */
 async function ownTokenRefusal(ctx, slug, data) {
-  const bad = await ownTokenProblems(ctx, slug, data);
+  /** @type {Awaited<ReturnType<typeof ownTokenProblems>>} */
+  let bad;
+  try {
+    bad = await ownTokenProblems(ctx, slug, data);
+  } catch (error) {
+    // The theme's own code threw while its values were read (a getter, a
+    // Proxy): nothing here can judge them, and the build that follows
+    // refuses the theme with its own load error.
+    if (error instanceof AstryxError) throw error;
+    return null;
+  }
   if (!bad.length) return null;
   const own = `themes/${slug}/${slug}.theme.ts`;
   const file = bad[0].file ?? own;

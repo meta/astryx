@@ -331,7 +331,7 @@ export async function withEmptyStylesheets(load, options = {}) {
  * Set in the async context of a guarded theme module load: whether the load
  * is done, and the handles (timers, watchers, servers, message ports) the
  * module opened while it loaded.
- * @typedef {{done: boolean, handles: Array<{unref: () => void}>}} GuardedLoad
+ * @typedef {{done: boolean, handles: Array<{unref: () => void}>, listeners: Array<{event: string | symbol, listener: (...args: any[]) => void}>, fail: (error: unknown) => void}} GuardedLoad
  * @type {AsyncLocalStorage<GuardedLoad>}
  */
 const guardedLoad = new AsyncLocalStorage();
@@ -517,7 +517,38 @@ function installThemeModuleGuards() {
   guardsInstalled = true;
   // An exception thrown from a module's callback after its load is told as
   // a warning (theme-module-rejections.mjs), never the command's crash.
-  tellThemeModuleCallbacks(() => Boolean(guardedLoad.getStore()?.done));
+  // One thrown while the module still loads (from a microtask it queued)
+  // refuses that load with it, as a throw from its top level does.
+  tellThemeModuleCallbacks(error => {
+    const load = guardedLoad.getStore();
+    if (!load) return null;
+    if (load.done) return 'after';
+    load.fail(error);
+    return 'during';
+  });
+  // A listener a theme module adds to `process` (`process.on('exit', …)`)
+  // is recorded while it loads and removed when the load ends; one it adds
+  // from a callback after its load is not added.
+  for (const method of /** @type {const} */ ([
+    'on',
+    'addListener',
+    'once',
+    'prependListener',
+    'prependOnceListener',
+  ])) {
+    const add = process[method];
+    process[method] = /** @type {any} */ (
+      function (
+        /** @type {string | symbol} */ event,
+        /** @type {(...args: any[]) => void} */ listener,
+      ) {
+        const load = guardedLoad.getStore();
+        if (load?.done) return process;
+        if (load) load.listeners.push({event, listener});
+        return add.call(process, event, listener);
+      }
+    );
+  }
   createHook({
     init(_asyncId, type, _triggerAsyncId, resource) {
       const load = guardedLoad.getStore();
@@ -574,8 +605,16 @@ function installThemeModuleGuards() {
 async function withThemeModuleGuards(load) {
   installThemeModuleGuards();
   holdExit();
+  /** @type {(error: unknown) => void} */
+  let fail = () => {};
+  /** @type {Promise<never>} */
+  const failed = new Promise((_resolve, reject) => {
+    fail = reject;
+  });
+  // Read only through the race below; a failure after it settled is moot.
+  failed.catch(() => {});
   /** @type {GuardedLoad} */
-  const store = {done: false, handles: []};
+  const store = {done: false, handles: [], listeners: [], fail};
   const exitCode = process.exitCode;
   // What the module's code may change for the whole process, put back when
   // the load ends: the working folder and the built-in objects.
@@ -591,13 +630,21 @@ async function withThemeModuleGuards(load) {
   // Node empties its loop with the load still waiting: refused, not exit 13.
   process.once('beforeExit', drained);
   try {
-    return await Promise.race([guardedLoad.run(store, load), unsettled]);
+    return await Promise.race([
+      guardedLoad.run(store, load),
+      unsettled,
+      failed,
+    ]);
   } finally {
     process.removeListener('beforeExit', drained);
     process.exitCode = exitCode;
     restoreCwd(cwd);
     restoreIntrinsics(intrinsics);
     store.done = true;
+    // A listener the module added to `process` would run in the CLI's own
+    // process after the load, outside every guard: it goes with the load.
+    for (const {event, listener} of store.listeners.splice(0))
+      process.removeListener(event, listener);
     for (const handle of store.handles.splice(0)) handle.unref();
     releaseExit();
   }

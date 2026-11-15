@@ -5426,19 +5426,31 @@ async function themeBuildInternal(
     // The name's extension is what follows its last dot, a leading one too:
     // `.css` is a name with no stem, which writes hidden files.
     const file = path.basename(outPath);
-    // A TypeScript declaration file's name (`p.css.d.ts`, the default build's
-    // stylesheet types) never names the stylesheet: CSS written there breaks
-    // every TypeScript file that imports the stylesheet.
-    if (/\.d\.[cm]?ts$/i.test(file)) {
+    // A name of another kind of file a stylesheet has never names the
+    // stylesheet: a TypeScript declaration file (`p.css.d.ts`, where CSS
+    // breaks every TypeScript file that imports the stylesheet) or a source
+    // map (`p.css.map`, which bundlers and devtools read as JSON).
+    const otherKind = /\.d\.[cm]?ts$/i.test(file)
+      ? {
+          suffix: /(?:\.css)?\.d\.[cm]?ts$/i,
+          what: 'a TypeScript declaration file, where a build writes types',
+        }
+      : /\.css\.map$/i.test(file)
+        ? {
+            suffix: /\.css\.map$/i,
+            what: "a stylesheet's source map, which bundlers and devtools read as JSON",
+          }
+        : null;
+    if (otherKind) {
       const fixed = path
         .join(
           path.dirname(options.out),
-          `${file.replace(/(?:\.css)?\.d\.[cm]?ts$/i, '') || baseName}.css`,
+          `${file.replace(otherKind.suffix, '') || baseName}.css`,
         )
         .split(path.sep)
         .join('/');
       throw new AstryxError(
-        `--out ${options.out} names a TypeScript declaration file, where a build writes types, not the stylesheet. --out names the .css file, such as ${fixed}. Nothing was written.`,
+        `--out ${options.out} names ${otherKind.what}, not the stylesheet. --out names the .css file, such as ${fixed}. Nothing was written.`,
         [
           {
             name: buildSuggestion(
@@ -5455,7 +5467,10 @@ async function themeBuildInternal(
     }
     const dot = file.lastIndexOf('.');
     const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
-    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    // `p.css.bak` slips a suffix after the stylesheet's name: its stem is p.
+    const stem = (dot < 0 ? file : file.slice(0, dot))
+      .replace(/\.d$/, '')
+      .replace(/\.css$/i, '');
     if (ext !== '.css' || !stem) {
       const fixed = path
         .join(path.dirname(options.out), `${stem || baseName}.css`)
