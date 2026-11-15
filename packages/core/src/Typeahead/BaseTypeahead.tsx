@@ -929,9 +929,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // the listbox or announce. Settlement then keeps the answer for the next
   // open, as a dismissed search does.
   const idleSearchRef = useRef(false);
-  // Whether the input currently has focus. `activeElement` after a rerender
-  // is not a reliable stand-in: an app that sets `query` in the same turn as
-  // focus can miss it, so a focused clear would take the idle path.
+  // `activeElement` after a rerender is not a reliable stand-in: an app that
+  // sets `query` in the same turn as focus can miss it, so a focused clear
+  // would take the idle path.
   const isInputFocusedRef = useRef(false);
   // The search still awaiting its answer, if any.
   const searchInFlightRef = useRef<{gen: number; query: string} | null>(null);
@@ -1619,8 +1619,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     });
   }, [committedChoicesKey]);
 
-  // Handle query change. `input` is a change the field made; `external` is
-  // the `query` prop or the initial `defaultQuery`.
+  // `input` is a change the field made; `external` is the `query` prop or
+  // the initial `defaultQuery`.
   const handleQueryChange = useCallback(
     (newQuery: string, origin: 'input' | 'external' = 'input') => {
       isFocusListKeptRef.current = false;

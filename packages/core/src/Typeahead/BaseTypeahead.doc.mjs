@@ -544,7 +544,7 @@ export const docsDense = {
     onKeyDown:
       'Keydown before internal nav. preventDefault() skips internal handling.',
     query:
-      'Controlled typed query. Reports every change through onChangeQuery, including a pick and a clear. Hold it after a pick to keep the text. Setting it from outside does not move focus or open the listbox, and announces a result count only while focused.',
+      'Controlled typed query. Reports every change through onChangeQuery, including a pick and a clear. Hold it after a pick to keep the text. Setting it from outside does not move focus. While the field is unfocused, it does not open the listbox or announce a result count.',
     defaultQuery: 'Initial typed query when query is not set.',
     onChangeQuery: 'Fired on query text change, including a pick and a clear.',
     onOpenChange: 'Fired on dropdown open/close.',
