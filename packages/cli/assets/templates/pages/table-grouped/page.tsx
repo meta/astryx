@@ -914,12 +914,17 @@ export default function DataTableTemplate() {
   const columns = useMemo(
     () =>
       getColumns({
-        onEdit: setSelectedTask,
+        onEdit: task =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: editing ${task.taskId} would open here`,
+            uniqueID: `edit-${task.taskId}`,
+          }),
         onDuplicate: task =>
           // Demo only: replace this toast with the call that performs the action.
           showToast({
             body: `${task.taskId} duplicated`,
-            uniqueID: `duplicate-${task.id}`,
+            uniqueID: `duplicate-${task.taskId}`,
           }),
       }),
     [showToast],
