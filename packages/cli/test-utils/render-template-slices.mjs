@@ -159,18 +159,15 @@ export async function readyPageTemplates(home) {
 }
 
 /**
- * Scaffolds each template into `templates/<id>`, builds any theme package a
- * template imports, and renders each to `templates/<id>/page.html` under one
- * fixed clock, four at a time. `after` runs once a template renders and
- * returns a problem line or null.
+ * Scaffolds each template into `templates/<id>` and builds any theme package
+ * a template imports, plus the `themes` the caller names.
  * @param {string} home a linked fixture project
  * @param {string[]} ids
- * @param {(id: string) => Promise<string | null>} [after]
- * @returns {Promise<string[]>} one line per template that failed
+ * @param {string[]} [themes] theme packages to build as well
  */
-export async function scaffoldAndRender(home, ids, after) {
+export async function scaffoldTemplates(home, ids, themes = []) {
   /** @type {Set<string>} */
-  const themes = new Set();
+  const imported = new Set(themes);
   for (const id of ids) {
     await template(id, {
       targetPath: `templates/${id}`,
@@ -184,14 +181,27 @@ export async function scaffoldAndRender(home, ids, after) {
     for (const m of source.matchAll(
       /from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g,
     ))
-      themes.add(m[1]);
+      imported.add(m[1]);
   }
   // The node tests build Core only. A template that imports a theme's
   // build needs that build.
-  for (const name of themes)
+  for (const name of imported)
     buildThemeOnce(
       fs.realpathSync(path.join(home, '..', 'node_modules', name)),
     );
+}
+
+/**
+ * Scaffolds each template (scaffoldTemplates) and renders each to
+ * `templates/<id>/page.html` under one fixed clock, four at a time. `after`
+ * runs once a template renders and returns a problem line or null.
+ * @param {string} home a linked fixture project
+ * @param {string[]} ids
+ * @param {(id: string) => Promise<string | null>} [after]
+ * @returns {Promise<string[]>} one line per template that failed
+ */
+export async function scaffoldAndRender(home, ids, after) {
+  await scaffoldTemplates(home, ids);
   /** @type {string[]} */
   const failed = [];
   // Every page process the renders start reads one fixed clock, so a
