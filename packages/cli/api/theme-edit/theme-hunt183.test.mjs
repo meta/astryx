@@ -13,8 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -23,26 +22,27 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The assertions are about lines, settings and builds, not rendered pages:
+// a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
 const T = 240_000;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
-
+// The real program, in process: no Node start per command.
 /** @param {string[]} args */
-const cli = args => {
-  const r = spawnSync(process.execPath, [BIN, '--json', ...args], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
+const cli = async args => {
+  const r = await runCli(['--json', ...args], {cwd});
   return {status: r.status, env: JSON.parse(r.stdout || '{}')};
 };
 /** @param {string[]} args */
-const editor = args => cli(['experimental', 'theme', 'editor', ...args]);
+const editor = async args => cli(['experimental', 'theme', 'editor', ...args]);
 /** The commands a refusal offers, after `editor `. @param {any} env */
 const lines = env =>
   (env.suggestions ?? []).map((/** @type {{name: string}} */ s) =>
@@ -52,7 +52,7 @@ const lines = env =>
  * Runs an offered line as typed (after `editor `), the shell's quotes read.
  * @param {string} line
  */
-const follow = line => {
+const follow = async line => {
   /** @type {string[]} */
   const words = [];
   for (const m of line.matchAll(/'((?:[^']|'\\'')*)'|(\S+)/g))
@@ -74,10 +74,10 @@ const saveSettings = (slug, settings) => {
   fs.writeFileSync(file, JSON.stringify({...data, settings}, null, 2));
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt183-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
-  editor(['new', 't', '--like', 'neutral']);
+  await editor(['new', 't', '--like', 'neutral']);
 }, 240_000);
 
 afterAll(() => {
@@ -87,11 +87,18 @@ afterAll(() => {
 describe('a swapped setting and value', () => {
   it(
     'beside an option typo gets one line with both repairs, which runs',
-    () => {
-      const r = editor(['set', 't', 'red', '--color-accent', '--mdoe', 'dark']);
+    async () => {
+      const r = await editor([
+        'set',
+        't',
+        'red',
+        '--color-accent',
+        '--mdoe',
+        'dark',
+      ]);
       expect(r.status).toBe(1);
       expect(lines(r.env)[0]).toBe('set t --color-accent red --mode dark');
-      expect(follow(lines(r.env)[0]).status).toBe(0);
+      expect((await follow(lines(r.env)[0])).status).toBe(0);
       saveSettings('t', []);
     },
     T,
@@ -99,11 +106,18 @@ describe('a swapped setting and value', () => {
 
   it(
     'with a spaced name beside a part typo gets the line, never how for the value',
-    () => {
-      const r = editor(['set', 't', 'red', 'background color', '--on', 'crad']);
+    async () => {
+      const r = await editor([
+        'set',
+        't',
+        'red',
+        'background color',
+        '--on',
+        'crad',
+      ]);
       expect(lines(r.env)[0]).toBe("set t 'background color' red --on card");
       expect(lines(r.env)).not.toContain('how red');
-      expect(follow(lines(r.env)[0]).status).toBe(0);
+      expect((await follow(lines(r.env)[0])).status).toBe(0);
       saveSettings('t', []);
     },
     T,
@@ -113,22 +127,27 @@ describe('a swapped setting and value', () => {
 describe('a var() naming a token one letter off', () => {
   it(
     'gets the line typed, and as the saved repair beside the undo',
-    () => {
-      const r = editor(['set', 't', '--color-accent', 'var(--color-eror)']);
+    async () => {
+      const r = await editor([
+        'set',
+        't',
+        '--color-accent',
+        'var(--color-eror)',
+      ]);
       expect(lines(r.env)).toContain(
         "set t --color-accent 'var(--color-error)'",
       );
       saveSettings('t', [
         {thing: '--color-accent', value: 'var(--color-eror)', source: 'token'},
       ]);
-      const s = editor(['show', 't']);
+      const s = await editor(['show', 't']);
       expect(lines(s.env)[0]).toBe('undo t --color-accent');
       expect(lines(s.env)).toContain(
         "set t --color-accent 'var(--color-error)'",
       );
-      expect(follow("set t --color-accent 'var(--color-error)'").status).toBe(
-        0,
-      );
+      expect(
+        (await follow("set t --color-accent 'var(--color-error)'")).status,
+      ).toBe(0);
       saveSettings('t', []);
     },
     T,
@@ -138,10 +157,10 @@ describe('a var() naming a token one letter off', () => {
 describe('undo naming two settings of different scopes', () => {
   it(
     'offers one undo for each, each of which runs',
-    () => {
-      editor(['set', 't', 'spacing', 'roomy']);
-      editor(['set', 't', 'background-color', 'blue', '--on', 'card']);
-      const r = editor([
+    async () => {
+      await editor(['set', 't', 'spacing', 'roomy']);
+      await editor(['set', 't', 'background-color', 'blue', '--on', 'card']);
+      const r = await editor([
         'undo',
         't',
         'spacing',
@@ -153,7 +172,7 @@ describe('undo naming two settings of different scopes', () => {
         'undo t spacing',
         'undo t background-color --on card',
       ]);
-      for (const l of lines(r.env)) expect(follow(l).status, l).toBe(0);
+      for (const l of lines(r.env)) expect((await follow(l)).status, l).toBe(0);
       expect(saved('t')).toEqual([]);
     },
     T,
@@ -163,8 +182,8 @@ describe('undo naming two settings of different scopes', () => {
 describe('a plain part fill that covers its variants', () => {
   it(
     'leads each "fill only one of them" chain with the undo of the fill',
-    () => {
-      const r = editor([
+    async () => {
+      const r = await editor([
         'set',
         't',
         'background-color',
@@ -178,10 +197,15 @@ describe('a plain part fill that covers its variants', () => {
       expect(note).toMatch(
         /to fill only one of them: \S.* editor undo t background-color --on button, then /,
       );
-      expect(follow('undo t background-color --on button').status).toBe(0);
+      expect((await follow('undo t background-color --on button')).status).toBe(
+        0,
+      );
       expect(
-        follow('set t background-color red --on button --when variant:primary')
-          .status,
+        (
+          await follow(
+            'set t background-color red --on button --when variant:primary',
+          )
+        ).status,
       ).toBe(0);
       expect(saved('t')).toEqual([
         expect.objectContaining({on: 'button', when: 'variant:primary'}),
@@ -195,35 +219,49 @@ describe('a plain part fill that covers its variants', () => {
 describe('new', () => {
   it(
     '--base offers the --like line as new checks it, every other flag repaired',
-    () => {
-      const r = editor(['new', 'n1', '--base', 'neutral', '--accent', 'bleu']);
+    async () => {
+      const r = await editor([
+        'new',
+        'n1',
+        '--base',
+        'neutral',
+        '--accent',
+        'bleu',
+      ]);
       expect(lines(r.env)[0]).toBe('new n1 --like neutral --accent blue');
-      expect(follow(lines(r.env)[0]).status).toBe(0);
+      expect((await follow(lines(r.env)[0])).status).toBe(0);
     },
     T,
   );
 
   it(
     'reads a word straight after a value, with no name given, as more of it',
-    () => {
-      const r = editor(['new', '--font', 'Open', 'Sans']);
+    async () => {
+      const r = await editor(['new', '--font', 'Open', 'Sans']);
       expect(r.env.error).toContain('"Sans" is more of --font\'s value');
       expect(lines(r.env)[0]).toMatch(
         /^new my-theme(-\d+)? --font 'Open Sans'$/,
       );
-      expect(follow(lines(r.env)[0]).status).toBe(0);
+      expect((await follow(lines(r.env)[0])).status).toBe(0);
     },
     T,
   );
 
   it(
     'reads a light and a dark mode given together as both modes',
-    () => {
-      const r = editor(['new', 'n3', '--mode', 'light', '--mode', 'dark']);
+    async () => {
+      const r = await editor([
+        'new',
+        'n3',
+        '--mode',
+        'light',
+        '--mode',
+        'dark',
+      ]);
       expect(r.env.suggestions[0].reason).toContain(
         'a light and a dark mode together are both modes',
       );
-      expect(follow(lines(r.env)[0]).status).toBe(0);
+      expect((await follow(lines(r.env)[0])).status).toBe(0);
     },
     T,
   );
@@ -232,10 +270,16 @@ describe('new', () => {
 describe('pasted lines', () => {
   it(
     "carry their repairs in the editor's arrow form too",
-    () => {
-      const r = editor(['set', 't', 'accent tomato -> tomatoe']);
+    async () => {
+      const r = await editor(['set', 't', 'accent tomato -> tomatoe']);
       expect(lines(r.env)).toContain('set t accent tomato');
-      const z = editor(['set', 't', 'z-index 1 -> 1,000', '--on', 'card']);
+      const z = await editor([
+        'set',
+        't',
+        'z-index 1 -> 1,000',
+        '--on',
+        'card',
+      ]);
       expect(lines(z.env)).toContain('set t z-index 1000 --on card');
     },
     T,
@@ -243,20 +287,26 @@ describe('pasted lines', () => {
 
   it(
     'read a mode label in any case, and refuse a mode typo with its line',
-    () => {
+    async () => {
       expect(
-        editor(['set', 't', '--color-accent (Dark): red -> blue']).status,
+        (await editor(['set', 't', '--color-accent (Dark): red -> blue']))
+          .status,
       ).toBe(0);
       expect(saved('t')).toEqual([
         expect.objectContaining({thing: '--color-accent', mode: 'dark'}),
       ]);
       saveSettings('t', []);
       expect(
-        editor(['set', 't', '--color-accent [dark only]: red -> blue']).status,
+        (await editor(['set', 't', '--color-accent [dark only]: red -> blue']))
+          .status,
       ).toBe(0);
       expect(saved('t')[0].mode).toBe('dark');
       saveSettings('t', []);
-      const typo = editor(['set', 't', '--color-accent (drak): red -> blue']);
+      const typo = await editor([
+        'set',
+        't',
+        '--color-accent (drak): red -> blue',
+      ]);
       expect(typo.status).toBe(1);
       expect(lines(typo.env)).toContain(
         'set t --color-accent blue --mode dark',
@@ -268,15 +318,16 @@ describe('pasted lines', () => {
 
   it(
     'keep a printed scope in another case or with a mode typo',
-    () => {
-      const card = editor(['set', 't', 'background-color = red on Card']);
+    async () => {
+      const card = await editor(['set', 't', 'background-color = red on Card']);
       expect(lines(card.env)).toContain('set t background-color red --on card');
       expect(
-        editor(['set', 't', 'background-color = red on card :Hover']).status,
+        (await editor(['set', 't', 'background-color = red on card :Hover']))
+          .status,
       ).toBe(0);
       expect(saved('t')[0].state).toBe('hover');
       saveSettings('t', []);
-      const mode = editor([
+      const mode = await editor([
         'set',
         't',
         '--color-accent = red (whole theme) [drak only]',
@@ -288,12 +339,17 @@ describe('pasted lines', () => {
 
   it(
     'read an entry with its field keys in other letters as that entry',
-    () => {
+    async () => {
       expect(
-        lines(editor(['set', 't', '{"Thing":"corners","Value":"pill"}']).env),
+        lines(
+          (await editor(['set', 't', '{"Thing":"corners","Value":"pill"}']))
+            .env,
+        ),
       ).toEqual(['set t corners pill']);
       expect(
-        lines(editor(['set', 't', '{"padding":"8px","On":"card"}']).env),
+        lines(
+          (await editor(['set', 't', '{"padding":"8px","On":"card"}'])).env,
+        ),
       ).toEqual(['set t padding 8px --on card']);
     },
     T,
@@ -303,8 +359,8 @@ describe('pasted lines', () => {
 describe('dropping --only', () => {
   it(
     'keeps every other scope flag',
-    () => {
-      const r = editor([
+    async () => {
+      const r = await editor([
         'set',
         't',
         'background-color',

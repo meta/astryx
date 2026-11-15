@@ -13,8 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {partKeyProblem} from '../theme/build/style-keys.mjs';
 import {
@@ -25,13 +24,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The assertions are about builds, files and messages, not rendered pages:
+// a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 const T = 240_000;
 
 beforeAll(() => {
@@ -43,13 +47,10 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+// The real program, in process: no Node start per command.
 /** @param {string[]} args */
-const json = args => {
-  const r = spawnSync(process.execPath, [BIN, '--json', ...args], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
+const json = async args => {
+  const r = await runCli(['--json', ...args], {cwd});
   return {status: r.status, env: JSON.parse(r.stdout)};
 };
 /** @param {string} file @param {string[]} [more] */
@@ -141,7 +142,7 @@ describe('part keys the browser drops or Core misreads', () => {
       ]) {
         plain(fields);
         fs.rmSync(path.join(cwd, 'plain/p.css'), {force: true});
-        const p = json(['theme', 'build', 'plain/p.ts']);
+        const p = await json(['theme', 'build', 'plain/p.ts']);
         expect(p.status, key).toBe(0);
         expect(JSON.stringify(p.env.data.warnings), key).toContain(
           JSON.stringify(`components.button.base.${key} (line 4): `).slice(
@@ -155,19 +156,19 @@ describe('part keys the browser drops or Core misreads', () => {
             key,
           ).toContain(written);
         own('k1', fields);
-        const e = compileOwn('k1');
+        const e = await compileOwn('k1');
         expect(e.status, key).toBe(1);
         expect(e.env.error, key).toContain('(line 7): ');
       }
       own('k1', "components: {button: {base: {'': {color: 'red'}}}}");
-      expect(compileOwn('k1').env.error).toContain(
+      expect((await compileOwn('k1')).env.error).toContain(
         'an empty key holds a block',
       );
       own(
         'k1',
         "components: {button: {base: {'-ms-overflow-style': 'none', ':hover::before': {color: 'red'}}}}",
       );
-      expect(compileOwn('k1').status).toBe(0);
+      expect((await compileOwn('k1')).status).toBe(0);
     },
     T,
   );
@@ -176,7 +177,7 @@ describe('part keys the browser drops or Core misreads', () => {
 describe('a family build with a member key the browser drops', () => {
   it(
     'builds, and warns the key with the member file, never a failed rule split',
-    () => {
+    async () => {
       write(
         'fam/ocean.ts',
         "import {defineTheme} from '@astryxdesign/core/theme';\nexport const ocean = defineTheme({name: 'ocean', tokens: {'--color-accent': '#0066cc'}});\n",
@@ -186,7 +187,7 @@ describe('a family build with a member key the browser drops', () => {
           'fam/ocean-calm.ts',
           `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean';\nexport default defineTheme({extends: ocean, name: 'ocean-calm',\n  components: {button: {base: {${JSON.stringify(key)}: {color: 'red'}}}}});\n`,
         );
-        const r = json([
+        const r = await json([
           'theme',
           'build',
           '--family',
@@ -228,7 +229,7 @@ describe('an own custom property that passes on a var() reading nothing', () => 
         ["localTokens: {'--brand': 'var(--button-focus-offset)'}", '--brand'],
       ]) {
         own('k4', fields);
-        const r = compileOwn('k4');
+        const r = await compileOwn('k4');
         expect(r.status, fields).toBe(1);
         expect(r.env.error, fields).toContain(
           `${name} passes its value on to what reads it: `,
@@ -240,7 +241,7 @@ describe('an own custom property that passes on a var() reading nothing', () => 
         "localTokens: {'--brand': 'var(--color-accent)'}",
       ]) {
         own('k4', fields);
-        expect(compileOwn('k4').status, fields).toBe(0);
+        expect((await compileOwn('k4')).status, fields).toBe(0);
       }
     },
     T,
@@ -274,7 +275,7 @@ describe('values read from another file through a call, an optional chain or a m
       ]) {
         write('themes/k5/shared.ts', shared);
         own('k5', fields, imports);
-        const r = compileOwn('k5');
+        const r = await compileOwn('k5');
         expect(r.status, fields).toBe(1);
         expect(r.env.error, fields).toContain(where);
         if (where === '(line 7)')
@@ -298,7 +299,7 @@ describe('a number no CSS value holds', () => {
         'components: {card: {base: {padding: NaN}}}',
       ]) {
         own('k12', fields);
-        const r = compileOwn('k12');
+        const r = await compileOwn('k12');
         expect(r.status, fields).toBe(1);
         expect(r.env.error, fields).not.toMatch(/NaNpx|Infinitypx/);
       }
@@ -310,12 +311,12 @@ describe('a number no CSS value holds', () => {
 describe('a default export that is a Promise of a theme', () => {
   it(
     'is named as a Promise, never as a theme without a name',
-    () => {
+    async () => {
       write(
         'p/b.ts',
         "import {defineTheme} from '@astryxdesign/core/theme';\nexport default Promise.resolve(defineTheme({name: 'b'}));\n",
       );
-      const r = json(['theme', 'build', 'p/b.ts']);
+      const r = await json(['theme', 'build', 'p/b.ts']);
       expect(r.status).toBe(1);
       expect(r.env.error).toContain('The default export is a Promise');
       expect(r.env.error).not.toContain('must have a name');

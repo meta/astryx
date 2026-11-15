@@ -15,7 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
   partCustomPropertyProblem,
@@ -29,13 +29,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The assertions are about builds, files and messages, not rendered pages:
+// a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 const T = 240_000;
 
 beforeAll(() => {
@@ -47,13 +52,10 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+// The real program, in process: no Node start per command.
 /** @param {string[]} args */
-const json = args => {
-  const r = spawnSync(process.execPath, [BIN, '--json', ...args], {
-    cwd,
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
+const json = async args => {
+  const r = await runCli(['--json', ...args], {cwd});
   return {status: r.status, env: JSON.parse(r.stdout)};
 };
 /** @param {string} file @param {string[]} [more] */
@@ -128,7 +130,7 @@ describe('a pseudo key read as a selector', () => {
           ['theme', 'build', 'plain/p.ts'],
         ]) {
           fs.rmSync(path.join(cwd, 'plain/p.css'), {force: true});
-          const p = json(args);
+          const p = await json(args);
           expect(p.status, `${args[0]} ${key}`).toBe(0);
           expect(
             JSON.stringify(p.env.data.warnings),
@@ -144,7 +146,7 @@ describe('a pseudo key read as a selector', () => {
           ).toContain(written);
         }
         own('k2', fields);
-        const e = compileOwn('k2');
+        const e = await compileOwn('k2');
         expect(e.status, key).toBe(1);
         expect(e.env.error, key).toContain(
           `components.button.base ${key} (line 7): ${key} `,
@@ -154,7 +156,7 @@ describe('a pseudo key read as a selector', () => {
         'k2',
         "components: {button: {base: {':nth-child(2n)': {color: 'red'}}}}",
       );
-      expect(compileOwn('k2').status).toBe(0);
+      expect((await compileOwn('k2')).status).toBe(0);
     },
     T,
   );
@@ -175,7 +177,7 @@ describe('a custom property with capitals on a part', () => {
       const fields =
         "components: {button: {base: {'--myColor': 'blue', color: 'var(--myColor)'}}}";
       plain(fields);
-      const p = compile('plain/p.ts');
+      const p = await compile('plain/p.ts');
       expect(p.status).toBe(0);
       expect(JSON.stringify(p.env.data.warnings)).toContain(
         'components.button.base.--myColor (line 4): --myColor has capitals',
@@ -184,14 +186,14 @@ describe('a custom property with capitals on a part', () => {
         '--my-color: blue;',
       );
       own('k6', fields);
-      const e = compileOwn('k6');
+      const e = await compileOwn('k6');
       expect(e.status).toBe(1);
       expect(e.env.error).toContain('--myColor has capitals');
       own(
         'k6',
         "components: {button: {base: {'--my-color': 'blue', color: 'var(--my-color)'}}}",
       );
-      expect(compileOwn('k6').status).toBe(0);
+      expect((await compileOwn('k6')).status).toBe(0);
     },
     T,
   );
@@ -203,16 +205,16 @@ describe('part variables Core sets on its own element', () => {
     async () => {
       await themeEditNew('k5', {cwd});
       own('k5', "localTokens: {'--button-focus-offset': '9px'}");
-      const local = compileOwn('k5');
+      const local = await compileOwn('k5');
       expect(local.status).toBe(1);
       expect(local.env.error).toContain(
         "--button-focus-offset is a variable Button sets on its own element, so a value in the page's localTokens never reaches it: set it on the part, components: {button: {base: {'--button-focus-offset': \"9px\"}}}",
       );
       // A name of the theme's own that only resembles one stays its own.
       own('k5', "localTokens: {'--button-focus-ofset': '9px'}");
-      expect(compileOwn('k5').status).toBe(0);
+      expect((await compileOwn('k5')).status).toBe(0);
       own('k5', "components: {card: {base: {'--button-focus-offset': '9px'}}}");
-      const card = compileOwn('k5');
+      const card = await compileOwn('k5');
       expect(card.status).toBe(1);
       expect(card.env.error).toContain(
         '--button-focus-offset is a variable Button sets on its own element, so a value on card never reaches it: set it on the part, components: {button: {base: {\'--button-focus-offset\': "9px"}}}',
@@ -222,7 +224,7 @@ describe('part variables Core sets on its own element', () => {
         "':focus-visible': {outlineOffset: 'calc(var(--button-focus-offset) * 2)'}",
       ]) {
         own('k5', `components: {button: {base: {${read}}}}`);
-        const r = compileOwn('k5');
+        const r = await compileOwn('k5');
         expect(r.status, read).toBe(0);
       }
     },
@@ -240,7 +242,7 @@ describe.skipIf(!posix)(
         const css = path.join(cwd, 'themes/k1/k1.css');
         fs.rmSync(css);
         expect(spawnSync('mkfifo', [css]).status).toBe(0);
-        const r = json([
+        const r = await json([
           'experimental',
           'theme',
           'editor',
@@ -278,7 +280,7 @@ describe('values read from another file through an expression', () => {
         ["import {make} from './shared';", 'tokens: make()', 5],
       ]) {
         own('k4', String(fields), String(imports));
-        const r = compileOwn('k4');
+        const r = await compileOwn('k4');
         expect(r.status, String(fields)).toBe(1);
         expect(r.env.error, String(fields)).toContain(
           `(in themes/k4/shared.ts, line ${line})`,
@@ -304,7 +306,7 @@ describe('values read from another file through an expression', () => {
         ["import * as B from './brand';", 'typography: B.T'],
       ]) {
         own('k12', fields, imports);
-        const r = compileOwn('k12');
+        const r = await compileOwn('k12');
         expect(r.status, fields).toBe(1);
         expect(r.env.error, fields).toContain(
           '(in themes/k12/brand.ts, line 1)',
@@ -334,7 +336,7 @@ describe("a null value in an editor theme's own file", () => {
         ],
       ]) {
         own('k10', fields);
-        const r = compileOwn('k10');
+        const r = await compileOwn('k10');
         expect(r.status, fields).toBe(0);
         expect(JSON.stringify(r.env.data.warnings), fields).toContain(where);
         await themeEditShow('k10', {cwd});
@@ -357,7 +359,7 @@ describe('a missing theme source near the one that exists', () => {
         'themes/k9/k9.theme.tsx',
         'themes/k9/K9.theme.ts',
       ]) {
-        const r = compile(file);
+        const r = await compile(file);
         expect(r.status, file).toBe(1);
         expect(r.env.error, file).not.toContain('generated file');
         expect(JSON.stringify(r.env), file).toContain(
