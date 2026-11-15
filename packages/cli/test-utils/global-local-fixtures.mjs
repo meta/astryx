@@ -45,6 +45,7 @@ import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
 import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
+import {scopedList} from './fixture-scope.mjs';
 
 /** This CLI package's folder. */
 export const CLI_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -404,10 +405,10 @@ export function placeCli(dir, version, options = {}) {
   if (ready) {
     fs.mkdirSync(path.dirname(dir), {recursive: true});
     fs.renameSync(ready.dir, dir);
-    placed.push({dir, key, record: ready.record});
+    scopedList('placed', placed).push({dir, key, record: ready.record});
   } else {
     buildCopy(dir, version, options);
-    placed.push({dir, key, record: treeRecord(dir)});
+    scopedList('placed', placed).push({dir, key, record: treeRecord(dir)});
   }
   return {dir, bin: path.join(dir, 'clients', 'cli', 'bin', 'astryx.mjs')};
 }
@@ -435,12 +436,14 @@ let pooledCount = 0;
  * A copy whose entries changed stays where it is, for its folder's removal.
  * So does every copy when `keep` is false: a step that is still running may
  * still use one.
- * @param {{keep?: boolean}} [options]
+ * `copies` names a fixture scope's own list; by default, the copies placed
+ * outside any scope.
+ * @param {{keep?: boolean, copies?: typeof placed}} [options]
  * @throws {Error} when a test wrote into a file every copy shares. The pool is
  * then emptied, and the changed files are unpacked again from the tarball.
  */
-export function recyclePlacedCopies({keep = true} = {}) {
-  const copies = placed.splice(0);
+export function recyclePlacedCopies({keep = true, copies: list = placed} = {}) {
+  const copies = list.splice(0);
   if (packed && packedRecord) {
     const changed = changedPaths(
       packedRecord,
