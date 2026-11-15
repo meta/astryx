@@ -475,7 +475,7 @@ const styles = stylex.create({
   // into the option's press target and the action's slot. The action cell is
   // a real cell for the active-descendant ring, drawn with the focus tokens
   // because no element in the popup has DOM focus.
-  // With `itemContent`, which already sizes it.
+  // The option cell also takes `itemContent`, which sizes it.
   optionCell: {
     alignItems: 'center',
     alignSelf: 'stretch',
@@ -593,11 +593,6 @@ function startsWithRows<T extends SearchableItem>(
   );
 }
 
-/**
- * A query that has been typed but is still shorter than the caller's
- * threshold. An empty query is not "below the minimum" — it is the
- * untouched state, and `hasEntriesOnFocus` owns what happens there.
- */
 // The caller's control must carry its own name: a screen reader reaches it
 // through the action cell. Checked when an action cell attaches, in
 // development only.
@@ -631,6 +626,11 @@ function preventOptionFocus(event: React.MouseEvent) {
   event.preventDefault();
 }
 
+/**
+ * A query that has been typed but is still shorter than the caller's
+ * threshold. An empty query is not "below the minimum" — it is the
+ * untouched state, and `hasEntriesOnFocus` owns what happens there.
+ */
 function isBelowMinQueryLength(query: string, minQueryLength: number): boolean {
   const length = characterCount(query);
   return length > 0 && length < minQueryLength;
