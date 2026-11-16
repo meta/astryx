@@ -19,6 +19,7 @@ applies_to:
     packages/core/src/Card/,
     packages/core/src/Dialog/,
     packages/core/src/BottomSheet/,
+    packages/core/src/Drawer/,
     packages/core/src/Lightbox/,
     packages/core/src/MobileNav/,
     packages/core/src/Section/,
@@ -95,8 +96,8 @@ The protocol has four layers:
    public spacing scale. Theme component overrides may set supported padding
    properties. `architecture:theme-authoring-contract` and
    `architecture:component-theming-surface` own those public surfaces.
-2. **Container lowering.** `container()` resolves Card, Section, Dialog, and
-   BottomSheet padding into internal logical-edge variables. An explicit
+2. **Container lowering.** `container()` resolves Card, Section, Dialog,
+   BottomSheet, and Drawer padding into internal logical-edge variables. An explicit
    component padding prop may publish the same geometry through the maps in
    `padding.stylex.ts`.
 3. **Descendant geometry.** Four inherited `--container-padding-*` variables
@@ -123,7 +124,7 @@ The protocol has four layers:
 
 | Role                       | Participants                                                   | Contract responsibility                                                                                                                                                                                |
 | -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Container publisher        | Card, Section, Dialog, BottomSheet, ScrollableArea             | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                                                           |
+| Container publisher        | Card, Section, Dialog, BottomSheet, Drawer, ScrollableArea     | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                                                           |
 | Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish the padding each region applies, on every edge, on the automatic and explicit-padding paths; LayoutContent's content-width gutter is applied but not published (`component:LayoutContent` FR2) |
 | Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`                                  |
 | Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry                               |
@@ -448,7 +449,7 @@ without dropping the active theme's Section default.
   logical-edge setters, Section propagation, and the overlay reset.
 - `packages/core/src/Layout/edgeCompensation.stylex.ts` — owns the container-side
   alignment adjustment for marked edge content.
-- Card, Section, Dialog, BottomSheet, ScrollableArea, and Layout region
+- Card, Section, Dialog, BottomSheet, Drawer, ScrollableArea, and Layout region
   implementations — publish their current geometry.
 - Section, ScrollableArea, Layout, Divider, Table, TabList, List, and Toolbar
   implementations — consume the current geometry for bleed or alignment.

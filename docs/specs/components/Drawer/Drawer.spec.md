@@ -106,9 +106,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   the caller's props, so a caller's `onCancel` is dropped.
   `architecture:public-component-api` INV5 has accepted event inputs reach the
   element.
-- **The container-padding record does not list Drawer.** Drawer's Content
-  area publishes its inset (FR16, DEC-2), but `architecture:container-padding`
-  does not name Drawer among its container publishers.
 
 ## Ownership boundary
 
