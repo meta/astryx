@@ -30,7 +30,6 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {
   CalendarIcon,
   FlagIcon,
@@ -279,14 +278,16 @@ function PageHeader({
               />
             </TabList>
           </StackItem>
-          <Button
-            label={isPanelOpen ? 'Hide panel' : 'Show panel'}
-            variant="ghost"
-            size="md"
-            icon={<Icon icon={ViewColumnsIcon} size="sm" />}
-            isIconOnly
-            onClick={onTogglePanel}
-          />
+          {!isNarrow && (
+            <Button
+              label={isPanelOpen ? 'Hide panel' : 'Show panel'}
+              variant="ghost"
+              size="md"
+              icon={<Icon icon={ViewColumnsIcon} size="sm" />}
+              isIconOnly
+              onClick={onTogglePanel}
+            />
+          )}
         </HStack>
       </VStack>
     </LayoutHeader>
@@ -614,66 +615,45 @@ function RightPanel() {
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function DetailPage2Template() {
   const [activeTab, setActiveTab] = useState('details');
-  const isNarrow = useMediaQuery('(max-width: 1024px)');
-  // Desktop: a fixed-width `end`-slot side panel that can be hidden.
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get the narrow layout, which reads well at every width. Once
+  // script runs, wide screens move the order details to the side panel.
+  const isNarrow = useMediaQuery('(max-width: 1024px)', true);
+  // Wide screens: a fixed-width `end`-slot side panel that can be hidden.
   const [showSidePanel, setShowSidePanel] = useState(true);
-  // Mobile: the panel opens as a full-screen dialog (the side slot would squish
-  // the main content), driven by the same toolbar button.
-  const [isPanelDialogOpen, setPanelDialogOpen] = useState(false);
-
-  const isPanelShown = isNarrow ? isPanelDialogOpen : showSidePanel;
-  const togglePanel = () =>
-    isNarrow
-      ? setPanelDialogOpen(prev => !prev)
-      : setShowSidePanel(prev => !prev);
 
   return (
-    <>
-      <Layout
-        height="fill"
-        contentWidth={1000}
-        defaultHasDividers
-        header={
-          <PageHeader
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            isPanelOpen={isPanelShown}
-            onTogglePanel={togglePanel}
-            isNarrow={isNarrow}
-          />
-        }
-        content={
-          <LayoutContent role="main">
-            <VStack gap={4}>
-              <ItemsCard />
-              <InvoiceCard />
-              <TimelineSection />
-            </VStack>
-          </LayoutContent>
-        }
-        end={!isNarrow && showSidePanel ? <RightPanel /> : undefined}
-      />
-      {/* Mobile: the side-panel content uses the full viewport so order details
-          are not squeezed beside narrow page chrome. Drawer remains available
-          for side-overlay flows that intentionally preserve page context. */}
-      <Dialog
-        variant="fullscreen"
-        isOpen={isNarrow && isPanelDialogOpen}
-        onOpenChange={setPanelDialogOpen}>
-        <Layout
-          header={
-            <DialogHeader
-              title="Order details"
-              onOpenChange={setPanelDialogOpen}
-            />
-          }
-          content={
-            <LayoutContent padding={4}>
-              <PanelContent />
-            </LayoutContent>
-          }
+    <Layout
+      height="fill"
+      contentWidth={1000}
+      defaultHasDividers
+      header={
+        <PageHeader
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isPanelOpen={showSidePanel}
+          onTogglePanel={() => setShowSidePanel(prev => !prev)}
+          isNarrow={isNarrow}
         />
-      </Dialog>
-    </>
+      }
+      content={
+        <LayoutContent role="main">
+          <VStack gap={4}>
+            <ItemsCard />
+            <InvoiceCard />
+            <TimelineSection />
+            {/* Narrow screens: the order details follow the main column
+                instead of squeezing beside it. */}
+            {isNarrow && (
+              <VStack gap={4}>
+                <Heading level={2}>Order details</Heading>
+                <PanelContent />
+              </VStack>
+            )}
+          </VStack>
+        </LayoutContent>
+      }
+      end={!isNarrow && showSidePanel ? <RightPanel /> : undefined}
+    />
   );
 }

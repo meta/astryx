@@ -43,7 +43,6 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
@@ -52,7 +51,6 @@ import {
   TrashIcon,
   PhotoIcon,
   ViewColumnsIcon,
-  InformationCircleIcon,
   BellIcon,
   ShareIcon,
   EyeIcon,
@@ -405,14 +403,7 @@ function PageHeader({
               Refresh onboarding flow for workspaces
             </Heading>
           </VStack>
-          {isNarrow ? (
-            <IconButton
-              label="Show details"
-              variant="secondary"
-              icon={<Icon icon={InformationCircleIcon} size="sm" />}
-              onClick={onToggleDetails}
-            />
-          ) : (
+          {!isNarrow && (
             <HStack gap={1}>
               {HEADER_ACTIONS.map(action => (
                 <IconButton
@@ -864,14 +855,11 @@ export default function WorkItemDetailTemplate() {
   const [subtasks, setSubtasks] = useState(SUBTASKS);
   const [comment, setComment] = useState('');
 
-  const isNarrow = useMediaQuery('(max-width: 1024px)');
-  // The details live in a rail on wide screens and a dialog on narrow ones.
-  // Each keeps its own flag: the rail is open by default, while the dialog must
-  // stay shut until asked for, so one shared initial value cannot serve both.
-  const [isRailOpen, setRailOpen] = useState(true);
-  const [isDialogOpen, setDialogOpen] = useState(false);
-  const isDetailsOpen = isNarrow ? isDialogOpen : isRailOpen;
-  const setDetailsOpen = isNarrow ? setDialogOpen : setRailOpen;
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get the narrow layout, which reads well at every width. Once
+  // script runs, wide screens move the details to a rail that can be hidden.
+  const isNarrow = useMediaQuery('(max-width: 1024px)', true);
+  const [isDetailsOpen, setDetailsOpen] = useState(true);
   const toggleDetails = () => setDetailsOpen(isOpen => !isOpen);
 
   const updateFields = (patch: Partial<WorkItemFields>) =>
@@ -883,59 +871,47 @@ export default function WorkItemDetailTemplate() {
     );
 
   return (
-    <>
-      <Layout
-        height="fill"
-        contentWidth={1260}
-        header={
-          <PageHeader
-            fields={fields}
-            onFieldsChange={updateFields}
-            isDetailsOpen={isDetailsOpen}
-            onToggleDetails={toggleDetails}
-            isNarrow={isNarrow}
-          />
-        }
-        content={
-          <LayoutContent padding={6} role="main">
-            <VStack gap={6}>
-              <DescriptionSection />
-              <Divider />
-              <SubtasksSection subtasks={subtasks} onSetDone={setSubtaskDone} />
-              <Divider />
-              <AttachmentsSection />
-              <Divider />
-              <ActivitySection comment={comment} onCommentChange={setComment} />
-            </VStack>
-          </LayoutContent>
-        }
-        end={
-          !isNarrow && isDetailsOpen ? (
-            <LayoutPanel
-              width={340}
-              padding={6}
-              role="complementary"
-              hasDivider>
-              <DetailsPanel fields={fields} />
-            </LayoutPanel>
-          ) : undefined
-        }
-      />
-      <Dialog
-        variant="fullscreen"
-        isOpen={isNarrow && isDetailsOpen}
-        onOpenChange={setDialogOpen}>
-        <Layout
-          header={
-            <DialogHeader title="Task details" onOpenChange={setDialogOpen} />
-          }
-          content={
-            <LayoutContent padding={4}>
-              <DetailsPanel fields={fields} />
-            </LayoutContent>
-          }
+    <Layout
+      height="fill"
+      contentWidth={1260}
+      header={
+        <PageHeader
+          fields={fields}
+          onFieldsChange={updateFields}
+          isDetailsOpen={isDetailsOpen}
+          onToggleDetails={toggleDetails}
+          isNarrow={isNarrow}
         />
-      </Dialog>
-    </>
+      }
+      content={
+        <LayoutContent padding={6} role="main">
+          <VStack gap={6}>
+            <DescriptionSection />
+            <Divider />
+            <SubtasksSection subtasks={subtasks} onSetDone={setSubtaskDone} />
+            <Divider />
+            <AttachmentsSection />
+            <Divider />
+            <ActivitySection comment={comment} onCommentChange={setComment} />
+            {/* Narrow screens: the details follow the main column instead
+                of squeezing beside it. */}
+            {isNarrow && (
+              <>
+                <Divider />
+                <Heading level={2}>Task details</Heading>
+                <DetailsPanel fields={fields} />
+              </>
+            )}
+          </VStack>
+        </LayoutContent>
+      }
+      end={
+        !isNarrow && isDetailsOpen ? (
+          <LayoutPanel width={340} padding={6} role="complementary" hasDivider>
+            <DetailsPanel fields={fields} />
+          </LayoutPanel>
+        ) : undefined
+      }
+    />
   );
 }
