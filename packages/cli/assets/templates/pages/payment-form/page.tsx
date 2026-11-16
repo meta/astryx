@@ -32,6 +32,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {ShieldCheckIcon} from '@heroicons/react/24/outline';
 import {LockClosedIcon} from '@heroicons/react/24/outline';
 import {CheckCircleIcon} from '@heroicons/react/24/outline';
@@ -200,6 +201,7 @@ const cardLogo: CSSProperties = {
 
 export default function PaymentFormPage() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -931,7 +933,24 @@ export default function PaymentFormPage() {
                                           max={10}
                                           isIntegerOnly
                                         />
-                                        <Link href="#" type="supporting">
+                                        <Link
+                                          type="supporting"
+                                          onClick={() =>
+                                            confirm.show({
+                                              title: `Remove ${item.name} from your cart?`,
+                                              description:
+                                                "This demo won't change your cart.",
+                                              actionLabel: 'Remove',
+                                              onAction: () => {
+                                                confirm.hide();
+                                                // Demo only: replace this toast with the call that performs the action.
+                                                showToast({
+                                                  body: `Demo: ${item.name} would be removed from your cart here`,
+                                                  uniqueID: 'remove-item',
+                                                });
+                                              },
+                                            })
+                                          }>
                                           Remove
                                         </Link>
                                         <Link
@@ -952,6 +971,7 @@ export default function PaymentFormPage() {
                                 <Divider />
                               </VStack>
                             ))}
+                            {confirm.element}
 
                             {/* Order total subsection */}
                             <VStack gap={3}>
