@@ -52,6 +52,14 @@ tester.run('press-through-recipes', rule, {
       filename: component,
     },
     {
+      code: "import {pressOnItemsOnly} from '../hooks/menuPressOnItems';",
+      filename: component,
+    },
+    {
+      code: "import type {MenuPressPointerType} from '../hooks/menuPressGesture';",
+      filename: component,
+    },
+    {
       code: "import {pressStyles} from '../privateAttributes/press.stylex';",
       filename: component,
     },
@@ -168,7 +176,7 @@ tester.run('press-through-recipes', rule, {
       errors: [{messageId: 'innerImport'}],
     },
     {
-      code: "import {menuPressGesture} from '../hooks/menuPressGesture';",
+      code: "import {menuPressValues} from '../hooks/menuPressValues';",
       filename: component,
       errors: [{messageId: 'innerImport'}],
     },
@@ -192,11 +200,13 @@ tester.run('press-through-recipes', rule, {
       filename: component,
       errors: [{messageId: 'innerImport'}],
     },
-    // (a) Lab reaching a press tracker through the touch entry.
+    // (a) The message for the group tracker's own module names the group entries.
     {
-      code: "import {createPressTracker} from '@astryxdesign/core/internal/touch';",
-      filename: labComponent,
-      errors: [{messageId: 'innerImport'}],
+      code: "import {trackGroupPress} from '../hooks/actionGroupTracker';",
+      filename: component,
+      errors: [
+        {message: /`useGroupPressTracking` or `useActionGroupTracking`/},
+      ],
     },
     // (a) One more import than the baseline allows.
     {

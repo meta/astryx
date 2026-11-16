@@ -11,12 +11,14 @@
  * Reported, in shipped Core and Lab source outside the press modules:
  *   - (a) an import of a press profile or a recipe's inner module
  *     (`PressTracker`, the action-group tracker's own module, the menu press
- *     helpers, the engine's gesture module), by relative path or through
- *     `@astryxdesign/core/internal/touch`. A recipe's entry point is always
+ *     helpers, the engine's gesture module), by relative path or by package
+ *     subpath. A recipe's entry point is always
  *     allowed: the engine (`usePressFeedback`, `utils/pressFeedback`), its
  *     group profile (`useGroupPressTracking`, `useActionGroupTracking`,
- *     `pressGroupContext`), the row-wide target (`useClickableContainer`, `utils/boxHold`), the cell or
- *     menu row (`useMenuPress`), and the recipe styles. An import that brings
+ *     `pressGroupContext`), the row-wide target (`useClickableContainer`,
+ *     `utils/boxHold`), the cell or menu row (`useMenuPress` with its
+ *     `menuPressOnItems` and `menuPressGesture` modules), and the recipe
+ *     styles. An import that brings
  *     only constants (UPPER_SNAKE_CASE names) is allowed: the guard is about
  *     trackers and pressed state, not shared numbers;
  *   - (b) pressed state of a component's own: a `useState` whose name starts
@@ -31,8 +33,9 @@
  *     in place of CSS `:active`.
  *
  * Known limitations: pressed state held in a ref, a reducer or an external
- * store, a handler passed through another component, and a press attribute
- * built at run time are not seen.
+ * store, a handler passed through another component, a press attribute
+ * built at run time, and an inner module re-exported through an entry such
+ * as `internal/touch` (none is today) are not seen.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
  * baseline lists, per file, each report's token once per site that predates
@@ -105,21 +108,15 @@ export const PRESS_MODULES = {
     inner: [],
   },
   'cell or menu row': {
-    entry: ['hooks/useMenuPress', 'privateAttributes/menuPressLit.stylex'],
-    inner: [
-      'hooks/menuPressGesture',
+    entry: [
+      'hooks/useMenuPress',
       'hooks/menuPressOnItems',
-      'hooks/menuPressValues',
-      'hooks/menuPressMarker',
+      'hooks/menuPressGesture',
+      'privateAttributes/menuPressLit.stylex',
     ],
+    inner: ['hooks/menuPressValues', 'hooks/menuPressMarker'],
   },
 };
-
-/** The modules whose `:active` arms are the shared press styles. */
-const PRESS_STYLE_MODULES = new Set([
-  'privateAttributes/press.stylex',
-  'utils/interactionOverlay.stylex',
-]);
 
 const ENTRY_MODULES = new Set(
   Object.values(PRESS_MODULES).flatMap(recipe => recipe.entry),
@@ -129,14 +126,17 @@ const INNER_MODULES = new Set(
 );
 const ALL_MODULES = new Set([...ENTRY_MODULES, ...INNER_MODULES]);
 
-/**
- * The profile names `@astryxdesign/core/internal/touch` re-exports, with the
- * module each one comes from.
- */
-const TOUCH_ENTRY_NAMES = {
-  createPressTracker: 'gestures/PressTracker',
-  PressTracker: 'gestures/PressTracker',
-  usePressTracker: 'gestures/usePressTracker',
+/** What to import instead of an inner module, when it is not the recipe's entry. */
+const IMPORT_HINTS = {
+  'hooks/actionGroupTracker':
+    'For a press that slides across a group, use `useGroupPressTracking` or `useActionGroupTracking`',
+  'gestures/PressTracker':
+    'For a press held through a drag, keep the press in the engine (`usePressFeedback`); the touch press tracker is still to fold into it',
+  'gestures/usePressTracker':
+    'For a press held through a drag, keep the press in the engine (`usePressFeedback`); the touch press tracker is still to fold into it',
+  'utils/pressGesture': 'Import only its constants, or use `usePressFeedback`',
+  'hooks/menuPressValues': 'Use `useMenuPress`',
+  'hooks/menuPressMarker': 'Use `useMenuPress`',
 };
 
 const CORE_PACKAGE = /^@astryxdesign\/core\//;
@@ -208,7 +208,7 @@ export default {
     ],
     messages: {
       innerImport:
-        '`{{token}}` is a press module inside the {{recipe}} recipe. Press code goes through {{recipes}}. Import the recipe’s entry point, or ask the record’s owner to change a recipe.',
+        '`{{token}}` is a press module inside the {{recipe}} recipe. Press code goes through {{recipes}}. {{hint}}, or ask the record’s owner to change a recipe.',
       pressedState:
         '`{{token}}` is pressed state of this component’s own. Press code goes through {{recipes}}. The engine keeps the pressed state; mark the element pressable instead.',
       pressAttribute:
@@ -248,15 +248,12 @@ export default {
       } else if (CORE_PACKAGE.test(specifier)) {
         const subpath = specifier.replace(CORE_PACKAGE, '');
         if (INNER_MODULES.has(subpath)) modules.add(subpath);
-        for (const name of importedNames ?? []) {
-          const module = TOUCH_ENTRY_NAMES[name];
-          if (module != null) modules.add(module);
-        }
       }
       if (onlyConstants) return;
       for (const module of modules) {
         report(node, 'innerImport', `import:${module}`, {
           recipe: recipeOf(module),
+          hint: IMPORT_HINTS[module] ?? 'Import the recipe’s entry point',
         });
       }
     }
@@ -339,9 +336,6 @@ export default {
       }
     }
 
-    const inPressStyles =
-      fileModule != null && PRESS_STYLE_MODULES.has(fileModule);
-
     return {
       ImportDeclaration(node) {
         checkSource(node, node.source.value, importedNamesOf(node.specifiers));
@@ -415,11 +409,10 @@ export default {
         if (node.callee.type === 'Identifier') {
           setterCalls.push({node, ancestors: sourceCode.getAncestors(node)});
         }
-        if (!inPressStyles && isStylexCall(node, 'create')) {
+        if (isStylexCall(node, 'create')) {
           node.arguments.forEach(checkActiveArms);
         }
         if (
-          !inPressStyles &&
           isStylexWhen(node) &&
           node.arguments[0]?.type === 'Literal' &&
           /:active\b/.test(String(node.arguments[0].value))

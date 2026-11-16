@@ -1,31 +1,19 @@
 {
-  "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": [
-    "import:hooks/menuPressOnItems"
-  ],
   "packages/core/src/Button/Button.tsx": [":active", ":active"],
   "packages/core/src/ClickableCard/ClickableCard.tsx": [":active", ":active"],
   "packages/core/src/ComplexSelector/ComplexSelector.tsx": [":active"],
-  "packages/core/src/DropdownMenu/DropdownMenu.tsx": [
-    "import:hooks/menuPressGesture"
-  ],
   "packages/core/src/DropdownMenu/DropdownMenuItem.tsx": [":active"],
   "packages/core/src/Lightbox/Lightbox.tsx": [
     "import:gestures/usePressTracker"
   ],
   "packages/core/src/MultiSelector/MultiSelector.tsx": [":active", ":active"],
   "packages/core/src/NavItem/navItemStyles.stylex.ts": [":active"],
-  "packages/core/src/NavMenu/NavHeadingMenu.tsx": [
-    "import:hooks/menuPressOnItems"
-  ],
   "packages/core/src/SegmentedControl/useSegmentedTouchTracking.ts": [
     "import:gestures/usePressTracker",
     "import:hooks/actionGroupTracker"
   ],
   "packages/core/src/SelectableCard/SelectableCard.tsx": [":active", ":active"],
   "packages/core/src/Selector/Selector.tsx": [":active", ":active"],
-  "packages/core/src/SideNav/SideNavHeading.tsx": [
-    "import:hooks/menuPressOnItems"
-  ],
   "packages/core/src/Slider/sliderTouchController.ts": [
     "import:gestures/PressTracker"
   ],
@@ -35,11 +23,7 @@
   ],
   "packages/core/src/TabList/Tab.tsx": [":active"],
   "packages/core/src/Thumbnail/Thumbnail.tsx": [":active", ":active"],
-  "packages/core/src/TopNav/TopNavHeading.tsx": [
-    "import:hooks/menuPressOnItems"
-  ],
   "packages/core/src/TopNav/TopNavItem.tsx": [":active"],
-  "packages/core/src/TopNav/TopNavMenu.tsx": ["import:hooks/menuPressOnItems"],
   "packages/core/src/gestures/GestureHost.ts": ["import:gestures/PressTracker"],
   "packages/lab/src/CircleCheckIndicator/CircleCheckIndicator.tsx": [":active"],
   "packages/lab/src/TabBar/useTabBarLens.ts": ["data-tab-bar-pressed"],
