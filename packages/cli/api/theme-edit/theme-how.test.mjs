@@ -3867,7 +3867,8 @@ const QUESTIONS_R = [
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
   ['squre corners', /^set q corners square$/],
-  ['eckiger corners', /^set q corners square$/],
+  // ("eckiger", more angular: one step sharper, never all the way.)
+  ['eckiger corners', /^set q corners less$/],
   ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
   [
     'buttons darker while being clicked',
