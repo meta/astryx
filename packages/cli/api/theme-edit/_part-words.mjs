@@ -17,6 +17,11 @@
  */
 export const OVERRIDES = [
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
+  // (The page's main panel, the area its content sits in.)
+  [
+    /\b(?:main\s+)?content\s+(?:area|panel|region|pane)s?\b|\bmain\s+(?:area|panel|pane)s?\b/,
+    {on: 'layout-content'},
+  ],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},

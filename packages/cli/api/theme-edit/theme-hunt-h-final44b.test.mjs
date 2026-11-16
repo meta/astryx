@@ -120,10 +120,12 @@ describe('looks', () => {
   }, 240_000);
 
   it('a status word after a possessive is that look', async () => {
+    // (The success color for the whole theme follows as the second line.)
     expect(
       writes(await how('q0', "make the badge's success background green")),
     ).toEqual([
       `set q0 background-color '#16a34a' --on badge --when variant:success`,
+      `set q0 success '#16a34a'`,
     ]);
   }, 240_000);
 });
