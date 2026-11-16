@@ -234,11 +234,41 @@ export default function App({ children }) {
                 Next steps
               </Heading>
               <List density="compact" listStyle="disc">
-                <ListItem label="Fundamental concepts — How theming, layout, and composition work" />
-                <ListItem label="Component API reference — Props, variants, and examples for every component" />
-                <ListItem label="Accessibility — Built-in a11y features and ARIA patterns" />
-                <ListItem label="CLI tools — Scaffold projects and manage templates" />
-                <ListItem label="Design tokens — Colors, spacing, typography, and sizing" />
+                {/* A node label wraps on a narrow screen; a string label
+                    truncates to one line. */}
+                <ListItem
+                  label={
+                    <>
+                      Fundamental concepts — How theming, layout, and
+                      composition work
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Component API reference — Props, variants, and examples
+                      for every component
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Accessibility — Built-in a11y features and ARIA patterns
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>CLI tools — Scaffold projects and manage templates</>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>Design tokens — Colors, spacing, typography, and sizing</>
+                  }
+                />
               </List>
             </VStack>
           </VStack>
