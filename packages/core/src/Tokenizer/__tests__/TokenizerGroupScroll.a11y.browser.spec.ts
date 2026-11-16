@@ -58,12 +58,15 @@ async function mount(page: Page, story: string) {
     .waitForFunction(() => {
       const render = (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__
         ?.currentRender;
-      return render?.phase === 'completed' || render?.phase === 'errored'
+      // A render rests at "finished" or "completed", by Storybook version.
+      return render?.phase === 'finished' ||
+        render?.phase === 'completed' ||
+        render?.phase === 'errored'
         ? render.phase
         : false;
     })
     .then(async handle => handle.jsonValue());
-  expect(phase, `the ${story} story's play function`).toBe('completed');
+  expect(phase, `the ${story} story's play function`).not.toBe('errored');
 }
 
 // The strip is the row's child that holds the tokens; the end controls are its
