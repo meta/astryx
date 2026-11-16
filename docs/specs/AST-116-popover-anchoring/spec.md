@@ -41,8 +41,7 @@ affects_consumer_docs: [Popover, usePopover, Dialog, DropdownMenu]
 
 A popover built with `usePopover` can point at something other than the
 control that opens it. A caller anchors the surface to any element, to an
-element it looks up again when the page changes, or to a rectangle inside a
-scrolling region, and the control that opens the popover keeps its trigger
+element it looks up again when the page changes, and the control that opens the popover keeps its trigger
 semantics. The caller decides what happens when the anchor scrolls out of view
 and which outside presses close the popover. These are composition inputs: they
 live on the hook, and the Popover component keeps its trigger-first props
@@ -60,6 +59,7 @@ where it is.
 
 - The Tour component and its step model, which compose this contract.
 - ContextMenu's point anchor and programmatic opening (`spec:AST-107` FR8).
+- A rectangle or point anchor with no element (DEC-1).
 - A shared layer stack for Escape and outside dismissal across associated
   layers (`spec:AST-003`). FR19's record of which layer opened which belongs
   to the overlays' shared focus return, not to the layer runtime.
@@ -98,15 +98,6 @@ where it is.
   becomes the anchor in the same frame; the surface does not close, remount,
   or move focus. An anchor that leaves the document while the popover is open
   is out of view (FR7).
-- **FR4 — A rectangle anchor stays in its scrolling region.** `anchor` also
-  accepts an object with `getBoundingClientRect()` and an optional
-  `contextElement`. The rectangle is in viewport coordinates. The popover
-  anchors to a box of that rectangle's size, placed when the popover opens or
-  the object changes, at the rectangle's position measured from
-  `contextElement`'s box (else from the page). The box scrolls with its containing block, so CSS anchor
-  positioning keeps the layer on it. The box is not focusable, is hidden from
-  assistive technology, and receives no pointer events. When `contextElement`
-  leaves the document, the anchor is out of view (FR7).
 - **FR5 — A popover without a trigger.** A `usePopover` composition with
   `anchor` that attaches no trigger opens and closes only through `show`,
   `hide` and `toggle`; a dismissal reports `onHide`.
@@ -249,12 +240,12 @@ Dialog and DropdownMenu.
 
 - Supported feature/engine floor: the layer runtime's CSS anchor positioning
   floor (`architecture:layer-runtime`).
-- Unsupported behavior: in the runtime's reduced browser fallback, FR4's box and
-  FR7's hide apply as in supported engines; placement follows the fallback. In
+- Unsupported behavior: in the runtime's reduced browser fallback, FR7's hide
+  applies as in supported engines; placement follows the fallback. In
   an engine without invoker-based focus order, FR12's non-modal order is the
   DOM order, in which a layer rendered at its JSX position follows the content
   before it.
-- Browser evidence: real Chromium, Firefox and WebKit for FR3, FR4, FR7, FR9,
+- Browser evidence: real Chromium, Firefox and WebKit for FR3, FR7, FR9,
   FR12, FR17–FR20 and AR1; jsdom for ARIA, focus order, event ordering and
   AR2–AR4.
 
@@ -307,7 +298,6 @@ the body.
 | FR1, FR23  | `PopoverAnchor.test.tsx`                                              | `anchor` with a trigger; with no trigger; Popover `anchorRef`                                                          | ARIA or a handler on the anchor, or the trigger losing ARIA, fails                                                                                           |
 | FR2, FR5   | `PopoverAnchor.test.tsx`                                              | A `div`, a table cell, an SVG element; a trigger-less popover opened by `show()` and dismissed                         | A non-button anchor that warns or does not anchor, or a trigger-less dismissal without `onHide`, fails                                                       |
 | FR3, FR6   | `PopoverAnchor.test.tsx` and a real-browser interaction spec          | A new function passed while open; anchor removed and re-added; function returning `null` at open                       | A remount, a close, a focus move, or a visible surface without an anchor fails                                                                               |
-| FR4        | `PopoverRectAnchor.test.tsx` and a real-browser interaction spec      | A rectangle inside a scrolling panel, scrolled; without `contextElement`                                               | A box that is focusable, takes pointer input, or does not scroll with the panel fails                                                                        |
 | FR7, FR8   | `PopoverAnchorOutOfView.test.tsx` and a real-browser interaction spec | Anchor clipped by a panel, by the viewport, removed; `stay` and `hideWhileOutOfView`                                   | A dismissal on hide, a hidden surface that takes pointer input, or a layout read in a scroll frame fails                                                     |
 | FR9–FR11   | `PopoverOutsidePress.test.tsx` and a real-browser spec                | Veto and no veto; press on the anchor and on the trigger; a touch pan; `hasLightDismiss: false`; Escape                | A vetoed press that closes, a reported pan, a native event on the callback, or a callback for a non-outside close fails                                      |
 | FR12–FR16  | `useFocusTrap.test.tsx`, `Popover.test.tsx` and a real-browser spec   | Modal and non-modal; Tab at each edge and from the anchor; Tab from outside; role `none`; Escape in and out; the sheet | A non-modal popover that holds Tab, a modal one that leaks it (FR14's role-neutral popups excepted), `aria-modal` on a non-modal one, or a modal sheet fails |
@@ -327,24 +317,13 @@ the body.
 
 Every shape `anchor` accepts answers one question — which box the layer sits
 on — so one input carries all of them. A ref names a stable element, a
-function names an element the page replaces, and a rectangle names a place
-inside a scrolling region. The trigger stays a separate concept with its own
+function names an element the page replaces. The trigger stays a separate concept with its own
 inputs.
 
 Rejected: widening `anchorRef` to non-buttons, because it would change what a
-released input does to the element it names.
-
-### DEC-2 — A rectangle anchor becomes a box inside its context
-
-**Reference:** `spec:AST-116/DEC-2`
-**Decider:** pending owner review
-
-A rectangle anchor is placed once per opening, as a box inside its context
-element, and the browser keeps the layer on it. This keeps
-`architecture:layer-runtime` INV21: no script follows a moving rectangle.
-
-Rejected: re-reading `getBoundingClientRect()` on scroll to move the layer,
-which INV21 forbids.
+released input does to the element it names; and a rectangle anchor with no
+element, because every consumer holds an element. A rectangle shape can be added
+later; it widens `anchor` and leaves existing callers unchanged.
 
 ### DEC-3 — Hiding with the anchor is a state, not a dismissal
 
@@ -431,12 +410,4 @@ callers; and a `BasePopover` component, which would share `usePopover`'s job
 
 ## Open questions
 
-- **OQ2 — Is the rectangle anchor in scope?** (`human-api`) FR4 serves a caller
-  that holds a rectangle and no element. Every consumer that holds an element
-  can use a function anchor instead.
-  - Keep FR4.
-  - Drop FR4: `anchor` accepts a ref or a function only.
-- **OQ3 — One record or three?** (`human-api`) Anchoring and dismissal
-  (FR1–FR11), modality (FR12–FR16) and focus return (FR17–FR21) are separable.
-  - Keep one record.
-  - Split into three records, one per concern.
+None. Anchoring, modality and focus return stay in one record.
