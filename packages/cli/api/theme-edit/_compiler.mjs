@@ -645,16 +645,25 @@ export function makeCompiler(project, parts) {
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined, drawnByRule?: (pair: TextPair, side: 'fg' | 'bg', mode: string) => boolean}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   *   `drawnByRule`: whether the base theme's own rule for a part draws a
+   *   side (not its token), so the side is named by its color.
    * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
-    {parseColor, ratio, alphaOf, compositeOver, page},
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page,
+      drawnByRule = () => false,
+    },
     extra = [],
   ) {
     /**
@@ -825,7 +834,15 @@ export function makeCompiler(project, parts) {
           m,
           baseBeneath,
         );
-        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
+        // No worse than the base theme draws it: none of the theme's own,
+        // and where the theme draws neither side, the base theme's own
+        // failure (`base`), a note with its line.
+        const baseDrawn =
+          fg === baseValue(p, 'fg', m) &&
+          bg === baseValue(p, 'bg', m) &&
+          beneath === baseBeneath;
+        if (was && ratio(was[0], was[1]) <= r + 0.05 && !baseDrawn) continue;
+        const base = Boolean(was && ratio(was[0], was[1]) <= r + 0.05);
         // Pairs alike in color are one problem only when they read the same
         // token on the same part: text on another token or on another part
         // is another fix, and shows as they part ways.
@@ -839,8 +856,9 @@ export function makeCompiler(project, parts) {
           sample: p.sample,
           // A side the theme changed is named by the value it set, not the
           // token the part reads without it.
+          // (So is one the base theme's own rule draws, not its token.)
           fg:
-            fg !== baseValue(p, 'fg', m)
+            fg !== baseValue(p, 'fg', m) || drawnByRule(p, 'fg', m)
               ? String(fg)
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
@@ -854,7 +872,7 @@ export function makeCompiler(project, parts) {
             ? `${bg}, its gradient where the text sits`
             : stops.length > 1
               ? `${bg}, a stop of its gradient`
-              : bg !== baseValue(p, 'bg', m)
+              : bg !== baseValue(p, 'bg', m) || drawnByRule(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
           // What a fix needs: the token the text reads, the part that draws
@@ -865,6 +883,7 @@ export function makeCompiler(project, parts) {
           when: /** @type {any} */ (p).when ?? null,
           ground: pair[1],
           pair: p,
+          ...(base ? {base: true} : {}),
         });
       }
     }
