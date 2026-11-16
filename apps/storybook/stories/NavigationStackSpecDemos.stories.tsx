@@ -10,13 +10,7 @@
  *   decision on it
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
@@ -255,7 +249,7 @@ export const RetainedScreens: Story = {render: () => <RetainStack />};
 // (d) A screen prepared at the press
 // =============================================================================
 
-const tally = {prepares: 0, mounts: 0};
+const tally = {mounts: 0};
 
 function HeavyChat({chat}: {chat: string}) {
   const {state} = useNavigationScreen();
@@ -284,28 +278,9 @@ function HeavyChat({chat}: {chat: string}) {
 
 function PreparedRow({chat}: {chat: string}) {
   const link = useNavigationLink(chat);
-  // The row's press props, on the row element itself.
-  const rowRef = useCallback(
-    (row: HTMLLIElement | null) => {
-      if (row == null) {
-        return undefined;
-      }
-      const down = (event: PointerEvent) => {
-        tally.prepares += 1;
-        link.onPointerDown(event as unknown as ReactPointerEvent<HTMLElement>);
-      };
-      row.addEventListener('pointerdown', down);
-      row.addEventListener('pointercancel', link.onPointerCancel);
-      return () => {
-        row.removeEventListener('pointerdown', down);
-        row.removeEventListener('pointercancel', link.onPointerCancel);
-      };
-    },
-    [link],
-  );
   return (
     <ListItem
-      ref={rowRef}
+      ref={link.ref}
       label={chat}
       description="Press: it renders ahead. Scroll instead: it is dropped."
       endContent={chevron}

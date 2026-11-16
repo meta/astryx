@@ -11,7 +11,7 @@
  *   __tests__/NavigationStackHidden.interaction.browser.spec.ts
  */
 
-import {beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {useEffect, useState} from 'react';
 import {flushSync} from 'react-dom';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
@@ -22,6 +22,7 @@ import {
   useNavigationScroller,
   useNavigationStack,
 } from './NavigationStack';
+import {coarsePrimaryPointer} from '../internal/__tests__/coarsePointer';
 import {useNavigationLink} from './useNavigationLink';
 
 let mounts: Record<string, number> = {};
@@ -207,6 +208,26 @@ function ForkHarness() {
   );
 }
 
+/**
+ * Sends a finger's touch event, as the press tracker reads it. A browser that
+ * takes the finger to scroll sends `touchcancel`.
+ */
+function touch(
+  type: 'touchstart' | 'touchend' | 'touchcancel',
+  target: Element,
+  id: number,
+) {
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  const entry = {identifier: id, clientX: 1, clientY: 1, target};
+  Object.defineProperty(event, 'changedTouches', {value: [entry]});
+  Object.defineProperty(event, 'touches', {
+    value: type === 'touchstart' ? [entry] : [],
+  });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+}
+
 const card = (entry: string) =>
   document.querySelector<HTMLElement>(
     `[data-navigation-screen="${entry === 'Chats' ? 'root' : `screen-${entry}`}"]`,
@@ -323,6 +344,13 @@ describe('NavigationStack: retained screens', () => {
 });
 
 describe('NavigationStack: a prepared screen', () => {
+  // A phone: under a coarse pointer the press tracker's host listens for
+  // touches, so a touch event alone presses.
+  let restorePointer = () => {};
+  beforeEach(() => {
+    restorePointer = coarsePrimaryPointer();
+  });
+  afterEach(() => restorePointer());
   it('renders a prepared screen hidden, and pushes it with no remount', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', {name: 'Prepare C'}));
@@ -349,15 +377,15 @@ describe('NavigationStack: a prepared screen', () => {
   it('prepares at a press, drops when a scroll cancels it, and pushes the prepared screen on the activation', async () => {
     render(<Harness />);
     const row = screen.getByRole('button', {name: 'Open B'});
-    fireEvent.pointerDown(row);
+    touch('touchstart', row, 1);
     await waitFor(() =>
       expect(card('B')?.getAttribute('data-navigation-screen-state')).toBe(
         'prepared',
       ),
     );
-    fireEvent.pointerCancel(row);
+    touch('touchcancel', row, 1);
     expect(card('B')).toBeNull();
-    fireEvent.pointerDown(row);
+    touch('touchstart', row, 2);
     await waitFor(() => expect(card('B')).not.toBeNull());
     expect(mounts.B).toBe(2);
     await open('Open B', 'B');
@@ -384,22 +412,29 @@ describe('NavigationStack: a path change that replaces the top entry', () => {
 });
 
 describe('NavigationStack: a press a scroll cancels', () => {
+  // A phone: under a coarse pointer the press tracker's host listens for
+  // touches, so a touch event alone presses.
+  let restorePointer = () => {};
+  beforeEach(() => {
+    restorePointer = coarsePrimaryPointer();
+  });
+  afterEach(() => restorePointer());
   it('leaves nothing that drops the next row’s prepared screen', async () => {
     render(<Harness />);
     const rowB = screen.getByRole('button', {name: 'Open B'});
-    fireEvent.pointerDown(rowB);
+    touch('touchstart', rowB, 1);
     await waitFor(() => expect(card('B')).not.toBeNull());
     // A scroll takes the touch: the browser cancels the pointer.
-    fireEvent.pointerCancel(rowB);
+    touch('touchcancel', rowB, 1);
     expect(card('B')).toBeNull();
     const rowD = screen.getByRole('button', {name: 'Open D'});
-    fireEvent.pointerDown(rowD);
+    touch('touchstart', rowD, 2);
     await waitFor(() =>
       expect(card('D')?.getAttribute('data-navigation-screen-state')).toBe(
         'prepared',
       ),
     );
-    fireEvent.pointerUp(rowD);
+    touch('touchend', rowD, 2);
     expect(card('D')?.getAttribute('data-navigation-screen-state')).toBe(
       'prepared',
     );

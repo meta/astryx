@@ -4,78 +4,47 @@
 
 /**
  * @file useNavigationLink.ts
- * @input The enclosing NavigationStack's API (useNavigationStack)
- * @output Exports useNavigationLink: the press props of a control that pushes
- *   one entry. It prepares the entry's screen at the press, drops it when the
- *   press ends with no activation or a scroll takes the touch, and pushes at
- *   the activation
+ * @input The enclosing NavigationStack's API (useNavigationStack), and Core's
+ *   press tracker (usePressTracker)
+ * @output Exports useNavigationLink: the ref and activation of a control that
+ *   pushes one entry. It prepares the entry's screen when a press goes down,
+ *   drops it when the press ends off the control or a scroll takes it, and
+ *   pushes at the activation
  * @position Lab component (packages/lab/src/NavigationStack); an opt-in hook
  *   apart from the stack, so a stack that does not prepare screens carries
  *   none of it
  */
 
-import {useCallback, useEffect, useRef, type PointerEvent} from 'react';
+import {usePressTracker} from '@astryxdesign/core/internal/touch';
+import {useCallback, useRef} from 'react';
 import {useNavigationStack} from './NavigationStack';
 
-/** The props a control that pushes one entry spreads. */
+/** What a control that pushes one entry takes. */
 export interface NavigationLinkProps {
-  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
-  onPointerCancel: () => void;
+  ref: (element: Element | null) => void;
   onClick: () => void;
 }
 
-/** Whether a value is a node, by its node type (it may be another window's). */
-function isNode(value: unknown): value is Node {
-  return (
-    typeof value === 'object' &&
-    value != null &&
-    typeof (value as Partial<Node>).nodeType === 'number'
-  );
-}
-
 /**
- * The press props of a control that pushes `entry`. Its first pointerdown
- * prepares the screen. A scroll that takes the touch cancels the pointer and
- * drops it, as does a release off the control. The activation pushes it.
+ * The ref and activation of a control that pushes `entry`. A press going
+ * down prepares the screen. A release off the control, or a scroll that takes
+ * the touch, drops it. The activation pushes it.
  */
 export function useNavigationLink<T>(entry: T): NavigationLinkProps {
   const stack = useNavigationStack<T>();
-  // The press in progress: its abort removes its window listener.
-  const pressRef = useRef<AbortController | null>(null);
-  const endPress = useCallback(() => {
-    pressRef.current?.abort();
-    pressRef.current = null;
-  }, []);
-  const onPointerDown = useCallback(
-    (event: PointerEvent<HTMLElement>) => {
-      endPress();
-      const press = new AbortController();
-      pressRef.current = press;
-      stack.prepare(entry);
-      const control = event.currentTarget;
-      const view = control.ownerDocument.defaultView;
-      // A release off the control activates nothing, so it drops the screen.
-      view?.addEventListener(
-        'pointerup',
-        up => {
-          endPress();
-          if (!isNode(up.target) || !control.contains(up.target)) {
-            stack.drop();
-          }
-        },
-        {capture: true, signal: press.signal},
-      );
+  const elementRef = useRef<Element | null>(null);
+  usePressTracker(elementRef, {
+    onControlEvent: event => {
+      if (event === 'touchDown') {
+        stack.prepare(entry);
+      } else if (event === 'touchUpOutside' || event === 'touchCancel') {
+        stack.drop();
+      }
     },
-    [endPress, entry, stack],
-  );
-  // A scroll that takes the touch cancels the pointer: no release follows.
-  const onPointerCancel = useCallback(() => {
-    endPress();
-    stack.drop();
-  }, [endPress, stack]);
-  // Removes a press's window listener at unmount (the window's listener, the
-  // system this syncs).
-  useEffect(() => endPress, [endPress]);
+  });
+  const ref = useCallback((element: Element | null) => {
+    elementRef.current = element;
+  }, []);
   const onClick = useCallback(() => stack.push(entry), [entry, stack]);
-  return {onPointerDown, onPointerCancel, onClick};
+  return {ref, onClick};
 }
