@@ -1111,7 +1111,9 @@ and rose by at most fourteen within two minutes in ninety-nine looks of a
 hundred (seventeen at most), so a margin over the jobs they run at a look would
 not hold the ceiling, and eighteen covers all but the rarest rises without
 lengthening every run's wait. Each CI or Main run counts its live jobs: a
-pull-request run still waiting counts the jobs it runs, the job that waits, a
+matrix that limits its legs with `max-parallel` counts at most that many of
+its live legs, since GitHub lists the legs it holds back as queued but they
+hold no runner; a pull-request run still waiting counts the jobs it runs, the job that waits, a
 Storybook build that found room and the `superseded-runs` sweep while it runs,
 so waiting runs hold each other back by no more
 than they use, and a run admitted in the last forty-five seconds, before its
