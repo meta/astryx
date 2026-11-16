@@ -249,12 +249,14 @@ export function framesOf(query) {
  * read is a swap of two neighbouring letters in a word of six or more letters
  * that the templates' own descriptors never use, so a real word ("pane",
  * "seating") is never respelled into a name. A run already written as the
- * name's words is left as it is.
+ * name's words is left as it is. With `spaced`, only a name of several words
+ * typed as one token (`MessagingShell`, `messaging-shell`) reads as its words.
  * @param {string} idea
  * @param {NamedTemplate[]} pages the project's page templates
+ * @param {{spaced?: boolean}} [options]
  * @returns {string}
  */
-export function readNames(idea, pages) {
+export function readNames(idea, pages, options = {}) {
   const text = String(idea ?? '');
   const names = pages.map(p => p.name);
   const known = descriptorWordsOf(pages);
@@ -285,6 +287,19 @@ export function readNames(idea, pages) {
       const sameWords =
         words.length === nameWords.length &&
         foldWords(typed).join('') === foldWords(found).join('');
+      if (options.spaced) {
+        // Only a name of several words typed as one token (MessagingShell,
+        // messaging-shell) reads as its words; any other run stays as typed.
+        if (
+          n !== 1 ||
+          nameWords.length < 2 ||
+          foldWords(typed).join('') !== nameWords.join('')
+        )
+          continue;
+        name = found;
+        matched = n;
+        continue;
+      }
       if (sameWords) continue;
       const slipped = words.filter(w => !nameWords.includes(w));
       const joined = words.length < nameWords.length;

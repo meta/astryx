@@ -145,12 +145,20 @@ export async function kitSignals(query, options = {}) {
   const wantsPages = !type || type === 'template';
   const templates = wantsPages
     ? await loadTemplates(cwd)
-    : {pages: [], blocks: [], notReadyPages: 0};
+    : {pages: [], blocks: [], notReadyPages: []};
   const catalog = templates.pages;
   // Search reads a page template the idea names in any case, separator or
   // with a neighbour-letter swap in a word of six or more letters as that template's own words
   // (readNames), as the page ranker does, so such a name matches by name.
-  const searched = wantsPages ? readNames(query, catalog) : query;
+  // A not-ready template's name, typed as one word or with its own
+  // separators, reads as its plain words too: search reads a whole entry name
+  // as naming that one entry, and build reads search as if a not-ready
+  // template were absent.
+  const searched = wantsPages
+    ? readNames(readNames(query, catalog), templates.notReadyPages, {
+        spaced: true,
+      })
+    : query;
   // Search wider than the surfaced kit so a flood of doc matches cannot bury
   // the page templates past the cutoff; the caller's `limit` still caps the
   // kit below. A non-positive or non-integer limit is passed through
@@ -166,7 +174,7 @@ export async function kitSignals(query, options = {}) {
       await search(searched, {
         cwd,
         type,
-        limit: wide + (wide > 0 ? templates.notReadyPages : 0),
+        limit: wide + (wide > 0 ? templates.notReadyPages.length : 0),
       })
     );
   /** @param {SearchResultEntry} r */

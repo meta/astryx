@@ -47,7 +47,10 @@ vi.mock('../_adapter.mjs', async importOriginal => {
       // The injected template is one more page template the project holds as
       // not ready.
       return injected
-        ? {...templates, notReadyPages: templates.notReadyPages + 1}
+        ? {
+            ...templates,
+            notReadyPages: [...templates.notReadyPages, {name: 'unready-hub'}],
+          }
         : templates;
     },
   };

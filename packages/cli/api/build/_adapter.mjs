@@ -94,22 +94,28 @@ export async function loadPageTemplates(cwd) {
 /**
  * Every ready page template and every block the project can scaffold, from one
  * discovery: pages as {@link loadPageTemplates} returns them, blocks as
- * {@link BlockTemplate}, and how many page templates are not ready yet.
- * Discovery failures leave all three empty.
+ * {@link BlockTemplate}, and the page templates that are not ready yet, by
+ * their name and descriptor words. Discovery failures leave all three empty.
  *
  * @param {string} cwd
- * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[], notReadyPages: number}>}
+ * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[], notReadyPages: import('./kit/words.mjs').NamedTemplate[]}>}
  */
 export async function loadTemplates(cwd) {
   let templates;
   try {
     templates = await discoverTemplates(cwd);
   } catch {
-    return {pages: [], blocks: [], notReadyPages: 0};
+    return {pages: [], blocks: [], notReadyPages: []};
   }
-  const notReadyPages = templates.filter(
-    t => t.type === 'page' && t.isReady === false,
-  ).length;
+  const notReadyPages = templates
+    .filter(t => t.type === 'page' && t.isReady === false)
+    .map(t => ({
+      name: t.dirName,
+      displayName: t.displayName || t.name,
+      category: t.category || '',
+      keywords: t.keywords ?? [],
+      description: t.description || '',
+    }));
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
     .map(t =>
