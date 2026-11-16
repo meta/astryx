@@ -266,6 +266,39 @@ describe('Toolbar', () => {
         'wrap',
       );
     });
+
+    it('lets the two-slot start lane shrink below min-content while keeping the end lane fixed', () => {
+      render(
+        <Toolbar
+          label="Actions"
+          startContent={<span data-testid="start">Start</span>}
+          endContent={<span data-testid="end">End</span>}
+        />,
+      );
+      const startStyle = getComputedStyle(slotOf('start'));
+      const endStyle = getComputedStyle(slotOf('end'));
+
+      expect(parseFloat(startStyle.minWidth)).toBe(0);
+      expect(startStyle.flexGrow).toBe('1');
+      expect(startStyle.flexShrink).toBe('1');
+      expect(parseFloat(endStyle.minWidth)).toBe(0);
+      expect(endStyle.flexShrink).toBe('0');
+      expect(clipsOverflow(slotOf('start'))).toBe(false);
+    });
+
+    it('keeps vertical two-slot lanes at natural height without horizontal flex-basis collapse', () => {
+      render(
+        <Toolbar
+          label="Actions"
+          orientation="vertical"
+          startContent={<span data-testid="start">Start</span>}
+          endContent={<span data-testid="end">End</span>}
+        />,
+      );
+      const startStyle = getComputedStyle(slotOf('start'));
+      expect(parseFloat(startStyle.minWidth)).toBe(0);
+      expect(startStyle.flexGrow).not.toBe('1');
+    });
   });
 
   it('navigates with ArrowRight/ArrowLeft in horizontal orientation', async () => {

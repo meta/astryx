@@ -81,6 +81,7 @@ const styles = stylex.create({
   startSlot: {
     display: 'flex',
     alignItems: 'center',
+    minWidth: 0,
   },
   // The center basis is its minimum width, so the row wraps before its text
   // overlaps a side lane. Alone on a line narrower than its content, the lane
@@ -110,10 +111,15 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    minWidth: 0,
   },
-  // When only startContent is present, let it fill
-  startOnly: {
+  // Take the leftover row width so shrinking content (such as OverflowList)
+  // measures its remaining space rather than flooring at min-content.
+  startFill: {
     flex: '1 1 0%',
+  },
+  endKeep: {
+    flexShrink: 0,
   },
   // When only endContent, push to end
   endOnly: {
@@ -453,7 +459,7 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.startSlot,
-                    !hasEndContent && styles.startOnly,
+                    orientation === 'horizontal' && styles.startFill,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>
@@ -464,6 +470,9 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.endSlot,
+                    orientation === 'horizontal' &&
+                      hasStartContent &&
+                      styles.endKeep,
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),

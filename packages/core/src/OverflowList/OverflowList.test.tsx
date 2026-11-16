@@ -1089,4 +1089,31 @@ describe('OverflowList', () => {
       expect(visibleContainer().textContent).toBe('Amore:1,2');
     });
   });
+
+  it('fills its parent width only while items overflow so flex parents can grow it back', async () => {
+    await renderMeasured(
+      <OverflowList
+        gap={0}
+        data-w="100"
+        data-testid="ov"
+        overflowRenderer={indicator('more:')}>
+        <button type="button" data-w="40">
+          A
+        </button>
+        <button type="button" data-w="40">
+          B
+        </button>
+        <button type="button" data-w="40">
+          C
+        </button>
+      </OverflowList>,
+    );
+    expect(getComputedStyle(visibleContainer()).width).toBe('100%');
+
+    visibleContainer().setAttribute('data-w', '200');
+    await triggerResize(visibleContainer());
+    await waitFor(() => {
+      expect(getComputedStyle(visibleContainer()).width).not.toBe('100%');
+    });
+  });
 });

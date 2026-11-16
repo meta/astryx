@@ -280,7 +280,6 @@ export function OverflowList({
 
   const gapPx = spacingToPx[gap];
 
-  const observeParent = behavior === 'observeParent';
   const isMultiRow = maxRows != null && maxRows > 1;
 
   // Re-run measurement when keyed children change without resizing the row.
@@ -406,7 +405,7 @@ export function OverflowList({
               rowHeight > 0 &&
               maxRows != null &&
               multiRowHeight.height(maxRows, rowHeight, gapPx),
-            observeParent && hasOverflow && styles.fillParent,
+            hasOverflow && styles.fillParent,
             xstyle,
           ),
           className,
