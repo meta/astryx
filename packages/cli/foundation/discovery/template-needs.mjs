@@ -27,6 +27,8 @@ import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
+import {servingRootPackages} from '../runtime/package-root.mjs';
+import {runChoice} from '../release/run-context.mjs';
 import {
   decidePackageManagerIn,
   formatCliCommand,
@@ -368,7 +370,12 @@ export function analyzeTemplateNeeds(source, cwd) {
     // No package.json or unreadable — treat everything as missing.
   }
 
-  const missing = external.filter(p => !(p in projectDeps));
+  // Outside a project, a page takes what the host's package set provides,
+  // so a package that set declares needs no install.
+  const provided = runChoice(cwd).inProject ? [] : servingRootPackages();
+  const missing = external.filter(
+    p => !(p in projectDeps) && !provided.includes(p),
+  );
 
   const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
 
