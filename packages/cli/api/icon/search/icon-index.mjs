@@ -28,7 +28,7 @@ import {rankIconSets} from './search.mjs';
  * The part of a set the ranking reads, as plain JSON. Paths into the folder
  * the set was read from are left out, so an index reads the same wherever it
  * was made.
- * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
+ * @param {Awaited<ReturnType<typeof loadIconSets>>['sets'][number]} set
  * @returns {import('../icon.type.mjs').IconIndexSet}
  */
 function portableSet(set) {
@@ -131,5 +131,9 @@ export async function rankIconIndex(query, indexes, options = {}) {
     sets.push(...index.sets);
     withdrawn.push(...(index.withdrawn ?? []));
   }
-  return rankIconSets(sets, withdrawn, term, {set, limit});
+  // A stored set holds exactly the fields the ranking reads.
+  const ranked = /** @type {Parameters<typeof rankIconSets>[0]} */ (
+    /** @type {unknown} */ (sets)
+  );
+  return rankIconSets(ranked, withdrawn, term, {set, limit});
 }

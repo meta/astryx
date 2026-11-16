@@ -64,7 +64,7 @@ export async function iconSearch(query, {cwd, set, limit}) {
 /**
  * Rank the icons of `sets` against a query: the one ranking behind both
  * `icon()` and `rankIconIndex()`.
- * @param {Array<import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet | import('../icon.type.mjs').IconIndexSet>} sets in tie order
+ * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
  * @param {{set?: string, limit: number}} options
@@ -76,12 +76,7 @@ export function rankIconSets(sets, withdrawn, query, {set, limit}) {
     searched = setsNamed(sets, set);
     if (searched.length === 0) throw unusableSet(sets, withdrawn, set);
   }
-  const ranked = rankIcons(
-    /** @type {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet[]} */ (
-      searched
-    ),
-    query,
-  );
+  const ranked = rankIcons(searched, query);
   // A word start (`start` for `star`) answers only when nothing matches a
   // whole word, and a partial match (`pin` inside `shopping`) only when
   // nothing matches a whole word or a word start.
