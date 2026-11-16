@@ -828,7 +828,8 @@ function usePlatformAnimatedTraversal(): {
  *
  * The app owns the path (`path` + `onPathChange`). The stack renders the
  * root screen and one screen per entry, top last. It animates the change
- * whenever the path gains or loses its top entry.
+ * whenever the path gains or loses its top entry, except after a history
+ * traversal the browser has animated itself.
  *
  * Motion is UIKit's, measured on iOS 26.2 (motion/uikit/navigation.ts). A
  * push is a critically damped spring (response 0.3 s) that starts at 8.773

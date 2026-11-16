@@ -66,13 +66,13 @@ function HistoryStack() {
   const [path, setPath] = useState<string[]>([]);
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
-      // The probe's own two entries carry no path; they leave the stack.
+      // The probe's own two entries leave the stack alone. Any other entry
+      // without a path (the page's first, which the router marks) is the root.
       const state = event.state as {path?: string[]; step?: number} | null;
-      if (state == null) {
-        setPath([]);
-      } else if (state.path != null) {
-        setPath(state.path);
+      if (state?.step != null) {
+        return;
       }
+      setPath(state?.path ?? []);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
