@@ -995,12 +995,19 @@ export const thousandsSetting = thing => {
  * @returns {string}
  */
 export function stateSpelling(text) {
+  // Several states at once are joined by +, with or without spaces around
+  // it (`selected + hover`): each is read on its own.
   return String(text)
-    .trim()
-    .replace(/^:+/, '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[\s_]+/g, '-')
-    .toLowerCase();
+    .split(/\s*\+\s*/)
+    .map(piece =>
+      piece
+        .trim()
+        .replace(/^:+/, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[\s_]+/g, '-')
+        .toLowerCase(),
+    )
+    .join('+');
 }
 
 /**

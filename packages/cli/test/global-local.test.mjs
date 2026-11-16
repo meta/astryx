@@ -9,7 +9,7 @@
  * @input global-local.shared.mjs
  * @output Vitest tests
  * @position packages/cli/test; the first of three files of the table's rows,
- *   with global-local.rows-16-39 and global-local.rows-40-58
+ *   with global-local.rows-16-39 and global-local.rows-40-59
  */
 
 import {describe, expect, it} from 'vitest';
@@ -148,6 +148,64 @@ describe.skipIf(!POSIX)(
         );
         expect(error.error).not.toMatch(/Outside a project/u);
         expect(filesIn(dir)).toEqual(before);
+
+        // A fresh clone that declares the CLI gets it by installing its
+        // dependencies: adding the CLI again would replace the version the
+        // project declares.
+        const declares = makeProject({
+          declare: {
+            '@astryxdesign/core': '9.0.1',
+            '@astryxdesign/cli': '9.0.1',
+          },
+        });
+        writeJson(path.join(declares, 'package-lock.json'), {
+          lockfileVersion: 3,
+          packages: {
+            '': {
+              dependencies: {
+                '@astryxdesign/core': '9.0.1',
+                '@astryxdesign/cli': '9.0.1',
+              },
+            },
+            'node_modules/@astryxdesign/core': {version: '9.0.1'},
+            'node_modules/@astryxdesign/cli': {version: '9.0.1'},
+          },
+        });
+        const declared = await runAsync(g.bin, ['--version'], {
+          cwd: declares,
+          pc,
+        });
+        expect(declared.lines).toEqual([
+          'astryx: this project has no Astryx CLI installed; answered by CLI 9.0.0 while its Core is 9.0.1. To install the CLI this project declares, run: npm install',
+        ]);
+        const doctor = JSON.parse(
+          (await runAsync(g.bin, ['doctor', '--json'], {cwd: declares, pc}))
+            .stdout,
+        );
+        expect(
+          doctor.data.checks.find(
+            (/** @type {any} */ c) => c.id === 'version-alignment',
+          ),
+        ).toMatchObject({
+          status: 'warn',
+          fix: 'To install the CLI this project declares, run: npm install.',
+        });
+
+        // A CLI named only as a peer dependency is not installed by every
+        // package manager, so the advice still adds it.
+        const peer = project(tempDir('peer'), {'@astryxdesign/core': '9.0.1'});
+        writeJson(path.join(peer, 'package.json'), {
+          name: 'peer',
+          private: true,
+          dependencies: {'@astryxdesign/core': '9.0.1'},
+          peerDependencies: {'@astryxdesign/cli': '9.0.1'},
+        });
+        installCore(peer, '9.0.1');
+        const peerRun = await runAsync(g.bin, ['--version'], {
+          cwd: peer,
+          pc,
+        });
+        expect(peerRun.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
       }),
     );
 

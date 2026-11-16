@@ -1,10 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A starter whose theme imports a file only a bundler loads by a name
- * the new app's type check reads no declaration for (a CSS file with a
- * query, a hash or an upper-case extension, a font file) is refused before
- * anything is written; a plain .css file and a picture are copied.
+ * @file A starter whose theme imports a file by a name the new app's type
+ * check reads no declaration for (a CSS file with a query, a hash or an
+ * upper-case extension, a font file, any module with a query) is refused
+ * before anything is written; a plain .css file and a picture are copied. An
+ * import written as a template literal with nothing put in it is judged as
+ * the string it holds.
  */
 
 import * as fs from 'node:fs';
@@ -56,7 +58,8 @@ async function withImport(line, file, fn) {
   const dir = path.join(cwd, 'themes/t');
   const source = path.join(dir, 't.theme.ts');
   const original = fs.readFileSync(source, 'utf8');
-  fs.writeFileSync(path.join(dir, file), '');
+  // A data file the theme build reads holds data.
+  fs.writeFileSync(path.join(dir, file), file.endsWith('.json') ? '{}' : '');
   fs.writeFileSync(source, `${line}\n${original}`);
   try {
     await fn();
@@ -82,6 +85,16 @@ describe('a starter whose theme imports a file only a bundler loads', () => {
           "import f from './brand.woff2';\nvoid f;",
         ],
         ['./brand.ttf', 'brand.ttf', "import f from './brand.ttf';\nvoid f;"],
+        // A query on a code or data module is part of its name too.
+        ['./x.ts?raw', 'x.ts', "import r from './x.ts?raw';\nvoid r;"],
+        ['./x.ts?v=1', 'x.ts', "import r from './x.ts?v=1';\nvoid r;"],
+        ['./d.json?raw', 'd.json', "import r from './d.json?raw';\nvoid r;"],
+        // A template literal with nothing put in it is the string it holds.
+        [
+          './brand.css?inline',
+          'brand.css',
+          'await import(`./brand.css?inline`);',
+        ],
       ])
         await withImport(
           line ?? `import '${spec}';`,
@@ -120,6 +133,43 @@ describe('a starter whose theme imports a file only a bundler loads', () => {
           );
         },
       );
+    },
+    T,
+  );
+});
+
+describe('a starter whose theme imports by a template literal', () => {
+  it(
+    'judges it as the string it holds',
+    async () => {
+      await withImport(
+        'await import(`./brand.scss`);',
+        'brand.scss',
+        async () => {
+          const e = await refusal(() =>
+            themeEditPreviewApp('q', {cwd, theme: 't'}),
+          );
+          expect(e.message).toContain(
+            "imports './brand.scss', a stylesheet in another language than CSS",
+          );
+        },
+      );
+      fs.writeFileSync(path.join(cwd, 'themes/shared.ts'), 'export {};\n');
+      try {
+        await withImport(
+          'await import(`../shared.ts`);',
+          'unused.txt',
+          async () => {
+            const e = await refusal(() =>
+              themeEditPreviewApp('q', {cwd, theme: 't'}),
+            );
+            expect(e.message).toContain("imports '../shared.ts'");
+            expect(fs.existsSync(path.join(cwd, 'q')), 'no app').toBe(false);
+          },
+        );
+      } finally {
+        fs.rmSync(path.join(cwd, 'themes/shared.ts'), {force: true});
+      }
     },
     T,
   );

@@ -81,9 +81,8 @@ describe("a part's own state saved in another spelling", () => {
           ),
         );
         const shown = await themeEditShow('t', {cwd});
-        expect(shown.data.settings).toContainEqual(
-          expect.objectContaining({state: 'isPressed'}),
-        );
+        // show reads the theme (the entry stays as saved until a change).
+        expect(shown.data.settings).toHaveLength(1);
         const r = await themeEditSet('t', 'accent', 'teal', {cwd});
         expect(r.data.notes.join('\n')).toContain(
           `was saved with state "${state}", read as isPressed`,

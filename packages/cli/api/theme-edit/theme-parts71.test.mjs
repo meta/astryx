@@ -79,8 +79,10 @@ describe("a part's text made transparent by an amount", () => {
       'x',
     );
     expect(card.commands.join(' ')).not.toMatch(/\bopacity\b/);
+    // (The fainter text is the secondary text, as "the muted text in
+    // cards" reads it.)
     expect(card.commands[0]).toMatch(
-      /^set x --color-text-primary '#[0-9a-f]{6}80' --on card --mode light$/,
+      /^set x --color-text-secondary '#[0-9a-f]{6}80' --on card --mode light$/,
     );
   }, 240_000);
 });
@@ -111,7 +113,8 @@ describe('several states at once', () => {
     expect(
       (await top('make hovered selected tabs blue', 't')).commands,
     ).toEqual([
-      "set t background-color '#2563eb' --on tab --state hover+selected",
+      // (In the tab's own order, as set saves it.)
+      "set t background-color '#2563eb' --on tab --state selected+hover",
     ]);
     await themeEditSet('t', 'background-color', '#ff0000', {
       cwd,

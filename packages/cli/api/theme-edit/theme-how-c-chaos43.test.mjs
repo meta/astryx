@@ -76,10 +76,11 @@ describe('chaos43', () => {
     '%s: the owner is the place, never painted',
     async (q, test) => {
       needsBases(test);
-      const r = await answer(q);
-      expect(r.first.length).toBeGreaterThan(0);
-      for (const c of r.all) expect(c, q).not.toMatch(/--on dropdown-menu/);
-      for (const c of r.all) expect(c, q).not.toMatch(/^background/);
+      // (The menu's own divider, which the census records drawing the
+      // line: never the menu, never every divider.)
+      expect((await answer(q)).all, q).toEqual([
+        "--color-border '#dc2626' --on dropdown-menu-divider",
+      ]);
     },
     T,
   );

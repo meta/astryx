@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Rows G40 to G58 of AST-081's "Who answers when global and project
+ * @file Rows G40 to G59 of AST-081's "Who answers when global and project
  * copies meet" table (spec AST-081 FR11), one test per row. Rows that depend
  * on an operating system's own file system test their path rules here; on
  * macOS and Windows themselves they run only in the cross-platform smoke
@@ -22,6 +22,7 @@ import {
   seedPackedRelease,
 } from '../test-utils/global-local-fixtures.mjs';
 import {project, tempDir, writeJson} from '../test-utils/release-fixtures.mjs';
+import {writePnpRuntime} from '../test-utils/pnp-fixtures.mjs';
 import {isGlobalCopy} from '../foundation/release/choose.mjs';
 import {globalUpgradeCommand} from '../foundation/release/notices.mjs';
 import {
@@ -862,12 +863,18 @@ describe.skipIf(!POSIX)(
          * A project whose own CLI records each interrupt it gets, then stops
          * as `onInterrupt` says.
          * @param {string} onInterrupt
+         * @param {{pnp?: boolean}} [options] a Yarn Plug'n'Play project
          */
-        const stubProject = onInterrupt => {
+        const stubProject = (onInterrupt, {pnp = false} = {}) => {
           const dir = project(tempDir('project'), {
             '@astryxdesign/cli': '9.0.0',
           });
-          const cliDir = path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+          // Under Yarn Plug'n'Play the CLI is outside node_modules, where only
+          // the project's runtime finds it.
+          const cliDir = pnp
+            ? path.join(tempDir('pnp-store'), 'cli')
+            : path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+          if (pnp) writePnpRuntime(dir, {'@astryxdesign/cli': cliDir});
           writeJson(path.join(cliDir, 'package.json'), {
             name: '@astryxdesign/cli',
             version: '9.0.0',
@@ -996,9 +1003,94 @@ describe.skipIf(!POSIX)(
           signal: 'SIGINT',
           alive: false,
         });
+        // In a Plug'n'Play project the copy first starts again with the
+        // project's runtime: the interrupt still reaches the CLI once, after
+        // one grace, and a group's interrupt is not passed on again.
+        const pnpAlone = await interrupt(
+          stubProject(HANDLES, {pnp: true}),
+          'alone',
+        );
+        expect(pnpAlone).toMatchObject({
+          code: 130,
+          signal: null,
+          alive: false,
+          interrupts: 1,
+        });
+        expect(pnpAlone.seconds).toBeGreaterThanOrEqual(5);
+        expect(pnpAlone.seconds).toBeLessThan(9);
+        const pnpGroup = await interrupt(
+          stubProject(HANDLES, {pnp: true}),
+          'group',
+        );
+        expect(pnpGroup).toMatchObject({
+          code: 130,
+          signal: null,
+          alive: false,
+          interrupts: 1,
+        });
+        expect(pnpGroup.seconds).toBeLessThan(5);
       },
-      60_000,
+      90_000,
     );
+
+    it("G59 a Yarn Plug'n'Play project, started outside its runtime: the run starts again inside it once, and the project's own CLI answers", () => {
+      const pc = computer();
+      const global = globalCli('npm', '9.0.1');
+      // Yarn keeps the packages outside any node_modules; only the runtime
+      // at the project root knows where they are.
+      const store = tempDir('pnp-store');
+      const cli = placeCli(path.join(store, 'cli'), '9.0.0');
+      const core = path.join(store, 'core');
+      writeJson(path.join(core, 'package.json'), {
+        name: '@astryxdesign/core',
+        version: '9.0.0',
+      });
+      const packages = {
+        '@astryxdesign/cli': cli.dir,
+        '@astryxdesign/core': core,
+      };
+      const app = project(tempDir('pnp-app'), {
+        '@astryxdesign/core': '9.0.0',
+        '@astryxdesign/cli': '9.0.0',
+      });
+      fs.writeFileSync(path.join(app, 'yarn.lock'), '');
+      writePnpRuntime(app, packages);
+      // The ES module loader Yarn writes beside the runtime for a module
+      // workspace: Node warns once in each process it is preloaded into.
+      fs.writeFileSync(path.join(app, '.pnp.loader.mjs'), '');
+      const src = path.join(app, 'src');
+      fs.mkdirSync(src);
+
+      const version = run(global.bin, ['--version'], {cwd: src, pc});
+      expect(version.status).toBe(0);
+      expect(version.stdout).toBe('9.0.0');
+      expect(version.lines).toEqual([handedTo('9.0.0')('9.0.1')]);
+      // All of standard error: the hand-off line, and Node's loader warning
+      // once, from the project's CLI, as when Yarn starts it.
+      const warning = /^\(node:\d+\) ExperimentalWarning: /u;
+      const rest = version.stderr
+        .split(/\r?\n/u)
+        .filter(
+          line =>
+            line !== '' &&
+            !line.startsWith('astryx: ') &&
+            !warning.test(line) &&
+            !line.startsWith('--import ') &&
+            !line.startsWith('(Use `node --trace-warnings'),
+        );
+      expect(rest).toEqual([]);
+      expect(
+        version.stderr.split(/\r?\n/u).filter(line => warning.test(line)),
+      ).toHaveLength(1);
+
+      // The project's CLI prints the command Yarn runs it with.
+      const docs = run(global.bin, ['docs', 'getting-started'], {cwd: app, pc});
+      expect(docs.status).toBe(0);
+      expect(docs.stdout).toContain(
+        'yarn astryx docs getting-started <section>',
+      );
+      expect(docs.stdout).not.toContain('yarn dlx');
+    });
   },
 );
 
@@ -1007,7 +1099,7 @@ it('names every row of the table exactly once', () => {
   const text = [
     'global-local.test.mjs',
     'global-local.rows-16-39.test.mjs',
-    'global-local.rows-40-58.test.mjs',
+    'global-local.rows-40-59.test.mjs',
   ]
     .map(file => fs.readFileSync(new URL(`./${file}`, import.meta.url), 'utf8'))
     .join('\n');
@@ -1016,6 +1108,6 @@ it('names every row of the table exactly once', () => {
       /^\s+(?:it|describe)(?:\.skipIf\([^)]*\)\()?\(?\s*['"](G\d+) /gmu,
     ),
   ].map(m => m[1]);
-  expect(rows).toEqual(Array.from({length: 58}, (_, i) => `G${i + 1}`));
+  expect(rows).toEqual(Array.from({length: 59}, (_, i) => `G${i + 1}`));
   expect(os.EOL).toBeTypeOf('string');
 });

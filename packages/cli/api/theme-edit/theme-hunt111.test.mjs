@@ -102,7 +102,7 @@ describe('the own-token check judges every value the source gives', () => {
     const c = await compile('tw');
     expect(c.status).toBe(1);
     expect(c.stdout + c.stderr).toMatch(
-      /typography\.heading\.weight \(line \d+\): a typography weight is a CSS value in quotes.*write '700'/,
+      /typography\.heading\.weight \(line \d+\): a typography weight is text, and 700 is a number: a type mismatch.*write '700'/,
     );
   }, 240_000);
 

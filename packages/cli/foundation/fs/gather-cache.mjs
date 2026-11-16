@@ -30,13 +30,14 @@
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them
- *   (foundation/suggest/name-index.mjs), and by css-tree.mjs for what
+ *   (foundation/suggest/name-index.mjs), by css-tree.mjs for what
  *   `theme build` finds when it checks a theme's pseudo-class keys and token
- *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), each kept
- *   while every path it
- *   stamped but the CLI's own files (which its build id and the folder it
- *   runs from, both in every entry's key, stand for) is unchanged, in any
- *   command. The commands whose runs keep the other
+ *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), and by
+ *   `theme build` for the JavaScript it compiles from a theme's local
+ *   modules (api/theme/build/self-contained.mjs), each kept while every
+ *   path it stamped but the CLI's own files (which its build id and the
+ *   folder it runs from, both in every entry's key, stand for) is
+ *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same

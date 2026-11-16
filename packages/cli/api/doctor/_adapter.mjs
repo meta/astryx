@@ -697,14 +697,17 @@ export function projectHasOwnCli(cwd) {
  * The command that adds the CLI at `version` with the project's package
  * manager, and the Core it matches: from a folder whose package.json declares
  * no Astryx package, in the Astryx project above at that project's Core; null
- * when there is none (see `cliInstallAdvice`).
+ * when there is none (see `cliInstallAdvice`). For a project that declares
+ * the CLI already, the command installs its dependencies (`declared`).
  * @param {string} cwd
  * @param {string} version
- * @returns {{command: string, core: string} | null}
+ * @returns {{command: string, core: string, declared: boolean} | null}
  */
 export function addCliCommandFor(cwd, version) {
   const advice = cliInstallAdvice({cwd, core: version});
-  return advice?.command ? {command: advice.command, core: advice.core} : null;
+  return advice?.command
+    ? {command: advice.command, core: advice.core, declared: advice.declared}
+    : null;
 }
 
 /**

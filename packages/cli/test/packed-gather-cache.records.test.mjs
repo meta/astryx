@@ -61,6 +61,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "what theme build checks a theme against in Core's component docs",
     );
     expect(plain).toContain(
+      "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
+    );
+    expect(plain).toContain(
       "what theme build finds when it checks a theme's pseudo-class keys and token names",
     );
     expect(plain).toContain(

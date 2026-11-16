@@ -162,7 +162,9 @@ const keyOf = p =>
       ? p.key.name
       : p.key.type === 'StringLiteral'
         ? p.key.value
-        : null;
+        : p.key.type === 'NumericLiteral'
+          ? String(p.key.value)
+          : null;
 
 /**
  * @typedef {{file: string, source: string}} SourceFile
@@ -369,13 +371,42 @@ function themeInputs(entry, load) {
           find(v);
     };
     find(mod.ast.program);
-    // A theme file that re-exports its theme from another module builds
-    // that module's theme.
+    // A theme file that re-exports its theme from another module, or
+    // exports a theme it imports, builds that module's theme.
     for (const re of mod.reExports)
       scan(imported(mod, re.specifier), depth + 1);
+    for (const value of mod.exported.values())
+      scan(importedBy(value, mod), depth + 1);
+  };
+  /**
+   * The module a value is imported from, following the consts that hold
+   * it (`export const t = x`, with x imported); null when it is not
+   * imported from a relative module.
+   * @param {any} node @param {any} mod @param {number} [depth]
+   * @returns {any}
+   */
+  const importedBy = (node, mod, depth = 0) => {
+    const value = unwrap(node);
+    if (value?.type !== 'Identifier' || depth > 8) return null;
+    if (mod.consts.has(value.name))
+      return importedBy(mod.consts.get(value.name), mod, depth + 1);
+    const from = mod.imports.get(value.name);
+    return from ? imported(mod, from.specifier) : null;
   };
   scan(moduleOf(entry), 0);
-  return {inputs, objectOf};
+  /**
+   * The literal a value is, following the consts of its module.
+   * @param {any} node @param {any} mod @param {number} [depth]
+   * @returns {any}
+   */
+  const literalOf = (node, mod, depth = 0) => {
+    const value = unwrap(node);
+    if (value?.type !== 'Identifier' || depth > 8) return value;
+    return mod.consts.has(value.name)
+      ? literalOf(mod.consts.get(value.name), mod, depth + 1)
+      : value;
+  };
+  return {inputs, objectOf, literalOf};
 }
 
 /**
@@ -393,7 +424,7 @@ function themeInputs(entry, load) {
  * @returns {Array<{path: string[], file: string, line: number | null, why: string}>}
  */
 export function sourceFieldProblems(entry, fields, load) {
-  const {inputs, objectOf} = themeInputs(entry, load);
+  const {inputs, objectOf, literalOf} = themeInputs(entry, load);
   /** @type {Array<{path: string[], file: string, line: number | null, why: string}>} */
   const out = [];
   /** @type {Set<any>} the objects a check is inside, for a spread that reaches back */
@@ -424,7 +455,8 @@ export function sourceFieldProblems(entry, fields, load) {
       }
       const k = keyOf(p);
       if (k == null) continue;
-      const literal = p.type === 'ObjectProperty' ? unwrap(p.value) : null;
+      const literal =
+        p.type === 'ObjectProperty' ? literalOf(p.value, object.mod) : null;
       if (values_ && takes.includes(k) && literal?.type === 'BigIntLiteral') {
         out.push({
           path: [...at, k],
