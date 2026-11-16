@@ -8,8 +8,9 @@
  * images become data: URIs; and the page's source rides along so
  * `--reverse` can give it back exactly.
  *
- * The file needs no network and runs no script, so it works inside a
- * sandboxed frame with a strict content security policy. Its colors follow
+ * A static file needs no network and runs no script, so it works inside a
+ * sandboxed frame with a strict content security policy; an interactive one
+ * also carries the page's script. Its colors follow
  * `color-scheme` (and a `data-theme` of `light` or `dark` on the root), since
  * Astryx tokens use light-dark().
  *
@@ -1117,19 +1118,24 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
-  // The file runs no script, so a media query the page asks in JavaScript
-  // keeps the answer it got on the server, whatever the reader's screen.
+  // A static file runs no script, so a media query the page asks in
+  // JavaScript keeps the answer it got on the server, whatever the reader's
+  // screen. An interactive file paints that answer first and asks again when
+  // its script runs; a viewer that blocks scripts keeps the server answer.
   const screenQueries = [
     ...new Set(/** @type {{call: string}[]} */ (message.screenQueries ?? []).map(q => q.call)),
   ];
   if (screenQueries.length > 0) {
     warnings.push({
       code: 'screen-query',
-      message: `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
+      message: script
+        ? `The page asks ${screenQueries.join(', ')} in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`
+        : `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
     });
   }
   // A chart the render did not draw is an empty box: a ResponsiveContainer
-  // holds only its sizing box, and a chart of fixed size an empty wrapper.
+  // holds only its sizing box, and a chart of fixed size an empty wrapper. An
+  // interactive file's script draws it when it runs.
   const blankCharts =
     (
       markup.match(
@@ -1142,7 +1148,9 @@ export async function renderPage(entry, options = {}) {
   if (blankCharts > 0) {
     warnings.push({
       code: 'chart-size',
-      message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+      message: script
+        ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
+        : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
     });
   }
   if (message.chartsAlone) {
@@ -1157,7 +1165,9 @@ export async function renderPage(entry, options = {}) {
     const why = causes[message.chartsAlone] ?? causes.error;
     warnings.push({
       code: 'chart-size',
-      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
+      message: script
+        ? `${why}, so each chart was drawn by itself for the first paint, as the first render gave it: until the file's script draws the page again, a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`
+        : `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
     });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {

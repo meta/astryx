@@ -15,7 +15,7 @@
  * @property {boolean} [reverse] - Turn a rendered HTML file back into a page module.
  * @property {string} [title] - The rendered page's title (default: its first heading, else the file name). Rendering only.
  * @property {boolean} [overwrite] - Replace the existing page module when reversing (never a protected file, and never a file other than the page, which always goes into a new folder). Rendering replaces an existing HTML file only when a render wrote it.
- * @property {boolean} [interactive] - Rendering only: the file also carries the page's script, which draws the page in the browser over its markup, so its state, effects and event handlers work. Still one file, with no network and no dependency.
+ * @property {boolean} [interactive] - Rendering only: the file also carries the page's script, which draws the page in the browser over its markup, so its state, effects and event handlers work. Still one file, and the render adds no network request; it needs esbuild (an optional peer) installed where the page or the CLI is.
  */
 
 /**

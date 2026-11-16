@@ -94,6 +94,7 @@ beforeAll(async () => {
     '@stylexjs',
     'react',
     'react-dom',
+    'recharts',
   ]);
   put('src/counter.tsx', COUNTER);
   put('src/label.ts', LABEL);
@@ -385,6 +386,56 @@ describe('an interactive render', () => {
     );
     expect(back.data.exact).toBe(true);
     expect(read('lazy-back/panel.tsx')).toContain("color: 'rgb(1, 2, 3)'");
+  }, 120_000);
+
+  it('says a media query asked in JavaScript is asked again when the script runs', async () => {
+    put(
+      'src/narrow.tsx',
+      "import {useMediaQuery} from '@astryxdesign/core/hooks';\nexport default function Page() {\n  const narrow = useMediaQuery('(max-width: 768px)');\n  return <main>{narrow ? 'One column' : 'Two columns'}</main>;\n}\n",
+    );
+    const narrow = /** @type {any} */ (
+      await render('src/narrow.tsx', {
+        cwd: dir,
+        out: 'narrow.html',
+        interactive: true,
+      })
+    );
+    const warning = narrow.data.warnings.find(
+      (/** @type {any} */ w) => w.code === 'screen-query',
+    );
+    expect(warning?.message).toBe(
+      "The page asks useMediaQuery('(max-width: 768px)') in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 120_000);
+
+  it('says a chart the render could not draw is drawn by the script, and stays empty in a static file', async () => {
+    put(
+      'src/blank-chart.tsx',
+      'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\n',
+    );
+    const live = /** @type {any} */ (
+      await render('src/blank-chart.tsx', {
+        cwd: dir,
+        out: 'blank-live.html',
+        interactive: true,
+      })
+    );
+    expect(
+      live.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')
+        ?.message,
+    ).toMatch(
+      /^A chart could not be drawn without a browser, so the file paints it empty and its script draws it when it runs; a viewer that blocks scripts keeps it empty\./,
+    );
+    const still = /** @type {any} */ (
+      await render('src/blank-chart.tsx', {cwd: dir, out: 'blank-static.html'})
+    );
+    expect(
+      still.data.warnings.find(
+        (/** @type {any} */ w) => w.code === 'chart-size',
+      )?.message,
+    ).toMatch(
+      /^A chart could not be drawn without a browser, so it is empty here:/,
+    );
   }, 120_000);
 
   it('keeps a static render as it was: no script and no element around the markup', async () => {
