@@ -26,10 +26,13 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   busyWindowProof,
   CONTROL_RGB,
   countBetween,
   inPresentationOrder,
+  releaseAnimations,
+  seekAnimations,
   startBusyControl,
   traceRendering,
   trackMarker,
@@ -88,56 +91,22 @@ async function setArgs(page: Page, updatedArgs: Record<string, unknown>) {
   );
 }
 
-/** Sets a value and holds the fill animations before their first frame. */
+/** Holds the change before a test-process delay can consume its duration. */
 async function changeAndPause(page: Page, value: number) {
-  return page.evaluate(
-    async ({storyId, updatedArgs}) => {
-      const fill = document.querySelector('.astryx-circular-progress-fill');
-      const held: Animation[] = [];
-      const animate = Element.prototype.animate;
-      let timeout = 0;
-      try {
-        return await new Promise<number>((resolve, reject) => {
-          Element.prototype.animate = function (
-            this: Element,
-            ...args: Parameters<Element['animate']>
-          ) {
-            const animation = animate.apply(this, args);
-            if (fill?.contains(this)) {
-              held.push(animation);
-              // Hold after the caller sets its start time, before any frame.
-              queueMicrotask(() => {
-                animation.pause();
-                animation.currentTime = 0;
-                if (held.length >= 4) {
-                  resolve(held.length);
-                }
-              });
-            }
-            return animation;
-          };
-          (
-            window as unknown as {
-              __STORYBOOK_ADDONS_CHANNEL__: {
-                emit: (event: string, payload: unknown) => void;
-              };
-            }
-          ).__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', {
-            storyId,
-            updatedArgs,
-          });
-          timeout = window.setTimeout(
-            () => reject(new Error('no animation started')),
-            3000,
-          );
-        });
-      } finally {
-        clearTimeout(timeout);
-        Element.prototype.animate = animate;
-      }
-    },
-    {storyId: STORY, updatedArgs: {value}},
-  );
+  const fill = page.locator('.astryx-circular-progress-fill');
+  const halves = fill.locator(':scope > span > span');
+  const hold = await armHold(page, fill, {
+    count: 4,
+    timeout: 3000,
+    judges: [
+      {target: halves.nth(0), property: 'transform'},
+      {target: halves.nth(1), property: 'transform'},
+      {target: fill.locator(':scope > span').last(), property: 'transform'},
+      {target: fill.locator(':scope > svg > path'), property: 'opacity'},
+    ],
+  });
+  await setArgs(page, {value});
+  return (await hold.held()).length;
 }
 
 /** Seeks every running change animation to `time` (ms). */
@@ -442,52 +411,50 @@ test('a value change lays out and paints nothing per frame', async ({page}) => {
   );
   // Hold the fill before tracing can consume any of its duration.
   expect(await changeAndPause(page, 80)).toBe(4);
-  const motion = await page.evaluateHandle(() => {
-    const fill = document.querySelector('.astryx-circular-progress-fill');
-    return document.getAnimations().filter(animation => {
-      const effect = animation.effect as KeyframeEffect | null;
-      return fill?.contains(effect?.target ?? null);
-    });
-  });
-  expect(
-    await motion.evaluate(animations =>
-      animations
-        .map(animation => {
-          const frames = (animation.effect as KeyframeEffect).getKeyframes();
-          return frames.some(frame => frame.transform != null)
-            ? 'transform'
-            : frames.some(frame => frame.opacity != null)
-              ? 'opacity'
-              : 'other';
-        })
-        .sort(),
-    ),
-  ).toEqual(['opacity', 'transform', 'transform', 'transform']);
+  const motion = await page.evaluateHandle(() =>
+    (window as unknown as {__harnessHeld: Animation[]}).__harnessHeld.slice(),
+  );
+  await seekAnimations(page, 200);
   let from = 0;
   let to = 0;
   let moving = false;
-  const trace = await traceRendering(page, async () => {
-    [from, to, moving] = await motion.evaluate(async animations => {
-      for (const animation of animations) {
-        animation.currentTime = 200;
-        animation.play();
-      }
-      await Promise.all(animations.map(animation => animation.ready));
-      await new Promise(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      );
-      // One evaluation places both marks and samples the final motion.
-      // Test-process delays cannot extend the judged second past the change.
-      const from = performance.timeOrigin + performance.now();
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return [
-        from,
-        performance.timeOrigin + performance.now(),
-        animations.every(animation => animation.playState === 'running'),
-      ] as const;
+  let trace;
+  try {
+    trace = await traceRendering(page, async () => {
+      // Observe the release on the page, so a late test process cannot miss it.
+      const sample = motion.evaluate(async animations => {
+        await new Promise<void>(resolve => {
+          const released = () => {
+            if (
+              animations.every(animation => animation.playState === 'running')
+            ) {
+              resolve();
+            } else {
+              requestAnimationFrame(released);
+            }
+          };
+          released();
+        });
+        await Promise.all(animations.map(animation => animation.ready));
+        await new Promise(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        // Both marks and the final motion read stay in the same evaluation.
+        const from = performance.timeOrigin + performance.now();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return [
+          from,
+          performance.timeOrigin + performance.now(),
+          animations.every(animation => animation.playState === 'running'),
+        ] as const;
+      });
+      await releaseAnimations(page);
+      [from, to, moving] = await sample;
     });
-  });
-  await motion.dispose();
+  } finally {
+    await releaseAnimations(page, {finish: true});
+    await motion.dispose();
+  }
   const counts = countBetween(trace, from, to);
   // A full second of the change: nothing lays out or paints. A
   // stroke-dashoffset transition repainted every frame (36 paints in 410 ms).
