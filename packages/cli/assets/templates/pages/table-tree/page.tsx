@@ -983,7 +983,9 @@ function AboutPanel() {
   return (
     <VStack gap={6}>
       <VStack gap={3}>
-        <Heading level={3}>About</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          About
+        </Heading>
         <Text color="secondary">{REPO_DESCRIPTION}</Text>
         <Link href="#" isExternalLink>
           canvas-editor.dev
@@ -1044,7 +1046,9 @@ function AboutPanel() {
       <Divider />
 
       <VStack gap={3}>
-        <Heading level={3}>Releases</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          Releases
+        </Heading>
         <HStack gap={2} vAlign="center">
           <Icon icon={Tag} size="sm" color="success" />
           <Text weight="bold">v2.4.0</Text>
@@ -1058,7 +1062,9 @@ function AboutPanel() {
       <Divider />
 
       <VStack gap={3}>
-        <Heading level={3}>Contributors</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          Contributors
+        </Heading>
         {/*
           AvatarGroup overlaps its children by design, which fights a wrapping
           grid — so this is a plain wrapped row of avatars, which is the shape
@@ -1706,7 +1712,7 @@ export default function FileTreeTemplate() {
         />
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           {data.length === 0 ? (
             <EmptyState
               title="No matching files"

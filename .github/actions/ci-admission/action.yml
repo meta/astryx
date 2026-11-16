@@ -37,9 +37,12 @@
 #   pull-request run still waiting here counts the jobs it runs, its waiting
 #   job and a Storybook build that found room, so waiting runs never hold each
 #   other back by more than they use; a waiting
-#   `main` run counts its whole peak. A run admitted in the last 45 seconds,
-#   before its jobs appear, counts at least its planned most. Every other
-#   workflow's run counts an estimate. A run not updated in two hours is a
+#   `main` run counts its whole peak. A matrix that limits its legs with
+#   `max-parallel` counts at most that many live legs, once a running leg
+#   names that limit (until then, every live leg): GitHub lists the legs it
+#   holds back as queued, but they hold no runner. A run admitted in the
+#   last 45 seconds, before its jobs appear, counts at least its planned
+#   most. Every other workflow's run counts an estimate. A run not updated in two hours is a
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
@@ -50,6 +53,17 @@
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
+# - A pull request labelled `release-critical` starts on its first look, even
+#   when CI is full and ahead of a waiting `main` check, and still runs every
+#   job (spec:AST-030 DEC-30). The look picks its legs' width, as for any run
+#   that fits: full width when CI has room for it. CI starts on no label event and this reads the
+#   labels of the event that started the run, so a label takes effect on the
+#   next push, reopen or ready toggle.
+#   The label counts only when its newest application came from someone with
+#   write access, the rule the `ci:run-*` labels follow (run-labels.cjs); a
+#   lookup that fails does not count it. A pull-request job that uses this
+#   action checks out `.github/scripts/lib`, which brings those scripts, and
+#   reads pull requests (`pull-requests: read`).
 # - A run can hold more matrix legs at once when CI has room for them
 #   (`leg-widths`). It waits for `peak`, which counts each such matrix at its
 #   tight width. When the look that starts it also has room for every matrix
@@ -156,6 +170,7 @@ runs:
         MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
         MAX_LOOKS: ${{ inputs.max-looks }}
         COUNT_MODULE: ${{ github.action_path }}/count.mjs
+        RUN_LABELS_MODULE: ${{ github.action_path }}/../../scripts/run-labels.cjs
       with:
         retries: 3
         script: |
@@ -205,6 +220,10 @@ runs:
           const widths = Object.values(JSON.parse(process.env.LEG_WIDTHS || '{}'));
           const widen = widths.reduce((sum, width) => sum + width.full - width.tight, 0);
           const main = process.env.MAIN === 'true';
+          // A release-critical pull request starts on its first look, whatever
+          // the load (spec:AST-030 DEC-30). The look only picks its legs' width.
+          const RELEASE_CRITICAL = 'release-critical';
+          let releaseCritical = false;
           const pr = context.payload.pull_request;
           if (pr != null) {
             const labels = (pr.labels ?? []).map(label => label.name);
@@ -215,6 +234,17 @@ runs:
             }
             const extra = JSON.parse(process.env.LABEL_LEGS || '{}');
             for (const label of labels) peak += extra[label] ?? 0;
+            // Only a label someone with write access applied counts. The
+            // shared check's own notices name a suite, so they stay quiet here.
+            if (labels.includes(RELEASE_CRITICAL)) {
+              try {
+                const {decideRunLabel} = await import(pathToFileURL(process.env.RUN_LABELS_MODULE).href);
+                releaseCritical = await decideRunLabel({github, context, core: {...core, notice: () => {}}, suite: RELEASE_CRITICAL, label: RELEASE_CRITICAL});
+              } catch (error) {
+                core.warning(`Could not check who applied ${RELEASE_CRITICAL}: ${error.message}`);
+              }
+              if (!releaseCritical) core.info(`${RELEASE_CRITICAL} is on this pull request, but its newest application is not from someone with write access, or could not be read: the run waits for room as usual.`);
+            }
           }
 
           // 'rest' carries on the wait 'room' began: its clock and its looks.
@@ -242,7 +272,8 @@ runs:
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes; starting.`);
                 return;
               }
-              if (next > 0 && looked < MAX_LOOKS) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
+              // A release-critical run looks at once: it never waits for room.
+              if (next > 0 && looked < MAX_LOOKS && !releaseCritical) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
             }
             // This run's own wait start on GitHub's clock (whole seconds), the
             // clock other runs' starts are read on: its first wait step as
@@ -300,12 +331,16 @@ runs:
               const smallCounted = others - lookAt.large;
               const smallList = Object.entries(smallBy).map(([name, count]) => `${name} ${count}`).join(', ');
               core.info(`Look ${look}: ${counted.join('; ') || 'no CI or Main runs'}. Small workflows ${small}${smallList ? ` (${smallList})` : ''}, counted as ${smallCounted}.${stale ? ` Ignored ${stale} stale run${stale === 1 ? '' : 's'}.` : ''}`);
-              const fits = others + peak <= CI_CEILING && !mainWaiting;
+              const fits = releaseCritical || (others + peak <= CI_CEILING && !mainWaiting);
               core.setOutput('fits', String(fits));
               if (fits) {
                 // A run with no widening matrix has no full width to take.
                 const wide = widen > 0 && others + peak + widen <= CI_CEILING;
                 core.setOutput('wide', String(wide));
+                if (releaseCritical) {
+                  core.notice(`${RELEASE_CRITICAL}: this run starts at once, without waiting for room under the CI ceiling (about ${others} other jobs + ${peak}; legs at ${wide ? 'full' : 'tight'} width).`);
+                  return;
+                }
                 core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.${widen === 0 ? '' : wide ? ` Legs run at full width: + ${widen} <= ${CI_CEILING}.` : ` Legs run at tight width: + ${widen} > ${CI_CEILING}.`}`);
                 return;
               }

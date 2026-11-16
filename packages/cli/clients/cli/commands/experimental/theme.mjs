@@ -114,6 +114,11 @@ import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewL
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../../lib/base-gate.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -1550,6 +1555,7 @@ function defineGroup(parent, doc) {
         const word = String(extras[0]).toLowerCase();
         const group = doc.name.split(' ').at(-1) ?? '';
         const ranked = (cmd.commands ?? [])
+          .filter(command => commandAvailable(command, helpBase()))
           .map(command => command.name())
           .sort(
             (a, b) =>
@@ -1589,7 +1595,9 @@ function defineGroup(parent, doc) {
             type: 'help',
             data: {
               command: words.join(' '),
-              commands: (cmd.commands ?? []).map(command => ({
+              commands: (cmd.commands ?? [])
+                .filter(command => commandAvailable(command, helpBase()))
+                .map(command => ({
                 name: command.name(),
                 summary: command.summary() || command.description(),
               })),
@@ -1647,12 +1655,20 @@ export function registerExperimentalTheme(group, program) {
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
+  // The run's base may not serve a line's command; help then leaves it out.
+  const overrides = [
+    ['experimental theme targets', `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`],
+    ['experimental theme editor how', `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`],
+    ['component <Name>', `  ${getCliInvocation()} component <Name>                    One component's theming table\n`],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n` +
-      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   const editor = defineGroup(theme, editorDoc);
@@ -1690,38 +1706,6 @@ export function registerExperimentalTheme(group, program) {
                 (/** @type {string} */ w) =>
                   /^-/.test(w) && !takes.has(w.split('=')[0]),
               );
-            // `--base` is the dial new takes as --like.
-            if (stray && stray.split('=')[0] === '--base') {
-              const args = (cmd?.args ?? []).slice(1).map(String);
-              const at = args.indexOf(stray);
-              const value = stray.includes('=')
-                ? stray.slice(stray.indexOf('=') + 1)
-                : args[at + 1];
-              // Thrown, as every refusal inside run is: run prints it once
-              // (a refusal printed here and then caught again by run would
-              // print twice where exit does not end the process).
-              // The line with --like is checked as new checks it (an
-              // install first, other flags' repairs folded in), as the
-              // option reader's lines are.
-              const lines = value
-                ? await checkedOptionLines(
-                    'editor',
-                    'new',
-                    `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                  )
-                : [];
-              throw new AstryxError(
-                `new takes the base theme as --like, not --base.`,
-                [
-                  ...lines,
-                  {
-                    name: `${EDITOR} new --help`,
-                    reason: 'every option it takes',
-                  },
-                ],
-                ERROR_CODES.ERR_INVALID_OPTION,
-              );
-            }
             if (stray)
               throw new AstryxError(
                 `unknown option '${stray}'.`,

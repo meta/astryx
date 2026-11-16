@@ -354,6 +354,14 @@ const RUNNERS = {
     runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
     sites: ['require(<computed>)'],
   },
+  'foundation/bases/requirements.mjs': {
+    runs: "a base's adapter module, only in a run whose command needs one of its steps",
+    sites: ['import(<computed>)'],
+  },
+  'foundation/bases/core-docs.mjs': {
+    runs: "docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'foundation/config/project.mjs': {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
@@ -596,6 +604,7 @@ const LOADER_MODULES = {
   'foundation/discovery/docs-discovery.mjs': [
     'BUILTIN_DOCS_PACKAGE',
     'DocsCatalog',
+    'builtinTopicsForCore',
     'discoverBuiltinTopics',
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',

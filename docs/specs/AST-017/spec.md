@@ -312,7 +312,11 @@ one removal merged ahead of the decision to allow it.
   Automation MUST use the documented programmatic API.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
-  options MUST appear in generated help and the machine-readable manifest.
+  options MUST appear in generated help and the machine-readable manifest; help
+  leaves out the ones the run's base does not serve and counts them, and the
+  manifest lists every command and every command's option with `available`;
+  the global options, which every base serves, carry none (`spec:AST-114`
+  FR7).
   Automatic behavior and other controls MUST either appear there or be linked from
   those discovery surfaces to consumer documentation. A
   normal invocation mode MUST have a documented command, option, or configuration
