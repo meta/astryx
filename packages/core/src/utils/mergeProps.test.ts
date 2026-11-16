@@ -162,5 +162,20 @@ describe('mergeProps', () => {
       const result = mergeProps({className: 'a'}, {className: 'b'}, undefined);
       expect(result).toEqual({className: 'a b'});
     });
+
+    it('merges classNames and styles across all four arguments in one pass', () => {
+      const result = mergeProps(
+        {className: 'c1', style: {margin: 0}, id: 'x'},
+        {className: 'c2', style: {color: 'red'}, role: 'button'},
+        'c3',
+        {fontSize: 12},
+      );
+      expect(result).toEqual({
+        id: 'x',
+        role: 'button',
+        className: 'c1 c2 c3',
+        style: {margin: 0, color: 'red', fontSize: 12},
+      });
+    });
   });
 });
