@@ -2330,7 +2330,8 @@ async function loadedForCheck(cwd, slug, skip) {
 
 /**
  * What a whole-theme change leaves out, by the census, each with the lines
- * that reach it, one per part: square corners leave the parts drawn as
+ * that reach it, one per part: corners leave the parts the theme gives
+ * corners of their own as they are; square corners leave the parts drawn as
  * pills round (they read --radius-full); a wider or narrower
  * --border-width does not reach the surfaces that draw no border or a
  * fixed line of their own, and moves every divider's rule with it.
@@ -2347,6 +2348,27 @@ function leftOutParts(ctx, slug, data, sub, s) {
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
   /** @type {Array<{note: string, run: string[]}>} */
   const out = [];
+  // Whole-theme corners never reach a part the theme gives corners of its
+  // own (border-radius 12px --on dialog, corners pill --on button): those
+  // parts are named as kept, with the lines that hand them back to the
+  // dial.
+  if (s.source === 'dial' && s.thing === 'corners') {
+    const own = data.settings.filter(
+      x =>
+        x.on &&
+        !x.state &&
+        (x.thing === 'corners' ||
+          /^border-(?:(?:top|bottom)-(?:left|right)-|(?:start|end)-(?:start|end)-)?radius$/.test(
+            String(x.thing),
+          )),
+    );
+    const parts = [...new Set(own.map(x => String(x.on)))];
+    if (parts.length)
+      out.push({
+        note: `${parts.join(', ')} ${parts.length > 1 ? 'keep their' : 'keeps its'} own corners (set on ${parts.length > 1 ? 'them' : 'it'} in this theme), which the corners dial does not change; ${own.length > 1 ? 'these hand them' : 'this hands it'} back to the dial:`,
+        run: own.map(x => `${P} undo ${slug} ${undoArgs(x)}`),
+      });
+  }
   if (
     s.source === 'dial' &&
     s.thing === 'corners' &&
