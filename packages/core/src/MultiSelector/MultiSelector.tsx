@@ -900,10 +900,10 @@ export interface MultiSelectorProps<
    * Content shown in the panel when a search query matches no options, and
    * announced in a polite live region at the same time.
    *
-   * The panel message is `role="presentation"`, so the live region is the
-   * only route to assistive tech. It announces the text this content renders,
-   * read from the DOM, so an element is announced as written and anything
-   * marked `aria-hidden` is left out of both.
+   * The panel shows the message as its content, and the live region also
+   * announces it. It announces the text this content renders, read from the
+   * DOM, so an element is announced as written and anything marked
+   * `aria-hidden` is left out of both.
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
@@ -1639,9 +1639,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     [announceSearch, isLoading, selectableItems, getCreateQuery, t],
   );
 
-  // The panel's empty message is role="presentation" — role="listbox" permits
-  // only option and group children — so this region is its only route to
-  // assistive tech, and the region has to say what the panel says. Both
+  // The panel shows its empty message as content, and this region announces
+  // it, so the region has to say what the panel says. Both
   // `emptyText` and `emptySearchText` take a ReactNode, so the words are read
   // off the rendered element rather than guessed from the prop: a caller who
   // puts a link in the dead end is announced their link, not a default
@@ -2309,9 +2308,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       cursor++;
     }
 
-    // Empty state — no real items to show. With no options, the popup is not
-    // a listbox (an empty listbox is invalid), so the message sits in a plain
-    // popup next to the input. The live region also announces it.
+    // Empty state — no real items to show. With no options, the popup is a
+    // group named by the label (an empty listbox is invalid); the message is
+    // its content, next to the input, and the live region also announces it.
     // While isLoading the options have not arrived yet, so asserting either
     // message would be a claim the component cannot make; the trigger's
     // spinner covers it.
@@ -2444,10 +2443,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const listboxLabelProps = hasExternalTrigger
     ? {'aria-label': label}
     : {'aria-labelledby': triggerId};
-  // With no options, the popup is not a listbox, so it takes none of a
-  // listbox's attributes.
+  // With no options, the popup is a group named by the label, not an empty
+  // listbox or grid, which is invalid. With options it keeps its one role.
   const listboxRoleProps = isListEmpty
-    ? {}
+    ? {role: 'group' as const}
     : {
         role: isGrid ? ('grid' as const) : ('listbox' as const),
         'aria-multiselectable': true as const,
@@ -2466,7 +2465,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           ref={listboxRef}
           id={listboxId}
           {...listboxRoleProps}
-          {...(isListEmpty ? {} : listboxLabelProps)}
+          {...listboxLabelProps}
           {...stylex.props(styles.listbox)}>
           {renderOptions()}
         </div>
@@ -2483,11 +2482,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         // layer. Name only this no-search sheet directly from the component's
         // existing label; searchable sheets and popovers retain their current
         // trigger relationship.
-        {...(isListEmpty
-          ? {}
-          : surface.activePresentation === 'bottom-sheet'
-            ? {'aria-label': label}
-            : listboxLabelProps)}
+        {...(surface.activePresentation === 'bottom-sheet'
+          ? {'aria-label': label}
+          : listboxLabelProps)}
         aria-activedescendant={activeDescendantId}
         tabIndex={listboxOwnsKeyboard ? 0 : undefined}
         onKeyDown={listboxOwnsKeyboard ? onKeyDown : undefined}

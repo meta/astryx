@@ -1353,7 +1353,7 @@ describe('MultiSelector', () => {
     ).toBeInTheDocument();
   });
 
-  it('with no matching options, the popup is not a listbox and the input still controls it', async () => {
+  it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
     const user = userEvent.setup();
     render(
       <MultiSelector
@@ -1369,14 +1369,14 @@ describe('MultiSelector', () => {
     await user.type(screen.getByRole('combobox', h), 'xyz');
 
     // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
-    // popup drops the listbox role, and the message sits in it beside the
-    // input. The result-count live region also announces it.
+    // popup is a group named by the label, and the message is its content.
+    // The result-count live region also announces it.
     const combobox = screen.getByRole('combobox', h);
     expect(screen.queryByRole('listbox', h)).toBeNull();
     expect(combobox).toHaveAttribute('aria-expanded', 'true');
     const popup = popupOf(combobox);
+    expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
     expect(popup).not.toHaveAttribute('aria-multiselectable');
-    expect(popup).not.toHaveAttribute('aria-labelledby');
     expect(within(popup).getByText('No results found')).toBeInTheDocument();
 
     // Matching options bring the listbox back.
@@ -4807,6 +4807,30 @@ describe('MultiSelector option actions (grid)', () => {
       />,
     );
     expect(screen.getByRole('grid', h)).toBeInTheDocument();
+  });
+
+  it('is a named group while a query matches nothing, and the grid again when it matches', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const combobox = screen.getByRole('combobox', h);
+    await user.type(combobox, 'zzz');
+    // An empty grid is invalid like an empty listbox; it is never a listbox.
+    expect(screen.queryByRole('grid', h)).toBeNull();
+    expect(screen.queryByRole('listbox', h)).toBeNull();
+    expect(popupOf(combobox)).toBe(
+      screen.getByRole('group', {name: 'Labels', ...h}),
+    );
+    await user.clear(combobox);
+    expect(screen.getByRole('grid', h)).toBe(popupOf(combobox));
   });
 
   it('becomes a grid when options arrive after loading, inside a section too', async () => {

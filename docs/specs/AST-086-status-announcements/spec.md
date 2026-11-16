@@ -143,9 +143,9 @@ announcement channel.
   present during page load is not announced. A message inserted after the
   document finishes loading, or whose text changes after that, is announced
   once. That includes a message brought in by a client-rendered route change and
-  a server-rendered message inserted by client navigation. A message that
-  reaches assistive technology only through its announcement, such as a picker's
-  empty-panel message under `spec:AST-056` FR3, announces even during page load.
+  a server-rendered message inserted by client navigation. A picker's
+  empty-panel message (`spec:AST-056` FR3), which its popup also shows as
+  content, announces even during page load.
   FR4 applies inside a mounted live container, and FR6 governs repeats. FR11
   covers components that announce their own rendered content;
   `component:FieldStatus`, a grouped field's status message (as in TimeInput
@@ -155,7 +155,7 @@ announcement channel.
   component FR11 covers announces the element's
   rendered text, or its accessible name when it renders no text, leaving out
   `aria-hidden` content. It stays silent for text present during page load
-  (except as FR11 provides for announcement-only messages), announces once per later appearance or text change, and re-arms when
+  (except as FR11 provides for a picker's empty-panel message), announces once per later appearance or text change, and re-arms when
   the element is hidden. An appearance its owner does not re-render for is
   announced on the owner's next render (FR13). During a server render it announces nothing and adds no
   live role, and a server-renderable adopter stays server-renderable and passes
@@ -314,10 +314,9 @@ announcement channel.
   own Effect because the core module is not published to lab (INV10).
 - Comments (lab): its error banners and progress label mount live roles
   together with their text. Inside a live log they follow FR4; otherwise FR2.
-- Selector and MultiSelector render their empty-panel message as
-  `role="presentation"`, so it reaches assistive technology only through the
-  announcement and announces even at page load (FR11, `spec:AST-056`
-  FR3). Typeahead and CommandPalette announce their empty state after page load and are otherwise unchanged.
+- Selector and MultiSelector show their empty-panel message as the content of
+  the empty popup, a group named by the field's label, and also announce it,
+  even at page load (FR11, `spec:AST-056` FR3). Typeahead and CommandPalette announce their empty state after page load and are otherwise unchanged.
 - `component:FieldStatus` AR1 is unchanged: a field message announces on first
   mount, because it reports the field's state when the field appears.
 - `component:Banner` FR8: the caller announces an async outcome from its

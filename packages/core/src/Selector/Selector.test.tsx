@@ -341,6 +341,30 @@ describe('Selector', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('with no options, focuses a group named by the label in the sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <Selector
+        label="Fruit"
+        options={[]}
+        onChange={() => {}}
+        presentation="bottom-sheet"
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await screen.findByRole('dialog', {name: 'Fruit'});
+    // The field is a group named "Fruit" too; the popup is the one the trigger
+    // controls.
+    const group = popupOf(trigger);
+    expect(group).toHaveAttribute('role', 'group');
+    expect(group).toHaveAccessibleName('Fruit');
+    await waitFor(() => {
+      expect(group).toHaveFocus();
+    });
+    expect(group).toHaveTextContent('No options');
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <Selector
@@ -1339,7 +1363,7 @@ describe('Selector', () => {
       expect(within(popup).getByText('No results found')).toBeInTheDocument();
     });
 
-    it('with no matching options, the popup is not a listbox and the input still controls it', async () => {
+    it('with no matching options, the popup is a named group, not a listbox, and the input still controls it', async () => {
       const user = userEvent.setup();
       render(
         <Selector
@@ -1354,13 +1378,12 @@ describe('Selector', () => {
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
       // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
-      // popup drops the listbox role, and the message sits in it beside the
-      // input.
+      // popup is a group named by the label, and the message is its content.
       const combobox = screen.getByRole('combobox', h);
       expect(screen.queryByRole('listbox', h)).toBeNull();
       expect(combobox).toHaveAttribute('aria-expanded', 'true');
       const popup = popupOf(combobox);
-      expect(popup).not.toHaveAttribute('aria-label');
+      expect(popup).toBe(screen.getByRole('group', {name: 'Fruit', ...h}));
       expect(within(popup).getByText('No results found')).toBeInTheDocument();
 
       // Matching options bring the listbox back.
