@@ -74,7 +74,7 @@ import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
 import {
-  announcesActiveOption,
+  useActiveOptionAnnouncement,
   useComboboxWithKeyHighlight,
   useSelectedItemOverlayMargin,
 } from './hooks';
@@ -1613,30 +1613,15 @@ export function Selector<T extends SelectorOptionType>(
     ],
   );
 
-  // Each move by a key names the active option in the polite live region:
-  // iOS VoiceOver does not follow aria-activedescendant. A new move replaces a
-  // name not yet spoken.
-  const announceActiveOption = useAnnounce({hasReplace: true});
-  const onKeyboardHighlight = useCallback(
-    (index: number) => {
-      const item = filteredItems[index];
-      if (item == null || !announcesActiveOption()) {
-        return;
-      }
-      announceActiveOption(
-        t(
-          item.value === optimisticValue
-            ? '@astryx.selector.activeOptionSelected'
-            : '@astryx.selector.activeOption',
-          {
-            label: item.label ?? item.value,
-            position: index + 1,
-            total: filteredItems.length,
-          },
-        ),
-      );
-    },
-    [announceActiveOption, filteredItems, optimisticValue, t],
+  // Each move by a key names the active option for iOS VoiceOver, which
+  // does not follow aria-activedescendant.
+  const isOptionSelected = useCallback(
+    (item: (typeof filteredItems)[number]) => item.value === optimisticValue,
+    [optimisticValue],
+  );
+  const onKeyboardHighlight = useActiveOptionAnnouncement(
+    filteredItems,
+    isOptionSelected,
   );
 
   // Selector behavior (keyboard nav, selection)

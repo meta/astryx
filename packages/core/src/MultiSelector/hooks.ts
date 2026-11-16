@@ -29,8 +29,6 @@ interface UseMultiComboboxOptions {
   onOpen: () => unknown;
   onClose: () => void;
   onToggle: (itemValue: string) => void;
-  /** Runs after each move of the highlight by a key, with the new index. */
-  onKeyboardHighlight?: (index: number) => void;
   /**
    * Clear all selected values. When provided, pressing Delete or Backspace on
    * the closed trigger clears the selection — a keyboard equivalent of the
@@ -84,22 +82,36 @@ interface UseMultiComboboxResult {
  *
  * The caller must ensure selectableItems is in the same order as the rendered DOM.
  */
-export function useMultiCombobox({
-  selectableItems,
-  isDisabled = false,
-  isOpen,
-  hasSearch = false,
-  onOpen,
-  onClose,
-  onToggle,
-  onKeyboardHighlight,
-  onClear,
-  hasValue = false,
-  listboxId,
-  isGrid = false,
-  rowHasAction,
-  onActivateAction,
-}: UseMultiComboboxOptions): UseMultiComboboxResult {
+export function useMultiCombobox(
+  options: UseMultiComboboxOptions,
+): UseMultiComboboxResult {
+  return useMultiComboboxWithKeyHighlight(options);
+}
+
+/**
+ * `useMultiCombobox` for Core's own MultiSelector: `onKeyboardHighlight` runs
+ * after each move of the highlight by a key, with the new index, so the
+ * caller can announce the active option (announcesActiveOption). Internal:
+ * not exported from the MultiSelector entry point.
+ */
+export function useMultiComboboxWithKeyHighlight(
+  {
+    selectableItems,
+    isDisabled = false,
+    isOpen,
+    hasSearch = false,
+    onOpen,
+    onClose,
+    onToggle,
+    onClear,
+    hasValue = false,
+    listboxId,
+    isGrid = false,
+    rowHasAction,
+    onActivateAction,
+  }: UseMultiComboboxOptions,
+  onKeyboardHighlight?: (index: number) => void,
+): UseMultiComboboxResult {
   const [highlightedIndex, setHighlightedIndexState] = useState<number>(-1);
   const [highlightedCell, setHighlightedCell] =
     useState<MultiComboboxCell>('option');

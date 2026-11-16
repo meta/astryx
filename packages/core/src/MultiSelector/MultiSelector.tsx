@@ -74,7 +74,7 @@ import {
   normalizeOption,
   getSelectableOptions,
 } from '../Selector/utils';
-import {useMultiCombobox} from './hooks';
+import {useMultiComboboxWithKeyHighlight} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -109,7 +109,7 @@ import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
-import {announcesActiveOption} from '../Selector/hooks';
+import {useActiveOptionAnnouncement} from '../Selector/hooks';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
@@ -1854,37 +1854,22 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     [handleSelectAll, handleToggle, commitCreate],
   );
 
+  // Each move by a key names the active option for iOS VoiceOver, which
+  // does not follow aria-activedescendant.
+  const isOptionSelected = useCallback(
+    (item: (typeof sortedItems)[number]) =>
+      item.value === SELECT_ALL_VALUE
+        ? allEnabledSelected
+        : !isCreateValue(item.value) && optimisticValue.includes(item.value),
+    [allEnabledSelected, optimisticValue],
+  );
+  const onKeyboardHighlight = useActiveOptionAnnouncement(
+    sortedItems,
+    isOptionSelected,
+  );
+
   // Multi-select combobox behavior — index-based, matching useCombobox pattern.
   // sortedItems is the single source of truth for item order.
-  // Each move by a key names the active option in the polite live region:
-  // iOS VoiceOver does not follow aria-activedescendant. A new move replaces a
-  // name not yet spoken.
-  const announceActiveOption = useAnnounce({hasReplace: true});
-  const onKeyboardHighlight = useCallback(
-    (index: number) => {
-      const item = sortedItems[index];
-      if (item == null || !announcesActiveOption()) {
-        return;
-      }
-      const isSelected =
-        item.value === SELECT_ALL_VALUE
-          ? allEnabledSelected
-          : !isCreateValue(item.value) && optimisticValue.includes(item.value);
-      announceActiveOption(
-        t(
-          isSelected
-            ? '@astryx.selector.activeOptionSelected'
-            : '@astryx.selector.activeOption',
-          {
-            label: item.label,
-            position: index + 1,
-            total: sortedItems.length,
-          },
-        ),
-      );
-    },
-    [announceActiveOption, sortedItems, allEnabledSelected, optimisticValue, t],
-  );
   const getActionCellIdForActivate = useCallback(
     (index: number) => `${listboxId}-item-${index}-action`,
     [listboxId],
@@ -1899,36 +1884,40 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
     setHighlightedIndex,
-  } = useMultiCombobox({
-    selectableItems: sortedItems,
-    isDisabled: isDisabled || isEffectivelyReadOnly,
-    isOpen: surface.isOpen,
-    hasSearch,
-    onOpen: useCallback(() => surface.show(), [surface]),
-    onClose: surface.hide,
-    onToggle: handleNavigableToggle,
+  } = useMultiComboboxWithKeyHighlight(
+    {
+      selectableItems: sortedItems,
+      isDisabled: isDisabled || isEffectivelyReadOnly,
+      isOpen: surface.isOpen,
+      hasSearch,
+      onOpen: useCallback(() => surface.show(), [surface]),
+      onClose: surface.hide,
+      onToggle: handleNavigableToggle,
+      onClear: hasClear ? clearValues : undefined,
+      hasValue,
+      listboxId,
+      isGrid,
+      rowHasAction: useCallback(
+        (index: number) => sortedItems[index]?.action != null,
+        [sortedItems],
+      ),
+      onActivateAction: useCallback(
+        (index: number) => {
+          // Fire the caller's control as a press would: the first focusable
+          // thing in the action cell. Reading the rendered DOM, not the node.
+          const cell = document.getElementById(
+            getActionCellIdForActivate(index),
+          );
+          const control = cell?.querySelector<HTMLElement>(
+            'button, a, input, [role="button"], [tabindex]',
+          );
+          control?.click();
+        },
+        [getActionCellIdForActivate],
+      ),
+    },
     onKeyboardHighlight,
-    onClear: hasClear ? clearValues : undefined,
-    hasValue,
-    listboxId,
-    isGrid,
-    rowHasAction: useCallback(
-      (index: number) => sortedItems[index]?.action != null,
-      [sortedItems],
-    ),
-    onActivateAction: useCallback(
-      (index: number) => {
-        // Fire the caller's control as a press would: the first focusable
-        // thing in the action cell. Reading the rendered DOM, not the node.
-        const cell = document.getElementById(getActionCellIdForActivate(index));
-        const control = cell?.querySelector<HTMLElement>(
-          'button, a, input, [role="button"], [tabindex]',
-        );
-        control?.click();
-      },
-      [getActionCellIdForActivate],
-    ),
-  });
+  );
 
   // A new query is a new list: the old highlight's index would name another
   // row, or one past the end, so it is cleared. With no row highlighted, Left

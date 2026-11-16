@@ -18,6 +18,12 @@
  */
 
 import {useCallback, useState} from 'react';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/hooks.generated';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -35,6 +41,8 @@ import {isIosWebKit} from '../utils/touchQueries';
 // The selected row renders one optical pixel below the closed trigger label at
 // the same mathematical center, so compensate before viewport clamping.
 const SELECTED_ITEM_OPTICAL_OFFSET = 1;
+
+registerEnglishFallback(english);
 
 /**
  * Return an element's document-relative layout top without CSS transforms.
@@ -401,6 +409,44 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
  */
 export function announcesActiveOption(): boolean {
   return isIosWebKit();
+}
+
+/**
+ * The keyboard-move callback for a Core combobox: it announces the active
+ * option politely, with its name, `selected` when it is, and its position,
+ * where announcesActiveOption says so. A new move replaces a name not yet
+ * spoken. `items` are the options in list order; `isSelected` tells whether
+ * one is selected.
+ */
+export function useActiveOptionAnnouncement<
+  I extends {readonly value: string; readonly label?: string},
+>(
+  items: ReadonlyArray<I>,
+  isSelected: (item: I) => boolean,
+): (index: number) => void {
+  const t = useComponentTranslator();
+  const announce = useAnnounce({hasReplace: true});
+  return useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item == null || !announcesActiveOption()) {
+        return;
+      }
+      announce(
+        t(
+          isSelected(item)
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label ?? item.value,
+            position: index + 1,
+            total: items.length,
+          },
+        ),
+      );
+    },
+    [announce, items, isSelected, t],
+  );
 }
 
 /**
