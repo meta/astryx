@@ -933,6 +933,13 @@ const ABOUT_LINKS = [
 ];
 
 /** The count reads as a noun; the button beside it has to read as a verb. */
+// Demo only: what each social count's button would do in a real app.
+const STAT_DEMO: Record<string, string> = {
+  stars: 'Demo: the repository would be starred here',
+  watching: 'Demo: you would watch the repository here',
+  forks: 'Demo: a fork would be created here',
+};
+
 const STAT_ACTION: Record<string, string> = {
   stars: 'Star',
   watching: 'Watch',
@@ -1672,7 +1679,7 @@ export default function FileTreeTemplate() {
                     onClick={() =>
                       // Demo only: replace this toast with the call that performs the action.
                       showToast({
-                        body: `Demo: ${STAT_ACTION[stat.label]} would toggle here`,
+                        body: STAT_DEMO[stat.label],
                         uniqueID: `stat-${stat.label}`,
                       })
                     }
@@ -1687,7 +1694,7 @@ export default function FileTreeTemplate() {
                     onClick={() =>
                       // Demo only: replace this toast with the call that performs the action.
                       showToast({
-                        body: `Demo: ${STAT_ACTION[stat.label]} would toggle here`,
+                        body: STAT_DEMO[stat.label],
                         uniqueID: `stat-${stat.label}`,
                       })
                     }
