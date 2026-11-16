@@ -584,7 +584,7 @@ export async function pictures(project, shots, modes) {
         }
         recordWritten(project.cwd, slug, [out]);
       }
-      if (r.note && !notes.includes(r.note)) notes.push(r.note);
+      for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
     }
   }
   if (linked.length) {
@@ -781,7 +781,12 @@ export function fontNotes(ctx, data) {
       // Apple systems reach their interface faces only by a generic.
       const {fallbacks} = fontOf(s.value);
       const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
-      const value = [generic, fallbacks.trim()].filter(Boolean).join(', ');
+      // The generic once: a stack that already holds it keeps one.
+      const value = [
+        ...new Set(
+          [generic, ...fallbacks.split(',')].map(f => f.trim()).filter(Boolean),
+        ),
+      ].join(', ');
       notes.push(
         `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
       );

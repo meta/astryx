@@ -522,7 +522,7 @@ export const DIALS = wordTable({
   },
   font: {
     help:
-      'The typeface. System presets (always show): ' +
+      'The typeface. System presets (fonts systems ship, so no package loads them; a system with none of a stack shows its own font of that kind, and a picture says when this machine has none): ' +
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +

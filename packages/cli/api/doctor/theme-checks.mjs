@@ -12,6 +12,7 @@ import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mj
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   collectUnloadedFonts,
+  fontPackagesInstallLine,
   discoverDoctorThemes,
   themeIdentifier,
   discoverDoctorUnmigratedCopies,
@@ -1884,7 +1885,7 @@ export async function checkAppThemes(cwd) {
       } else if (evidence.unread) {
         unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
       } else {
-        fontFailures.push({theme, message: missing.join(', ')});
+        fontFailures.push({theme, message: missing.join(', '), missing});
       }
     } catch {
       fontFailures.push({
@@ -1933,6 +1934,15 @@ export async function checkAppThemes(cwd) {
       'Confirm the font service stylesheet loads each named family.',
     );
   }
+  // A family with no loader in a stylesheet the app imports loads once
+  // the package that loads it is installed and the theme's stylesheet is
+  // written again, so the fix names that package.
+  const fontInstall = fontFailures.some(f => f.missing)
+    ? await fontPackagesInstallLine(
+        state.projectDir,
+        fontFailures.flatMap(f => f.missing ?? []),
+      )
+    : null;
   checks.push(
     incompleteResolution
       ? {
@@ -1950,7 +1960,11 @@ export async function checkAppThemes(cwd) {
             message: `Named font families have no proven loader (${fontFailures
               .map(problem => `${problem.theme.slug}: ${problem.message}`)
               .join('; ')}).`,
-            fix: `Add the missing font stylesheet export or local <slug>.fonts.css, then ${fontFailures
+            fix: `${
+              fontInstall && fontFailures.every(f => f.missing)
+                ? `Install the packages that load them (${fontInstall})`
+                : `Add the missing font stylesheet export or local <slug>.fonts.css${fontInstall ? ` (${fontInstall} installs the packages that load the named families)` : ''}`
+            }, then ${fontFailures
               .map(problem =>
                 refreshThemeCommand(
                   state.projectDir,

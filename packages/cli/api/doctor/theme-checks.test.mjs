@@ -1550,6 +1550,23 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 names the package that loads a family the font stylesheet lacks', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Inter',
+        fontCss:
+          '/* No font stylesheets: no installed package loads them. */\n',
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.fix).toMatch(
+      /^Install the packages that load them \((npm install|pnpm add|yarn add|bun add) @fontsource\/inter\), then /,
+    );
+  });
+
   it('check 9 warns when an external import cannot prove the named family', async () => {
     const {dir} = await fixture([
       {

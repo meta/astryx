@@ -463,6 +463,18 @@ describe('fonts', () => {
     T,
   );
 
+  it(
+    'offers an Apple interface face as its generic once, never twice',
+    async () => {
+      await themeEditNew('sfpro', {cwd});
+      const r = await themeEditSet('sfpro', 'font', 'SF Pro', {cwd});
+      const notes = JSON.stringify(r.data.notes);
+      expect(notes).toContain('Apple systems show it for system-ui');
+      expect(notes).not.toMatch(/system-ui, system-ui/);
+    },
+    T,
+  );
+
   it('shows a weight as CSS font matching picks its face', () => {
     const faces = [400, 500, 600, 700];
     expect(shownWeight(800, faces)).toBe(700);

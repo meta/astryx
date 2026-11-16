@@ -68,6 +68,7 @@ import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1858,7 +1859,7 @@ export function newPictureRun() {
  * @param {'light' | 'dark'} mode
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
- * @returns {Promise<{ok: true, file: string, note?: string} | {ok: false, reason: string, stopped?: string}>}
+ * @returns {Promise<{ok: true, file: string, notes?: string[]} | {ok: false, reason: string, stopped?: string}>}
  */
 export async function screenshot(
   project,
@@ -1938,16 +1939,18 @@ export async function screenshot(
         ok: false,
         reason: `no browser was started: the system temp folder cannot be written (${r.noTemp}), and a browser needs a profile folder of its own there; fix the temp folder (TMPDIR), then run the command again`,
       };
-    if (r.status === 0 && fs.existsSync(png))
+    if (r.status === 0 && fs.existsSync(png)) {
       return {
         ok: true,
         file: shown(project.cwd, png),
-        ...(failed.length
-          ? {
-              note: `the picture was taken with ${t.who}; ${failed.join('; ')}`,
-            }
-          : {}),
+        notes: [
+          ...(failed.length
+            ? [`the picture was taken with ${t.who}; ${failed.join('; ')}`]
+            : []),
+          ...pictureFontNotes(r.stdout ?? ''),
+        ],
       };
+    }
     const text = r.error ? String(r.error.message) : r.stderr;
     if (
       t.script === PLAYWRIGHT_PICTURE &&
@@ -1979,6 +1982,48 @@ export async function screenshot(
     ok: false,
     reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
   };
+}
+
+/** The generic families any font of a common kind stands in for. */
+const PLAIN_GENERICS = ['sans-serif', 'system-ui', 'ui-sans-serif'];
+
+/**
+ * What a picture shows in place of a font stack: a role whose stack ends in
+ * a generic of a kind (serif, monospace, cursive) and none of whose named
+ * families this machine has is drawn in this machine's font for that
+ * generic, which may be of another kind (a system with no serif font draws
+ * serif in a sans-serif one). A stack that ends in sans-serif falls back
+ * to a font of its own kind, so it is not named.
+ * @param {string} stdout what the picture script printed
+ * @returns {string[]}
+ */
+export function pictureFontNotes(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(FONT_PROBE_PREFIX));
+  if (!line) return [];
+  /** @type {Record<string, {stack: string[], shown: string | null} | null>} */
+  let probe;
+  try {
+    probe = JSON.parse(line.slice(FONT_PROBE_PREFIX.length));
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const out = [];
+  for (const [role, label] of /** @type {const} */ ([
+    ['heading', 'headings'],
+    ['body', 'body text'],
+  ])) {
+    const r = probe?.[role];
+    const generic = r?.stack.at(-1)?.toLowerCase();
+    if (!r?.shown || !generic || PLAIN_GENERICS.includes(generic)) continue;
+    const named = r.stack.slice(0, -1);
+    const drawn = r.shown.toLowerCase();
+    if (!named.length || named.some(f => f.toLowerCase() === drawn)) continue;
+    out.push(
+      `this machine has none of ${named.join(', ')}, so the pictures draw the ${label} in ${r.shown}, its font for ${generic}; a system with ${named[0]} shows them as set (an open font with its package installed shows everywhere, the pictures included)`,
+    );
+  }
+  return out;
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */
@@ -2498,7 +2543,7 @@ export function takeFirstAppCopy(cwd, slug) {
  * @param {string[]} args
  * @param {number} [bound] milliseconds before the run is stopped
  * @param {{drop?: string[]}} [opts]
- * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, stdout?: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
  */
 export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
   const drop = opts.drop ?? [];
@@ -2516,9 +2561,10 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
   }
   return new Promise(resolve => {
     let stderr = '';
+    let stdout = '';
     const posix = process.platform !== 'win32';
     const child = spawn(process.execPath, [script, ...args], {
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {...process.env, TMPDIR: temp, TMP: temp, TEMP: temp},
       // A group of its own, so a stop reaches the browser it starts too.
       detached: posix,
@@ -2566,6 +2612,10 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', d => {
       if (stderr.length < 8000) stderr += d;
+    });
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', d => {
+      if (stdout.length < 8000) stdout += d;
     });
     /** Set once the run is being stopped (bound, signal): it ends there. */
     let stopping = false;
@@ -2615,7 +2665,7 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     child.once('close', (status, signal) => {
       if (stopping) return;
       clean();
-      settle({status, signal, stderr});
+      settle({status, signal, stderr, stdout});
     });
   });
 }

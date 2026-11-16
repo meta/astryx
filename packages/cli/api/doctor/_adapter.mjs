@@ -925,3 +925,24 @@ export function builtIntegrationPackages(target, cwd) {
     if (path.dirname(at) === at) return [];
   }
 }
+
+/**
+ * The install line for the packages that load font families, in the
+ * project's package manager, or null when no family has one (a font a
+ * system ships). The editor's font table names each package.
+ * @param {string} projectDir
+ * @param {string[]} families
+ * @returns {Promise<string | null>}
+ */
+export async function fontPackagesInstallLine(projectDir, families) {
+  const {fontsourceSuggestion} = await import('../theme-edit/_settings.mjs');
+  const {installLine} = await import('../theme-edit/_project.mjs');
+  const packages = [
+    ...new Set(
+      families
+        .map(family => fontsourceSuggestion(family)?.pkg)
+        .filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
+    ),
+  ];
+  return packages.length ? installLine(projectDir, packages) : null;
+}
