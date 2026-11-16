@@ -54,7 +54,7 @@ const RUNNERS = {
   },
   'api/integration/pack-check.mjs': {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
-    sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
+    sites: ['child_process.spawnSync ×2', 'loadTopicModule'],
   },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
@@ -495,7 +495,7 @@ const RUNNERS = {
     sites: ['importUserModule'],
   },
   'foundation/integrations/pack-state.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is written)",
+    runs: "`npm pack --json`, with its output in temporary files: `--dry-run --ignore-scripts` to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is packed), and the real pack `api/integration/pack-check.mjs` asks for (it runs the package's pack scripts and writes the tarball)",
     sites: ['child_process.spawnSync'],
   },
   'foundation/integrations/validate-contributions.mjs': {
