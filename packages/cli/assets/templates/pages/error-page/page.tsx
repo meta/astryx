@@ -72,10 +72,10 @@ export default function ErrorPage() {
                 variant="secondary"
                 onClick={() => setIsConnectionShown(true)}
               />
-              <Button label="Go to home" variant="ghost" href="/" />
             </>
           }
         />
+        <Button label="Go to home" variant="ghost" href="/" />
 
         {isConnectionShown ? (
           <VStack gap={2}>
