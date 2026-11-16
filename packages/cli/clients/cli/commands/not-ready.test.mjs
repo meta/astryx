@@ -78,8 +78,8 @@ const NO_TEMPLATE_RESULTS = new Set([
   'component.detail.props',
   'component.detail.source',
   'component.detail.showcase',
-  // Built from package manifests, often of packages that are not installed,
-  // so no template doc is read.
+  // discover names a package's templates only by id, often for a package
+  // the project has not installed, so its results carry neither.
   'discover.list',
   'discover.detail',
   'discover.detail.doc',

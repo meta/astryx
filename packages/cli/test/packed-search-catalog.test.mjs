@@ -240,12 +240,20 @@ describe('the stored search catalog', () => {
     expect(storeAnswers()).toBe(true);
     const text = ['search', 'incident console', '--type', 'template'];
     const json = [...text, '--json'];
+    /**
+     * The incident console's own text record.
+     * @param {string} stdout
+     */
+    const consoleRecord = stdout =>
+      stdout
+        .split('\n\n')
+        .find(r => r.includes('name:        incident-console\n')) ?? '';
     /** @param {string} stdout */
     const consoleResult = stdout =>
       JSON.parse(stdout).data.results.find(
         (/** @type {any} */ r) => r.name === 'incident-console',
       );
-    expect(run(packed, text).stdout).toContain(
+    expect(consoleRecord(run(packed, text).stdout)).toContain(
       'kind:        page (not ready)\n',
     );
     expect(consoleResult(run(packed, json).stdout).isReady).toBe(false);
@@ -261,7 +269,7 @@ describe('the stored search catalog', () => {
       expect(storeAnswers()).toBe(false);
       const textAnswer = run(packed, text);
       expect(textAnswer.status, textAnswer.stderr).toBe(0);
-      expect(textAnswer.stdout).not.toContain('(not ready)');
+      expect(consoleRecord(textAnswer.stdout)).toContain('kind:        page\n');
       expect(textAnswer).toEqual(runLive(text));
       const jsonAnswer = run(packed, json);
       expect(consoleResult(jsonAnswer.stdout).isReady).toBe(true);

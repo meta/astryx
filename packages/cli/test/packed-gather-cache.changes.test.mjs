@@ -81,6 +81,14 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         'export default function Page() { return null; }\n',
       );
       const ask = ['search', 'running totals tallied', '--type', 'template'];
+      /**
+       * The tally template's own text record.
+       * @param {{stdout: string}} answer
+       */
+      const tallyRecord = answer =>
+        answer.stdout
+          .split('\n\n')
+          .find(r => r.includes('name:        tally\n')) ?? '';
       /** @param {{stdout: string}} answer */
       const tally = answer =>
         JSON.parse(answer.stdout).data.results.find(
@@ -94,7 +102,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         const [unready] = expectWarmHit(tmp, [ask]);
         expect(tally(unready).isReady).toBe(false);
         const [unreadyText] = expectWarmHit(tmp, [ask], {json: false});
-        expect(unreadyText.stdout).toContain('kind:        page (not ready)\n');
+        expect(tallyRecord(unreadyText)).toContain(
+          'kind:        page (not ready)\n',
+        );
         // Same size and times, other text: only a content check sees it.
         const {atime, mtime} = fs.statSync(doc);
         writeTally('isReady: true, ');
@@ -108,8 +118,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         const [ready] = expectWarmHit(tmp, [ask]);
         expect(tally(ready).isReady).toBe(true);
         const [readyText] = expectWarmHit(tmp, [ask], {json: false});
-        expect(readyText.stdout).toContain('kind:        page\n');
-        expect(readyText.stdout).not.toContain('(not ready)');
+        expect(tallyRecord(readyText)).toContain('kind:        page\n');
       } finally {
         fs.rmSync(doc, {force: true});
         fs.rmSync(source, {force: true});

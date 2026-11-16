@@ -586,6 +586,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   template's doc sets `isReady: false` and `true` otherwise, and no other kind
   of artifact carries it; text output marks a template whose doc sets
   `isReady: false` `(not ready)` wherever a result lists or returns it.
+  `discover` names a package's templates only by id, often for a package the
+  project has not installed, so its results carry neither.
 
 - **INV30 — A host's package set fills only what the project leaves open, from
   one root.** A package set is a package root whose `node_modules` holds a CLI,
