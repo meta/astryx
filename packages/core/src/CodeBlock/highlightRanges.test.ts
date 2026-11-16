@@ -52,11 +52,11 @@ function createPlainCodeElement(lines: string[]): HTMLElement {
 function createCodeElement(lines: string[]): HTMLElement {
   const code = document.createElement('code');
   for (let i = 0; i < lines.length; i++) {
-    // Range-mode line: one dir="ltr" content span holding the line's text.
+    // Range-mode line: one dir="auto" content span holding the line's text.
     const div = document.createElement('div');
     div.setAttribute('data-line', String(i + 1));
     const content = document.createElement('span');
-    content.setAttribute('dir', 'ltr');
+    content.setAttribute('dir', 'auto');
     content.textContent = lines[i] || '\u200b';
     div.appendChild(content);
     code.appendChild(div);

@@ -124,8 +124,8 @@ interface RangeEntry {
 
 /**
  * Apply highlight ranges for a single line's tokens.
- * The line div is expected to contain a single text node as its
- * first child (or a zero-width space placeholder for empty lines).
+ * The line div holds its text directly, or inside one content element, as a
+ * single text node (a zero-width space placeholder for an empty line).
  */
 function applyLineRanges(
   lineDiv: Element,

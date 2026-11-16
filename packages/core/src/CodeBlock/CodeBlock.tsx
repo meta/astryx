@@ -885,8 +885,8 @@ function SpanCodeContent({
           </>
         );
       }
-      // Wrap tokens in a single element so they occupy one grid cell when line
-      // numbers are on (see `lineNumbered`); an inline span is a no-op when off.
+      // One content element holds the tokens, so they occupy one grid cell when
+      // line numbers are on (see `lineContent`).
       return (
         <span dir="auto" {...stylex.props(styles.lineContent)}>
           {buildSpanLine(line, tokens)}
