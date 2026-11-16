@@ -322,9 +322,8 @@ const styles = stylex.create({
       '@container (max-width: 40rem)': 'auto',
     },
     padding: 0,
-    // The panel body scrolls and clips, and has no padding of its own. So a
-    // reorderable list inside it reaches into none: it must not take the
-    // padding of a Card around the selector as room for its handles.
+    // The panel body scrolls and clips. It has no padding of its own. So a
+    // reorderable list in it takes no room from a Card's padding.
     '--container-padding-inline-start': '0px',
     '--container-padding-inline-end': '0px',
   },

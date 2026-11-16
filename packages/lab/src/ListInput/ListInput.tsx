@@ -194,7 +194,7 @@ interface PendingMutationMotion<T> {
 }
 
 // Core List's reorder handle is 28 px wide for every pointer.
-// SYNC: core List/ListReorderHandle.tsx HANDLE_SIZE and REORDER_HANDLE_HANG.
+// SYNC: core List's reorder handle HANDLE_SIZE and REORDER_HANDLE_HANG.
 const REORDER_HANDLE_SIZE = 28;
 /**
  * How far a hanging handle sits before its record's first field, px: core
