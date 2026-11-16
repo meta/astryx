@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "search",
-    "matchCount": 117,
+    "matchCount": 118,
     "results": [
       {
         "domain": "doc",
@@ -93,6 +93,18 @@
         "description": "<text>",
         "import": "@astryxdesign/core/hooks",
         "command": "astryx hook useTypeahead",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "record-lookup",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "page",
+        "command": "astryx template record-lookup --type page",
         "mentions": []
       },
       {
@@ -229,18 +241,6 @@
         "mentions": [
           "Declares which integrations to load, where to route issue links, post-codemod hooks, local debug-log and gap-report handlers, a discover source, and experimental layout components.…"
         ]
-      },
-      {
-        "domain": "doc",
-        "name": "cli/api/enums/response-types",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "title": "<text>",
-        "command": "astryx docs cli/api/enums/response-types",
-        "parent": "astryx docs cli/api/enums",
-        "mentions": []
       }
     ]
   },

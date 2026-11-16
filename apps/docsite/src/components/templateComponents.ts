@@ -90,8 +90,6 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/login-split/page'),
   'login-sso': () =>
     import('../../../../packages/cli/assets/templates/pages/login-sso/page'),
-  lookup: () =>
-    import('../../../../packages/cli/assets/templates/pages/lookup/page'),
   'mixed-gallery': () =>
     import('../../../../packages/cli/assets/templates/pages/mixed-gallery/page'),
   'payment-form': () =>
@@ -100,6 +98,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
   'product-gallery': () =>
     import('../../../../packages/cli/assets/templates/pages/product-gallery/page'),
+  'record-lookup': () =>
+    import('../../../../packages/cli/assets/templates/pages/record-lookup/page'),
   settings: () =>
     import('../../../../packages/cli/assets/templates/pages/settings/page'),
   'settings-dialog': () =>

@@ -5622,11 +5622,6 @@
       "aliases": []
     },
     {
-      "name": "template-lookup",
-      "path": "templates/lookup",
-      "aliases": []
-    },
-    {
       "name": "template-messaging-shell",
       "path": "templates/messaging-shell",
       "aliases": []
@@ -5649,6 +5644,11 @@
     {
       "name": "template-product-gallery",
       "path": "templates/product-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-record-lookup",
+      "path": "templates/record-lookup",
       "aliases": []
     },
     {

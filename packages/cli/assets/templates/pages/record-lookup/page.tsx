@@ -252,7 +252,7 @@ function findOrders(query: string, kind: LookupKind): OrderRecord[] {
 
 const LOOKUP_DELAY_MS = 400;
 
-export default function LookupTemplate() {
+export default function RecordLookupTemplate() {
   const showToast = useToast();
   const {copy} = useClipboard();
   const isNarrow = useMediaQuery('(max-width: 768px)');
@@ -303,11 +303,10 @@ export default function LookupTemplate() {
       setSelectedId(found.length === 1 ? found[0].id : null);
       setTab('overview');
       setIsLooking(false);
-      announce(
-        found.length === 0
-          ? `No order matches ${q}`
-          : `${found.length} found for ${q}`,
-      );
+      // The not-found state announces itself; only a result count is said here.
+      if (found.length > 0) {
+        announce(`${found.length} found for ${q}`);
+      }
       if (found.length > 0) {
         setRecent(prev =>
           [
