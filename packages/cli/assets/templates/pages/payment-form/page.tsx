@@ -235,41 +235,35 @@ export default function PaymentFormPage() {
   });
   const [submitted, setSubmitted] = useState(false);
 
-  const errors = submitted
-    ? {
-        firstName: !firstName.trim() ? 'Required' : undefined,
-        lastName: !lastName.trim() ? 'Required' : undefined,
-        address: !address.trim() ? 'Required' : undefined,
-        city: !city.trim() ? 'Required' : undefined,
-        zip: !zip.trim() ? 'Required' : undefined,
-        state: !state ? 'Required' : undefined,
-        email: !email.trim() ? 'Required' : undefined,
-        phone: !phone.trim() ? 'Required' : undefined,
-        expiry: !expiry ? 'Required' : undefined,
-        expYear: !expYear ? 'Required' : undefined,
-        cvc: !cvc.trim() ? 'Required' : undefined,
-        cardNumber:
-          paymentMethod === 'card' && !cardNumber.trim()
-            ? 'Required'
-            : undefined,
-        cardName:
-          paymentMethod === 'card' && !cardName.trim() ? 'Required' : undefined,
-        billingAddress:
-          !billingMatchesShipping && !billingAddress.trim()
-            ? 'Required'
-            : undefined,
-        billingCity:
-          !billingMatchesShipping && !billingCity.trim()
-            ? 'Required'
-            : undefined,
-        billingZip:
-          !billingMatchesShipping && !billingZip.trim()
-            ? 'Required'
-            : undefined,
-        billingState:
-          !billingMatchesShipping && !billingState ? 'Required' : undefined,
-      }
-    : {};
+  // What is missing, checked on every render; shown only after Place Order.
+  const problems = {
+    firstName: !firstName.trim() ? 'Required' : undefined,
+    lastName: !lastName.trim() ? 'Required' : undefined,
+    address: !address.trim() ? 'Required' : undefined,
+    city: !city.trim() ? 'Required' : undefined,
+    zip: !zip.trim() ? 'Required' : undefined,
+    state: !state ? 'Required' : undefined,
+    email: !email.trim() ? 'Required' : undefined,
+    phone: !phone.trim() ? 'Required' : undefined,
+    expiry: !expiry ? 'Required' : undefined,
+    expYear: !expYear ? 'Required' : undefined,
+    cvc: !cvc.trim() ? 'Required' : undefined,
+    cardNumber:
+      paymentMethod === 'card' && !cardNumber.trim() ? 'Required' : undefined,
+    cardName:
+      paymentMethod === 'card' && !cardName.trim() ? 'Required' : undefined,
+    billingAddress:
+      !billingMatchesShipping && !billingAddress.trim()
+        ? 'Required'
+        : undefined,
+    billingCity:
+      !billingMatchesShipping && !billingCity.trim() ? 'Required' : undefined,
+    billingZip:
+      !billingMatchesShipping && !billingZip.trim() ? 'Required' : undefined,
+    billingState:
+      !billingMatchesShipping && !billingState ? 'Required' : undefined,
+  };
+  const errors: Partial<typeof problems> = submitted ? problems : {};
 
   return (
     <Layout
@@ -833,14 +827,30 @@ export default function PaymentFormPage() {
                             variant="primary"
                             size="lg"
                             style={fullWidth}
-                            onClick={() => setSubmitted(true)}
+                            onClick={() => {
+                              setSubmitted(true);
+                              if (Object.values(problems).some(Boolean)) {
+                                return;
+                              }
+                              // Demo only: replace this toast with the call that performs the action.
+                              showToast({
+                                body: 'Demo: your order would be placed here',
+                                uniqueID: 'place-order',
+                              });
+                            }}
                           />
                           <Button
                             label="Continue Shopping"
                             variant="secondary"
                             size="lg"
                             style={fullWidth}
-                            onClick={() => {}}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that performs the action.
+                              showToast({
+                                body: 'Demo: the store would open here',
+                                uniqueID: 'continue-shopping',
+                              })
+                            }
                           />
                         </VStack>
                         <Divider />
@@ -924,7 +934,15 @@ export default function PaymentFormPage() {
                                         <Link href="#" type="supporting">
                                           Remove
                                         </Link>
-                                        <Link href="#" type="supporting">
+                                        <Link
+                                          type="supporting"
+                                          onClick={() =>
+                                            // Demo only: replace this toast with the call that performs the action.
+                                            showToast({
+                                              body: 'Demo: this item would be saved for later here',
+                                              uniqueID: 'save-for-later',
+                                            })
+                                          }>
                                           Save
                                         </Link>
                                       </HStack>
