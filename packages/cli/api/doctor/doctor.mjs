@@ -393,8 +393,13 @@ export function checkVersionAlignment(ctx) {
     // is not the project's, or in no project, the fix says how to reach one.
     const add = addCliCommandFor(ctx.cwd, coreVersion);
     const matches = coreVersion === cliVersion;
+    const lead = add?.declared
+      ? 'To install the CLI this project declares'
+      : matches
+        ? 'To pin it for the team and CI'
+        : 'To match';
     const fix = add
-      ? `${matches ? 'To pin it for the team and CI' : 'To match'}, run: ${add.command}.`
+      ? `${lead}, run: ${add.command}.`
       : matches
         ? null
         : NO_PROJECT_FIX;

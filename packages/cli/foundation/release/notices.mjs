@@ -63,7 +63,7 @@ import {
   isGlobalCopy,
   projectRootOf,
 } from './choose.mjs';
-import {readReleaseFacts} from './project.mjs';
+import {installsCliPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 
@@ -392,6 +392,17 @@ const ADD = {
 };
 
 /**
+ * The command that installs a project's dependencies, by package manager.
+ * @type {Record<string, string>}
+ */
+const INSTALL = {
+  npm: 'npm install',
+  pnpm: 'pnpm install',
+  yarn: 'yarn install',
+  bun: 'bun install',
+};
+
+/**
  * The command that adds a package to the project of a run in `cwd`, with the
  * project's package manager (spec AST-081 FR12). Null when `cwd` belongs to
  * no project `spec:AST-040` FR9 defines, and in a folder inside the project
@@ -482,26 +493,40 @@ export function projectRelease(dir) {
 }
 
 /**
- * The command that adds the CLI at Core's version, for a run in `cwd` whose
- * Core is `core`, with the project's package manager in the project root.
- * `command` is null in a folder inside the project whose package.json is not
- * the project's (see {@link installFolder}), where the advice is
+ * The command that gives a project with no CLI installed its CLI, for a run in
+ * `cwd` whose Core is `core`, with the project's package manager in the
+ * project root: the command that adds the CLI at Core's version, or, when the
+ * project's package.json lists the CLI among the packages its install gets,
+ * as a fresh clone's does, the command that installs the project's
+ * dependencies (`declared`). Adding the CLI again would replace the version
+ * the project lists. A CLI listed only as a peer dependency keeps the add
+ * command: some package managers never install peers. `command` is
+ * null in a folder inside the project whose package.json is not the
+ * project's (see {@link installFolder}), where the advice is
  * {@link RUN_FROM_PROJECT}. Null when the folder belongs to no project.
  * @param {{cwd: string, core: string}} options
- * @returns {{root: string, core: string, command: string | null} | null}
+ * @returns {{root: string, core: string, command: string | null, declared: boolean} | null}
  */
 export function cliInstallAdvice({cwd, core}) {
   const target = installFolder(cwd);
   if (target == null) return null;
-  if (target.moved) return {root: target.dir, core, command: null};
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  return {root, core, command: addCliCommand(root, core)};
+  if (target.moved) {
+    return {root: target.dir, core, command: null, declared: false};
+  }
+  const facts = readReleaseFacts(cwd);
+  const root = projectRootOf(facts) ?? cwd;
+  if (installsCliPackage(root)) {
+    const install = INSTALL[detectPackageManager(root)] ?? INSTALL.npm;
+    return {root, core, command: install, declared: true};
+  }
+  return {root, core, command: addCliCommand(root, core), declared: false};
 }
 
 /**
  * The hint for a project with no CLI of its own, answered by `answered` while
- * its Core is `core`: the command that adds the CLI at Core's version, with
- * the project's package manager (see {@link cliInstallAdvice}). Null when no
+ * its Core is `core`, with the command {@link cliInstallAdvice} names: the one
+ * that adds the CLI at Core's version, or the one that installs the
+ * project's dependencies when the project lists the CLI already. Null when no
  * command fits, or when the project the command adds to already matches.
  * @param {{cwd: string, answered: string, core: string}} options
  * @returns {{root: string, line: string} | null}
@@ -512,7 +537,7 @@ export function noCliHint({cwd, answered, core}) {
   if (advice == null) return null;
   return {
     root: advice.root,
-    line: noCliHintLine(answered, core, advice.command),
+    line: noCliHintLine(answered, core, advice.command, advice.declared),
   };
 }
 
@@ -521,14 +546,18 @@ export function noCliHint({cwd, answered, core}) {
  * @param {string} answered
  * @param {string} core
  * @param {string | null} command the command that adds the CLI at Core's
- *   version; null in a folder whose package.json is not the project's
+ *   version, or that installs the project's dependencies (`declared`); null
+ *   in a folder whose package.json is not the project's
+ * @param {boolean} [declared] the project lists the CLI already, so the
+ *   command installs the version it lists, which need not match its Core
  * @returns {string}
  */
-export function noCliHintLine(answered, core, command) {
+export function noCliHintLine(answered, core, command, declared = false) {
   const head = `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}.`;
-  return command
-    ? `${head} To match, run: ${command}`
-    : `${head} ${RUN_FROM_PROJECT}`;
+  if (!command) return `${head} ${RUN_FROM_PROJECT}`;
+  return declared
+    ? `${head} To install the CLI this project declares, run: ${command}`
+    : `${head} To match, run: ${command}`;
 }
 
 /**
