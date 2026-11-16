@@ -712,10 +712,11 @@ export const tokenDefaults: Record<string, string> = {
 // =============================================================================
 
 /**
- * Whether a theme carries a field only defineTheme() writes (`__inputTokens`,
- * always present on its result) or a built theme module's `__built`. A plain
- * object with a name and tokens is theme input, not a theme: its values are
- * not built (a light/dark pair is still an array), so it is no base.
+ * Whether a theme carries a field the theme builders write (`__inputTokens`,
+ * always present on the result of defineTheme() and defineSyntaxTheme()) or a
+ * built theme module's `__built`. A plain object with a name and tokens is
+ * theme input, not a theme: its values are not built (a light/dark pair is
+ * still an array), so it is no base.
  */
 function isBuiltTheme(theme: DefinedTheme): boolean {
   return '__inputTokens' in theme || theme.__built === true;
@@ -830,8 +831,15 @@ export function defineTheme<
   // supposed to inherit.
   if (
     'extends' in input &&
-    !(isDefinedTheme(input.extends) && isBuiltTheme(input.extends))
+    isDefinedTheme(input.extends) &&
+    !isBuiltTheme(input.extends)
   ) {
+    throw new Error(
+      `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got a plain object named "${input.extends.name}", which is theme input, not a theme. ` +
+        `Pass it through defineTheme() first (extends: defineTheme({...})), or import the theme its own file defines.`,
+    );
+  }
+  if ('extends' in input && !isDefinedTheme(input.extends)) {
     throw new Error(
       `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got ${describeBadBase(input.extends)}. ` +
         `Check that the import naming your base theme resolves to its source and exports that name — ` +

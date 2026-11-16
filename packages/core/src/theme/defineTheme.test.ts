@@ -338,7 +338,9 @@ describe('defineTheme', () => {
         name: 'plain-base-child',
         extends: plainBase as unknown as DefinedTheme,
       }),
-    ).toThrow(/`extends` must be a theme from defineTheme\(\)/);
+    ).toThrow(
+      /`extends` must be a theme from defineTheme\(\), got a plain object named "plain-base", which is theme input, not a theme\. Pass it through defineTheme\(\) first/,
+    );
     expect(() =>
       defineTheme({
         name: 'plain-base-child',
