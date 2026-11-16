@@ -8,7 +8,8 @@
  * icon a template already imports from a set in the list in another look
  * move to that look; a missing look never moves an icon to a backup.
  * Without a variant, an icon from the main set's own library moves to the
- * set's export that re-exports it.
+ * set's export that re-exports it. Either way, a library export under another
+ * name is the same icon when both resolve to one declaration.
  */
 
 import * as fs from 'node:fs';
@@ -320,6 +321,82 @@ describe("a project variant and the main set's own library", () => {
       });
       expect(solid.icons?.mapped[0]).not.toHaveProperty('variant');
     });
+  });
+});
+
+describe('a library that exports one icon under two names', () => {
+  const packageDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-wrapped-alias-look-'),
+  );
+  afterAll(() => fs.rmSync(packageDir, {recursive: true, force: true}));
+  const library = path.join(packageDir, 'node_modules', '@acme', 'library');
+  fs.mkdirSync(library, {recursive: true});
+  fs.writeFileSync(
+    path.join(library, 'package.json'),
+    JSON.stringify({
+      name: '@acme/library',
+      type: 'module',
+      exports: {'.': './index.js', './solid': './solid.js'},
+    }),
+  );
+  for (const file of ['index.js', 'solid.js']) {
+    fs.writeFileSync(
+      path.join(library, file),
+      'function Bin() { return null; }\nexport {Bin, Bin as BinGlyph};\n',
+    );
+  }
+  fs.writeFileSync(
+    path.join(packageDir, 'wrapper.generated.js'),
+    [
+      "export {BinGlyph as BinIcon} from '@acme/library';",
+      "export {BinGlyph as BinSolidIcon} from '@acme/library/solid';",
+      '',
+    ].join('\n'),
+  );
+  const READ = /** @type {any} */ ({
+    ...WRAPPER,
+    packageDir,
+    data: {
+      ...WRAPPER.data,
+      generated: './wrapper.generated.js',
+      icons: [
+        ...WRAPPER.data.icons,
+        {
+          id: 'bin',
+          export: 'BinIcon',
+          words: ['bin'],
+          variants: [{variant: 'solid', export: 'BinSolidIcon'}],
+        },
+      ],
+    },
+  });
+  const TEMPLATE =
+    "import {Bin} from '@acme/library';\nexport const A = () => <Bin />;\n";
+
+  it("with a variant, maps the other name to the set's icon in that look when both read one declaration", () => {
+    const {source, icons} = mapTemplateIcons(
+      TEMPLATE,
+      {sets: [READ], choice: chosen([READ], 'solid')},
+      {Bin: 'delete'},
+    );
+    expect(source).toBe(
+      "import {BinSolidIcon} from '@acme/wrapper';\nexport const A = () => <BinSolidIcon />;\n",
+    );
+    expect(
+      icons?.mapped.map(each => [each.target.export, each.by, each.variant]),
+    ).toEqual([['BinSolidIcon', 'variant', undefined]]);
+  });
+
+  it("without a variant, maps it to the set's export that re-exports it", () => {
+    const {source, icons} = mapTemplateIcons(
+      TEMPLATE,
+      {sets: [READ], choice: chosen([READ])},
+      {Bin: 'delete'},
+    );
+    expect(source).toContain("import {BinIcon} from '@acme/wrapper';");
+    expect(icons?.mapped.map(each => [each.target.export, each.by])).toEqual([
+      ['BinIcon', 'wrapped'],
+    ]);
   });
 });
 
