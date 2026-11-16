@@ -329,9 +329,15 @@ export default function FormWizardPage() {
       return;
     }
 
-    if (!isLastStep) {
-      setStep(s => s + 1);
+    if (isLastStep) {
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your workspace would be created here',
+        uniqueID: 'create-workspace',
+      });
+      return;
     }
+    setStep(s => s + 1);
   };
 
   // Skip is not Next with a different label. Next asserts the step is done and

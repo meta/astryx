@@ -587,9 +587,18 @@ export default function FormWizardVerticalPage() {
       return;
     }
 
-    if (Object.keys(errorsByStep[step]).length === 0 && !isLastStep) {
-      setStep(s => s + 1);
+    if (Object.keys(errorsByStep[step]).length > 0) {
+      return;
     }
+    if (isLastStep) {
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your audiobook would be submitted for review here',
+        uniqueID: 'submit-review',
+      });
+      return;
+    }
+    setStep(s => s + 1);
   };
 
   const goTo = (index: number) => {
