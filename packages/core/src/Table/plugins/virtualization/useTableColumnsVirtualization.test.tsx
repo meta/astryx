@@ -902,6 +902,18 @@ describe('first-visible-column anchor', () => {
     expect(mountedKeys(container)).toContain('c30');
   });
 
+  it('writes no scroll when the last column is unpinned near the end of the run', async () => {
+    const viewport = controlledViewport();
+    const {rerender} = render(<Fixture endKeys={['c39']} />);
+    await settle();
+    // c34 is first visible, half shown, within one column of the run's end.
+    await viewport.scrollTo(3450);
+    rerender(<Fixture />);
+    await viewport.landWrites();
+    expect(viewport.writes).toEqual([]);
+    expect(viewport.getLeft()).toBe(3450);
+  });
+
   it('keeps the first visible column when an earlier column is pinned', async () => {
     const viewport = controlledViewport();
     const {rerender, container} = await mountAt(viewport);
