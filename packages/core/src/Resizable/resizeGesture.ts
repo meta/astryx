@@ -296,6 +296,17 @@ export function createResizeGesture(
       if (config.isDisabled) {
         return;
       }
+      // Only the key map acts: a plain key, or Shift with an arrow. Other
+      // modified keys belong to the platform (word, line and document
+      // movement, text selection) and to app shortcuts, so they pass through.
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.shiftKey && !event.key.startsWith('Arrow'))
+      ) {
+        return;
+      }
       const state = model.state();
       const isHorizontal = config.direction === 'horizontal';
       const sign = config.isReversed ? -1 : 1;
@@ -319,11 +330,6 @@ export function createResizeGesture(
         case 'ArrowDown':
         case 'ArrowLeft':
         case 'ArrowUp': {
-          // Alt, Control and Meta arrows belong to the platform (word and
-          // line movement) and to app shortcuts, so they pass through.
-          if (event.altKey || event.ctrlKey || event.metaKey) {
-            break;
-          }
           event.preventDefault();
           if (state.isCollapsed) {
             // A collapsed pane answers only the grow arrow. It opens one step

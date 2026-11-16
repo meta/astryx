@@ -168,21 +168,34 @@ describe('ResizeHandle', () => {
     );
   });
 
+  const ALL_KEYS = [
+    'ArrowRight',
+    'ArrowLeft',
+    'ArrowUp',
+    'ArrowDown',
+    'Home',
+    'End',
+    'Enter',
+  ];
   it.each([
-    {altKey: true},
-    {ctrlKey: true},
-    {metaKey: true},
-    {metaKey: true, shiftKey: true},
-  ])('leaves an arrow with %o to the page', modifiers => {
-    render(<Harness />);
-    const separator = getSeparator();
-    act(() => separator.focus());
-    for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown']) {
-      const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
-      expect(isNotConsumed).toBe(true);
-    }
-    expect(separator).toHaveAttribute('aria-valuenow', '200');
-  });
+    {modifiers: {altKey: true}, keys: ALL_KEYS},
+    {modifiers: {ctrlKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true}, keys: ALL_KEYS},
+    {modifiers: {metaKey: true, shiftKey: true}, keys: ALL_KEYS},
+    {modifiers: {shiftKey: true}, keys: ['Home', 'End', 'Enter']},
+  ])(
+    'leaves a key with $modifiers that the map does not name to the page',
+    ({modifiers, keys}) => {
+      render(<Harness />);
+      const separator = getSeparator();
+      act(() => separator.focus());
+      for (const key of keys) {
+        const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
+        expect(isNotConsumed, key).toBe(true);
+      }
+      expect(separator).toHaveAttribute('aria-valuenow', '200');
+    },
+  );
 
   it('jumps to the minimum on Home', () => {
     render(<Harness />);

@@ -208,15 +208,16 @@ Consumer migration instructions belong in consumer docs and release notes.
   ArrowRight and ArrowDown move the divider toward the end of its axis and
   ArrowLeft and ArrowUp toward the start, the inline arrows following the
   reading direction under RTL, with Shift for a larger step, so the pane grows
-  or shrinks by the side of the Handle it sits on; an arrow with Alt, Control
-  or Meta held does nothing and is not consumed; with snap points set, an
+  or shrinks by the side of the Handle it sits on; with snap points set, an
   arrow moves to the adjacent snap point, a point beyond `minSize` or `maxSize`
   counting as that bound (Shift, two); Home moves to the minimum size and End to
   the maximum; Enter collapses a collapsible pane and restores it, and the arrow
   that grows a collapsed pane opens it one step above its minimum, or at its
   `collapsedSize` when that is larger (with snap points, at the snap point
-  nearest that size; the shrinking arrow leaves it collapsed). An unbounded
-  Handle reports a measured stand-in as `aria-valuemax`: the window's extent
+  nearest that size; the shrinking arrow leaves it collapsed). Only the keys
+  above act; a key pressed with a modifier the map does not name does nothing
+  and is not consumed. An unbounded Handle reports a measured stand-in as
+  `aria-valuemax`: the window's extent
   along its axis when no container is supplied, or its container's content box
   while a percentage bound observes it, never below its current size or, while
   collapsed, its minimum. Implementation gaps under `spec:AST-020/FR15`: the
