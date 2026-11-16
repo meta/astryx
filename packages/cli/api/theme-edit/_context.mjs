@@ -1300,7 +1300,9 @@ export function familyPages(sheet, slug, cwd, only = FAMILY_SECTIONS) {
   // holds no section of its own: one ends where the next starts, and the
   // last at the last section close.
   const starts = [
-    ...text.matchAll(/<section\b[^>]*\sdata-cs-group="([a-z-]+)"[^>]*>/g),
+    ...text.matchAll(
+      /<section\b[^>]*\sclass="[^"]*\bcs-family-([a-z-]+)\b[^"]*"[^>]*>/g,
+    ),
   ].map(m => ({family: m[1], at: /** @type {number} */ (m.index)}));
   const close = text.lastIndexOf('</section>');
   if (!starts.length || close < 0) return {pages, problems};

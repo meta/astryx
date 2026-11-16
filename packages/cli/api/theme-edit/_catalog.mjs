@@ -602,7 +602,7 @@ export default function Page() {
       if (!c) { c = {name: it.name, list: []}; g.cells.push(c); }
       if (!c.list.some(x => x.label === it.label)) c.list.push(it);
     }
-    body = groups.map(g => h('section', {key: g.name, className: g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group', 'data-cs-group': g.name},
+    body = groups.map(g => h('section', {key: g.name, className: (g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group') + ' cs-family-' + g.name},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
       h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell', style: {'--cs-examples': c.list.length}},
         h('div', {className: 'cs-name'}, c.name),
@@ -612,7 +612,7 @@ export default function Page() {
     // On the overlays section's own page the states come first, so its
     // picture shows them in its first screen.
     if (stated.length)
-      body[SECTION === 'overlays' ? 'unshift' : 'push'](h('section', {key: 'states', className: 'cs-group cs-states', 'data-cs-group': 'states'},
+      body[SECTION === 'overlays' ? 'unshift' : 'push'](h('section', {key: 'states', className: 'cs-group cs-states cs-family-states'},
         h('h2', {className: 'cs-group-name'}, 'states'),
         h('div', {className: 'cs-states-grid'},
           h('div', {className: 'cs-states-row cs-states-head'}, h('div', null), STATES.map(([label]) => h('div', {key: label, className: 'cs-label'}, label))),

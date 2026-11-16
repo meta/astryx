@@ -69,6 +69,8 @@ describe('show --png', () => {
         `themes/t/sheet-${FAMILY_OVERVIEW}-dark.png`,
       ]);
       const sheet = fs.readFileSync(path.join(dir, 'sheet.html'), 'utf8');
+      // The page is cut by its own classes: no data attribute of its own.
+      expect(sheet).not.toContain('data-cs-group');
       const family = FAMILY_OVERVIEW;
       const html = fs.readFileSync(
         path.join(dir, `sheet-${family}.html`),
@@ -76,13 +78,13 @@ describe('show --png', () => {
       );
       // Its own family, and no other, as the full sheet draws it.
       expect(
-        [...html.matchAll(/data-cs-group="([a-z-]+)"/g)].map(m => m[1]),
+        [...html.matchAll(/\bcs-family-([a-z-]+)\b/g)].map(m => m[1]),
       ).toEqual([family]);
       expect(html).toContain(`class="cs-page cs-section-${family}"`);
       expect(html).toContain(`<strong>t: every component (${family})</strong>`);
       expect(html).toMatch(/<!-- astryx: sheet of build [0-9a-f]{16} -->\n$/);
-      const at = sheet.indexOf(`data-cs-group="${family}"`);
-      const own = html.indexOf(`data-cs-group="${family}"`);
+      const at = sheet.indexOf(`cs-family-${family}`);
+      const own = html.indexOf(`cs-family-${family}`);
       expect(html.slice(own, own + 2000)).toBe(sheet.slice(at, at + 2000));
       expect(r.data.look).toMatch(
         new RegExp(
