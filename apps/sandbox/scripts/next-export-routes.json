@@ -791,7 +791,6 @@
     "/templates/messaging-shell/",
     "/templates/mixed-gallery/",
     "/templates/payment-form/",
-    "/templates/portal/",
     "/templates/product-detail/",
     "/templates/product-gallery/",
     "/templates/settings-dialog/",
@@ -858,6 +857,7 @@
     "/templates/useTreeFocusHookUsage/",
     "/templates/useTruncationHookUsage/",
     "/templates/useTypeaheadHookUsage/",
+    "/templates/welcome-portal/",
     "/templates/work-item-detail/",
     "/themes/",
     "/tools/"

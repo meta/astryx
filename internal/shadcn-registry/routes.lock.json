@@ -5637,11 +5637,6 @@
       "aliases": []
     },
     {
-      "name": "template-portal",
-      "path": "templates/portal",
-      "aliases": []
-    },
-    {
       "name": "template-product-detail",
       "path": "templates/product-detail",
       "aliases": []
@@ -5729,6 +5724,11 @@
     {
       "name": "template-theme-showcase",
       "path": "templates/theme-showcase",
+      "aliases": []
+    },
+    {
+      "name": "template-welcome-portal",
+      "path": "templates/welcome-portal",
       "aliases": []
     },
     {

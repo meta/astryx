@@ -94,8 +94,6 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/mixed-gallery/page'),
   'payment-form': () =>
     import('../../../../packages/cli/assets/templates/pages/payment-form/page'),
-  portal: () =>
-    import('../../../../packages/cli/assets/templates/pages/portal/page'),
   'product-detail': () =>
     import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
   'product-gallery': () =>
@@ -130,6 +128,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/table-page/page'),
   'table-tree': () =>
     import('../../../../packages/cli/assets/templates/pages/table-tree/page'),
+  'welcome-portal': () =>
+    import('../../../../packages/cli/assets/templates/pages/welcome-portal/page'),
   'work-item-detail': () =>
     import('../../../../packages/cli/assets/templates/pages/work-item-detail/page'),
 };

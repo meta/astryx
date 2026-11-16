@@ -185,7 +185,7 @@ const railPanel: CSSProperties = {
   alignSelf: 'start',
 };
 
-export default function PortalPage() {
+export default function WelcomePortalPage() {
   const showToast = useToast();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [query, setQuery] = useState('');
