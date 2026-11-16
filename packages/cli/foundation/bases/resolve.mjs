@@ -270,10 +270,16 @@ export function resolveBase({
  * builds on Core and none is left out.
  * @param {LoadedIntegration[]} integrations
  * @param {ActiveBase} base
+ * @param {LoadedIntegration[]} [bases] every base the run knows, which
+ *   decides what an integration builds on; the bases among `integrations`
+ *   when omitted
  * @returns {{kept: LoadedIntegration[], leftOut: Array<{integration: LoadedIntegration, buildsOn: string[]}>}}
  */
-export function splitForBase(integrations, base) {
-  const bases = integrations.filter(isBaseIntegration);
+export function splitForBase(
+  integrations,
+  base,
+  bases = integrations.filter(isBaseIntegration),
+) {
   if (bases.length === 0 && base.core) return {kept: integrations, leftOut: []};
   const baseNames = new Set([CORE_BASE_NAME, ...bases.map(b => b.name)]);
   /** @type {LoadedIntegration[]} */
