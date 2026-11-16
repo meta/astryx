@@ -43,7 +43,7 @@ interface TargetReport {
   height: number;
   /** Points inside the 24 px target that do not land on the button. */
   misses: string[];
-  /** Whether the point just before the button, toward the text, is its. */
+  /** Whether the point 1 px before the button, toward the text, is its. */
   takesTextSide: boolean;
 }
 
@@ -78,7 +78,9 @@ for (const story of STORIES) {
         width: box.width,
         height: box.height,
         misses: points.filter(([, x, y]) => !hits(x, y)).map(([side]) => side),
-        takesTextSide: hits(start - toEnd * 0.5, centerY),
+        // Chromium gives a point within a pixel before an element's
+        // whole-pixel edge to that element, so the probe sits 1 px out.
+        takesTextSide: hits(start - toEnd, centerY),
       };
     });
     expect(report.width).toBeCloseTo(20, 0);
