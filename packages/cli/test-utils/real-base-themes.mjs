@@ -5,9 +5,9 @@
  *   installs them has them.
  * @input A linked fixture's path and the bundled theme names it needs.
  * @output An empty string, or why a theme could not be installed.
- * @position Test support. A checkout that built only Core has no theme
- *   `dist`: the theme is then built as its package build's theme step does,
- *   from its own source with its own installed packages.
+ * @position Test support. Each worker builds from the theme's own source
+ *   into its own output folder and copies it into the fixture. A checkout's
+ *   `dist` can belong to another test or an incomplete package build.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,10 +34,6 @@ export async function installRealBaseThemes(cwd, likes) {
       `theme-${like}`,
     );
     fs.rmSync(link, {recursive: true, force: true});
-    if (fs.existsSync(path.join(own, 'dist', `${like}.js`))) {
-      fs.symlinkSync(own, link, 'dir');
-      continue;
-    }
     try {
       const out = `node_modules/.astryx-test-built/${process.pid}`;
       await themeBuild(
