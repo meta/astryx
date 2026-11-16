@@ -159,7 +159,7 @@ const styles = stylex.create({
   // Core List's reorder handle sits at its row's start or end (the owner's
   // `handle.placement`). Where it shows only on hover or focus, it hangs
   // outside the row's content, and core List keeps that room on its side
-  // (30 px less the row gap). The selected panel's heading moves in by the
+  // (30 px less the row's own inline inset). The selected panel's heading moves in by the
   // same room at the start, so the labels stay under it. Where the handle
   // shows in its row, it takes 28 px and the row's gap: always, or under a
   // coarse pointer. A row without a handle then clears it, so every label
@@ -322,6 +322,11 @@ const styles = stylex.create({
       '@container (max-width: 40rem)': 'auto',
     },
     padding: 0,
+    // The panel body scrolls and clips, and has no padding of its own. So a
+    // reorderable list inside it reaches into none: it must not take the
+    // padding of a Card around the selector as room for its handles.
+    '--container-padding-inline-start': '0px',
+    '--container-padding-inline-end': '0px',
   },
   groupHeading: {
     paddingBlock: spacingVars['--spacing-1'],
