@@ -136,7 +136,7 @@ const styles = stylex.create({
       default: '0',
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
-    // A bare glyph: no hover or press fill of its own. Only reorder mode
+    // A bare glyph: no hover fill of its own. Only reorder mode
     // fills it, as a pressed toggle button; in forced colors, the system's
     // highlight.
     backgroundColor: {
