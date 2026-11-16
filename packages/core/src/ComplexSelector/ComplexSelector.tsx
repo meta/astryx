@@ -34,7 +34,6 @@ import {
   type FieldPartStyleProps,
 } from '../Field/fieldParts';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {mergeRefs} from '../utils/mergeRefs';
 import {isFocusLost} from '../utils/focusReturn';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -860,6 +859,30 @@ export function ComplexSelector<Value>({
     xstyle: styles.popover,
   });
 
+  // Stable refs: an inline ref re-runs on every render (null, then the element).
+  const popoverTriggerRef = popover.triggerRef;
+  const disabledMessagePositionRef = disabledMessageTooltip.positionRef;
+  const controlBoxRef = useCallback(
+    (el: HTMLElement | null) => {
+      popoverTriggerRef(el);
+      // Anchor names compose, so the tooltip can anchor here in every state.
+      disabledMessagePositionRef(el);
+    },
+    [popoverTriggerRef, disabledMessagePositionRef],
+  );
+  const callerTriggerElementRef = useCallback(
+    (el: HTMLElement | null) => {
+      popoverTriggerRef(el);
+      triggerRef.current = el;
+    },
+    [popoverTriggerRef],
+  );
+  const callerTriggerRef = useMergedRefs<HTMLElement>(
+    callerTriggerElementRef,
+    disabledMessageTooltip.ref,
+    ref,
+  );
+
   if (renderTrigger != null) {
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no chevron — the caller owns the control;
@@ -876,14 +899,7 @@ export function ComplexSelector<Value>({
         ]
           .filter(Boolean)
           .join(' ') || undefined,
-      ref: mergeRefs<HTMLElement>(
-        el => {
-          popover.triggerRef(el);
-          triggerRef.current = el;
-        },
-        disabledMessageTooltip.ref,
-        ref,
-      ),
+      ref: callerTriggerRef,
       id: triggerId,
       // This path never forwarded caller handlers before, so the newly
       // forwarded ones compose component first and cannot cancel opening.
@@ -924,11 +940,7 @@ export function ComplexSelector<Value>({
   const selectorContent = (
     <>
       <div
-        ref={el => {
-          popover.triggerRef(el);
-          // Anchor names compose, so the tooltip can anchor here in every state.
-          disabledMessageTooltip.positionRef(el);
-        }}
+        ref={controlBoxRef}
         {...pressable}
         onClick={handleControlBoxClick}
         {...mergeProps(
