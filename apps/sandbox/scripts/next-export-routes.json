@@ -793,6 +793,7 @@
     "/templates/payment-form/",
     "/templates/product-detail/",
     "/templates/product-gallery/",
+    "/templates/review-workspace/",
     "/templates/run-console/",
     "/templates/settings-dialog/",
     "/templates/settings-sidebar/",
