@@ -56,15 +56,15 @@ import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {resolveProviders} from '../../foundation/integrations/provider-resolution.mjs';
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
-import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
 import {
   isBaseIntegration,
   runBase,
   splitForBase,
 } from '../../foundation/bases/resolve.mjs';
 
-/** The package that owns Core's components, hooks, and codemods. */
 import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
+
+/** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
 
 // Re-exported for the run leaf's lightweight agent-docs inspection path
@@ -215,12 +215,12 @@ const LEGACY_NAMES = {[CORE_PROVIDER_ID]: ['@xds/core']};
  * package read is the run's base: Core, or the base a project or `--base`
  * names.
  * @param {string} cwd
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the base of the upgrade in `cwd` ({@link upgradeBase})
  * @returns {{version: string, packageName: string}|null}
  */
-export function detectInstalledTargetVersion(cwd) {
-  const run = runBase();
-  const name = run.ok ? run.base.name : CORE_PROVIDER_ID;
-  const found = findProjectPackageOf(cwd, [name, ...(LEGACY_NAMES[name] ?? [])]);
+export function detectInstalledTargetVersion(cwd, base = runBase(cwd)) {
+  const found = findProjectPackageOf(cwd, targetPackages(base));
   if (!found) return null;
   try {
     const pkg = JSON.parse(
@@ -234,14 +234,52 @@ export function detectInstalledTargetVersion(cwd) {
 }
 
 /**
- * Does this run's upgrade read Core? Core's copied compositions and the Core
- * version the agent-docs block names belong to a run on Core. A run on
- * another base reads none of them.
+ * The base an upgrade in `cwd` reads, resolved from the project in that
+ * folder, so a caller of the package API gets the base the CLI reads there.
+ * @param {string} cwd
+ * @returns {Promise<import('../../foundation/bases/resolve.mjs').BaseResolution>}
+ */
+export async function upgradeBase(cwd) {
+  try {
+    return (await Project.load(cwd, {core: 'project'})).base;
+  } catch {
+    // A config that does not load yet, which a config codemod may fix,
+    // leaves the base the CLI resolves without it.
+    return runBase(cwd);
+  }
+}
+
+/**
+ * The packages that hold an upgrade's target version: the base's package,
+ * then the earlier names it was published under.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string[]}
+ */
+function targetPackages(base) {
+  const name = base.ok ? base.base.name : CORE_PROVIDER_ID;
+  return [name, ...(LEGACY_NAMES[name] ?? [])];
+}
+
+/**
+ * The target package as a message names it, such as
+ * `@astryxdesign/core (or legacy @xds/core)`.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string}
+ */
+export function upgradeTargetLabel(base) {
+  const [name, ...legacy] = targetPackages(base);
+  return legacy.length > 0 ? `${name} (or legacy ${legacy.join(', ')})` : name;
+}
+
+/**
+ * Does an upgrade on `base` read Core? Core's codemods, its copied
+ * compositions, and the Core version the agent-docs block names belong to a
+ * run on Core. A run on another base reads none of them.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
  * @returns {boolean}
  */
-export function upgradeReadsCore() {
-  const run = runBase();
-  return !run.ok || run.base.core;
+export function upgradeReadsCore(base) {
+  return !base.ok || base.base.core;
 }
 
 /**
@@ -250,10 +288,11 @@ export function upgradeReadsCore() {
  * `init` agree.
  * @param {string} cwd
  * @param {string} targetVersion
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
  * @returns {string}
  */
-export function upgradeAgentDocsVersion(cwd, targetVersion) {
-  return upgradeReadsCore() ? targetVersion : agentDocsVersion(cwd);
+export function upgradeAgentDocsVersion(cwd, targetVersion, base) {
+  return upgradeReadsCore(base) ? targetVersion : agentDocsVersion(cwd);
 }
 
 /**
@@ -606,9 +645,10 @@ export function applyAgentDocsRefresh(plan) {
  * a run whose base is not Core has none.
  * @param {string} from
  * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
  */
-async function coreTransformsBetween(from, to) {
-  return currentNonCoreBase() ? [] : getTransformsBetween(from, to);
+async function coreTransformsBetween(from, to, base) {
+  return upgradeReadsCore(base) ? getTransformsBetween(from, to) : [];
 }
 
 /**
@@ -619,7 +659,7 @@ async function coreTransformsBetween(from, to) {
 export async function collectAllCodemods() {
   const codemods = [];
   const manifests = /** @type {CoreVersionManifest[]} */ (
-    await coreTransformsBetween('0.0.0', latestVersion)
+    await coreTransformsBetween('0.0.0', latestVersion, runBase())
   );
   for (const {version, transforms} of manifests) {
     for (const {name, meta, optional} of transforms) {
@@ -639,11 +679,13 @@ export async function collectAllCodemods() {
  * Core version manifests for the (from, to] range.
  * @param {string} from
  * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the upgrade's base ({@link upgradeBase})
  * @returns {Promise<CoreVersionManifest[]>}
  */
-export async function getCoreVersionManifests(from, to) {
+export async function getCoreVersionManifests(from, to, base = runBase()) {
   return /** @type {CoreVersionManifest[]} */ ([
-    ...(await coreTransformsBetween(from, to)),
+    ...(await coreTransformsBetween(from, to, base)),
   ]);
 }
 

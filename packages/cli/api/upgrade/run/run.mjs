@@ -41,7 +41,9 @@ import {
   runIntegrationCodemodsStep,
   withCodemodOutcomes,
   upgradeAgentDocsVersion,
+  upgradeBase,
   upgradeReadsCore,
+  upgradeTargetLabel,
 } from '../_adapter.mjs';
 import {
   logRegistryCompositionSummary,
@@ -592,28 +594,28 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
     logger.log(`Project root: ${path.relative(origin, cwd) || '.'}`);
     logger.log(`Source folder: ${path.relative(origin, path_) || '.'}`);
   }
-  const installed = detectInstalledTargetVersion(cwd);
+  const base = await upgradeBase(cwd);
+  const installed = detectInstalledTargetVersion(cwd, base);
   if (!installed) {
     // Outside a project there is no version to install (spec AST-081 FR3).
     const msg = isOutsideProject(cwd)
       ? 'Could not find installed @astryxdesign/core (or legacy @xds/core). This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.'
-      : `Could not find installed @astryxdesign/core (or legacy @xds/core). Install the target version first, then rerun \`${getCliInvocation()} upgrade --from <old-version>\`.`;
+      : `Could not find installed ${upgradeTargetLabel(base)}. Install the target version first, then rerun \`${getCliInvocation()} upgrade --from <old-version>\`.`;
     logger.error(msg);
     logger.log('Aborted\n');
     throw new AstryxError(msg, undefined, ERROR_CODES.ERR_VERSION_DETECT);
   }
   const targetVersion = installed.version;
-  const agentDocsVersion = upgradeAgentDocsVersion(cwd, targetVersion);
+  const agentDocsVersion = upgradeAgentDocsVersion(cwd, targetVersion, base);
 
   const reconcileCompositions = async () => {
-    // Copied compositions come from Core, so a run on another base checks
-    // none of them.
-    if (options.codemod || !upgradeReadsCore()) return null;
+    if (options.codemod) return null;
     const result = await reconcileRegistryCompositions(
       {apply, path: path_},
       {
         cwd,
         origin,
+        readsCore: upgradeReadsCore(base),
         expectedVersion:
           installed.packageName === '@astryxdesign/core'
             ? targetVersion
@@ -665,6 +667,7 @@ export async function run(options = {}, {cwd = process.cwd(), origin} = {}) {
   const versionManifests = await getCoreVersionManifests(
     currentVersion,
     targetVersion,
+    base,
   );
 
   const coreConfigCodemodNames = [];

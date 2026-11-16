@@ -1100,6 +1100,32 @@ describe('a non-Core base shows no Core outside its content', () => {
       const text = astryx(['build', 'a settings page'], dir);
       expect(text.stdout).not.toMatch(/^frame:/mu);
       expect(text.stdout).not.toMatch(/^foundation:/mu);
+      expect(text.stdout).not.toMatch(/^COMPONENTS$/mu);
+    },
+    SLOW,
+  );
+
+  it(
+    "lists a base's own component whose name is on Core's always-on list",
+    () => {
+      const dir = project({
+        '@acme/native-ui': {
+          manifest: "export default {base: {}, components: './components'};\n",
+          files: {
+            'components/Button.doc.mjs':
+              "export default {type: 'component', name: 'Button', props: [], keywords: ['settings'], usage: {description: 'A native button.'}};\n",
+            'components/Button.tsx': 'export function Button() { return null; }\n',
+          },
+        },
+      });
+      const json = astryx(['--json', 'build', 'settings button'], dir);
+      expect(json.status).toBe(0);
+      expect(json.json().data.domain).toContainEqual(
+        expect.objectContaining({name: 'Button', package: '@acme/native-ui'}),
+      );
+      const text = astryx(['build', 'settings button'], dir);
+      expect(text.stdout).toMatch(/^COMPONENTS$/mu);
+      expect(text.stdout).toContain('Button');
     },
     SLOW,
   );
@@ -1226,6 +1252,49 @@ describe('a non-Core base shows no Core outside its content', () => {
       );
       expect(registry.status).toBe(0);
       expect(registry.json().data).toMatchObject({ok: true, found: 0});
+    },
+    SLOW,
+  );
+
+  it(
+    'checks the --registry source folder before it skips Core compositions',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const r = astryx(
+        ['--json', 'upgrade', '--registry', '--path', '../elsewhere'],
+        dir,
+      );
+      expect(r.status).toBe(1);
+      expect(r.json().code).toBe('ERR_PATH_TRAVERSAL');
+    },
+    SLOW,
+  );
+
+  it(
+    'resolves the base for the cwd a package API caller passes to upgrade',
+    async () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      write(path.join(dir, 'src', 'a.js'), 'export const a = 1;\n');
+      const {upgrade} = await import('../../api/index.mjs');
+      const result = await upgrade({from: '1.0.0'}, {cwd: dir});
+      expect(result.data).toMatchObject({from: '1.0.0', to: '2.1.0'});
+    },
+    SLOW,
+  );
+
+  it(
+    "names the active base when its installed version can't be read",
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      write(
+        path.join(dir, 'node_modules', '@acme', 'native-ui', 'package.json'),
+        JSON.stringify({name: '@acme/native-ui', type: 'module'}),
+      );
+      const r = astryx(['--json', 'upgrade', '--from', '1.0.0'], dir);
+      expect(r.status).toBe(1);
+      expect(r.json().code).toBe('ERR_VERSION_DETECT');
+      expect(r.json().error).toContain('Could not find installed @acme/native-ui.');
+      expect(r.json().error).not.toContain('@astryxdesign/core');
     },
     SLOW,
   );

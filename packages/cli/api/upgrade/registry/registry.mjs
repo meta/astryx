@@ -35,6 +35,7 @@ import {AstryxError} from '../../error.mjs';
 import {logger} from '../../logger.mjs';
 import {
   detectInstalledTargetVersion,
+  upgradeBase,
   upgradeReadsCore,
 } from '../_adapter.mjs';
 
@@ -980,9 +981,11 @@ function applyPlan(plan) {
 /**
  * Reported paths are relative to the scanned source folder, or, when `origin`
  * names the folder the command ran in below the project root `cwd`, to that
- * folder, so they resolve from where the command ran.
+ * folder, so they resolve from where the command ran. Copied compositions
+ * come from Core, so with `readsCore` false (a run on another base) none is
+ * checked, once the source folder passes its check.
  * @param {{apply?: boolean, path?: string}} options
- * @param {{cwd?: string, origin?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean}} [ctx]
+ * @param {{cwd?: string, origin?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean, readsCore?: boolean}} [ctx]
  */
 export async function reconcileRegistryCompositions(
   options = {},
@@ -993,6 +996,7 @@ export async function reconcileRegistryCompositions(
     registryOrigin = PUBLIC_SHADCN_REGISTRY_ORIGIN,
     expectedVersion,
     requireExpectedVersion = false,
+    readsCore = true,
   } = {},
 ) {
   let root;
@@ -1014,8 +1018,9 @@ export async function reconcileRegistryCompositions(
 
   const display = origin ?? root;
   const apply = options.apply ?? false;
-  const receipts = discoverRegistryReceipts(root);
   const summary = emptySummary(apply);
+  if (!readsCore) return {summary, writtenFiles: []};
+  const receipts = discoverRegistryReceipts(root);
   summary.found = receipts.length;
   if (receipts.length === 0) return {summary, writtenFiles: []};
   if (requireExpectedVersion && !expectedVersion) {
@@ -1151,15 +1156,9 @@ export async function registryUpgrade(options = {}, ctx = {}) {
   if (ctx.origin != null) {
     logger.log(`Project root: ${path.relative(ctx.origin, cwd) || '.'}`);
   }
-  // Copied compositions come from Core, so a run on another base checks
-  // none of them.
-  if (!upgradeReadsCore()) {
-    logger.log(
-      'No ShadCN composition receipts checked: they come from Core, and the active base is not Core.\n',
-    );
-    return {type: 'upgrade.registry', data: emptySummary(options.apply ?? false)};
-  }
-  const installed = detectInstalledTargetVersion(cwd);
+  const base = await upgradeBase(cwd);
+  const readsCore = upgradeReadsCore(base);
+  const installed = detectInstalledTargetVersion(cwd, base);
   const expectedVersion =
     ctx.expectedVersion ??
     (installed?.packageName === '@astryxdesign/core'
@@ -1170,8 +1169,13 @@ export async function registryUpgrade(options = {}, ctx = {}) {
     cwd,
     expectedVersion,
     requireExpectedVersion: true,
+    readsCore,
   });
-  if (summary.found === 0) {
+  if (!readsCore) {
+    logger.log(
+      'No ShadCN composition receipts checked: they come from Core, and the active base is not Core.',
+    );
+  } else if (summary.found === 0) {
     logger.log('No ShadCN composition receipts found.');
   } else {
     logRegistryCompositionSummary(summary);
