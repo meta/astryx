@@ -223,6 +223,22 @@ describe('withOtherCommand', () => {
     ).toEqual([hint, routes[0]]);
   });
 
+  it('keeps the pinned suggestions ahead of the hint, and the list no longer', () => {
+    expect(
+      withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 1,
+      }),
+    ).toEqual([list[0], hint, list[1]]);
+    const one = [{name: 'a', reason: 'x'}];
+    expect(
+      withOtherCommand(one, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 1,
+      }),
+    ).toEqual(one);
+  });
+
   it('puts the hint right after the last suggestion at its tier or a better one', () => {
     const own = [
       {name: 'zinnet', reason: 'x'},

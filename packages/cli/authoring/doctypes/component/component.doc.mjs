@@ -68,7 +68,7 @@ export const doc = {
       name: 'keywords',
       type: 'string[]',
       description:
-        'Search keywords for CLI discovery: synonyms and related UI concepts from other design systems (MUI, Chakra, Radix, and others). Lowercase. `astryx search` matches them; `astryx component <term>` also suggests Core components by keyword.',
+        "Words to find the component by: each is a word or short phrase a builder would type when they need this component and not another, before they know its name. Use another name for the same whole component, such as another library's name (`accordion`), or the job in the builder's words (`expand and collapse`). Lowercase, best first. `astryx search` ranks a match on them. `astryx component <term>` never opens a component by a keyword; it lists the component first among its suggestions.",
     },
     {
       name: 'hiddenComponents',
