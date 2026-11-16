@@ -517,6 +517,14 @@ works on is `spec:AST-040` FR9's.
   - A copy hands the run off before it loads anything the project provides
     (FR2). It does not hand off when it is itself the release FR2 names, or
     when the door that started it declined the project's CLI (FR2).
+  - In a Yarn Plug'n'Play project, only the project's runtime knows where the
+    project's packages are, and Yarn preloads it into every command it runs.
+    A copy started without that runtime first starts again with it preloaded
+    through `NODE_OPTIONS`, as Yarn preloads it, and the run started again
+    makes the choice this requirement names. A run whose Node options preload
+    the runtime already, and a programmatic host's run, never start again.
+    Starting again is not a hand-off: the same copy runs, with the same
+    arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
     `astryx init --user` (FR8) and `astryx docs global` with its pages, the
     docs of global mode itself, is never handed to a project's release: it is
@@ -533,13 +541,15 @@ works on is `spec:AST-040` FR9's.
   - The copy the run is handed to receives what it would receive if started
     directly in that folder: the same arguments, working folder, and standard
     input, output, and error, with nothing added to its environment, options,
-    or configuration (FR1). The run ends with that copy's exit status, or the
-    signal that ended it. A termination or hangup signal sent to the copy that
-    started the run reaches the copy it handed the run to. A SIGINT that
-    reaches only the starting copy is forwarded if the handed-off CLI is still
-    running 5 seconds later, so an interrupt the whole process group got (a
-    terminal's Ctrl-C) reaches a CLI that stops within that time exactly once.
-    On Windows the starting copy forwards no interrupt.
+    or configuration (FR1); in a Yarn Plug'n'Play project, started directly
+    means started with the project's runtime preloaded, as Yarn starts it.
+    The run ends with that copy's exit status, or the signal that ended it. A
+    termination or hangup signal sent to the copy that started the run reaches
+    the copy it handed the run to. A SIGINT that reaches only the starting
+    copy is forwarded if the handed-off CLI is still running 5 seconds later,
+    so an interrupt the whole process group got (a terminal's Ctrl-C) reaches
+    a CLI that stops within that time exactly once. On Windows the starting
+    copy forwards no interrupt.
   - When the project's own CLI cannot be started, the matched release answers
     (FR2). When the matched release cannot be obtained, the copy that started
     the run answers, announced (FR2).
@@ -744,7 +754,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G37 A project that installs the same integration as the computer                                                             | The project's release, with the project's copy only                                                                          | As for that case                                                                                                                                                                                                                                                | `› G37`                                                                                               |
 | G38 An integration installed for the computer whose peer range excludes the answering release                                | The global copy, without it                                                                                                  | As for that case; `doctor` warns                                                                                                                                                                                                                                | `› G38`                                                                                               |
 | G39 A door's package set: the CLI and an integration installed together in one root                                          | That copy, with the integration loaded outside a project                                                                     | As for that case                                                                                                                                                                                                                                                | `› G39`                                                                                               |
-| G40 pnpm global folders: one shared folder, or a folder per package                                                          | The global copy, with the integrations in every such folder loaded outside a project                                         | As for that case                                                                                                                                                                                                                                                | `global-local.rows-40-58.test.mjs › G40`                                                              |
+| G40 pnpm global folders: one shared folder, or a folder per package                                                          | The global copy, with the integrations in every such folder loaded outside a project                                         | As for that case                                                                                                                                                                                                                                                | `global-local.rows-40-59.test.mjs › G40`                                                              |
 | G41 Outside a project, in an integration's own source folder                                                                 | That copy, with the folder's own copy of the integration                                                                     | As for that case; `doctor` names the computer's copy as not used, without a warning                                                                                                                                                                             | `› G41`                                                                                               |
 | G42 Inside a project, an integration installed for the computer that the project's release excludes, or that fails to load   | The project's release                                                                                                        | As for that case; neither `discover` nor `doctor` offers it                                                                                                                                                                                                     | `› G42`                                                                                               |
 | G43 Inside a project with only Core that a door's package set answers                                                        | That copy                                                                                                                    | `copy` is `starting`; its integrations are offered as available                                                                                                                                                                                                 | `› G43`                                                                                               |
@@ -763,6 +773,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G56 An open `search` outside a project before the release's Core is cached                                                   | The global copy                                                                                                              | Gets the Core as `component` does; when it cannot, `meta.partial` names the skipped domains and the reason, with one standard-error line                                                                                                                        | `› G56`                                                                                               |
 | G57 A folder more than four levels deep in a project with only Core                                                          | The copy that started the run                                                                                                | Reads the project's Core, never the carried one; `meta.answeredBy.core` names it                                                                                                                                                                                | `› G57`                                                                                               |
 | G58 An interrupt sent to the copy that started a handed-off run alone, or to its whole process group                         | The project's own CLI                                                                                                        | Alone: forwarded once after 5 seconds; group: received once, not forwarded to a CLI that stopped in time; the run ends with that CLI's exit status or signal                                                                                                    | `› G58`                                                                                               |
+| G59 A Yarn Plug'n'Play project, run from a copy started outside the project's runtime                                        | The project's own CLI, from the run started again with the runtime                                                           | The hand-off line; with a runtime that does not start, the copy that started the run answers as in a project with no CLI of its own, and the run starts again only once                                                                                         | `› G59`                                                                                               |
 
 ### Platform support
 
@@ -773,10 +784,9 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 - Unsupported behavior: a door that cannot obtain the release FR2 names fails
   before any write; a global copy that cannot reach the registry answers as
   always, and prints no notice (FR6). In a Yarn Plug'n'Play project, a
-  copy cannot see the project's own CLI without running the project's
-  loader, which FR2 forbids before the hand-off, so the release equal to the
-  project's Core answers from the per-user cache instead; it is the same
-  release whenever the project's CLI matches its Core.
+  programmatic host's run does not start again with the project's runtime
+  (FR9), so it answers as in a project with no CLI of its own unless its door
+  runs the project's own CLI (FR1).
 - Browser evidence: not applicable; the contract is CLI output, exit status,
   and file changes.
 

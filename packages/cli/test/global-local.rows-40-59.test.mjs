@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Rows G40 to G58 of AST-081's "Who answers when global and project
+ * @file Rows G40 to G59 of AST-081's "Who answers when global and project
  * copies meet" table (spec AST-081 FR11), one test per row. Rows that depend
  * on an operating system's own file system test their path rules here; on
  * macOS and Windows themselves they run only in the cross-platform smoke
@@ -22,6 +22,7 @@ import {
   seedPackedRelease,
 } from '../test-utils/global-local-fixtures.mjs';
 import {project, tempDir, writeJson} from '../test-utils/release-fixtures.mjs';
+import {writePnpRuntime} from '../test-utils/pnp-fixtures.mjs';
 import {isGlobalCopy} from '../foundation/release/choose.mjs';
 import {globalUpgradeCommand} from '../foundation/release/notices.mjs';
 import {
@@ -999,6 +1000,47 @@ describe.skipIf(!POSIX)(
       },
       60_000,
     );
+
+    it("G59 a Yarn Plug'n'Play project, started outside its runtime: the run starts again inside it once, and the project's own CLI answers", () => {
+      const pc = computer();
+      const global = globalCli('npm', '9.0.1');
+      // Yarn keeps the packages outside any node_modules; only the runtime
+      // at the project root knows where they are.
+      const store = tempDir('pnp-store');
+      const cli = placeCli(path.join(store, 'cli'), '9.0.0');
+      const core = path.join(store, 'core');
+      writeJson(path.join(core, 'package.json'), {
+        name: '@astryxdesign/core',
+        version: '9.0.0',
+      });
+      const packages = {'@astryxdesign/cli': cli.dir, '@astryxdesign/core': core};
+      const app = project(tempDir('pnp-app'), {
+        '@astryxdesign/core': '9.0.0',
+        '@astryxdesign/cli': '9.0.0',
+      });
+      fs.writeFileSync(path.join(app, 'yarn.lock'), '');
+      writePnpRuntime(app, packages);
+      const src = path.join(app, 'src');
+      fs.mkdirSync(src);
+
+      const version = run(global.bin, ['--version'], {cwd: src, pc});
+      expect(version.status).toBe(0);
+      expect(version.stdout).toBe('9.0.0');
+      expect(version.lines).toEqual([handedTo('9.0.0')('9.0.1')]);
+
+      // The project's CLI prints the command Yarn runs it with.
+      const docs = run(global.bin, ['docs', 'getting-started'], {cwd: app, pc});
+      expect(docs.status).toBe(0);
+      expect(docs.stdout).toContain('yarn astryx docs getting-started <section>');
+      expect(docs.stdout).not.toContain('yarn dlx');
+
+      // A runtime that does not start: the copy that started the run
+      // answers, once, as when it sees no CLI of the project's.
+      writePnpRuntime(app, packages, {starts: false});
+      const unstarted = run(global.bin, ['--version'], {cwd: app, pc});
+      expect(unstarted.status).toBe(0);
+      expect(unstarted.stdout).toBe('9.0.1');
+    });
   },
 );
 
@@ -1007,7 +1049,7 @@ it('names every row of the table exactly once', () => {
   const text = [
     'global-local.test.mjs',
     'global-local.rows-16-39.test.mjs',
-    'global-local.rows-40-58.test.mjs',
+    'global-local.rows-40-59.test.mjs',
   ]
     .map(file => fs.readFileSync(new URL(`./${file}`, import.meta.url), 'utf8'))
     .join('\n');
@@ -1016,6 +1058,6 @@ it('names every row of the table exactly once', () => {
       /^\s+(?:it|describe)(?:\.skipIf\([^)]*\)\()?\(?\s*['"](G\d+) /gmu,
     ),
   ].map(m => m[1]);
-  expect(rows).toEqual(Array.from({length: 58}, (_, i) => `G${i + 1}`));
+  expect(rows).toEqual(Array.from({length: 59}, (_, i) => `G${i + 1}`));
   expect(os.EOL).toBeTypeOf('string');
 });

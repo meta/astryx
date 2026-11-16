@@ -1259,7 +1259,7 @@
     "packages/cli/test/drift/docs-drift.test.mjs": 1.8,
     "packages/cli/test/experimental-isolation.test.mjs": 28.3,
     "packages/cli/test/global-local.rows-16-39.test.mjs": 30.4,
-    "packages/cli/test/global-local.rows-40-58.test.mjs": 56.7,
+    "packages/cli/test/global-local.rows-40-59.test.mjs": 56.7,
     "packages/cli/test/global-local.test.mjs": 51.7,
     "packages/cli/test/global-mode-docs.test.mjs": 3,
     "packages/cli/test/global-mode-notes.test.mjs": 0.4,
