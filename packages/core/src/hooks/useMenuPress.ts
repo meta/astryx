@@ -414,6 +414,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   const pointerIdRef = useRef<number | null>(null);
   const touchIdentifierRef = useRef<number | null>(null);
   const touchTargetRef = useRef<EventTarget | null>(null);
+  const touchStartCancelableRef = useRef(true);
   const detachRef = useRef<(() => void) | null>(null);
   // `useLongPress` detects the held finger, as in ContextMenu, so the hold
   // time and the movement tolerance have one home. A ref holds the handle,
@@ -671,6 +672,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
             cancelsTouchEnd: native?.pointerType === 'touch',
             touchIdentifier: touchIdentifierRef.current ?? undefined,
             touchTarget: touchTargetRef.current ?? undefined,
+            touchStartCancelable: touchStartCancelableRef.current,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -704,6 +706,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
               cancelsTouchEnd: native?.pointerType === 'touch',
               touchIdentifier: touchIdentifierRef.current ?? undefined,
               touchTarget: touchTargetRef.current ?? undefined,
+              touchStartCancelable: touchStartCancelableRef.current,
             });
           }
           if (effect.dismiss) {
@@ -802,10 +805,12 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       pointerIdRef.current = pointerId;
       touchIdentifierRef.current = null;
       touchTargetRef.current = null;
+      touchStartCancelableRef.current = true;
 
       // The touchstart after this pointerdown names the touch. So the guard
       // at the lift cancels only that touch's touchend, also on the node the
-      // touch began on.
+      // touch began on. It also says whether the browser let the page cancel
+      // the touch: see utils/clickGuard.ts.
       let stopTouchStart: (() => void) | null = null;
       if (view != null) {
         stopTouchStart = subscribeInput(view, 'touchstart', event => {
@@ -814,6 +819,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
           const named = touchOfPointer(event.changedTouches, pointerId);
           touchIdentifierRef.current = named?.identifier ?? null;
           touchTargetRef.current = named?.target ?? null;
+          touchStartCancelableRef.current = event.cancelable;
         });
       }
       const onMove = (event: PointerEvent) => {

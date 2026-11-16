@@ -353,6 +353,64 @@ describe('clickGuard', () => {
     expect(click(target).defaultPrevented).toBe(true);
   });
 
+  it('armed after a touchstart that was not cancelable, stays armed after the cancelled touchend and takes the compatibility mousedown, mouseup and click that WebKit still sends in a Home Screen web app (spec:AST-094 FR19)', () => {
+    const target = button();
+    const onPage = vi.fn();
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      window.addEventListener(type, onPage);
+    }
+    try {
+      armClickGuard(document, {
+        staysInstalled: true,
+        cancelsTouchEnd: true,
+        touchStartCancelable: false,
+      });
+      expect(touchEnd(target).defaultPrevented).toBe(true);
+      expect(isClickGuardArmed(document)).toBe(true);
+      // A keyboard's or a screen reader's click still passes.
+      expect(click(target, 0).defaultPrevented).toBe(false);
+      onPage.mockClear();
+      expect(mouse('mousedown', target).defaultPrevented).toBe(true);
+      expect(mouse('mouseup', target).defaultPrevented).toBe(true);
+      expect(click(target).defaultPrevented).toBe(true);
+      expect(onPage).not.toHaveBeenCalled();
+      // The click spends it: the next mousedown and click are the page's.
+      expect(isClickGuardArmed(document)).toBe(false);
+      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+      expect(click(target).defaultPrevented).toBe(false);
+    } finally {
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        window.removeEventListener(type, onPage);
+      }
+    }
+  });
+
+  it('armed after a touchstart that was not cancelable, keeps a full window from the cancelled touchend, and the next pointerdown disarms it', () => {
+    vi.useFakeTimers();
+    const target = button();
+    armClickGuard(document, {
+      cancelsTouchEnd: true,
+      touchStartCancelable: false,
+    });
+    // A busy main thread can hold the touchend until late in the window.
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS - 50);
+    expect(touchEnd(target).defaultPrevented).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(isClickGuardArmed(document)).toBe(true);
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
+    expect(isClickGuardArmed(document)).toBe(false);
+    armClickGuard(document, {
+      cancelsTouchEnd: true,
+      touchStartCancelable: false,
+    });
+    expect(touchEnd(target).defaultPrevented).toBe(true);
+    // A new press is a new gesture: its click is the page's.
+    target.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(isClickGuardArmed(document)).toBe(false);
+    expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+    expect(click(target).defaultPrevented).toBe(false);
+  });
+
   it('cancels no touchend on any other arm', () => {
     const target = button();
     armClickGuard(document, {staysInstalled: true});

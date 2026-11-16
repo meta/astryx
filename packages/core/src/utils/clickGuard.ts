@@ -38,6 +38,13 @@
 // takes that node out of the document. Its `touchend` then never reaches the
 // window.
 //
+// In a Home Screen web app, WebKit can make a touch's `touchstart`
+// uncancelable. It then still sends the `mousedown`, `mouseup` and click
+// after a cancelled `touchend`, at the point where the touch began. So when
+// the menu reports such a touch, the guard stays armed after that `touchend`
+// and takes them, as at a claimed touch's lift. Its window then starts again
+// at that `touchend`.
+//
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
 //   page dispatches;
@@ -90,6 +97,13 @@ export interface ClickGuardOptions {
    * still cancels it after a pick takes that node out of the document.
    */
   readonly touchTarget?: EventTarget;
+  /**
+   * With `cancelsTouchEnd`: whether the touch's `touchstart` was cancelable.
+   * When it was not, the guard stays armed after the cancelled `touchend`
+   * for the late `mousedown`, `mouseup` and click that follow it.
+   * @default true
+   */
+  readonly touchStartCancelable?: boolean;
 }
 
 interface Guard {
@@ -136,6 +150,7 @@ export function armClickGuard(
     cancelsTouchEnd = false,
     touchIdentifier,
     touchTarget,
+    touchStartCancelable = true,
   }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
@@ -156,12 +171,24 @@ export function armClickGuard(
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
-  if (takesLateMouse) {
+  const restartWindow = () => {
+    if (guard.timer != null) {
+      clearTimeout(guard.timer);
+    }
+    guard.timer = setTimeout(
+      () => disarmClickGuard(doc),
+      CLICK_GUARD_WINDOW_MS,
+    );
+  };
+  const takeLateMouse = () => {
     for (const type of ['mousedown', 'mouseup'] as const) {
       guard.unsubscribers.push(
         subscribeInput(view, type, swallowLateMouse, {cancels: true}),
       );
     }
+  };
+  if (takesLateMouse) {
+    takeLateMouse();
   }
   if (cancelsTouchEnd) {
     // The release of the gesture in flight then brings no light dismiss.
@@ -185,8 +212,16 @@ export function armClickGuard(
       // The guard stays armed for a click that may follow it.
       if (event.cancelable) {
         event.preventDefault();
-        // No click follows a cancelled touchend.
-        disarmClickGuard(doc);
+        if (touchStartCancelable) {
+          // No click follows a cancelled touchend.
+          disarmClickGuard(doc);
+          return;
+        }
+        // The late mouse events and click still come: see the file header.
+        if (!takesLateMouse) {
+          takeLateMouse();
+        }
+        restartWindow();
       }
     };
     listeners.push(
@@ -203,7 +238,7 @@ export function armClickGuard(
     }
     guard.unsubscribers.push(stopTouchEnd);
   }
-  guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
+  restartWindow();
 }
 
 /**

@@ -196,13 +196,14 @@ function fireTouchEnd(target: Element): Event {
   return event;
 }
 
-/** A cancelable touch event at `target` whose one changed touch has `identifier`. */
+/** A touch event at `target` whose one changed touch has `identifier`. */
 function fireTouch(
   target: Element,
   type: 'touchstart' | 'touchend',
   identifier: number,
+  cancelable = true,
 ): Event {
-  const event = new Event(type, {bubbles: true, cancelable: true});
+  const event = new Event(type, {bubbles: true, cancelable});
   Object.defineProperty(event, 'changedTouches', {
     value: [{identifier, target}],
   });
@@ -802,6 +803,33 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     // The pick closed the menu: the row the touch began on is gone.
     picked.remove();
     expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+  });
+
+  it('after a touchstart that was not cancelable, also swallows the compatibility mousedown, mouseup and click that WebKit still sends after the cancelled touchend in a Home Screen web app (spec:AST-094 FR19)', () => {
+    const onSelect = vi.fn();
+    const onOutside = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const outside = screen.getByTestId('outside');
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      outside.addEventListener(type, onOutside);
+    }
+    const picked = row('A');
+    fireEvent.pointerDown(picked, touch(7));
+    fireTouch(picked, 'touchstart', 7, false);
+    fireEvent.pointerUp(picked, touch(7));
+    expect(onSelect.mock.calls).toEqual([['A']]);
+    picked.remove();
+    expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+    // WebKit aims them at the point where the touch began: here, the control
+    // that the closed menu covered.
+    fireEvent.mouseDown(outside, {detail: 1});
+    fireEvent.mouseUp(outside, {detail: 1});
+    fireEvent.click(outside, {detail: 1});
+    expect(onOutside).not.toHaveBeenCalled();
+    // A later tap is the page's.
+    fireEvent.pointerDown(outside, touch(8));
+    fireEvent.click(outside, {detail: 1});
+    expect(onOutside).toHaveBeenCalledTimes(1);
   });
 });
 
