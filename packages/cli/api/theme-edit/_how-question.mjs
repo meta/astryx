@@ -2926,6 +2926,15 @@ function clausesOf(q, partWords) {
           refSaid ? new RegExp(`\\b${refSaid}\\b(?=\\S*\\s+colou?r)`) : /$^/,
           ' ',
         )
+        // (Nor in "the color of the links": the reference's words.)
+        .replace(
+          refSaid
+            ? new RegExp(
+                `\\b(colou?r) of\\s+(?:the\\s+|my\\s+)?(?:[a-z]+\\s+)?${refSaid}\\b`,
+              )
+            : /$^/,
+          '$1',
+        )
         .replace(
           /\b(?:color-mix|rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((?:[^()]|\([^()]*\))*\)/g,
           ' ',
@@ -3070,9 +3079,12 @@ function clausesOf(q, partWords) {
     // once.)
     // (Said by other words than the first: "active" names one state, even
     // where two readings take that word; "pressed or hovered" is a list.)
-    const firstAt = STATE_WORDS.map(([re]) => re.exec(stateText)).find(
-      m => m != null,
-    );
+    // (Where the first state is said: the words of that state.)
+    const firstAt =
+      STATE_WORDS.filter(([, s]) => s === state)
+        .map(([re]) => re.exec(stateText))
+        .find(m => m != null) ??
+      STATE_WORDS.map(([re]) => re.exec(stateText)).find(m => m != null);
     const alsoState =
       STATE_WORDS.map(([re, s]) => {
         const m = re.exec(stateText);
@@ -3610,7 +3622,14 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:more\s+)?(transparent|translucent|see-through)\s+by\s+((?:a|an|one|two|three)\s+(?:half|thirds?|quarters?|fifths?|tenths?)|half)\b/gi,
       '$2 more $1',
     )
-    .replace(/\b([a-z]{3,}er)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi, '$2% $1');
+    .replace(/\b([a-z]{3,}er)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi, '$2% $1')
+    // "the card's fainter text lighter": a fainter word right before the
+    // text, with another way said for it, says WHICH text (the secondary
+    // text), never the way.
+    .replace(
+      /\b(?:fainter|subtler|faint|subtle)\s+(text|labels?|copy)\b(?=.*\b(?:lighter|darker|bigger|smaller|bolder|thinner|larger|brighter|paler)\b)/gi,
+      'secondary $1',
+    );
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -5306,6 +5325,37 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:them|it|they|those|these)\b/.test(clauses[i].text)
     )
       clauses[i].parts = clauses[i - 1].parts.map(x => ({...x}));
+  // "the row hovered and selected red": a part in one state, joined by
+  // "and" to a second state that carries the ask, is the part in both at
+  // once (as "the checked and disabled checkbox"); never the first state
+  // dropped.
+  for (let i = clauses.length - 1; i >= 1; i--) {
+    const [a, b] = [clauses[i - 1], clauses[i]];
+    const esc = (/** @type {string} */ x) =>
+      x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (
+      a.parts.length &&
+      a.state &&
+      !a.alsoState &&
+      !a.aspects.length &&
+      !a.colors.length &&
+      !a.dir &&
+      !a.except &&
+      b.state &&
+      b.state !== a.state &&
+      !b.alsoState &&
+      (!b.parts.length ||
+        b.parts.every(x => a.parts.some(y => y.on === x.on))) &&
+      new RegExp(
+        `${esc(a.text.trim())}\\s+and\\s+${esc(b.text.trim().split(/\s+/)[0])}`,
+        'i',
+      ).test(q)
+    ) {
+      b.parts = a.parts.map(x => ({...x}));
+      b.alsoState = a.state;
+      clauses.splice(i - 1, 1);
+    }
+  }
   // "never make buttons rounder than 12px; make everything rounder",
   // "never rounder than 8px; make the buttons and cards rounder", "the
   // cards bolder, but never rounder than 8px": a bound is a limit on the
@@ -6097,7 +6147,10 @@ export function draftAnswer(ctx, env, question) {
       // divider), drawn in the place or not.
       // (Said owner first only: "the menu's separators"; "the muted text
       // in cards" names the cards' own text.)
-      const ownPart = by === 'possessive' ? partIn(nameText) : null;
+      // ("The card's muted text" is the cards' own text, as "the muted
+      // text in cards" says it: text is never a part of its own there.)
+      const ownPart0 = by === 'possessive' ? partIn(nameText) : null;
+      const ownPart = ownPart0 === 'body' ? 'text' : ownPart0;
       // (The place's own part of that kind: a dropdown menu's own divider.)
       for (const h of members)
         if (ownPart && keys.includes(`${h}-${ownPart}`))
@@ -6286,15 +6339,30 @@ export function draftAnswer(ctx, env, question) {
         .slice(poss.index + poss[0].length)
         .split(/\s+/)
         .filter(Boolean);
-      const child = after.find(w => stateWord(w) == null && w !== 'own');
+      // (A word that only says which of a thing, "the card's fainter
+      // text", "the card's main text", is skipped too: the thing is the
+      // child.)
+      const ci = after.findIndex(w => stateWord(w) == null && w !== 'own');
+      const child =
+        ci >= 0 &&
+        /^(?:text|labels?|copy|writing|words)$/.test(after[ci + 1] ?? '') &&
+        !lex.parts.some(([re]) => re.test(` ${after[ci]} `))
+          ? after[ci + 1]
+          : after[ci];
       // (A thing the parts have, "the cards' and buttons' borders": each
       // possessive names the part itself, never a place.)
       if (
         child &&
         aspectsOf(child).length &&
         !lex.parts.some(([re]) => re.test(` ${child} `))
-      )
+      ) {
+        // ("the card's muted text": the text the owner shows, as "the
+        // muted text in cards" says it; the owner is the place.)
+        const others = c.parts.filter(x => x.on !== 'body');
+        if (others.length === 1 && others.length < c.parts.length)
+          c.parts = others;
         continue;
+      }
       // (The owner's words end at the possessive: "the dropdown menu's".)
       const possEnd = poss.index + poss[1].length;
       /** @type {{index: number} | null} */
@@ -13093,7 +13161,15 @@ export function draftAnswer(ctx, env, question) {
    */
   function textOfRole(c, toks) {
     const secondary = toks.filter(t => t === '--color-text-secondary');
-    return /\bsecondary\b/.test(c.text) && secondary.length ? secondary : toks;
+    // (The fainter, muted or subtle text is the secondary text.)
+    return /\b(?:secondary|muted|faint|fainter|subtle|subdued)\s+(?:text|labels?|copy|writing)\b/.test(
+      c.text,
+    ) ||
+      (/\bsecondary\b/.test(c.text) && secondary.length)
+      ? secondary.length
+        ? secondary
+        : toks
+      : toks;
   }
   /**
    * The commands for one part (or the whole theme) and one aspect.

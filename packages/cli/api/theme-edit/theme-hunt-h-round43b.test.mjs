@@ -121,7 +121,7 @@ describe('words that name which parts', () => {
       const rs = await how('q0', q);
       expect(writes(rs), q).toEqual([]);
       expect(rs.map(r => r.text).join(' '), q).toMatch(
-        /has no (?:type|variant) "(?:success|primary)"/,
+        /has no (?:(?:type|variant) "(?:success|primary)"|primary part)/,
       );
     }
   }, 240_000);
