@@ -123,7 +123,7 @@ export const doc = {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), the count of parts the changes to the theme do not reach (`missed`, left out when none; `show` lists them), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), how many misses the changes to the theme leave (`missed`) and on how many parts (`missedParts`; a part can miss two ways, its border and its shadow), both left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
@@ -135,7 +135,7 @@ export const doc = {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, `alsoRemoved` (when the setting was listed more than once by hand: the other entries, removed with it), and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewAdd',

@@ -6,7 +6,8 @@
  * @input A cache folder, and which of its files count.
  * @output `CACHE_LIMIT_BYTES`, the most a cache folder holds, and
  *   `evictOldest(dir, counts)`, which deletes the folder's oldest counted
- *   files until it holds at most that.
+ *   files until it holds at most that, and says when the oldest file it
+ *   kept was last used.
  * @position Used by gather-cache.mjs for the kept catalogs and by
  *   jiti-cache.mjs for jiti's transpiled code. Each folder has its own limit
  *   of this size.
@@ -35,6 +36,8 @@ const lastWrite = stat => stat.mtimeMs;
  * @param {string} dir
  * @param {(name: string) => boolean} counts - whether a file name counts
  * @param {{limit?: number, keepUsedSince?: number, lastUse?: (stat: fs.Stats) => number}} [options]
+ * @returns {number} when the least recently used file it kept was last used
+ *   (Infinity when it kept none)
  */
 export function evictOldest(
   dir,
@@ -61,6 +64,7 @@ export function evictOldest(
     .filter(e => e != null)
     .sort((a, b) => a.used - b.used);
   let total = entries.reduce((sum, e) => sum + e.size, 0);
+  let kept = 0;
   for (const {entry, size, used} of entries) {
     if (total <= limit || used >= keepUsedSince) break;
     try {
@@ -69,5 +73,7 @@ export function evictOldest(
     } catch {
       // Another run removed it.
     }
+    kept++;
   }
+  return entries[kept]?.used ?? Infinity;
 }

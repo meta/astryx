@@ -155,6 +155,11 @@ describe('every line, followed, leaves the part readable', () => {
   it(
     'the info banner: its own color generated, never the accent',
     async () => {
+      // (With the vibrancy moved, the info dial builds a color of its own;
+      // at the base's vibrancy it gives the base's back, and the banner is
+      // drawn as the base draws it.)
+      expect(named(await missed('t'))).not.toContain('banner');
+      await themeEditSet('t', 'vibrancy', '80', {cwd});
       const m = (await missed('t')).find(x => x.part === 'banner');
       expect(m?.line).toMatch(/ set t info /);
       await follow(/** @type {string} */ (m?.line));
@@ -176,6 +181,7 @@ describe('a setting takes a part off only for the aspect the list is about', () 
     async () => {
       await themeEditNew('u', {cwd, like: 'neutral'});
       await themeEditSet('u', 'accent', '#0b6e4f', {cwd});
+      await themeEditSet('u', 'vibrancy', '80', {cwd});
       await themeEditSet('u', 'background-color', '#ff0000', {
         cwd,
         on: 'banner',

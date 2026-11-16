@@ -23,7 +23,91 @@ const isBlock = value =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * @typedef {{path: string[], why: string}} WrittenValueProblem
+ * A block of keys, as a theme writes one: a plain object. An instance of a
+ * class (a Date) is a value, which the build writes as its text.
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
+const isPlainBlock = value =>
+  isBlock(value) && Object.prototype.toString.call(value) === '[object Object]';
+
+/**
+ * A primitive's boxed form (`new String('4px')`, `Object(4)`), or false.
+ * Core writes a token's value as text, which unboxes it.
+ * @param {unknown} value
+ */
+const boxed = value =>
+  isBlock(value) &&
+  /^\[object (?:String|Number|Boolean)\]$/.test(
+    Object.prototype.toString.call(value),
+  );
+
+/**
+ * A JSON replacer that writes a BigInt as its digits, the text Core writes
+ * into the stylesheet for it: JSON itself has no BigInt.
+ * @param {string} _key
+ * @param {unknown} value
+ */
+export const bigIntAsText = (_key, value) =>
+  typeof value === 'bigint' ? String(value) : value;
+
+/**
+ * A value as the build hands it to Core: each BigInt in it, in plain
+ * objects and arrays at any depth, replaced by its digits, and each boxed
+ * primitive (`new String('4px')`) by its primitive. The same object where
+ * it holds none, so a theme without one is handed on as it is. The value
+ * judge reads values by the same rules, so what is warned is what is
+ * written.
+ * @template T
+ * @param {T} value
+ * @param {Map<any, any>} [done] each object already replaced, for one that holds itself
+ * @returns {T}
+ */
+export function writtenPrimitives(value, done = new Map()) {
+  if (typeof value === 'bigint') return /** @type {any} */ (String(value));
+  if (boxed(value)) return /** @type {any} */ (value).valueOf();
+  if (!Array.isArray(value) && !isPlainBlock(value)) return value;
+  if (done.has(value)) return done.get(value);
+  done.set(value, value);
+  /** @type {any} */
+  let copy = null;
+  for (const [k, v] of Object.entries(value)) {
+    const next = writtenPrimitives(v, done);
+    if (next === v) continue;
+    copy ??= Array.isArray(value) ? [...value] : {...value};
+    copy[k] = next;
+  }
+  if (copy) done.set(value, copy);
+  return copy ?? value;
+}
+
+/**
+ * The JSON text Core writes for an object a part holds as a value, where it
+ * writes a BigInt as its digits (the build hands Core its digits); null for
+ * an object that holds itself, which has no JSON text.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function partJsonText(value) {
+  try {
+    return JSON.stringify(value, bigIntAsText);
+  } catch {
+    return null;
+  }
+}
+
+/** What the build writes for a value, as Core writes it (as text). @param {unknown} value */
+const writtenAs = value => {
+  try {
+    return String(value);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * @typedef {{path: string[], why: string, unbuildable?: boolean}} WrittenValueProblem
+ *   `unbuildable`: a value Core cannot write at all, so the build stops
  */
 
 /**
@@ -32,12 +116,19 @@ const isBlock = value =>
  * @param {unknown} value
  */
 function nonText(key, value) {
+  if (boxed(value)) return nonText(key, /** @type {any} */ (value).valueOf());
   if (typeof value === 'boolean')
     return `${key} holds ${value}, which the build writes as it is (${key}: ${value}), a value no browser reads: give it a CSS value in quotes`;
   if (typeof value === 'number' && !Number.isFinite(value))
     return `${key} holds ${value}, a number no CSS value holds (a computed value gone wrong, such as a division by zero), which the build writes as it is: give it a CSS value in quotes`;
+  if (typeof value === 'bigint')
+    return `${key} holds ${value}n, a BigInt, which the build writes as ${value}: give it a CSS value in quotes`;
+  if (typeof value === 'function')
+    return `${key} holds a function, which the build writes as its source text (${writtenAs(value)?.replace(/\s+/g, ' ').slice(0, 60)}), a value no browser reads: call it, or give it a CSS value in quotes`;
+  if (typeof value === 'symbol')
+    return `${key} holds a symbol, which the build cannot write as text: give it a CSS value in quotes`;
   if (isBlock(value))
-    return `${key} holds an object, which the build writes as [object Object], a value no browser reads: give it a CSS value in quotes${'light' in value || 'dark' in value ? ", or a [light, dark] pair such as ['#fff', '#000']" : ''}`;
+    return `${key} holds an object, which the build writes as ${writtenAs(value) ?? 'no text'}, a value no browser reads: give it a CSS value in quotes${isPlainBlock(value) && ('light' in value || 'dark' in value) ? ", or a [light, dark] pair such as ['#fff', '#000']" : ''}`;
   return null;
 }
 
@@ -57,17 +148,28 @@ function tokenValueProblem(key, value, reads) {
     const missing = value.findIndex(h => h === null || h === undefined);
     if (missing !== -1)
       return `${key} gives no ${missing === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and the browser drops the whole value, in both modes: give both halves, or one value for both modes`;
-    const half = value.find(
+    const halves = value.map(h => (boxed(h) ? h.valueOf() : h));
+    const half = halves.find(
       h => typeof h !== 'string' && typeof h !== 'number',
     );
-    return half === undefined
-      ? null
-      : `${key} holds a half that is no text (${typeof half}), so the build writes ${shown}, which the browser drops: give each half a CSS value in quotes`;
+    if (half !== undefined)
+      return `${key} holds a half that is no text (${typeof half}), so the build writes ${shown}, which the browser drops: give each half a CSS value in quotes`;
+    // light-dark() takes two colors: an empty half or a number is none.
+    const empty = halves.findIndex(
+      h => typeof h === 'string' && h.trim() === '',
+    );
+    if (empty !== -1)
+      return `${key} gives an empty ${empty === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
+    const number = halves.findIndex(h => typeof h === 'number');
+    if (number !== -1)
+      return `${key} gives the number ${halves[number]} as its ${number === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
+    return null;
   }
   const bad = nonText(key, value);
   if (bad) return bad;
+  if (boxed(value)) value = /** @type {any} */ (value).valueOf();
   if (typeof value !== 'string') return null;
-  for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/g)) {
+  for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/gi)) {
     if (comma || name === key) continue;
     if (reads && !reads(name))
       return `${key} reads var(${name}), which no token sets, so it has no value and the browser drops what reads it: read a token, or give a fallback (var(${name}, <value>))`;
@@ -99,7 +201,7 @@ function tokenNameProblem(key, value) {
 const varNames = value =>
   (Array.isArray(value) ? value : [value]).flatMap(part =>
     typeof part === 'string'
-      ? [...part.matchAll(/var\(\s*(--[\w-]+)/g)].map(m => m[1])
+      ? [...part.matchAll(/var\(\s*(--[\w-]+)/gi)].map(m => m[1])
       : [],
   );
 
@@ -152,25 +254,66 @@ export function cycleProblem(name, values) {
  * its tokens and local tokens, and in its parts' properties, on the page,
  * its surfaces (onDark, onLight) and the adaptation rules' values.
  * @param {Record<string, any>} theme
- * @param {{reads?: (name: string) => boolean}} [options] `reads`: whether a
- *   var() of a name reads a value (left out, var() targets are not judged)
+ * @param {{reads?: (name: string) => boolean, rootTokens?: Record<string, unknown>, surfaceDefaults?: {onDark?: Record<string, unknown>, onLight?: Record<string, unknown>}}} [options]
+ *   `reads`: whether a var() of a name reads a value (left out, var()
+ *   targets are not judged); `rootTokens`: the token definitions Core's
+ *   stylesheet sets on the theme's root too, which a loop of the page's
+ *   tokens can run through; `surfaceDefaults`: the tokens Core itself sets
+ *   on each media surface, which a resolved surface carries: a loop runs
+ *   through them, but they are Core's, not the theme's, so none is named
  * @returns {WrittenValueProblem[]}
  */
-export function writtenValueProblems(theme, {reads} = {}) {
+export function writtenValueProblems(
+  theme,
+  {reads, rootTokens, surfaceDefaults} = {},
+) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
   /** @param {any} node @param {string[]} at @param {number} depth */
   const part = (node, at, depth) => {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
-      if (isBlock(v)) {
+      if (isPlainBlock(v)) {
         part(v, [...at, k], depth + 1);
         continue;
       }
-      const why = Array.isArray(v)
-        ? `${k} holds an array, which the build writes as JSON text (${JSON.stringify(v)}), a value no browser reads: give it a CSS value in quotes`
-        : (nonText(k, v) ??
-          (k.startsWith('--') ? cycleProblem(k, ownCustom(node)) : null));
+      if (typeof v === 'symbol') {
+        out.push({
+          path: [...at, k],
+          why: `${k} holds a symbol, which has no text the build can write: give it a CSS value in quotes`,
+          unbuildable: true,
+        });
+        continue;
+      }
+      // A boxed primitive is handed to Core as its primitive, so it is
+      // judged as that.
+      if (boxed(v)) {
+        const why = nonText(k, /** @type {any} */ (v).valueOf());
+        if (why) out.push({path: [...at, k], why});
+        continue;
+      }
+      // Core writes an object a part holds as a value (an array, a Date) as
+      // its JSON text.
+      if (Array.isArray(v) || isBlock(v)) {
+        const text = partJsonText(v);
+        const what = Array.isArray(v) ? 'an array' : 'an object';
+        out.push(
+          text == null
+            ? {
+                path: [...at, k],
+                why: `${k} holds ${what} that holds itself, which has no text the build can write: give it a CSS value in quotes`,
+                unbuildable: true,
+              }
+            : {
+                path: [...at, k],
+                why: `${k} holds ${what}, which the build writes as JSON text (${text}), a value no browser reads: give it a CSS value in quotes`,
+              },
+        );
+        continue;
+      }
+      const why =
+        nonText(k, v) ??
+        (k.startsWith('--') ? cycleProblem(k, ownCustom(node)) : null);
       if (why) out.push({path: [...at, k], why});
     }
   };
@@ -179,8 +322,11 @@ export function writtenValueProblems(theme, {reads} = {}) {
     Object.fromEntries(
       Object.entries(node).filter(([k]) => k.startsWith('--')),
     );
-  /** @param {any} surface @param {string[]} at */
-  const visit = (surface, at) => {
+  /**
+   * @param {any} surface @param {string[]} at
+   * @param {Record<string, unknown>} [defaults] the tokens Core sets there
+   */
+  const visit = (surface, at, defaults = {}) => {
     if (!isBlock(surface) || '__built' in surface) return;
     // A defined theme's tokens are resolved (a pair is already its
     // light-dark() text); the ones its author wrote are `__inputTokens`.
@@ -189,8 +335,15 @@ export function writtenValueProblems(theme, {reads} = {}) {
       map === 'tokens' && '__inputTokens' in surface
         ? surface.__inputTokens
         : surface[map];
-    // Tokens and local tokens are set on the same element.
+    // Tokens and local tokens are set on the same element; on the page's
+    // root, so are Core's token definitions and the tokens the theme takes
+    // from the theme it extends (the resolved tokens), under the theme's own.
+    const page = at.length === 0;
     const onElement = {
+      ...(page ? (rootTokens ?? {}) : {}),
+      ...(page && '__inputTokens' in surface && isBlock(surface.tokens)
+        ? surface.tokens
+        : {}),
       ...(isBlock(valuesOf('localTokens')) ? valuesOf('localTokens') : {}),
       ...(isBlock(valuesOf('tokens')) ? valuesOf('tokens') : {}),
     };
@@ -198,6 +351,25 @@ export function writtenValueProblems(theme, {reads} = {}) {
       const values = valuesOf(map);
       if (isBlock(values))
         for (const [k, v] of Object.entries(values)) {
+          if (
+            map === 'tokens' &&
+            Object.hasOwn(defaults, k) &&
+            defaults[k] === v
+          )
+            continue;
+          // Core writes a token's value as text: a symbol has none, and an
+          // object that holds itself cannot be read for one.
+          if (
+            typeof v === 'symbol' ||
+            (isBlock(v) && !boxed(v) && partJsonText(v) == null)
+          ) {
+            out.push({
+              path: [...at, map, k],
+              why: `${k} holds ${typeof v === 'symbol' ? 'a symbol' : 'an object that holds itself'}, which has no text the build can write: give it a CSS value in quotes`,
+              unbuildable: true,
+            });
+            continue;
+          }
           const why =
             tokenNameProblem(k, v) ??
             tokenValueProblem(k, v, reads) ??
@@ -212,8 +384,12 @@ export function writtenValueProblems(theme, {reads} = {}) {
             part(rules, [...at, 'components', name, key], 0);
   };
   visit(theme, []);
-  visit(theme.onDark ?? theme.__onDark, ['onDark']);
-  visit(theme.onLight ?? theme.__onLight, ['onLight']);
+  visit(theme.onDark ?? theme.__onDark, ['onDark'], surfaceDefaults?.onDark);
+  visit(
+    theme.onLight ?? theme.__onLight,
+    ['onLight'],
+    surfaceDefaults?.onLight,
+  );
   const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
   if (Array.isArray(rules))
     rules.forEach((rule, i) =>

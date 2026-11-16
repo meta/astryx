@@ -794,6 +794,7 @@
     "/templates/product-detail/",
     "/templates/product-gallery/",
     "/templates/record-lookup/",
+    "/templates/run-console/",
     "/templates/settings-dialog/",
     "/templates/settings-sidebar/",
     "/templates/settings/",

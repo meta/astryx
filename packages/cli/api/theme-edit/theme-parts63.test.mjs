@@ -3,7 +3,7 @@
 /**
  * A part whose text sits on Core's media surface inside it (a toast's
  * inverted surface) takes its text color through the on-dark and on-light
- * colors; resting shadows on ringed parts keep each render's own rings (no
+ * colors, which its color writes; resting shadows on ringed parts keep each render's own rings (no
  * shadow too) and give way to a state's own shadow; an input's focus ring
  * is its box-shadow ring; thumb words; covers notes keep their mode; the
  * corners help names the step between round and pill. Against real bundled
@@ -68,26 +68,23 @@ const top = async (q, theme) => {
 };
 
 describe("a toast's text color", () => {
-  it('is refused on the toast with the on-dark and on-light lines, which are accepted', async ctx => {
+  it('is its color on the toast, and a text token there is refused with that line', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('t', {cwd, like: 'neutral'});
-    for (const thing of ['color', '--color-text-primary']) {
-      const r = await refusal(() =>
-        themeEditSet('t', thing, '#2a2a2a', {cwd, on: 'toast'}),
-      );
-      expect(r.code, thing).toBe('ERR_THEME_NO_EFFECT');
-      expect(r.message, thing).toMatch(/media surface/);
-    }
+    const r = await refusal(() =>
+      themeEditSet('t', '--color-text-primary', '#2a2a2a', {cwd, on: 'toast'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toMatch(/media surface/);
     const answer = await top('make the toast text #2a2a2a', 't');
-    expect(answer.commands).toEqual([
-      "set t --color-on-dark '#2a2a2a' --on toast",
-      "set t --color-on-light '#2a2a2a' --on toast",
-    ]);
-    await themeEditSet('t', '--color-on-dark', '#2a2a2a', {cwd, on: 'toast'});
-    await themeEditSet('t', '--color-on-light', '#2a2a2a', {
-      cwd,
-      on: 'toast',
-    });
+    expect(answer.commands).toEqual(["set t color '#2a2a2a' --on toast"]);
+    await themeEditSet('t', 'color', '#2a2a2a', {cwd, on: 'toast'});
+    // The color goes into the two colors the surface gives its text, on
+    // the toast alone.
+    const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+    const toast = css.slice(css.indexOf('.astryx-toast'));
+    expect(toast).toMatch(/--color-on-dark:\s*#2a2a2a/i);
+    expect(toast).toMatch(/--color-on-light:\s*#2a2a2a/i);
   }, 240_000);
 });
 
