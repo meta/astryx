@@ -34,6 +34,7 @@ export const doc = {
         'One or more exact selectors. Use Name, package/Name, @scope/package/Name, or @scope/package@version/Name. Two or more return one ordered batch. At most 100 selectors are accepted.',
       required: false,
       variadic: true,
+      names: 'component',
     },
   ],
   options: [
