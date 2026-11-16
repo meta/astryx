@@ -9777,15 +9777,16 @@ export async function contrastProblems(ctx, data, res) {
    * a token of the theme, `var(--token)`, gives the value it has in that
    * mode. Anything else is as written.
    * @param {string | null | undefined} v @param {string} m
+   * @param {{light: Record<string, string>, dark: Record<string, string>}} [within] the tokens a `var()` reads (the theme's; the base theme's for its own look)
    * @returns {string | null}
    */
-  const inMode = (v, m) => {
+  const inMode = (v, m, within = res) => {
     if (v == null) return null;
     const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(String(v).trim());
     const side = split ? split[m === 'dark' ? 2 : 1].trim() : String(v).trim();
     const ref = /^var\((--[\w-]+)\)$/.exec(side);
     return ref
-      ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? side)
+      ? (within[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? side)
       : side;
   };
   /**
@@ -9825,8 +9826,8 @@ export async function contrastProblems(ctx, data, res) {
     );
     return found.length === 1 ? found[0] : null;
   };
-  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const ofBase = (p, side, m) => {
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string, within?: {light: Record<string, string>, dark: Record<string, string>}) => string | null} */
+  const ofBase = (p, side, m, within = res) => {
     // The ground's own variant for the ground side (text on a header
     // variant), else the pair's variant.
     const pw = /** @type {any} */ (p);
@@ -9853,7 +9854,7 @@ export async function contrastProblems(ctx, data, res) {
               })
             : null))
         : null;
-    if (inState) return inMode(inState, m);
+    if (inState) return inMode(inState, m, within);
     const own =
       baseComponent(
         base,
@@ -9868,9 +9869,27 @@ export async function contrastProblems(ctx, data, res) {
         ? baseComponent(base, ctx, target, 'background', {
             when: w,
           })
+        : null) ??
+      // Text that sets no color of its own takes its text token as the
+      // part it sits on points it, in that part's variant (butter's colored
+      // cards write their own text colors, in both modes).
+      (side === 'fg' && p.bg.target && p.bg.target !== target
+        ? (p.fg.tokens
+            .map(tok =>
+              baseComponent(
+                base,
+                ctx,
+                /** @type {string} */ (p.bg.target),
+                tok,
+                {
+                  when: pw.groundWhen ?? pw.when,
+                },
+              ),
+            )
+            .find(Boolean) ?? null)
         : null);
     if (!own) return null;
-    return inMode(own, m);
+    return inMode(own, m, within);
   };
   /**
    * The variant a pair's text is drawn in: its own, or the one variant of
@@ -10144,6 +10163,10 @@ export async function contrastProblems(ctx, data, res) {
     // Lifted text on the tint is held to 4.5:1, never excused by an
     // unlifted base pair.
     if (onTint(p, m) != null) return null;
+    // The base theme's own rule for the part (or for the part its text sits
+    // on, in that part's variant), as the theme's look reads it.
+    const own = ofBase(p, side, m, base);
+    if (own) return own;
     const s = p[side];
     const tokens = side === 'fg' ? textTokens(p, m, baseValue) : s.tokens;
     return tokens.length
@@ -10475,6 +10498,8 @@ export async function contrastProblems(ctx, data, res) {
       compositeOver,
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
+      drawnByRule: (p, side, m) =>
+        ofBase(p, side, inScheme(p, side, m), base) != null,
     },
     [...variantPairs, ...headerPairs, ...ownTextPairs, ...mediaPairs],
   );
@@ -10583,343 +10608,420 @@ export async function contrastProblems(ctx, data, res) {
     }
     return out;
   };
-  return [
-    ...problems.map(x => ({
-      // What the problem is, whatever its ratio: the text, the token or
-      // property that draws it, what it sits on, its variant and mode.
-      key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
-      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${/** @type {any} */ (x.pair)?.drawnIn ? `${/** @type {any} */ (x.pair).drawnIn} (${/** @type {any} */ (x.pair).mediaOf} draws it in its ${/** @type {any} */ (x.pair).drawnIn} scheme)` : x.mode} (${x.fg} on ${(x.pair ? nearerFillOf(/** @type {TextPair} */ (x.pair), inScheme(/** @type {TextPair} */ (x.pair), 'bg', x.mode))?.part : null) ?? x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
-      // The fix sets what draws the text: the setting that wins in CSS,
-      // where one does, else the text token where the text sits.
-      fix: (() => {
-        const pair = /** @type {TextPair} */ (x.pair);
-        // (A pair drawn in a state, a selected item's: its line is for that
-        // state.)
-        const pairIn = pairState(pair);
-        const stateFlag = pairIn ? ` --state ${pairIn}` : '';
-        // (The state goes on a line for a part that has it: a part shown
-        // only in another part's state, a checkbox's check in its checked
-        // box, takes its line at rest.)
-        /** @param {string | null | undefined} part */
-        const stateOn = part =>
-          pairIn &&
-          (!part ||
-            (ctx.project.target.get(part)?.states ?? []).includes(pairIn))
-            ? ` --state ${pairIn}`
-            : '';
-        // Text with a role of its own (secondary text, a placeholder, a
-        // link's accent, a status color) keeps it: its own color moved
-        // toward black or white just far enough to read at 4.5:1, not the
-        // plain black or white of primary text, which would make it read
-        // as body text.
-        // (It reads on every ground that text sits on there: a token set on
-        // a part reaches its text on each of the part's grounds.)
-        const fgNow = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
-        const ownRole =
-          fgNow &&
-          /^--color-text-(?!primary$)[\w-]+$/.test(String(pair.fg.tokens?.[0]));
-        const page = parseColor(
-          String(
-            res[/** @type {'light' | 'dark'} */ (x.mode)][
-              '--color-background-body'
-            ],
+  /**
+   * The base theme's own failures of one cause (the same text color on the
+   * same ground color, in the same variant and mode, on whichever parts) as
+   * one note: the texts it reaches named together with the parts they sit
+   * on, the ratios as a range, and the first text's line. Every other
+   * problem as it is.
+   * @param {Array<{x: any, problem: ThemeProblem}>} list
+   * @returns {ThemeProblem[]}
+   */
+  const oneNotePerCause = list => {
+    /** @type {Map<string, Array<{x: any, problem: ThemeProblem}>>} */
+    const causes = new Map();
+    /** @type {Array<ThemeProblem | string>} */
+    const out = [];
+    for (const it of list) {
+      if (!it.x.base) {
+        out.push(it.problem);
+        continue;
+      }
+      const k = `base|${it.x.fg}|${it.x.bg}|${it.x.when ?? ''}|${it.x.mode}`;
+      if (!causes.has(k)) {
+        causes.set(k, []);
+        out.push(k);
+      }
+      /** @type {any[]} */ (causes.get(k)).push(it);
+    }
+    /** A base note with the line that fixes it in this theme, where one does. @param {ThemeProblem} n */
+    const withLine = n =>
+      n.fix ? {...n, text: `${n.text}; to fix it in this theme: ${n.fix}`} : n;
+    return out.map(o => {
+      if (typeof o !== 'string') return o;
+      const group = /** @type {Array<{x: any, problem: ThemeProblem}>} */ (
+        causes.get(o)
+      );
+      if (group.length === 1) return withLine(group[0].problem);
+      const [{x}] = group;
+      const ratios = group.map(g => Number(g.x.ratio));
+      const lo = Math.min(...ratios);
+      const hi = Math.max(...ratios);
+      const texts = [
+        ...new Set(
+          group.map(
+            g =>
+              `${g.x.part} ("${g.x.sample}")${g.x.bgPart ? ` on ${g.x.bgPart}` : ''}`,
           ),
-        );
-        const groundsThere = ownRole
-          ? [
-              x.ground,
-              .../** @type {TextPair[]} */ (
-                /** @type {any} */ (ctx).parts.pairs
-              )
-                .filter(
-                  q =>
-                    (q.bg.target === x.bgPart || q.fg.target === x.textPart) &&
-                    q.fg.tokens[0] === pair.fg.tokens[0],
-                )
-                .map(q => {
-                  const v = String(value(q, 'bg', x.mode) ?? '');
-                  const c = parseColor(v);
-                  const a = alphaOf(v);
-                  return c && a < 1 && page ? compositeOver(c, a, page) : c;
-                })
-                .filter(g => g != null && plainOn(g) === plainOn(x.ground)),
-            ]
-          : [];
-        const color = `'${
-          ownRole
-            ? nearestReading(
-                /** @type {[number, number, number]} */ (fgNow),
-                /** @type {Array<[number, number, number]>} */ (groundsThere),
-                4.5,
-              )
-            : plainOn(x.ground)
-        }'`;
-        // Text in the top bar sits over each of the bar's grounds (its
-        // variants): when they need opposite text, one color set on the
-        // text's part turns it the wrong way on the others, so no line
-        // fixes this alone.
-        const over = /** @type {any} */ (pair).over;
-        if (over && !(/** @type {any} */ (pair).mediaOf)) {
-          const own = value(pair, 'bg', x.mode);
-          const sides = new Set(
-            grounds.map(g => {
-              const under = parseColor(value({...pair, bg: g}, 'bg', x.mode));
-              const top = parseColor(own);
-              const a = alphaOf(own);
-              const rgb =
-                top && under
-                  ? a >= 1
-                    ? top
-                    : compositeOver(top, a, under)
-                  : under;
-              return rgb ? plainOn(rgb) : null;
-            }),
-          );
-          if (sides.size > 1) return null;
-        }
-        const drawn = drawnBy(pair, x.mode);
-        // Scoped to the variant the text is drawn in, so the fix leaves the
-        // part's other variants, on other grounds, as they are.
-        const variant = pairVariant(pair);
-        const when = (/** @type {string | null | undefined} */ w) =>
-          w ? ` --when ${w}` : '';
-        // A part the theme scopes to itself alone (a setting on it with
-        // --only) is fixed alone too: --on it would reach its whole group.
-        const only = (/** @type {string | null | undefined} */ part) =>
-          part && data.settings.some(s => s.on === part && s.only)
-            ? ' --only'
-            : '';
-        // Text inside Core's media surface (a button on a lightbox's dark
-        // island) is drawn in the surface's scheme whatever the page's
-        // mode: a color on its part (its variant) for that mode reaches it
-        // there, and the page's parts in that mode, which sit on a ground of
-        // the same kind. When the part's own fill lets the surface's ground
-        // through (a transparent button) and the same text on the page in
-        // that mode needs the other color, the two grounds disagree: the
-        // surface's own on-color for its side reaches only the text inside
-        // it (unless a color the theme set on the part draws the text).
-        const onMedia = /** @type {any} */ (pair).mediaOf;
-        const drawnIn = /** @type {any} */ (pair).drawnIn;
-        if (onMedia && drawnIn) {
-          const q = /** @type {TextPair} */ (/** @type {any} */ (pair).pageOf);
-          const v = q ? value(q, 'bg', drawnIn) : null;
-          const page = parseColor(
-            String(
-              res[/** @type {'light' | 'dark'} */ (drawnIn)][
-                '--color-background-body'
-              ],
-            ),
-          );
-          const c = parseColor(String(v ?? ''));
-          const a = alphaOf(String(v ?? ''));
-          const through =
-            !/gradient\(|url\(/.test(String(v ?? '')) && (!c || a < 1);
-          const ground = !through
-            ? null
-            : c && page
-              ? compositeOver(c, a, page)
-              : page;
-          const theirs = drawnBy(pair, drawnIn);
-          if (ground && plainOn(ground) !== plainOn(x.ground)) {
-            if (theirs?.thing === 'color') return null;
-            // (Text the surface draws on its own on-color grounds, a
-            // caption bar, would need that on-color the other way: then the
-            // surface's own ground (its overlay) is what turned, and the
-            // base theme's value for it is the line.)
-            const want = plainOn(x.ground);
-            const bars = census.pairs.some((/** @type {TextPair} */ q) => {
-              if (
-                q.bg.target !== onMedia ||
-                !/^--color-on-/.test(String(q.bg.tokens[0]))
-              )
-                return false;
-              const g = parseColor(String(value(q, 'bg', drawnIn) ?? ''));
-              return g != null && plainOn(g) !== want;
-            });
-            if (!bars)
-              return `${P} set ${slug} --color-on-${drawnIn} ${color} --on ${onMedia}`;
-            const tok = /** @type {any} */ (pair).over?.tokens?.[0];
-            const was = tok ? /** @type {any} */ (base)?.[x.mode]?.[tok] : null;
-            return tok &&
-              was &&
-              was !== res[/** @type {'light' | 'dark'} */ (x.mode)][tok]
-              ? `${P} set ${slug} ${tok} '${was}'${stateFlag}${modeFlag(x.mode)}`
-              : null;
-          }
-          if (x.textPart)
-            return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(theirs?.when ?? variant)}${modeFlag(drawnIn)}`;
-        }
-        // Text whose part's own color reads on a pane the theme painted for
-        // it (a side nav's dark fill), shown here on another part that
-        // holds it unpainted (the mobile nav drawer): that part takes the
-        // same fill, which keeps the color where it reads. Recoloring the
-        // text would turn it the wrong way on the painted pane.
-        if (
-          drawn?.thing === 'color' &&
-          x.textPart &&
-          x.bgPart &&
-          x.bgPart !== x.textPart &&
-          drawn.on &&
-          partsOf(ctx, drawn).includes(x.textPart)
-        ) {
-          const holds = (/** @type {string} */ a, /** @type {string} */ b) =>
-            /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
-          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
-          const pane = [...data.settings]
-            .reverse()
-            .find(
-              y =>
-                y.source === 'property' &&
-                /^background(-color)?$/.test(y.thing) &&
-                !y.when &&
-                !y.state &&
-                (!y.mode || y.mode === x.mode) &&
-                y.on &&
-                y.on !== x.bgPart &&
-                partsOf(ctx, y).some(q => holds(q, String(x.textPart))),
-            );
-          const paneColor = pane ? parseColor(String(pane.value)) : null;
-          if (
-            pane &&
-            fg &&
-            paneColor &&
-            holds(x.bgPart, x.textPart) &&
-            ratio(fg, paneColor) >= 4.5
-          )
-            return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateOn(x.bgPart)}${modeFlag(x.mode)}`;
-        }
-        // Text a whole-theme token setting draws, too faint in several
-        // places: one line on that token, the nearest color that reads on
-        // every ground it is too faint on (all of one side, light or dark).
-        const whole = wholeOf(pair, x.mode);
-        const wholeOn = whole
-          ? wholeGrounds.get(`${whole.thing}|${x.mode}`)
-          : null;
-        if (
-          whole &&
-          wholeOn &&
-          wholeOn.length > 1 &&
-          wholeOn.every(g => plainOn(g) === plainOn(wholeOn[0]))
-        ) {
-          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
-          if (fg)
-            return `${P} set ${slug} ${whole.thing} '${nearestReading(fg, wholeOn, 4.5)}'${modeFlag(x.mode)}`;
-        }
-        if (drawn) {
-          const onText =
-            drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
-          // A setting that reaches the text's part through its group (a
-          // color on date-input, which every input takes) cannot name a
-          // variant only the text's part has: that variant is scoped on
-          // the text's own part instead.
-          const v = drawn.when ?? (onText ? variant : null);
-          const name = /^variant:([\w-]+)$/.exec(String(v ?? ''))?.[1];
-          if (
-            name &&
-            !drawn.when &&
-            drawn.on &&
-            x.textPart &&
-            drawn.on !== x.textPart &&
-            ![
-              .../** @type {string[]} */ (
-                /** @type {any} */ (ctx.C.MAP[drawn.on])?.attrs?.variant ?? []
+        ),
+      ];
+      return withLine({
+        key: o,
+        text: `the base theme's ${x.fg} on ${x.bg} is ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode}, in ${texts.length} texts: ${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}; text needs 4.5:1; the base theme draws it so`,
+        fix: group.find(g => g.problem.fix)?.problem.fix ?? null,
+      });
+    });
+  };
+  return [
+    ...oneNotePerCause(
+      problems.map(x => ({
+        x,
+        problem: {
+          // What the problem is, whatever its ratio: the text, the token or
+          // property that draws it, what it sits on, its variant and mode. A
+          // failure the base theme draws itself (`base`) is said as the base
+          // theme's: a note, with the line that fixes it in this theme.
+          key: `${/** @type {any} */ (x).base ? 'base|' : ''}text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
+          text: `${/** @type {any} */ (x).base ? "the base theme's " : ''}text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${/** @type {any} */ (x.pair)?.drawnIn ? `${/** @type {any} */ (x.pair).drawnIn} (${/** @type {any} */ (x.pair).mediaOf} draws it in its ${/** @type {any} */ (x.pair).drawnIn} scheme)` : x.mode} (${x.fg} on ${(x.pair ? nearerFillOf(/** @type {TextPair} */ (x.pair), inScheme(/** @type {TextPair} */ (x.pair), 'bg', x.mode))?.part : null) ?? x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1${/** @type {any} */ (x).base ? '; the base theme draws it so' : ''}`,
+          // The fix sets what draws the text: the setting that wins in CSS,
+          // where one does, else the text token where the text sits.
+          fix: (() => {
+            const pair = /** @type {TextPair} */ (x.pair);
+            // (A pair drawn in a state, a selected item's: its line is for that
+            // state.)
+            const pairIn = pairState(pair);
+            const stateFlag = pairIn ? ` --state ${pairIn}` : '';
+            // (The state goes on a line for a part that has it: a part shown
+            // only in another part's state, a checkbox's check in its checked
+            // box, takes its line at rest.)
+            /** @param {string | null | undefined} part */
+            const stateOn = part =>
+              pairIn &&
+              (!part ||
+                (ctx.project.target.get(part)?.states ?? []).includes(pairIn))
+                ? ` --state ${pairIn}`
+                : '';
+            // Text with a role of its own (secondary text, a placeholder, a
+            // link's accent, a status color) keeps it: its own color moved
+            // toward black or white just far enough to read at 4.5:1, not the
+            // plain black or white of primary text, which would make it read
+            // as body text.
+            // (It reads on every ground that text sits on there: a token set on
+            // a part reaches its text on each of the part's grounds.)
+            const fgNow = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+            const ownRole =
+              fgNow &&
+              /^--color-text-(?!primary$)[\w-]+$/.test(
+                String(pair.fg.tokens?.[0]),
+              );
+            const page = parseColor(
+              String(
+                res[/** @type {'light' | 'dark'} */ (x.mode)][
+                  '--color-background-body'
+                ],
               ),
-            ].includes(name)
-          )
-            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateOn(drawn.on)}${modeFlag(x.mode)}`;
-        }
-        // (Text on a toast's own surface takes a color on the toast: a
-        // text token there never reaches it.)
-        if (x.textPart && autoMediaPart(ctx, x.textPart))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
-        // Text on a surface's own ground drawn from its on-color (a
-        // lightbox's caption bar): the ground is what changed, and that
-        // on-color on the surface is the line that reaches it, set to the
-        // color the text reads on.
-        const groundToken = String(pair.bg.tokens?.[0] ?? '');
-        if (
-          x.bgPart &&
-          ctx.C.MAP[x.bgPart]?.media &&
-          !autoMediaPart(ctx, x.bgPart) &&
-          /^--color-on-(dark|light)$/.test(groundToken)
-        ) {
-          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
-          return fg
-            ? `${P} set ${slug} ${groundToken} '${plainOn(fg)}' --on ${x.bgPart}${only(x.bgPart)}`
-            : null;
-        }
-        // The base theme colors the text on its own part: only a color
-        // there changes what is drawn.
-        // (Text on a ground part's variants that need opposite text: a color
-        // on the text's part turns it the wrong way on the others.)
-        const was = /** @type {any} */ (pair).replaces;
-        const sidesOver = was
-          ? new Set(
-              variantPairs
-                .filter(q => /** @type {any} */ (q).replaces === was)
-                .map(q => {
-                  const g = parseColor(value(q, 'bg', x.mode));
-                  return g ? plainOn(g) : null;
+            );
+            const groundsThere = ownRole
+              ? [
+                  x.ground,
+                  .../** @type {TextPair[]} */ (
+                    /** @type {any} */ (ctx).parts.pairs
+                  )
+                    .filter(
+                      q =>
+                        (q.bg.target === x.bgPart ||
+                          q.fg.target === x.textPart) &&
+                        q.fg.tokens[0] === pair.fg.tokens[0],
+                    )
+                    .map(q => {
+                      const v = String(value(q, 'bg', x.mode) ?? '');
+                      const c = parseColor(v);
+                      const a = alphaOf(v);
+                      return c && a < 1 && page ? compositeOver(c, a, page) : c;
+                    })
+                    .filter(g => g != null && plainOn(g) === plainOn(x.ground)),
+                ]
+              : [];
+            const color = `'${
+              ownRole
+                ? nearestReading(
+                    /** @type {[number, number, number]} */ (fgNow),
+                    /** @type {Array<[number, number, number]>} */ (
+                      groundsThere
+                    ),
+                    4.5,
+                  )
+                : plainOn(x.ground)
+            }'`;
+            // Text in the top bar sits over each of the bar's grounds (its
+            // variants): when they need opposite text, one color set on the
+            // text's part turns it the wrong way on the others, so no line
+            // fixes this alone.
+            const over = /** @type {any} */ (pair).over;
+            if (over && !(/** @type {any} */ (pair).mediaOf)) {
+              const own = value(pair, 'bg', x.mode);
+              const sides = new Set(
+                grounds.map(g => {
+                  const under = parseColor(
+                    value({...pair, bg: g}, 'bg', x.mode),
+                  );
+                  const top = parseColor(own);
+                  const a = alphaOf(own);
+                  const rgb =
+                    top && under
+                      ? a >= 1
+                        ? top
+                        : compositeOver(top, a, under)
+                      : under;
+                  return rgb ? plainOn(rgb) : null;
                 }),
-            ).size
-          : 1;
-        if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
-          return sidesOver > 1
-            ? null
-            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
-        const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
-        // A ground part that draws several grounds the theme cannot tell
-        // apart (variants set cannot name): a token set on it would turn
-        // the text on its other grounds the other way. The text's own part
-        // is fixed instead, when its text sits on one ground only; else no
-        // line can fix this alone.
-        const groundsOf = (/** @type {(q: TextPair) => boolean} */ test) =>
-          new Set(
-            /** @type {any} */ (ctx).parts.pairs
-              .filter(
-                (/** @type {TextPair} */ q) =>
-                  q.bg.target === x.bgPart && test(q),
+              );
+              if (sides.size > 1) return null;
+            }
+            const drawn = drawnBy(pair, x.mode);
+            // Scoped to the variant the text is drawn in, so the fix leaves the
+            // part's other variants, on other grounds, as they are.
+            const variant = pairVariant(pair);
+            const when = (/** @type {string | null | undefined} */ w) =>
+              w ? ` --when ${w}` : '';
+            // A part the theme scopes to itself alone (a setting on it with
+            // --only) is fixed alone too: --on it would reach its whole group.
+            const only = (/** @type {string | null | undefined} */ part) =>
+              part && data.settings.some(s => s.on === part && s.only)
+                ? ' --only'
+                : '';
+            // Text inside Core's media surface (a button on a lightbox's dark
+            // island) is drawn in the surface's scheme whatever the page's
+            // mode: a color on its part (its variant) for that mode reaches it
+            // there, and the page's parts in that mode, which sit on a ground of
+            // the same kind. When the part's own fill lets the surface's ground
+            // through (a transparent button) and the same text on the page in
+            // that mode needs the other color, the two grounds disagree: the
+            // surface's own on-color for its side reaches only the text inside
+            // it (unless a color the theme set on the part draws the text).
+            const onMedia = /** @type {any} */ (pair).mediaOf;
+            const drawnIn = /** @type {any} */ (pair).drawnIn;
+            if (onMedia && drawnIn) {
+              const q = /** @type {TextPair} */ (
+                /** @type {any} */ (pair).pageOf
+              );
+              const v = q ? value(q, 'bg', drawnIn) : null;
+              const page = parseColor(
+                String(
+                  res[/** @type {'light' | 'dark'} */ (drawnIn)][
+                    '--color-background-body'
+                  ],
+                ),
+              );
+              const c = parseColor(String(v ?? ''));
+              const a = alphaOf(String(v ?? ''));
+              const through =
+                !/gradient\(|url\(/.test(String(v ?? '')) && (!c || a < 1);
+              const ground = !through
+                ? null
+                : c && page
+                  ? compositeOver(c, a, page)
+                  : page;
+              const theirs = drawnBy(pair, drawnIn);
+              if (ground && plainOn(ground) !== plainOn(x.ground)) {
+                if (theirs?.thing === 'color') return null;
+                // (Text the surface draws on its own on-color grounds, a
+                // caption bar, would need that on-color the other way: then the
+                // surface's own ground (its overlay) is what turned, and the
+                // base theme's value for it is the line.)
+                const want = plainOn(x.ground);
+                const bars = census.pairs.some((/** @type {TextPair} */ q) => {
+                  if (
+                    q.bg.target !== onMedia ||
+                    !/^--color-on-/.test(String(q.bg.tokens[0]))
+                  )
+                    return false;
+                  const g = parseColor(String(value(q, 'bg', drawnIn) ?? ''));
+                  return g != null && plainOn(g) !== want;
+                });
+                if (!bars)
+                  return `${P} set ${slug} --color-on-${drawnIn} ${color} --on ${onMedia}`;
+                const tok = /** @type {any} */ (pair).over?.tokens?.[0];
+                const was = tok
+                  ? /** @type {any} */ (base)?.[x.mode]?.[tok]
+                  : null;
+                return tok &&
+                  was &&
+                  was !== res[/** @type {'light' | 'dark'} */ (x.mode)][tok]
+                  ? `${P} set ${slug} ${tok} '${was}'${stateFlag}${modeFlag(x.mode)}`
+                  : null;
+              }
+              if (x.textPart)
+                return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(theirs?.when ?? variant)}${modeFlag(drawnIn)}`;
+            }
+            // Text whose part's own color reads on a pane the theme painted for
+            // it (a side nav's dark fill), shown here on another part that
+            // holds it unpainted (the mobile nav drawer): that part takes the
+            // same fill, which keeps the color where it reads. Recoloring the
+            // text would turn it the wrong way on the painted pane.
+            if (
+              drawn?.thing === 'color' &&
+              x.textPart &&
+              x.bgPart &&
+              x.bgPart !== x.textPart &&
+              drawn.on &&
+              partsOf(ctx, drawn).includes(x.textPart)
+            ) {
+              const holds = (
+                /** @type {string} */ a,
+                /** @type {string} */ b,
+              ) =>
+                /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
+              const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+              const pane = [...data.settings]
+                .reverse()
+                .find(
+                  y =>
+                    y.source === 'property' &&
+                    /^background(-color)?$/.test(y.thing) &&
+                    !y.when &&
+                    !y.state &&
+                    (!y.mode || y.mode === x.mode) &&
+                    y.on &&
+                    y.on !== x.bgPart &&
+                    partsOf(ctx, y).some(q => holds(q, String(x.textPart))),
+                );
+              const paneColor = pane ? parseColor(String(pane.value)) : null;
+              if (
+                pane &&
+                fg &&
+                paneColor &&
+                holds(x.bgPart, x.textPart) &&
+                ratio(fg, paneColor) >= 4.5
               )
-              // The text each ground needs now (black or white), as the
-              // theme draws it: grounds a setting made alike are one.
-              .map((/** @type {TextPair} */ q) => {
-                const g = parseColor(value(q, 'bg', x.mode));
-                return g ? plainOn(g) : '';
-              }),
-          ).size;
-        // Text over a region's ground (a button in the top bar): a token on
-        // the region reaches its text there, and nowhere else.
-        const region = /** @type {any} */ (pair).over?.target;
-        if (token && region && !onMedia)
-          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateOn(region)}${modeFlag(x.mode)}`;
-        const mixed =
-          token &&
-          x.bgPart &&
-          x.bgPart !== x.textPart &&
-          !x.when &&
-          !(/** @type {any} */ (pair).groundWhen) &&
-          groundsOf(() => true) > 1;
-        if (mixed)
-          return x.textPart &&
-            groundsOf(
-              (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
-            ) === 1
-            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
-            : null;
-        // (The ground is the part the theme painted under the text, where
-        // it painted one: a tab given a fill of its own.)
-        const groundPart =
-          nearerFillOf(pair, inScheme(pair, 'bg', x.mode))?.part ?? x.bgPart;
-        if (token)
-          return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${token} ${color} --on ${groundPart}${only(String(groundPart))}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateOn(groundPart)}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
-        return x.textPart
-          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
-          : null;
-      })(),
-    })),
+                return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateOn(x.bgPart)}${modeFlag(x.mode)}`;
+            }
+            // Text a whole-theme token setting draws, too faint in several
+            // places: one line on that token, the nearest color that reads on
+            // every ground it is too faint on (all of one side, light or dark).
+            const whole = wholeOf(pair, x.mode);
+            const wholeOn = whole
+              ? wholeGrounds.get(`${whole.thing}|${x.mode}`)
+              : null;
+            if (
+              whole &&
+              wholeOn &&
+              wholeOn.length > 1 &&
+              wholeOn.every(g => plainOn(g) === plainOn(wholeOn[0]))
+            ) {
+              const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+              if (fg)
+                return `${P} set ${slug} ${whole.thing} '${nearestReading(fg, wholeOn, 4.5)}'${modeFlag(x.mode)}`;
+            }
+            if (drawn) {
+              const onText =
+                drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
+              // A setting that reaches the text's part through its group (a
+              // color on date-input, which every input takes) cannot name a
+              // variant only the text's part has: that variant is scoped on
+              // the text's own part instead.
+              const v = drawn.when ?? (onText ? variant : null);
+              const name = /^variant:([\w-]+)$/.exec(String(v ?? ''))?.[1];
+              if (
+                name &&
+                !drawn.when &&
+                drawn.on &&
+                x.textPart &&
+                drawn.on !== x.textPart &&
+                ![
+                  .../** @type {string[]} */ (
+                    /** @type {any} */ (ctx.C.MAP[drawn.on])?.attrs?.variant ??
+                      []
+                  ),
+                ].includes(name)
+              )
+                return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+              return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateOn(drawn.on)}${modeFlag(x.mode)}`;
+            }
+            // (Text on a toast's own surface takes a color on the toast: a
+            // text token there never reaches it.)
+            if (x.textPart && autoMediaPart(ctx, x.textPart))
+              return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+            // Text on a surface's own ground drawn from its on-color (a
+            // lightbox's caption bar): the ground is what changed, and that
+            // on-color on the surface is the line that reaches it, set to the
+            // color the text reads on.
+            const groundToken = String(pair.bg.tokens?.[0] ?? '');
+            if (
+              x.bgPart &&
+              ctx.C.MAP[x.bgPart]?.media &&
+              !autoMediaPart(ctx, x.bgPart) &&
+              /^--color-on-(dark|light)$/.test(groundToken)
+            ) {
+              const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+              return fg
+                ? `${P} set ${slug} ${groundToken} '${plainOn(fg)}' --on ${x.bgPart}${only(x.bgPart)}`
+                : null;
+            }
+            // The base theme colors the text on its own part: only a color
+            // there changes what is drawn.
+            // (Text on a ground part's variants that need opposite text: a color
+            // on the text's part turns it the wrong way on the others.)
+            const was = /** @type {any} */ (pair).replaces;
+            const sidesOver = was
+              ? new Set(
+                  variantPairs
+                    .filter(q => /** @type {any} */ (q).replaces === was)
+                    .map(q => {
+                      const g = parseColor(value(q, 'bg', x.mode));
+                      return g ? plainOn(g) : null;
+                    }),
+                ).size
+              : 1;
+            if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
+              return sidesOver > 1
+                ? null
+                : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+            const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
+            // A ground part that draws several grounds the theme cannot tell
+            // apart (variants set cannot name): a token set on it would turn
+            // the text on its other grounds the other way. The text's own part
+            // is fixed instead, when its text sits on one ground only; else no
+            // line can fix this alone.
+            const groundsOf = (/** @type {(q: TextPair) => boolean} */ test) =>
+              new Set(
+                /** @type {any} */ (ctx).parts.pairs
+                  .filter(
+                    (/** @type {TextPair} */ q) =>
+                      q.bg.target === x.bgPart && test(q),
+                  )
+                  // The text each ground needs now (black or white), as the
+                  // theme draws it: grounds a setting made alike are one.
+                  .map((/** @type {TextPair} */ q) => {
+                    const g = parseColor(value(q, 'bg', x.mode));
+                    return g ? plainOn(g) : '';
+                  }),
+              ).size;
+            // Text over a region's ground (a button in the top bar): a token on
+            // the region reaches its text there, and nowhere else.
+            const region = /** @type {any} */ (pair).over?.target;
+            if (token && region && !onMedia)
+              return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateOn(region)}${modeFlag(x.mode)}`;
+            const mixed =
+              token &&
+              x.bgPart &&
+              x.bgPart !== x.textPart &&
+              !x.when &&
+              !(/** @type {any} */ (pair).groundWhen) &&
+              groundsOf(() => true) > 1;
+            if (mixed)
+              return x.textPart &&
+                groundsOf(
+                  (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
+                ) === 1
+                ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
+                : null;
+            // (The ground is the part the theme painted under the text, where
+            // it painted one: a tab given a fill of its own.)
+            const groundPart =
+              nearerFillOf(pair, inScheme(pair, 'bg', x.mode))?.part ??
+              x.bgPart;
+            if (token)
+              return x.bgPart && x.bgPart !== x.textPart
+                ? `${P} set ${slug} ${token} ${color} --on ${groundPart}${only(String(groundPart))}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateOn(groundPart)}${modeFlag(x.mode)}`
+                : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+            return x.textPart
+              ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
+              : null;
+          })(),
+        },
+      })),
+    ),
     ...borderContrastProblems(ctx, data, res, base),
     ...trackContrastProblems(ctx, data, res, base),
     ...floatingEdgeProblems(ctx, data, res, base),
