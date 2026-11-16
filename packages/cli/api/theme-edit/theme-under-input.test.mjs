@@ -3,13 +3,14 @@
 /**
  * A part drawn under an invisible native input (a checkbox's or radio's
  * box, a switch) never takes the pointer or the focus: the part data
- * records it, and set refuses those states there. Against real bundled
- * base themes.
+ * records it, and set writes those states as the part holding the input
+ * shows them. Against real bundled base themes.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -47,7 +48,7 @@ const needBases = ctx => {
 };
 
 describe('a part under an input', () => {
-  it('refuses a pointer or focus state there, never on a menu item', async ctx => {
+  it('takes a pointer or focus state there from the part holding the input', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('u', {cwd, like: 'neutral'});
     for (const [on, state] of [
@@ -55,18 +56,20 @@ describe('a part under an input', () => {
       ['radio-indicator', 'hover'],
       ['radio-indicator', 'focus-within'],
       ['switch', 'hover'],
-    ]) {
-      const r = await refusal(() =>
-        themeEditSet('u', 'background-color', '#dc2626', {
-          cwd,
-          on,
-          state,
-          ...(on === 'switch' ? {} : {only: true}),
-        }),
-      );
-      expect(r.code, `${on} ${state}`).toBe('ERR_THEME_NO_EFFECT');
-      expect(r.message, `${on} ${state}`).toMatch(/invisible input/);
-    }
+    ])
+      await themeEditSet('u', 'background-color', '#dc2626', {
+        cwd,
+        on,
+        state,
+        ...(on === 'switch' ? {} : {only: true}),
+      });
+    const css = fs.readFileSync(path.join(cwd, 'themes', 'u', 'u.css'), 'utf8');
+    expect(css).toMatch(
+      /\.astryx-checkbox-indicator:where\(\.astryx-checkbox-input:hover \*\)/,
+    );
+    expect(css).toMatch(
+      /\.astryx-radio-indicator:where\(\.astryx-[\w-]+:focus-within \*\)/,
+    );
     // (A part with no input over it keeps its hover.)
     await themeEditSet('u', 'background-color', '#dc2626', {
       cwd,

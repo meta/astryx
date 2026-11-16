@@ -741,6 +741,33 @@ function deepFreeze(value) {
 }
 
 /**
+ * The runtime states the census finds a part's own element marked with
+ * that its doc does not list (a list item rides an Item, whose
+ * `data-selected` marks it selected): each `name=name` condition the part
+ * reads under, less its visual props. Added to the part's states, so set
+ * names them and the build writes them as the data attribute Core marks.
+ * @param {{target: Map<string, {props: string[], states: string[]}>}} project
+ * @param {PartData} parts
+ */
+export function addCensusStates(project, parts) {
+  for (const [part, rec] of Object.entries(parts.map)) {
+    const t = project.target.get(part);
+    if (!t) continue;
+    const props = new Set(t.props);
+    /** @type {Set<string>} */
+    const found = new Set();
+    for (const byCond of Object.values(rec.at ?? {}))
+      for (const cond of Object.keys(byCond ?? {}))
+        for (const pair of cond.split(/\s/)[0].split(','))
+          if (/^([a-z][\w-]*)=\1$/.test(pair)) {
+            const name = pair.slice(0, pair.indexOf('='));
+            if (!props.has(name)) found.add(name);
+          }
+    for (const name of found) if (!t.states.includes(name)) t.states.push(name);
+  }
+}
+
+/**
  * The part data for the installed Core, from the cache or built now.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
@@ -963,6 +990,19 @@ async function buildPartData(project) {
     const layers = walkMarkup(markup.slice(at), decls, tokens, project.target);
     const added = Object.keys(layers.map).filter(k => !(k in result.map));
     for (const k of added) result.map[k] = layers.map[k];
+    // A part the page draws too keeps its page record, and takes from the
+    // opened overlays only the open state the page never shows (a menu's
+    // submenu row, open while its flyout is): its conditions under the open
+    // attribute.
+    for (const [k, rec] of Object.entries(layers.map)) {
+      if (added.includes(k)) continue;
+      const page = result.map[k];
+      if (!page) continue;
+      for (const [prop, byCond] of Object.entries(rec.at ?? {}))
+        for (const [cond, v] of Object.entries(byCond ?? {}))
+          if (/(?:^|,)aria-expanded=true\b/.test(cond.split(' ')[0]))
+            ((page.at ??= {})[prop] ??= {})[cond] ??= v;
+    }
     const seen = new Set(result.pairs.map(x => JSON.stringify(x)));
     for (const x of layers.pairs)
       if (
@@ -1360,7 +1400,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     const ownState = Object.keys(dataAttrs).some(k => states.has(k));
     const context = ownState
       ? []
-      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
+      : [...attrs.matchAll(/\b(aria-(?:current|pressed|expanded))="([^"]*)"/g)]
           .filter(x => x[2] !== 'false')
           .map(x => `${x[1]}=${x[2]}`);
     const env = {...parent.env};

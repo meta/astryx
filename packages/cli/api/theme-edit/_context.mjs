@@ -43,7 +43,7 @@ import {
 } from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
-import {partData} from './_parts.mjs';
+import {addCensusStates, partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
   assetRef,
@@ -146,6 +146,7 @@ export async function context(cwd) {
   let uncheckedCode = null;
   try {
     parts = await partData(project);
+    addCensusStates(project, parts);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);

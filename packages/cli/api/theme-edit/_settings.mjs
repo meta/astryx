@@ -5293,7 +5293,7 @@ export function compileTheme(ctx, data, base) {
       ctx.project.target.get(target)?.states ?? [],
       s.state,
       s.when,
-      wrapsOneControl(ctx, target),
+      controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
     );
     const b = (t[key] ??= {});
@@ -5312,7 +5312,7 @@ export function compileTheme(ctx, data, base) {
       ctx.project.target.get(target)?.states ?? [],
       s.state,
       s.when,
-      wrapsOneControl(ctx, target),
+      controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
     );
     const rule = (t[key] ??= {});
@@ -5987,7 +5987,7 @@ export function compileTheme(ctx, data, base) {
       tg?.states ?? [],
       s.state,
       s.when,
-      wrapsOneControl(ctx, target),
+      controlOf(ctx, target),
       tg?.stateValues,
     );
     if (s.state && slot.key !== (s.when ?? 'base')) return null;
@@ -6086,7 +6086,7 @@ export function compileTheme(ctx, data, base) {
       tg?.states ?? [],
       s.state,
       s.when,
-      wrapsOneControl(ctx, target),
+      controlOf(ctx, target),
       tg?.stateValues,
     );
     if (!slot.pseudo) return [block(s, target), dir];
@@ -12318,7 +12318,7 @@ export function baseComponent(base, ctx, target, prop, s) {
       states,
       s.state,
       s.when,
-      wrapsOneControl(ctx, target),
+      controlOf(ctx, target),
       ctx.project.target.get(target)?.stateValues,
     );
     b = slot.pseudo
@@ -12554,17 +12554,70 @@ export function clearNewMarker(dir) {
  * control inside it (never a list row); an action part that holds
  * children (a button group, a segmented control) never does, so one
  * disabled child never makes the whole part look disabled.
+ * A moment state on a part drawn under an invisible input lands on the
+ * part holding that input, and the part shows it from there.
  * @param {string} state
- * @param {boolean} [wrapsControl]
+ * @param {boolean | Control} [control] whether it wraps one control, or
+ *   its control (`controlOf`)
  * @returns {string}
  */
-export function stateKey(state, wrapsControl = false) {
+export function stateKey(state, control = false) {
+  const {wraps: wrapsControl, under} = controlParts(control);
   const aria = ARIA_STATES[/** @type {keyof typeof ARIA_STATES} */ (state)];
   if (aria) return `:is(${aria.selector})`;
+  // A part drawn under an invisible input (a checkbox's box): the input
+  // takes the pointer and the focus, so a moment state lands on the part
+  // that holds the input, and the part shows it from there.
+  const held = under ? HELD_STATES[state] : undefined;
+  if (held) return `:where(.astryx-${under}${held} *)`;
   if (state !== 'disabled') return `:${state}`;
   return wrapsControl
     ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
     : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * A moment state as the part holding an invisible input shows it, for a
+ * part drawn under that input.
+ * @type {Record<string, string>}
+ */
+const HELD_STATES = {
+  hover: ':hover',
+  active: ':active',
+  focus: ':has(:is(input,button,select,textarea):focus)',
+  'focus-visible': ':has(:is(input,button,select,textarea):focus-visible)',
+  'focus-within': ':focus-within',
+};
+
+/**
+ * A part's control: whether it wraps one control (its disabled state is
+ * the control's too), and the part holding the invisible input it is drawn
+ * under, if any.
+ * @typedef {{wraps: boolean, under: string | null}} Control
+ */
+
+/**
+ * @param {boolean | Control} control
+ * @returns {Control}
+ */
+function controlParts(control) {
+  return typeof control === 'object' && control
+    ? control
+    : {wraps: Boolean(control), under: null};
+}
+
+/**
+ * A part's control, as `stateSlot` takes it.
+ * @param {Ctx} ctx
+ * @param {string} target
+ * @returns {Control}
+ */
+export function controlOf(ctx, target) {
+  const under = ctx.C.MAP[target]?.underInput;
+  return {
+    wraps: wrapsOneControl(ctx, target),
+    under: typeof under === 'string' && under ? under : null,
+  };
 }
 
 /**
@@ -12762,7 +12815,8 @@ function loadedForm(data) {
  * @param {string[]} own the states Core writes as keys on the part
  * @param {string | undefined} state
  * @param {string | undefined} when
- * @param {boolean} [wrapsControl]
+ * @param {boolean | Control} [wrapsControl] whether it wraps one control,
+ *   or its control (`controlOf`)
  * @param {Record<string, string>} [values] the value Core writes for each
  *   own state: a state that names a boolean prop is written `state:true`
  * @returns {{key: string, pseudo: string | null}}
