@@ -594,6 +594,64 @@ describe('icon-imports check', () => {
     });
   });
 
+  it('an icon component of your own, reached through a path alias, baseUrl, or package.json imports, is not a missing package', async () => {
+    const check = await importsCheckOf(
+      {config: {experimental: {iconSet: 'glyphs'}}},
+      {
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: {baseUrl: 'src', paths: {'@/*': ['src/*']}},
+        }),
+        'src/icons/logo.tsx': 'export const LogoIcon = () => null;\n',
+        'src/page.tsx': [
+          "import {BrandIcon} from '@/components/BrandIcon';",
+          "import {LogoIcon} from 'icons/logo';",
+          "import {HomeIcon} from '~/icons';",
+          "import {MenuIcon} from '#icons';",
+          'export const A = () => <><BrandIcon /><LogoIcon /><HomeIcon /><MenuIcon /></>;',
+          '',
+        ].join('\n'),
+      },
+    );
+    expect(check).toMatchObject({status: 'pass'});
+  });
+
+  it('still fails for imports of the main set once its package is uninstalled', async () => {
+    const check = await importsCheckOf(
+      {packages: [], config: {experimental: {iconSet: '@acme/glyphs/glyphs'}}},
+      {
+        'src/page.tsx': [
+          "import {XIcon} from '@acme/glyphs';",
+          'export const A = () => <XIcon />;',
+          '',
+        ].join('\n'),
+      },
+    );
+    expect(check).toMatchObject({
+      status: 'fail',
+      message:
+        '1 icon import in 1 file name a package that is not installed, so the build fails: src/page.tsx (@acme/glyphs: XIcon).',
+    });
+  });
+
+  it('reads a named re-export like an import', async () => {
+    const check = await importsCheckOf(
+      {config: {experimental: {iconSet: 'glyphs'}}},
+      {
+        'src/icons.ts': [
+          "export {TrashIcon} from '@acme/uninstalled';",
+          "export type {BoltIcon} from '@acme/types-only';",
+          "export * from '@acme/everything';",
+          '',
+        ].join('\n'),
+      },
+    );
+    expect(check).toMatchObject({status: 'fail'});
+    expect(check?.message).toContain(
+      'src/icons.ts (@acme/uninstalled: TrashIcon)',
+    );
+    expect(check?.message).not.toContain('types-only');
+  });
+
   it('a project whose code imports no icon passes', async () => {
     const check = await importsCheckOf(
       {config: {experimental: {iconSet: 'glyphs'}}},

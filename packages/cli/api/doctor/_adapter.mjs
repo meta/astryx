@@ -45,6 +45,12 @@ import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 import {iconImportFindings} from '../../foundation/discovery/icon-imports.mjs';
 import {
+  baseUrlFor,
+  existingFile,
+  matchPath,
+  pathsFor,
+} from '../../foundation/render/ts-paths.mjs';
+import {
   resolveIconModule,
   splitSpecifier,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
@@ -311,8 +317,9 @@ export function findIconPlaceholders(projectDir) {
  * Each file in the project's own source with icon imports that do not match
  * the project's icon sets (see `iconImportFindings`): an icon from a set that
  * is not in the list, or from a set later in the list than one that draws the
- * same meaning, and an icon-named import of a package that does not resolve
- * and that the project's package.json does not declare. A file reads only as
+ * same meaning, and an icon-named import of an npm package that does not
+ * resolve, that no path alias (`compilerOptions.paths` or `baseUrl`) maps, and
+ * that the project's package.json does not declare. A file reads only as
  * a syntax tree. Read without executing app code.
  * @param {string} projectDir
  * @param {{sets: import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet[], choice: import('../../foundation/discovery/icon-set-discovery.mjs').IconSetChoice}} iconSets
@@ -359,12 +366,20 @@ export function findIconImports(projectDir, iconSets) {
       continue;
     }
     const fromDir = path.dirname(file);
+    /** @param {string} module */
+    const aliased = module => {
+      // A path alias or `baseUrl` maps the specifier to the app's own code.
+      if (matchPath(pathsFor(file), module)) return true;
+      const base = baseUrlFor(file);
+      return base !== null && existingFile(path.join(base, module)) !== null;
+    };
     const imports = iconImportFindings(
       source,
       iconSets,
       module =>
         !declared.has(splitSpecifier(module).name) &&
-        resolveIconModule(module, fromDir) === null,
+        resolveIconModule(module, fromDir) === null &&
+        !aliased(module),
       wrappedRead,
     );
     if (!imports || imports.length === 0) continue;

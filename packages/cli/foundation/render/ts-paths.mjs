@@ -2,7 +2,8 @@
 
 /**
  * @file A project's `compilerOptions.paths` (tsconfig.json or jsconfig.json),
- * read and matched by TypeScript's rules, for `astryx experimental render`.
+ * read and matched by TypeScript's rules, for `astryx experimental render`
+ * and Doctor.
  * The config of a file is the nearest tsconfig.json (else jsconfig.json) in
  * its folder or above, read through its `extends`; a config that does not
  * include the file lends the referenced project that does, as a
@@ -14,7 +15,8 @@
  * resolve from `baseUrl`, else from the folder of the config that writes
  * `paths`.
  *
- * @position foundation/render — used by page-worker.mjs and embedded-imports.mjs
+ * @position foundation/render — used by page-worker.mjs, embedded-imports.mjs,
+ *   and Doctor's icon-imports scan (api/doctor/_adapter.mjs)
  */
 
 import * as fs from 'node:fs';
@@ -329,6 +331,19 @@ function configFor(file) {
 export function pathsFor(file) {
   const found = configFor(file);
   return found ? patternsOf(found.config, path.dirname(found.file)) : [];
+}
+
+/**
+ * The folder bare specifiers resolve from for a file (`compilerOptions.baseUrl`
+ * of the config TypeScript reads for it), or null when that config sets none.
+ * @param {string} file absolute, which need not exist yet
+ * @returns {string | null}
+ */
+export function baseUrlFor(file) {
+  const found = configFor(file);
+  const baseUrl = found?.config.options.baseUrl;
+  if (!found || typeof baseUrl !== 'string') return null;
+  return configPath(baseUrl, found.config.baseUrlDir, path.dirname(found.file));
 }
 
 /**

@@ -698,11 +698,14 @@ message}`) names each template or namespace doc that sets `stability`, and
   when a set earlier in the list draws one of those definitions, naming each
   file and import with that earlier set's icon (FR9's rule), or saying that
   no set in the list has the meaning; an import from the main set or the
-  library it wraps always matches. It fails for an import of a package
-  that does not resolve from the file and that the project's package.json
-  does not declare, when every name it imports follows the icon export
-  contract (`<Name>Icon`); a type-only, default, or namespace import never
-  counts. It passes when no such import remains. The template `icons` report and
+  library it wraps always matches. A named re-export reads like an import.
+  It fails for an import of an npm package name that does not resolve from
+  the file, that no `compilerOptions.paths` or `baseUrl` maps, and that the
+  project's package.json does not declare, when every name it imports
+  follows the icon export contract (`<Name>Icon`); a type-only, default, or
+  namespace import never counts. That rule needs no main set: it holds when
+  the set the list names is not installed. It passes when no such import
+  remains. The template `icons` report and
   `experimental icon --list` carry the same status and reason, and
   `experimental icon` with `--set` (with words or `--all-icons`) or
   `<set>/<id>`, `experimental icon use`, and `discover <package>/<set>` name a

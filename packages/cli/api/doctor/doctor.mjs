@@ -2774,7 +2774,7 @@ export async function runChecks(options = {}) {
   ];
   // Only a project where icon features are on and a main set is decided
   // scans its source for placeholders: no other project gets the check.
-  if (placeholderMainSet(iconSets)) {
+  if (iconSets && placeholderMainSet(iconSets)) {
     try {
       const projectDir = findPackageRoot(cwd) ?? cwd;
       ctx.iconPlaceholders = findIconPlaceholders(projectDir);
