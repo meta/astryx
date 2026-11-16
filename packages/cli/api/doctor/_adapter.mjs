@@ -93,6 +93,7 @@ export {
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
+export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
