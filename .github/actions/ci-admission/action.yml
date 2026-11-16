@@ -38,8 +38,9 @@
 #   job and a Storybook build that found room, so waiting runs never hold each
 #   other back by more than they use; a waiting
 #   `main` run counts its whole peak. A matrix that limits its legs with
-#   `max-parallel` counts at most that many live legs: GitHub lists the legs
-#   it holds back as queued, but they hold no runner. A run admitted in the
+#   `max-parallel` counts at most that many live legs, once a running leg
+#   names that limit (until then, every live leg): GitHub lists the legs it
+#   holds back as queued, but they hold no runner. A run admitted in the
 #   last 45 seconds, before its jobs appear, counts at least its planned
 #   most. Every other workflow's run counts an estimate. A run not updated in two hours is a
 #   stale record GitHub still lists as active, and counts nothing.
