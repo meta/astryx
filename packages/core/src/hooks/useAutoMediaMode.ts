@@ -24,12 +24,14 @@ import {useRef, useState} from 'react';
 import type {RefObject} from 'react';
 import type {RGBA} from '../utils/color';
 import {parseColor, formatColor} from '../utils/color';
-import {contrastRatio, compositeOver} from '../theme/contrast';
+import {compositeOver} from '../theme/contrast';
 import {useTheme} from '../theme/useTheme';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
-
-/** A surface luminance context, or `"off"` when no media context is wanted. */
-export type DetectedMediaMode = 'dark' | 'light' | 'off';
+import {
+  pickMediaMode,
+  type DetectedMediaMode,
+  type MediaSidePicker,
+} from './mediaSide';
 
 /**
  * Resolve token references to the colors they paint, through a hidden probe.
@@ -97,48 +99,6 @@ function resolveBackdrop(element: HTMLElement): RGBA | null {
 }
 
 /**
- * Contrast at which a surface's own text reads well enough that no media
- * context is wanted. This is WCAG's large-text line. It is low on purpose: it
- * decides if a surface is effectively inverted, not if its text meets a
- * standard. A media context on a 3:1 pairing changes accent, overlays and
- * borders with no legibility gain.
- */
-const AMBIENT_READS_AT = 3;
-
-/**
- * Which media context a surface wants: `'off'` when its ambient text already
- * reads on the surface, otherwise whichever on-color reads better. Pure — the
- * DOM read is the caller's. Ties between the two sides go to dark, matching
- * the convention that an inverted surface is usually the dark one.
- *
- * The `'off'` answer is the point of measuring at all. A surface that a theme
- * calls inverted but paints pale does not want an inverted context; its own
- * text is already correct for it, and forcing one is how white-on-pale-grey
- * happens.
- */
-export function pickMediaMode(
-  background: RGBA,
-  ambient: RGBA | null,
-  onDark: RGBA | null,
-  onLight: RGBA | null,
-): DetectedMediaMode | null {
-  if (onDark === null || onLight === null) {
-    return null;
-  }
-
-  if (
-    ambient !== null &&
-    contrastRatio(ambient, background) >= AMBIENT_READS_AT
-  ) {
-    return 'off';
-  }
-
-  return contrastRatio(onDark, background) >= contrastRatio(onLight, background)
-    ? 'dark'
-    : 'light';
-}
-
-/**
  * Detect the media context for the element's surroundings.
  *
  * Measures `ref`'s PARENT, never `ref` itself: MediaTheme sets its media
@@ -155,6 +115,30 @@ export function useAutoMediaMode(
   ref: RefObject<HTMLElement | null>,
   isEnabled: boolean,
 ): DetectedMediaMode | null {
+  return useMeasuredMediaMode(
+    () => ref.current?.parentElement ?? null,
+    isEnabled,
+    pickMediaMode,
+  );
+}
+
+/**
+ * Detect the media side for the surface `ref` paints itself, by `pick`.
+ * Returns null until a measurement succeeds, as useAutoMediaMode does.
+ */
+export function useSurfaceMediaMode(
+  ref: RefObject<HTMLElement | null>,
+  isEnabled: boolean,
+  pick: MediaSidePicker,
+): DetectedMediaMode | null {
+  return useMeasuredMediaMode(() => ref.current, isEnabled, pick);
+}
+
+function useMeasuredMediaMode(
+  surfaceOf: () => HTMLElement | null,
+  isEnabled: boolean,
+  pick: MediaSidePicker,
+): DetectedMediaMode | null {
   const [detected, setDetected] = useState<DetectedMediaMode | null>(null);
   // `tokens` is a stable reference unless the theme or color mode changes.
   const {tokens} = useTheme();
@@ -166,7 +150,7 @@ export function useAutoMediaMode(
   // name catches that. So the measurement runs on each render, and it skips
   // its expensive half when nothing moved (see the early return below).
   useIsomorphicLayoutEffect(() => {
-    const surface = ref.current?.parentElement ?? null;
+    const surface = surfaceOf();
     if (!isEnabled || surface === null) {
       return;
     }
@@ -195,7 +179,7 @@ export function useAutoMediaMode(
       '--color-on-dark',
       '--color-on-light',
     ]);
-    const next = pickMediaMode(background, ambient, onDark, onLight);
+    const next = pick(background, ambient, onDark, onLight);
     if (next === null) {
       return;
     }

@@ -75,7 +75,7 @@ describe('themeBuild({iconsSpecifier}) — direct API', () => {
     expect(js).toContain('export { myIcons }');
   });
 
-  it('emits the scraped specifier unchanged when the option is omitted', async () => {
+  it('without the option, compiles the TypeScript registry beside the outputs and imports it', async () => {
     const file = writeIconTheme();
 
     const result = await themeBuild(
@@ -85,7 +85,15 @@ describe('themeBuild({iconsSpecifier}) — direct API', () => {
     );
 
     expect(result?.type).toBe('theme.build');
-    expect(builtModule()).toContain(`import { myIcons } from './icons';`);
+    expect(builtModule()).toContain(
+      `import { myIcons } from './icotheme.modules/icons.ts.js';`,
+    );
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, 'dist', 'icotheme.modules', 'icons.ts.js'),
+        'utf8',
+      ),
+    ).toContain(`export const myIcons = {`);
   });
 
   it('is inert for a theme with no icons field', async () => {

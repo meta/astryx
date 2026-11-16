@@ -479,6 +479,34 @@ describe('busyWindowProof against a control', () => {
       judgedFromMs: 20,
     });
   });
+
+  it('throws BusyWindowTooLateError when a settle bound leaves the control too few frames, where judging on would have held enough', () => {
+    // It comes within 4 px of its end at +33 ms: the block started late for
+    // the motion, while the control moves on every frame.
+    const late = moving().map((f, i) => {
+      const y = i <= 12 ? 256 - 4 * i : i === 13 ? 206 : i === 14 ? 203 : 200;
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const run = () =>
+      busyWindowProof(late, BLOCK, {
+        control: asControl(moving()),
+        settledWithin: 4,
+      });
+    expect(run).toThrow(BusyWindowTooLateError);
+    expect(run).toThrow(
+      /busyWindowProof: the tracked y came within 4 px of where it ends 33 ms after the block began, so the part judged from 20 ms held 1 of the control's frames, under the 4 it needs, where judging on to 680 ms would have held \d+ \(\d+ frames presented in the block\): the block started late for the motion\./,
+    );
+    let caught: unknown = null;
+    try {
+      run();
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as BusyWindowTooLateError).numbers).toMatchObject({
+      judgedFromMs: 20,
+      controlFrames: 1,
+    });
+  });
 });
 
 /**
@@ -589,6 +617,27 @@ describe('pooledBusyProof', () => {
     ]);
     expect(pooled.summary).toMatch(/run 1: too late to judge/);
     expect(pooled.summary).toMatch(/run 2: too late to judge/);
+  });
+
+  it('pools a short travel that comes within its settle bound early in an on-time block: each run adds its frames, and only a single window throws', () => {
+    // It comes within 4 px of its end at t = 1033, while the block runs on.
+    // That is two or three of the control's frames into each judged part.
+    const settling = moving().map((f, i) => {
+      const y = i <= 12 ? 256 - 4 * i : i === 13 ? 206 : i === 14 ? 203 : 200;
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const control = asControl(moving());
+    const window = {from: 972, to: 1300};
+    expect(() =>
+      busyWindowProof(settling, window, {control, settledWithin: 4}),
+    ).toThrow(BusyWindowTooLateError);
+    const pooled = pooledBusyProof(
+      [0, 1, 2].map(() => ({tracked: settling, control, window})),
+      {settledWithin: 4},
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.late).toEqual([null, null, null]);
+    expect(pooled.judged).toEqual([true, true, true]);
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {

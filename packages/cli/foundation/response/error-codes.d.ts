@@ -45,6 +45,7 @@ export type ErrorCode =
   | 'ERR_FILE_EXISTS'
   | 'ERR_PATH_TRAVERSAL'
   | 'ERR_WRITE_FAILED'
+  | 'ERR_READ_FAILED'
   | 'ERR_THEME_INVALID'
   | 'ERR_THEME_LOAD'
   | 'ERR_THEME_STALE'

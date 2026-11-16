@@ -43,6 +43,7 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   PencilIcon,
   DocumentDuplicateIcon,
@@ -584,144 +585,155 @@ function getGroupLabel(groupBy: GroupByField, key: string): string {
   return key;
 }
 
-const columns: TableColumn<TaskRow>[] = [
-  {
-    key: 'status',
-    header: '',
-    width: pixel(44),
-    renderCell: task => (
-      <Center axis="horizontal">
-        <StatusDot
-          variant={STATUS_DOT_VARIANT[task.status]}
-          label={STATUS_LABEL[task.status]}
-        />
-      </Center>
-    ),
-  },
-  {
-    key: 'title',
-    header: 'Issue',
-    width: proportional(1),
-    renderCell: task => (
-      <HStack gap={3} vAlign="center">
-        <Icon
-          icon={ChartBarIcon}
-          size="sm"
-          color={PRIORITY_COLOR[task.priority]}
-        />
-        <Text type="supporting" color="secondary">
-          {task.taskId}
-        </Text>
-        <Text type="body" maxLines={1}>
-          {task.title}
-        </Text>
-        {task.subtitle && (
-          <Text type="body" color="secondary" maxLines={1}>
-            › {task.subtitle}
+function getColumns({
+  onEdit,
+  onDuplicate,
+  onDemo,
+}: {
+  onEdit: (task: TaskRow) => void;
+  onDuplicate: (task: TaskRow) => void;
+  /** Says what a menu action would do, for actions this demo does not perform. */
+  onDemo: (task: TaskRow, action: string) => void;
+}): TableColumn<TaskRow>[] {
+  return [
+    {
+      key: 'status',
+      header: '',
+      width: pixel(44),
+      renderCell: task => (
+        <Center axis="horizontal">
+          <StatusDot
+            variant={STATUS_DOT_VARIANT[task.status]}
+            label={STATUS_LABEL[task.status]}
+          />
+        </Center>
+      ),
+    },
+    {
+      key: 'title',
+      header: 'Issue',
+      width: proportional(1),
+      renderCell: task => (
+        <HStack gap={3} vAlign="center">
+          <Icon
+            icon={ChartBarIcon}
+            size="sm"
+            color={PRIORITY_COLOR[task.priority]}
+          />
+          <Text type="supporting" color="secondary">
+            {task.taskId}
           </Text>
-        )}
-      </HStack>
-    ),
-  },
-  {
-    key: 'project',
-    header: 'Project',
-    width: pixel(180),
-    renderCell: task =>
-      task.project ? (
-        <Text type="body" maxLines={1}>
-          {task.project}
-        </Text>
-      ) : (
+          <Text type="body" maxLines={1}>
+            {task.title}
+          </Text>
+          {task.subtitle && (
+            <Text type="body" color="secondary" maxLines={1}>
+              › {task.subtitle}
+            </Text>
+          )}
+        </HStack>
+      ),
+    },
+    {
+      key: 'project',
+      header: 'Project',
+      width: pixel(180),
+      renderCell: task =>
+        task.project ? (
+          <Text type="body" maxLines={1}>
+            {task.project}
+          </Text>
+        ) : (
+          <Text type="supporting" color="secondary">
+            —
+          </Text>
+        ),
+    },
+    {
+      key: 'created',
+      header: 'Created',
+      width: pixel(88),
+      renderCell: task => (
         <Text type="supporting" color="secondary">
-          —
+          {task.created}
         </Text>
       ),
-  },
-  {
-    key: 'created',
-    header: 'Created',
-    width: pixel(88),
-    renderCell: task => (
-      <Text type="supporting" color="secondary">
-        {task.created}
-      </Text>
-    ),
-  },
-  {
-    key: 'updated',
-    header: 'Updated',
-    width: pixel(88),
-    renderCell: task => (
-      <Text type="supporting" color="secondary">
-        {task.updated}
-      </Text>
-    ),
-  },
-  {
-    key: 'assignee',
-    header: 'Assignee',
-    width: pixel(88),
-    renderCell: task => <Avatar name={task.assignee} size="sm" />,
-  },
-  {
-    key: 'actions',
-    header: '',
-    width: pixel(56),
-    renderCell: () => (
-      <DropdownMenu
-        button={{
-          label: 'Actions',
-          variant: 'ghost',
-          size: 'sm',
-          icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
-          isIconOnly: true,
-        }}
-        hasChevron={false}
-        items={[
-          {
-            label: 'Edit issue',
-            icon: PencilIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Assign to...',
-            icon: UserIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Add label',
-            icon: TagIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Duplicate',
-            icon: DocumentDuplicateIcon,
-            onClick: () => {},
-          },
-          {
-            label: 'Move to project',
-            icon: (
-              <Icon
-                icon={ArrowRightIcon}
-                size="sm"
-                color="secondary"
-                xstyle={rtlStyles.mirror}
-              />
-            ),
-            onClick: () => {},
-          },
-          {type: 'divider' as const},
-          {
-            label: 'Delete issue',
-            icon: TrashIcon,
-            onClick: () => {},
-          },
-        ]}
-      />
-    ),
-  },
-];
+    },
+    {
+      key: 'updated',
+      header: 'Updated',
+      width: pixel(88),
+      renderCell: task => (
+        <Text type="supporting" color="secondary">
+          {task.updated}
+        </Text>
+      ),
+    },
+    {
+      key: 'assignee',
+      header: 'Assignee',
+      width: pixel(88),
+      renderCell: task => <Avatar name={task.assignee} size="sm" />,
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: pixel(56),
+      renderCell: task => (
+        <DropdownMenu
+          button={{
+            label: 'Actions',
+            variant: 'ghost',
+            size: 'sm',
+            icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+            isIconOnly: true,
+          }}
+          hasChevron={false}
+          items={[
+            {
+              label: 'Edit issue',
+              icon: PencilIcon,
+              onClick: () => onEdit(task),
+            },
+            {
+              label: 'Assign to...',
+              icon: UserIcon,
+              onClick: () => onDemo(task, 'assigning'),
+            },
+            {
+              label: 'Add label',
+              icon: TagIcon,
+              onClick: () => onDemo(task, 'labeling'),
+            },
+            {
+              label: 'Duplicate',
+              icon: DocumentDuplicateIcon,
+              onClick: () => onDuplicate(task),
+            },
+            {
+              label: 'Move to project',
+              icon: (
+                <Icon
+                  icon={ArrowRightIcon}
+                  size="sm"
+                  color="secondary"
+                  xstyle={rtlStyles.mirror}
+                />
+              ),
+              onClick: () => onDemo(task, 'moving'),
+            },
+            {type: 'divider' as const},
+            {
+              label: 'Delete issue',
+              icon: TrashIcon,
+              onClick: () => {},
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+}
 
 const powerSearchConfig: PowerSearchConfig = {
   name: 'IssueSearch',
@@ -901,6 +913,31 @@ export default function DataTableTemplate() {
   const [priorityFilter, _setPriorityFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+  const showToast = useToast();
+  const columns = useMemo(
+    () =>
+      getColumns({
+        onEdit: task =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: editing ${task.taskId} would open here`,
+            uniqueID: `edit-${task.taskId}`,
+          }),
+        onDuplicate: task =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${task.taskId} would be duplicated here`,
+            uniqueID: `duplicate-${task.taskId}`,
+          }),
+        onDemo: (task, action) =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${action} ${task.taskId} would happen here`,
+            uniqueID: `${action}-${task.taskId}`,
+          }),
+      }),
+    [showToast],
+  );
   const [powerSearchFilters, setPowerSearchFilters] = useState<
     ReadonlyArray<PowerSearchFilter>
   >([]);

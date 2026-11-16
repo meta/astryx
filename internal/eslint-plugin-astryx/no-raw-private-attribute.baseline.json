@@ -125,7 +125,7 @@
   "packages/lab/src/Schedule/useScheduleViewPopover.ts": [
     "data-astryx-popover-fallback-close"
   ],
-  "packages/richtext/src/CodeSyntaxPlugin.tsx": [
+  "packages/richtext/src/internal/CodeSyntaxPlugin.tsx": [
     "data-astryx-richtext-code-syntax"
   ]
 }

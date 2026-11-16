@@ -16,7 +16,7 @@ export const doc = {
   summary:
     'Render a page to one self-contained HTML file, or turn one back into a page',
   description:
-    "Renders the page's default export with the project's own Astryx components and writes ONE static HTML file that needs nothing beside it: no script runs and nothing loads from the network, so it opens anywhere, including a sandboxed frame with a strict content security policy, and follows the viewer's light or dark scheme. The page's own StyleX compiles, only the Core CSS rules the page uses are inlined, local images become data: URIs, and the page's source is embedded. Warnings name anything that may not look as meant, such as a component that did not render the text it was given (ListItem takes label=, not children). The file opens with a plain note for whoever opens it next: the CLI version and render format that made it, the page's path, the files it carries, the packages it rendered with, and the exact commands that give the page back and render it again. --reverse (the way back, or unrender) writes the embedded source back byte for byte and names any text someone changed in the HTML after the render, with the file and line that hold the old text; a file with Astryx markup but no embedded source is rebuilt from its components (text and layout only, as a starting point); any other HTML is refused. Experimental: it may change or be removed in a patch release.",
+    "Renders the page's default export with the project's own Astryx components and writes ONE static HTML file that needs nothing beside it: no script runs and nothing loads from the network, so it opens anywhere, including a sandboxed frame with a strict content security policy, and follows the viewer's light or dark scheme. The page's own StyleX compiles, only the Core CSS rules the page uses are inlined, local images become data: URIs, and the page's source is embedded. Warnings name anything that may not look as meant, such as a component that did not render the text it was given (ListItem takes label=, not children). The file opens with a plain note for whoever opens it next: the CLI version and render format that made it, the page's path, the files it carries, the packages it rendered with, and the exact commands that give the page back and render it again. To make a page to share, follow `astryx docs cli/experimental/share-a-page` first: it lists the layouts that go wrong on a phone in a file that runs no script. --reverse (the way back, or unrender) writes the embedded source back byte for byte and names any text someone changed in the HTML after the render, with the file and line that hold the old text; a file with Astryx markup but no embedded source is rebuilt from its components (text and layout only, as a starting point); any other HTML is refused. Experimental: it may change or be removed in a patch release.",
   fn: 'render',
   args: [{name: 'file', param: 'file', required: false}],
   options: [
@@ -24,7 +24,7 @@ export const doc = {
       flag: '--out <file>',
       param: 'options.out',
       description:
-        "Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)",
+        'Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)',
     },
     {
       flag: '--reverse',
@@ -40,12 +40,23 @@ export const doc = {
     {
       flag: '--overwrite',
       param: 'options.overwrite',
-      description: 'With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)',
+      description:
+        'With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)',
     },
   ],
   examples: [
-    {label: 'Render a page', cli: 'astryx experimental render src/app/page.tsx --out page.html'},
-    {label: 'Give it back', cli: 'astryx experimental render --reverse page.html --out page.tsx'},
+    {
+      label: 'Before you make a page to share, read what goes wrong on a phone',
+      cli: 'astryx docs cli/experimental/share-a-page',
+    },
+    {
+      label: 'Render a page',
+      cli: 'astryx experimental render src/app/page.tsx --out page.html',
+    },
+    {
+      label: 'Give it back',
+      cli: 'astryx experimental render --reverse page.html --out page.tsx',
+    },
     {label: 'As JSON', cli: 'astryx --json experimental render page.tsx'},
   ],
   outsideProject: 'same',
