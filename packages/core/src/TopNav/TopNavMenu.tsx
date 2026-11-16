@@ -637,7 +637,12 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                onClick={item.onClick}
+                // Picking an item ends the menu, as in DropdownMenu: it closes
+                // and focus goes back to the trigger.
+                onClick={() => {
+                  item.onClick?.();
+                  close();
+                }}
                 {...focusOutlineProps.focusVisible(styles.menuItem)}>
                 <div {...stylex.props(styles.menuItemIcon)}>{item.icon}</div>
                 <div {...stylex.props(styles.menuItemContent)}>
