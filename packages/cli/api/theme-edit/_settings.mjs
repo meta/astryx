@@ -6664,7 +6664,19 @@ export function compileTheme(ctx, data, base) {
         // The see-through main area and the fixed attachment go with the
         // page background: in its mode's block for a one-mode one, so the
         // other mode keeps the content panel Core paints.
-        if (ctx.project.target.has('layout-content')) {
+        // (A main area a setting gives a background of its own, in this
+        // mode or in every mode, keeps it: the see-through rule is not
+        // written over it, in whichever order the two were set.)
+        const panelOwn = data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^background(-color|-image)?$/.test(kebab(x.thing)) &&
+            !x.when &&
+            !x.state &&
+            (!x.mode || x.mode === s.mode) &&
+            partsOf(ctx, x).includes('layout-content'),
+        );
+        if (ctx.project.target.has('layout-content') && !panelOwn) {
           const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
           const scope = s.mode ? (lc[`@${s.mode}`] ??= {}) : lc;
           const main = (scope[':where(.astryx-app-shell [role="main"])'] ??=
