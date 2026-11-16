@@ -14,7 +14,7 @@ import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Outline, type OutlineItem} from '@astryxdesign/core/Outline';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {
   SparklesIcon,
   ClipboardDocumentIcon,
@@ -43,6 +43,7 @@ const outlinePanel: CSSProperties = {
 const subscribeToNothing = () => () => {};
 
 export default function TechnicalDocumentationPage() {
+  const {copy} = useClipboard();
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
   // every width; once script runs, wide screens move the links to the rail.
@@ -99,7 +100,7 @@ export default function TechnicalDocumentationPage() {
                       size="sm"
                       icon={<Icon icon={ClipboardDocumentIcon} />}
                       onClick={() => {
-                        void navigator.clipboard.writeText(
+                        void copy(
                           'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
                         );
                       }}
