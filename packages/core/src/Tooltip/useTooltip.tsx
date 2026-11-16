@@ -821,11 +821,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
       // A trigger in a shadow root or another document keeps the hidden
-      // copy there.
+      // copy there. A trigger that attaches again in the page moves it back.
       const descriptionRoot = descriptionRootOf(el);
-      if (descriptionRoot !== document.body) {
-        setTriggerDescriptionRoot(descriptionRoot);
-      }
+      setTriggerDescriptionRoot(
+        descriptionRoot === document.body ? null : descriptionRoot,
+      );
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that

@@ -27,6 +27,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import {Suspense, startTransition, use, useRef} from 'react';
+import {createPortal} from 'react-dom';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
@@ -1116,6 +1117,47 @@ describe('Tooltip layer mounts at its first show', () => {
       });
     } finally {
       iframe.remove();
+    }
+  });
+
+  it('moves the hidden copy back to the page when a hook trigger attaches there again', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const portalTarget = document.createElement('div');
+    shadowRoot.appendChild(portalTarget);
+    function HookTrigger({inShadow}: {inShadow: boolean}) {
+      const tooltip = useTooltip();
+      const button = (
+        <button
+          type="button"
+          ref={tooltip.ref}
+          aria-describedby={tooltip.describedBy || undefined}>
+          Save
+        </button>
+      );
+      return (
+        <>
+          {inShadow ? createPortal(button, portalTarget) : button}
+          {tooltip.renderTooltip('Save changes')}
+        </>
+      );
+    }
+    try {
+      const {rerender} = render(<HookTrigger inShadow />);
+      await waitFor(() => {
+        const trigger = portalTarget.querySelector('button') as HTMLElement;
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
+      });
+      rerender(<HookTrigger inShadow={false} />);
+      await waitFor(() => {
+        const trigger = screen.getByRole('button', {name: 'Save'});
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(document.getElementById(id)).toHaveTextContent('Save changes');
+      });
+    } finally {
+      host.remove();
     }
   });
 
