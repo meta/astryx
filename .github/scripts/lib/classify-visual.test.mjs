@@ -9,7 +9,12 @@
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
-import {classifyVisualDiff, JSX_CAP} from './classify-visual.js';
+import {
+  classifyVisualDiff,
+  JSX_CAP,
+  styleContextLines,
+  styleContextPaths,
+} from './classify-visual.js';
 
 // Build a minimal unified diff for a single file. Lines are raw content;
 // they get prefixed with +/- here.
@@ -725,6 +730,285 @@ describe('classifyVisualDiff', () => {
   });
 });
 
+// A diff that adds a whole file, with the bytes the style-context test reads.
+function addedFile(file, lines) {
+  return {
+    diff: [
+      `diff --git a/${file} b/${file}`,
+      'new file mode 100644',
+      '--- /dev/null',
+      `+++ b/${file}`,
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map(l => `+${l}`),
+    ].join('\n'),
+    styleSources: {[file]: {head: lines.join('\n')}},
+  };
+}
+
+// A diff that removes `removed` (0-based line indexes) from a file.
+function removedLines(file, lines, removed) {
+  const hunks = removed.map((at, i) =>
+    [`@@ -${at + 1},1 +${at + 1 - i},0 @@`, `-${lines[at]}`].join('\n'),
+  );
+  return {
+    diff: [
+      `diff --git a/${file} b/${file}`,
+      'index 1111111..2222222 100644',
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      ...hunks,
+    ].join('\n'),
+    styleSources: {[file]: {base: lines.join('\n')}},
+  };
+}
+
+const cssCount = ({diff, styleSources}) =>
+  classifyVisualDiff(diff, {styleSources}).signals.cssProperties;
+
+describe('CSS-named keys count only in a style context', () => {
+  it('scores a route that removes data objects with a `content` key at 0', () => {
+    // The docs site's old MCP route built its results as
+    // `{content: [{type: 'text', text}]}`.
+    const route = [
+      "import {createMcpHandler} from 'mcp-handler';",
+      '',
+      'const handler = createMcpHandler(server => {',
+      "  server.tool('search', 'Search', {query: z.string()}, async ({query}) => {",
+      '    const results = search(query);',
+      '    return {',
+      "      content: [{type: 'text' as const, text: JSON.stringify(results)}],",
+      '    };',
+      '  });',
+      "  server.tool('get', 'Get', {name: z.string()}, async ({name}) => {",
+      '    const result = get(name);',
+      '    if (!result) {',
+      '      return {',
+      '        content: [',
+      "          {type: 'text' as const, text: `No match for ${name}`},",
+      '        ],',
+      '        isError: true,',
+      '      };',
+      '    }',
+      "    return {content: [{type: 'text' as const, text: JSON.stringify(result)}]};",
+      '  });',
+      '});',
+      '',
+      'export {handler as GET, handler as POST};',
+    ];
+    const file = 'apps/docsite/src/app/mcp/route.ts';
+    const change = removedLines(file, route, [6, 13]);
+    const result = classifyVisualDiff(change.diff, {
+      styleSources: change.styleSources,
+    });
+    expect(result.signals.cssProperties).toBe(0);
+    expect(result.score).toBe(0);
+    expect(result.bucket).toBe('non-visual');
+    // The same diff without the file's bytes counts as before.
+    expect(classifyVisualDiff(change.diff).signals.cssProperties).toBe(2);
+  });
+
+  it('scores a stylex.create declaration as before', () => {
+    const lines = [
+      "import * as stylex from '@stylexjs/stylex';",
+      'const styles = stylex.create({',
+      '  root: {',
+      "    padding: '8px',",
+      '    opacity: 0.5,',
+      '  },',
+      '});',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(2);
+  });
+
+  it('scores the other stylex style calls, a theme and Web Animations keyframes', () => {
+    const lines = [
+      "const vars = stylex.defineVars({color: 'red'});",
+      'const fade = stylex.keyframes({',
+      '  from: {opacity: 0},',
+      '  to: {',
+      '    opacity: 1,',
+      '  },',
+      '});',
+      'export const theme = defineTheme({',
+      '  components: {',
+      '    button: {',
+      "      borderRadius: 'var(--radius-full)',",
+      '    },',
+      '  },',
+      '});',
+      'element.animate(',
+      '  [',
+      '    {',
+      '      opacity: 0,',
+      '    },',
+      '  ],',
+      '  {duration: 200},',
+      ');',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/motion.ts', lines))).toBe(3);
+  });
+
+  it('scores a JSX style, xstyle or named style attribute, and a style property', () => {
+    const lines = [
+      'export function A() {',
+      '  return (',
+      "    <div style={{color: 'red',",
+      '      padding: 4}} title="don\'t">',
+      '      <B',
+      '        xstyle={{',
+      '          margin: 0,',
+      '        }}',
+      '        contentStyle={{',
+      '          width: 10,',
+      '        }}',
+      '      />',
+      '    </div>',
+      '  );',
+      '}',
+      'const props = {',
+      '  style: {',
+      "    height: '1em',",
+      '  },',
+      '};',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(4);
+  });
+
+  it('scores Object.assign onto an element style', () => {
+    const lines = [
+      'Object.assign(shield.style, {',
+      "  position: 'fixed',",
+      "  inset: '0',",
+      '});',
+      'Object.assign(options, {',
+      '  width: 10,',
+      '});',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/shield.ts', lines))).toBe(2);
+  });
+
+  it('scores a named object typed as style, or read inside a style context, and a function whose result is', () => {
+    const lines = [
+      "import type {CSSProperties} from 'react';",
+      'const root: CSSProperties = {',
+      "  height: '100dvh',",
+      '};',
+      'const SECONDARY = {',
+      "  backgroundColor: 'transparent',",
+      '};',
+      'const sizing = (width: number) => ({',
+      '  width: `${width}px`,',
+      '});',
+      'const rect = {',
+      '  left: 0,',
+      '};',
+      'export const theme = defineTheme({',
+      '  button: {secondary: SECONDARY},',
+      '});',
+      'export function A() {',
+      '  return <div style={{...root, ...sizing(4)}} />;',
+      '}',
+      'measure(rect);',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(3);
+  });
+
+  it('scores a .css file and a .stylex.ts file throughout', () => {
+    expect(
+      cssCount(
+        addedFile('packages/core/src/A/A.css', ['.a {', '  color: red;', '}']),
+      ),
+    ).toBe(1);
+    expect(
+      cssCount(
+        addedFile('packages/core/src/A/tokens.stylex.ts', [
+          'export const sizes = {',
+          '  width: 4,',
+          '};',
+        ]),
+      ),
+    ).toBe(1);
+  });
+
+  it('ignores a CSS-named key in a data object, a type and a geometry helper', () => {
+    const lines = [
+      'type Rect = {left: number; top: number};',
+      'export function grow(rect: Rect, by: number): Rect {',
+      '  return {',
+      '    left: rect.left - by,',
+      '    top: rect.top - by,',
+      '  };',
+      '}',
+      'const column = {',
+      '  position: 3,',
+      '};',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/geometry.ts', lines))).toBe(
+      0,
+    );
+  });
+
+  it('keeps counting when the bytes do not hold the line or do not lex', () => {
+    const lines = ['const x = {', '  opacity: 1,', '};'];
+    const file = 'packages/core/src/A/a.ts';
+    const {diff} = addedFile(file, lines);
+    // Bytes of another revision: the line is not where the diff puts it.
+    expect(
+      classifyVisualDiff(diff, {
+        styleSources: {[file]: {head: ['', ...lines].join('\n')}},
+      }).signals.cssProperties,
+    ).toBe(1);
+    // An unclosed string: the file does not lex.
+    expect(styleContextLines("const a = 'open\n", false)).toBeNull();
+    expect(
+      classifyVisualDiff(diff, {
+        styleSources: {[file]: {head: `${lines.join('\n')}\nconst a = '`}},
+      }).signals.cssProperties,
+    ).toBe(1);
+  });
+
+  it('reads JSX text, comments, strings, regular expressions and generics without moving a boundary', () => {
+    const lines = [
+      'const pattern = /[{(]/g;',
+      'const quote = "}";',
+      '// a stray brace }',
+      'const pick = <T,>(value: T) => value;',
+      'export function A() {',
+      '  return (',
+      "    <p>Don't {'move'} }</p>",
+      '  );',
+      '}',
+      'const styles = stylex.create({',
+      '  a: {',
+      '    color: `${pattern}`,',
+      '  },',
+      '});',
+    ];
+    const covered = styleContextLines(lines.join('\n'), true);
+    expect(covered).not.toBeNull();
+    expect([...covered]).toEqual([10, 11, 12, 13, 14]);
+  });
+
+  it('names the file revisions a diff needs', () => {
+    const file = 'packages/core/src/A/A.tsx';
+    const diff = [
+      `diff --git a/${file} b/${file}`,
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      '@@ -1,2 +1,2 @@',
+      '-  width: 1,',
+      '+  width: 2,',
+      `diff --git a/packages/core/src/A/A.css b/packages/core/src/A/A.css`,
+      '@@ -1,1 +1,1 @@',
+      '+  color: red;',
+      'diff --git a/packages/core/src/A/plain.ts b/packages/core/src/A/plain.ts',
+      '@@ -1,1 +1,1 @@',
+      '+  label: 2,',
+    ].join('\n');
+    expect(styleContextPaths(diff)).toEqual({[file]: {base: true, head: true}});
+  });
+});
+
 describe('review-signal loading contract', () => {
   // review-signal.yml has no checkout: it fetches this file from the base ref
   // via the API and instantiates it with new Function(module, exports, require).
@@ -743,5 +1027,18 @@ describe('review-signal loading contract', () => {
       makeDiff('packages/core/src/Button/Button.tsx', ['opacity: 0.5,']),
     );
     expect(result.signals.cssProperties).toBe(1);
+  });
+
+  it('is given the bytes of every file the style-context test needs', () => {
+    const workflow = readFileSync(
+      fileURLToPath(
+        new URL('../../workflows/review-signal.yml', import.meta.url),
+      ),
+      'utf8',
+    );
+    expect(workflow).toContain('mod.exports.styleContextPaths(String(diff)');
+    expect(workflow).toMatch(
+      /classifyVisualDiff\(String\(diff\), \{[^}]*styleSources,/,
+    );
   });
 });

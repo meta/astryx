@@ -556,9 +556,32 @@ jobs:
                   ]);
                   sources[file.filename] = {base: baseSource, head: headSource};
                 }
+                // A CSS-named key scores only in a style context of its file
+                // at its own revision (the classifier's styleContextLines),
+                // so read each file that holds one, at each side it changed.
+                // A file that cannot be read keeps scoring as a style edit.
+                const styleSources = {};
+                const needed = mod.exports.styleContextPaths(String(diff), {
+                  ignorePath: isSafeSpace,
+                });
+                for (const [filePath, sides] of Object.entries(needed)) {
+                  styleSources[filePath] = {};
+                  for (const [side, repoName, ref] of [
+                    ['base', pr.base.repo.full_name, pr.base.sha],
+                    ['head', pr.head.repo.full_name, pr.head.sha],
+                  ]) {
+                    if (!sides[side]) continue;
+                    try {
+                      styleSources[filePath][side] = await readSource(repoName, ref, filePath);
+                    } catch (e) {
+                      core.info(`No ${side} bytes for ${filePath}: ${e.message}`);
+                    }
+                  }
+                }
                 visualClassification = mod.exports.classifyVisualDiff(String(diff), {
                   ignorePath: isSafeSpace,
                   sources,
+                  styleSources,
                 });
                 core.info(`visual content score: ${visualClassification.score} (${visualClassification.bucket}); appearanceOnly=${visualClassification.appearanceOnly}`);
                 if (
