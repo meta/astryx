@@ -1,6 +1,6 @@
 ---
 schema_version: 1
-template_version: 1
+template_version: 3
 kind: architecture
 id: architecture:press-feedback
 authority: current
@@ -36,15 +36,15 @@ deciding_specs: [spec:AST-094/FR5, spec:AST-094/FR11, spec:AST-094/DEC-21]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | How a press looks and when it shows: `spec:AST-094` FR5, FR8, FR11, FR20 and DEC-21; `design:user-states` DR1–DR5; `design:reduced-motion` DR1–DR2; `architecture:layer-runtime` INV22; `component:Item` FR9.                                                                                                                                                                                                                                                                                                                                                             |
-| System behavior         | One press engine, the page press controller, writes every pressed state in Core. Each pressable surface uses one of three recipes: a momentary control, a row-wide target, or a cell or menu row. A press paints and does nothing else: it never changes layout, the hit area, or hit-testing. Every release fades on the theme's exit motion tokens. A coarse first press paints in the frame the finger lands.                                                                                                                                                          |
-| End-user impact         | A person sees the same press on every Astryx surface: the same tint, the same start delay inside scrolling content, the same release fade, and the same cancel when a scroll takes the touch. A press never moves a tap target, so a tap lands where the person aims it.                                                                                                                                                                                                                                                                                                  |
-| Builder impact          | A component picks a recipe and states it in its own record. It adds no press attribute, tracker, timer, or tint variable of its own. A press fix lands once, in the engine or the recipe, and reaches every component that uses it. No public API changes; the recipes are exports of the private press modules.                                                                                                                                                                                                                                                          |
-| Compatibility/readiness | No public API change. INV1 gap: the group tracker, the touch-runtime press tracker, the menu lit-row attribute, and local copies in ClickableCard, SelectableCard, Thumbnail, Tab, Switch, Slider and the Selector-family triggers write their own press state. INV4 gap: Switch, Slider and the SegmentedControl lens release in a fixed 200 ms, and controller surfaces end a press after 10 px of drift outside scrolling content. INV5 gap: under a mouse or a pen, most surfaces paint CSS `:active`. INV8 gap: Selector-family triggers scale under reduced motion. |
-| Review checks           | Reject a new press attribute, tracker, timer, or tint variable outside the recipes; a press style that changes layout, the containing block, or the hit area; a fixed release duration; a container that paints for a finger or pen press that starts on a nested interactive element; and press engine code moved off first load.                                                                                                                                                                                                                                        |
-| Governing rules         | `spec:AST-094` FR5, FR8, FR11, FR20, DEC-14, DEC-21; `design:user-states` DR1–DR5; `design:reduced-motion` DR1–DR2; `architecture:layer-runtime` INV22; `component:Item` FR9; `component:Button` anatomy and FR15; `module:DropdownMenu/useMenuPress` FR6; `architecture:component-import-boundaries` INV10; `spec:AST-013` FR9.                                                                                                                                                                                                                                          |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | How a press looks and when it shows: `spec:AST-094` FR5, FR8, FR11, FR20 and DEC-21; `design:user-states` DR1–DR5; `design:reduced-motion` DR1–DR2; `architecture:layer-runtime` INV22; `component:Item` FR9.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| System behavior         | One press engine, the page press controller, writes every pressed state in Core. Each pressable surface uses one of three recipes: a momentary control, a row-wide target, or a cell or menu row. A press paints and does nothing else: it never changes layout, the hit area, or hit-testing. Every release fades on the theme's exit motion tokens. A coarse first press paints in the frame the finger lands.                                                                                                                                                                                                |
+| End-user impact         | A person sees the same press on every Astryx surface: the same tint, the same start delay inside scrolling content, the same release fade, and the same cancel when a scroll takes the touch. A press never moves a tap target, so a tap lands where the person aims it.                                                                                                                                                                                                                                                                                                                                        |
+| Builder impact          | A component picks a recipe and states it in its own record. It adds no press attribute, tracker, timer, or tint variable of its own. A press fix lands once, in the engine or the recipe, and reaches every component that uses it. No public API changes; the recipes are exports of the private press modules.                                                                                                                                                                                                                                                                                                |
+| Compatibility/readiness | No public API change. INV1 gap: the group tracker, the touch-runtime press tracker, the menu lit-row attribute, and local copies in ClickableCard, SelectableCard, Thumbnail, Tab, Switch, Slider and the Selector-family triggers write their own press state. INV4 gap: Switch, Slider and the SegmentedControl lens release in a fixed 200 ms, and controller controls end a press after 10 px of drift outside scrolling content. INV2 gap: Table cells paint no press. INV5 gap: under a mouse or a pen, most surfaces paint CSS `:active`. INV8 gap: Selector-family triggers scale under reduced motion. |
+| Review checks           | Reject a new press attribute, tracker, timer, or tint variable outside the recipes; a press style that changes layout, the containing block, or the hit area; a fixed release duration; a container that paints for a finger or pen press that starts on a nested interactive element; and press engine code moved off first load.                                                                                                                                                                                                                                                                              |
+| Governing rules         | `spec:AST-094` FR5, FR8, FR11, FR20, DEC-14, DEC-21; `design:user-states` DR1–DR5; `design:reduced-motion` DR1–DR2; `architecture:layer-runtime` INV22; `component:Item` FR9; `component:Button` anatomy and FR15; `module:DropdownMenu/useMenuPress` FR6; `architecture:component-import-boundaries` INV10; `spec:AST-013` FR9.                                                                                                                                                                                                                                                                                |
 
 ## Purpose
 
@@ -61,11 +61,11 @@ writes the private press attribute (`on`, then `fading`), starts the delay
 timer, and ends the press on a release, a cancel, or a scroll that takes the
 touch. The recipe styles paint from that attribute.
 
-| Recipe               | Used by                                                                                                                                                                                                                                                                                                     | What paints                                                                                                                                                                                                                                | Start                                                                                                       | End                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 1. Momentary control | Button family, Link, Switch, Tab, Token, SegmentedControl segment, navigation items, Selector-family triggers, Step, Calendar day                                                                                                                                                                           | The system pressed tint on the control's own press layer. A standalone control may also scale, as its record states. Option: keeps its press through a drag (Slider thumb, SegmentedControl lens, Switch thumb; `design:user-states` DR4). | Touch-down outside scrolling content; 150 ms after touch-down inside it (`spec:AST-094` FR11).              | The lift, with the release fade. A scroll that takes the touch ends it with no fade. |
-| 2. Row-wide target   | Item and ListItem, TreeList rows, CheckboxList and RadioList rows, Collapsible trigger, ClickableCard, SelectableCard, Thumbnail; a control whose caller stretches it across a row (its root static and its `::after` covering the row, `component:Button` anatomy and FR17), which tints the row it covers | The pressed tint on the whole row or card, only for a press that would activate it. A press on a row's own box presses the row (`component:CheckboxListItem` AR3).                                                                         | As recipe 1.                                                                                                | As recipe 1.                                                                         |
-| 3. Cell or menu row  | Menu rows, picker options, Table cells, CommandPalette rows                                                                                                                                                                                                                                                 | The pressed tint on the row. At most one row of a menu is lit; a sliding finger moves the light (`module:DropdownMenu/useMenuPress` FR6).                                                                                                  | 150 ms after touch-down inside scrolling content; at once in a menu whose rows fit (`spec:AST-094` DEC-14). | The lift acts on the lit row. A scroll that takes the touch ends it with no fade.    |
+| Recipe               | Used by                                                                                                                                                                                                                                       | What paints                                                                                                                                                                                                                                | Start                                                                                                       | End                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1. Momentary control | Button family, Link, Switch, Tab, Token, SegmentedControl segment, TopNavItem, SideNavItem, NavItem, Selector-family triggers, Step, Calendar day                                                                                             | The system pressed tint on the control's own press layer. A standalone control may also scale, as its record states. Option: keeps its press through a drag (Slider thumb, SegmentedControl lens, Switch thumb; `design:user-states` DR4). | Touch-down outside scrolling content; 150 ms after touch-down inside it (`spec:AST-094` FR11).              | The lift, with the release fade. A scroll that takes the touch ends it with no fade. |
+| 2. Row-wide target   | Item and ListItem, TreeList rows, CheckboxList and RadioList rows, Collapsible trigger, ClickableCard, SelectableCard, Thumbnail; a control whose caller stretches it across a row (its root static and its `::after` covering the row; INV9) | The pressed tint on the whole row or card, only for a press that would activate it. A press on a row's own box presses the row (`component:CheckboxListItem` AR3).                                                                         | As recipe 1.                                                                                                | As recipe 1.                                                                         |
+| 3. Cell or menu row  | Menu rows, picker options, CommandPalette rows, Table cells (INV2 gap)                                                                                                                                                                        | The pressed tint on the row. At most one row of a menu is lit; a sliding finger moves the light (`module:DropdownMenu/useMenuPress` FR6).                                                                                                  | 150 ms after touch-down inside scrolling content; at once in a menu whose rows fit (`spec:AST-094` DEC-14). | The lift acts on the lit row. A scroll that takes the touch ends it with no fade.    |
 
 ## Boundaries and invariants
 
@@ -81,29 +81,23 @@ touch. The recipe styles paint from that attribute.
   never writes a caller's `::before` or `::after`. A layer anchors to its
   trigger's untransformed box (`architecture:layer-runtime` INV22).
 - **INV4 — One timing source.** Every profile reads its start delay, cancel,
-  and release from the engine. A press ends when a scroll takes the touch
-  (`spec:AST-094` FR20), or when the pointer leaves the target by more than the
-  control profile's tracking margin of 70 px. Every release that fades plays
-  the theme's exit motion tokens, with the reduced-motion treatment of
-  `design:reduced-motion` DR2 (`spec:AST-094` FR5, FR8). No profile uses a
-  fixed duration.
+  and release from the engine. A control keeps its press until the pointer
+  leaves its bounds expanded by UIControl's tracking margin (70 pt,
+  measurement M-G12). A row, card, or cell ends its press at the cell
+  profile's travel, the pan hysteresis. Inside a scroll view, a scroll that
+  takes the touch ends any press (`spec:AST-094` FR20). Every release that
+  fades plays the theme's exit motion tokens, with the reduced-motion
+  treatment of `design:reduced-motion` DR2 (`spec:AST-094` FR5, FR8). No
+  profile uses a fixed duration.
 - **INV5 — Every pointer through the engine.** A mouse or pen press paints at
   once on `pointerdown` through the engine, with the same release fade as a
-  finger's, in place of CSS `:active` (`spec:AST-094` DEC-21).
+  finger's, in place of CSS `:active` (`spec:AST-094` DEC-21; `component:Button` FR15), except the container case INV7 keeps.
 - **INV6 — The first press.** The engine's core stays on first load: it finds
   the pressable element, writes the attribute, starts the delay timer, and
-  ends the press on a scroll. A coarse first press paints in the frame the
-  finger lands; this code never moves into the deferred touch runtime.
-  Optional profiles (the group slide, the menu scrub, a press held through a
-  drag, a row's box hold) load with their opt-in or with the touch runtime and
-  cost an unused page at most what `architecture:component-import-boundaries`
-  INV10 allows. Before an optional profile loads, each pressable keeps its own
-  press. Nothing is painted into server HTML that has not hydrated
-  (`spec:AST-013` FR9).
-- **INV3a — A stretched control.** When a caller stretches a control across a
-  row, the control's own press layer covers the same box as its hit area: a
-  press tints the row it covers, and the whole row stays the tap target for the
-  whole press.
+  ends the press on a scroll. Optional profiles (the group slide, the menu
+  scrub, a press held through a drag, a row's box hold) cost an unused page at
+  most what `architecture:component-import-boundaries` INV10 allows. Nothing
+  is painted into server HTML that has not hydrated (`spec:AST-013` FR9).
 - **INV7 — A nested control.** In recipe 2, a finger or pen press that starts
   on a nested interactive element paints that element only and never its row
   or card (`component:Item` FR9). A mouse press there keeps the container's
@@ -112,6 +106,11 @@ touch. The recipe styles paint from that attribute.
   scales (`design:reduced-motion` DR1). A disabled surface paints no press
   (`design:user-states` DR2). A control whose own popup is open does not scale
   (`component:Button` FR15).
+- **INV9 — A stretched control.** A control paints its press on its own
+  `::before` (`component:Button` FR15). When a caller stretches the control
+  across a row, its static root gives that layer and its hit area the row's
+  box (`component:Button` anatomy), so a press tints the row the control
+  covers, and the whole row stays the tap target for the whole press.
 
 ## Change coupling
 
@@ -134,18 +133,19 @@ touch. The recipe styles paint from that attribute.
 
 - `spec:AST-094` FR5, FR11, DEC-21: the release, the press profiles, and the
   fine-pointer profile.
-- Owner decision (`cixzhang`, 2026-11-16): one record for the press code that
-  ships, with three recipes, no new module, and no public API change.
+- Owner decision (`cixzhang`, 2026-11-16): "A record for today's press code,
+  3 recipes", with no new module and no public API change.
 
 ## Verification
 
-| Invariant | Evidence                                                                                                          | Failure signal                                                           |
-| --------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| INV1      | Review: no new press attribute, tracker, or tint variable outside the recipe modules                              | A component writes its own pressed state                                 |
-| INV2      | Each pressable component record names its recipe                                                                  | A record restates press rules without a recipe                           |
-| INV3      | `pressFeedback.test.ts`; a browser test that a point inside a caller's stretched target still hits during a press | A tap during a press misses its target, or layout shifts                 |
-| INV4      | Computed release durations follow the theme's exit tokens and tempo on every recipe                               | A fixed duration, or two surfaces that cancel the same drift differently |
-| INV5      | A mouse press test per recipe asserts the press attribute, not `:active`                                          | A mouse press paints with no shared release fade                         |
-| INV6      | Size report: the engine core is on first load; a first-touch browser test paints in the landing frame             | A first finger press paints late or not at all                           |
-| INV7      | A press on a nested control in a row and in a card, for finger, pen, and mouse                                    | A finger or pen press on a nested control paints the container           |
-| INV8      | Reduced-motion and disabled press tests per recipe                                                                | A scale under reduced motion, or paint on a disabled surface             |
+| Invariant | Evidence                                                                                                              | Failure signal                                                           |
+| --------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| INV1      | Review: no new press attribute, tracker, or tint variable outside the recipe modules                                  | A component writes its own pressed state                                 |
+| INV2      | Each pressable component record names its recipe                                                                      | A record restates press rules without a recipe                           |
+| INV3      | `pressFeedback.test.ts`; a browser test that a point inside a caller's stretched target still hits during a press     | A tap during a press misses its target, or layout shifts                 |
+| INV4      | Computed release durations follow the theme's exit tokens and tempo on every recipe                                   | A fixed duration, or two surfaces that cancel the same drift differently |
+| INV5      | A mouse press test per recipe asserts the press attribute, not `:active`                                              | A mouse press paints with no shared release fade                         |
+| INV6      | Size report: the engine core is on first load; optional profiles within INV10                                         | The engine core moves off first load, or an unused profile exceeds INV10 |
+| INV7      | A press on a nested control in a row and in a card, for finger, pen, and mouse                                        | A finger or pen press on a nested control paints the container           |
+| INV8      | Reduced-motion and disabled press tests per recipe                                                                    | A scale under reduced motion, or paint on a disabled surface             |
+| INV9      | A browser test: a point inside a caller's stretched target still hits during a press, and the press tints that target | A tap during a press misses, or the tint and the target disagree         |
