@@ -328,6 +328,26 @@ describe('defineTheme', () => {
     expect(theme.tokens['--color-accent']).toBe('light-dark(#0077B6, #48CAE4)');
   });
 
+  it('defines a plain-object base before merging it, as its own input is', () => {
+    const plainBase = {
+      name: 'plain-base',
+      tokens: {'--color-accent': ['#ffffff', '#000000']},
+      typography: {body: {family: 'Lato'}},
+    };
+    const child = defineTheme({
+      name: 'plain-base-child',
+      extends: plainBase as unknown as DefinedTheme,
+    });
+    expect(child.tokens['--color-accent']).toBe('light-dark(#ffffff, #000000)');
+    const definedBase = defineTheme(plainBase as DefineThemeInput);
+    const fromDefined = defineTheme({
+      name: 'plain-base-child',
+      extends: definedBase,
+    });
+    expect(child.tokens).toEqual(fromDefined.tokens);
+    expect(child.__inputTokens).toEqual(fromDefined.__inputTokens);
+  });
+
   it('passes through string values as-is', () => {
     const theme = defineTheme({
       name: 'string-test',
