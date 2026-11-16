@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {themeDataAttributes, themeProps} from './themeProps';
+import {
+  themeDataAttributeName,
+  themeDataAttributes,
+  themeProps,
+} from './themeProps';
 
 describe('themeProps', () => {
   it('returns the stable target class for a component', () => {
@@ -58,5 +62,12 @@ describe('themeProps', () => {
       'data-variant': 'primary',
       'data-size': 'sm',
     });
+  });
+
+  it('caches computed data attribute names across repeated lookups', () => {
+    const first = themeDataAttributeName('visualPropName');
+    const second = themeDataAttributeName('visualPropName');
+    expect(first).toBe('data-visual-prop-name');
+    expect(second).toBe(first);
   });
 });
