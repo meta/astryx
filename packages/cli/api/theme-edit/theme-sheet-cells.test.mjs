@@ -83,7 +83,7 @@ describe('a sheet cell', () => {
     expect(SHEET_CSS).not.toMatch(/(^|\})\.cs-cell\{[^}]*max-height/);
     expect(SHEET_CSS).not.toMatch(/\.cs-open-group \.cs-cell\{[^}]*max-height/);
     expect(SHEET_CSS).toContain(
-      '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
+      '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){flex-basis:100%}',
     );
     expect(SHEET_CSS).toMatch(/\.cs-item\{[^}]*flex:1 1 200px/);
   });
