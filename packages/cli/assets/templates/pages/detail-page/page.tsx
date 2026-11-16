@@ -416,6 +416,7 @@ function InvoiceCard() {
             </HStack>
           </StackItem>
           <HStack gap={2}>
+            {/* A refund cannot be undone: wire it only behind a confirm step. */}
             <Button label="Refund" variant="ghost" />
             <Button
               label="Send Invoice"
