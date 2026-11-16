@@ -62,6 +62,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
+import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
+import {STYLESHEET_FILE} from '../../../foundation/fs/stylesheet-file.mjs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
@@ -116,6 +118,7 @@ import {
   INPUT_DECLARATION_FILES,
   inputFieldsFrom,
   sourceFieldProblems,
+  inputFieldProblems,
   sourceTypography,
 } from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
@@ -3926,6 +3929,163 @@ function keptWarnings(kept, cwd) {
 }
 
 /**
+ * Read each value of a loaded theme (in plain objects and arrays, at any
+ * depth), so a getter or Proxy the module wrote that throws fails here, as
+ * a load: "Failed to load theme from <file>: <message> (reading <field>)".
+ * @param {any} theme
+ * @param {string} filePath
+ */
+function readThemeValues(theme, filePath) {
+  /** @type {Set<any>} */
+  const seen = new Set();
+  /** @param {any} value @param {string[]} at */
+  const walk = (value, at) => {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      seen.has(value) ||
+      at.length > 32
+    )
+      return;
+    seen.add(value);
+    if (!Array.isArray(value) && !isPlainObject(value)) return;
+    /** @type {Array<string | symbol>} */
+    let keys;
+    try {
+      keys = Reflect.ownKeys(value);
+    } catch (error) {
+      throw readFailure(error, at);
+    }
+    for (const key of keys) {
+      if (typeof key !== 'string') continue;
+      /** @type {any} */
+      let next;
+      try {
+        next = value[key];
+      } catch (error) {
+        throw readFailure(error, [...at, key]);
+      }
+      walk(next, [...at, key]);
+    }
+  };
+  /** @param {unknown} error @param {string[]} at */
+  const readFailure = (error, at) =>
+    new Error(
+      `Failed to load theme from ${filePath}: ${error instanceof Error ? error.message : thrownText(error)}${at.length ? ` (reading ${at.join('.')})` : ''}`,
+      {cause: error},
+    );
+  walk(theme, []);
+}
+
+/**
+ * Whether a theme object is one defineTheme() made: it carries the surface
+ * data defineTheme adds (the `__onDark` key, set even when it is empty) or a
+ * built module's mark, with its tokens. Any other object is raw input.
+ * @param {any} theme
+ */
+function isDefinedTheme(theme) {
+  return (
+    theme.tokens !== undefined &&
+    (Object.hasOwn(theme, '__onDark') || theme.__built === true)
+  );
+}
+
+/**
+ * A plain-object theme as defineTheme() input: a field given as undefined
+ * is a field not given (`extends: undefined` names no base), and a plain
+ * base it extends is made with defineTheme() first, its own base before it,
+ * so a base's `extends`, typography and [light, dark] pairs are resolved as
+ * the theme's own are.
+ * @param {any} theme
+ * @param {Set<any>} [seen] the bases already met, for one that extends itself
+ * @returns {any}
+ */
+function defineThemeInput(theme, seen = new Set()) {
+  const input = Object.fromEntries(
+    Object.entries(theme).filter(([, value]) => value !== undefined),
+  );
+  const base = input.extends;
+  if (
+    base &&
+    typeof base === 'object' &&
+    !isDefinedTheme(base) &&
+    !seen.has(base)
+  ) {
+    seen.add(base);
+    input.extends = _defineTheme(defineThemeInput(base, seen));
+  }
+  return input;
+}
+
+/**
+ * The stylesheets a theme's modules import that are there and that its
+ * outputs do not carry, each as an app writes its import: a stylesheet the
+ * theme file imports by the specifier it writes (`'pkg/fonts.css'`) or, for
+ * a relative one, its path from the working folder; one a module the theme
+ * imports brings in (`loaded`, from the load), by its path when it is a file
+ * of the project. Read from the source as well as the load: a load the
+ * module cache answers runs no import again.
+ * @param {string} filePath the theme source
+ * @param {string} source its text
+ * @param {string[]} loaded the stylesheet files the load brought in
+ * @param {string} outPath the stylesheet this build writes
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function carriedStylesheets(filePath, source, loaded, outPath, cwd) {
+  /** @param {string} file */
+  const real = file => {
+    try {
+      return fs.realpathSync(file);
+    } catch {
+      return path.resolve(file);
+    }
+  };
+  const own = real(outPath);
+  /** @type {Map<string, string>} each named stylesheet, by its real file */
+  const named = new Map();
+  const require = createRequire(filePath);
+  for (const {specifier, typeOnly} of moduleImports(source, filePath) ?? []) {
+    const query = specifier.lastIndexOf('?');
+    const bare =
+      query > specifier.lastIndexOf('/')
+        ? specifier.slice(0, query)
+        : specifier;
+    if (typeOnly || !STYLESHEET_FILE.test(bare)) continue;
+    const relative = bare.startsWith('./') || bare.startsWith('../');
+    let file;
+    try {
+      file = relative
+        ? path.resolve(path.dirname(filePath), bare)
+        : require.resolve(bare);
+    } catch {
+      continue;
+    }
+    if (!fs.existsSync(file)) continue;
+    const key = real(file);
+    if (key === own || named.has(key)) continue;
+    named.set(
+      key,
+      relative ? path.relative(cwd, file) || file : `'${specifier}'`,
+    );
+  }
+  for (const file of loaded) {
+    const key = real(file);
+    if (key === own || named.has(key)) continue;
+    const shown = path.relative(cwd, file);
+    // A package's own stylesheet a module of it imports is the package's.
+    if (
+      !shown ||
+      shown.startsWith('..') ||
+      shown.split(path.sep).includes('node_modules')
+    )
+      continue;
+    named.set(key, shown);
+  }
+  return [...named.values()];
+}
+
+/**
  * Refuse a theme whose source imports a stylesheet that is not there, unless
  * it is the stylesheet this build writes (which loads empty, so the first
  * build from a clean checkout writes it).
@@ -4808,6 +4968,10 @@ async function themeBuildInternal(
     importedStylesheets = loaded.importedStylesheets ?? [];
     loadDegradation = loaded.degraded;
     colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
+    // Every value of the theme is read here, where a getter or Proxy of the
+    // module's that throws is a failed load naming the file and the field,
+    // never a failure of a check that reads it later.
+    readThemeValues(themeDef, filePath);
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
@@ -5120,6 +5284,26 @@ async function themeBuildInternal(
         from: null,
       }))
     : [];
+  // A field the source reader cannot place (the theme reached through a
+  // member, an array element, a call) is judged on the input itself, the
+  // one defineTheme reads, and named without a line: never dropped.
+  const loadedInput =
+    interception?.inputOf(themeDef) ??
+    (isDefinedTheme(themeDef) ? null : themeDef);
+  if (fields && loadedInput) {
+    const placed = new Set(badFields.map(f => f.path.join('.')));
+    for (const f of inputFieldProblems(loadedInput, fields))
+      if (!placed.has(f.path.join('.')))
+        badFields.push({
+          path: f.path,
+          why: f.why,
+          line: null,
+          at: null,
+          inherited: false,
+          elsewhere: false,
+          from: null,
+        });
+  }
   // A typography value Core builds into something no browser uses (a font
   // stack in one family, a quoted name with a space, a role weight with no
   // type scale), or of a type the field does not take (a weight as a
@@ -5276,22 +5460,14 @@ async function themeBuildInternal(
     // defineTheme() turns a [light, dark] pair into light-dark() and adds
     // Core's media-surface rules. A theme with no tokens is raw input too,
     // whatever it carries (a resolved theme always has its tokens).
-    const resolved =
-      themeDef.tokens !== undefined &&
-      (Object.hasOwn(themeDef, '__onDark') || themeDef.__built === true);
+    const resolved = isDefinedTheme(themeDef);
     const needsResolution =
       !resolved ||
       INPUT_ONLY_FIELDS.some(field => themeDef[field] !== undefined) ||
       ('localTokens' in themeDef && themeDef.__localTokenLineage === undefined);
     if (needsResolution) {
       try {
-        // A field given as undefined is a field not given, as the checks
-        // above read it (`extends: undefined` names no base).
-        resolvedTheme = _defineTheme(
-          Object.fromEntries(
-            Object.entries(themeDef).filter(([, value]) => value !== undefined),
-          ),
-        );
+        resolvedTheme = _defineTheme(defineThemeInput(themeDef));
       } catch (error) {
         const message =
           error instanceof Error
@@ -5677,9 +5853,16 @@ async function themeBuildInternal(
   // A stylesheet the source imports for its side effect (`import
   // './brand.css'`) loads empty, and the outputs do not carry it: said, so
   // the app imports it beside the theme's stylesheet.
-  for (const file of importedStylesheets) {
-    if (path.resolve(file) === path.resolve(outPath)) continue;
-    const w = `${path.relative(cwd, filePath) || filePath} imports ${path.relative(cwd, file) || file}, which the built outputs do not carry (a theme's module and stylesheet hold only the theme): import it in your app beside ${path.relative(cwd, outPath) || outPath}.`;
+  // Each is named as an app writes its import: a package stylesheet by the
+  // specifier the source wrote, a file of the project by its path.
+  for (const shown of carriedStylesheets(
+    filePath,
+    themeSource,
+    importedStylesheets,
+    outPath,
+    cwd,
+  )) {
+    const w = `${path.relative(cwd, filePath) || filePath} imports ${shown}, which the built outputs do not carry (a theme's module and stylesheet hold only the theme): import it in your app beside ${path.relative(cwd, outPath) || outPath}.`;
     warningMessages.push(w);
     logger.warn(`Warning: ${w}`);
   }

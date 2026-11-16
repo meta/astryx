@@ -529,6 +529,81 @@ export function sourceFieldProblems(entry, fields, load) {
 }
 
 /**
+ * Each field the loaded theme input holds that Core's theme input does not
+ * take, by its key path, as {@link sourceFieldProblems} words it: the input
+ * the build hands defineTheme, whatever expression in the source made it (a
+ * member, an array element, a call's result). A key with two underscores
+ * (`__onDark`) is the theme's own data, not a field.
+ * @param {any} input the theme input as loaded
+ * @param {InputFields} fields
+ * @returns {Array<{path: string[], why: string}>}
+ */
+export function inputFieldProblems(input, fields) {
+  /** @type {Array<{path: string[], why: string}>} */
+  const out = [];
+  const did = (/** @type {string | null} */ near) =>
+    near ? `; did you mean ${near}?` : '';
+  /** @param {any} value */
+  const block = value =>
+    value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  /**
+   * @param {any} object
+   * @param {string[]} at
+   * @param {string[]} takes
+   * @param {(k: string, near: string | null) => string} why
+   */
+  const check = (object, at, takes, why) => {
+    for (const k of Object.keys(object)) {
+      if (k.startsWith('__') || takes.includes(k)) continue;
+      out.push({path: [...at, k], why: why(k, nearField(k, takes))});
+    }
+  };
+  const top = block(input);
+  if (!top) return out;
+  check(
+    top,
+    [],
+    fields.theme,
+    (k, near) =>
+      `${k} is no field defineTheme takes, so the build reads nothing from it${did(near)}`,
+  );
+  for (const surface of ['onDark', 'onLight']) {
+    const value = block(top[surface]);
+    if (value)
+      check(
+        value,
+        [surface],
+        fields.surface,
+        (k, near) =>
+          `${k} is no field ${surface} takes, so the build reads nothing from it${did(near)}`,
+      );
+  }
+  const typography = block(top.typography);
+  if (!typography) return out;
+  check(
+    typography,
+    ['typography'],
+    fields.typography,
+    (k, near) =>
+      `${k} is no field typography takes (${fields.typography.join(', ')}), so Core builds nothing from it${did(near)}`,
+  );
+  for (const role of Object.keys(typography)) {
+    if (!fields.typography.includes(role)) continue;
+    const value = block(typography[role]);
+    const takes = role === 'scale' ? fields.scale : fields.role;
+    if (!value || !takes.length) continue;
+    check(
+      value,
+      ['typography', role],
+      takes,
+      (k, near) =>
+        `${k} is no field typography.${role} takes (${takes.join(', ')}), so Core builds nothing from it${did(near)}`,
+    );
+  }
+  return out;
+}
+
+/**
  * A theme source's typography as the plain values it writes: text,
  * numbers (signed too) and arrays, in nested blocks, followed through the consts of the
  * theme file. A value written as anything else (a call, a name from another
