@@ -135,7 +135,8 @@ then have contradictory winners.
      is `text`, `icon`, `background`, or `border`. The role is an emphasis
      (`primary`, `secondary`, `disabled`, `emphasized`), an intent
      (`--color-text-accent`), a surface (`surface`, `body`, `card`, `popover`,
-     `muted`, `inverted`), or a hue (`--color-text-green`).
+     `muted`, `inverted`), a hue (`--color-text-green`), or `control`, the
+     edge of a form control (`--color-border-control`, INV13).
   2. `--color-<intent>`: the intent's own colour. The intents are `accent`,
      `neutral`, `info`, `success`, `warning`, and `error`.
   3. A shape-1 or shape-2 name with one variant suffix: `-muted` (the pale
@@ -208,6 +209,15 @@ then have contradictory winners.
 
 - **INV12 — The stock accent pair meets 4.5:1.** `--color-on-accent` on
   `--color-accent` meets 4.5:1 in light and dark mode in Core's defaults.
+- **INV13 — A form control's edge meets 3:1.** `--color-border-control` is the
+  edge of a field shell and of a checkbox or radio box, the edge that is the
+  only cue to where the control is. It meets 3:1 against the default surface
+  and the page body in light and dark mode in Core's defaults, and every
+  Astryx theme template sets a value that does. A theme built from a colour
+  scale gets a generated `--color-border-control` held at 3:1 or more against
+  its own surface and body
+  (`spec:AST-020` FR1; WCAG 2.2 SC 1.4.11). Other borders keep their own
+  lighter roles (`--color-border` or `--color-border-emphasized`) (DEC-2).
 
 This record does not own:
 
@@ -300,6 +310,25 @@ Rejected: keeping spacing in `px` while type is `rem` (text grows into fixed
 boxes); converting author-written `px` in custom themes (a theme's own
 decision).
 
+### DEC-2 — Form controls get their own border role
+
+**Decider:** `cixzhang`, `2026-11-13`
+
+> "New control-border role" — Owner decision, 2026-11-13 (Cindy)
+
+A field's edge is often the only cue to where it is, so form controls take a
+border role of their own, `--color-border-control`, held at 3:1 (INV13). Field
+shells and checkbox and radio boxes use it. Cards, dividers and every other surface keep their own lighter edge
+(`--color-border` or `--color-border-emphasized`), so in Core's
+defaults and the theme templates only the controls darken. A theme built from
+a colour scale gets a generated control edge held at 3:1 against its surface
+and body.
+
+Rejected: raising `--color-border-emphasized` to 3:1, because about twenty other
+surfaces would darken with it.
+Rejected: pointing fields at `--color-border-gray`, because it fails 3:1 in some
+themes and ties fields to badge theming.
+
 ## Verification
 
 | Invariant                    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                 |
@@ -312,5 +341,6 @@ decision).
 | INV10                        | `tokens.test.ts` name check over Astryx's own `colorDefaults` and `domainTokenDefaults` only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A colour token Astryx defines fits none of the five shapes                                                                                                                                                                                                                     |
 | INV11                        | `scripts/check-muted-status-contrast.test.mjs` (resolves global and Banner pale-surface role pairs), `scripts/check-badge-contrast.test.mjs` (resolves Core Badge defaults plus theme overrides), `scripts/check-status-text-contrast.test.mjs` (resolves `--color-on-<status>` on each strong fill, and `--color-text-<status>`, `--color-icon-<status>`, and `--color-border-<status>` against the surface and card tokens and checks that each status fill and text colour is chromatic in every first-party theme), `neutralTheme.test.ts` (pins reviewed role values and pairings), `tailwind-theme.test.ts` (pins the status utilities, including the released base ones), forced-colors assertions in the Badge, StatusDot, and Banner tests, and theme alias-generation tests | A status role is missing, mispaired, grey, routed to the wrong public utility, or falls below its contrast threshold in light or dark mode, a status fill loses its border in forced-colors mode, or a released status fill or utility changes value without a recorded reason |
 | INV12                        | `packages/core/src/theme/contrast.test.ts` "the stock accent pair meets 4.5:1 in the light/dark theme" (current values: light `#0064E0`, dark `#0171E3`, label `#FFFFFF`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The stock `--color-on-accent` on `--color-accent` falls below 4.5:1 in light or dark mode                                                                                                                                                                                      |
+| INV13                        | `packages/core/src/theme/contrast.test.ts` resolves `--color-border-control` against the surface and the page body in light and dark for Core's defaults, each theme template and a colour-scale theme                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `--color-border-control` falls below 3:1 against the surface or the page body in either mode, for any of them, or a colour-scale theme emits no `--color-border-control`                                                                                                       |
 | Released token compatibility | Type checking plus representative package/source builds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | A released CSS variable or typed token name disappears without an explicit migration decision                                                                                                                                                                                  |
 | Visual defaults              | Real Chromium examples in light, dark, status, and high-contrast contexts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A changed default produces unreadable or semantically inconsistent output                                                                                                                                                                                                      |

@@ -29,6 +29,7 @@ import type {TableContextActions} from './types';
 import {overflowStyles, containerEdgeStyles} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {TableCellContextMenu} from './TableCellContextMenu';
+import {hasContextActions} from './tableContextActions';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 
@@ -91,6 +92,21 @@ const headerDividerStyles = stylex.create({
   },
 });
 
+const headerTriggerStyles = stylex.create({
+  unpositioned: {
+    position: 'static',
+  },
+});
+
+// Holds the context menu's cursor anchor in place of its unpositioned
+// trigger, so the menu still scrolls with the table. A plugin's own position,
+// such as a sticky column, wins.
+const headerMenuCellStyles = stylex.create({
+  cell: {
+    position: 'relative',
+  },
+});
+
 const dividerColumnStyles = stylex.create({
   cell: {
     borderInlineEndWidth: {
@@ -135,6 +151,7 @@ export function TableHeaderCell({
   // Header cells always get the bottom divider (separates header from body).
   // When used standalone (no table context) the cell renders plain, with no
   // density/divider styles.
+  const hasContextMenu = hasContextActions(contextMenuActions);
   const cellStyles: StyleXStyles[] = [];
   if (ctx) {
     cellStyles.push(
@@ -148,12 +165,21 @@ export function TableHeaderCell({
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
     }
+    if (hasContextMenu) {
+      cellStyles.push(headerMenuCellStyles.cell);
+    }
   }
 
   // The cell owns the context-menu wrapper so it controls how the menu
-  // interacts with its padding / content. No-op when no actions.
+  // interacts with its padding / content. No-op when no actions. Inside a
+  // Table the wrapper stays unpositioned, so a header plugin's overlay, such
+  // as a resize boundary, positions against the cell and sits on its edge.
   const content = (
-    <TableCellContextMenu actions={contextMenuActions}>
+    <TableCellContextMenu
+      actions={contextMenuActions}
+      triggerXstyle={
+        ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined
+      }>
       {children}
     </TableCellContextMenu>
   );

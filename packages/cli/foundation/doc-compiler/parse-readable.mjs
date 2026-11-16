@@ -11,6 +11,7 @@
  */
 
 import {parseDoc} from '../../authoring/doctypes/parse.mjs';
+import {storedParse} from './stored-docs.mjs';
 
 /**
  * @param {unknown} input
@@ -25,5 +26,7 @@ export function parseReadableDoc(input, label = 'doc') {
   if (type === 'theme') {
     throw new Error(`${label} has unsupported type ${JSON.stringify(type)}.`);
   }
-  return parseDoc(input, label);
+  // A doc Astryx ships was parsed at publish (scripts/generate-stored-docs.mjs):
+  // its stored parse is what parsing it gives.
+  return storedParse(input) ?? parseDoc(input, label);
 }

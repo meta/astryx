@@ -55,15 +55,48 @@ describe('the Node legs inside their job limit', () => {
   });
 
   it("end door-conformance's slowest hook at least two minutes inside the job limit", () => {
+    // The three door-conformance test files share one hook.
     const source = fs.readFileSync(
-      path.join(root, 'packages/cli/host/door-conformance.test.mjs'),
+      path.join(root, 'packages/cli/test-utils/door-conformance.mjs'),
       'utf8',
     );
     const bound =
-      /beforeAll\(async \(\) => \{[\s\S]*?\n {2}\}, (\d+) \* 60_000\);/.exec(
+      /beforeAll\(async \(\) => \{[\s\S]*?\n {2,}\}, (\d+) \* 60_000\);/.exec(
         source,
       );
     expect(bound, 'the beforeAll bound').not.toBeNull();
     expect(Number(bound[1])).toBeLessThanOrEqual(limitMinutes - 2);
+  });
+
+  it('run no browser step: the browser contracts have a job of their own', () => {
+    // A step only one leg runs takes a share of that leg no split can book.
+    // The first leg keeps only the steps that run where no Node share runs (a
+    // spec-only change's record readers) or a Lab-only change's one check.
+    const legOneOnly = job.steps
+      .filter(
+        each =>
+          typeof each.if === 'string' && /\bmatrix\.shard == 1\b/.test(each.if),
+      )
+      .map(each => each.name);
+    expect(legOneOnly.sort()).toEqual([
+      'Check out the change for the tests that read its records',
+      'Lab-only: CLI official-packages check',
+      'List the tests that read a changed record',
+    ]);
+    expect(
+      job.steps.some(each => /playwright/i.test(String(each.run ?? ''))),
+    ).toBe(false);
+    const browser = yaml.parse(
+      fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
+    ).jobs['node-browser-contracts'];
+    expect(browser.steps.map(each => each.name)).toEqual(
+      expect.arrayContaining([
+        'Install Playwright for theme-family contract',
+        'Offline-media browser cases',
+        'Theme editor browser case',
+        'Run the theme-family contract',
+      ]),
+    );
+    expect(step.env.VITEST_LEG_ONE_RESERVE).toBeUndefined();
   });
 });

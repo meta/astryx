@@ -58,8 +58,9 @@ export interface TriggerPoint {
 export function longPressPoint(
   point: {x: number; y: number},
   trigger: Element | null,
+  anchor: HTMLElement | null = null,
 ): TriggerPoint {
-  const rect = trigger?.getBoundingClientRect();
+  const rect = anchorBase(trigger, anchor)?.getBoundingClientRect();
   return {
     x: rect ? point.x - rect.left : point.x,
     y: rect ? point.y - rect.top : point.y,
@@ -68,21 +69,45 @@ export function longPressPoint(
 }
 
 /**
- * The point in `trigger`'s box where a `contextmenu` event opens the menu. A
- * keyboard `contextmenu` (Shift+F10, the Menu key) has coordinates (0, 0) in
- * several browsers. Then the menu opens at the trigger's bottom-left corner,
- * so it is reachable without a pointer.
+ * The box the cursor anchor's offsets are measured from: its containing
+ * block. That is the trigger, unless the caller's trigger style leaves the
+ * trigger unpositioned so that another box holds the anchor.
+ */
+export function anchorBase(
+  trigger: Element | null,
+  anchor: HTMLElement | null,
+): Element | null {
+  const base = anchor?.offsetParent;
+  return base instanceof HTMLElement ? base : trigger;
+}
+
+/**
+ * The point in the anchor's base box where a `contextmenu` event opens the
+ * menu. A keyboard `contextmenu` (Shift+F10, the Menu key) has coordinates
+ * (0, 0) in several browsers. Then the menu opens at the trigger's
+ * bottom-left corner, so it is reachable without a pointer.
  */
 export function contextMenuPoint(
   event: ReactMouseEvent,
   trigger: Element | null,
+  anchor: HTMLElement | null = null,
 ): TriggerPoint {
-  const rect = trigger?.getBoundingClientRect();
+  const rect = anchorBase(trigger, anchor)?.getBoundingClientRect();
   const isKeyboard =
     event.clientX === 0 && event.clientY === 0 && event.detail === 0;
+  let x = 0;
+  let y = rect?.height ?? 0;
+  const box = isKeyboard ? trigger?.getBoundingClientRect() : undefined;
+  if (rect && box) {
+    x = box.left - rect.left;
+    y = box.bottom - rect.top;
+  } else if (rect && !isKeyboard) {
+    x = event.clientX - rect.left;
+    y = event.clientY - rect.top;
+  }
   return {
-    x: isKeyboard || !rect ? 0 : event.clientX - rect.left,
-    y: isKeyboard || !rect ? (rect?.height ?? 0) : event.clientY - rect.top,
+    x,
+    y,
     isTouch:
       (event.nativeEvent as Partial<PointerEvent>).pointerType === 'touch',
   };

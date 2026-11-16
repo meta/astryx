@@ -117,6 +117,7 @@
     "sections": [
       "start-from-the-generated-doc",
       "explain-when-to-use-it",
+      "choose-keywords",
       "document-every-public-prop",
       "add-focused-examples",
       "read-the-result"
@@ -564,6 +565,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",
@@ -1252,6 +1254,12 @@
   "theme": {
     "type": "docs.detail",
     "sections": [
+      "make-or-change",
+      "look-after-each-change",
+      "denser-or-roomier",
+      "one-kind-of-part",
+      "no-app-yet",
+      "share-with-other-teams",
       "quick-start",
       "creating-a-custom-theme",
       "icon-sizes",

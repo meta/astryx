@@ -26,8 +26,10 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import {StrictMode} from 'react';
 import userEvent from '@testing-library/user-event';
 import {getGestureHost} from '../gestures/GestureHost';
+import {isInHeldLayer} from '../Layer/inputHold';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
@@ -73,7 +75,10 @@ function stubAlertDialogMedia({
     'matchMedia',
     vi.fn((query: string) => {
       let matches = false;
-      if (query.includes('max-width: 640px')) {
+      if (
+        query.includes('max-width: 640px') ||
+        query.includes('width < 768px')
+      ) {
         matches = smallScreen;
       } else if (query.includes('pointer: coarse')) {
         matches = coarsePointer;
@@ -351,7 +356,8 @@ describe('AlertDialog', () => {
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
-      expect(dialog.getAttribute('style')).toContain('--x-width: 400px');
+      // On a phone the alert takes iOS's width; the layout stays the same.
+      expect(dialog.getAttribute('style')).toContain('--x-width: 320px');
       expect(buttons.map(button => button.textContent)).toEqual([
         'Permanently delete workspace',
         'Keep this workspace',
@@ -570,6 +576,12 @@ describe('AlertDialog action tracking', () => {
     target.dispatchEvent(event);
   }
 
+  /** Under a finger, input reaches the alert once it has entered. */
+  async function completePresentation(): Promise<void> {
+    const dialog = screen.getByRole('alertdialog');
+    await waitFor(() => expect(isInHeldLayer(dialog)).toBe(false));
+  }
+
   function renderOpen(props: {isInline?: boolean; coarse?: boolean} = {}) {
     const isCoarse = props.coarse ?? true;
     stubAlertDialogMedia({
@@ -660,6 +672,7 @@ describe('AlertDialog action tracking', () => {
     const action = screen.getByRole('button', {name: 'Delete'});
     place(action, 16, 100);
     place(screen.getByRole('button', {name: 'Cancel'}), 16, 140);
+    await completePresentation();
     selectText(page);
     mouse('pointerdown', action, {x: 60, y: 116}, 'pen');
     mouse('pointerup', action, {x: 60, y: 116}, 'pen');
@@ -684,8 +697,9 @@ describe('AlertDialog action tracking', () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
-  it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', () => {
+  it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', async () => {
     const {onOpenChange, onAction, cancel, action} = renderOpen();
+    await completePresentation();
     let id = touchId++;
     touch('touchstart', action, {x: 60, y: 116}, id);
     expect(action).toHaveAttribute('data-astryx-press', 'on');
@@ -737,6 +751,179 @@ describe('AlertDialog action tracking', () => {
     }
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(onAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('AlertDialog touch motion', () => {
+  let touchClock = 20_000;
+  let touchId = 900;
+
+  function touch(
+    type: 'touchstart' | 'touchend',
+    target: Element,
+    point: {x: number; y: number},
+    id: number,
+  ): void {
+    touchClock += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
+    Object.defineProperty(event, 'changedTouches', {value: [entry]});
+    Object.defineProperty(event, 'touches', {
+      value: type === 'touchend' ? [] : [entry],
+    });
+    Object.defineProperty(event, 'timeStamp', {value: touchClock});
+    target.dispatchEvent(event);
+  }
+
+  function place(element: Element, left: number, top: number): void {
+    const rect = DOMRect.fromRect({x: left, y: top, width: 120, height: 32});
+    element.getBoundingClientRect = () => rect;
+  }
+
+  function renderOpen(
+    props: {touch?: boolean; smallScreen?: boolean; width?: number} = {},
+  ) {
+    const isTouch = props.touch ?? true;
+    stubAlertDialogMedia({
+      smallScreen: props.smallScreen ?? true,
+      coarsePointer: isTouch,
+      noHover: isTouch,
+    });
+    const onOpenChange = vi.fn();
+    const onAction = vi.fn();
+    const element = (isOpen: boolean) => (
+      <AlertDialog
+        isOpen={isOpen}
+        width={props.width}
+        onOpenChange={onOpenChange}
+        title="Delete item?"
+        description="This cannot be undone."
+        actionLabel="Delete"
+        onAction={onAction}
+      />
+    );
+    const view = render(element(true));
+    const cancel = screen.getByRole('button', {name: 'Cancel'});
+    const action = screen.getByRole('button', {name: 'Delete'});
+    place(action, 16, 100);
+    place(cancel, 16, 140);
+    const close = () => view.rerender(element(false));
+    return {onOpenChange, onAction, cancel, close};
+  }
+
+  /** Under a finger, input reaches the alert once it has entered. */
+  async function completePresentation(): Promise<void> {
+    const dialog = screen.getByRole('alertdialog');
+    await waitFor(() => expect(isInHeldLayer(dialog)).toBe(false));
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('drops a touch that lands while the alert enters, then tracks once it has entered', async () => {
+    const {onOpenChange, onAction, cancel} = renderOpen();
+    expect(isInHeldLayer(screen.getByRole('alertdialog'))).toBe(true);
+    const early = touchId++;
+    touch('touchstart', cancel, {x: 60, y: 156}, early);
+    expect(cancel).not.toHaveAttribute('data-astryx-press');
+    touch('touchend', cancel, {x: 60, y: 156}, early);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
+    await completePresentation();
+    const late = touchId++;
+    touch('touchstart', cancel, {x: 60, y: 156}, late);
+    expect(cancel).toHaveAttribute('data-astryx-press', 'on');
+    touch('touchend', cancel, {x: 60, y: 156}, late);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps the theme's motion with a mouse: a click acts at once and a close is immediate", () => {
+    const {onOpenChange, cancel, close} = renderOpen({touch: false});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const dialog = screen.getByRole('alertdialog');
+    expect(isInHeldLayer(dialog)).toBe(false);
+    fireEvent.click(cancel);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    close();
+    expect(dialog).not.toHaveAttribute('open');
+  });
+
+  it("takes iOS's 320 px width on a phone, a caller's width there, and 400 on a wider touch screen or with a mouse", () => {
+    const widthOf = () => screen.getByRole('alertdialog').getAttribute('style');
+    renderOpen();
+    expect(widthOf()).toContain('--x-width: 320px');
+    cleanup();
+    vi.unstubAllGlobals();
+    renderOpen({width: 360});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
+    expect(widthOf()).toContain('--x-width: 360px');
+    cleanup();
+    vi.unstubAllGlobals();
+    renderOpen({smallScreen: false});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
+    expect(widthOf()).toContain('--x-width: 400px');
+    cleanup();
+    vi.unstubAllGlobals();
+    renderOpen({touch: false});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    expect(widthOf()).toContain('--x-width: 400px');
+  });
+
+  it('stays open under a finger while it fades out after the caller closes it', async () => {
+    const {close} = renderOpen();
+    await completePresentation();
+    const dialog = screen.getByRole('alertdialog');
+    close();
+    expect(dialog).toHaveAttribute('open');
+  });
+
+  it('holds its content inert and ignores Escape under a finger while it leaves', async () => {
+    const {onOpenChange, onAction, close} = renderOpen();
+    await completePresentation();
+    const dialog = screen.getByRole('alertdialog', {hidden: true});
+    const content = () =>
+      [...dialog.children].filter(child => !child.hasAttribute('popover'));
+    expect(content().some(child => child.hasAttribute('inert'))).toBe(false);
+    close();
+    expect(dialog).toHaveAttribute('open');
+    expect(content().length).toBeGreaterThan(0);
+    expect(content().every(child => child.hasAttribute('inert'))).toBe(true);
+    expect(dialog.querySelector(':scope > [popover]')).not.toBeNull();
+    fireEvent.keyDown(dialog, {key: 'Escape'});
+    expect(onAction).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('presents an alert that mounts open under StrictMode and takes touches once it has entered', async () => {
+    stubAlertDialogMedia({
+      smallScreen: true,
+      coarsePointer: true,
+      noHover: true,
+    });
+    const onOpenChange = vi.fn();
+    render(
+      <StrictMode>
+        <AlertDialog
+          isOpen
+          onOpenChange={onOpenChange}
+          title="Delete item?"
+          description="This cannot be undone."
+          actionLabel="Delete"
+          onAction={() => {}}
+        />
+      </StrictMode>,
+    );
+    const cancel = screen.getByRole('button', {name: 'Cancel'});
+    place(cancel, 16, 140);
+    expect(isInHeldLayer(screen.getByRole('alertdialog'))).toBe(true);
+    await completePresentation();
+    const id = touchId++;
+    touch('touchstart', cancel, {x: 60, y: 156}, id);
+    expect(cancel).toHaveAttribute('data-astryx-press', 'on');
+    touch('touchend', cancel, {x: 60, y: 156}, id);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
 

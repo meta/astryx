@@ -374,7 +374,7 @@ describe('doctor outside a project (own)', () => {
         latest,
       });
     expect(at(null).message).toBe(
-      'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+      "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     );
     expect(at('1.3.0').message).toContain('1.3.0 is newer than 1.2.0');
     expect(at('1.2.0').message).toContain('No newer release is known');
@@ -820,7 +820,7 @@ describe('experimental theme preview app outside a project (own)', () => {
   );
 
   it(
-    'writes nothing for a theme that is not there',
+    'writes nothing for a theme, and names the missing app first',
     async () => {
       const r = await answer(
         [
@@ -837,7 +837,9 @@ describe('experimental theme preview app outside a project (own)', () => {
       );
       expect(r.status).toBe(1);
       expect(r.written).toEqual([]);
-      expect(r.kind).toBe('ERR_UNKNOWN_THEME');
+      // A theme is one of an app's own: with no app here, the app finder's
+      // answer comes first.
+      expect(r.kind).toBe('ERR_PROJECT_REQUIRED');
     },
     SLOW,
   );

@@ -9,8 +9,9 @@
  * reads such a doc without importing it; and each typed descriptor's
  * statically read value (themes, icon sets, icon definitions), keyed by the
  * hash of its text and the type it is read as, so the published package reads
- * it without parsing. The file is not committed; a checkout
- * without it imports every doc, with the same result. `--clean` (at
+ * it without parsing; and the CLI's own shipped docs' exports as the readers
+ * parse them, so it reads the parse without running it. The file is not committed;
+ * a checkout without it imports every doc, with the same result. `--clean` (at
  * `postpack`) removes it.
  */
 
@@ -24,6 +25,8 @@ import {
   storedKey,
   STORED_DOCS_FILE,
 } from '../foundation/doc-compiler/stored-docs.mjs';
+import {storedParseKey} from '../foundation/doc-compiler/stored-docs.mjs';
+import {parseReadableDoc} from '../foundation/doc-compiler/parse-readable.mjs';
 import {
   descriptorStoreKey,
   readDescriptorSource,
@@ -199,6 +202,28 @@ export async function storedDocsText() {
     }
     if (!isDeepStrictEqual(data, exports)) continue;
     byKey[storedKey(text)] = data;
+    // Each export of the CLI's own shipped docs as the readers parse it
+    // (parse-readable.mjs), when the parse is plain data that reads back
+    // exactly, key order included. Core's component docs are left out: a read
+    // parses one or two of them, so storing them would cost far more bytes
+    // than time.
+    // Icon definitions are checked on their static value, never parsed here.
+    const parsedHere = file.startsWith(
+      path.join(CLI_ROOT, 'assets', 'docs') + path.sep,
+    );
+    for (const name of parsedHere ? ['docs', 'default'] : []) {
+      if (!data[name] || typeof data[name] !== 'object') continue;
+      let parsed;
+      try {
+        parsed = parseReadableDoc(structuredClone(data[name]), file);
+      } catch {
+        // Parsed at run time, so it fails as it always did.
+        continue;
+      }
+      if (isDeepStrictEqual(JSON.parse(JSON.stringify(parsed)), parsed)) {
+        byKey[storedParseKey(storedKey(text), name)] = parsed;
+      }
+    }
   }
   /** @type {Record<string, [number, number]>} */
   const ranges = {};

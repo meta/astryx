@@ -11,8 +11,10 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutFooterActions() {
+  const showToast = useToast();
   return (
     <Center width={400}>
       <Layout
@@ -26,10 +28,22 @@ export default function LayoutFooterActions() {
         footer={
           <LayoutFooter hasDivider>
             <HStack gap={2} hAlign="end">
-              <Button label="Cancel" variant="secondary">
+              <Button
+                onClick={() =>
+                  showToast({
+                    body: 'Demo: your changes would be discarded here',
+                  })
+                }
+                label="Cancel"
+                variant="secondary">
                 Cancel
               </Button>
-              <Button label="Save" variant="primary">
+              <Button
+                onClick={() =>
+                  showToast({body: 'Demo: your changes would be saved here'})
+                }
+                label="Save"
+                variant="primary">
                 Save
               </Button>
             </HStack>

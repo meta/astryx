@@ -27,7 +27,14 @@ import {
   expectSameAsFresh,
   expectWarmHit,
   hasModuleHooks,
+  readKept,
+  writeKept,
+  docsTreeEntries,
+  themeFactsEntries,
+  BUILD_ID,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
+import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 
 usePackedCli();
 
@@ -112,11 +119,11 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       run(QUERIES[0], {tmp: kept});
       const [name] = [...entries(kept).keys()];
       const file = path.join(kept, CACHE_NAME, name);
-      const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const entry = readKept(file);
       // An altered but well-formed catalog, which a run that reads it shows.
       entry.value.all = [];
       entry.value.components = [];
-      fs.writeFileSync(file, JSON.stringify(entry));
+      writeKept(file, entry);
       expect(run(QUERIES[0], {tmp: kept}).stdout).not.toBe(fresh.stdout);
       expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
     },
@@ -158,6 +165,146 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       }
     },
     120_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps what theme build checks a theme against in Core's docs, and is not used after an edit to a visual-prop value in one of them",
+    () => {
+      const tmp = keptTmp('theme-facts');
+      // A project with an integration, so theme build keeps its gathers, and
+      // its own copies of the CLI and Core: theme build reads the Core
+      // installed beside the CLI that runs.
+      const {dir} = makeProject();
+      const scope = path.join(dir, 'node_modules', '@astryxdesign');
+      const cli = path.join(scope, 'cli');
+      fs.cpSync(packed, cli, {recursive: true, verbatimSymlinks: true});
+      const core = path.join(scope, 'core');
+      fs.unlinkSync(core);
+      copyPublishedCore(core);
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core', 'node_modules'),
+        path.join(core, 'node_modules'),
+        'dir',
+      );
+      fs.mkdirSync(path.join(dir, 'theme'));
+      // A theme with no component overrides.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'plain.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const plainTheme = defineTheme({name: 'plain', tokens: {'--color-accent': '#0b5fcc'}});\n`,
+      );
+      // `quiet` is not a built-in Button variant: the build adds it.
+      fs.writeFileSync(
+        path.join(dir, 'theme', 'probe.ts'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const probeTheme = defineTheme({name: 'probe', components: {button: {'variant:quiet': {color: 'red'}}}});\n`,
+      );
+      const ask = ['theme', 'build', 'theme/probe.ts'];
+      try {
+        const plain = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(plain.status, plain.stderr).toBe(0);
+        const kept = themeFactsEntries(tmp);
+        expect(kept.size).toBe(1);
+        // A build after an edit to that theme reads the facts back: they do
+        // not depend on the theme.
+        fs.appendFileSync(path.join(dir, 'theme', 'plain.ts'), '// edited\n');
+        const edited = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(edited.status, edited.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A theme whose overrides name a prop value reads back the same
+        // entry: it holds every fact a build checks a theme against.
+        const first = run(ask, {tmp, cwd: dir, cli});
+        expect(first.status, first.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        // A warm run reads the facts back: the entry is not written again.
+        const warm = run(ask, {tmp, cwd: dir, cli});
+        expect(themeFactsEntries(tmp)).toEqual(kept);
+        expect(warm).toEqual(first);
+        // An in-place edit makes `quiet` a built-in value.
+        const doc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
+        const text = fs.readFileSync(doc, 'utf8');
+        const builtIn = "'primary' | 'secondary' | 'ghost' | 'destructive'";
+        expect(text).toContain(builtIn);
+        fs.writeFileSync(doc, text.replaceAll(builtIn, `${builtIn} | 'quiet'`));
+        const after = run(ask, {tmp, cwd: dir, cli});
+        expect(after).toEqual(run(ask, {tmp: freshTmp(), cwd: dir, cli}));
+        expect(after).not.toEqual(first);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps the CLI's own docs tree, which a reinstall or a copy in another folder gathers again",
+    async () => {
+      const tmp = keptTmp('docs-tree');
+      const ask = ['docs', 'authoring/building-blocks/components'];
+      const first = run(ask, {tmp});
+      expect(first.status, first.stderr).toBe(0);
+      expect(docsTreeEntries(tmp).size).toBe(1);
+      expectWarmHit(tmp, [ask]);
+      const tree = path.join('assets', 'docs', 'tree', 'components.doc.mjs');
+      /** @param {string} cli */
+      const edit = cli => {
+        const file = path.join(cli, tree);
+        const source = fs.readFileSync(file, 'utf8');
+        const edited = source.replace(
+          'Add components to an integration,',
+          'Add components to an integration package,',
+        );
+        expect(edited).not.toBe(source);
+        fs.writeFileSync(file, edited);
+        return () => fs.writeFileSync(file, source);
+      };
+      // A patched copy, installed beside the CLI as a package manager's patch
+      // installs one in another folder, while the CLI it came from stays as it
+      // was: it keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        edit(copy);
+        const patched = run(ask, {tmp: freshTmp(), cli: copy});
+        expect(patched.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp, cli: copy})).toEqual(patched);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
+      }
+      // As patch-package or a hand edit leaves the installed CLI: same build
+      // id, same folder, other text. The build id and the folder stand for
+      // the CLI's own files, so the edit is not seen (the record says
+      // in-place edits to an installed CLI aren't supported).
+      const restore = edit(packed);
+      const buildIdFile = path.join(packed, BUILD_ID);
+      const buildId = fs.readFileSync(buildIdFile, 'utf8');
+      try {
+        const fresh = run(ask, {tmp: freshTmp()});
+        expect(fresh.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp})).toEqual(first);
+        // A reinstall gives another build id: the next run gathers again.
+        fs.writeFileSync(
+          buildIdFile,
+          JSON.stringify({id: 'reinstalled'}) + '\n',
+        );
+        const [kept, again] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept).toEqual(again);
+        expect(kept.stdout).toBe(fresh.stdout);
+      } finally {
+        restore();
+        fs.writeFileSync(buildIdFile, buildId);
+      }
+    },
+    180_000,
   );
 
   it("is not used after an edit to the installed CLI's table-building code or cards", async () => {

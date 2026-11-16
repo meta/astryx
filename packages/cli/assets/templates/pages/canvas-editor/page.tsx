@@ -50,6 +50,8 @@ import {TreeList, type TreeListItemData} from '@astryxdesign/core/TreeList';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
+import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {
   Aperture,
@@ -1659,6 +1661,9 @@ function ShadowFields({
 // =============================================================================
 
 export default function CanvasEditor() {
+  const showToast = useToast();
+  // Demo only: replace these toasts with the calls that perform each action.
+  const demo = (body: string, uniqueID: string) => showToast({body, uniqueID});
   const [layers, setLayers] = useState(INITIAL_LAYERS);
   const [selectedID, setSelectedID] = useState('headline');
   const [panel, setPanel] = useState('layers');
@@ -2262,19 +2267,39 @@ export default function CanvasEditor() {
                                       <>
                                         <IconButton
                                           label="Undo"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: the last change would be undone here',
+                                              'undo',
+                                            )
+                                          }
                                           tooltip="Undo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Undo2} size={ICON} />
+                                            <Icon
+                                              icon={Undo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
                                         <IconButton
                                           label="Redo"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: the change would be redone here',
+                                              'redo',
+                                            )
+                                          }
                                           tooltip="Redo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Redo2} size={ICON} />
+                                            <Icon
+                                              icon={Redo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
@@ -2284,6 +2309,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add frame"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: a new frame would be added here',
+                                              'add-frame',
+                                            )
+                                          }
                                           tooltip="Add frame"
                                           variant="ghost"
                                           icon={
@@ -2293,6 +2324,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add text"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: a new text layer would be added here',
+                                              'add-text',
+                                            )
+                                          }
                                           tooltip="Add text"
                                           variant="ghost"
                                           icon={
@@ -2302,6 +2339,12 @@ export default function CanvasEditor() {
                                         />
                                         <IconButton
                                           label="Add image"
+                                          onClick={() =>
+                                            demo(
+                                              'Demo: an image picker would open here',
+                                              'add-image',
+                                            )
+                                          }
                                           tooltip="Add image"
                                           variant="ghost"
                                           icon={
@@ -2384,6 +2427,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Set padding per side"
+                              onClick={() =>
+                                demo(
+                                  'Demo: padding fields for each side would open here',
+                                  'set-padding-per-side',
+                                )
+                              }
                               tooltip="Per side"
                               size="sm"
                               variant="ghost"
@@ -2433,6 +2482,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Set radius per corner"
+                              onClick={() =>
+                                demo(
+                                  'Demo: radius fields for each corner would open here',
+                                  'set-radius-per-corner',
+                                )
+                              }
                               tooltip="Per corner"
                               size="sm"
                               variant="ghost"
@@ -2515,6 +2570,12 @@ export default function CanvasEditor() {
                           <InspectorRow label="Flip" hAlign="end">
                             <IconButton
                               label="Flip horizontally"
+                              onClick={() =>
+                                demo(
+                                  'Demo: the layer would flip horizontally here',
+                                  'flip-horizontally',
+                                )
+                              }
                               tooltip="Flip horizontally"
                               size="sm"
                               variant="ghost"
@@ -2522,6 +2583,12 @@ export default function CanvasEditor() {
                             />
                             <IconButton
                               label="Flip vertically"
+                              onClick={() =>
+                                demo(
+                                  'Demo: the layer would flip vertically here',
+                                  'flip-vertically',
+                                )
+                              }
                               tooltip="Flip vertically"
                               size="sm"
                               variant="ghost"

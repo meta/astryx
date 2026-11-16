@@ -12,7 +12,7 @@
  *   error a codemod throws still fails the run.
  */
 
-import postcss from 'postcss';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {selectorParser as loadSelectorParser} from '../../foundation/runtime/lazy-dependencies.mjs';
 
 export const CODEMOD_PARSE_ERROR = 'ERR_CODEMOD_PARSE';
@@ -45,7 +45,7 @@ export function isCodemodParseError(err) {
  */
 export function parseCss(source, options) {
   try {
-    return postcss.parse(source, options);
+    return postcss().parse(source, options);
   } catch (err) {
     throw markParseError(err);
   }

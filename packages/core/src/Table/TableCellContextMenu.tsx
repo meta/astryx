@@ -316,7 +316,11 @@ function CellTrigger({
           holdInvocation({
             owner: triggerRef,
             gesture: currentGesture(),
-            point: contextMenuPoint(event, triggerRef.current),
+            point: contextMenuPoint(
+              event,
+              triggerRef.current,
+              anchorRef.current,
+            ),
           });
           preloadTableContextMenu();
         }}

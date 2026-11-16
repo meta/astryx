@@ -261,7 +261,7 @@ function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
     'Use it when you build or change UI, pick components, or style or theme an app.',
-    `Its docs, components, templates, and themes are all reachable through \`${run}\`. Start with \`${run} search '<what you need>'\`.`,
+    `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
     "In a project, the project's version of Astryx answers automatically.",
     // How to build, which discovery alone leaves to the agent's own page

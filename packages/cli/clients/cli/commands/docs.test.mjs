@@ -157,6 +157,70 @@ describe('progressive reads', () => {
   }, SLOW);
 });
 
+describe('--list, the same as giving no topic', () => {
+  const SLOW = 60_000;
+
+  it('prints what a bare read prints, in text and as docs.list JSON', async () => {
+    const bare = await runCli(['docs']);
+    const listed = await runCli(['docs', '--list']);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toBe(bare.stdout);
+    expect(listed.stdout).toMatch(/^Topics$/m);
+
+    const bareJson = await runCli(['docs', '--json']);
+    const listedJson = await runCli(['docs', '--list', '--json']);
+    expect(listedJson.status).toBe(0);
+    expect(listedJson.stdout).toBe(bareJson.stdout);
+    expect(JSON.parse(listedJson.stdout).type).toBe('docs.list');
+  }, SLOW);
+
+  it('pairs with each docs flag as a read with no topic does', async () => {
+    // Each pair composes or fails exactly as the same flags do without a
+    // topic.
+    for (const flags of [
+      ['--index'],
+      ['--full'],
+      ['--depth', 'all'],
+      ['--depth', '1', '--json'],
+      ['--index', '--full', '--json'],
+      ['--depth', 'deep', '--json'],
+      ['--dense'],
+      ['--lang', 'zh'],
+      ['--detail', 'compact', '--json'],
+    ]) {
+      const bare = await runCli(['docs', ...flags]);
+      const listed = await runCli(['docs', '--list', ...flags]);
+      expect({flags, status: listed.status, stdout: listed.stdout}).toEqual({
+        flags,
+        status: bare.status,
+        stdout: bare.stdout,
+      });
+    }
+  }, 2 * SLOW);
+
+  it('refuses a topic or a section beside --list', async () => {
+    for (const args of [
+      ['docs', 'theme', '--list'],
+      ['docs', 'theme', 'quick-start', '--list'],
+    ]) {
+      const asText = await runCli(args);
+      expect(asText.status).toBe(1);
+      expect(asText.stderr).toContain('--list takes no topic or section');
+      const asJson = await runCli([...args, '--json']);
+      expect(asJson.status).toBe(1);
+      expect(JSON.parse(asJson.stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    }
+  }, SLOW);
+
+  it('says in help that it is the same as giving no topic', async () => {
+    const help = await runCli(['docs', '--help']);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toMatch(
+      /^ +--list +List every topic \(the same as giving no topic\)$/m,
+    );
+  }, SLOW);
+});
+
 describe('blocks as text', () => {
   const SLOW = 60_000;
 
