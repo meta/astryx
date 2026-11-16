@@ -349,12 +349,18 @@ export function moduleGraphStats(inputs, entryInput) {
  * counts the round trips a cold load waits for in turn. Another bundler splits
  * chunks differently, so these numbers describe this build only.
  */
+export function chunkGraphStats(outputs, entryOutput) {
+  const levels = importLevels(outputs, entryOutput, ['import-statement']);
+  return {chunks: levels.size, depth: Math.max(...levels.values()) + 1};
+}
+
 /**
  * The modules this build keeps in the page's first-load chunks after tree
  * shaking: every module with output bytes in a chunk the entry reaches
- * through static imports, the synthetic entry not counted. A folder index
- * that only re-exports is reached but keeps no bytes, so `modules` minus
- * `keptModules` shows how much of the graph a barrel adds without cost.
+ * through static imports, the synthetic entry not counted. `modules` minus
+ * `keptModules` counts the reached modules that tree shaking drops entirely:
+ * folder indexes that only re-export, and modules none of the page's code
+ * uses.
  */
 export function keptModuleCount(outputs, entryOutput, entryInput) {
   const kept = new Set();
@@ -368,11 +374,6 @@ export function keptModuleCount(outputs, entryOutput, entryInput) {
     }
   }
   return kept.size;
-}
-
-export function chunkGraphStats(outputs, entryOutput) {
-  const levels = importLevels(outputs, entryOutput, ['import-statement']);
-  return {chunks: levels.size, depth: Math.max(...levels.values()) + 1};
 }
 
 /** One page as a production app bundle: what it loads before first paint. */
