@@ -1176,6 +1176,35 @@ describe('theme-local adaptation values', () => {
     expect(theme.__adaptationRules?.[0].tokens[name]).toBe('44px');
   });
 
+  it('names a token map that holds itself instead of overflowing the stack', () => {
+    const tokens: Record<string, string> = {'--color-accent': 'red'};
+    // A loop no theme writes on purpose: the map is its own value.
+    (tokens as Record<string, unknown>).self = tokens;
+    const base = defineTheme({
+      name: 'cycle-self-base',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-accent': 'blue'}},
+          },
+        ],
+      },
+    });
+    expect(() => defineTheme({name: 'cycle-self', tokens})).not.toThrow(
+      /call stack/,
+    );
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-child',
+        extends: base,
+        tokens,
+      }),
+    ).toThrow(
+      /tokens refers to itself: the value of self holds an object it sits in/,
+    );
+  });
+
   it('rejects conditional local-token cycles', () => {
     const a = '--astryx-theme-cycle-local-a';
     const b = '--astryx-theme-cycle-local-b';

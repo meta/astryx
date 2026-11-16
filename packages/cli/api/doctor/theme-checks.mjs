@@ -9,7 +9,7 @@
 
 import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
-import postcss from 'postcss';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
@@ -466,7 +466,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
   let unread = false;
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkAtRules(atRule => {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
@@ -533,7 +533,7 @@ function scopedToTheme(rule, slug) {
 /** @param {string} css @param {string} slug */
 function globalRules(css, slug) {
   const rules = new Map();
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkRules(rule => {
     if (scopedToTheme(rule, slug)) return;
     /** @type {import('postcss').Node|undefined} */
@@ -1174,6 +1174,30 @@ export function withProviderWiring(appChecks, wiring) {
 }
 
 /**
+ * The theme input the private-variable check reads. A bundled theme is a copy
+ * of its package's source. When the project installs that package, the check
+ * reads the package's own copy: the app uses that package, and the copy's
+ * imports, such as the theme's icon library, resolve from the package in every
+ * install layout. Yarn Plug'n'Play refuses the CLI's copy an import of a
+ * package the CLI does not depend on.
+ * @param {DiscoveredTheme} theme the discovered theme
+ * @param {string} owner the package that the app's theme record names
+ * @param {string} projectDir
+ * @returns {string}
+ */
+function privateInputFile(theme, owner, projectDir) {
+  const own = path.join(theme.sourceDir, theme.entry);
+  if (theme.source !== 'bundled') return own;
+  const packageDir = findDoctorInstalledPackage(projectDir, owner);
+  const installed = packageDir
+    ? path.join(packageDir, 'src', theme.entry)
+    : null;
+  // The path as found, not its real path: Yarn gives a package with peer
+  // dependencies a path of its own, and resolves its imports only from there.
+  return installed && realDoctorFile(installed) ? installed : own;
+}
+
+/**
  * Run all ten app-theme checks.
  * @param {string} cwd
  * @returns {Promise<DoctorCheck[]>}
@@ -1306,7 +1330,7 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but it or its stylesheet names a file the package does not ship, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);
@@ -1416,7 +1440,7 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'warn',
       message: unshippedImports.map(each => each.message).join(' '),
-      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships the named file, or ask its owner to publish one.`,
+      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships every file its built module imports, as JavaScript, or ask its owner to publish one.`,
     });
   } else {
     checks.push({
@@ -1673,7 +1697,7 @@ export async function checkAppThemes(cwd) {
     if (!availableTheme) continue;
     try {
       const errors = await validateThemePrivateInputs(
-        path.join(availableTheme.sourceDir, availableTheme.entry),
+        privateInputFile(availableTheme, theme.owner, state.projectDir),
         {cwd: state.projectDir},
       );
       if (errors.length > 0) {

@@ -157,7 +157,7 @@ export const docs = {
       {
         className: 'astryx-multi-selector-option',
         visualProps: ['size'],
-        states: ['select-all', 'selected', 'disabled'],
+        states: ['select-all', 'highlighted', 'selected', 'disabled'],
       },
       {className: 'astryx-multi-selector-popup'},
     ],

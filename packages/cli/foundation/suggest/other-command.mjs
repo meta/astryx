@@ -4,14 +4,20 @@
  * @file The lookup commands' shared hint: when `astryx component`, `hook`,
  * `template` or `docs` finds no entry for a name, and the name matches an
  * entry another of those commands reads, the not-found error suggests that
- * command (`astryx hook useHotkeys`). A name matches at one of four tiers,
+ * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
- * or folded), and word cover (every word of the name); only the first three
- * give a hint. A better tier wins; inside a tier, commands win in
+ * or folded), near hook (a `use…` name a slip or two from a hook's name, or
+ * one whose every word the hook's name carries), hook keyword (two or more words that are a keyword
+ * one hook's doc declares), and word cover (every word of the name); word
+ * cover gives no hint. The near hook tier gives one when a component or
+ * template lookup misses and no better tier matches; the hook keyword tier
+ * only for a component lookup, the one lookup that knows its suggestions'
+ * declared keywords. A better tier wins; inside a tier, commands win in
  * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
  * first, then in tree order. The hint goes right after the command's own
- * suggestions that match at its tier or a better one, and the list never
+ * suggestions that match at its tier or a better one (an own suggestion that
+ * declares the name as a keyword or synonym matches at the folded tier), and the list never
  * grows: the last suggestion drops, and a hint that would come last is left
  * out.
  *
@@ -36,6 +42,11 @@ import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
 import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
+import {
+  closeNameScore,
+  nameWords,
+  synonymMatches,
+} from '../text/suggest-order.mjs';
 import {
   hintNameIndex,
   nameIndexKept,
@@ -96,11 +107,27 @@ export const MATCH_TIER = /** @type {const} */ ({
   folded: 1,
   /** Only the last segment of a path name, as exact or folded. */
   segment: 2,
+  /**
+   * A hook a `use…` name nearly spells: one or two slips, or every typed
+   * word (suggest-order.mjs closeNameScore).
+   */
+  near: 3,
+  /**
+   * A hook whose doc declares a keyword with exactly the typed words, two or
+   * more.
+   */
+  keyword: 4,
   /** A name that carries every typed word. */
-  words: 3,
+  words: 5,
   /** None of the above. */
-  none: 4,
+  none: 6,
 });
+
+/** The lookups whose misses can get a near hook hint. */
+const NEAR_HOOK_FROM = new Set(['component', 'template']);
+
+/** A name shaped like a hook's: `use` and then a capital or a digit. */
+const HOOK_SHAPED = /^use[A-Z0-9]/;
 
 /**
  * The tier at which `name`, an entry of `command`, matches `typed`, by the
@@ -170,9 +197,11 @@ function bestMatch(command, names, typed) {
 
 /**
  * The hint that names `name`, an entry of `command`, for `from`, at `tier`.
+ * Without `from` (a word that is no command), the reason names the entry's
+ * kind alone.
  * @param {LookupCommand} command
  * @param {string} name
- * @param {LookupCommand} from
+ * @param {LookupCommand | undefined} from
  * @param {number} tier
  * @returns {Found}
  */
@@ -180,7 +209,9 @@ function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
-      reason: `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`,
+      reason: from
+        ? `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`
+        : ENTRY_KIND[command],
     },
     tier,
   };
@@ -218,7 +249,13 @@ export function otherCommand(typed, entries, from) {
  * ({@link MATCH_TIER}), so it goes first when no suggestion does. The list
  * never grows: the last suggestion drops, and a hint that would come last is
  * left out. The hint is the only suggestion when `alone` holds or when the
- * list is empty, since then no suggestion shares a word with the name.
+ * list is empty, since then no suggestion shares a word with the name. A
+ * suggestion also matches at the folded tier when one of its `keywordsOf`
+ * folds to the typed name ({@link foldEntryName}): a name the suggestion
+ * declares is as good as its own name without spaces and hyphens. For a
+ * near hook or hook keyword hint, a suggestion also matches as well when one
+ * of its names is a near name or carries every typed word, and, for a hook
+ * keyword hint, when one of its `keywordsOf` has exactly the typed words.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -227,30 +264,46 @@ export function otherCommand(typed, entries, from) {
  *   from: LookupCommand,
  *   alone?: boolean,
  *   namesOf?: (suggestion: T) => Array<string | undefined>,
+ *   keywordsOf?: (suggestion: T) => string[],
  * }} options `namesOf` gives the names the command matched a suggestion by;
- *   by default its name
+ *   by default its name. `keywordsOf` gives the keywords the suggestion's doc
+ *   declares and the synonyms its search card lists; by default none
  * @returns {Array<T | Hint> | undefined}
  */
 export function withOtherCommand(
   suggestions,
   found,
   typed,
-  {from, alone = false, namesOf = suggestion => [suggestion.name]},
+  {
+    from,
+    alone = false,
+    namesOf = suggestion => [suggestion.name],
+    keywordsOf = () => [],
+  },
 ) {
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
-  // The hint's tier is exact, folded or segment, so only a suggestion with a
-  // name that matches by the name alone (nameTier) can go before it: word
-  // cover is never needed here.
+  const byHook = found.tier >= MATCH_TIER.near;
+  const wanted = foldEntryName(typed);
+  /** @param {T} suggestion */
+  const declares = suggestion =>
+    found.tier >= MATCH_TIER.folded &&
+    keywordsOf(suggestion).some(keyword => foldEntryName(keyword) === wanted);
+  /** @param {T} suggestion */
+  const matchesAsWell = suggestion =>
+    declares(suggestion) ||
+    namesOf(suggestion).some(
+      name =>
+        name &&
+        (nameTier(from, name, typed) <= found.tier ||
+          (byHook && closeNameScore(typed, name) > 0)),
+    ) ||
+    (found.tier === MATCH_TIER.keyword &&
+      synonymMatches(typed, {own: {synonyms: keywordsOf(suggestion)}}).size >
+        0);
   let at = 0;
   suggestions.forEach((suggestion, index) => {
-    if (
-      namesOf(suggestion).some(
-        name => name && nameTier(from, name, typed) <= found.tier,
-      )
-    ) {
-      at = index + 1;
-    }
+    if (matchesAsWell(suggestion)) at = index + 1;
   });
   return [
     ...suggestions.slice(0, at),
@@ -265,20 +318,23 @@ export function withOtherCommand(
  * text, says first which catalogs can hold the name; a catalog is asked only
  * then, only for the names that fold to it, and only until a catalog before
  * it has an exact match. So a name no file carries reads no doc and loads no
- * discovery. The docs catalog is every route of the docs tree, from
+ * discovery, except the hook discovery that the near hook and hook keyword
+ * tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
  * `docsRoutes`, which the docs lookup owns; the index keeps them where it is
  * kept, and they are worked out only when the name's last segment can end a
  * route. A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
- *   from: LookupCommand,
+ *   from?: LookupCommand,
  *   cwd?: string,
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
- * }} context `coreDir` and `integrations` are the ones the lookup found, if
- *   any. `docsRoutes` works out every route `astryx docs` reads in the
- *   project with these integrations; without it, no docs route is a hint
+ * }} context `from` is the lookup command that did not find the name; without
+ *   it, every lookup command is asked. `coreDir` and `integrations` are the
+ *   ones the lookup found, if any. `docsRoutes` works out every route
+ *   `astryx docs` reads in the project with these integrations; without it,
+ *   no docs route is a hint
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -431,7 +487,61 @@ export async function findOtherCommand(
       if (match.tier === MATCH_TIER.exact) break;
     }
   }
+  if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
+    try {
+      const {discoverHookKeywords} =
+        await import('../discovery/hook-discovery.mjs');
+      const found = hookByMeaning(typed, discoverHookKeywords(coreDir), {
+        keywords: from === 'component',
+      });
+      if (found) best = hintFor('hook', found.name, from, found.tier);
+    } catch {
+      // A check that fails gives no hint.
+    }
+  }
   return best;
+}
+
+/**
+ * The hook a name that is no entry most likely means, with its tier, or
+ * null. A `use…` name means the one hook it nearly spells: the closest near
+ * name, or the closest name with every typed word (suggest-order.mjs
+ * closeNameScore). With `keywords`, any other name of two or more words
+ * means the one hook whose doc declares a keyword with exactly those words
+ * (suggest-order.mjs synonymMatches); one word names a topic many hooks
+ * share, not a hook. A tie, or a keyword more than one hook declares, means
+ * no hook.
+ * @param {string} typed
+ * @param {Array<{name: string, keywords: string[]}>} hooks
+ * @param {{keywords?: boolean}} [options]
+ * @returns {{name: string, tier: number} | null}
+ */
+export function hookByMeaning(typed, hooks, {keywords = true} = {}) {
+  if (HOOK_SHAPED.test(typed)) {
+    let best = 0;
+    /** @type {string | null} */
+    let name = null;
+    for (const hook of hooks) {
+      const score = closeNameScore(typed, hook.name);
+      if (score > best) {
+        best = score;
+        name = hook.name;
+      } else if (score === best) {
+        name = null;
+      }
+    }
+    return name ? {name, tier: MATCH_TIER.near} : null;
+  }
+  if (!keywords || nameWords(typed).length < 2) return null;
+  const declared = synonymMatches(
+    typed,
+    Object.fromEntries(
+      hooks.map(hook => [hook.name, {synonyms: hook.keywords}]),
+    ),
+  );
+  return declared.size === 1
+    ? {name: [...declared][0], tier: MATCH_TIER.keyword}
+    : null;
 }
 
 /**

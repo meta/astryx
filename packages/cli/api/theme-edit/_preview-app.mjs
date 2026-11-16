@@ -20,10 +20,17 @@ import {IMPORTER_SCAN_MAX, pageImporters} from './_importers.mjs';
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {
+  nestedRootLayouts,
+  nextAppAt,
+  nextRouteFolders,
+  sameUrlPage,
+  urlSegments,
+} from '../../foundation/discovery/next-routes.mjs';
 import {
   assertWithin,
   PathSafetyError,
@@ -32,6 +39,7 @@ import {baseResolved, installLine, openProject} from './_project.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
+  buildThemeHeld,
   camel,
   editedThemes,
   fontPackages,
@@ -48,15 +56,19 @@ import {
   isEditorPage,
   fontsourceSuggestion,
   builtFontWeights,
+  localModuleFile,
 } from './_settings.mjs';
 import {
   baseFontsCss,
+  baseFontsSheet,
   colorsPageSource,
   componentsPageSource,
   overviewPageSource,
   previewRouteSource,
   appCopyBlocker,
+  fontIndexWeights,
   fontPackageSheets,
+  fontPackageWeights,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -71,6 +83,7 @@ import {
   readRegularFile,
 } from './_palette.mjs';
 import {build} from '../build/build.mjs';
+import {CLEAR_FIT} from '../build/kit/start.mjs';
 import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
 import {
@@ -84,13 +97,19 @@ import {
   requireProject,
   context,
   familiesNothingLoads,
+  lookAtPictures,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {AstryxError} from '../error.mjs';
 import {
   formatCliCommand,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+import {
+  isBundlerFile,
+  isOtherLanguageStylesheet,
+} from '../../foundation/fs/stylesheet-file.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -595,21 +614,6 @@ function appsOver(cwd, dir) {
 }
 
 /**
- * Whether a folder is a Next app: its package.json depends on `next`.
- * @param {string} dir
- */
-function nextAppAt(dir) {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
-    );
-    return ['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * {@link reservedFolder} for one app folder.
  * @param {string} cwd the app folder
  * @param {string} dir
@@ -724,6 +728,27 @@ function typeScriptNotes(cwd, dir, added) {
 }
 
 /**
+ * Why a file could not be read, as {@link unreadable} names it.
+ * @param {string} name the file, as shown
+ * @param {string} code
+ */
+const unreadableNote = (name, code) =>
+  code === 'ENOTREG'
+    ? `${name} is not a regular file (a pipe, a device or a folder), so it is never read`
+    : `${name} could not be read (${code})`;
+
+/**
+ * What makes a file {@link unreadable} names readable: a plain file in its
+ * place, or its permissions.
+ * @param {string} name the file, as shown
+ * @param {string} code
+ */
+const unreadableFix = (name, code) =>
+  code === 'ENOTREG'
+    ? `replace it with a plain file or move it out of the folder`
+    : `make it readable (chmod u+r ${quoteCommandArgument(name)})`;
+
+/**
  * A file's text when it is a regular file that can be read, else null.
  * @param {string} file
  */
@@ -814,116 +839,6 @@ function unroutedSegment(app, dir) {
 }
 
 /**
- * The URL a folder of the routes folder is served at, with route groups
- * dropped, as path segments.
- * @param {string} app
- * @param {string} dir
- */
-const urlSegments = (app, dir) =>
-  path
-    .relative(app, dir)
-    .split(path.sep)
-    .filter(seg => seg && !/^\(.*\)$/.test(seg));
-
-/** An optional catch-all route folder, `[[...slug]]`: it also serves its parent folder's URL (a required `[...slug]` does not). */
-const CATCH_ALL = /^\[\[\.\.\.[^\]]+\]\]$/;
-
-/** A file Next serves a URL from: a page or a route handler. */
-const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
-
-/**
- * A page or route handler of the app that Next serves at the same URL as
- * `dir`, or null: beside the preview, Next refuses to build (a route and a
- * page), or the preview takes that URL from it.
- * @param {string} cwd
- * @param {string} app the routes folder
- * @param {string} dir
- */
-function sameUrlPage(cwd, app, dir) {
-  const url = urlSegments(app, dir).join('/');
-  /** @param {string} folder @returns {string | null} */
-  const walk = folder => {
-    /** @type {fs.Dirent[]} */
-    let entries;
-    try {
-      entries = fs.readdirSync(folder, {withFileTypes: true});
-    } catch {
-      return null;
-    }
-    for (const e of entries) {
-      const full = path.join(folder, e.name);
-      if (e.isDirectory()) {
-        if (/^[_@]/.test(e.name) || e.name === 'node_modules' || full === dir)
-          continue;
-        const hit = walk(full);
-        if (hit) return hit;
-      } else if (ROUTE_FILE.test(e.name) && servesUrl(folder)) return full;
-    }
-    return null;
-  };
-  /** A folder served at the URL, or at the URLs under it through a catch-all. @param {string} folder */
-  const servesUrl = folder => {
-    const segs = urlSegments(app, folder);
-    return (
-      segs.join('/') === url ||
-      (CATCH_ALL.test(segs.at(-1) ?? '') && segs.slice(0, -1).join('/') === url)
-    );
-  };
-  // The preview's own folder: a route handler, a page other than the
-  // page.tsx the preview writes, or a catch-all route in it.
-  try {
-    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (!e.isDirectory()) {
-        if (ROUTE_FILE.test(e.name) && e.name !== 'page.tsx')
-          return path.join(dir, e.name);
-      } else if (CATCH_ALL.test(e.name))
-        for (const name of fs.readdirSync(path.join(dir, e.name)))
-          if (ROUTE_FILE.test(name)) return path.join(dir, e.name, name);
-    }
-  } catch {
-    // No folder yet.
-  }
-  const inApp = walk(app);
-  if (inApp) return inApp;
-  for (const pages of [path.join(cwd, 'pages'), path.join(cwd, 'src', 'pages')])
-    for (const ext of ['tsx', 'ts', 'jsx', 'js']) {
-      for (const f of [`${url}.${ext}`, `${url}/index.${ext}`]) {
-        const full = path.join(pages, f);
-        if (url && fs.existsSync(full)) return full;
-      }
-    }
-  return null;
-}
-
-/**
- * The folders that hold a root layout when the routes folder has none of
- * its own: each route group with a layout (`(shop)/`, `(marketing)/`), or
- * a `[locale]/` in an app with the locale in every URL. Empty when the
- * routes folder has its own root layout.
- * @param {string} app
- * @returns {string[]}
- */
-function nestedRootLayouts(app) {
-  const LAYOUT = /^layout\.(tsx|ts|jsx|js)$/;
-  if (fs.readdirSync(app).some(f => LAYOUT.test(f))) return [];
-  /** @type {string[]} */
-  const out = [];
-  /** A folder with a layout counts; a route group without one is looked into. @param {string} dir @param {boolean} top */
-  const look = (dir, top) => {
-    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (!e.isDirectory()) continue;
-      const sub = path.join(dir, e.name);
-      const group = /^\(.+\)$/.test(e.name);
-      if (!top && !group) continue;
-      if (fs.readdirSync(sub).some(f => LAYOUT.test(f))) out.push(sub);
-      else if (group) look(sub, false);
-    }
-  };
-  look(app, true);
-  return out.sort();
-}
-
-/**
  * Refuse a folder where the preview would not be served as reported, or
  * would break the app: one that holds the app itself, a reserved or
  * unrouted folder, src/app/ while app/ is what Next serves, an app whose
@@ -943,9 +858,8 @@ function checkPlacement(cwd, dir, where, retry) {
     return checkPlacement(owner, dir, where, p =>
       retry(p == null ? null : shown(cwd, path.resolve(owner, p))),
     );
-  const served = [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(
-    r => fs.existsSync(r) && fs.statSync(r).isDirectory(),
-  );
+  const routesFolder = nextRouteFolders(cwd).app;
+  const served = routesFolder ? path.join(cwd, routesFolder) : undefined;
   const fallback = retry(
     served
       ? shown(cwd, path.join(served, 'theme-preview'))
@@ -1309,8 +1223,8 @@ function previewDir(cwd, where, opts = {}) {
       return {dir: older, app: null};
     }
   }
-  // The routes folder Next serves: app/ when both app/ and src/app/ are there.
-  const served = routes[0];
+  const servedFolder = nextRouteFolders(cwd).app;
+  const served = servedFolder ? path.join(cwd, servedFolder) : undefined;
   const nested =
     served && !known ? (nestedRootLayouts(served)[0] ?? null) : null;
   const dir = known ?? (served && path.join(nested ?? served, 'theme-preview'));
@@ -1406,11 +1320,35 @@ function cdTo(folder) {
 }
 
 /**
+ * The folders version-control systems keep their repository in (or the
+ * file a worktree has there): Git, Mercurial, Sapling, Subversion,
+ * Jujutsu, Bazaar, Pijul, CVS, Fossil and darcs.
+ */
+const VCS_ENTRIES = [
+  '.git',
+  '.hg',
+  '.sl',
+  '.svn',
+  '.jj',
+  '.bzr',
+  '.pijul',
+  'CVS',
+  '.fslckout',
+  '_darcs',
+];
+
+/**
+ * Entries of a theme folder that are no part of the theme, which a starter
+ * app never copies: a repository's own folder and installed packages.
+ */
+const NOT_THEME_ENTRIES = new Set([...VCS_ENTRIES, 'node_modules']);
+
+/**
  * A folder name for a new starter app that is free in `cwd`: theme-app, else
  * theme-app-2, theme-app-3 and so on.
  * @param {string} cwd
  */
-function freeAppFolder(cwd) {
+export function freeAppFolder(cwd) {
   return shown(cwd, freeFolder(cwd, cwd, 'theme-app'));
 }
 
@@ -1554,28 +1492,19 @@ export function appWiring(ctx, slug, data) {
 }
 
 /**
- * The routes folder of a Next app in `dir` (app/, else src/app/, with a
- * root layout), when its package.json depends on `next`; else null.
+ * The App Router folder of a Next app in `dir`, when its package.json
+ * depends on `next` and that folder holds a root layout; else null.
  * @param {string} dir
  * @returns {string | null}
  */
 function nextRoutesOf(dir) {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
-    );
-    if (!['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next))
-      return null;
-  } catch {
-    return null;
-  }
-  return (
-    [path.join(dir, 'app'), path.join(dir, 'src', 'app')].find(
-      r =>
-        fs.existsSync(r) &&
-        fs.readdirSync(r).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)),
-    ) ?? null
-  );
+  if (!nextAppAt(dir)) return null;
+  const folder = nextRouteFolders(dir).app;
+  if (!folder) return null;
+  const routes = path.join(dir, folder);
+  return fs.readdirSync(routes).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+    ? routes
+    : null;
 }
 
 /**
@@ -1617,6 +1546,48 @@ const CLI_PACKAGE = path.resolve(
   '../..',
 );
 const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
+
+/**
+ * Pictures the new app's type check reads: Next declares them for every app
+ * (its image types), by their lower-case extension.
+ */
+const NEXT_TYPED_PICTURES = [
+  'svg',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'avif',
+  'ico',
+  'bmp',
+];
+
+/**
+ * The ends of the module names the new app's type check reads, as
+ * TypeScript matches them: its own declarations (css.d.ts) and the pictures
+ * Next declares. A name with a query, a hash or another case ends in none
+ * of them.
+ * @type {string[] | null}
+ */
+let newAppTyped = null;
+
+/**
+ * Whether the new app's type check reads an import of a file only its
+ * bundler loads (a stylesheet or an asset).
+ * @param {string} specifier
+ */
+function typedByNewApp(specifier) {
+  newAppTyped ??= [
+    ...[
+      ...fs
+        .readFileSync(path.join(STARTER, 'css.d.ts'), 'utf8')
+        .matchAll(/declare module '\*([^']*)'/g),
+    ].map(m => m[1]),
+    ...NEXT_TYPED_PICTURES.map(x => `.${x}`),
+  ];
+  return newAppTyped.some(end => specifier.endsWith(end));
+}
 
 /**
  * `file` when it is inside `root`, also through links; else a refusal.
@@ -2322,10 +2293,17 @@ function canonicalCode(text) {
   const walk = node => {
     if (Array.isArray(node)) return node.map(walk);
     if (!node || typeof node !== 'object') return node;
+    const jsx = node.type === 'JSXElement' || node.type === 'JSXFragment';
     /** @type {Record<string, any>} */
     const out = {};
     for (const [k, v] of Object.entries(node)) {
       if (LAYOUT.has(k)) continue;
+      // An element's children are read once, below: walked here too, each
+      // level of nesting would read everything inside it twice.
+      if (jsx && k === 'children') {
+        out[k] = null;
+        continue;
+      }
       out[k] = walk(v);
     }
     // A key written "a" or a is the same key.
@@ -2339,8 +2317,7 @@ function canonicalCode(text) {
       /^[A-Za-z_$][\w$]*$/.test(node.key.value)
     )
       out.key = {type: 'Identifier', name: node.key.value};
-    if (node.type === 'JSXElement' || node.type === 'JSXFragment')
-      out.children = jsxChildren(node.children, walk);
+    if (jsx) out.children = jsxChildren(node.children, walk);
     return out;
   };
   const comments = (file.comments ?? []).map((/** @type {any} */ c) =>
@@ -3506,7 +3483,7 @@ function pageUrls(cwd, at, ids) {
  * @param {'colors' | 'components' | 'overview'} focus
  * @param {{code: string, cause: string} | null} [notChecked] why the change
  *   could not be rendered
- * @param {{pictureProblem?: string | null, stale?: string[]}} [extra] this
+ * @param {{pictureProblem?: string | null, stale?: string[], pictures?: string[]}} [extra] this
  *   result's picture problem (what kept --png from taking pictures) and its
  *   previewStale entries (an in-app preview changed by hand)
  * @returns {string}
@@ -3579,11 +3556,16 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const pngNote = extra.pictureProblem
     ? `--png took no pictures: ${extra.pictureProblem}`
     : `${EDITOR} show ${slug} --png takes pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+  // Pictures this run took: the two to open, by name.
+  const look = lookAtPictures(extra.pictures ?? []);
   const own = notChecked
     ? /could not be written/.test(notChecked.cause)
       ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
       : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
-    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
+    : look
+      ? `look without changing your app: ${look}`
+      : // The pictures first: the one command that writes the two to open.
+        `look without changing your app: ${extra.pictureProblem ? pngNote : `${EDITOR} show ${slug} --png writes ${shown(cwd, f.previewPng)} (the sample page, with a tooltip, a menu and a list drawn open below it) and ${shown(cwd, path.join(f.dir, 'sheet-overlays.png'))} (every menu, tooltip, popover and list, drawn open) to open, with no dev server (it needs a Playwright or a Chrome)`}; or open ${shown(cwd, f.preview)} (one self-contained page, current after this change)`;
   const edited = handEdited.length
     ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ ${stale.some(f => /could not be written/.test(f)) && !stale.some(f => /changed by hand/.test(f)) ? 'could not be written' : 'was changed by hand'}, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
     : '';
@@ -3784,7 +3766,7 @@ async function rankedPages(
     said.some(w => id.split('-').includes(w)) ? 1 : 0;
   const fellBack =
     !start || (start.basis === 'fallback' && frames.has(start.name));
-  const ranked = (fellBack ? [...(kit.data.pages ?? [])] : [])
+  const byBuild = (fellBack ? [...(kit.data.pages ?? [])] : [])
     .map((r, i) => ({
       name: r.name,
       score: Number(r.score) || 0,
@@ -3802,7 +3784,18 @@ async function rankedPages(
     )
     .sort(
       (a, b) => b.score - a.score || byId(b.name) - byId(a.name) || a.i - b.i,
-    )
+    );
+  const ranked = byBuild.map(r => r.name);
+  // The pages build's ranking matches by their name or a keyword, or by at
+  // least two fifths of the description's terms ("a hero section" is
+  // centered-hero's 2 of 2). A word that is only in a page's id ("page" in
+  // table-page, for a long description of an event page) is no such match.
+  const namedByBuild = byBuild
+    .filter(r => {
+      if (/^(exact name|name|keyword)\b/.test(r.reason)) return true;
+      const m = /^matches (\d+)\/(\d+) terms/.exec(r.reason);
+      return !!m && Number(m[1]) / Number(m[2]) >= 0.4;
+    })
     .map(r => r.name);
   for (const r of kit.data.pages ?? [])
     if (!matchedWords.has(r.name))
@@ -3824,50 +3817,49 @@ async function rankedPages(
     list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
   /** @param {string[]} ids */
   const showableOf = ids => showablePages(cwd, appRoot ?? cwd, ids, 3);
-  // No page relates when the ranking fell back to a frame with no direct
-  // match, and no page the search found matches three words of the request
-  // or two fifths of them.
-  const termsMatched = (/** @type {any} */ r) => {
-    const m = /^matches (\d+)\/(\d+)/.exec(String(r.reason ?? ''));
-    if (!m) return 0;
-    const [hit, of] = [Number(m[1]), Number(m[2])];
-    return hit >= 3 || hit / of >= 0.4 ? hit : 0;
-  };
   // A page the description names in a phrase (a blog post, an issue
   // tracker) always relates.
   const named = APP_PAGES.some(([re]) => re.test(words.toLowerCase()));
+  // So does a page build's ranking names by its name or a keyword when
+  // build itself starts from the app shell ("checkout"). Otherwise a page is
+  // added only when build is sure of its start: never from the app shell,
+  // nor from a page its page pick gives less than a clear fit.
+  // A closest start is judged by its fit, when build gives one: a direct
+  // match stands on search's own match ("a login page"), and a start on a
+  // template the page pick does not score has no fit to judge.
+  const loose =
+    !!start &&
+    start.basis === 'closest' &&
+    typeof start.fit === 'number' &&
+    start.fit < CLEAR_FIT;
   const unrelated =
     !named &&
     !exact &&
-    !ranked.some(n => !frames.has(n)) &&
-    (!pages.length ||
-      (start &&
-        start.basis === 'fallback' &&
-        frames.has(start.name) &&
-        !kit.data.directMatch &&
-        !found.some(
-          (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
-        )));
+    !namedByBuild.some(n => !frames.has(n)) &&
+    (!pages.length || !start || start.basis === 'fallback' || loose);
   if (unrelated) {
-    // With no page close, a few pages this app can show, and the list.
-    const offered = await showableOf(
-      pages.length
-        ? pages
-        : [
-            ...['dashboard', 'settings', 'login'],
-            ...listed.map(t => t.id),
-          ].filter(
-            (id, i, all) =>
-              all.indexOf(id) === i &&
-              listed.some(t => t.id === id) &&
-              !frames.has(id),
-          ),
+    // The pages build ranks nearest that this app can show; with none, a
+    // few pages it can show. The list of every page comes last.
+    const fallbacks = [
+      ...['dashboard', 'settings', 'login'],
+      ...listed.map(t => t.id),
+    ].filter(
+      (id, i, all) =>
+        all.indexOf(id) === i &&
+        listed.some(t => t.id === id) &&
+        !frames.has(id),
     );
+    const nearest = pages.length ? await showableOf(pages) : [];
+    const offered = nearest.length ? nearest : await showableOf(fallbacks);
     refuse(
       E.ERR_NOT_FOUND,
       cut
         ? `No page template relates to "${cut.typed}". ${cut.why}: put the words that name the page first, or name a page to add it anyway.`
-        : `No page template relates to "${words}". Name a page to add it anyway.`,
+        : loose
+          ? `No page template is a clear fit for "${words}": build's closest, ${start.name}, is a loose fit. Name a page to add it anyway.`
+          : start && start.basis === 'fallback' && pages.length
+            ? `No page template is a clear fit for "${words}": build starts this idea from the app shell. Name a page to add it anyway.`
+            : `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: [
           ...suggest(offered),
@@ -4156,6 +4148,19 @@ function wornTheme(cwd, slug, again, without) {
         `There is no theme "${slug}" under themes/.`,
         {run: near.map(n => again(n))},
       );
+    // A refusal that names the theme meant (a path, a list): the same
+    // preview command with that theme, never a look at it instead.
+    if (e instanceof AstryxError && e.suggestions?.length) {
+      const show = `${EDITOR} show `;
+      e.suggestions = e.suggestions.map(x => {
+        const t = x.name.startsWith(show)
+          ? x.name.slice(show.length)
+          : undefined;
+        return t && themes.includes(t)
+          ? {name: again(t), reason: 'do this instead'}
+          : x;
+      });
+    }
     throw e;
   }
 }
@@ -4423,9 +4428,22 @@ async function addPreview(description, options, box) {
     const addable =
       isDefault(named) ||
       (await showablePages(cwd, appRootOf(cwd, cwd), [named], 1)).length > 0;
+    // The description alone is offered only when it relates to a page,
+    // read as add reads it (nothing is written): a line add refuses is
+    // never offered.
+    const relates = await rankedPages(
+      said,
+      cwd,
+      [],
+      `${tf}${pf}`,
+      appRootOf(cwd, cwd),
+    ).then(
+      picks => picks.length > 0,
+      () => false,
+    );
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--template names the page; a description asks the ranking to pick one, so drop one of them.${addable ? '' : ` The ${named} page cannot be added here as it is (a package it needs is missing, or no page template has that id).`}`,
+      `--template names the page; a description asks the ranking to pick one, so drop one of them.${addable ? '' : ` The ${named} page cannot be added here as it is (a package it needs is missing, or no page template has that id).`}${relates ? '' : ` No page template relates to "${said}".`}`,
       {
         run: [
           ...(addable
@@ -4433,7 +4451,11 @@ async function addPreview(description, options, box) {
                 `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
               ]
             : []),
-          `${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`,
+          ...(relates
+            ? [`${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`]
+            : []),
+          // With neither, the default pages, which need nothing more.
+          ...(!addable && !relates ? [`${PREVIEW} add${tf}${pf}`] : []),
         ],
       },
     );
@@ -4933,6 +4955,27 @@ async function addPreview(description, options, box) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
  */
 export async function themeEditPreviewApp(dir, options = {}) {
+  // A stale theme is built before the copy checks read it: a refusal after
+  // that puts the build back, so a refused command changes nothing.
+  /** @type {{undo: (() => void) | null}} */
+  const held = {undo: null};
+  try {
+    return await previewApp(dir, options, held);
+  } catch (e) {
+    held.undo?.();
+    throw e;
+  }
+}
+
+/**
+ * {@link themeEditPreviewApp}'s steps; `held.undo` puts back a build it
+ * made first.
+ * @param {string} dir
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAppOptions} options
+ * @param {{undo: (() => void) | null}} held
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
+ */
+async function previewApp(dir, options, held) {
   const {cwd = process.cwd()} = options;
   if (typeof dir !== 'string' || !dir.trim())
     refuse(
@@ -4987,7 +5030,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
           {run: [`${P} show ${slug}`]},
         );
     } else if (why) {
-      const built = await buildTheme(ctx, slug, theme);
+      const {built, undo} = await buildThemeHeld(ctx, slug, theme);
+      held.undo = undo;
       notes.push(
         `built ${shown(cwd, from.dir)}/ first: its build was not current (${why}), and the app gets a current copy`,
         ...built.notes,
@@ -5013,6 +5057,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const recorded = readWrittenRecord(cwd, slug);
     /** Links in the theme folder: never read through, so left out, and named. @type {string[]} */
     const links = [];
+    /** Version-control and package folders in the theme folder: no part of the theme, so left out, and named. @type {string[]} */
+    const notTheme = [];
+    /** What the copy leaves out, by full path, with what it is. @type {Map<string, string>} */
+    const leftOut = new Map();
     /**
      * A file of the theme folder, read for the copy before anything is
      * written: one too large for a read, or one that cannot be read, is
@@ -5044,20 +5092,54 @@ export async function themeEditPreviewApp(dir, options = {}) {
         );
       }
     };
+    /**
+     * A folder of the theme folder, listed for the copy: one that cannot be
+     * read is refused by name, as a file that cannot be read is (a read,
+     * never called a write).
+     * @param {string} folder
+     */
+    const listForCopy = folder => {
+      try {
+        return fs.readdirSync(folder, {withFileTypes: true});
+      } catch (e) {
+        const code = /** @type {any} */ (e)?.code;
+        return refuse(
+          E.ERR_READ_FAILED,
+          `${shown(cwd, folder)}/ could not be read (${code ?? String(e)}), so ${slug} cannot be copied into a new app.`,
+          {
+            fix: `make it readable (chmod u+rx ${quoteCommandArgument(shown(cwd, folder))}) or move it out of ${shown(cwd, from.dir)}/, then run the command again`,
+            run: [appCommand(dir, slug)],
+          },
+        );
+      }
+    };
     /** @param {string} rel */
     const copyDir = rel => {
-      for (const entry of fs.readdirSync(path.join(from.dir, rel), {
-        withFileTypes: true,
-      })) {
+      for (const entry of listForCopy(path.join(from.dir, rel))) {
         const sub = path.join(rel, entry.name);
-        if (entry.isDirectory()) copyDir(sub);
+        // A repository's own folder (.git, a file in a worktree) and
+        // installed packages are not the theme's: never copied, whether a
+        // folder, a file or a link of that name.
+        if (NOT_THEME_ENTRIES.has(entry.name)) {
+          notTheme.push(shown(cwd, path.join(from.dir, sub)));
+          leftOut.set(
+            path.join(from.dir, sub),
+            entry.name === 'node_modules'
+              ? 'a folder of installed packages, which the copy leaves out'
+              : 'a version-control folder, which the copy leaves out',
+          );
+        } else if (entry.isDirectory()) copyDir(sub);
         else if (
           entry.isSymbolicLink() &&
           !(rel === '' && skip.has(entry.name)) &&
           !(rel === '' && isEditorPage(entry.name, recorded))
-        )
+        ) {
           links.push(shown(cwd, path.join(from.dir, sub)));
-        else if (
+          leftOut.set(
+            path.join(from.dir, sub),
+            'a link, which the copy does not follow',
+          );
+        } else if (
           entry.isFile() &&
           !(rel === '' && skip.has(entry.name)) &&
           // No page or picture the editor wrote (dark pictures, section
@@ -5074,23 +5156,106 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
     };
     copyDir('');
+    if (notTheme.length)
+      notes.push(
+        `left out ${notTheme.join(', ')}: version control and installed packages are no part of the theme (the new app installs its own packages)`,
+      );
     if (links.length)
       notes.push(
-        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the editor never reads through; put a copy of the file there to bring it along`,
+        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the copy does not follow; put a copy of what ${links.length === 1 ? 'it leads' : 'each leads'} to there to bring it along`,
       );
     // A source file of the theme that imports a file outside its folder
     // would not build in the new app, where that file is not: refused,
     // naming the import, before anything is written.
+    // Outside the theme folder by where a file really is: a link in the
+    // folder that leads out of it (themes/t/img → ../../shared) is left out
+    // of the copy, so what it reaches is outside too.
+    const realFrom = (() => {
+      try {
+        return fs.realpathSync(from.dir);
+      } catch {
+        return from.dir;
+      }
+    })();
+    /** @param {string} at */
+    const leaves = at => {
+      /** @type {string} */
+      let real;
+      try {
+        real = fs.realpathSync(at);
+      } catch {
+        // Not there (an import without its extension): by its path.
+        real = path.resolve(at);
+        const lexical =
+          real === from.dir || real.startsWith(from.dir + path.sep);
+        return !lexical;
+      }
+      return real !== realFrom && !real.startsWith(realFrom + path.sep);
+    };
+    /**
+     * A path inside the theme folder that the copy will not hold, because
+     * something the copy leaves out is on its way (a link to a place inside
+     * the folder, a package folder): that entry, else null.
+     * @param {string} at
+     */
+    const leftOutOn = at => {
+      const rel = path.relative(from.dir, path.resolve(at));
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+      let p = from.dir;
+      for (const part of rel.split(path.sep)) {
+        p = path.join(p, part);
+        if (leftOut.has(p)) return p;
+      }
+      return null;
+    };
+    /** References the copy would break, each with the entry it goes through. @type {string[]} */
+    const broken = [];
+    /**
+     * Whether a reference leads out of the theme folder; one that reaches
+     * a file through something the copy leaves out is recorded as broken.
+     * @param {string} at
+     * @param {string} said how the file names it
+     */
+    const check = (at, said) => {
+      if (leaves(at)) return true;
+      const by = leftOutOn(at);
+      if (by && fs.existsSync(at))
+        broken.push(`${said} through ${shown(cwd, by)}, ${leftOut.get(by)}`);
+      return false;
+    };
+    /** Packages the copied theme sources import, by name. @type {Set<string>} */
+    const imported = new Set();
+    /** Stylesheets of another language the theme sources import (a Sass file), which the new app cannot build or type. @type {string[]} */
+    const otherStyles = [];
+    /** Other files only a bundler loads that the theme sources import by a name the new app's type check does not read (`./brand.css?inline`, a font). @type {string[]} */
+    const untyped = [];
     const outside = themeCopy.flatMap(c => {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.(mjs|cjs|js|mts|cts|ts|tsx|jsx)$/.test(rel)) return [];
       const file = path.join(from.dir, rel);
-      return importSpecifiers(file, String(c.text))
+      const specs = importSpecifiers(file, String(c.text));
+      // A package by its name (`tintx`, `@sc/brand`): never a path alias
+      // (`@/x`, `~/x`, `#x`), which the theme build refuses on its own.
+      for (const spec of specs) {
+        const pkg = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*/i.exec(spec)?.[0];
+        if (pkg && !isBuiltin(spec)) imported.add(pkg);
+        if (isOtherLanguageStylesheet(spec))
+          otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
+        else if (isBundlerFile(spec) && !typedByNewApp(spec))
+          untyped.push(`${shown(cwd, file)} imports '${spec}'`);
+      }
+      // Each import at the file it loads, resolved as the theme build
+      // resolves it (`./helpers` is helpers.ts), so a link it loads is
+      // seen; one that names no file stays at its path.
+      return specs
         .filter(spec => spec.startsWith('.'))
-        .filter(spec => {
-          const at = path.resolve(path.dirname(file), spec);
-          return at !== from.dir && !at.startsWith(from.dir + path.sep);
-        })
+        .filter(spec =>
+          check(
+            localModuleFile(path.dirname(file), spec) ??
+              path.resolve(path.dirname(file), spec),
+            `${shown(cwd, file)} imports '${spec}'`,
+          ),
+        )
         .map(spec => `${shown(cwd, file)} imports '${spec}'`);
     });
     // A stylesheet's url() that leads out of the theme folder (an image in
@@ -5098,6 +5263,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // module: the new app does not have it, so its build would fail. Read
     // with the renderer's own url reader; a `/` url is the app's public/
     // folder, which the bundler leaves alone.
+    /** Root urls the previews read from this project's public/. @type {Set<string>} */
+    const publicRefs = new Set();
+    /** Urls that name no file. @type {string[]} */
+    const missing = [];
     for (const c of themeCopy) {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.css$/.test(rel)) continue;
@@ -5109,16 +5278,35 @@ export async function themeEditPreviewApp(dir, options = {}) {
           dir: path.dirname(file),
           root: cwd,
         });
-        if (!named || named.kind === 'remote' || named.ref.startsWith('/'))
+        if (!named || named.kind === 'remote') continue;
+        // The app's public/ folder: the bundler leaves it alone, and the
+        // new app has none of this project's files there.
+        if (named.ref.startsWith('/')) {
+          if (named.kind === 'file')
+            publicRefs.add(`url(${named.ref}) (${shown(cwd, named.file)})`);
           continue;
+        }
         const at =
           named.kind === 'missing'
             ? path.resolve(path.dirname(file), named.ref)
             : named.file;
-        if (at !== from.dir && !at.startsWith(from.dir + path.sep))
+        if (check(at, `${shown(cwd, file)} uses url(${named.ref})`))
           outside.push(`${shown(cwd, file)} uses url(${named.ref})`);
+        // A url that names no file (a wrong-case path): the new app's
+        // bundler resolves it as a module and fails.
+        else if (named.kind === 'missing')
+          missing.push(`${shown(cwd, file)} uses url(${named.ref})`);
       }
     }
+    if (missing.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${missing.slice(0, 3).join('; ')}, and there is no such file in ${shown(cwd, from.dir)}/ (names are matched with their case), so the new app's bundler cannot resolve it and its theme would not build there.`,
+        {
+          fix: `name the file as it is spelled in ${shown(cwd, from.dir)}/, or put it there, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
     if (outside.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -5126,6 +5314,70 @@ export async function themeEditPreviewApp(dir, options = {}) {
         {
           fix: `move what it imports into ${shown(cwd, from.dir)}/ (and import it from there), then run the command again`,
           run: [appCommand(dir, slug)],
+        },
+      );
+    // A Sass, Less or Stylus file the theme imports: the new app builds and
+    // types CSS only (its css.d.ts declares *.css), so its build would
+    // stop there.
+    if (otherStyles.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${otherStyles.slice(0, 3).join('; ')}, a stylesheet in another language than CSS, which the new app does not build, so its build would stop there.`,
+        {
+          fix: `make it a .css file (and import that), or take the import out of the theme, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    // A stylesheet or an asset the new app builds, named in a way its type
+    // check reads no declaration for (a query, a hash, an upper-case
+    // extension, a font file): its build would stop there.
+    if (untyped.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (it reads .css files and pictures, by their plain lower-case name), so its build would stop there.`,
+        {
+          fix: `import the file by its plain name with a lower-case extension (a .css file, a picture), load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    // Inside the folder, yet through something the copy leaves out: the
+    // new app would not have the file at the path it is named by.
+    if (broken.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${broken.slice(0, 3).join('; ')}, so the new app would not have the file where it is named, and its theme would not build there.`,
+        {
+          fix: `put the file itself where it is named (in place of what the copy leaves out), or name it at its own place in ${shown(cwd, from.dir)}/, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    if (publicRefs.size)
+      notes.push(
+        `${[...publicRefs].join(', ')}: ${publicRefs.size === 1 ? 'an image' : 'images'} of this app's public/ folder, which the new app does not have, so it shows the theme without ${publicRefs.size === 1 ? 'it' : 'them'} until ${publicRefs.size === 1 ? 'it is' : 'they are'} copied into its public/ folder`,
+      );
+    // A package the theme's own source imports goes into the new app, at
+    // the version this project has, as Core and the base theme do; one this
+    // project cannot resolve is refused by name (its theme would not build).
+    /** @type {string[]} */
+    const unresolved = [];
+    for (const pkg of imported) {
+      if (
+        pkg === 'react' ||
+        pkg === 'react-dom' ||
+        pkg.startsWith('@astryxdesign/')
+      )
+        continue;
+      const v = installedVersion(cwd, pkg);
+      if (v) dependencies[pkg] = v;
+      else unresolved.push(pkg);
+    }
+    if (unresolved.length)
+      refuse(
+        E.ERR_DEP_MISSING,
+        `${slug} cannot be copied into a new app: its source imports ${unresolved.join(', ')}, which this project does not have installed, so its theme would not build there.`,
+        {
+          fix: `install ${unresolved.length > 1 ? 'them' : 'it'} here (or take the import out of ${shown(cwd, from.dir)}/), then run the command again`,
+          run: [installLine(cwd, unresolved)],
         },
       );
     if (theme.like && theme.like !== 'neutral')
@@ -5158,34 +5410,84 @@ export async function themeEditPreviewApp(dir, options = {}) {
     };
     // The new app installs its own packages, so every open font the theme
     // names is added, at the version this project has, else a known one.
-    const fonts = fontPackages(ctx, theme, {forNewApp: true});
+    // A family the base theme's fonts stylesheet loads (which the route
+    // imports) needs no package of its own: it is loaded, every weight the
+    // sheet names.
+    const baseLoads = new Set(
+      (baseFontsSheet(ctx, theme)?.families ?? []).map(f => f.toLowerCase()),
+    );
+    const fonts = fontPackages(ctx, theme, {forNewApp: true}).filter(
+      x => !baseLoads.has(x.family.replace(/["']/g, '').toLowerCase()),
+    );
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
-    // A package the new app adds and this project has not installed: which
-    // weights it ships is unknown here (Lato has no 500), and importing one
-    // it lacks would stop the app's build. Its index sheet (weight 400)
-    // loads; every other weight the theme uses is named, with the import
-    // that loads it once installed.
-    const used = (builtFontWeights(ctx, slug) ?? [400]).filter(w => w !== 400);
+    // A package loaded by its index sheet alone: the weights that sheet's
+    // own faces load are read from it (a variable package's one face loads
+    // every weight in its range). One this project has not installed is
+    // unread: which weights it ships is unknown here (Lato has no 500), and
+    // importing one it lacks would stop the app's build, so its index
+    // sheet is taken as Fontsource's (weight 400). Each weight the theme
+    // uses that the index does not load is named, with the import of each
+    // weight sheet the package ships (unknown until installed).
+    const used = builtFontWeights(ctx, slug) ?? [400];
+    // The weight sheets a Fontsource static package can have: its weights
+    // are the hundreds from 100 to 900, so a weight between two (650) is
+    // drawn from the two around it, the sheets the browser picks between.
+    /** @param {number[]} ws */
+    const sheetWeights = ws =>
+      [
+        ...new Set(
+          ws
+            .flatMap(w =>
+              w % 100 === 0
+                ? [w]
+                : [Math.floor(w / 100) * 100, Math.ceil(w / 100) * 100],
+            )
+            .map(w => Math.min(900, Math.max(100, w))),
+        ),
+      ].sort((a, b) => a - b);
     for (const font of fonts) {
       const sheets = fontPackageSheets(ctx, slug, font.pkg);
-      if (
-        used.length &&
-        sheets.length === 1 &&
-        sheets[0] === `${font.pkg}/index.css`
-      )
-        notes.push(
-          `the new app loads ${font.family} at weight 400 only (${font.pkg}/index.css): ${slug} also uses ${used.join(', ')}, which show as a bold drawn by the browser until loaded; after installing, import ${used.map(w => `'${font.pkg}/${w}.css'`).join(', ')} in its root layout (each weight the family ships)`,
-        );
+      if (sheets.length !== 1 || sheets[0] !== `${font.pkg}/index.css`)
+        continue;
+      const loads = fontIndexWeights(ctx, font.pkg);
+      const spans = loads ?? [[400, 400]];
+      const unloaded = used.filter(
+        w => !spans.some(([from, to]) => w >= from && w <= to),
+      );
+      if (!unloaded.length) continue;
+      const loaded = spans
+        .map(([from, to]) => (from === to ? `${from}` : `${from}–${to}`))
+        .join(', ');
+      const ships = loads
+        ? unloaded.filter(w =>
+            (fontPackageWeights(ctx, font.pkg) ?? []).includes(w),
+          )
+        : sheetWeights(unloaded);
+      notes.push(
+        `the new app loads ${font.family} at weight ${loaded} only (${font.pkg}/index.css): ${slug} also uses ${unloaded.join(', ')}, which show as a bold drawn by the browser${loads ? '' : ' until loaded'}; ${
+          ships.length
+            ? `${loads ? '' : 'after installing, '}import ${ships.map(w => `'${font.pkg}/${w}.css'`).join(', ')} in its root layout${loads ? '' : ' (each weight the family ships)'}`
+            : `${font.pkg} ships no stylesheet for ${unloaded.length > 1 ? 'those weights' : 'that weight'}`
+        }`,
+      );
     }
     // A family the CLI cannot vouch for as an open font (and this project
     // has no package of) is not installed in the new app: said, with the
     // package that would load it.
+    // Its index sheet would load weight 400 alone, as for a package not
+    // installed above: the import names the sheet of each weight the theme
+    // uses.
     for (const family of familiesNothingLoads(ctx, theme, fonts)) {
       const s = fontsourceSuggestion(family);
+      const sheets = s
+        ? sheetWeights(used)
+            .map(w => `'${s.pkg}/${w}.css'`)
+            .join(', ')
+        : '';
       notes.push(
-        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import '${s.pkg}' in its root layout)` : ''}`,
+        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import ${sheets} in its root layout: the weight sheets for the weights ${slug} uses, a weight between two hundreds drawn from the two around it; leave out any the family does not ship)` : ''}`,
       );
     }
     routeTheme = {
@@ -5677,11 +5979,22 @@ async function removePreview(page, options, box) {
       // Several previews, or none.
     }
     const pageArg = page != null ? ` ${quoteCommandArgument(page)}` : '';
+    // Add is offered only where add takes the folder, checked as add checks
+    // it (a root layout, the routes folder, the folder's own kind). Where
+    // add refuses, the lines add itself offers there take its place.
+    const addRetry = (/** @type {string | null} */ p) =>
+      `${PREVIEW} add${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
     let addable = true;
+    /** @type {string[]} */
+    let addWays = [];
     try {
-      previewDir(cwd, options.path, {write: true, retry});
-    } catch {
+      previewDir(cwd, options.path, {write: true, retry: addRetry});
+    } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
       addable = false;
+      addWays = (e.suggestions ?? [])
+        .map(x => x.name)
+        .filter(n => !n.startsWith(`${PREVIEW} add`));
     }
     refuse(
       E.ERR_NOT_FOUND,
@@ -5695,11 +6008,13 @@ async function removePreview(page, options, box) {
           ),
           ...(others.length
             ? []
-            : [
-                addable && !holdsApp(cwd, at.dir)
-                  ? `${PREVIEW} add${pf}`
-                  : `${PREVIEW} add`,
-              ]),
+            : addable
+              ? [
+                  holdsApp(cwd, at.dir)
+                    ? `${PREVIEW} add`
+                    : `${PREVIEW} add${pf}`,
+                ]
+              : addWays),
         ],
       },
     );
@@ -5818,16 +6133,18 @@ async function removePreview(page, options, box) {
     else if (unreadable(inside(rel))) {
       kept.push(name);
       notes.push(
-        `${name} could not be read (${unreadable(inside(rel))}), so it is left in place and stays in ${PREVIEW_DATA}; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+        `${unreadableNote(name, /** @type {string} */ (unreadable(inside(rel))))}, so it is left in place, and the ${target.id} page stays in ${PREVIEW_DATA}; ${unreadableFix(name, /** @type {string} */ (unreadable(inside(rel))))}, then run ${PREVIEW} remove ${target.id}${pf} again`,
       );
     } else if (verdict !== 'delete') {
       kept.push(name);
       notes.push(keptNote(name, verdict));
     } else deletes.push(rel);
-    data.pages = data.pages.filter(x => x !== target);
-    // A file left in place because it could not be read stays recorded.
-    if (!unreadable(inside(rel)))
+    // A page whose file could not be read stays, file and record: the same
+    // remove of that page runs again once the file is fixed.
+    if (!unreadable(inside(rel))) {
+      data.pages = data.pages.filter(x => x !== target);
       data.files = data.files.filter(f => f !== rel);
+    }
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
@@ -5964,7 +6281,7 @@ async function removePreview(page, options, box) {
     if (cannot) {
       kept.push(shown(cwd, file));
       notes.push(
-        `${shown(cwd, file)} could not be read (${cannot}), so it is left in place; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+        `${unreadableNote(shown(cwd, file), cannot)}, so it is left in place; ${unreadableFix(shown(cwd, file), cannot)}, then run ${PREVIEW} remove${pf} again`,
       );
       continue;
     }
