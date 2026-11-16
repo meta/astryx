@@ -9065,7 +9065,12 @@ export function draftAnswer(ctx, env, question) {
       }
       const between =
         c.parts.length && !c.except && c.text
-          ? unknownSlot(c.text, false, true)
+          ? unknownSlot(
+              c.text,
+              false,
+              true,
+              c.parts.map(x => x.on),
+            )
           : null;
       if (between) {
         push({
@@ -19399,9 +19404,13 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} text
    * @param {boolean} [subject] also the subject an elided clause starts
    *   with ("and the gizmo red")
+   * @param {boolean} [between] only the word between a part and what
+   *   changes, or before a place
+   * @param {string[]} [held] the parts the clause kept, for the word
+   *   before a place
    * @returns {{word: string, parts: string[]} | null}
    */
-  function unknownSlot(text, subject = false, between = false) {
+  function unknownSlot(text, subject = false, between = false, held = []) {
     // The part slot: the noun after "from", "on" or "to", the noun right
     // after the verb, or the noun before the thing changed ("the zorp
     // padding"). A word there that how knows as nothing (no part, group,
@@ -19432,8 +19441,26 @@ export function draftAnswer(ctx, env, question) {
         ? m[2]
         : undefined;
     })();
+    // (Before a place, "the zorp in cards": the word the place holds,
+    // with the place a known part.)
+    const placedWord = (() => {
+      const m = new RegExp(
+        String.raw`\b${DET}([a-z]{3,})\s+(?:in|on|of|inside|within)\s+(?:the\s+|my\s+|all\s+)?([a-z]+)\b`,
+      ).exec(text);
+      // (Only when the clause kept nothing but the place: an element the
+      // words name, "the dot in radios", is read as that element.)
+      const place = m
+        ? lex.parts.filter(([re]) => re.test(` ${m[2]} `)).map(([, x]) => x.on)
+        : [];
+      return m &&
+        place.length &&
+        held.length &&
+        held.every(on => place.includes(on))
+        ? m[1]
+        : undefined;
+    })();
     const slots = between
-      ? [betweenWord]
+      ? [betweenWord, placedWord]
       : [
           new RegExp(
             String.raw`\b(?:from|on)\s+${DET}([a-z]{3,})\b(?!\s+(?:mode|theme)\b)`,
