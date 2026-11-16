@@ -563,8 +563,10 @@ const STYLEX_STYLE_CALLS = new Set([
 ]);
 // A bare call: an Astryx theme and its code-syntax colors.
 const THEME_CALLS = new Set(['defineTheme', 'defineSyntaxTheme']);
-// A method call: Web Animations keyframes and timing (`element.animate(...)`).
-const STYLE_METHOD_CALLS = new Set(['animate']);
+// A method call whose arguments are motion values: Web Animations keyframes
+// and timing (`element.animate(...)`), and the motion system's targets
+// (`handle.play({opacity: ...})`).
+const STYLE_METHOD_CALLS = new Set(['animate', 'play']);
 // A JSX attribute or an object property whose value is style: `style`,
 // `xstyle`, and a named style slot such as `contentStyle` or `labelStyle`.
 const STYLE_NAME = /^(?:x?style|[a-z][A-Za-z0-9]*Style)$/;
@@ -645,8 +647,14 @@ function styleContextLines(source, jsx) {
   const stack = [];
   // Open style contexts, each ending with the frame at its depth.
   const contexts = [];
-  // Objects bound to a name: {name, from, to, typed}.
+  // Objects and function bodies bound to a name: {name, from, to, typed}.
   const bindings = [];
+  // Names bound to a call's result (`const sizing = resolveSizing(...)`):
+  // using the name as style uses what that function returns.
+  const callResults = [];
+  // Names bound to `stylex.create(...)`: calling one of its dynamic styles
+  // (`sheet.size(width)`) takes style values.
+  const styleSheets = new Set();
   // Each identifier read in code, with its line.
   const references = [];
   // Lines where a style-named property takes a bare value (`style: base`):
@@ -760,6 +768,7 @@ function styleContextLines(source, jsx) {
     if (THEME_CALLS.has(c) && b !== '.') return 'all';
     if (b === '.' && STYLE_METHOD_CALLS.has(c)) return 'all';
     if (a === 'Object' && b === '.' && c === 'assign') return 'assign';
+    if (b === '.' && styleSheets.has(a)) return 'all';
     return null;
   };
 
@@ -788,7 +797,10 @@ function styleContextLines(source, jsx) {
         last = ')';
         index = end + 1;
       } else if (character === '<') {
-        open({kind: 'tag', close: '>'}, false);
+        open(
+          {kind: 'tag', close: '>', intrinsic: /[a-z]/.test(next ?? '')},
+          false,
+        );
         index += 1;
       } else {
         index += 1;
@@ -820,7 +832,12 @@ function styleContextLines(source, jsx) {
         if (end === -1) return null;
         index = end;
       } else if (character === '{') {
-        open({kind: 'code', close: '}'}, pendingAttribute);
+        // A spread onto an intrinsic element (`<svg {...svgProps}>`) sets
+        // its presentation attributes.
+        const spread =
+          top().intrinsic &&
+          /^\{\s*\.\.\./.test(source.slice(index, index + 8));
+        open({kind: 'code', close: '}'}, pendingAttribute || spread);
         pendingAttribute = false;
         last = '{';
         index += 1;
@@ -894,7 +911,7 @@ function styleContextLines(source, jsx) {
         stack.push({kind: 'children', close: '<'});
         index += 2;
       } else {
-        open({kind: 'tag', close: '>'}, false);
+        open({kind: 'tag', close: '>', intrinsic: /[a-z]/.test(next)}, false);
         index += 1;
       }
       continue;
@@ -926,6 +943,14 @@ function styleContextLines(source, jsx) {
         declaration = named
           ? {name: named[1], typed: STYLE_TYPE.test(named[2] ?? '')}
           : null;
+        const result = source
+          .slice(end, end + 400)
+          .match(
+            /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^;=]*?\?\s*[^;:]*?:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
+          );
+        if (result && /^stylex/.test(result[2])) styleSheets.add(result[1]);
+        else if (result)
+          callResults.push({name: result[1], calls: result[2], line});
         const arrow = source
           .slice(end, end + 400)
           .match(/^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:async\s*)?\(/);
@@ -1053,26 +1078,64 @@ function styleContextLines(source, jsx) {
   }
   if (stack.length > 0 || contexts.length > 0) return null;
 
-  // A named object is style when its type says so, or when its name is read
-  // inside another style context (or as a style property's value). One
-  // object marked so can mark another that it reads, so this runs until
-  // nothing changes.
+  // A named object or function is style when its type says so, or when its
+  // name is read inside another style context (or as a style property's
+  // value); a name bound to a call's result passes that on to the function.
+  // Marking one can mark another that it reads: a work list follows each
+  // newly marked range to the names read in it, so every reference is
+  // looked at a bounded number of times.
+  const linesOf = new Map();
+  const namesAt = new Map();
+  for (const {name, line: at} of references) {
+    if (!linesOf.has(name)) linesOf.set(name, []);
+    linesOf.get(name).push(at);
+    if (!namesAt.has(at)) namesAt.set(at, new Set());
+    namesAt.get(at).add(name);
+  }
+  const bindingsOf = new Map();
+  for (const binding of bindings) {
+    if (!bindingsOf.has(binding.name)) bindingsOf.set(binding.name, []);
+    bindingsOf.get(binding.name).push(binding);
+  }
+  const resultsOf = new Map();
+  for (const result of callResults) {
+    if (!resultsOf.has(result.name)) resultsOf.set(result.name, []);
+    resultsOf.get(result.name).push(result);
+  }
+  const usedAsStyle = (name, from, to) =>
+    (linesOf.get(name) ?? []).some(
+      at =>
+        (at < from || at > to) && (covered.has(at) || styleValueLines.has(at)),
+    );
   const marked = new Set();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const binding of bindings) {
-      if (marked.has(binding)) continue;
-      const usedAsStyle = references.some(
-        reference =>
-          reference.name === binding.name &&
-          (reference.line < binding.from || reference.line > binding.to) &&
-          (covered.has(reference.line) || styleValueLines.has(reference.line)),
-      );
-      if (binding.typed || usedAsStyle) {
-        marked.add(binding);
-        markLines(binding.from, binding.to);
-        changed = true;
+  const pending = [];
+  // Names to look at again: every name read where a style context lies.
+  const queue = [...new Set(references.map(reference => reference.name))];
+  const markBinding = binding => {
+    if (marked.has(binding)) return;
+    marked.add(binding);
+    for (let at = binding.from; at <= binding.to; at += 1) {
+      if (covered.has(at)) continue;
+      covered.add(at);
+      for (const name of namesAt.get(at) ?? []) pending.push(name);
+    }
+  };
+  for (const binding of bindings) if (binding.typed) markBinding(binding);
+  const seen = new Set();
+  while (queue.length > 0 || pending.length > 0) {
+    const name = pending.length > 0 ? pending.pop() : queue.pop();
+    for (const binding of bindingsOf.get(name) ?? []) {
+      if (!marked.has(binding) && usedAsStyle(name, binding.from, binding.to)) {
+        markBinding(binding);
+      }
+    }
+    for (const result of resultsOf.get(name) ?? []) {
+      if (seen.has(result) || !usedAsStyle(name, result.line, result.line)) {
+        continue;
+      }
+      seen.add(result);
+      for (const binding of bindingsOf.get(result.calls) ?? []) {
+        markBinding(binding);
       }
     }
   }

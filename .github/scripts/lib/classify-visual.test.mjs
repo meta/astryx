@@ -913,6 +913,58 @@ describe('CSS-named keys count only in a style context', () => {
     expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(3);
   });
 
+  it('scores motion targets, SVG presentation props spread onto an intrinsic element, and values passed to a dynamic style', () => {
+    const lines = [
+      "import * as stylex from '@stylexjs/stylex';",
+      'panel.play({',
+      '  opacity: between(progress, 0, 1),',
+      '});',
+      'const svgProps = {',
+      "  fill: 'none',",
+      '};',
+      'export const Icon = () => <svg {...svgProps} />;',
+      'const sheet = stylex.create({',
+      '  size: (width: string) => ({width}),',
+      '});',
+      'function resolveSizing(width: number) {',
+      '  return {',
+      '    width: `${width}px`,',
+      '  };',
+      '}',
+      'const sizing = resolveSizing(4);',
+      'export const A = () => <div {...stylex.props(sheet.size(sizing.width))} />;',
+      'const data = {',
+      '  height: 3,',
+      '};',
+      'export const B = () => <Chart {...data} />;',
+    ];
+    const covered = styleContextLines(lines.join('\n'), true);
+    // The motion target, the spread props, the dynamic style's own body and
+    // the helper whose result it is given; not a data object spread onto a
+    // component.
+    for (const at of [3, 6, 10, 14])
+      expect(covered.has(at), String(at)).toBe(true);
+    expect(covered.has(20)).toBe(false);
+  });
+
+  it('marks a long chain of named objects in time linear in the file', () => {
+    const count = 20000;
+    const source = [
+      ...Array.from(
+        {length: count},
+        (_, i) => `const o${i} = {a${i}: o${i + 1}};`,
+      ),
+      `const o${count} = {color: 1};`,
+      'const styles = stylex.create({x: o0});',
+    ].join('\n');
+    const started = performance.now();
+    const covered = styleContextLines(source, false);
+    const elapsed = performance.now() - started;
+    expect(covered.has(count + 1)).toBe(true);
+    // A pass per object (quadratic) took minutes on this input.
+    expect(elapsed).toBeLessThan(10_000);
+  });
+
   it('scores a .css file and a .stylex.ts file throughout', () => {
     expect(
       cssCount(
@@ -1036,7 +1088,10 @@ describe('review-signal loading contract', () => {
       ),
       'utf8',
     );
-    expect(workflow).toContain('mod.exports.styleContextPaths(String(diff)');
+    // A classifier loaded from an older base has no styleContextPaths.
+    expect(workflow).toContain(
+      "typeof mod.exports.styleContextPaths === 'function'",
+    );
     expect(workflow).toMatch(
       /classifyVisualDiff\(String\(diff\), \{[^}]*styleSources,/,
     );
