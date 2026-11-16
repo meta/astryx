@@ -14,7 +14,7 @@ import {RocketLaunchIcon, BookOpenIcon} from '@heroicons/react/24/outline';
 export default function TopNavMegaMenuBasic() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Main navigation"
       heading={<TopNavHeading heading="DevTools" />}
       startContent={

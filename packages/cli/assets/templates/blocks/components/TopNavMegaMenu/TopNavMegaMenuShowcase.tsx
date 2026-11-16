@@ -21,7 +21,7 @@ import {
 export default function TopNavMegaMenuShowcase() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Mega menu demo"
       heading={<TopNavHeading heading="DevTools" />}
       startContent={

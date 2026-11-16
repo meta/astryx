@@ -19,7 +19,7 @@ import {
 export default function TopNavMenuShowcase() {
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Menu demo"
       heading={<TopNavHeading heading="Platform" />}
       startContent={

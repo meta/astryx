@@ -17,7 +17,7 @@ export default function StepperCustomContent() {
   // a notice. Gating it on `active` is what makes the flow expand a step at a
   // time.
   return (
-    <div style={{width: 680}}>
+    <div style={{width: 680, maxWidth: '100%'}}>
       <Stepper
         activeStep={active}
         orientation="vertical"

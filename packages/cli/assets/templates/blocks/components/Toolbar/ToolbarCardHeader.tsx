@@ -14,7 +14,8 @@ import {useToast} from '@astryxdesign/core/Toast';
 export default function ToolbarCardHeader() {
   const showToast = useToast();
   return (
-    <Card style={{width: 500, height: '100%', marginTop: 260}}>
+    <Card
+      style={{width: 500, maxWidth: '100%', height: '100%', marginTop: 260}}>
       <Toolbar
         label="User list actions"
         size="sm"

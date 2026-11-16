@@ -12,7 +12,7 @@ export default function StepContent() {
   // this on the step being active; here it is a single Step so the slot is
   // always shown.
   return (
-    <div style={{width: 400}}>
+    <div style={{width: 400, maxWidth: '100%'}}>
       <Stepper activeStep={1} orientation="vertical">
         <Step
           step={1}

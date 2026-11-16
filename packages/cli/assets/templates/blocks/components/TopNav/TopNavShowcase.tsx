@@ -13,7 +13,7 @@ export default function TopNavShowcase() {
   const showToast = useToast();
   return (
     <TopNav
-      style={{width: 600}}
+      style={{width: 600, maxWidth: '100%'}}
       label="Main navigation"
       heading={
         <TopNavHeading
