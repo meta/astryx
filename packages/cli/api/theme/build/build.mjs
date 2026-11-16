@@ -2989,6 +2989,15 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       'The default export is a Promise, not a theme object: the build reads the export as it is and does not await it. Export the theme itself, such as export default await …, or the defineTheme() result.',
     );
   }
+  // A doc (`{type: 'theme', name, description, …}`, read from a file not
+  // named as one) is no theme: `type` is no theme field, and a doc has no
+  // tokens.
+  if (
+    isPlainObject(defaultExport) &&
+    typeof defaultExport.type === 'string' &&
+    defaultExport.tokens === undefined
+  )
+    throw themeDocError(filePath, 'export');
   // A plain-object default export is the module's theme even when it has
   // no tokens of its own (local tokens, typography or component styles may
   // be all it defines), or no name: the build's validation says what it
@@ -3115,6 +3124,12 @@ function isThemeObject(value) {
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+  // A doc module is not run as a theme.
+  if (DOC_FILE.test(filePath))
+    throw new Error(
+      `Failed to load theme from ${filePath}: ${themeDocError(filePath, 'name').message}`,
+      {cause: themeDocError(filePath, 'name')},
+    );
   // A stylesheet the source imports that is not there yet loads as an empty
   // module, and is named, so the build can refuse one it does not write.
   /** @type {Set<string>} */
@@ -3332,7 +3347,8 @@ function themeLoadReason(error) {
   const message = error.message;
   if (error instanceof ThemeShapeError)
     return `${message}\n${THEME_EXPORT_FIX}`;
-  if (error instanceof ThemeNameError) return message;
+  if (error instanceof ThemeNameError || error instanceof ThemeDocError)
+    return message;
   if (
     error instanceof TypeError &&
     /^Cannot read properties of (?:null|undefined)/.test(message) &&
@@ -3366,6 +3382,55 @@ class ThemeShapeError extends Error {}
 class ThemeNameError extends Error {}
 
 /**
+ * A module that is a doc, not a theme: a `*.doc.*` file (the name every doc
+ * of the CLI's has), or one whose default export is a doc (`{type: 'theme',
+ * …}`, a field no theme has). Nothing is built from it. `source` is the theme
+ * source beside it that the doc describes, when there is one.
+ */
+class ThemeDocError extends Error {
+  /** @param {string} message @param {string | null} source */
+  constructor(message, source) {
+    super(message);
+    this.source = source;
+  }
+}
+
+/** A doc module's name: `oceanTheme.doc.mjs`. */
+const DOC_FILE = /\.doc\.[cm]?[jt]sx?$/i;
+
+/**
+ * The theme source beside a doc that has its name, `oceanTheme.ts` beside
+ * `oceanTheme.doc.mjs`, or null.
+ * @param {string} docFile
+ */
+function themeSourceOfDoc(docFile) {
+  const stem = path.basename(docFile).replace(DOC_FILE, '');
+  for (const ext of THEME_SOURCE_EXTENSIONS) {
+    if (ext === '.json') continue;
+    const file = path.join(path.dirname(docFile), `${stem}${ext}`);
+    if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+  }
+  return null;
+}
+
+/**
+ * The refusal for a doc module read as a theme.
+ * @param {string} filePath
+ * @param {'name' | 'export'} by how it is known to be a doc
+ */
+function themeDocError(filePath, by) {
+  const source = themeSourceOfDoc(filePath);
+  const what =
+    by === 'name'
+      ? `${path.basename(filePath)} is a doc module (a *.doc.* file describes a theme, a component or a command for the docs)`
+      : `its default export is a doc (it has a type field, which no theme has, and no tokens)`;
+  return new ThemeDocError(
+    `${what}, not a theme, so nothing is built from it. Build the theme source itself${source ? `, ${path.basename(source)}` : ''}.`,
+    source,
+  );
+}
+
+/**
  * The command that moves a failed theme load forward: the install for a
  * package the theme imports and the app lacks, the same build for a file that
  * changed while it loaded, else the annotated template, which shows a theme
@@ -3376,6 +3441,18 @@ class ThemeNameError extends Error {}
  * @returns {import('../../../foundation/response/base').Suggestion[]}
  */
 function themeLoadSuggestions(error, shown, cwd, mode = {}) {
+  const doc = error.cause instanceof ThemeDocError ? error.cause : null;
+  if (doc?.source)
+    return [
+      {
+        name: buildSuggestion(
+          path.relative(cwd, doc.source) || doc.source,
+          mode,
+          cwd,
+        ),
+        reason: 'build the theme source the doc describes',
+      },
+    ];
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
     const {installCommand} = installCommandFor(
