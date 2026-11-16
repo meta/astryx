@@ -55,9 +55,12 @@
  * preview per `SelectableCard`; many choices use one `Selector` and one live
  * preview below it. Prefer the real component being configured so the sample
  * cannot drift. For detail most readers do not need, expand a `Collapsible`
- * inside the row. Never open a dialog from this dialog: nested focus traps and
- * two overlapping dismiss paths are not progressive disclosure. If the detail
- * is too large to expand in place, it belongs on a page.
+ * inside the row. Never open a dialog from this dialog to show more detail:
+ * nested focus traps and two overlapping dismiss paths are not progressive
+ * disclosure. If the detail is too large to expand in place, it belongs on a
+ * page. The one exception is an `AlertDialog` that confirms a destructive
+ * action, such as deleting the account: it asks one question, closes before
+ * the action runs, and Escape closes only the alert, never this dialog.
  */
 
 import {Button} from '@astryxdesign/core/Button';
@@ -2724,7 +2727,8 @@ export default function SettingsDialogTemplate() {
         // transform or `overflow: hidden` can clip — an open one inside a scaled
         // preview tile paints over the whole gallery instead of inside its tile.
         // The docsite's own preview is also a Dialog, which a modal here would
-        // then nest inside, and Astryx forbids nesting dialogs.
+        // then nest inside, and Astryx does not nest dialogs, apart from an
+        // AlertDialog that confirms a destructive action.
         //
         // Everything else on this page is the composition you want: drop
         // `isInline`, drive `isOpen` from state, hand `onOpenChange` the setter,
