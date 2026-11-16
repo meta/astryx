@@ -2434,7 +2434,6 @@ export default function SupportInboxTemplate() {
   return (
     <>
       <Layout
-        role="main"
         ref={surfaceRef}
         height="fill"
         header={
@@ -2653,7 +2652,7 @@ export default function SupportInboxTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent ref={listRef} padding={4} isScrollable>
+          <LayoutContent role="main" ref={listRef} padding={4} isScrollable>
             {isPaneFullWidth && openConversation != null ? (
               <ConversationPane
                 conversation={openConversation}

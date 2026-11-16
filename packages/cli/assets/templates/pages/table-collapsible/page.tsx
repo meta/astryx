@@ -1345,7 +1345,6 @@ export default function ConnectedAccountsTemplate() {
   return (
     <RangeContext.Provider value={range}>
       <Layout
-        role="main"
         height="auto"
         contentWidth={1200}
         xstyle={styles.wash}
@@ -1379,7 +1378,7 @@ export default function ConnectedAccountsTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent padding={4}>
+          <LayoutContent role="main" padding={4}>
             <VStack gap={4} ref={contentRef}>
               <AccountGroup
                 icon={BuildingLibraryIcon}

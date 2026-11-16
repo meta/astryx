@@ -1576,7 +1576,6 @@ export default function FileTreeTemplate() {
 
   return (
     <Layout
-      role="main"
       /*
        * `fill` — the default — pins the layout to the viewport and scrolls the
        * content area internally, which would trap the README below the fold
@@ -1713,7 +1712,7 @@ export default function FileTreeTemplate() {
         />
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           {data.length === 0 ? (
             <EmptyState
               title="No matching files"

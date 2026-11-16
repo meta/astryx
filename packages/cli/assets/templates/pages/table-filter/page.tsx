@@ -4339,7 +4339,6 @@ export default function TableFilterTemplate() {
   return (
     <>
       <Layout
-        role="main"
         height="fill"
         padding={0}
         xstyle={styles.pageShell}
@@ -4486,7 +4485,7 @@ export default function TableFilterTemplate() {
         content={
           /* Default padding (16px) is deliberate: Table bleeds to the edges
              and re-applies it to the first and last cells. */
-          <LayoutContent padding={4} label="Service jobs">
+          <LayoutContent role="main" padding={4} label="Service jobs">
             {results.length === 0 ? (
               <EmptyState
                 icon={<Icon icon={Search} size="lg" />}
