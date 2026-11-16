@@ -15,8 +15,7 @@
  *   resolves in needs a real engine.
  */
 
-import * as fs from 'node:fs';
-import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -26,10 +25,14 @@ import {
 
 const STORY = 'core-themes-colorscheme--cases';
 const FORCED_ROOT_STORY = 'core-themes-colorscheme--forced-root';
-/** Core's built stylesheet, which an app without reset.css still loads. */
-const ASTRYX_CSS_FILE = fileURLToPath(
-  new URL('../../../dist/astryx.css', import.meta.url),
-);
+/**
+ * The layer order and the root block Core's stylesheet begins with, which an
+ * app without reset.css still loads. Storybook compiles the components'
+ * styles itself, so the page loads them here.
+ */
+const {LAYER_ORDER, CORE_ROOT_BLOCK} = createRequire(import.meta.url)(
+  '../../../../build/src/source-stylesheet.js',
+) as {LAYER_ORDER: string; CORE_ROOT_BLOCK: string};
 const LIGHT = 'rgb(1, 2, 3)';
 const DARK = 'rgb(4, 5, 6)';
 
@@ -46,9 +49,10 @@ test.afterAll(async () => {
 /**
  * Open the story. Storybook pins the page root and the story's frame to the
  * toolbar's scheme; that is taken away, so the root is what Core's CSS,
- * reset.css and the host make it. Without reset.css, the page loads Core's
- * built stylesheet instead, as an app that skips reset.css does (Storybook
- * compiles the components' styles itself).
+ * reset.css and the host make it. Without reset.css, the page loads the
+ * root block of Core's stylesheet instead, as an app that skips reset.css
+ * does. A host scheme arrives in a style element, or with `hostLink` in a
+ * linked stylesheet that applies when it loads.
  */
 async function openStory(
   page: Page,
@@ -57,11 +61,13 @@ async function openStory(
     withoutReset = false,
     withCoreStylesheet = withoutReset,
     hostScheme,
+    hostLink = false,
   }: {
     story?: string;
     withoutReset?: boolean;
     withCoreStylesheet?: boolean;
     hostScheme?: string;
+    hostLink?: boolean;
   } = {},
 ): Promise<void> {
   await page.goto(
@@ -69,15 +75,10 @@ async function openStory(
   );
   await page.locator('[data-probe]').first().waitFor();
   if (withCoreStylesheet) {
-    if (!fs.existsSync(ASTRYX_CSS_FILE)) {
-      throw new Error(
-        'Build Core first: pnpm -F @astryxdesign/core build:css writes dist/astryx.css.',
-      );
-    }
-    await page.addStyleTag({content: fs.readFileSync(ASTRYX_CSS_FILE, 'utf8')});
+    await page.addStyleTag({content: `${LAYER_ORDER}\n${CORE_ROOT_BLOCK}`});
   }
   await page.evaluate(
-    ({withoutReset: dropReset, hostScheme: forced}) => {
+    ({withoutReset: dropReset, hostScheme: forced, hostLink: linked}) => {
       document.documentElement.style.removeProperty('color-scheme');
       for (const element of document.querySelectorAll<HTMLElement>(
         '[style*="color-scheme"]',
@@ -104,13 +105,18 @@ async function openStory(
           }
         }
       }
-      if (forced != null) {
+      if (forced != null && linked) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `data:text/css,${encodeURIComponent(`:root { color-scheme: ${forced}; }`)}`;
+        document.head.append(link);
+      } else if (forced != null) {
         const style = document.createElement('style');
         style.textContent = `:root { color-scheme: ${forced}; }`;
         document.head.append(style);
       }
     },
-    {withoutReset, hostScheme},
+    {withoutReset, hostScheme, hostLink},
   );
 }
 
@@ -161,6 +167,26 @@ test.describe('the reader prefers light', () => {
         'system-under-light': 'light',
         'system-under-system': 'dark',
       });
+  });
+
+  test('useTheme() reads a dark scheme a host links after the page drew', async ({
+    page,
+  }) => {
+    await openStory(page, {hostScheme: 'dark', hostLink: true});
+    await expect
+      .poll(async () => hookModes(page))
+      .toEqual({
+        'root-system': 'dark',
+        'forced-light': 'light',
+        'system-under-light': 'light',
+        'system-under-system': 'dark',
+      });
+    expect(await schemes(page)).toEqual({
+      'root-system': DARK,
+      'forced-light': LIGHT,
+      'system-under-light': LIGHT,
+      'system-under-system': DARK,
+    });
   });
 
   test('a root Theme that forces dark keeps the page dark when Core\u2019s stylesheet loads after reset.css', async ({

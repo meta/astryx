@@ -376,8 +376,8 @@ describe('useTheme system follows the page root', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     resetThemes();
-    for (const style of document.head.querySelectorAll('style[data-probe]')) {
-      style.remove();
+    for (const node of document.head.querySelectorAll('[data-probe]')) {
+      node.remove();
     }
   });
 
@@ -441,6 +441,33 @@ describe('useTheme system follows the page root', () => {
       document.head.append(style);
     });
     await waitFor(() => expect(result.current.mode).toBe('dark'));
+  });
+
+  it('reads the root again when a linked stylesheet loads, and when a stylesheet link changes', async () => {
+    stubRootScheme();
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'host.css';
+    link.setAttribute('data-probe', '');
+    act(() => {
+      document.head.append(link);
+    });
+    // The sheet applies when it loads, not when its element arrives.
+    expect(result.current.mode).toBe('light');
+    rootScheme = 'dark';
+    act(() => {
+      link.dispatchEvent(new Event('load'));
+    });
+    await waitFor(() => expect(result.current.mode).toBe('dark'));
+    rootScheme = '';
+    act(() => {
+      link.media = 'print';
+    });
+    await waitFor(() => expect(result.current.mode).toBe('light'));
+    link.remove();
   });
 
   it('shares one observer across system consumers, and disconnects it after the last', () => {

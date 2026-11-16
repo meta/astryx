@@ -49,7 +49,7 @@ import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {syncReaderTextSize} from './dynamicType';
-import {ThemeContext} from './useTheme';
+import {SystemSchemeContext, ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
 import {
@@ -364,11 +364,10 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
-  const parent = use(ThemeContext);
-  const parentForces = parent?.mode === 'light' || parent?.mode === 'dark';
-  const systemScheme = parentForces
-    ? 'preference'
-    : (parent?.systemScheme ?? 'root');
+  const parentMode = use(ThemeContext)?.mode;
+  const parentForces = parentMode === 'light' || parentMode === 'dark';
+  const aroundScheme = use(SystemSchemeContext);
+  const systemScheme = parentForces ? 'preference' : aroundScheme;
 
   registerTheme(theme);
 
@@ -395,27 +394,26 @@ export function Theme({
           : null;
 
   // Memoize the context value to prevent unnecessary re-renders
-  const ctxValue = useMemo(
-    () => ({theme, mode, systemScheme}),
-    [theme, mode, systemScheme],
-  );
+  const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
 
   return (
-    <ThemeContext value={ctxValue}>
-      <ThemeNestingContext value={true}>
-        <div
-          {...stylex.props(
-            wrapperStyles.base,
-            colorSchemeStyle,
-            reducesMotion && wrapperStyles.reducedMotion,
-          )}
-          data-astryx-theme={theme.name}
-          {...reducedMotionMarkProps(reducesMotion)}
-          data-theme={mode === 'system' ? undefined : mode}>
-          {children}
-        </div>
-      </ThemeNestingContext>
-    </ThemeContext>
+    <SystemSchemeContext value={systemScheme}>
+      <ThemeContext value={ctxValue}>
+        <ThemeNestingContext value={true}>
+          <div
+            {...stylex.props(
+              wrapperStyles.base,
+              colorSchemeStyle,
+              reducesMotion && wrapperStyles.reducedMotion,
+            )}
+            data-astryx-theme={theme.name}
+            {...reducedMotionMarkProps(reducesMotion)}
+            data-theme={mode === 'system' ? undefined : mode}>
+            {children}
+          </div>
+        </ThemeNestingContext>
+      </ThemeContext>
+    </SystemSchemeContext>
   );
 }
 
