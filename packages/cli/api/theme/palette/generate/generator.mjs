@@ -226,6 +226,13 @@ function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
  * it shares it wholly.
  */
 const V2_SHARED_FROM = 1.3;
+/**
+ * From this tone v2 starts to draw a tint at the seed's own chroma; by
+ * V2_PALE_FROM + V2_PALE_SPAN it draws it wholly. The middle of a ramp, up
+ * to tone 70, stays as v1 draws it.
+ */
+const V2_PALE_FROM = 70;
+const V2_PALE_SPAN = 15;
 /** v2 shares only stops lighter than this tone: the pale side of a ramp. */
 const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
@@ -313,9 +320,16 @@ function generateCandidate(
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
   // Every recipe starts from v1's chroma, so a stop v2 does not share is
-  // drawn exactly as v1 draws it.
+  // drawn exactly as v1 draws it, the middle of a ramp included. In v2 a
+  // pale tint (above V2_PALE_FROM) moves to the seed's own chroma, which
+  // coordination never raises: a dusty seed's tints stay dusty.
+  const pale =
+    recipe === PALETTE_RECIPE_V2
+      ? smoothstep((adjustedTone - V2_PALE_FROM) / V2_PALE_SPAN)
+      : 0;
   const baseChroma = coordinateWithOtherFamilies
-    ? coordinatedChroma(source.chroma)
+    ? (1 - pale) * coordinatedChroma(source.chroma) +
+      pale * coordinatedChroma(source.chroma, recipe)
     : source.chroma;
   let chroma =
     baseChroma *

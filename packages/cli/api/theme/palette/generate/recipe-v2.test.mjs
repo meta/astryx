@@ -171,6 +171,19 @@ describe('palette recipes', () => {
     expect(hexToOklch(amber(PALETTE_RECIPE_V2)).C).toBeGreaterThan(0.09);
   });
 
+  it("v2 keeps a dusty seed's pale tints at or below its own chroma, where its gamut is wide", () => {
+    // A muted olive: yellow-greens hold a lot of chroma when pale, so the
+    // tint is not shared, and coordination must not raise it to chartreuse.
+    const olive = '#66662e';
+    const seed = hexToOklch(olive).C;
+    const v2 = ramp(olive, 50, PALETTE_RECIPE_V2).families[0].light.colors;
+    const v1 = ramp(olive, 50, PALETTE_RECIPE).families[0].light.colors;
+    for (const stop of [85, 90, 95])
+      expect(hexToOklch(v2[stop]).C, `stop ${stop}`).toBeLessThanOrEqual(seed);
+    // The middle of the ramp is still v1's.
+    for (const stop of [30, 50, 70]) expect(v2[stop]).toBe(v1[stop]);
+  });
+
   it('refuses a recipe it does not know, naming the ones it does', () => {
     expect(() => ramp(VIVID, 50, 'astryx-oklch-v9')).toThrow(
       /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2\)/,
