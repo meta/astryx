@@ -704,18 +704,22 @@ function isBuildOutput(file) {
     return true;
   const text = head.trimStart();
   if (/\.css$/i.test(file)) return text.startsWith('@scope ([data-xds-theme=');
-  if (/\.d\.ts$/i.test(file))
+  if (/\.d\.ts$/i.test(file)) {
+    const lines = text
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
     return (
-      text.length > 0 &&
-      text
-        .split('\n')
-        .filter(line => line.trim())
-        .every(line =>
-          /^(?:import type \{[^}]*\} from '@xds\/core[^']*';|export declare const [A-Za-z_$][\w$]*: [A-Za-z_$][\w$]*;)$/.test(
-            line.trim(),
-          ),
-        )
+      lines.includes(
+        "import type { XDSDefinedTheme } from '@xds/core/theme';",
+      ) &&
+      lines.every(line =>
+        /^(?:import type \{[^}]*\} from '@xds\/core[^']*';|export declare const [A-Za-z_$][\w$]*: [A-Za-z_$][\w$]*;)$/.test(
+          line,
+        ),
+      )
     );
+  }
   if (/\.js$/i.test(file))
     return /theme — built by `[^`]*xds theme build`/.test(head);
   return false;
@@ -1353,7 +1357,10 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `familyInterception` make the build a family member's plan.
  * `colorModes` is the one color mode a calling command knows the theme has
  * (the theme editor, from its settings), written into the built module.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
+ * `ownsOutputs` says the caller made the folder the outputs go into and owns
+ * every file there named like one (the theme editor's theme folder), so a
+ * damaged or half-written output is replaced, never refused.
+ * @typedef {{ownsOutputs?: boolean, prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
  */
 
 /**
@@ -1483,10 +1490,11 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
 /**
  * Refuse a build that would replace a file it does not own. A build never
  * writes over its input, two of its own outputs at one path, or an output
- * another theme in the same run already wrote. With `refuseUnmarked` (a path
- * --out names), it also replaces only its own earlier outputs (their header
- * names this source, or a source that is gone) and empty files, never another
- * source's output or another file such as `package.json` or app source.
+ * another theme in the same run already wrote. With `refuseUnmarked` (every
+ * build but one whose caller owns the output folder), it also replaces only
+ * outputs of a release of the build (isBuildOutput) and empty files, never
+ * another file such as the user's own stylesheet, `package.json` or app
+ * source.
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
@@ -1605,7 +1613,12 @@ function assertOutputsReplaceable(
     }
     // A file no release of the build wrote is the user's or another
     // tool's: only the user can say it may go.
-    if (refuseUnmarked && stat.size > 0 && !isBuildOutput(write.dest)) {
+    // A family build keeps its released rule: a file without the current
+    // mark is replaced with a warning naming it.
+    const ours = warnUnmarked
+      ? fileHead(write.dest).includes(GENERATED_MARKER)
+      : isBuildOutput(write.dest);
+    if (refuseUnmarked && stat.size > 0 && !ours) {
       if (warnUnmarked) {
         unmarkedReplaced.push(rel(write.dest));
         continue;
@@ -1634,7 +1647,7 @@ function assertOutputsReplaceable(
     onWarning?.(warnedOtherSource);
   }
   if (unmarkedReplaced.length) {
-    const message = `${unmarkedReplaced.join(', ')} ${unmarkedReplaced.length > 1 ? 'have' : 'has'} no build header (an output from a CLI before 0.6.7, or a file of your own or another tool's), and this build of ${rel(filePath)} replaces ${unmarkedReplaced.length > 1 ? 'them' : 'it'}; to keep a file of your own there, build with another ${elsewhere}.`;
+    const message = `${unmarkedReplaced.join(', ')} ${unmarkedReplaced.length > 1 ? 'have' : 'has'} no build header (an output of an earlier build, or a file of your own or another tool's), and this build of ${rel(filePath)} replaces ${unmarkedReplaced.length > 1 ? 'them' : 'it'}; to keep a file of your own there, build with another ${elsewhere}.`;
     logger.warn(`Warning: ${message}`);
     onWarning?.(message);
   }
@@ -6128,11 +6141,12 @@ async function themeBuildInternal(
         cwd,
       );
     // Beside the source or at a path --out names, only build outputs are
-    // replaced: a file of the user's own of the same name is kept.
+    // replaced: a file of the user's own of the same name is kept. A caller
+    // that owns the output folder (the theme editor) repairs it instead.
     assertOutputsReplaceable(writes, filePath, cwd, {
       claimed: handOff.claimedOutputs,
       rerun,
-      refuseUnmarked: true,
+      refuseUnmarked: !handOff.ownsOutputs,
       onEditorFolder: editorFolderListener ?? undefined,
       // The result's warnings carry what text prints.
       onWarning: message => warningMessages.push(message),
