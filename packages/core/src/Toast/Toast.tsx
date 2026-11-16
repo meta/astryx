@@ -175,11 +175,6 @@ interface ToastSurfaceProps extends ToastProps {
    */
   timerKey?: string;
   /**
-   * False when the viewport announces the toast: the card then carries no
-   * live region of its own, so an update in place is announced once.
-   */
-  isLiveRegion?: boolean;
-  /**
    * True once the toast's row has started to open. The card then has no
    * starting style, so a move between modal outlets starts no transition.
    */
@@ -224,7 +219,6 @@ export function ToastSurface({
   renderContent,
   gestureDirection,
   timerKey,
-  isLiveRegion = true,
   announce,
   isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
@@ -403,9 +397,11 @@ export function ToastSurface({
   // The viewport announces a plain-text body when it dispatches the toast.
   // This reads a component body or a custom layout after commit. A body is
   // read whole, links included. A custom layout leaves out its controls.
+  // Only the viewport passes `announce`. The card never holds a live role, so
+  // a Toast rendered on its own announces nothing; its caller owns that.
   useAnnounceRenderedText(
     renderContent != null ? rootRef : bodyRef,
-    !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
+    announce != null && (renderContent != null || isRenderedBodyAnnouncement),
     timerKey ?? '',
     {
       politeness: isError ? 'assertive' : 'polite',
@@ -452,9 +448,6 @@ export function ToastSurface({
     <div
       {...pickDataAttributes(rest)}
       ref={rootRef}
-      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
-      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
-      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}

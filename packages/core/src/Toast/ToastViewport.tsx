@@ -262,8 +262,6 @@ interface ToastRowProps {
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
   announce: AnnounceFn;
-  /** Whether the card carries its own live region (see ToastViewport). */
-  isLiveRegion: boolean;
 }
 
 /**
@@ -287,7 +285,6 @@ function ToastRow({
   onExited,
   onDismiss,
   announce,
-  isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -368,7 +365,6 @@ function ToastRow({
           onDismiss={reason => onDismiss(entry.id, reason)}
           renderContent={o.renderContent}
           timerKey={entry.id}
-          isLiveRegion={isLiveRegion}
           announce={announce}
           isRenderedBodyAnnouncement={
             o.renderContent == null && getNodeText(o.body) === ''
@@ -1017,7 +1013,6 @@ export function ToastViewport({
             onExited={handleExited}
             onDismiss={removeToast}
             announce={announce}
-            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>
