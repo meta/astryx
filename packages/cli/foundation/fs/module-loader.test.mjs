@@ -560,7 +560,7 @@ describe('importThemeArtifact', () => {
         write(`${packageDir}/dist/Theme/brand.css`, 'body {}\n');
 
         await expect(importThemeArtifact('./built.js', tmpDir)).rejects.toThrow(
-          /Unknown file extension "\.css".*brand\.css/,
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later/,
         );
       },
     );

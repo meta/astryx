@@ -1317,7 +1317,9 @@ describe('themeBuild() — extends', () => {
 
         await expect(
           themeBuild('styled-child.mjs', {}, {cwd: extDir}),
-        ).rejects.toThrow(/Unknown file extension "\.css".*brand\.css/);
+        ).rejects.toThrow(
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later \(this is Node [\d.]+\)\. Nothing was written\./,
+        );
       },
     );
   });

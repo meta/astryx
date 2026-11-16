@@ -290,6 +290,30 @@ function removeStylesheetHooks() {
 }
 
 /**
+ * On a Node without module hooks, the refusal for a stylesheet or an asset a
+ * theme module imports: it names the file and the Node that loads it. Null
+ * for any other error.
+ * @param {unknown} error
+ * @returns {Error | null}
+ */
+function needsModuleHooks(error) {
+  if (/** @type {any} */ (error)?.code !== 'ERR_UNKNOWN_FILE_EXTENSION')
+    return null;
+  const file = /\bfor (.+)$/.exec(/** @type {Error} */ (error).message)?.[1];
+  if (!file || !(STYLESHEET_FILE.test(file) || ASSET_FILE.test(file)))
+    return null;
+  const relative = path.relative(process.cwd(), file);
+  const shown =
+    relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+      ? relative
+      : file;
+  return new Error(
+    `it imports ${shown}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later (this is Node ${process.versions.node}). Nothing was written.`,
+    {cause: error},
+  );
+}
+
+/**
  * Run a theme module load with every stylesheet that the theme's modules
  * import, at any depth, loaded as an empty module, and every asset they
  * import (an .svg, a picture, a font) as its URL. A theme module can import
@@ -304,7 +328,8 @@ function removeStylesheetHooks() {
  * there, so the caller can say what its outputs do not carry. Module loads
  * outside this call's async context do not change. The module hook is
  * installed for the first overlapping load and removed after the last. A
- * Node without module hooks (before 22.15) runs the load unchanged.
+ * Node without module hooks (before 22.15) runs the load unchanged, and a
+ * stylesheet or asset it meets refuses the load, naming that Node.
  * @template T
  * @param {() => Promise<T>} load
  * @param {{unbuilt?: Set<string>, imported?: Set<string>}} [options]
@@ -316,7 +341,13 @@ export async function withEmptyStylesheets(load, options = {}) {
   // running never keeps the command from exiting, and an exit it calls
   // while loading is a refused load, never the command's own exit.
   const guarded = () => withStdoutOnStderr(() => withThemeModuleGuards(load));
-  if (typeof registerHooks !== 'function') return await guarded();
+  if (typeof registerHooks !== 'function') {
+    try {
+      return await guarded();
+    } catch (error) {
+      throw needsModuleHooks(error) ?? error;
+    }
+  }
   stylesheetHooks ??= registerHooks({
     resolve: resolveUnbuiltStylesheet,
     load: loadStylesheetAsEmptyModule,
@@ -344,6 +375,11 @@ let exitGuards = 0;
 /** @type {typeof process.exit | null} */
 let realExit = null;
 let guardsInstalled = false;
+/**
+ * The last exception a theme module's microtask threw, with its load.
+ * @type {{error: unknown, load: GuardedLoad} | null}
+ */
+let microtaskThrow = null;
 /** Callbacks of a module load running now, each holding the stdout gate. */
 const deferredGates = new Set();
 /**
@@ -563,12 +599,31 @@ function installThemeModuleGuards() {
   // One thrown while the module still loads (from a microtask it queued)
   // refuses that load with it, as a throw from its top level does.
   tellThemeModuleCallbacks(error => {
-    const load = guardedLoad.getStore();
+    const thrown = microtaskThrow?.error === error ? microtaskThrow : null;
+    microtaskThrow = null;
+    const load = guardedLoad.getStore() ?? thrown?.load;
     if (!load) return null;
     if (load.done) return 'after';
     load.fail(error);
     return 'during';
   });
+  // Before Node 24, an exception from a microtask reaches 'uncaughtException'
+  // outside the async context that queued it. A microtask a theme module
+  // queues keeps its load, so its exception is told as the module's.
+  const queue = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = function (callback) {
+    const load = guardedLoad.getStore();
+    if (!load || typeof callback !== 'function')
+      return queue.call(globalThis, callback);
+    return queue.call(globalThis, () => {
+      try {
+        callback();
+      } catch (error) {
+        microtaskThrow = {error, load};
+        throw error;
+      }
+    });
+  };
   // A global Node defines as replaceable (an accessor, such as `Buffer`)
   // that a theme module assigns while it loads is put back when the load
   // ends: its value as it was is read only when the module assigns it.
