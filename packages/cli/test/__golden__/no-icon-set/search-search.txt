@@ -39,10 +39,6 @@ domain:      hook
 package:     @astryxdesign/core
 import:      @astryxdesign/core/hooks
 command:     pnpm exec astryx hook useTypeahead
-name:        record-lookup
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template record-lookup --type page
 name:        Typeahead
 domain:      component
 package:     @astryxdesign/core
@@ -92,3 +88,8 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference config
 parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        cli/api/enums/response-types
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/api/enums/response-types
+parent:      pnpm exec astryx docs cli/api/enums
