@@ -13,7 +13,13 @@
  * volume level from the microphone via AudioContext analyser.
  */
 
-import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import {useLocale} from '../i18n';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
@@ -125,6 +131,14 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
     null
   );
 }
+
+// Support never changes during a page's life, so there is nothing to
+// subscribe to. The server, and the first client render that hydrates its
+// markup, report no support, so both render the same tree; the browser's
+// answer arrives in the render after hydration.
+const subscribeToNothing = () => () => {};
+const getIsSupported = () => getSpeechRecognition() != null;
+const getIsSupportedOnServer = () => false;
 
 // =============================================================================
 // Volume analyser
@@ -287,7 +301,11 @@ export function useSpeechRecognition(
     [externalAudioContext],
   );
 
-  const isSupported = useMemo(() => getSpeechRecognition() != null, []);
+  const isSupported = useSyncExternalStore(
+    subscribeToNothing,
+    getIsSupported,
+    getIsSupportedOnServer,
+  );
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
