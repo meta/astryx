@@ -49,6 +49,16 @@ import type {ToastProps} from './Toast';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
 import type {ToastOptions} from './types';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // jsdom reports no window focus until an element is focused, but a test page
 // stands for a focused window: a toast raised while the window is blurred
@@ -1955,6 +1965,38 @@ describe('Toast swipe dismissal', () => {
     });
     return {...result, visualToast, onHide};
   }
+
+  it('tracks no swipe before the touch runtime loads', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      const {visualToast, onHide} = renderSwipeToast();
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 60,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 60,
+        });
+      });
+      expect(onHide).not.toHaveBeenCalled();
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
+  });
 
   it('dismisses on a pen swipe toward the configured block edge past the threshold', () => {
     const {visualToast, onHide} = renderSwipeToast();

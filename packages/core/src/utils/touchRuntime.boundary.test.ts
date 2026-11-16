@@ -100,6 +100,8 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
     'SegmentedControl/index.ts',
     'Switch/index.ts',
     'BottomSheet/index.ts',
+    'Toast/index.ts',
+    'Popover/index.ts',
   ])('%s reaches no touch module statically', entry => {
     expect(touchChains(entry)).toEqual([]);
   });

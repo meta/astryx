@@ -6,20 +6,22 @@
  * @file useToastGesture.ts
  * @input Uses a resolved Toast edge direction, timer pause/resume hooks,
  *   dismissal callback, enabled state, and interactive-descendant policy
- * @output Returns the Toast card root ref and touch/pen gesture bindings; the
- *   gesture host claims a finger's touch through a one-way pan
+ * @output Returns the Toast card root ref, touch/pen gesture bindings and the
+ *   touch runtime's swipe claim to render; the gesture host claims a finger's
+ *   touch through a one-way pan once the runtime has loaded
  * @position Internal Toast gesture unit; attached to the Toast card root
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+import {createElement, useCallback, useRef} from 'react';
 import type {
   PointerEvent as ReactPointerEvent,
+  ReactNode,
   RefObject,
   Touch as ReactTouch,
   TouchEvent as ReactTouchEvent,
 } from 'react';
-import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
-import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {useTouchRuntime} from '../utils/touchRuntime';
 
 const DRAG_PROMOTION_SLOP = 8;
 const SWIPE_DISMISS_RATIO = 0.4;
@@ -85,9 +87,25 @@ interface ToastGestureBindings {
   onTouchCancel: (event: ReactTouchEvent<HTMLDivElement>) => void;
 }
 
+/** The props of the touch runtime's swipe claim for one toast. */
+export interface ToastSwipeClaimProps {
+  readonly rootRef: RefObject<HTMLDivElement | null>;
+  readonly direction: ToastGestureDirection;
+  readonly isEnabled: boolean;
+  /** Whether a touch that starts on `target` may become the swipe. */
+  readonly shouldReceive: (target: EventTarget | null) => boolean;
+  /** Receives the claim's pan on mount, and `null` on unmount. */
+  readonly onClaim: (claim: PanGestureRecognizer | null) => void;
+}
+
 interface UseToastGestureResult {
   rootRef: RefObject<HTMLDivElement | null>;
   bindings: ToastGestureBindings;
+  /**
+   * The touch runtime's swipe claim, for the card to render. It is `null`
+   * until the runtime has loaded, and until then no swipe starts.
+   */
+  swipeClaim: ReactNode;
 }
 
 function swipeProgressValue(travel: number, surfaceSize: number): number {
@@ -118,33 +136,27 @@ export function useToastGesture({
   shouldIgnoreTargetRef.current = shouldIgnoreTarget;
 
   // The gesture host's pan only claims the touch and never begins. This hook
-  // draws the swipe.
-  const claim = useGestureRecognizer(
-    rootRef,
-    () =>
-      new PanGestureRecognizer({
-        name: 'toast-swipe',
-        direction: direction === 1 ? 'down' : 'up',
-        firstMoveDecides: true,
-        maximumNumberOfTouches: 1,
-        hysteresis: Number.POSITIVE_INFINITY,
-        cancelsTouchesInView: false,
-        shouldReceiveTouch: (_recognizer, touch) => {
-          const root = rootRef.current;
-          return (
-            touch.pointerType === 'touch' &&
-            root != null &&
-            !shouldIgnoreTargetRef.current(touch.target as EventTarget, root)
-          );
-        },
-      }),
-    undefined,
-    {isEnabled: enabled, manageStyle: false},
-  );
-  // Syncs the gesture host's pan with the edge this toast dismisses toward.
-  useEffect(() => {
-    claim.setDirection(direction === 1 ? 'down' : 'up');
-  }, [claim, direction]);
+  // draws the swipe. The pan comes with the shared touch runtime, which
+  // loads after first paint; until then no swipe starts.
+  const touchRuntime = useTouchRuntime();
+  const claimRef = useRef<PanGestureRecognizer | null>(null);
+  const receiveClaim = useCallback((claim: PanGestureRecognizer | null) => {
+    claimRef.current = claim;
+  }, []);
+  const shouldReceive = useCallback((target: EventTarget | null) => {
+    const root = rootRef.current;
+    return root != null && !shouldIgnoreTargetRef.current(target, root);
+  }, []);
+  const swipeClaim =
+    touchRuntime == null
+      ? null
+      : createElement(touchRuntime.ToastSwipeClaim, {
+          rootRef,
+          direction,
+          isEnabled: enabled,
+          shouldReceive,
+          onClaim: receiveClaim,
+        });
 
   const resetGesture = useCallback(
     (shouldResume: boolean) => {
@@ -167,6 +179,7 @@ export function useToastGesture({
       if (
         !root ||
         !enabled ||
+        claimRef.current == null ||
         gestureRef.current != null ||
         shouldIgnoreTarget(target, root)
       ) {
@@ -442,7 +455,7 @@ export function useToastGesture({
       }
       // The gesture host's pan decides the touch from its first move. Once
       // the pan fails, the page has the touch, so the swipe ends too.
-      if (gestureRef.current != null && claim.state === 'failed') {
+      if (gestureRef.current != null && claimRef.current?.state === 'failed') {
         resetGesture(true);
         return;
       }
@@ -451,7 +464,7 @@ export function useToastGesture({
         moveGesture(touchPoint(touch, event));
       }
     },
-    [changedTouch, claim, enabled, moveGesture, resetGesture, touchPoint],
+    [changedTouch, enabled, moveGesture, resetGesture, touchPoint],
   );
 
   const handleTouchEnd = useCallback(
@@ -492,5 +505,6 @@ export function useToastGesture({
       onTouchEnd: handleTouchEnd,
       onTouchCancel: handleTouchCancel,
     },
+    swipeClaim,
   };
 }

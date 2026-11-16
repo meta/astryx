@@ -30,11 +30,11 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {createPresentationHold} from '../Layer/presentationHold';
 import {isCoarsePointer} from '../utils/coarsePointer';
-import {
-  createPopoverSurfaceMotion,
-  type PopoverSurfaceMotion,
-  type PopoverSurfaceRect,
+import type {
+  PopoverSurfaceMotion,
+  PopoverSurfaceRect,
 } from './popoverSurfaceMotion';
+import {getTouchRuntime, useTouchRuntime} from '../utils/touchRuntime';
 
 // The growth needs where the surface ends and where its source is. Both
 // boxes are read once, in the frame that starts it, before that frame writes.
@@ -79,14 +79,22 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
     motionRef.current = null;
   }, []);
 
+  // The touch presentation's motion comes with the shared touch runtime,
+  // which loads after first paint. Until then a popover presents as under a
+  // fine pointer.
+  useTouchRuntime();
   const motionFor = useCallback(
     (element: HTMLElement, entrance: HTMLElement | null) => {
       const current = motionRef.current;
       if (current?.element === element && current.entrance === entrance) {
         return current.motion;
       }
+      const createMotion = getTouchRuntime()?.createPopoverSurfaceMotion;
+      if (createMotion == null) {
+        return null;
+      }
       current?.motion.dispose();
-      const motion = createPopoverSurfaceMotion(element, {entrance});
+      const motion = createMotion(element, {entrance});
       motionRef.current = {element, entrance, motion};
       return motion;
     },
@@ -107,7 +115,9 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
         return;
       }
       const isTouch =
-        source != null && isCoarsePointer(layer.ownerDocument.defaultView);
+        source != null &&
+        isCoarsePointer(layer.ownerDocument.defaultView) &&
+        getTouchRuntime() != null;
       touchHold.take(isTouch);
       if (!isTouch || source == null) {
         // A fine pointer animates nothing here, so nothing is created for
@@ -118,7 +128,7 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
         return;
       }
       const surface = entrance ?? layer;
-      motionFor(surface, entrance).enter(() => ({
+      motionFor(surface, entrance)?.enter(() => ({
         surface: boxOf(surface),
         source: boxOf(source),
       }));
