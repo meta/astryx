@@ -5447,6 +5447,11 @@
       "aliases": []
     },
     {
+      "name": "template-access-denied",
+      "path": "templates/access-denied",
+      "aliases": []
+    },
+    {
       "name": "template-ai-chat",
       "path": "templates/ai-chat",
       "aliases": []
@@ -5547,6 +5552,11 @@
       "aliases": []
     },
     {
+      "name": "template-error-page",
+      "path": "templates/error-page",
+      "aliases": []
+    },
+    {
       "name": "template-file-explorer",
       "path": "templates/file-explorer",
       "aliases": []
@@ -5629,6 +5639,11 @@
     {
       "name": "template-mixed-gallery",
       "path": "templates/mixed-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-not-found",
+      "path": "templates/not-found",
       "aliases": []
     },
     {
