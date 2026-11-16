@@ -26,6 +26,7 @@ import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Center} from '@astryxdesign/core/Center';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   UserIcon,
   LockClosedIcon,
@@ -221,6 +222,7 @@ const TIMEZONES = [
 ];
 
 export default function SettingsSecurityTemplate() {
+  const showToast = useToast();
   const isNarrow = useMediaQuery('(max-width: 768px)');
   // Mobile is a master→detail drill-down: 'nav' shows the menu, 'detail' shows
   // the selected section with a back button. Desktop shows both side-by-side.
@@ -280,7 +282,13 @@ export default function SettingsSecurityTemplate() {
         <ListItem
           label="Professional hosting tools"
           startContent={<Icon icon={WrenchScrewdriverIcon} />}
-          onClick={() => {}}
+          onClick={() =>
+            // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: 'Demo: professional hosting tools would open here',
+              uniqueID: 'hosting-tools',
+            })
+          }
         />
       </List>
     </VStack>
