@@ -848,6 +848,11 @@
       "aliases": []
     },
     {
+      "name": "component-nav-heading-menu-item",
+      "path": "components/nav-heading-menu-item",
+      "aliases": []
+    },
+    {
       "name": "component-nav-icon",
       "path": "components/nav-icon",
       "aliases": []

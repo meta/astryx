@@ -26,8 +26,7 @@ const anatomy = [
   {
     name: 'Caller-rendered item label',
     required: false,
-    description:
-      'Non-string Item label content rendered directly by the caller.',
+    description: 'Non-string Item label content rendered directly by the caller.',
   },
   {
     name: 'Item description',
@@ -62,7 +61,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'NavHeadingMenu implements the WAI-ARIA APG Menu pattern (https://www.w3.org/WAI/ARIA/apg/patterns/menubar/): a menu of menuitem rows. ArrowDown and ArrowUp move one row and wrap, Home and End go to the first and last row, typing a character moves to the matching row, Enter or Space activates the row, and Escape closes the heading menu where the heading supplies a close action.',
+          'NavHeadingMenu follows the keyboard model of the WAI-ARIA APG Menu pattern (https://www.w3.org/WAI/ARIA/apg/patterns/menubar/): a menu of menuitem rows. ArrowDown and ArrowUp move one row and wrap, Home and End go to the first and last row, typing a character moves to the matching row, Enter or Space activates the row, and Escape closes the heading menu where the heading supplies a close action.',
       },
       {
         guidance: true,
@@ -84,51 +83,18 @@ export const docs = {
   playground: {
     defaults: {
       children: [
-        {
-          __element: 'NavHeadingMenuItem',
-          props: {label: 'Dashboard', href: '#'},
-        },
-        {
-          __element: 'NavHeadingMenuItem',
-          props: {label: 'Analytics', href: '#'},
-        },
-        {
-          __element: 'NavHeadingMenuItem',
-          props: {label: 'Settings', href: '#'},
-        },
+        {__element: 'NavHeadingMenuItem', props: {label: 'Dashboard', href: '#'}},
+        {__element: 'NavHeadingMenuItem', props: {label: 'Analytics', href: '#'}},
+        {__element: 'NavHeadingMenuItem', props: {label: 'Settings', href: '#'}},
       ],
     },
   },
   props: [
-    {
-      name: 'children',
-      type: 'ReactNode',
-      required: true,
-      description: 'Menu items.',
-    },
-    {
-      name: 'size',
-      type: "'sm' | 'md' | 'lg'",
-      default: "'md'",
-      description: 'Controls min-width and item padding.',
-    },
-    {
-      name: 'minWidth',
-      type: 'number | string',
-      description:
-        'Minimum width override. Takes precedence over the size-based minimum width.',
-    },
-    {
-      name: 'ref',
-      type: 'Ref<HTMLDivElement>',
-      description: 'Ref forwarded to the menu element.',
-    },
-    {
-      name: 'xstyle',
-      type: 'StyleXStyles',
-      description:
-        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
-    },
+    {name: 'children', type: 'ReactNode', required: true, description: 'Menu items.'},
+    {name: 'size', type: "'sm' | 'md' | 'lg'", default: "'md'", description: 'Controls min-width and item padding.'},
+    {name: 'minWidth', type: 'number | string', description: 'Minimum width override. Takes precedence over the size-based minimum width.'},
+    {name: 'ref', type: 'Ref<HTMLDivElement>', description: 'Ref forwarded to the menu element.'},
+    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.'},
   ],
   components: [
     {
@@ -197,8 +163,7 @@ export const docs = {
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
-  description:
-    'Accessible menu container + items for nav heading popovers. NavHeadingMenu = role="menu" w/ keyboard nav; NavHeadingMenuItem renders selectable items.',
+  description: 'Accessible menu container + items for nav heading popovers. NavHeadingMenu = role="menu" w/ keyboard nav; NavHeadingMenuItem renders selectable items.',
   usage: {
     anatomy,
     description:
