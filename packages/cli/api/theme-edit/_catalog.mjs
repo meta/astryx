@@ -192,6 +192,21 @@ export const SAMPLE_PAGE = h(
 );
 
 /**
+ * The few fixed items of the sample search source a page hands a part that
+ * requires one (a typeahead): the editor's pages and the catalog the part
+ * data is read from use these same items.
+ */
+export const SAMPLE_SEARCH_ITEMS = Object.freeze([
+  {id: 'design', label: 'Design'},
+  {id: 'engineering', label: 'Engineering'},
+  {id: 'research', label: 'Research'},
+  {id: 'marketing', label: 'Marketing'},
+]);
+
+/** The prop value that stands for the page's sample search source. */
+export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
+
+/**
  * Overlays the overlays section draws open in a deeper state than their docs
  * show: a menu with its submenu open, a popover that holds a form, a date and
  * time field with its time list, a table with a row selected and a column
@@ -278,6 +293,19 @@ export const OPEN_SCENES = Object.freeze([
           sort: [{sortKey: 'name', direction: 'ascending'}],
         },
       },
+    }),
+  },
+  {
+    name: 'CommandPalette',
+    label: 'highlighted',
+    // Its picker highlights the chosen item once its first results come,
+    // so it is drawn as the browser shows it after mounting.
+    mounted: true,
+    tree: h('CommandPalette', {
+      isOpen: true,
+      isInline: true,
+      searchSource: SAMPLE_SOURCE,
+      value: SAMPLE_SEARCH_ITEMS[1].id,
     }),
   },
   {
@@ -397,21 +425,6 @@ export function elementNames(v, out = new Set()) {
 
 /** The module a binding imports. @param {Binding} b */
 export const bindingFrom = b => (typeof b === 'string' ? b : b.from);
-
-/**
- * The few fixed items of the sample search source a page hands a part that
- * requires one (a typeahead): the editor's pages and the catalog the part
- * data is read from use these same items.
- */
-export const SAMPLE_SEARCH_ITEMS = Object.freeze([
-  {id: 'design', label: 'Design'},
-  {id: 'engineering', label: 'Engineering'},
-  {id: 'research', label: 'Research'},
-  {id: 'marketing', label: 'Marketing'},
-]);
-
-/** The prop value that stands for the page's sample search source. */
-export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
 
 /**
  * The page module source for a list of items. Each item renders on its own,
@@ -755,6 +768,9 @@ export const SHEET_CSS = [
   // An overlay shown in place keeps its own width (a popover that holds a
   // form, a date input's calendar): its cell grows to hold it.
   '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important;box-sizing:border-box!important}',
+  // A layer opened from inside another (a submenu's flyout) sits beside it.
+  '.cs-cell [data-astryx-layer-nest]{display:flex;align-items:flex-start;gap:4px}',
+  '.cs-cell [data-astryx-layer-nest] > [data-astryx-layer-root]{margin-top:8px!important}',
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
   // The overlays section's own page (sheet-overlays.png): five to a row,
@@ -768,6 +784,9 @@ export const SHEET_CSS = [
   '.cs-states-cell{min-width:0;overflow:clip;overflow-clip-margin:8px;padding:6px}',
   // A panel wider than its cell (a narrow screen's navigation drawer) is
   // drawn from its start, never cut at the start.
-  '.cs-cell dialog > *{max-width:100%!important}',
+  // A dialog drawn in place holds its panel in place too: a panel placed
+  // over the window (a navigation drawer at the window's edge) would leave
+  // the dialog with no height, and the cell empty.
+  '.cs-cell dialog > *{max-width:100%!important;position:relative!important;inset:auto!important}',
   '.cs-cell dialog{display:block!important;position:relative!important;inset:auto!important;margin:0!important;max-width:100%!important;max-height:300px!important;translate:none!important;transform:none!important}',
 ].join('');
