@@ -351,6 +351,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const [triggerDescriptionRoot, setTriggerDescriptionRoot] = useState<
     DocumentFragment | HTMLElement | null
   >(null);
+  const triggerDescriptionRootRef = useCommittedRef(triggerDescriptionRoot);
   const descriptionHost = isHydrating
     ? null
     : (triggerDescriptionRoot ?? document.body);
@@ -822,10 +823,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       triggerRef.current = el;
       // A trigger in a shadow root or another document keeps the hidden
       // copy there. A trigger that attaches again in the page moves it back.
+      // Fields attach their tooltip through an inline ref at every commit, so
+      // the state changes only when the root does.
       const descriptionRoot = descriptionRootOf(el);
-      setTriggerDescriptionRoot(
-        descriptionRoot === document.body ? null : descriptionRoot,
-      );
+      const nextDescriptionRoot =
+        descriptionRoot === document.body ? null : descriptionRoot;
+      if (nextDescriptionRoot !== triggerDescriptionRootRef.current) {
+        setTriggerDescriptionRoot(nextDescriptionRoot);
+      }
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -897,7 +902,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       detachTriggerRef.current = detach;
       return detach;
     },
-    [handlersRef, settleDetach],
+    [handlersRef, settleDetach, triggerDescriptionRootRef],
   );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
