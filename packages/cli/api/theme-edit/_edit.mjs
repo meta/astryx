@@ -6433,6 +6433,33 @@ async function changeOnce(
           break;
         }
     }
+  // A radius the own source sets on a part wins over a radius setting
+  // there, which the editor writes as the part's radius token (a button's
+  // --radius-element): the own border-radius does not read it.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^border(-[a-z]+)*-radius$/.test(s.thing)
+  )
+    for (const target of partsOf(ctx, s)) {
+      const state = s.state ? `:${s.state}` : null;
+      for (const [prop, value] of ownPartTokens(
+        cwd,
+        slug,
+        target,
+        s.when ?? 'base',
+        state,
+      ))
+        if (
+          /^border(-[a-z]+)*-radius$/.test(prop) &&
+          !String(value ?? '').includes('var(--radius-') &&
+          !ownPartHits.some(h => h.target === target && h.prop === prop)
+        ) {
+          ownPartHits.push({target, key: s.when ?? 'base', state, prop, value});
+          break;
+        }
+    }
   // A direct setting on exactly the rule the own source sets: its undo
   // takes it back (anything else the file wins over either way).
   const ownHitDirect =

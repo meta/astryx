@@ -95,7 +95,8 @@ describe('problems a change makes', () => {
   it(
     'lead the result under the status line, each with a fix that clears it',
     async () => {
-      await cli([...ED, 'set', 't', '--color-border', '#000000']);
+      // (A border the color of the dark page draws nothing there.)
+      await cli([...ED, 'set', 't', '--color-border', '#1b1b1b']);
       const out = await text([
         ...ED,
         'set',

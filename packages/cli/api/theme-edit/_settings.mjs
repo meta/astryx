@@ -9366,7 +9366,10 @@ export async function contrastProblems(ctx, data, res) {
       );
       const one =
         conds.size === 1 ? /^([\w-]+)=([\w-]+)$/.exec([...conds][0]) : null;
-      if (one) return `${one[1]}:${one[2]}`;
+      // (A state, a selected item's, is not a variant `--when` names: the
+      // pair is drawn in that state, which pairState says.)
+      const states = ctx.project.target.get(t)?.states ?? [];
+      if (one && !states.includes(one[1])) return `${one[1]}:${one[2]}`;
     }
     // (Only variants the part is drawn in: a rule shared with its group
     // can name a variant the part does not take, which `--when` refuses.)
@@ -9460,13 +9463,17 @@ export async function contrastProblems(ctx, data, res) {
    */
   const drawnBy = (p, m) => {
     const when = pairVariant(p);
+    // (A pair drawn in a state, a selected item's: a setting for that
+    // state draws it too, and wins over one at rest.)
+    const inState = pairState(p);
     /** @param {(x: Setting) => boolean} test @param {string | null} [w] the variant a setting must name, if any */
     const latest = (test, w = when) =>
       [...data.settings]
         .reverse()
+        .sort((a, b) => Number(!!b.state) - Number(!!a.state))
         .find(
           x =>
-            !x.state &&
+            (!x.state || (inState != null && x.state === inState)) &&
             (!x.when || x.when === w) &&
             (!x.mode || x.mode === m) &&
             test(x),
@@ -9518,6 +9525,39 @@ export async function contrastProblems(ctx, data, res) {
     if (!drawnIn) return m;
     return side === 'fg' || p.bg !== /** @type {any} */ (p).over ? drawnIn : m;
   };
+  /**
+   * A fill the theme paints on a part between the text and the ground the
+   * census measured it on (a side nav pane painted blue, between its items
+   * and the app shell): the text sits on that fill now. The setting's
+   * value, or null when the theme paints none there.
+   * @param {TextPair} p @param {string} m
+   */
+  const nearerFill = (p, m) => {
+    const t = p.fg.target;
+    const g = p.bg.target;
+    if (!t || !g || g === t || /** @type {any} */ (p).over) return null;
+    const holds = (/** @type {string} */ a, /** @type {string} */ b) =>
+      /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
+    const fill = [...data.settings].reverse().find(
+      x =>
+        x.source === 'property' &&
+        /^background(-color)?$/.test(x.thing) &&
+        !x.when &&
+        !x.state &&
+        (!x.mode || x.mode === m) &&
+        x.on &&
+        partsOf(ctx, x).some(
+          q =>
+            q !== t &&
+            q !== g &&
+            // (The census drew the text inside that part, and that part
+            // inside the ground: a side nav's item in the side nav.)
+            (p.within ?? []).includes(q) &&
+            holds(g, q),
+        ),
+    );
+    return fill ? String(fill.value) : null;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m0) => {
     const m = inScheme(p, side, m0);
@@ -9527,17 +9567,20 @@ export async function contrastProblems(ctx, data, res) {
       inMode(
         side === 'fg'
           ? drawnBy(p, m)?.value
-          : override(
-              s,
-              side,
-              m,
-              // The ground's own variant; else the variant the text is
-              // drawn in, when the ground is the text's own part (a
-              // secondary button's label on its secondary fill).
-              /** @type {any} */ (p).groundWhen ??
-                /** @type {any} */ (p).when ??
-                (s.target && s.target === p.fg.target ? pairVariant(p) : null),
-            ),
+          : (nearerFill(p, m) ??
+              override(
+                s,
+                side,
+                m,
+                // The ground's own variant; else the variant the text is
+                // drawn in, when the ground is the text's own part (a
+                // secondary button's label on its secondary fill).
+                /** @type {any} */ (p).groundWhen ??
+                  /** @type {any} */ (p).when ??
+                  (s.target && s.target === p.fg.target
+                    ? pairVariant(p)
+                    : null),
+              )),
         m,
       ) ??
       // The base theme's own part style (neutral's destructive button),
@@ -9865,6 +9908,10 @@ export async function contrastProblems(ctx, data, res) {
       // where one does, else the text token where the text sits.
       fix: (() => {
         const pair = /** @type {TextPair} */ (x.pair);
+        // (A pair drawn in a state, a selected item's: its line is for that
+        // state.)
+        const pairIn = pairState(pair);
+        const stateFlag = pairIn ? ` --state ${pairIn}` : '';
         // Secondary text (a placeholder, a caption) stays secondary: its
         // own color moved toward black or white just far enough to read at
         // 4.5:1, not the plain black or white of primary text.
@@ -10001,11 +10048,50 @@ export async function contrastProblems(ctx, data, res) {
             return tok &&
               was &&
               was !== res[/** @type {'light' | 'dark'} */ (x.mode)][tok]
-              ? `${P} set ${slug} ${tok} '${was}'${modeFlag(x.mode)}`
+              ? `${P} set ${slug} ${tok} '${was}'${stateFlag}${modeFlag(x.mode)}`
               : null;
           }
           if (x.textPart)
             return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(theirs?.when ?? variant)}${modeFlag(drawnIn)}`;
+        }
+        // Text whose part's own color reads on a pane the theme painted for
+        // it (a side nav's dark fill), shown here on another part that
+        // holds it unpainted (the mobile nav drawer): that part takes the
+        // same fill, which keeps the color where it reads. Recoloring the
+        // text would turn it the wrong way on the painted pane.
+        if (
+          drawn?.thing === 'color' &&
+          x.textPart &&
+          x.bgPart &&
+          x.bgPart !== x.textPart &&
+          drawn.on &&
+          partsOf(ctx, drawn).includes(x.textPart)
+        ) {
+          const holds = (/** @type {string} */ a, /** @type {string} */ b) =>
+            /** @type {any} */ (ctx.C.MAP[a]?.contains ?? []).includes(b);
+          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+          const pane = [...data.settings]
+            .reverse()
+            .find(
+              y =>
+                y.source === 'property' &&
+                /^background(-color)?$/.test(y.thing) &&
+                !y.when &&
+                !y.state &&
+                (!y.mode || y.mode === x.mode) &&
+                y.on &&
+                y.on !== x.bgPart &&
+                partsOf(ctx, y).some(q => holds(q, String(x.textPart))),
+            );
+          const paneColor = pane ? parseColor(String(pane.value)) : null;
+          if (
+            pane &&
+            fg &&
+            paneColor &&
+            holds(x.bgPart, x.textPart) &&
+            ratio(fg, paneColor) >= 4.5
+          )
+            return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateFlag}${modeFlag(x.mode)}`;
         }
         if (drawn) {
           const onText =
@@ -10028,13 +10114,13 @@ export async function contrastProblems(ctx, data, res) {
               ),
             ].includes(name)
           )
-            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${modeFlag(x.mode)}`;
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${modeFlag(x.mode)}`;
+            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
         }
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
         if (x.textPart && autoMediaPart(ctx, x.textPart))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
         // Text on a surface's own ground drawn from its on-color (a
         // lightbox's caption bar): the ground is what changed, and that
         // on-color on the surface is the line that reaches it, set to the
@@ -10069,7 +10155,7 @@ export async function contrastProblems(ctx, data, res) {
         if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
           return sidesOver > 1
             ? null
-            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
         const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
         // A ground part that draws several grounds the theme cannot tell
         // apart (variants set cannot name): a token set on it would turn
@@ -10094,7 +10180,7 @@ export async function contrastProblems(ctx, data, res) {
         // the region reaches its text there, and nowhere else.
         const region = /** @type {any} */ (pair).over?.target;
         if (token && region && !onMedia)
-          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateFlag}${modeFlag(x.mode)}`;
         const mixed =
           token &&
           x.bgPart &&
@@ -10107,19 +10193,20 @@ export async function contrastProblems(ctx, data, res) {
             groundsOf(
               (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
             ) === 1
-            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`
+            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`
             : null;
         if (token)
           return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${only(x.bgPart)}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${modeFlag(x.mode)}`;
+            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${only(x.bgPart)}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateFlag}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
         return x.textPart
-          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${modeFlag(x.mode)}`
+          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateFlag}${modeFlag(x.mode)}`
           : null;
       })(),
     })),
     ...borderContrastProblems(ctx, data, res, base),
     ...stateTextProblems(ctx, data, res),
+    ...leakedButtonProblems(ctx, data, res),
     // Pairs styled for one variant or state are not measured yet.
     ...(() => {
       const scoped = data.settings.filter(
@@ -10177,12 +10264,13 @@ function plainOn(rgb) {
 }
 
 /**
- * How much fainter than the base's own hairline (its contrast times this)
- * a theme's border token must be to count as no longer showing: a hairline
- * a little lighter or darker than the base's (a clone's #e3e8ee) is the
- * same design.
+ * The contrast under which a border no longer differs from the page at all
+ * (the page's own color, within rounding). Where the base's own border is a
+ * hairline under 3:1, the theme's hairline is a choice of how faint, a
+ * clone's #ebebeb as much as the base's; only a border that draws nothing
+ * is a problem there.
  */
-const HAIRLINE_STEP = 0.9;
+const HAIRLINE_SHOWS = 1.02;
 
 /**
  * A color moved toward black or white (whichever stands out on the
@@ -10214,9 +10302,8 @@ function nearestReading(from, grounds, need) {
  * 1.4.11): a part's own border counts on controls only (a card's or a
  * divider's is decoration). The border token for the whole theme, where
  * the base's own is a hairline under 3:1 (its edge comes from elsewhere, a
- * fill), is held to that hairline instead: a problem only when it is
- * clearly fainter than the base's ({@link HAIRLINE_STEP}). The fix is the
- * nearest color that reaches 3:1.
+ * fill), is a problem only when it draws nothing at all
+ * ({@link HAIRLINE_SHOWS}). The fix is the nearest color that reaches 3:1.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
@@ -10346,7 +10433,7 @@ function borderContrastProblems(ctx, data, res, base) {
         if (
           now != null &&
           now < 3 &&
-          (was == null || (was >= 3 ? was > now : now < was * HAIRLINE_STEP))
+          (was == null || (was >= 3 ? was > now : now < HAIRLINE_SHOWS))
         ) {
           const color = fixOn(
             page,
@@ -10421,6 +10508,173 @@ function borderContrastProblems(ctx, data, res, base) {
           );
           break;
         }
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/**
+ * A button color the theme sets that also paints the buttons Core draws
+ * inside a toast (its close button, an icon in a ghost button): measured on
+ * the toast's own fill in each type and mode, where an icon needs 3:1. No
+ * setting reaches the toast's buttons apart from the rest, so the problem
+ * says so; its line is the nearest button color that reads both there and
+ * on the page and surface (4.5:1), or none when no one color does.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function leakedButtonProblems(ctx, data, res) {
+  const modes = modesOf(data);
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** @param {string} v @param {[number, number, number]} under */
+  const solid = (v, under) => {
+    const c = parseColor(v);
+    return c ? compositeOver(c, alphaOf(v), under) : null;
+  };
+  /** @type {Map<string, ThemeProblem>} */
+  const out = new Map();
+  for (const m of Object.keys(ctx.C.MAP).filter(t => autoMediaPart(ctx, t))) {
+    const held = /** @type {string[]} */ (
+      /** @type {any} */ (ctx.C.MAP[m])?.holdsVariants?.button ?? []
+    );
+    if (!held.length) continue;
+    const reads = ctx.C.partReads(m, 'background') ?? [];
+    const types = /** @type {string[]} */ ([
+      ...(ctx.C.MAP[m]?.attrs?.type ?? []),
+    ]);
+    // The toast's fill in each type and page mode, with the scheme its
+    // media surface draws what it holds in there: a setting for one mode
+    // reaches the toast's buttons only where the surface draws that mode
+    // (or takes no side, 'off', where the page's mode applies).
+    /** @type {Array<{type: string, mode: 'light' | 'dark', scheme: 'light' | 'dark', value: string, rgb: [number, number, number]}>} */
+    const fills = [];
+    for (const m0 of modes) {
+      const mode = /** @type {'light' | 'dark'} */ (m0);
+      const page = parseColor(String(res[mode]['--color-background-body']));
+      if (!page) continue;
+      for (const type of ['', ...types]) {
+        const cond = type ? `type=${type}` : '';
+        const fillSet = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y.source === 'property' &&
+              /^background(-color)?$/.test(y.thing) &&
+              !y.state &&
+              (!y.mode || y.mode === mode) &&
+              (!y.when || y.when === `type:${type}`) &&
+              y.on &&
+              partsOf(ctx, y).includes(m),
+          );
+        const read =
+          reads.find(r => cond && r.when.includes(cond)) ??
+          reads.find(r => r.when.includes(''));
+        const value = fillSet
+          ? inMode(fillSet.value, mode)
+          : read
+            ? inMode(`var(${read.token})`, mode)
+            : '';
+        if (/gradient\(|url\(/.test(value)) continue;
+        const rgb = solid(value, page);
+        if (!rgb) continue;
+        const side = autoMediaSide(value, res[mode], {
+          mode,
+          error: type === 'error',
+        });
+        fills.push({
+          type,
+          mode,
+          scheme: side === 'off' ? mode : side,
+          value,
+          rgb,
+        });
+      }
+    }
+    for (const scheme of /** @type {Array<'light' | 'dark'>} */ ([
+      'light',
+      'dark',
+    ])) {
+      const here = fills.filter(f => f.scheme === scheme);
+      if (!here.length) continue;
+      const x = [...data.settings]
+        .reverse()
+        .find(
+          y =>
+            y.source === 'property' &&
+            y.thing === 'color' &&
+            !y.state &&
+            (!y.mode || y.mode === scheme) &&
+            y.on &&
+            partsOf(ctx, y).includes('button') &&
+            (!y.when || held.some(v => y.when === `variant:${v}`)),
+        );
+      if (!x) continue;
+      const page = parseColor(
+        String(res[scheme]['--color-background-body'] ?? ''),
+      );
+      if (!page) continue;
+      const color = solid(inMode(x.value, scheme), page);
+      if (!color) continue;
+      const failing = here.filter(f => ratio(color, f.rgb) < 3);
+      if (!failing.length) continue;
+      // The nearest color that reads on every one of those fills (3:1) and,
+      // where the theme draws that mode, as text on its page and surface
+      // (4.5:1), toward black or white; none when no one color does.
+      const surface = solid(
+        String(res[scheme]['--color-background-surface'] ?? ''),
+        page,
+      );
+      const grounds = /** @type {Array<[number, number, number]>} */ (
+        modes.includes(scheme) ? [page, surface].filter(Boolean) : []
+      );
+      /** @type {string | null} */
+      let best = null;
+      let steps = Infinity;
+      for (const end of /** @type {Array<[number, number, number]>} */ ([
+        [0, 0, 0],
+        [255, 255, 255],
+      ]))
+        for (let i = 0; i <= 100 && i < steps; i++) {
+          const c = /** @type {[number, number, number]} */ (
+            color.map((v, k) => Math.round(v + ((end[k] - v) * i) / 100))
+          );
+          if (
+            here.every(f => ratio(c, f.rgb) >= 3) &&
+            grounds.every(g => ratio(c, g) >= 4.5)
+          ) {
+            best = hex(c);
+            steps = i;
+            break;
+          }
+        }
+      for (const f of failing) {
+        const where = `${m}${f.type ? ` (type ${f.type})` : ''}`;
+        const key = `leak|button|${m}|${f.type}|${f.mode}`;
+        if (out.has(key)) continue;
+        out.set(key, {
+          key,
+          text: `your button color (${describe(x)}) also paints the close button in ${where}: it is ${ratio(color, f.rgb).toFixed(2)}:1 on the ${m}'s fill (${f.value}) in ${f.mode}, and an icon needs 3:1; no setting keeps the ${m}'s buttons apart${best ? '' : `, and no one button color reads on every ${m} and on the page`}`,
+          fix: best
+            ? `${P} set ${data.name} color '${best}' --on ${x.on}${x.only ? ' --only' : ''}${x.when ? ` --when ${x.when}` : ''}${x.mode || modes.length > 1 ? ` --mode ${scheme}` : ''}`
+            : null,
+        });
       }
     }
   }

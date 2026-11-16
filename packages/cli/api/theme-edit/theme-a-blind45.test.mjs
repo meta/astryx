@@ -3,10 +3,10 @@
 /**
  * @file Results that say what the theme does: a mode's own setting under a
  * setting for every mode names the one still drawing the other modes; the
- * neutral note says the page moved when it did, with an example in the
- * theme's mode; an inverted surface left as the base's is given the theme's
- * own other-mode surface; a token set on the top bar reaches the text over
- * its ground, and a fix there stays in the top bar; a faint hairline where
+ * neutral note gives an example in the theme's mode; an inverted surface
+ * whose theme counterpart looks the same is not listed; a token set on the
+ * top bar reaches the text over its ground, and a fix there stays in the
+ * top bar; a faint hairline where
  * the base draws one is a choice; secondary text is fixed with the nearest
  * gray that reads; and pills stay off the misses unless the corners go
  * square.
@@ -74,7 +74,7 @@ describe('a change says what still draws', () => {
 
 describe("the inverted surface on the theme's own surfaces", () => {
   it(
-    "is given the theme's surface from the other mode",
+    "stays off the list where the theme's own dark looks like the base's",
     async () => {
       await themeEditNew('c', {cwd, like: 'neutral'});
       await themeEditSet('c', 'neutral', '#78716c', {cwd});
@@ -84,19 +84,12 @@ describe("the inverted surface on the theme's own surfaces", () => {
       });
       const show = /** @type {any} */ (await themeEditShow('c', {cwd})).data;
       const tooltip = (show.missed ?? []).find(
-        (/** @type {any} */ x) => x.part === 'tooltip',
+        (/** @type {any} */ x) =>
+          x.part === 'tooltip' && /surfaces changed/.test(x.why),
       );
-      expect(tooltip).toBeTruthy();
-      const fill =
-        /--color-background-inverted '#([0-9a-f]{6})' --on tooltip --mode light/i.exec(
-          String(tooltip.line),
-        )?.[1];
-      // Not the cream light surface: the theme's own dark one.
-      expect(fill).toBeTruthy();
-      const [r, g, b] = [0, 2, 4].map(i =>
-        Number.parseInt(String(fill).slice(i, i + 2), 16),
-      );
-      expect(r + g + b).toBeLessThan(200);
+      // A warm near-black beside the base's cool near-black is the same look:
+      // no line, which would change nothing you see.
+      expect(tooltip).toBeUndefined();
     },
     T,
   );
@@ -152,7 +145,7 @@ describe('borders', () => {
       expect(
         problemsOf(card).filter(p => /border on card/.test(p.problem)),
       ).toEqual([]);
-      const token = await themeEditSet('b', '--color-border', '#d9d9d9', {cwd});
+      const token = await themeEditSet('b', '--color-border', '#ebebeb', {cwd});
       expect(
         problemsOf(token).filter(p => /a border needs 3:1/.test(p.problem)),
       ).toEqual([]);

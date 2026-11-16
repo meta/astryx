@@ -264,19 +264,39 @@ export function missedSteps(ctx, data, res, base) {
       const swap = lost.filter(m =>
         standsOut(res[m]?.['--color-background-surface'], m),
       );
-      found.push({
-        kind: 0,
-        part: p,
-        why: lost.length
-          ? `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`
-          : `still the base's dark inverted surface (${inverted}); the theme's surfaces changed`,
-        aspect: 'background',
-        steps: lost.length
-          ? swap.length !== lost.length
-            ? []
-            : surfaceSteps(lost)
-          : surfaceSteps(modes, true),
+      // (With the surfaces changed, only the modes where the theme's own
+      // inverted surface looks different from the base's: the same side,
+      // dark or light, at nearly the same lightness (under 1.5:1 apart) is
+      // the same look, and a line there changes nothing you see.)
+      const looksNew = modes.filter(m => {
+        const now = parseColor(String(res[m]?.[inverted] ?? ''));
+        const other = modes.length > 1 ? modes.find(x => x !== m) : m;
+        const next = parseColor(
+          String(
+            res[/** @type {string} */ (other)]?.[
+              '--color-background-surface'
+            ] ?? '',
+          ),
+        );
+        if (!now || !next) return true;
+        const side = (/** @type {[number, number, number]} */ c) =>
+          ratio([255, 255, 255], c) >= ratio([0, 0, 0], c);
+        return side(now) !== side(next) || ratio(now, next) >= 1.5;
       });
+      if (lost.length || looksNew.length)
+        found.push({
+          kind: 0,
+          part: p,
+          why: lost.length
+            ? `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`
+            : `still the base's dark inverted surface (${inverted}); the theme's surfaces changed`,
+          aspect: 'background',
+          steps: lost.length
+            ? swap.length !== lost.length
+              ? []
+              : surfaceSteps(lost)
+            : surfaceSteps(looksNew, true),
+        });
     }
     // A fill made from a status token the theme's own status color does
     // not reach (an error toast's inverted red, after the danger color is

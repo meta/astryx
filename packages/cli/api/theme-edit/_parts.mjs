@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 25;
+const PART_DATA_VERSION = 26;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -58,6 +58,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string} [underInput] - drawn under an invisible native input
  *   laid over it (a checkbox's box), which takes its pointer and focus: the
@@ -72,7 +73,7 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide, within?: string[]}} TextPair
  *   `over`: the region the part sits in (a header), whose background shows
  *   through a see-through background of the part's own, else the page
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
@@ -1150,7 +1151,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1163,7 +1164,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
    */
   const addPair = (target, fg, bg, sample) => {
     const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
-    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+    // (The parts the text sits inside where the census drew it, between
+    // it and its ground and beyond: a side nav's item inside the side nav.)
+    const within = new Set(pairs.get(k)?.within ?? []);
+    for (const anc of stack)
+      for (const at of anc.all ?? (anc.target ? [anc.target] : []))
+        if (at !== target) within.add(at);
+    pairs.set(k, {
+      text: target,
+      fg,
+      bg,
+      sample: sample.slice(0, 30),
+      within: [...within],
+    });
   };
   /** The parts whose paint is a line inside them. @type {Set<string>} */
   const lined = new Set();
@@ -1393,6 +1406,12 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const at of anc.all ?? (anc.target ? [anc.target] : []))
           if (at !== t) {
             map[at].contains.add(t);
+            // (The variant each holds there: a toast's close button is a
+            // ghost button.)
+            if (dataAttrs.variant)
+              ((map[at].holdsVariants ??= {})[t] ??= new Set()).add(
+                dataAttrs.variant,
+              );
             // What the parts inside it draw with there, at rest (a table
             // row's cells' border color; a toast's ghost button declares
             // none).
@@ -1491,6 +1510,13 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      ...(v.holdsVariants
+        ? {
+            holdsVariants: Object.fromEntries(
+              Object.entries(v.holdsVariants).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
       tags: [...v.tags],
       ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
