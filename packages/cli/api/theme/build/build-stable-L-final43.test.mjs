@@ -105,7 +105,27 @@ async function captured(run) {
   }
 }
 
-const NEUTRAL = `import {neutralTheme} from '@astryxdesign/theme-neutral';\n`;
+/**
+ * A theme package of the test's own, installed in the temp project: a
+ * defineTheme() result with tokens and an icon registry, as a published base
+ * theme ships one. Self-contained: it needs only Core.
+ */
+const writeBasePackage = () => {
+  write(
+    'node_modules/@fixture/base-theme/package.json',
+    JSON.stringify({
+      name: '@fixture/base-theme',
+      version: '1.0.0',
+      type: 'module',
+      exports: {'.': './index.mjs'},
+    }),
+  );
+  write(
+    'node_modules/@fixture/base-theme/index.mjs',
+    `import {defineTheme} from '@astryxdesign/core/theme';\nexport const baseTheme = defineTheme({name: 'base', tokens: {'--color-accent': '#123456', '--color-bg': '#fafafa'}, icons: {close: 'x'}});\n`,
+  );
+};
+const BASE = `import {baseTheme} from '@fixture/base-theme';\n`;
 
 describe('F43-07: what a theme module changes for the whole process', () => {
   it('console, a global and the file mode mask are put back after its load', () => {
@@ -149,16 +169,17 @@ describe('F43-11: a plain-object theme is resolved as defineTheme input', () => 
 
 describe('F43-08: a plain-object theme with extends and no tokens', () => {
   it('builds as the empty theme over its base', async () => {
-    write(
-      'p/p.ts',
-      `${NEUTRAL}export default {name: 'p', extends: neutralTheme};\n`,
-    );
+    writeBasePackage();
+    write('p/p.ts', `${BASE}export default {name: 'p', extends: baseTheme};\n`);
     const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
     expect(r.err).toBeUndefined();
     expect(r.result.data.tokenCount).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(dir, 'p/p.css'), 'utf8')).toContain(
+      '#123456',
+    );
     write(
       'p/n.ts',
-      `${NEUTRAL}export const n = {name: 'n', extends: neutralTheme};\n`,
+      `${BASE}export const n = {name: 'n', extends: baseTheme};\n`,
     );
     const named = await captured(() => themeBuild('p/n.ts', {}, {cwd: dir}));
     expect(named.err).toBeUndefined();
@@ -168,12 +189,13 @@ describe('F43-08: a plain-object theme with extends and no tokens', () => {
 
 describe('F43-09: a spread of a package theme', () => {
   it('is refused naming the spread and the extends form that builds', async () => {
-    write('p/p.ts', `${NEUTRAL}export default {...neutralTheme, name: 'p'};\n`);
+    writeBasePackage();
+    write('p/p.ts', `${BASE}export default {...baseTheme, name: 'p'};\n`);
     const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
     expect(r.err?.code).toBe('ERR_THEME_INVALID');
-    expect(r.err.message).toContain('The theme spreads neutralTheme');
-    expect(r.err.message).toContain('extends: neutralTheme');
-    expect(r.err.message).not.toContain('icons: neutralTheme');
+    expect(r.err.message).toContain('The theme spreads baseTheme');
+    expect(r.err.message).toContain('extends: baseTheme');
+    expect(r.err.message).not.toContain('icons: baseTheme');
   });
 });
 

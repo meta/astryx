@@ -90,8 +90,6 @@ async function captured(run) {
   }
 }
 
-const NEUTRAL = `import {neutralTheme} from '@astryxdesign/theme-neutral';\n`;
-
 const DOC = `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'ocean', displayName: 'Ocean', description: 'Ocean theme.', maintained: true};\n`;
 
 describe('a doc module built as a theme', () => {
