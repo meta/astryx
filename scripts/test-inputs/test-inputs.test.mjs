@@ -43,6 +43,8 @@ describe('the recorder', () => {
     const work = tempDir('inputs-work-');
     fs.writeFileSync(path.join(work, 'a.txt'), 'a');
     fs.mkdirSync(path.join(work, 'dir'));
+    fs.mkdirSync(path.join(work, 'tree'));
+    fs.writeFileSync(path.join(work, 'tree', 'fixture.json'), '{}');
     const child = `
       import fs from 'node:fs';
       fs.readFileSync(${JSON.stringify(path.join(work, 'a.txt'))});
@@ -56,6 +58,7 @@ describe('the recorder', () => {
       fs.readdirSync(${JSON.stringify(path.join(work, 'dir'))});
       fs.writeFileSync(${JSON.stringify(path.join(work, 'out.txt'))}, 'x');
       fs.mkdtempSync(${JSON.stringify(path.join(work, 'tmp-'))});
+      fs.cpSync(${JSON.stringify(path.join(work, 'tree'))}, ${JSON.stringify(path.join(work, 'copy'))}, {recursive: true});
       execFileSync(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(child)}]);
       execFileSync('true');
     `;
@@ -76,6 +79,11 @@ describe('the recorder', () => {
     expect(all('reads')).toContain(path.join(work, 'a.txt'));
     expect(all('probes')).toContain(path.join(work, 'missing.lock'));
     expect(all('lists')).toContain(path.join(work, 'dir'));
+    // A recursive copy's source is read as a whole tree, like a listing.
+    expect(
+      lines.filter(line => line.lists.includes(path.join(work, 'dir'))).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(all('writes')).toContain(path.join(work, 'copy'));
     expect(all('writes')).toContain(path.join(work, 'out.txt'));
     expect(
       all('writes').some(file => path.basename(file).startsWith('tmp-')),

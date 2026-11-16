@@ -114,8 +114,12 @@ if (OUT && !globalThis.__astryxTestInputs) {
   const watchPair = (object, name) => {
     const original = object[name];
     if (typeof original !== 'function') return;
+    // A recursive copy (`cp`) reads the whole tree under its source natively,
+    // so its source counts as a listing: a change anywhere under it can
+    // change what the test sees.
+    const source = name.startsWith('cp') ? lists : reads;
     object[name] = function (from, to, ...rest) {
-      note(reads, from);
+      note(source, from);
       note(writes, to);
       return original.call(this, from, to, ...rest);
     };
