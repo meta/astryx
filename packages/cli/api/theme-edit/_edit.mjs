@@ -6778,12 +6778,16 @@ async function changeOnce(
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.
     const modes = modesOf(data);
-    const pages = modes
-      .map(m => [m, base[m]['--color-background-body']])
-      .filter(([, v]) => v)
-      .map(([m, v]) => `${v} in ${m}`);
+    const pinned = data.settings.some(
+      x =>
+        x.source === 'token' &&
+        x.thing === '--color-background-body' &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
     notes.push(
-      `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
+      `${pinned ? 'the page background keeps the color you set for it' : "the page background follows it too, at the official theme's page shade of this gray"}${
         modes.includes('light')
           ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
           : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#f8fafc')}`

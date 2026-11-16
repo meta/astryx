@@ -2435,7 +2435,13 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         const moved = pick(names.text, f.id, m, S, grounds, TEXT);
         const last = checks.length > before ? checks[checks.length - 1] : null;
         if (last && moved.stop !== S)
-          last.note = `${names.text} ${m}: your exact color (${own.color}) reads at only ${round(r)}:1 on ${grounds.map(([n]) => n).join(', ')} (text needs ${TEXT}:1), so links and accent text use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+          last.note = `${names.text} ${m}: your exact color (${own.color}) reads at only ${grounds
+            .map(([n, bg]) => [n, contrast(own.color, bg)])
+            .filter(([, x]) => Number(x) < TEXT)
+            .map(([n, x]) => `${round(Number(x))}:1 on ${n}`)
+            .join(
+              ', ',
+            )} (text needs ${TEXT}:1), so links and accent text use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
         return moved;
       }
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
