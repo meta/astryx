@@ -3483,6 +3483,29 @@ export function stateSynonym(word, states) {
 }
 
 /**
+ * The part's state a negated state word denies (`unpressed`, `not-pressed`,
+ * `non-selected`), or null: the word names the part when it is NOT in that
+ * state, its rest look, which a setting with no --state gives. Never a
+ * reading as the state itself (the opposite of what was asked). A word the
+ * synonym table reads (inactive) keeps that reading.
+ * @param {string} state
+ * @param {string[]} states
+ * @returns {string | null}
+ */
+function negatedState(state, states) {
+  const w = state.toLowerCase();
+  if (STATE_SYNONYMS[w]) return null;
+  const m = /^(?:un|non-?|not-?)([a-z][a-z-]*)$/.exec(w);
+  if (!m) return null;
+  const denied = m[1];
+  return (
+    sameState(denied, states) ??
+    (STATE_SYNONYMS[denied] ?? []).find(x => states.includes(x)) ??
+    null
+  );
+}
+
+/**
  * The state a typed one means among those a part (or a group's members)
  * has: another word for one, else the nearest; null when none is near.
  * @param {string} state
@@ -4821,6 +4844,18 @@ function checkOne(
             .map(state => setLine(slug, thing, v, {...s, state}, unset)),
         },
       );
+    // A negated state (`unpressed`) is the part at rest: the same line with
+    // no --state, never the state it denies.
+    const denied =
+      s.state && !statesHold(states, s.state)
+        ? negatedState(s.state, states)
+        : null;
+    if (denied)
+      refuse(
+        E.ERR_THEME_UNKNOWN_STATE,
+        `"${s.state}" is not a state of ${s.on}: it names ${s.on} when it is not ${denied}, its rest look, which a setting with no --state gives.`,
+        {run: [setLine(slug, thing, v, {...s, state: undefined}, unset)]},
+      );
     if (s.state && !statesHold(states, s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
@@ -5067,6 +5102,13 @@ function checkOne(
       state &&
       !members.some(([m]) => statesHold(partStates(ctx, m), state))
     ) {
+      const denied = negatedState(state, states);
+      if (denied)
+        refuse(
+          E.ERR_THEME_UNKNOWN_STATE,
+          `"${s.state}" is not a state of the ${s.on} group: it names its members when they are not ${denied}, their rest look, which a setting with no --state gives.`,
+          {run: [setLine(slug, thing, v, {...s, state: undefined}, unset)]},
+        );
       const meant = stateMeant(state, states);
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
