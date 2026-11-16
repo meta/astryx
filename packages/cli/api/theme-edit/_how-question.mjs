@@ -23868,6 +23868,9 @@ export function draftAnswer(ctx, env, question) {
       // easier", "cards used", "corners rounded".)
       cssProperties().has(w) ||
       cssProperties().has(word) ||
+      // (A word of how see-through a thing is, "nav bar translucent
+      // white".)
+      visibilityAsk(w) != null ||
       // (A shade the color reader takes before a color, "area deep
       // green".)
       new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
