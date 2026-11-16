@@ -102,8 +102,8 @@ jobs:
       # A `main` full check waits for room under CI's ceiling before its legs
       # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.
       # `peak` is the most jobs this run holds at once (ci-admission.test.mjs).
-      # A fetch that hangs fails here in five minutes and is tried once more,
-      # instead of using up the job (spec:AST-030 FR22).
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the admission action
         id: checkout
         uses: actions/checkout@v7
@@ -125,10 +125,10 @@ jobs:
           path: .ci-admission
           persist-credentials: false
 
-      - name: Stop when the checkout hung twice
+      - name: Stop when the checkout failed twice
         if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
         run: |
-          echo "::error title=Checkout hung twice::checkout hung twice: neither try finished in five minutes."
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
           exit 1
 
       - name: Wait for room under the CI ceiling
@@ -153,8 +153,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      # A fetch that hangs fails here in five minutes and is tried once more,
-      # instead of using up the job (spec:AST-030 FR22).
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the commit under test
         id: checkout
         uses: actions/checkout@v7
@@ -172,10 +172,10 @@ jobs:
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
 
-      - name: Stop when the checkout hung twice
+      - name: Stop when the checkout failed twice
         if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
         run: |
-          echo "::error title=Checkout hung twice::checkout hung twice: neither try finished in five minutes."
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
           exit 1
 
       - name: Check package.json exports are in sync
@@ -216,8 +216,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      # A fetch that hangs fails here in five minutes and is tried once more,
-      # instead of using up the job (spec:AST-030 FR22).
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the commit under test
         id: checkout
         uses: actions/checkout@v7
@@ -235,10 +235,10 @@ jobs:
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
 
-      - name: Stop when the checkout hung twice
+      - name: Stop when the checkout failed twice
         if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
         run: |
-          echo "::error title=Checkout hung twice::checkout hung twice: neither try finished in five minutes."
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
           exit 1
 
       - uses: ./.github/actions/setup
@@ -269,8 +269,8 @@ jobs:
       # Two commits: the swizzle proof diffs main's squash-merged commit
       # against its parent to prove only the copies that change affects
       # (spec:AST-110 FR7).
-      # A fetch that hangs fails here in five minutes and is tried once more,
-      # instead of using up the job (spec:AST-030 FR22).
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the commit under test
         id: checkout
         uses: actions/checkout@v7
@@ -290,10 +290,10 @@ jobs:
           ref: ${{ needs.main-commit.outputs.sha }}
           fetch-depth: 2
 
-      - name: Stop when the checkout hung twice
+      - name: Stop when the checkout failed twice
         if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
         run: |
-          echo "::error title=Checkout hung twice::checkout hung twice: neither try finished in five minutes."
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
           exit 1
 
       - uses: ./.github/actions/setup
@@ -321,8 +321,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      # A fetch that hangs fails here in five minutes and is tried once more,
-      # instead of using up the job (spec:AST-030 FR22).
+      # A checkout that hangs or fails stops here within five minutes and is tried
+      # once more, instead of using up the job (spec:AST-030 FR22).
       - name: Check out the commit under test
         id: checkout
         uses: actions/checkout@v7
@@ -340,10 +340,10 @@ jobs:
         with:
           ref: ${{ needs.main-commit.outputs.sha }}
 
-      - name: Stop when the checkout hung twice
+      - name: Stop when the checkout failed twice
         if: steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'
         run: |
-          echo "::error title=Checkout hung twice::checkout hung twice: neither try finished in five minutes."
+          echo "::error title=Checkout failed twice::checkout failed twice: neither try succeeded within five minutes; the two checkout steps above show why."
           exit 1
 
       - uses: ./.github/actions/setup

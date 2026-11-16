@@ -44,7 +44,7 @@ describe('main validation checkouts', () => {
       .map((step, index) => ({step, index}))
       .filter(({step}) => step.uses?.startsWith('actions/checkout@'));
 
-  it('bounds every checkout at five minutes, tries it once more, and stops with a named reason when both hang', () => {
+  it('bounds every checkout at five minutes, tries it once more, and stops with a named reason when both fail', () => {
     const jobs = Object.entries(workflow.jobs).filter(([, job]) =>
       job.steps?.some(step => step.uses?.startsWith('actions/checkout@')),
     );
@@ -76,11 +76,11 @@ describe('main validation checkouts', () => {
       );
       // When both fail, the job stops at once with the reason.
       const stop = job.steps[again.index + 1];
-      expect(stop.name, id).toBe('Stop when the checkout hung twice');
+      expect(stop.name, id).toBe('Stop when the checkout failed twice');
       expect(String(stop.if), id).toContain(
         "steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'",
       );
-      expect(stop.run, id).toContain('checkout hung twice');
+      expect(stop.run, id).toContain('checkout failed twice');
       expect(stop.run.trim().split('\n').at(-1), id).toBe('exit 1');
       // A condition the original step had applies to all three.
       if (first.step.if)
