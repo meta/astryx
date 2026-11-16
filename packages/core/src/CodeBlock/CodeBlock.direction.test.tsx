@@ -29,7 +29,7 @@ function lineRows(container: HTMLElement): HTMLElement[] {
 
 describe('CodeBlock on a right-to-left page', () => {
   for (const highlightMode of ['spans', 'ranges'] as const) {
-    it(`isolates each line's code as left-to-right (${highlightMode} mode)`, () => {
+    it(`gives each line its own direction inside a left-to-right viewport (${highlightMode} mode)`, () => {
       const {container} = inRtl(
         <CodeBlock
           code={SOURCE}
@@ -119,7 +119,7 @@ describe('Code on a right-to-left page', () => {
 });
 
 describe('Markdown code on a right-to-left page', () => {
-  it('isolates inline code and fenced code as left-to-right', () => {
+  it('isolates inline code as left-to-right and gives fence lines their own direction', () => {
     const {container} = inRtl(
       <Markdown>{'النص `x => y` النص\n\n```ts\n});\n```'}</Markdown>,
     );
