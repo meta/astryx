@@ -201,6 +201,12 @@ that times motion with it. Everything here is internal to
   rides as any control does. Firefox for Android takes the same path, but
   reports the hide once, at its end, and the content moves at that report
   (AST-099 Gap 12). Safari's and Firefox's reveals are unchanged.
+  A presented Hug sheet on a coarse pointer passes `inset: 'resize'` instead.
+  Its functional style uses the shared height to lift its bottom and cap its
+  height to the space above the keyboard, without adding an inset to its
+  content. It shares the focus, reveal, dismissal and viewport subscriptions.
+  Layout changes ride the guide's transition when one exists; the retained
+  fit ends when the visual viewport recovers.
 - **When the keyboard goes:** the body's scroll goes back to where it was
   when the keyboard came up, within the range left once the inset drops. A
   field that keeps focus, as after iOS's downward keyboard dismissal, is then

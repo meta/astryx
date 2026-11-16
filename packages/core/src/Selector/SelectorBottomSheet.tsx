@@ -9,11 +9,18 @@
  * @position Internal presentation primitive for selection controls
  */
 
-import {lazy, Suspense, useEffect, type ReactNode, type RefObject} from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Heading} from '../Heading';
 import {Section} from '../Section';
 import {spacingVars} from '../theme/tokens.stylex';
+import {isCoarsePointer} from '../utils/coarsePointer';
 
 const LazyBottomSheet = lazy(async () =>
   import('../BottomSheet/BottomSheet').then(module => ({
@@ -40,26 +47,6 @@ interface SelectorBottomSheetProps {
   onOpenChange: (isOpen: boolean) => void;
 }
 
-function SelectorBottomSheetInitialFocus({
-  isOpen,
-  targetRef,
-}: {
-  isOpen: boolean;
-  targetRef: RefObject<HTMLElement | null>;
-}) {
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      targetRef.current?.focus({preventScroll: true});
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [isOpen, targetRef]);
-
-  return null;
-}
-
 export function SelectorBottomSheet({
   children,
   finalFocusRef,
@@ -68,9 +55,33 @@ export function SelectorBottomSheet({
   label,
   onOpenChange,
 }: SelectorBottomSheetProps) {
+  const setPanelRef = useCallback(
+    (panel: HTMLDivElement | null) => {
+      if (!isOpen || panel == null) {
+        return;
+      }
+      const view = panel.ownerDocument.defaultView;
+      if (
+        initialFocusRef.current?.tagName === 'INPUT' &&
+        view != null &&
+        isCoarsePointer(view)
+      ) {
+        // The panel ref attaches before showModal runs. Native focusing must
+        // not reach search, even before a deferred focus move could correct it.
+        panel.setAttribute('autofocus', '');
+        return () => panel.removeAttribute('autofocus');
+      }
+      const frame = requestAnimationFrame(() => {
+        initialFocusRef.current?.focus({preventScroll: true});
+      });
+      return () => cancelAnimationFrame(frame);
+    },
+    [initialFocusRef, isOpen],
+  );
   return (
     <Suspense fallback={null}>
       <LazyBottomSheet
+        ref={setPanelRef}
         isOpen={isOpen}
         onOpenChange={onOpenChange}
         finalFocusRef={finalFocusRef}
@@ -83,10 +94,6 @@ export function SelectorBottomSheet({
               {label}
             </Heading>
             {children}
-            <SelectorBottomSheetInitialFocus
-              isOpen={isOpen}
-              targetRef={initialFocusRef}
-            />
           </div>
         </Section>
       </LazyBottomSheet>

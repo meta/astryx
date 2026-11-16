@@ -1410,29 +1410,45 @@ export function Selector<T extends SelectorOptionType>(
   // window and poisons the next keystroke ("Dog" then "c" would search "dc").
   const resetTypeaheadRef = useRef<() => void>(() => {});
 
+  const openFocusFrameRef = useRef<number | null>(null);
+  const cancelOpenFocus = useCallback(() => {
+    if (openFocusFrameRef.current != null) {
+      cancelAnimationFrame(openFocusFrameRef.current);
+      openFocusFrameRef.current = null;
+    }
+  }, []);
+  // Releases the browser's pending focus frame when this control unmounts.
+  useEffect(() => cancelOpenFocus, [cancelOpenFocus]);
+
   // Layer for dropdown positioning
   const handleLayerHide = useCallback(() => {
+    cancelOpenFocus();
     setSearchQuery('');
     searchQueryRef.current = '';
     resetTypeaheadRef.current();
     // Clear any lingering result count when the popover closes so stale status
     // text does not linger in the a11y tree.
     announce('');
-  }, [announce]);
+  }, [announce, cancelOpenFocus]);
 
-  const handleLayerShow = useCallback(() => {
-    if (hasSearch) {
-      requestAnimationFrame(() => {
-        const input = searchRef.current;
-        if (input) {
-          input.focus();
-          // When typing seeded the query, place the caret after it so the user
-          // keeps typing where they left off.
-          input.setSelectionRange(input.value.length, input.value.length);
-        }
-      });
-    }
-  }, [hasSearch]);
+  const handleLayerShow = useCallback(
+    (activePresentation: 'popover' | 'bottom-sheet') => {
+      cancelOpenFocus();
+      if (hasSearch && activePresentation === 'popover') {
+        openFocusFrameRef.current = requestAnimationFrame(() => {
+          openFocusFrameRef.current = null;
+          const input = searchRef.current;
+          if (input) {
+            input.focus();
+            // When typing seeded the query, place the caret after it so the user
+            // keeps typing where they left off.
+            input.setSelectionRange(input.value.length, input.value.length);
+          }
+        });
+      }
+    },
+    [hasSearch, cancelOpenFocus],
+  );
 
   // Explicit placement opts out of the selector-specific overlay behavior and
   // uses the standard layer positioning API instead.

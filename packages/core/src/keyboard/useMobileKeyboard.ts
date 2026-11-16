@@ -73,9 +73,10 @@ export interface MobileKeyboardOptions {
   /**
    * Reserves the keyboard's inset at the end of the target's scroll area,
    * the first element inside it that `useScrollableArea` marks with
-   * `data-scroll-axis`.
+   * `data-scroll-axis`. With `'resize'`, the target instead fits above the
+   * keyboard using the returned inset as its bottom offset and height cap.
    */
-  inset?: boolean;
+  inset?: boolean | 'resize';
   /** The gap kept between the focused field and the keyboard, CSS px. */
   offset?: number;
   /** Whether the target follows the keyboard at all. */
@@ -90,7 +91,7 @@ export interface MobileKeyboardOptions {
 
 /** What useMobileKeyboard returns. */
 export interface MobileKeyboard {
-  /** The inset the target lays out at its scroller's content end, CSS px. */
+  /** The inset the target applies to its content or viewport fit, CSS px. */
   readonly inset: number;
   /**
    * Dismisses the keyboard, keeping the inset while the keyboard goes. The
@@ -154,9 +155,8 @@ function mayKeepKeyboard(): boolean {
 /**
  * Keeps a focused field in `targetRef`'s element above the on-screen
  * keyboard (see README.md). A sheet passes its panel, and the hook reserves
- * the inset in the panel's scroll area. Returns the inset the keyboard takes
- * at the end of that area's content, CSS px, or 0 without a keyboard, and a
- * dismiss.
+ * the inset in the panel's scroll area or fits the panel above the keyboard.
+ * Returns the inset in CSS px, or 0 without a keyboard, and a dismiss.
  *
  * @example
  * ```
@@ -175,10 +175,10 @@ export function useMobileKeyboard(
     isPageScrollLocked = false,
   }: MobileKeyboardOptions = {},
 ): MobileKeyboard {
-  // The inset the keyboard takes at the end of the body's content, CSS px.
-  // The target lays it out after its content box's children, through a
-  // functional style.
+  // The target lays out the inset through a functional style: at the body's
+  // content end or in the panel's viewport fit.
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const resizesViewport = reservesInset === 'resize';
   const hasKeyboardLayoutRef = useRef(false);
   const retainKeyboardLayoutRef = useRef(false);
   // The committed options, which the listeners and the dismissal read. They
@@ -244,7 +244,12 @@ export function useMobileKeyboard(
     targetRef,
     sheet => {
       const body = sheet.querySelector<HTMLElement>('[data-scroll-axis]');
-      if (!isEnabled || !reservesInset || body == null) {
+      if (
+        !isEnabled ||
+        !reservesInset ||
+        body == null ||
+        (resizesViewport && !isTouch)
+      ) {
         return () => {};
       }
       // A field inside the sheet moves nothing itself.
@@ -322,9 +327,40 @@ export function useMobileKeyboard(
       const writeInset = (inset: number) => {
         const changes = inset !== laidOutInset;
         const rangeBefore = changes ? body.scrollHeight : 0;
+        // A closing sheet owns its animator for the swipe exit.
+        const fitAnimator =
+          resizesViewport && changes && isOpenRef.current
+            ? animatorFor(sheet)
+            : null;
+        const topBefore =
+          fitAnimator == null ? 0 : sheet.getBoundingClientRect().top;
         laidOutInset = inset;
         // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the reveal scrolls into this inset in the same frame, so it must be laid out before the reveal measures
         flushSync(() => setKeyboardInset(inset));
+        if (fitAnimator != null) {
+          const shift = topBefore - sheet.getBoundingClientRect().top;
+          let from = fitAnimator.get('y') + shift;
+          const transition = guide?.transition;
+          if (transition?.kind === 'show') {
+            const field = findTextEntryControl(document.activeElement, body);
+            if (field != null) {
+              // The first report must clear the field before Chrome can pan to it.
+              from = Math.min(
+                from,
+                fitAnimator.get('y') +
+                  getObstructionTop() -
+                  FIELD_CLEARANCE_AT_REPORT -
+                  field.getBoundingClientRect().bottom,
+              );
+            }
+          }
+          if (transition != null) {
+            fitAnimator.set({y: from});
+            rideKeyboard(fitAnimator, {y: 0}, transition);
+          } else {
+            fitAnimator.set({y: 0});
+          }
+        }
         if (changes) {
           insetRange =
             inset === 0
@@ -425,7 +461,10 @@ export function useMobileKeyboard(
         // Under a pixel of overhang is `innerHeight`'s precision, not a
         // keyboard: no suggestion clearance then (overlapOf).
         const overlap = overlapOf(measuredBodyRect.bottom, obstructionTop);
-        const clearance = overlap > 0 ? offset : 0;
+        const clearance =
+          overlap > 0 || (resizesViewport && getKeyboardHeight(window) > 0)
+            ? offset
+            : 0;
         const safeTop = measuredBodyRect.top;
         const safeBottom = Math.min(
           measuredBodyRect.bottom,
@@ -469,6 +508,10 @@ export function useMobileKeyboard(
         // retained keyboard layout unconditionally.
         if (isVisualViewportRecovered()) {
           clearKeyboardLayout();
+          return;
+        }
+        if (resizesViewport) {
+          writeInset(getKeyboardHeight(window));
           return;
         }
         const overlap = overlapOf(geometry.bodyBottom, obstructionTop);
@@ -576,7 +619,9 @@ export function useMobileKeyboard(
         retainKeyboardLayoutRef.current = false;
 
         const measuredBodyRect = body.getBoundingClientRect();
-        const overlap = overlapOf(measuredBodyRect.bottom, obstructionTop);
+        const overlap = resizesViewport
+          ? getKeyboardHeight(window)
+          : overlapOf(measuredBodyRect.bottom, obstructionTop);
         // The extra clearance leaves space for mobile suggestion UI, but only
         // while the visual viewport actually overlaps the sheet. With no
         // obstruction, ordinary desktop and hardware-keyboard focus must not
@@ -601,13 +646,13 @@ export function useMobileKeyboard(
         }
         hasKeyboardLayoutRef.current = overlap > 0;
 
-        const inset =
-          overlap > 0
-            ? Math.max(
-                0,
-                measuredBodyRect.bottom - (obstructionTop - clearance),
-              )
-            : 0;
+        let inset = overlap;
+        if (!resizesViewport && overlap > 0) {
+          inset = Math.max(
+            0,
+            measuredBodyRect.bottom - (obstructionTop - clearance),
+          );
+        }
         writeInset(inset);
 
         scrollControlIntoSafeArea(
@@ -810,7 +855,11 @@ export function useMobileKeyboard(
           return;
         }
         if (transition.kind === 'hide') {
-          if (hasKeyboardLayoutRef.current && transition.animated) {
+          if (
+            !resizesViewport &&
+            hasKeyboardLayoutRef.current &&
+            transition.animated
+          ) {
             holdInsetThrough(transition);
           }
           return;
@@ -1033,6 +1082,9 @@ export function useMobileKeyboard(
         unsubscribeGuide?.();
         heldHide?.release();
         (contentAnimator() ?? unguidedAnimator())?.set({y: 0});
+        if (resizesViewport) {
+          animatorFor(sheet).set({y: 0});
+        }
         revealPan?.stop();
         body.removeEventListener('focusin', handleFocusIn);
         body.removeEventListener('focusout', handleFocusOut);

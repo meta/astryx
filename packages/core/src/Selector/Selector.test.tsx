@@ -331,6 +331,68 @@ describe('Selector', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('opens a searchable touch sheet on its panel without focusing search, including on reopen', async () => {
+    vi.mocked(window.matchMedia).mockImplementation(query => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    vi.mocked(HTMLDialogElement.prototype.showModal).mockImplementation(
+      function (this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector('input')
+        )?.focus();
+      },
+    );
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        hasSearch
+        onChange={onChange}
+        presentation="bottom-sheet"
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: /Fruit/});
+    await user.click(trigger);
+    const dialog = await screen.findByRole('dialog', {name: 'Fruit'});
+    const panel = dialog.querySelector('.astryx-bottom-sheet');
+    await waitFor(() => expect(panel).toHaveFocus());
+    const search = screen.getByRole('combobox');
+    expect(focus.mock.contexts).not.toContain(search);
+
+    await user.keyboard('{Escape}');
+    fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
+      propertyName: 'transform',
+    });
+    expect(trigger).toHaveFocus();
+    focus.mockClear();
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('dialog', {name: 'Fruit'})
+          .querySelector('.astryx-bottom-sheet'),
+      ).toHaveFocus(),
+    );
+    const reopenedSearch = screen.getByRole('combobox');
+    expect(focus.mock.contexts).not.toContain(reopenedSearch);
+    await user.click(reopenedSearch);
+    await user.paste('Banana');
+    await user.click(screen.getByRole('option', {name: /Banana/}));
+    expect(onChange).toHaveBeenCalledWith('Banana');
+  });
+
   it('restores touch focus without painting a trigger focus ring', async () => {
     render(
       <Selector
