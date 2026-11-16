@@ -16,7 +16,7 @@ export const doc = {
     'spreadsheet',
     'roster',
   ],
-  isReady: false,
+  isReady: true,
   category: 'Table - Basic',
   isHiddenFromOverview: true,
   icons: {

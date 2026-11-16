@@ -330,9 +330,11 @@ export const RUN_FROM_PROJECT = DOCTOR_RUN_FROM_PROJECT;
  * The once-a-day hint in a project with no CLI of its own.
  * @param {string} answered
  * @param {string} core
+ * @param {{exact?: boolean}} [options] the project pins its Core to one
+ *   version, so the command pins the CLI too
  */
-export const noCliHint = (answered, core) =>
-  `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}. To match, run: npm install @astryxdesign/cli@${core}`;
+export const noCliHint = (answered, core, {exact = false} = {}) =>
+  `astryx: this project has no Astryx CLI installed; answered by CLI ${answered} while its Core is ${core}. To match, run: npm install ${exact ? '-E ' : ''}@astryxdesign/cli@${core}`;
 
 /** @param {string} version */
 export const handedTo = version => (/** @type {string} */ from) =>

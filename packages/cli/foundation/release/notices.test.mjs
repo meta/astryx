@@ -25,6 +25,7 @@ import {
   oldGlobalLines,
   projectLag,
   alignCliAndCore,
+  addVerbFor,
   lastNoticeSkip,
   recordNoticeSkip,
   takeNotice,
@@ -358,9 +359,31 @@ describe('globalBehind and projectLag', () => {
       projectLag({cwd: coreOnly, current: '0.7.1', stateDir}),
     ).toMatchObject({
       root: coreOnly,
-      install: 'npm install @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+      // A project that pins Core to one version keeps its pins.
+      install:
+        'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
       upgrade: 'npx astryx upgrade --from 0.7.1 --apply',
     });
+    // A project that declares a range keeps a range.
+    const ranged = project(tempDir(), {'@astryxdesign/core': '^0.7.1'});
+    writeJson(path.join(ranged, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(ranged, '0.7.1');
+    expect(projectLag({cwd: ranged, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
+    // A Core declared as `=0.7.1` is one version too.
+    const equals = project(tempDir(), {'@astryxdesign/core': '=0.7.1'});
+    writeJson(path.join(equals, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(equals, '0.7.1');
+    expect(projectLag({cwd: equals, current: '0.7.1', stateDir})?.install).toBe(
+      'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
+    const bun = project(tempDir(), {'@astryxdesign/core': '0.7.1'});
+    fs.writeFileSync(path.join(bun, 'bun.lock'), '{}\n');
+    installCore(bun, '0.7.1');
+    expect(projectLag({cwd: bun, current: '0.7.1', stateDir})?.install).toBe(
+      'bun add --exact @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
     const pnpm = project(tempDir(), {
       '@astryxdesign/core': '0.7.1',
       '@astryxdesign/cli': '0.7.1',
@@ -372,9 +395,29 @@ describe('globalBehind and projectLag', () => {
     installCore(pnpm, '0.7.1');
     installStandInCli(pnpm, '0.7.1');
     expect(projectLag({cwd: pnpm, current: '0.7.1', stateDir})).toMatchObject({
-      install: 'pnpm add @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+      install: 'pnpm add -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
       upgrade: 'pnpm exec astryx upgrade --from 0.7.1 --apply',
     });
+  });
+});
+
+describe('addVerbFor', () => {
+  it('reads the CLI a project pins when it declares no Core', () => {
+    const cliOnly = project(tempDir(), {'@astryxdesign/cli': '0.7.1'});
+    writeJson(path.join(cliOnly, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addVerbFor(cliOnly, '0.7.3')).toBe('npm install -E');
+    // A range is saved as the range, and no version gets no flag.
+    expect(addVerbFor(cliOnly, '^0.7.3')).toBe('npm install');
+    expect(addVerbFor(cliOnly)).toBe('npm install');
+    const cliRanged = project(tempDir(), {'@astryxdesign/cli': '^0.7.1'});
+    writeJson(path.join(cliRanged, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addVerbFor(cliRanged, '0.7.3')).toBe('npm install');
+  });
+
+  it('reads a pin the way the release matcher does, `v0.7.1` included', () => {
+    const vPinned = project(tempDir(), {'@astryxdesign/core': 'v0.7.1'});
+    writeJson(path.join(vPinned, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addVerbFor(vPinned, '0.7.3')).toBe('npm install -E');
   });
 });
 
@@ -419,7 +462,7 @@ describe('the commands notices print go through the command-name picker (spec AS
         'acme astryx upgrade --from 0.7.1 --apply',
       );
       expect(alignCliAndCore({cwd: dir, cli: '0.7.3', core: '0.7.1'})).toBe(
-        'npm install @astryxdesign/core@0.7.3, then acme astryx upgrade --from 0.7.1 --apply',
+        'npm install -E @astryxdesign/core@0.7.3, then acme astryx upgrade --from 0.7.1 --apply',
       );
     } finally {
       recordDeclaredCliCommands(dir, []);
@@ -434,7 +477,7 @@ describe('the commands notices print go through the command-name picker (spec AS
         'host astryx upgrade --from 0.7.1 --apply',
       );
       expect(alignCliAndCore({cwd: dir, cli: '0.7.3', core: '0.7.1'})).toBe(
-        'npm install @astryxdesign/core@0.7.3, then host astryx upgrade --from 0.7.1 --apply',
+        'npm install -E @astryxdesign/core@0.7.3, then host astryx upgrade --from 0.7.1 --apply',
       );
     });
   });
@@ -442,7 +485,7 @@ describe('the commands notices print go through the command-name picker (spec AS
   it("fall back to the project's own installed CLI", () => {
     const dir = coreOnlyProject();
     expect(alignCliAndCore({cwd: dir, cli: '0.7.3', core: '0.7.1'})).toBe(
-      'npm install @astryxdesign/core@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
+      'npm install -E @astryxdesign/core@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
     );
   });
 });
@@ -556,7 +599,7 @@ describe.skipIf(process.platform === 'win32')('noticeLines', () => {
     };
     expect(noticeLines({...input, stateDir, now: 10})).toEqual([
       'A new release of Astryx is available: 0.7.1 → 0.7.3',
-      'To upgrade, run: npm install @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
+      'To upgrade, run: npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3, then npx astryx upgrade --from 0.7.1 --apply',
       'The astryx command on this computer runs CLI 0.7.1, which answers every folder itself.',
       oldUpgrade,
     ]);
