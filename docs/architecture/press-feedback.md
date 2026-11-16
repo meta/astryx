@@ -138,7 +138,9 @@ touch. The recipe styles paint from that attribute.
   and the `press*.stylex.ts` modules beside it.
 - Group and menu profiles (`architecture:interaction-modality` INV13):
   `packages/core/src/hooks/useGroupPressTracking.ts`,
-  `packages/core/src/hooks/useMenuPress.ts`.
+  `packages/core/src/hooks/useMenuPress.ts`, with its
+  `menuPressOnItems.ts` and `menuPressGesture.ts` modules
+  (`module:DropdownMenu/useMenuPress`).
 - Other press tracker (INV1 gap): `packages/core/src/gestures/PressTracker.ts`.
 
 ## Deciding specs
