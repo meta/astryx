@@ -151,6 +151,26 @@ export const WithRemove: Story = {
   ),
 };
 
+/**
+ * The same value shown on several rows: each remove button takes its own
+ * accessible name with `removeButtonLabel`, so a screen reader announces which
+ * row the button clears instead of "Remove Morning" each time.
+ */
+export const RepeatedLabelsWithRemove: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+      {['Monday', 'Tuesday', 'Wednesday'].map(day => (
+        <Token
+          key={day}
+          label="Morning"
+          removeButtonLabel={`Remove Morning from ${day}`}
+          onRemove={() => {}}
+        />
+      ))}
+    </div>
+  ),
+};
+
 export const Clickable: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>

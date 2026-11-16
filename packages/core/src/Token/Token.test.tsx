@@ -279,6 +279,55 @@ describe('Token accessibility', () => {
     ).toBeInTheDocument();
   });
 
+  it('removeButtonLabel names the remove button', () => {
+    render(
+      <Token
+        label="Morning"
+        removeButtonLabel="Remove Morning from Tuesday"
+        onRemove={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Remove Morning from Tuesday'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {name: 'Remove Morning'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: vi.fn()}],
+    ['link and remove', {href: '/schedule'}],
+  ])(
+    'removeButtonLabel names the remove button in the %s structure',
+    (_structure, props) => {
+      render(
+        <Token
+          label="Morning"
+          removeButtonLabel="Remove Morning from Tuesday"
+          onRemove={() => {}}
+          {...props}
+        />,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Remove Morning from Tuesday'}),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('does not render removeButtonLabel as a DOM attribute', () => {
+    const {container} = render(
+      <Token
+        label="Morning"
+        removeButtonLabel="Remove Morning from Tuesday"
+        onRemove={() => {}}
+      />,
+    );
+    expect(container.firstChild).not.toHaveAttribute('removeButtonLabel');
+    expect(container.firstChild).not.toHaveAttribute('removebuttonlabel');
+  });
+
   it('keeps aria-labelledby and aria-describedby on a disabled link token', () => {
     render(
       <>

@@ -101,6 +101,13 @@ export interface TokenProps extends BaseProps<HTMLElement> {
    */
   onRemove?: (e: React.MouseEvent) => void;
   /**
+   * Accessible name for the remove button. Use it when several tokens share a
+   * label and each remove button needs context, for example
+   * "Remove Morning from Tuesday".
+   * @default "Remove {label}"
+   */
+  removeButtonLabel?: string;
+  /**
    * Click handler. When provided, the token renders as a `<span>` container
    * with an invisible `<button>` inside for accessibility.
    */
@@ -307,6 +314,7 @@ export function Token({
   icon,
   isDisabled = false,
   onRemove,
+  removeButtonLabel: removeButtonLabelFromProps,
   onClick,
   href,
   description,
@@ -336,12 +344,14 @@ export function Token({
   // if onClick was provided — the popover attaches its own handler.
   const effectiveOnClick = onClick ?? (role === 'button' ? () => {} : null);
 
+  const removeButtonLabel =
+    removeButtonLabelFromProps ??
+    t('@astryx.token.remove', {label: naming?.removeName ?? label});
+
   const removeButton = onRemove != null && (
     <button
       type="button"
-      aria-label={t('@astryx.token.remove', {
-        label: naming?.removeName ?? label,
-      })}
+      aria-label={removeButtonLabel}
       {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
