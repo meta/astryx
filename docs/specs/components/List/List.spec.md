@@ -241,8 +241,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   handle is the one element reordering adds to a row (`spec:AST-103` FR5),
   at the row edge its reorderable's `handle.placement` names: its trailing
   edge by default, or its leading edge, before the row's start content.
-  The handle always shows and takes its place in the row, and a row that
-  stays put keeps that room, unless `handle.visibility` is `'hover'`.
+  The handle always shows and takes its place in the row, unless
+  `handle.revealBehavior` is `'adaptive'`. At the trailing edge, a row with end
+  content keeps the handle in its end slot, after that content, and the
+  handle reaches into the row's inline inset, as an end slot's last control
+  does. At the leading edge, a row that stays put keeps the handles' room, so
+  its label lines up with theirs.
   Then, where the primary pointer is fine, the handle shows while its row is
   hovered or holds the focus. It then hangs outside the row's content
   and takes no width, so the content keeps its place. A reorderable list

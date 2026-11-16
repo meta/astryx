@@ -865,7 +865,7 @@ describe('ListInput', () => {
     const {container} = renderListInput({
       reorderable: createReorderable({
         onReorder: () => {},
-        handle: {placement: 'end', visibility: 'always'},
+        handle: {placement: 'end', revealBehavior: 'always'},
       }),
     });
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});

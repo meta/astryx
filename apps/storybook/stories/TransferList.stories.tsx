@@ -179,7 +179,7 @@ function useMoveReorderable<T extends string>(
   isReorderable?: (value: T) => boolean,
   handle?: ReorderHandle,
 ) {
-  const visibility = handle?.visibility;
+  const revealBehavior = handle?.revealBehavior;
   const placement = handle?.placement;
   return useMemo(
     () =>
@@ -191,9 +191,9 @@ function useMoveReorderable<T extends string>(
             return next;
           }),
         isReorderable,
-        handle: {visibility, placement},
+        handle: {revealBehavior, placement},
       }),
-    [setValue, isReorderable, visibility, placement],
+    [setValue, isReorderable, revealBehavior, placement],
   );
 }
 
@@ -226,19 +226,19 @@ export const Default: Story = {
 };
 
 type ReorderHandleArgs = {
-  visibility: 'always' | 'hover';
+  revealBehavior: 'always' | 'adaptive';
   placement: 'start' | 'end';
 };
 
-/** The reorderable's `handle` option: the handle's edge and visibility. */
+/** The reorderable's `handle` option: the handle's edge and how it reveals itself. */
 export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
-  args: {visibility: 'always', placement: 'end'},
+  args: {revealBehavior: 'always', placement: 'end'},
   argTypes: {
-    visibility: {control: 'inline-radio', options: ['always', 'hover']},
+    revealBehavior: {control: 'inline-radio', options: ['always', 'adaptive']},
     placement: {control: 'inline-radio', options: ['start', 'end']},
   },
-  render: ({visibility, placement}) => (
-    <DefaultExample handle={{visibility, placement}} />
+  render: ({revealBehavior, placement}) => (
+    <DefaultExample handle={{revealBehavior, placement}} />
   ),
 };
 

@@ -186,14 +186,17 @@ const styles = stylex.create({
   clearsShownHandleAtStart: {
     paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
   },
+  // At the end, the handle joins the row's end slot after Remove. It
+  // overlaps the row's end padding by 8 px, so a row without one keeps its
+  // Remove 20 px clear.
   clearsHandleAtEnd: {
     marginInlineEnd: {
       default: 0,
-      '@media (pointer: coarse)': `calc(28px + ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': 20,
     },
   },
   clearsShownHandleAtEnd: {
-    marginInlineEnd: `calc(28px + ${spacingVars['--spacing-2']})`,
+    marginInlineEnd: 20,
   },
   root: {
     display: 'flex',
@@ -657,7 +660,7 @@ export function TransferList<T extends string = string>({
   const isHandleAtEnd = owner?.handle?.placement !== 'start';
   // An ordering list is read for its order, so its handles show by default.
   const isHandleAlwaysVisible =
-    (owner?.handle?.visibility ?? 'always') === 'always';
+    (owner?.handle?.revealBehavior ?? 'always') === 'always';
   const hangRoom =
     keepsHandleRoom && !isHandleAlwaysVisible
       ? isHandleAtEnd
@@ -763,9 +766,9 @@ export function TransferList<T extends string = string>({
         // A row without a handle keeps its Remove in the movable rows'
         // column, clear of where their handles sit.
         xstyle={[
-          keepsHandleRoom &&
+          isOrdering &&
             isHandleAtEnd &&
-            (!isOrdering || !canMove(option.value)) &&
+            !canMove(option.value) &&
             (isHandleAlwaysVisible
               ? styles.clearsShownHandleAtEnd
               : styles.clearsHandleAtEnd),

@@ -200,9 +200,11 @@ const REORDER_HANDLE_SIZE = 28;
  * List's hang.
  */
 const REORDER_HANDLE_HANG = 30;
-/** As much of that room as the container's padding holds. */
-const HANG_REACH = `min(${REORDER_HANDLE_HANG}px, var(--container-padding-inline-start, ${REORDER_HANDLE_HANG}px))`;
-const HANG_REACH_END = `min(${REORDER_HANDLE_HANG}px, var(--container-padding-inline-end, ${REORDER_HANDLE_HANG}px))`;
+/**
+ * As much of that room as the container's padding holds; none outside a
+ * container that publishes its padding, so nothing reaches past the host.
+ */
+const HANG_REACH = `min(${REORDER_HANDLE_HANG}px, var(--container-padding-inline-start, 0px))`;
 const PAST_HANDLE = `calc(${REORDER_HANDLE_SIZE}px + ${spacingVars['--spacing-1']})`;
 
 const styles = stylex.create({
@@ -215,8 +217,8 @@ const styles = stylex.create({
     containerType: 'inline-size',
     containerName: 'list-input',
   },
-  // Where the handles show only on hover or focus, each hangs outside its
-  // record. The group pads that room on the handles' side, and reaches out
+  // Where the handles start their records and show only on hover or focus,
+  // each hangs outside its record. The group pads that room at its start, and reaches out
   // into its container's padding by as much of it as the padding holds. So a
   // clipping container never cuts a handle, and the records move in only by
   // the room the padding lacks. Outside a container that sets its padding,
@@ -235,20 +237,7 @@ const styles = stylex.create({
       '@media (pointer: coarse)': '100%',
     },
   },
-  groupWithHangingHandlesAtEnd: {
-    marginInlineEnd: {
-      default: `calc(-1 * ${HANG_REACH_END})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineEnd: {
-      default: REORDER_HANDLE_HANG,
-      '@media (pointer: coarse)': 0,
-    },
-    width: {
-      default: `calc(100% + ${HANG_REACH_END})`,
-      '@media (pointer: coarse)': '100%',
-    },
-  },
+
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -275,6 +264,9 @@ const styles = stylex.create({
       '@container list-input (max-width: 640px)': spacingVars['--spacing-2'],
     },
     minWidth: 0,
+    // Core's reorder handle reaches into a ListItem row's inline inset. A
+    // record has no inset, so the handle and its focus ring end at its edge.
+    '--_item-inset-inline': '0px',
   },
   rowFieldsOnly: {
     gridTemplateColumns: 'minmax(0, 1fr)',
@@ -282,23 +274,16 @@ const styles = stylex.create({
   rowWithRemove: {
     gridTemplateColumns: `minmax(0, 1fr) ${sizeVars['--size-element-md']}`,
   },
-  // A handle at the record's end sits in Remove's cell, after Remove. Where
-  // it shows only on hover or focus it hangs past the record's end and the
-  // cell keeps Remove's width. Where it shows in the record (always, or under
-  // a coarse pointer), the cell's track grows by the handle and the cell's
-  // gap. The Add row shares the track, so it keeps the fields' width.
+  // A handle at the record's end sits in Remove's cell, after Remove, for
+  // every pointer (UIKit's reorder control is the trailing control of an
+  // editing row). It shows with Remove unless it always shows. The cell's
+  // track is fixed, so the Add row, which has no controls, keeps the fields'
+  // width.
   rowWithRemoveAndHandle: {
-    gridTemplateColumns: {
-      default: `minmax(0, 1fr) ${sizeVars['--size-element-md']}`,
-      '@media (pointer: coarse)': `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-2']} + ${REORDER_HANDLE_SIZE}px)`,
-    },
+    gridTemplateColumns: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${REORDER_HANDLE_SIZE}px)`,
   },
-  rowWithRemoveAndShownHandle: {
-    gridTemplateColumns: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-2']} + ${REORDER_HANDLE_SIZE}px)`,
-  },
-  // Core's hanging handle gives back a gap of this size after Remove.
   controlCellWithHandle: {
-    columnGap: spacingVars['--spacing-2'],
+    columnGap: spacingVars['--spacing-1'],
   },
   // A handle at the record's start sits before the first field's control.
   // Where it shows only on hover or focus, it hangs there from an empty
@@ -736,7 +721,7 @@ export function ListInput<T>({
   // object says otherwise: a record's controls stay quiet until used.
   const isHandleAtEnd = reorderScope?.options.handle?.placement !== 'start';
   const isHandleAlwaysVisible =
-    (reorderScope?.options.handle?.visibility ?? 'hover') === 'always';
+    (reorderScope?.options.handle?.revealBehavior ?? 'adaptive') === 'always';
   const showStartHandle = showReorderHandle && !isHandleAtEnd;
   const showEndHandle = showReorderHandle && isHandleAtEnd;
   // The handle comes with the owner's object: a list without one loads no
@@ -1124,9 +1109,7 @@ export function ListInput<T>({
   const rowLayoutStyle = !showRemoveColumn
     ? styles.rowFieldsOnly
     : showEndHandle
-      ? isHandleAlwaysVisible
-        ? styles.rowWithRemoveAndShownHandle
-        : styles.rowWithRemoveAndHandle
+      ? styles.rowWithRemoveAndHandle
       : styles.rowWithRemove;
   // Where the handle starts the record, the styles that line the record's
   // content up past it.
@@ -1182,11 +1165,9 @@ export function ListInput<T>({
             }),
             stylex.props(
               styles.group,
-              showReorderHandle &&
+              showStartHandle &&
                 !isHandleAlwaysVisible &&
-                (isHandleAtEnd
-                  ? styles.groupWithHangingHandlesAtEnd
-                  : styles.groupWithHangingHandles),
+                styles.groupWithHangingHandles,
             ),
           )}>
           <ListReorderScope reorder={reorderScope}>
@@ -1394,6 +1375,7 @@ export function ListInput<T>({
                                 itemKey={itemKey}
                                 isDisabled={isDisabled || isLoading}
                                 isAlwaysVisible={isHandleAlwaysVisible}
+                                isInRow={true}
                                 placement="end"
                               />
                             ) : null}

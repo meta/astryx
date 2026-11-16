@@ -37,9 +37,9 @@ export const docs = {
     },
     {
       name: 'handle',
-      type: "{visibility?: 'always' | 'hover'; placement?: 'start' | 'end'}",
+      type: "{revealBehavior?: 'always' | 'adaptive'; placement?: 'start' | 'end'}",
       description:
-        "How each item's handle shows. `placement` is the item edge it sits at: 'end' (default), after the item's content, or 'start', before it. With `visibility: 'always'`, the handle takes its own place in the item and its grip always shows. With `visibility: 'hover'`, the handle shows while its item is hovered or holds the focus, and always under a coarse pointer; where it shows only on hover or focus, it takes no space and hangs outside the item's content, so the content keeps its place. The collection takes that room from its container's padding, and moves its items in by any room the padding lacks. Without it, the collection decides: List and TransferList use 'always', and ListInput uses 'hover'. The same options serve all three.",
+        "How each item's handle shows. `placement` is the item edge it sits at: 'end' (default), after the item's content, or 'start', before it. With `revealBehavior: 'always'`, the handle takes its own place in the item and its grip always shows. With `revealBehavior: 'adaptive'`, where the primary pointer is fine, it shows while its item is hovered or holds the focus; where the primary pointer is coarse, it always shows. Where it shows only on hover or focus, it takes no space and hangs outside the item's content, so the content keeps its place. The collection takes that room from its container's padding, and moves its items in by any room the padding lacks. Without it, the collection decides: List and TransferList use 'always', and ListInput uses 'adaptive', keeping a handle at the end in its Remove cell. The same options serve all three.",
     },
   ],
   returns: [
@@ -72,7 +72,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Set `handle: {visibility: 'hover'}` where reordering is occasional and rows should stay quiet until hovered; keep handles shown where people must find them at a glance, such as a list whose only purpose is ordering.",
+          "Set `handle: {revealBehavior: 'adaptive'}` where reordering is occasional and rows should stay quiet until hovered; keep handles shown where people must find them at a glance, such as a list whose only purpose is ordering.",
       },
       {
         guidance: false,
@@ -96,7 +96,7 @@ export const docsDense = {
     isReorderable:
       '(key) => boolean; a rejected row has no handle, and at an end bounds the drop.',
     handle:
-      "{visibility: 'always' | 'hover', placement: 'start' | 'end'}; end by default; List and TransferList default to 'always', ListInput to 'hover'.",
+      "{revealBehavior: 'always' | 'adaptive', placement: 'start' | 'end'}; end by default; List and TransferList default to 'always', ListInput to 'adaptive'.",
   },
   returnDescriptions: {
     reorderable:

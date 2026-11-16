@@ -30,44 +30,45 @@ const OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   {value: 'priority', label: 'Priority'},
 ];
 
-export const Disabled: StoryObj<{handleVisibility: 'always' | 'hover'}> = {
-  args: {handleVisibility: 'always'},
-  render: function DisabledStory({handleVisibility}) {
-    const [value, setValue] = useState<readonly string[]>([
-      'name',
-      'owner',
-      'status',
-    ]);
-    const [isDisabled, setIsDisabled] = useState(false);
-    const reorderable = useMemo(
-      () =>
-        createReorderable<string>({
-          onReorder: ({key, to}) =>
-            setValue(current => {
-              const next = current.filter(item => item !== key);
-              next.splice(to, 0, key);
-              return next;
-            }),
-          handle: {visibility: handleVisibility},
-        }),
-      [handleVisibility],
-    );
-    return (
-      <>
-        <Switch
-          label="Disable the list"
-          value={isDisabled}
-          onChange={checked => setIsDisabled(checked)}
-        />
-        <TransferList
-          label="Visible fields"
-          options={OPTIONS}
-          value={value}
-          onChange={setValue}
-          reorderable={reorderable}
-          isDisabled={isDisabled}
-        />
-      </>
-    );
-  },
-};
+export const Disabled: StoryObj<{handleRevealBehavior: 'always' | 'adaptive'}> =
+  {
+    args: {handleRevealBehavior: 'always'},
+    render: function DisabledStory({handleRevealBehavior}) {
+      const [value, setValue] = useState<readonly string[]>([
+        'name',
+        'owner',
+        'status',
+      ]);
+      const [isDisabled, setIsDisabled] = useState(false);
+      const reorderable = useMemo(
+        () =>
+          createReorderable<string>({
+            onReorder: ({key, to}) =>
+              setValue(current => {
+                const next = current.filter(item => item !== key);
+                next.splice(to, 0, key);
+                return next;
+              }),
+            handle: {revealBehavior: handleRevealBehavior},
+          }),
+        [handleRevealBehavior],
+      );
+      return (
+        <>
+          <Switch
+            label="Disable the list"
+            value={isDisabled}
+            onChange={checked => setIsDisabled(checked)}
+          />
+          <TransferList
+            label="Visible fields"
+            options={OPTIONS}
+            value={value}
+            onChange={setValue}
+            reorderable={reorderable}
+            isDisabled={isDisabled}
+          />
+        </>
+      );
+    },
+  };

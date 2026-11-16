@@ -46,17 +46,19 @@ export interface ReorderMove<
 /** How each item's reorder handle shows (`ReorderableOptions.handle`). */
 export interface ReorderHandleOptions {
   /**
-   * When the handle shows. `'always'`: the handle takes its own place in its
-   * item, and its grip always shows. `'hover'`: it shows while its item is
-   * hovered or holds the focus, and always under a coarse pointer. Where it
-   * shows only on hover or focus, it takes no space. It hangs outside the
+   * How the handle reveals itself. `'always'`: the handle takes its own place
+   * in its item, and its grip always shows. `'adaptive'`: where the primary
+   * pointer is fine, it shows while its item is hovered or holds the focus;
+   * where the primary pointer is coarse, it always shows. Where it shows only
+   * on hover or focus, it takes no space. It hangs outside the
    * item's content, at the item's edge, so the content keeps its place. The
    * collection takes that room from its container's padding, and moves its
-   * items in by any room the padding lacks. Without it, the collection
-   * decides: List and TransferList use `'always'`, and ListInput uses
-   * `'hover'`.
+   * items in by any room the padding lacks. ListInput keeps a handle at the
+   * end in its Remove cell, where it shows with Remove. Without it, the
+   * collection decides: List and TransferList use `'always'`, and ListInput
+   * uses `'adaptive'`.
    */
-  readonly visibility?: 'always' | 'hover';
+  readonly revealBehavior?: 'always' | 'adaptive';
   /**
    * The edge of each item that the handle sits at: `'start'`, before the
    * item's content, or `'end'`, after it.

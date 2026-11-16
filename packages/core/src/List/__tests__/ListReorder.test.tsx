@@ -491,9 +491,11 @@ describe('List reorderable', () => {
       );
       const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
       const sent = screen.getByText('Sent').closest('li') as HTMLElement;
-      // The row's own last child, after its end content.
-      expect(inbox.lastElementChild).toBe(handleOf('Inbox'));
+      // With end content, the handle joins the end slot, after the content.
+      expect(handleOf('Inbox').parentElement).not.toBe(inbox);
+      expect(inbox.lastElementChild).toContainElement(handleOf('Inbox'));
       expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+      // Without, it is the row's own last child.
       expect(sent.lastElementChild).toBe(handleOf('Sent'));
     },
   );
@@ -521,7 +523,7 @@ describe('List reorderable', () => {
     expect(sent.firstElementChild).toBe(handleOf('Sent'));
   });
 
-  it("always shows the handle by default; with handle.visibility 'hover' it fades with its row", () => {
+  it("always shows the handle by default; with handle.revealBehavior 'adaptive' it fades with its row", () => {
     // The reveal's fade, without its opacity: the tokens a shown and a
     // fading reveal share.
     const {result} = renderHook(() => useContainerReveal());
@@ -538,11 +540,11 @@ describe('List reorderable', () => {
     );
     const fade = fading.filter(token => shown.includes(token));
     expect(fade.length).toBeGreaterThan(0);
-    const rows = (visibility?: 'always' | 'hover') => (
+    const rows = (revealBehavior?: 'always' | 'adaptive') => (
       <List
         reorderable={createReorderable({
           onReorder: () => {},
-          handle: {visibility},
+          handle: {revealBehavior},
         })}>
         <ListItem itemKey="inbox" label="Inbox" />
       </List>
@@ -553,7 +555,7 @@ describe('List reorderable', () => {
     expect(classes()).not.toEqual(expect.arrayContaining(fade));
     rerender(rows('always'));
     expect(classes()).not.toEqual(expect.arrayContaining(fade));
-    rerender(rows('hover'));
+    rerender(rows('adaptive'));
     expect(classes()).toEqual(expect.arrayContaining(fade));
   });
 
@@ -577,10 +579,34 @@ describe('List reorderable', () => {
     );
     expect(screen.queryByRole('button', {name: 'Reorder Trash'})).toBeNull();
     expect(handleOf('Inbox')).toBeInTheDocument();
+    expect(trash.outerHTML).toBe(before);
+  });
+
+  it("keeps the handles' room in a row the object rejects when the handles start their rows", () => {
+    const rows = (reorderable?: Reorderable) => (
+      <List reorderable={reorderable}>
+        <ListItem itemKey="inbox" label="Inbox" />
+        <ListItem itemKey="trash" label="Trash" endContent={<span>9</span>} />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const trash = screen.getByText('Trash').closest('li') as HTMLElement;
+    const before = trash.outerHTML;
+    rerender(
+      rows(
+        createReorderable({
+          onReorder: () => {},
+          isReorderable: key => key !== 'trash',
+          handle: {placement: 'start'},
+        }),
+      ),
+    );
+    expect(screen.queryByRole('button', {name: 'Reorder Trash'})).toBeNull();
     // Only its classes change: it keeps the room its neighbours' handles
     // take, so its label lines up with theirs.
     const withoutClasses = (html: string) =>
       html.replace(/ class="[^"]*"/g, '');
+    expect(trash.outerHTML).not.toBe(before);
     expect(withoutClasses(trash.outerHTML)).toBe(withoutClasses(before));
   });
 

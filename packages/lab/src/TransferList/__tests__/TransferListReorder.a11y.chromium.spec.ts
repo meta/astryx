@@ -300,7 +300,7 @@ test.describe('a disabled list', () => {
     page,
   }) => {
     await page.goto(
-      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handleVisibility:hover`,
+      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=handleRevealBehavior:adaptive`,
     );
     await page.getByRole('switch', {name: 'Disable the list'}).click();
     const row = page.locator('[data-transfer-list-row="owner"]');

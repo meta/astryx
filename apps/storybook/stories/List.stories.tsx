@@ -986,21 +986,21 @@ export const Reorderable: Story = {
 };
 
 type ReorderHandleArgs = {
-  visibility: 'always' | 'hover';
+  revealBehavior: 'always' | 'adaptive';
   placement: 'start' | 'end';
 };
 
 export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
-  args: {visibility: 'always', placement: 'end'},
+  args: {revealBehavior: 'always', placement: 'end'},
   argTypes: {
-    visibility: {control: 'inline-radio', options: ['always', 'hover']},
+    revealBehavior: {control: 'inline-radio', options: ['always', 'adaptive']},
     placement: {control: 'inline-radio', options: ['start', 'end']},
   },
-  render: ({visibility, placement}) => (
+  render: ({revealBehavior, placement}) => (
     <ReorderDemo
       initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash']}
       pinned={['Trash']}
-      handle={{visibility, placement}}
+      handle={{revealBehavior, placement}}
     />
   ),
   parameters: {
@@ -1009,7 +1009,7 @@ export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
         story:
           "`createReorderable`'s `handle` option. `placement` puts each " +
           "handle at its row's end (the default) or start. List's handles always show, " +
-          "each in a place of its own. With `visibility: 'hover'`, the " +
+          "each in a place of its own. With `revealBehavior: 'adaptive'`, the " +
           'handle shows while its row is hovered or holds the focus, and ' +
           "hangs outside the row's content, so the content keeps its place; " +
           'on a touch screen it then shows in the row. Trash stays put, so it ' +
@@ -1050,7 +1050,7 @@ export const ReorderInCard: Story = {
             <ReorderDemo
               initial={['Inbox', 'Sent', 'Drafts']}
               edge={edge}
-              handle={{visibility: 'hover', placement: 'start'}}
+              handle={{revealBehavior: 'adaptive', placement: 'start'}}
             />
           </VStack>
         </Card>
@@ -1062,7 +1062,7 @@ export const ReorderInCard: Story = {
             initial={['Inbox', 'Sent', 'Drafts']}
             pinned={['Sent']}
             listStyle="decimal"
-            handle={{visibility: 'hover', placement: 'start'}}
+            handle={{revealBehavior: 'adaptive', placement: 'start'}}
           />
         </VStack>
       </Card>
@@ -1072,7 +1072,7 @@ export const ReorderInCard: Story = {
     docs: {
       description: {
         story:
-          "With `handle: {visibility: 'hover', placement: 'start'}`, a handle shows on hover and hangs before its row's text. The " +
+          "With `handle: {revealBehavior: 'adaptive', placement: 'start'}`, a handle shows on hover and hangs before its row's text. The " +
           "list takes that room from the card's padding, and its rows move " +
           'in by the room the padding lacks, so the card never cuts a ' +
           "handle. Under outset and bleed, whose rows reach the card's " +

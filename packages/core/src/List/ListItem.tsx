@@ -484,15 +484,18 @@ export function ListItem({
     reorder != null &&
     itemKey != null &&
     (reorder.options.isReorderable?.(itemKey) ?? true);
-  // The handle is the one element reordering adds to a row. It starts or
-  // ends the row's content, unwrapped (ItemTrailingContext): a slot of
-  // its own would be a second element.
-  const rowLabel = restProps['aria-label'];
-  const rowLabelledBy = restProps['aria-labelledby'];
-  const rowAlign = hasHandle ? (align ?? 'center') : undefined;
   // The handle ends the row unless the reorderable places it at the start.
   // The handle reads the rest of its placement from the list.
   const isHandleAtStart = reorder?.options.handle?.placement === 'start';
+  // The handle is the one element reordering adds to a row. At the end of a
+  // row with end content, it joins the end slot. Otherwise it is the row's
+  // own child, at the edge it sits at (ItemTrailingContext), since a slot of
+  // its own would be a second element.
+  const isHandleInEndSlot = hasHandle && !isHandleAtStart && endContent != null;
+  const rowLabel = restProps['aria-label'];
+  const rowLabelledBy = restProps['aria-labelledby'];
+  const rowAlign =
+    hasHandle && !isHandleInEndSlot ? (align ?? 'center') : undefined;
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -519,10 +522,10 @@ export function ListItem({
   );
   const edgeControl = useMemo(
     (): ItemEdgeControl | null =>
-      reorderHandle == null
+      reorderHandle == null || isHandleInEndSlot
         ? null
         : {control: reorderHandle, edge: isHandleAtStart ? 'start' : 'end'},
-    [isHandleAtStart, reorderHandle],
+    [isHandleAtStart, isHandleInEndSlot, reorderHandle],
   );
   // Under a finger, the row's hit target grows where its neighbors leave room.
   const isTouchTarget =
@@ -616,7 +619,16 @@ export function ListItem({
       startContent={startContent}
       label={label}
       description={description}
-      endContent={endContent}
+      endContent={
+        isHandleInEndSlot ? (
+          <>
+            {endContent}
+            {reorderHandle}
+          </>
+        ) : (
+          endContent
+        )
+      }
       onClick={onClick}
       interactiveRef={interactiveRef}
       href={href}

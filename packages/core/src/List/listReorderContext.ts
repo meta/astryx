@@ -55,7 +55,7 @@ export interface ListReorderOptions {
    * shows, and the row edge it sits at.
    */
   readonly handle?: {
-    readonly visibility?: 'always' | 'hover';
+    readonly revealBehavior?: 'always' | 'adaptive';
     readonly placement?: 'start' | 'end';
   };
   /**
@@ -102,7 +102,7 @@ export interface ListReorderHandleProps {
   readonly isInRow?: boolean;
   /**
    * Whether the handle always shows, in a place of its own in the row: the
-   * reorderable's `handle.visibility`, else the collection's own default. A
+   * reorderable's `handle.revealBehavior`, else the collection's own default. A
    * List row's handle reads it from its list (`'always'` by default); a
    * collection that renders the handle itself passes it.
    */
@@ -164,7 +164,7 @@ export interface ListReorderSession {
     density: ListDensity,
   ): StyleXStyles | null;
   /** The room a row without a handle keeps for its neighbours' handles. */
-  roomStyle(list: ListContextValue): StyleXStyles;
+  roomStyle(list: ListContextValue): StyleXStyles | null;
 }
 
 /** How a reorder session finds a collection's rows in its container. */

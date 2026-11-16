@@ -103,11 +103,14 @@ const GRIP_SIZE = '1rem';
 /**
  * How far a hanging handle sits outside its row's content, px: its own side
  * and a small clearance. The grip's edge then sits 8 px from the content.
- * SYNC: List/List.tsx REORDER_GUTTER.
+ * SYNC: lab ListInput/ListInput.tsx and TransferList/TransferList.tsx
+ * REORDER_HANDLE_HANG, which lay out around it.
  */
 const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
 /** The hanging handle's inner margin: it gives back the row's gap. */
 const HANG_GIVE_BACK = `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`;
+/** How far a handle at the row's end reaches into the row's inline inset. */
+const END_REACH = 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))';
 
 /** The grip when the theme maps nothing to `list-reorder-handle`. */
 const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
@@ -194,13 +197,15 @@ const styles = stylex.create({
     },
     marginInlineEnd: {
       default: -REORDER_HANDLE_HANG,
-      '@media (pointer: coarse)': 0,
+      '@media (pointer: coarse)': END_REACH,
     },
   },
   // In its place at the row's end, the handle ends the row, as an end slot
-  // would.
+  // would. It and its focus ring reach into the row's inline inset, never
+  // past it, so a flush row's handle stays inside the clip.
   inRowAtEnd: {
     marginInlineStart: 'auto',
+    marginInlineEnd: END_REACH,
   },
   // Presses on the grip land on the handle.
   grip: {
@@ -285,10 +290,11 @@ export const reorderListStyle = [listStyles.list, reorderLineStyles.list];
 const PADDED_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-2']})`;
 const SPACIOUS_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-3']})`;
 const FLUSH_ROOM = `${REORDER_HANDLE_HANG}px`;
-// As much of a room as the container's padding on that side holds, or all
-// of it outside a container that sets its padding.
+// As much of a room as the container's padding on that side holds. Outside
+// a container that publishes its padding, none: the list's rows move in by
+// the whole room, so nothing reaches past the host.
 const reachOf = (room: string, side: 'start' | 'end') =>
-  `min(${room}, var(--container-padding-inline-${side}, ${room}))`;
+  `min(${room}, var(--container-padding-inline-${side}, 0px))`;
 
 // The list pads the room on the handles' side, and reaches out into its
 // container's padding by as much of it as the padding holds. So its inline
@@ -354,7 +360,11 @@ export function reorderGutterStyle(
   edge: ListEdge,
   density: ListDensity,
 ): StyleXStyles | null {
-  if (handle?.visibility !== 'hover' || edge === 'outset' || edge === 'bleed') {
+  if (
+    handle?.revealBehavior !== 'adaptive' ||
+    edge === 'outset' ||
+    edge === 'bleed'
+  ) {
     return null;
   }
   const room =
@@ -378,28 +388,19 @@ export function reorderGutterStyle(
 const INSET = 'var(--_item-inset-inline)';
 const BLEED_START =
   'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
-const BLEED_END =
-  'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
 // A handle's room in its row: its side and the row's gap after it.
 const IN_ROW_ROOM = `${HANDLE_SIZE}px + ${spacingVars['--spacing-2']}`;
 const COARSE = '@media (pointer: coarse)';
 
-// The room a row that stays put keeps where its neighbours' handles sit in
+// The room a row that stays put keeps where its neighbours' handles start
 // their rows: always, or under a coarse pointer when they show on hover.
 // After a list marker, the room goes after the marker (Item's
 // `--_item-marker-room`), where those handles sit whether or not they show.
 const roomStyles = stylex.create({
   afterMarker: {'--_item-marker-room': `calc(${IN_ROW_ROOM})`},
   shownAtStart: {paddingInlineStart: `calc(${INSET} + ${IN_ROW_ROOM})`},
-  shownAtEnd: {paddingInlineEnd: `calc(${INSET} + ${IN_ROW_ROOM})`},
   coarseAtStart: {
     paddingInlineStart: {
-      default: INSET,
-      [COARSE]: `calc(${INSET} + ${IN_ROW_ROOM})`,
-    },
-  },
-  coarseAtEnd: {
-    paddingInlineEnd: {
       default: INSET,
       [COARSE]: `calc(${INSET} + ${IN_ROW_ROOM})`,
     },
@@ -407,17 +408,10 @@ const roomStyles = stylex.create({
   bleedShownAtStart: {
     paddingInlineStart: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
   },
-  bleedShownAtEnd: {paddingInlineEnd: `calc(${BLEED_END} + ${IN_ROW_ROOM})`},
   bleedCoarseAtStart: {
     paddingInlineStart: {
       default: BLEED_START,
       [COARSE]: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
-    },
-  },
-  bleedCoarseAtEnd: {
-    paddingInlineEnd: {
-      default: BLEED_END,
-      [COARSE]: `calc(${BLEED_END} + ${IN_ROW_ROOM})`,
     },
   },
 });
@@ -436,36 +430,31 @@ function placementIn(list: ListContextValue | null) {
     isAfterMarker || list?.edge === 'outset' || list?.edge === 'bleed';
   // Shown handles are found without hovering a row, so a List shows them
   // unless the reorderable hides them.
-  const isAlwaysVisible = (handle?.visibility ?? 'always') === 'always';
+  const isAlwaysVisible = (handle?.revealBehavior ?? 'always') === 'always';
   return {isAtEnd, isAfterMarker, isInRow, isAlwaysVisible};
 }
 
 /**
  * The style of a reorderable List row without a handle (ListItem applies
- * it): the room its neighbours' handles take, so every label lines up.
+ * it): where the handles start their rows, the room they take, so every
+ * label lines up. Null where they end their rows: a row there keeps its
+ * content where it is.
  */
-export function reorderRoomStyle(list: ListContextValue): StyleXStyles {
+export function reorderRoomStyle(list: ListContextValue): StyleXStyles | null {
   const {isAtEnd, isAfterMarker, isInRow, isAlwaysVisible} = placementIn(list);
-  // Whether the handles take a place in their rows for every pointer.
-  const areHandlesInRow = isAlwaysVisible || isInRow;
-  const edge = isAtEnd ? 'end' : 'start';
-  const isBleed = list.edge === 'bleed';
+  if (isAtEnd) {
+    return null;
+  }
   if (isAfterMarker) {
     // A custom property alone is not a StyleXStyles value; the array is.
     return [roomStyles.afterMarker] as StyleXStyles;
   }
-  if (isBleed) {
-    if (edge === 'end') {
-      return areHandlesInRow
-        ? roomStyles.bleedShownAtEnd
-        : roomStyles.bleedCoarseAtEnd;
-    }
+  // Whether the handles take a place in their rows for every pointer.
+  const areHandlesInRow = isAlwaysVisible || isInRow;
+  if (list.edge === 'bleed') {
     return areHandlesInRow
       ? roomStyles.bleedShownAtStart
       : roomStyles.bleedCoarseAtStart;
-  }
-  if (edge === 'end') {
-    return areHandlesInRow ? roomStyles.shownAtEnd : roomStyles.coarseAtEnd;
   }
   return areHandlesInRow ? roomStyles.shownAtStart : roomStyles.coarseAtStart;
 }

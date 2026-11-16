@@ -3,7 +3,7 @@
 /**
  * @file ListReorderHandleOptions.interaction.browser.spec.ts
  * @input The built List "Reorder Handle Options" story with its
- *   `visibility` and `placement` args, with a mouse and in the touch
+ *   `revealBehavior` and `placement` args, with a mouse and in the touch
  *   phone context
  * @output Browser proofs of createReorderable's `handle` option in List. A
  *   handle that always shows sits in its row, at the edge `placement` names,
@@ -80,7 +80,7 @@ async function openOptions(
   placement: 'start' | 'end',
 ) {
   await openStory(page, origin, STORY, {
-    visibility: isAlwaysVisible ? 'always' : 'hover',
+    revealBehavior: isAlwaysVisible ? 'always' : 'adaptive',
     placement,
   });
   await page
