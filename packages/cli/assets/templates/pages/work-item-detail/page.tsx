@@ -898,6 +898,7 @@ export default function WorkItemDetailTemplate() {
             {isNarrow && (
               <>
                 <Divider />
+                <Heading level={2}>Task details</Heading>
                 <DetailsPanel fields={fields} />
               </>
             )}

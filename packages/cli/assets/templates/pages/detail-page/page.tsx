@@ -644,7 +644,12 @@ export default function DetailPage2Template() {
             <TimelineSection />
             {/* Narrow screens: the order details follow the main column
                 instead of squeezing beside it. */}
-            {isNarrow && <PanelContent />}
+            {isNarrow && (
+              <VStack gap={4}>
+                <Heading level={2}>Order details</Heading>
+                <PanelContent />
+              </VStack>
+            )}
           </VStack>
         </LayoutContent>
       }
