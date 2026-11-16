@@ -29,7 +29,7 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Selector} from '@astryxdesign/core/Selector';
-import {Tooltip} from '@astryxdesign/core/Tooltip';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
@@ -43,7 +43,6 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   InboxIcon,
-  InformationCircleIcon,
   ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 
@@ -400,13 +399,7 @@ function BoardColumn({
                   label={`${meta.title} status`}
                 />
                 <Heading level={4}>{meta.title}</Heading>
-                <Tooltip content={meta.tooltip}>
-                  <Icon
-                    icon={InformationCircleIcon}
-                    size="sm"
-                    color="secondary"
-                  />
-                </Tooltip>
+                <InfoTip content={meta.tooltip} label={`About ${meta.title}`} />
               </HStack>
               <Text type="supporting" color="secondary" hasTabularNumbers>
                 {count}
