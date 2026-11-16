@@ -26,6 +26,7 @@
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
  * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
  * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
+ * - press-through-recipes: Flags press trackers, pressed state, press attributes and :active arms outside the three press recipes (a momentary control, a row-wide target, a cell or menu row)
  * - no-comment-provenance: Flags record and claim ids, pull request and issue references, date stamps, and quoted MUST/SHALL text in source comments (the record links the code; `pnpm specs:for <path>` finds it)
  * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
@@ -71,6 +72,7 @@ import requireTableSectionRule from './require-table-section.js';
 import noLightDarkOutsideThemeRule from './no-light-dark-outside-theme.js';
 import noRawColorRule from './no-raw-color.js';
 import noRawPrivateAttributeRule from './no-raw-private-attribute.js';
+import pressThroughRecipesRule from './press-through-recipes.js';
 import noPreventDefaultInPassiveReactHandlerRule from './no-prevent-default-in-passive-react-handler.js';
 
 // =============================================================================
@@ -378,6 +380,7 @@ const plugin = {
     'no-light-dark-outside-theme': noLightDarkOutsideThemeRule,
     'no-raw-color': noRawColorRule,
     'no-raw-private-attribute': noRawPrivateAttributeRule,
+    'press-through-recipes': pressThroughRecipesRule,
     'no-prevent-default-in-passive-react-handler':
       noPreventDefaultInPassiveReactHandlerRule,
     'no-comment-provenance': noCommentProvenanceRule,
