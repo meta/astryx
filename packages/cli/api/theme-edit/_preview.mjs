@@ -119,6 +119,36 @@ function groupOf(name, category) {
 }
 
 /**
+ * A container's or a layout's props on the sheet, with two lines of sample
+ * text when its doc suggests no children (a section, a form layout): empty,
+ * it draws nothing of the theme. The part data reads the doc's own props.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {Record<string, unknown>} props
+ * @returns {Record<string, unknown>}
+ */
+function withSampleContent(project, name, props) {
+  const info = project.components[name];
+  const kids = info?.props?.children;
+  if (
+    'children' in props ||
+    !kids ||
+    kids.slots?.length ||
+    !/ReactNode/.test(String(kids.type ?? '')) ||
+    !/^(container|layout)$/i.test(String(info.category ?? '')) ||
+    !project.components.Text
+  )
+    return props;
+  return {
+    ...props,
+    children: [
+      {__element: 'Text', props: {}, children: ['Content']},
+      {__element: 'Text', props: {}, children: ['More content']},
+    ],
+  };
+}
+
+/**
  * Items of the theme-building page: each component once per variant
  * (overlays open), the sample page, and template pages
  * whose packages the project has.
@@ -157,7 +187,10 @@ export function showcaseItems(project, group) {
         group: g,
         name,
         label: v.label,
-        tree: inParent({__element: name, props: v.props}),
+        tree: inParent({
+          __element: name,
+          props: withSampleContent(project, name, v.props),
+        }),
         // An overlay shown open is drawn open: Core places a popover,
         // tooltip or hover card only once it is mounted. Any other part, as
         // first shown, is shown open with the overlays too when a press

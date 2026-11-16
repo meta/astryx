@@ -640,12 +640,9 @@ export const SHEET_CSS = [
   '.cs-group-name{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}',
   '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
-  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:hidden;max-height:340px}',
+  // A cell is as tall as what it holds, so every variant is drawn whole.
+  '.cs-cell{border:1px dashed #8885;padding:10px;overflow:hidden}',
   '.cs-pages .cs-cell{max-height:none}',
-  // An overlay drawn open is shown at the height of what it holds (a date
-  // range's calendar, a command palette), up to the height of the window a
-  // picture is taken in (900px), as a person sees it on a screen.
-  '.cs-open-group .cs-cell{max-height:900px}',
   // A panel that fills the window (a drawer, a bottom sheet, a lightbox)
   // takes an equal share of that height for each of its examples, so every
   // example is drawn, never one panel filling the cell.
@@ -653,7 +650,16 @@ export const SHEET_CSS = [
   '.cs-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}',
   '.cs-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}',
   '.cs-label{font:10px ui-monospace,monospace;opacity:.5}',
-  '.cs-item{max-width:100%;position:relative}',
+  // An item takes a share of its row, so a part as wide as its container
+  // (a divider, a form layout) is drawn at a width, never at none.
+  '.cs-item{max-width:100%;position:relative;flex:1 1 200px;min-width:0}',
+  // A part that needs a row's width (a table, code, an app shell) takes the
+  // whole row of the grid, so its text is never cut or wrapped mid-word.
+  '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
+  // A picture is one moment: a part that loops an animation (a skeleton's
+  // shimmer, a pulsing dot) is drawn at rest, never at a frame where it is
+  // faint or gone.
+  '.cs-page *,.cs-page *::before,.cs-page *::after{animation:none!important}',
   // Overlays shown open in place: a layer the page would open with script
   // (its root alone: a hidden helper popover inside it stays hidden), and a
   // panel over the page (a drawer, a bottom sheet, a lightbox) at the size
@@ -669,11 +675,9 @@ export const SHEET_CSS = [
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
   // The overlays section's own page (sheet-overlays.png): five to a row,
-  // each cell at most 300px tall (a panel over the page cropped to its
-  // top), so its picture stays under about 1600px, the small overlays
-  // first. The full sheet keeps each at a window's height.
+  // a panel over the page cropped to its top at 260px, the small overlays
+  // first.
   '.cs-section-overlays .cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
-  '.cs-section-overlays .cs-open-group .cs-cell{max-height:300px}',
   '.cs-section-overlays .cs-open-group .cs-cell dialog{max-height:260px!important}',
   // The states section: one row per control, one column per state.
   '.cs-states-grid{display:grid;gap:10px;padding:14px}',

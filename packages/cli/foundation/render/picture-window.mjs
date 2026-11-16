@@ -37,12 +37,33 @@ function mediaLength(text) {
 }
 
 /**
+ * How the picture's window answers the features a display mode sets: no
+ * forced colors (a high-contrast mode), no contrast preference, colors not
+ * inverted, a color screen. A bare `(name)` holds when its value is not the
+ * feature's off value.
+ */
+const DESKTOP_DISPLAY = Object.freeze({
+  'forced-colors': 'none',
+  'prefers-contrast': 'no-preference',
+  'inverted-colors': 'none',
+  monochrome: '0',
+});
+
+/** The off value of each display feature, which a bare `(name)` does not match. */
+const DISPLAY_OFF = Object.freeze({
+  'forced-colors': 'none',
+  'prefers-contrast': 'no-preference',
+  'inverted-colors': 'none',
+  monochrome: '0',
+});
+
+/**
  * Whether one feature of a media query holds in the picture's window: its
- * width and height (with min- and max-, or a range), its orientation, and a
- * mouse for the pointer. Any other feature holds, as in the chart document
- * (no motion).
+ * width and height (with min- and max-, or a range), its orientation, a
+ * mouse for the pointer, and its display (DESKTOP_DISPLAY). Null for a
+ * feature the window does not judge (motion, the color scheme).
  * @param {string} feature what the parentheses hold
- * @returns {boolean}
+ * @returns {boolean | null}
  */
 function featureHolds(feature) {
   const {width, height} = PICTURE_WINDOW;
@@ -55,16 +76,23 @@ function featureHolds(feature) {
       name
     ];
     if (pointer != null) return value == null || value.trim() === pointer;
+    const display = /** @type {Record<string, string>} */ (DESKTOP_DISPLAY)[
+      name
+    ];
+    if (display != null)
+      return value == null
+        ? display !== /** @type {Record<string, string>} */ (DISPLAY_OFF)[name]
+        : value.trim() === display;
     if (name === 'orientation')
       return (
         value == null ||
         value.trim() === (width >= height ? 'landscape' : 'portrait')
       );
     const dim = /^(min-|max-)?(width|height)$/.exec(name);
-    if (!dim) return true;
+    if (!dim) return null;
     if (value == null) return true;
     const at = mediaLength(value);
-    if (Number.isNaN(at)) return true;
+    if (Number.isNaN(at)) return null;
     const own = size[dim[2]];
     return dim[1] === 'min-'
       ? own >= at
@@ -75,7 +103,7 @@ function featureHolds(feature) {
   // A range: `width < 640px`, `640px <= width`, `400px < width <= 700px`.
   const parts = feature.split(/(<=|>=|<|>|=)/).map(x => x.trim());
   const at = parts.findIndex(x => x === 'width' || x === 'height');
-  if (at < 0) return true;
+  if (at < 0) return null;
   const own = size[parts[at]];
   /** @param {number} a @param {string} op @param {number} b */
   const holds = (a, op, b) =>
@@ -104,11 +132,14 @@ function featureHolds(feature) {
  * Whether a media query matches in the window a picture is taken in
  * (PICTURE_WINDOW, a desktop's, with a mouse): each comma-separated query
  * matches when its media type is the screen's and every feature holds
- * (featureHolds); `not` turns it round.
+ * (featureHolds); `not` turns it round. A feature the window does not judge
+ * holds, as in the chart document (no motion); with `sure`, a query that
+ * holds one never matches, so only what the window answers counts.
  * @param {string} query
+ * @param {{sure?: boolean}} [options]
  * @returns {boolean}
  */
-export function desktopMatches(query) {
+export function desktopMatches(query, {sure = false} = {}) {
   return String(query)
     .split(',')
     .some(part => {
@@ -116,11 +147,11 @@ export function desktopMatches(query) {
         part,
       )?.[1];
       const screen = type == null || !/^(print|speech)$/i.test(type);
-      const all =
-        screen &&
-        [...part.matchAll(/\(([^()]*)\)/g)].every(([, feature]) =>
-          featureHolds(feature),
-        );
+      const answers = [...part.matchAll(/\(([^()]*)\)/g)].map(([, feature]) =>
+        featureHolds(feature),
+      );
+      if (sure && answers.includes(null)) return false;
+      const all = screen && answers.every(a => a !== false);
       return /^\s*not\s/.test(part) ? !all : all;
     });
 }

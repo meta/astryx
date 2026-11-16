@@ -130,9 +130,13 @@ describe('the open states page and something of yours at its name', () => {
 
 describe('open overlays drawn whole', () => {
   it(
-    'the overlays section sizes its cells to a window, and a submenu opens with rows',
+    'the overlays section sizes its panels to a window, and a submenu opens with rows',
     async () => {
-      expect(SHEET_CSS).toContain('.cs-open-group .cs-cell{max-height:900px}');
+      // A cell grows to what it holds; a panel over the page in it takes a
+      // window's height, shared among its examples.
+      expect(SHEET_CSS).toContain(
+        '.cs-open-group .cs-cell dialog{max-height:calc((860px - (var(--cs-examples, 1) - 1) * 34px) / var(--cs-examples, 1))!important}',
+      );
       const project = await openProject(cwd);
       const props = /** @type {any} */ (
         demoProps(project, 'DropdownMenuSubMenu')

@@ -114,13 +114,18 @@ export function cutCss(css, used, options = {}) {
     if (kept.length && options.states) {
       const real = rule.selector;
       rule.selector = withDrawnStates(real);
-      // A state rule behind a media query the picture's window answers
-      // true (`(hover: hover)`, Core's own hover wash) applies to an
+      // A state rule behind media queries the picture's window answers
+      // true, each feature of them (`(hover: hover)`, Core's own hover wash;
+      // never `(forced-colors: active)`, nor a feature it does not judge),
+      // applies to an
       // element drawn in that state, whatever the browser taking the
       // picture reports about its pointer: a copy with the drawn states
       // alone follows the outermost such query, in the same place.
       const guards = mediaGuards(rule);
-      if (guards.length && guards.every(at => desktopMatches(at.params))) {
+      if (
+        guards.length &&
+        guards.every(at => desktopMatches(at.params, {sure: true}))
+      ) {
         const drawn = drawnStatesOnly(real);
         if (drawn) {
           const copy = rule.clone({selector: drawn});
