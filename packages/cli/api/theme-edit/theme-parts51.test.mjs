@@ -58,9 +58,9 @@ describe("a part in another component's place", () => {
     // Core paints a ghost button transparent at rest.
     expect(at('--color-neutral')).not.toContain('--when variant:ghost');
     expect(at('--color-overlay-pressed')).not.toContain('--when variant:ghost');
-    // The current page's fill is a condition of its own.
+    // The current page's fill is a condition of its own, a state set names.
     expect(at('--color-neutral').join(' ')).toMatch(
-      /variant=ghost aria-current=page/,
+      /--when variant:ghost --state current/,
     );
     expect(at('--color-neutral')).toContain('--when variant:secondary');
   }, 240_000);

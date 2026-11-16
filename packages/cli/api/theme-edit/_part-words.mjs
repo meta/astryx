@@ -16,7 +16,7 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
-  [/\bdividers?\b/, {on: 'divider'}],
+  [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},

@@ -103,8 +103,14 @@ describe('the direction guard', () => {
     'a way asked of a line never adds one where Core drew none',
     async test => {
       needsBases(test);
+      // (Nor a width that reaches the controls inside: the cells draw the
+      // row line at a width Core sets per render, so nothing is written
+      // and the answer says why.)
       const r = await answer('make the table row dividers thicker');
-      expect(r.first).toEqual(['set n --border-width 2px --on table-row']);
+      expect(r.all).toEqual([]);
+      expect(r.text).toMatch(
+        /table-row dividers are drawn by .*per render; the editor can't change that width without touching the borders of the controls inside/,
+      );
       const card = await answer('make card borders thicker');
       // (A width only: the card variants that draw no border stay without.)
       for (const c of card.all) expect(c).not.toMatch(/set n border '/);

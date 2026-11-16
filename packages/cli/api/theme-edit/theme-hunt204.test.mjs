@@ -144,8 +144,11 @@ describe('all borders in one mode', () => {
   it('gives every step, the new lines see-through in the other mode', async () => {
     const w = writes(await how('ne', 'make all borders red in dark mode'));
     expect(w).toContain("set ne --color-border '#dc2626' --mode dark");
+    // A new line on a part with none is a ring at its edge that takes no
+    // room (a border would take its width in light mode too), before the
+    // shadow the part draws.
     expect(w).toContain(
-      "set ne border '1px solid light-dark(transparent, #dc2626)' --on dialog",
+      "set ne box-shadow 'inset 0 0 0 1px light-dark(transparent, #dc2626), var(--shadow-high)' --on dialog",
     );
     // A line's width and style never take --mode.
     expect(

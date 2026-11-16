@@ -16,13 +16,16 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {
+  INPUT_DECLARATION_FILES,
+  inputFieldsFrom,
+} from '../theme/build/input-fields.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {
   collectThemingTargets,
   collectThemingVars,
 } from '../../foundation/discovery/theming-targets.mjs';
-import {parse as parseModule} from '@babel/parser';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {
@@ -43,24 +46,16 @@ import {
  * @property {string} cacheDir - node_modules/.cache/astryx-theme/<coreKey>
  * @property {any} core - Core's theme module.
  * @property {NodeJS.Require} req - Resolves packages from the project.
- * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[]} targets
- * @property {Map<string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget>} target
+ * @property {ProjectTarget[]} targets
+ * @property {Map<string, ProjectTarget>} target
  * @property {Record<string, ComponentInfo>} components
  * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingVar[]} vars - The public custom properties Core's components read.
- * @property {InputFields | null} inputFields - The fields Core's theme input takes, read from its type declarations; null when they are not installed.
+ * @property {import('../theme/build/input-fields.mjs').InputFields | null} inputFields - The fields Core's theme input takes, read from its type declarations; null when they are not installed.
  */
 
 /**
- * The fields Core's `defineTheme()` input takes, read from the type
- * declarations of the installed Core, so the editor names a misspelled
- * field by the fields that Core has.
- * @typedef {object} InputFields
- * @property {string[]} theme - A theme input's fields (and a defined theme's, which a spread carries).
- * @property {string[]} surface - An `onDark`/`onLight` block's fields.
- * @property {string[]} typography - The typography block's fields.
- * @property {string[]} role - A typography role's fields.
- * @property {string[]} scale - The type scale's fields.
- * @property {string[]} levels - The heading levels a role's `weights` takes.
+ * A theming target, with the value Core writes for each of its states.
+ * @typedef {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget & {stateValues: Record<string, string>}} ProjectTarget
  */
 
 /**
@@ -355,7 +350,7 @@ export async function openProject(cwd) {
   );
   // Reading every component doc takes a second; it is fixed per Core install.
   const docsFile = path.join(cacheDir, 'docs.json');
-  /** @type {{version: number, targets: ThemeProject['targets'], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
+  /** @type {{version: number, targets: import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
     const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
@@ -379,7 +374,20 @@ export async function openProject(cwd) {
       // A read-only node_modules: read the docs again next time.
     }
   }
-  const {targets, components, vars} = docs;
+  const {components, vars} = docs;
+  // The value Core writes for each state a target lists: a state that names
+  // a boolean prop of its component (toggle-button's isPressed) is that
+  // prop's attribute, written "true" when on; any other is a bare state,
+  // written as its own name (parseStyleKey's two key forms).
+  const targets = docs.targets.map((/** @type {any} */ t) => ({
+    ...t,
+    stateValues: Object.fromEntries(
+      (t.states ?? []).map((/** @type {string} */ st) => [
+        st,
+        components[t.component]?.props?.[st]?.type === 'boolean' ? 'true' : st,
+      ]),
+    ),
+  }));
   const project = {
     cwd: key,
     coreDir,
@@ -399,72 +407,20 @@ export async function openProject(cwd) {
 }
 
 /**
- * The fields Core's theme input takes, from the type declarations beside
- * its theme module; null when a declaration file is missing or does not
- * parse.
- * @param {string} themeDir the folder of Core's built theme module
- * @returns {InputFields | null}
+ * The fields Core's theme input takes, read from the type declarations in
+ * the folder of its built theme module; null when one cannot be read.
+ * @param {string} themeDir
  */
 function readInputFields(themeDir) {
-  /** @type {Map<string, any>} */
-  const interfaces = new Map();
-  for (const file of ['defineTheme.d.ts', 'onMediaTokens.d.ts', 'types.d.ts']) {
-    /** @type {any} */
-    let ast;
-    try {
-      ast = parseModule(fs.readFileSync(path.join(themeDir, file), 'utf8'), {
-        sourceType: 'module',
-        plugins: [['typescript', {dts: true}]],
-      });
-    } catch {
-      return null;
-    }
-    for (const node of ast.program.body) {
-      const decl =
-        node.type === 'ExportNamedDeclaration' ? node.declaration : node;
-      if (decl?.type === 'TSInterfaceDeclaration')
-        interfaces.set(decl.id.name, decl.body.body);
-    }
-  }
-  /** @param {any[] | undefined} members */
-  const names = members =>
-    (members ?? [])
-      .filter(m => m.type === 'TSPropertySignature')
-      .map(m => m.key?.name ?? m.key?.value)
-      .filter(k => typeof k === 'string');
-  /** @param {string} iface @param {string} name */
-  const member = (iface, name) =>
-    (interfaces.get(iface) ?? []).find(
-      (/** @type {any} */ m) => (m.key?.name ?? m.key?.value) === name,
-    );
-  const theme = names(interfaces.get('DefineThemeInput'));
-  const surface = names(interfaces.get('OnMediaOverrides'));
-  const typography = names(interfaces.get('TypographyConfig'));
-  const role = names(interfaces.get('TypographyRole'));
-  if (!theme.length || !surface.length || !typography.length || !role.length)
-    return null;
-  const scaleType = member('TypographyConfig', 'scale')?.typeAnnotation
-    ?.typeAnnotation;
-  /** The numeric literals a type names (the levels of `Record<1 | 2, …>`). @param {any} node @returns {string[]} */
-  const numbers = node => {
-    if (!node || typeof node !== 'object') return [];
-    if (
-      node.type === 'TSLiteralType' &&
-      node.literal?.type === 'NumericLiteral'
-    )
-      return [String(node.literal.value)];
-    return Object.entries(node)
-      .filter(([k]) => k !== 'loc' && k !== 'start' && k !== 'end')
-      .flatMap(([, v]) => (Array.isArray(v) ? v.flatMap(numbers) : numbers(v)));
-  };
-  return {
-    theme: [...new Set([...theme, ...names(interfaces.get('DefinedTheme'))])],
-    surface,
-    typography,
-    role,
-    scale: scaleType?.type === 'TSTypeLiteral' ? names(scaleType.members) : [],
-    levels: numbers(member('TypographyRole', 'weights')?.typeAnnotation),
-  };
+  return inputFieldsFrom(
+    INPUT_DECLARATION_FILES.map(file => {
+      try {
+        return fs.readFileSync(path.join(themeDir, file), 'utf8');
+      } catch {
+        return null;
+      }
+    }),
+  );
 }
 
 /**
