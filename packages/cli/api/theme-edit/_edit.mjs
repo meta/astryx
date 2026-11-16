@@ -7241,11 +7241,14 @@ async function changeOnce(
         !x.when &&
         !x.state,
     );
+    // (A page color the theme already sets is kept, and offered no line.)
     notes.push(
       `${pinned ? 'the page background keeps the color you set for it' : "the page background follows it too, at the official theme's page shade of this gray"}${
-        modes.includes('light')
-          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
-          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
+        pinned
+          ? ''
+          : modes.includes('light')
+            ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
+            : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
       }`,
     );
   }

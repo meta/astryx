@@ -586,12 +586,22 @@ function changeBlocks(r) {
   const unchanged = /** @type {any} */ (d.notes ?? []).some(
     (/** @type {string} */ n) => n.startsWith('no change: '),
   );
+  // A dial step on a part (`corners large --on card`) says what it drew
+  // there, when that is a value or two: a part's own scale can give a step
+  // another size than the dial's help names for the whole theme.
+  const stepOn = d.action === 'set' && s.source === 'dial' ? s.on : null;
+  const drawnOn = stepOn
+    ? /** @type {string[]} */ (/** @type {any} */ (d).styled ?? [])
+        .filter(x => x.startsWith(`${stepOn}: `))
+        .map(x => x.slice(stepOn.length + 2))
+    : [];
+  const drawnAs = drawnOn.length <= 2 ? drawnOn : [];
   const done =
     unchanged && d.action === 'set'
       ? `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-        : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+        : `[ok] ${d.theme}: ${d.action === 'set' ? `${describe(s)}${drawnAs.length ? ` (drawn as ${drawnAs.join(', ')})` : ''}` : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
