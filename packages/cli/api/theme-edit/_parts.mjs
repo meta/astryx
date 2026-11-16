@@ -1398,11 +1398,18 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     // that marks the place with a runtime state of its own (a selected tab)
     // is conditioned by that state already.
     const ownState = Object.keys(dataAttrs).some(k => states.has(k));
-    const context = ownState
-      ? []
-      : [...attrs.matchAll(/\b(aria-(?:current|pressed|expanded))="([^"]*)"/g)]
-          .filter(x => x[2] !== 'false')
-          .map(x => `${x[1]}=${x[2]}`);
+    // (Open is the part's own state, never a place another component puts
+    // it: a submenu's row is highlighted while its flyout is open, and open
+    // too.)
+    const context = [
+      ...attrs.matchAll(
+        ownState
+          ? /\b(aria-expanded)="([^"]*)"/g
+          : /\b(aria-(?:current|pressed|expanded))="([^"]*)"/g,
+      ),
+    ]
+      .filter(x => x[2] !== 'false')
+      .map(x => `${x[1]}=${x[2]}`);
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
