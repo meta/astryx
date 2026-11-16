@@ -7,8 +7,8 @@
  *   icon tokens on the theme root to values chosen for the page
  * @output Real-Chromium evidence that a media surface resolves its secondary
  *   text and icon colors itself, so the page's mapping does not reach it, and
- *   both meet WCAG 2.2 contrast on the surface (text 4.5:1, SC 1.4.3; icons
- *   3:1, SC 1.4.11)
+ *   both meet WCAG 2.2 contrast against the surface's own background token
+ *   (text 4.5:1, SC 1.4.3; icons 3:1, SC 1.4.11)
  * @position Browser evidence for the media surface's scheme-dependent tokens
  */
 
@@ -61,15 +61,6 @@ for (const pageMode of ['light', 'dark'] as const) {
             ? values.slice(0, 3).map(value => value * 255)
             : values.slice(0, 3);
         };
-        const alpha = (color: string): number => {
-          if (color === 'transparent') return 0;
-          const values = color.match(/[\d.]+/g)?.map(Number) ?? [];
-          const slash = color.includes('/');
-          if (color.startsWith('rgba(') || slash) {
-            return values[3] ?? 1;
-          }
-          return 1;
-        };
         const luminance = ([r, g, b]: number[]): number => {
           const linear = (value: number) => {
             const c = value / 255;
@@ -81,25 +72,26 @@ for (const pageMode of ['light', 'dark'] as const) {
           const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
           return (hi + 0.05) / (lo + 0.05);
         };
-        let host: Element | null = element;
-        let background = 'transparent';
-        while (host != null) {
-          const color = getComputedStyle(host).backgroundColor;
-          if (alpha(color) > 0) {
-            background = color;
-            break;
-          }
-          host = host.parentElement;
-        }
-        const probe = (token: string) => {
+        // The surface's own background, resolved inside it. A story's
+        // backdrop can follow the page instead of the surface.
+        const resolved = (
+          property: 'color' | 'backgroundColor',
+          token: string,
+        ) => {
           const span = document.createElement('span');
-          span.style.color = `var(${token})`;
+          span.style[property] = `var(${token})`;
           span.textContent = 'probe';
           element.append(span);
-          const color = getComputedStyle(span).color;
+          const value = getComputedStyle(span)[property];
           span.remove();
-          return ratio(channels(color), channels(background));
+          return value;
         };
+        const background = resolved(
+          'backgroundColor',
+          '--color-background-surface',
+        );
+        const probe = (token: string) =>
+          ratio(channels(resolved('color', token)), channels(background));
         return {
           text: probe('--color-text-secondary'),
           icon: probe('--color-icon-secondary'),
