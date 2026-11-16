@@ -69,7 +69,9 @@ describe('text a part cuts when narrow', () => {
     const wide = item(240, [{scroll: 2000, client: 100, ellipsis: true}]);
     const clipped = item(240, [{scroll: 400, client: 100, ellipsis: false}]);
     const whole = item(240, [{scroll: 80, client: 80, ellipsis: true}]);
-    run([stepper, wide, clipped, whole]);
+    // A label only a screen reader reads: drawn in no width, never cut.
+    const hidden = item(240, [{scroll: 107, client: 0, ellipsis: true}]);
+    run([stepper, wide, clipped, whole, hidden]);
     expect(stepper.style.minWidth).toBe('281px');
     // Never past the sheet's content box: the cell's padding and border fit
     // inside it.
@@ -77,6 +79,7 @@ describe('text a part cuts when narrow', () => {
     // Text clipped with no ellipsis, or drawn whole, is left as it is.
     expect(clipped.style.minWidth).toBeUndefined();
     expect(whole.style.minWidth).toBeUndefined();
+    expect(hidden.style.minWidth).toBeUndefined();
   });
 
   it('is run by both browsers before the picture', () => {
