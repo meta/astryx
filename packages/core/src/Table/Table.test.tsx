@@ -1453,6 +1453,10 @@ describe('Table', () => {
   });
 
   it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {
+    // Let a page-wide preload an earlier test scheduled finish first.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
     vi.resetModules();
     const loads = tooltipModuleLoads;
     loads.count = 0;
@@ -1465,6 +1469,30 @@ describe('Table', () => {
     await waitFor(() => {
       expect(loads.count).toBe(1);
     });
+  });
+
+  it('schedules one after-paint preload for the page, whatever the number of cells', async () => {
+    async function framesForRows(count: number) {
+      vi.resetModules();
+      const frame = vi.spyOn(window, 'requestAnimationFrame');
+      try {
+        const {Table: FreshTable} = await import('./Table');
+        const rows = Array.from({length: count}, (_, index) => ({
+          ...users[index % users.length],
+          name: `${users[index % users.length].name} ${index}`,
+        }));
+        const {unmount} = render(
+          <FreshTable data={rows} columns={columns} textOverflow="truncate" />,
+        );
+        const calls = frame.mock.calls.length;
+        unmount();
+        return calls;
+      } finally {
+        frame.mockRestore();
+      }
+    }
+    // Forty rows of default cells ask for no more frames than three rows do.
+    expect(await framesForRows(40)).toBe(await framesForRows(3));
   });
 
   it('does not wrap renderCell content in Text when truncating', () => {

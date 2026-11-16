@@ -42,6 +42,19 @@ const tooltipModule = createModuleLoader(
   async () => import('../Tooltip/Tooltip'),
 );
 
+// One after-paint preload per page, whatever the number of texts that ask:
+// it waits for the page's next paint (a frame, then a task), then loads the
+// module once.
+let preload: Promise<{Tooltip: TooltipComponent}> | null = null;
+async function loadAfterNextPaint(): Promise<{Tooltip: TooltipComponent}> {
+  preload ??= new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  }).then(async () => tooltipModule.load());
+  return preload;
+}
+
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
@@ -76,39 +89,25 @@ export function useTruncationTooltipInterest(
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once. Text that measures on
-  // interest has measured nothing yet, so it starts the load after the page's
-  // next paint (a frame, then a task): the page shows first, and the first
-  // hover usually finds the module loaded.
+  // interest has measured nothing yet, so it joins the page's one after-paint
+  // preload: the page shows first, and the first hover usually finds the
+  // module loaded.
   useEffect(() => {
     if ((!isEnabled && measure == null) || tooltip != null) {
       return;
     }
     let isCurrent = true;
-    const load = () => {
-      tooltipModule.load().then(
-        loaded => {
-          if (isCurrent) {
-            setTooltip(() => loaded.Tooltip);
-          }
-        },
-        () => {},
-      );
+    const show = (loaded: {Tooltip: TooltipComponent}) => {
+      if (isCurrent) {
+        setTooltip(() => loaded.Tooltip);
+      }
     };
-    let frame: number | undefined;
-    let task: ReturnType<typeof setTimeout> | undefined;
-    if (isEnabled) {
-      load();
-    } else {
-      frame = requestAnimationFrame(() => {
-        task = setTimeout(load, 0);
-      });
-    }
+    (isEnabled ? tooltipModule.load() : loadAfterNextPaint()).then(
+      show,
+      () => {},
+    );
     return () => {
       isCurrent = false;
-      if (frame !== undefined) {
-        cancelAnimationFrame(frame);
-      }
-      clearTimeout(task);
     };
   }, [isEnabled, measure, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
