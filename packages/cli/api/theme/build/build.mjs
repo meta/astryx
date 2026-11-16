@@ -1574,15 +1574,20 @@ function assertOutputsReplaceable(
     // that source.
     const owner = /** @type {{source?: string}} */ (write).source ?? filePath;
     if (key === sourceKey) {
+      // The module is named after the theme, so a .js source of that name
+      // (brand.js for theme brand) has its built module at its own path:
+      // only another folder takes every output.
+      const free = freeOutPath(writes);
       throw new AstryxError(
-        `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
-        [
-          {
-            // The same build without --out (its --icons-specifier kept).
-            name: beside.name,
-            reason: 'write the outputs beside the source',
-          },
-        ],
+        `The output ${rel(write.dest)} is the theme source itself, so the build does not write it. Build the outputs into another folder with --out${free ? `, such as --out ${rel(free)}` : ''}.`,
+        free && rerun
+          ? [
+              {
+                name: rerun(rel(free)),
+                reason: 'a folder where no output of this build exists yet',
+              },
+            ]
+          : [],
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
@@ -3218,7 +3223,7 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
         ? jitiError
         : new Error(`it threw ${thrownText(jitiError)}`);
     throw new Error(
-      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
+      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}${await baseImportHint(filePath, je)}`,
       {cause: jitiError},
     );
   }
@@ -3399,6 +3404,53 @@ function thrownText(value) {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * The import that fixes a base Core refuses as no theme, when the theme
+ * extends a package's default export or the package as one object: a theme
+ * package exports its themes by name, and the hint names them.
+ * @param {string} filePath
+ * @param {Error} error
+ * @returns {Promise<string>} '' when the base is no such import
+ */
+async function baseImportHint(filePath, error) {
+  if (!/`extends` must be a theme from defineTheme\(\)/.test(error.message))
+    return '';
+  const binding = themeBaseBinding(filePath, 'default');
+  const specifier = binding?.importPath;
+  if (
+    !specifier ||
+    specifier.startsWith('.') ||
+    path.isAbsolute(specifier) ||
+    (binding.exportName !== 'default' && binding.exportName !== '*')
+  )
+    return '';
+  /** @type {string[]} */
+  let themes = [];
+  try {
+    const resolved = createRequire(filePath).resolve(specifier);
+    const mod = await import(pathToFileURL(resolved).href);
+    themes = Object.entries(mod)
+      .filter(
+        ([name, value]) =>
+          name !== 'default' &&
+          value &&
+          typeof value === 'object' &&
+          typeof value.name === 'string' &&
+          value.tokens &&
+          typeof value.tokens === 'object',
+      )
+      .map(([name]) => name);
+  } catch {
+    // The package's exports are not read: the hint names the form only.
+  }
+  const how =
+    binding.exportName === '*'
+      ? `all of ${specifier} as one object`
+      : `the default export of ${specifier}`;
+  const example = themes[0] ?? '<theme>';
+  return `\nThe theme extends ${how}, which is not a theme: a theme package exports its theme by name${themes.length ? ` (${themes.join(', ')})` : ''}. Import it so: import {${example}} from '${specifier}', and extend ${example}.`;
 }
 
 /**
@@ -7205,6 +7257,11 @@ function themeBaseBinding(filePath, exportName) {
           imports.set(spec.local.name, {
             source: node.source.value,
             imported: 'default',
+          });
+        else if (spec.type === 'ImportNamespaceSpecifier')
+          imports.set(spec.local.name, {
+            source: node.source.value,
+            imported: '*',
           });
     addDeclaration(node);
     if (node.type === 'ExportNamedDeclaration') {

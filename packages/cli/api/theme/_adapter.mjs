@@ -1362,19 +1362,35 @@ async function addThemeToAppLocked(slug, cwd, options) {
   const match = await findTheme(slug, {cwd, package: options.package});
   if (!match) {
     const available = await listAvailableThemes(cwd);
+    // A theme the person wrote and built elsewhere is no theme `theme add`
+    // finds by name: the message says where one must live to be added, and
+    // how a built theme is used without it.
     throw new AstryxError(
-      `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.`,
-      themeCommandsFor('theme add', slug, available, cwd).map(
-        ({theme, name}) => ({
-          name,
-          reason:
-            theme.source === 'bundled'
-              ? 'bundled theme'
-              : theme.source === 'local'
-                ? 'local theme'
-                : `provided by ${theme.package}`,
-        }),
-      ),
+      `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.${options.package ? '' : ` A theme you wrote is added by name from ${LOCAL_THEME_ROOT}/<slug>/, where a theme source sits beside a same-stem .doc.mjs descriptor; a theme you built elsewhere needs no add: import its built module and stylesheet in your app, as theme build prints with --detail full.`}`,
+      [
+        ...(options.package
+          ? []
+          : [
+              {
+                name: formatCliCommand(
+                  'docs author-a-theme creating-a-custom-theme',
+                  cwd,
+                ),
+                reason: `how a theme you wrote lives in ${LOCAL_THEME_ROOT}/ so theme add finds it`,
+              },
+            ]),
+        ...themeCommandsFor('theme add', slug, available, cwd).map(
+          ({theme, name}) => ({
+            name,
+            reason:
+              theme.source === 'bundled'
+                ? 'bundled theme'
+                : theme.source === 'local'
+                  ? 'local theme'
+                  : `provided by ${theme.package}`,
+          }),
+        ),
+      ],
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
