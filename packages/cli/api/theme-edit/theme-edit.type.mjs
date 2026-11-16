@@ -92,6 +92,7 @@
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
+ * @property {ThemeEditSetting[]} [alsoRemoved] - On `undo` of a setting listed more than once by hand: the other entries, removed with it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
@@ -104,7 +105,8 @@
  * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail. The text output leads with them, under the status line.
- * @property {number} [missed] - How many parts the theme's own changes still do not reach (show lists each, with the line that reaches it); the text output counts them near its top.
+ * @property {number} [missed] - How many misses the theme's own changes left (show lists each, with the line that reaches it); the text output counts them near its top.
+ * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures

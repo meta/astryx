@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import {seedThemeCache} from './theme-cache.mjs';
 
 const CLI_ROOT = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(CLI_ROOT, 'package.json'));
@@ -53,11 +54,14 @@ export function makeLinkedFixture(prefix, packages) {
   fs.mkdirSync(dir);
   // A fixture that links Core is an app that lists it, as a real app's
   // package.json does: the theme editor finds the app by that listing.
-  if (packages.some(n => n === '@astryxdesign/core' || n === '@astryxdesign'))
+  if (packages.some(n => n === '@astryxdesign/core' || n === '@astryxdesign')) {
     fs.writeFileSync(
       path.join(dir, 'package.json'),
       `${JSON.stringify({private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}}, null, 2)}\n`,
     );
+    // The editor's cache for that Core, built once for the run.
+    seedThemeCache(root);
+  }
   return dir;
 }
 

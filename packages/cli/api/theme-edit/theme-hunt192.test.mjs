@@ -117,16 +117,14 @@ const save = settings =>
 describe('a saved property name in another form', () => {
   for (const thing of ['background color', 'Background-Color']) {
     it(
-      `"${thing}": the set line replaces the entry and the theme loads`,
+      `"${thing}": read as background-color, and saved so by the next change`,
       async () => {
         save([{thing, value: 'red', source: 'property', on: 'card'}]);
-        const r = await cli([...ED, 'show', 't']);
-        expect(r.error).toBeTruthy();
-        const set = (r.suggestions ?? []).find((/** @type {any} */ x) =>
-          x.name.includes(' editor set t '),
+        expect((await cli([...ED, 'show', 't'])).error).toBeUndefined();
+        const r = await cli([...ED, 'set', 't', 'corners', 'pill']);
+        expect(JSON.stringify(r.data.notes)).toContain(
+          'read as background-color',
         );
-        expect(set.reason).toBe('or set the value it holds, as set reads it');
-        expect((await follow(set.name)).data).toBeTruthy();
         expect(data().settings).toEqual([
           {
             thing: 'background-color',
@@ -134,6 +132,7 @@ describe('a saved property name in another form', () => {
             source: 'property',
             on: 'card',
           },
+          {thing: 'corners', value: 'pill', source: 'dial'},
         ]);
         expect((await cli([...ED, 'show', 't'])).error).toBeUndefined();
       },

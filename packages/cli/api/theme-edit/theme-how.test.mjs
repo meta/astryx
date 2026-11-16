@@ -299,8 +299,9 @@ const QUESTIONS = [
   [
     'disabled buttons look too faded',
     {
-      top: /^set q opacity 0\.8 --on button --state disabled$/,
-      adds: /aria-disabled.*opacity=0\.8/,
+      // (Less faded from the 0.5 Core draws disabled: halfway to 1.)
+      top: /^set q opacity 0\.75 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.75/,
     },
   ],
   [
@@ -356,8 +357,10 @@ const QUESTIONS = [
   [
     'border color of inputs should be gray',
     {
-      top: /^set q border-color '#9ca3af' --on inputs$/,
-      adds: /text-input\.base\.borderColor=#9ca3af/,
+      // (Gray is the theme's own grays: neutral's shade nearest the
+      // usual gray.)
+      top: /^set q border-color '#9e9e9e' --on inputs$/,
+      adds: /text-input\.base\.borderColor=#9e9e9e/,
     },
   ],
   [
@@ -1727,10 +1730,11 @@ const QUESTIONS_3 = [
     },
   ],
   [
-    'Can you please make the context menu darker? Thanks!',
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    'Can you please make the trigger menu darker? Thanks!',
     // A part Core draws only once a press opens it has no fill read: the
     // answer asks for a color.
-    {top: null, text: /has not read the fill of context-menu/},
+    {top: null, text: /has not read the fill of trigger-menu/},
   ],
   [
     'make inputs taller (44px)',
@@ -2306,8 +2310,11 @@ const QUESTIONS_G = [
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
   ['carrd rounder', {top: /^set q corners more --on card$/}],
   [
+    // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
-    {top: /^set q --color-border '#e5e7eb' --on divider$/},
+    {
+      top: /^set q --color-border '#e5e7eb' --on divider && set q --color-border-emphasized '#e5e7eb' --on divider$/,
+    },
   ],
   // a CSS property named in the question is set as named
   [
@@ -2984,7 +2991,12 @@ const QUESTIONS_I = [
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
-  ['divider color red', {top: /^set q --color-border '#dc2626' --on divider$/}],
+  [
+    'divider color red',
+    {
+      top: /^set q --color-border '#dc2626' --on divider && set q --color-border-emphasized '#dc2626' --on divider$/,
+    },
+  ],
   ['make the divider 2px', {top: /^set q --border-width 2px --on divider$/}],
   // typography and complaints
   [
@@ -4315,13 +4327,14 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('context-menu', {cwd, theme: 'q'});
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    const {data} = await themeEditHow('trigger-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
     expect(data.unrecorded.reason).toMatch(
-      /what context-menu reads is unknown/,
+      /what trigger-menu reads is unknown/,
     );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on context-menu",
+      "set q background-color '#f3f4f6' --on trigger-menu",
     );
   });
 

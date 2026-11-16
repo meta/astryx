@@ -46,7 +46,7 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
-import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup} from './layers.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -445,10 +445,15 @@ async function drawCharts(markup, Page) {
   };
 }
 
-/** Parts the page asked to be drawn open, in the order asked, each with whether it is drawn as nothing when nothing opens. @type {Array<{element: unknown, ifOpen: boolean}>} */
+/**
+ * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
+ * as nothing when nothing opens), or `mounted`, as the browser shows the part
+ * once it runs, nothing opened.
+ * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean}>}
+ */
 const layers = [];
-/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, ifOpen = false) =>
-  layerPlaceholder(layers.push({element, ifOpen: Boolean(ifOpen)}) - 1);
+/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted'} */ how = false) =>
+  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted'}) - 1);
 
 /**
  * Run `fn` with a document in place, as a browser page has one, then put
@@ -502,7 +507,7 @@ async function drawLayers(markup, server) {
   const g = /** @type {any} */ (globalThis);
   /** @type {string[]} */
   const drawings = [];
-  for (const {element, ifOpen} of layers) {
+  for (const {element, ifOpen, mounted} of layers) {
     /** @type {string | null} */
     let out = null;
     if (client) {
@@ -511,17 +516,24 @@ async function drawLayers(markup, server) {
       const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
       try {
         flushSync(() => root.render(element));
-        // Its overlays shown open mount, and each popup a press opens opens.
-        await openLayerMarkup(host, flushSync);
-        const open = [...g.document.querySelectorAll('[data-astryx-layer-root]')].filter(
-          (/** @type {any} */ layer) => layer.__astryxPopoverOpen === true,
-        );
-        if (open.length) {
-          // The part as drawn, then each overlay open now, after it; never a
-          // closed one, nor the markers that place them.
-          const part = host.cloneNode(true);
-          for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
-          out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+        if (mounted) {
+          await settled();
+          // A part that draws nothing in this window (a narrow screen's
+          // navigation, in a desktop's) is its server render.
+          out = host.innerHTML.replace(/<template><\/template>/g, '') || null;
+        } else {
+          // Its overlays shown open mount, and each popup a press opens opens.
+          await openLayerMarkup(host, flushSync);
+          const open = [...g.document.querySelectorAll('[data-astryx-layer-root]')].filter(
+            (/** @type {any} */ layer) => layer.__astryxPopoverOpen === true,
+          );
+          if (open.length) {
+            // The part as drawn, then each overlay open now, after it; never a
+            // closed one, nor the markers that place them.
+            const part = host.cloneNode(true);
+            for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+          }
         }
       } catch {
         out = null;
@@ -567,32 +579,40 @@ async function drawOpenLayers(elements, React) {
     return '';
   }
   const g = /** @type {any} */ (globalThis);
-  const host = g.document.createElement('div');
-  g.document.body.appendChild(host);
-  const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
-  /** @type {string[]} */
-  let layers = [];
-  try {
-    class Alone extends React.Component {
-      state = {failed: false};
-      static getDerivedStateFromError() {
-        return {failed: true};
-      }
-      render() {
-        return this.state.failed ? null : this.props.children;
-      }
+  class Alone extends React.Component {
+    state = {failed: false};
+    static getDerivedStateFromError() {
+      return {failed: true};
     }
-    flushSync(() => root.render(createElement(React.Fragment, null, ...elements.map((e, i) => createElement(Alone, {key: i}, e)))));
-    layers = await openLayerMarkup(host, flushSync);
-  } catch {
-    // A page that cannot be drawn there adds no overlays.
+    render() {
+      return this.state.failed ? null : this.props.children;
+    }
   }
-  try {
-    root.unmount();
-  } catch {
-    // Unmounting a page that failed to draw changes nothing.
+  // Each part is drawn on its own, then taken down before the next: the
+  // listeners a drawn part puts on the document (a typeahead's or a menu's
+  // outside press) then hear only the presses on its own controls, never
+  // every other part's, as in a window that shows that part alone.
+  /** @type {string[]} */
+  const layers = [];
+  for (const element of elements) {
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+    try {
+      flushSync(() => root.render(createElement(Alone, null, element)));
+      // (A part that opens nothing on a press and holds a layer, a context
+      // menu's area, is right-clicked, as one drawn in its own place is.)
+      layers.push(...(await openLayerMarkup(host, flushSync)));
+    } catch {
+      // A part that cannot be drawn there adds no overlays.
+    }
+    try {
+      root.unmount();
+    } catch {
+      // Unmounting a part that failed to draw changes nothing.
+    }
+    host.remove();
   }
-  host.remove();
   return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 

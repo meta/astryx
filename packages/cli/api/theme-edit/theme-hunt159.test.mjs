@@ -125,8 +125,10 @@ describe("headings' letter spacing", () => {
 
 describe('a part taller or wider by a length', () => {
   it('reads its height, and its inline padding half on each side', async () => {
+    // (Each control height the button reads, so every size keeps its own.)
     expect(writes(await how('ne', 'make buttons 4px taller'))).toEqual([
-      'set ne height 36px --on button',
+      'set ne --size-element-md 36px --on button',
+      'set ne --size-element-sm 32px --on button',
     ]);
     const wider = writes(await how('ne', 'make buttons 8px wider'));
     expect(wider).toHaveLength(1);

@@ -325,9 +325,10 @@ export function makeCompiler(project, parts) {
    * @param {string} token
    * @param {string} value
    * @param {string} P
+   * @param {string} [when] the --when the token is set under (`variant:strong`)
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P) {
+  function checkTokenOn(theme, target, token, value, P, when) {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -337,6 +338,55 @@ export function makeCompiler(project, parts) {
       };
     }
     const g = groupOfToken(token);
+    // Under a variant: only what the part reads in that variant's rules (or
+    // rules that name no variant) counts.
+    const [wProp, wVal] = String(when ?? '').split(':');
+    if (wProp && wVal && allReads(target).has(token)) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const inVariant = (/** @type {string} */ c) => {
+        const attrs = c.split(' ')[0].split(',');
+        const own = attrs.find(a => a.startsWith(`${wProp}=`));
+        return !own || own === `${wProp}=${wVal}`;
+      };
+      // (What a line inside the part declares is recorded as the part's
+      // own already; any other part inside it that reads the token takes
+      // it.)
+      const inside =
+        !MAP[target]?.line?.length &&
+        (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (conds.length && !conds.some(inVariant) && !inside) {
+        const there = [
+          ...new Set(
+            Object.values(MAP[target]?.own ?? {}).flatMap(x =>
+              Object.entries(x.tokens ?? {})
+                .filter(([, cs]) =>
+                  /** @type {string[]} */ (cs).some(inVariant),
+                )
+                .map(([t]) => t)
+                .filter(
+                  t =>
+                    groupOfToken(t) === g &&
+                    /^--color-/.test(t) === /^--color-/.test(token),
+                ),
+            ),
+          ),
+        ];
+        return {
+          message: `${target} (${wProp} ${wVal}) never reads ${token}: only its other ${wProp}s do.${there.length ? ` There it reads ${there.slice(0, 4).join(', ')}.` : ''}`,
+          run: there
+            .slice(0, 3)
+            .map(
+              t =>
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+            ),
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.
@@ -567,6 +617,56 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
+    /**
+     * The color a one-layer linear or radial gradient has where centered
+     * text sits: the middle of a linear one, the center of a radial one,
+     * between the stops around that place; null for any other (several
+     * layers, a conic or repeating one, a stop with no fixed color).
+     * @param {string} v
+     * @returns {string | null}
+     */
+    const colorBehindText = v => {
+      const m = /^(linear|radial)-gradient\((.*)\)$/s.exec(v.trim());
+      if (!m || splitTop(v.trim(), ',').length !== 1) return null;
+      const args = splitTop(m[2], ',').map(x => x.trim());
+      if (
+        args[0] &&
+        /^(to\b|at\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+          args[0],
+        )
+      )
+        args.shift();
+      /** @type {Array<{c: [number, number, number], a: number, at: number | null}>} */
+      const stops = [];
+      for (const arg of args) {
+        const pos = /\s(-?[\d.]+)%$/.exec(arg);
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        const c = parseColor(color);
+        if (!c) return null;
+        stops.push({
+          c,
+          a: alphaOf(color),
+          at: pos ? Number(pos[1]) / 100 : null,
+        });
+      }
+      if (stops.length < 2) return null;
+      // Positions a stop leaves out are spread evenly, as CSS spreads them.
+      stops.forEach((x, i) => {
+        if (x.at == null) x.at = i / (stops.length - 1);
+      });
+      const at = m[1] === 'linear' ? 0.5 : 0;
+      const i = stops.findIndex(x => /** @type {number} */ (x.at) >= at);
+      if (i <= 0) {
+        const x = stops[Math.max(0, i)];
+        return `rgba(${x.c.join(', ')}, ${x.a})`;
+      }
+      const [lo, hi] = [stops[i - 1], stops[i]];
+      const span =
+        /** @type {number} */ (hi.at) - /** @type {number} */ (lo.at);
+      const f = span > 0 ? (at - /** @type {number} */ (lo.at)) / span : 0;
+      const mix = lo.c.map((v0, k) => Math.round(v0 + (hi.c[k] - v0) * f));
+      return `rgba(${mix.join(', ')}, ${lo.a + (hi.a - lo.a) * f})`;
+    };
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
     const seen = new Set();
@@ -579,6 +679,10 @@ export function makeCompiler(project, parts) {
     );
     for (const p of [...parts.pairs, ...extra]) {
       if (replaced.has(p)) continue;
+      // Text drawn in a disabled color marks an inactive control, which
+      // needs no 4.5:1 (and must stay dimmer than the live text beside it).
+      if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
+        continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -596,15 +700,24 @@ export function makeCompiler(project, parts) {
         // one is measured as the pair itself already is.
         if (
           region &&
+          !(/** @type {any} */ (p).mediaOf) &&
           alphaOf(whole) >= 1 &&
           !/gradient|url\(/.test(String(whole))
         )
           continue;
-        // A gradient is measured at each of its color stops, the worst one
-        // counting; an image, or a stop with no fixed color, is not checked.
-        const stops = /gradient|url\(/.test(String(whole))
-          ? gradientStops(String(whole))
-          : [whole];
+        // A gradient is measured where the text sits on it: a linear or
+        // radial one at the color it has under the text (its middle, or its
+        // center), so a glossy highlight at an edge is not taken for the
+        // ground; any other at each of its color stops, the worst one
+        // counting. An image, or a stop with no fixed color, is not checked.
+        const behind = /gradient/.test(String(whole))
+          ? colorBehindText(String(whole))
+          : null;
+        const stops = behind
+          ? [behind]
+          : /gradient|url\(/.test(String(whole))
+            ? gradientStops(String(whole))
+            : [whole];
         if (!stops) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
           continue;
@@ -673,8 +786,9 @@ export function makeCompiler(project, parts) {
             region && alphaOf(bg) < 1
               ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
               : null,
-          bg:
-            stops.length > 1
+          bg: behind
+            ? `${bg}, its gradient where the text sits`
+            : stops.length > 1
               ? `${bg}, a stop of its gradient`
               : bg !== baseValue(p, 'bg', m)
                 ? String(bg)

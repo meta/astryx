@@ -161,20 +161,22 @@ describe('one-mode backgrounds and keywords', () => {
       color: '#00f',
     });
     await themeEditNew('b1', {cwd, like: 'neutral'});
+    // (On a card: a divider's own element is painted over by its line, so
+    // a fill there is refused.)
     await themeEditSet('b1', 'background', '#f00 linear-gradient(red, blue)', {
       cwd,
-      on: 'divider',
+      on: 'card',
       mode: 'dark',
     });
     // The dark block takes the images and the color under them, apart.
     const css = cssOf('b1');
-    expect(modeValue(css, '.astryx-divider', 'background-image', 'dark')).toBe(
+    expect(modeValue(css, '.astryx-card', 'background-image', 'dark')).toBe(
       'linear-gradient(red, blue)',
     );
-    expect(modeValue(css, '.astryx-divider', 'background-color', 'dark')).toBe(
+    expect(modeValue(css, '.astryx-card', 'background-color', 'dark')).toBe(
       '#f00',
     );
-    expect(modeValue(css, '.astryx-divider', 'background-image', 'light')).toBe(
+    expect(modeValue(css, '.astryx-card', 'background-image', 'light')).toBe(
       undefined,
     );
   }, 240_000);
