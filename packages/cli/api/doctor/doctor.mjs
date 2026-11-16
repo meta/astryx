@@ -112,6 +112,7 @@ import {
   projectCoreVersion,
   projectHasOwnCli,
   computerIntegrationsOutside,
+  findIconImports,
   findIconPlaceholders,
   iconFeatureGate,
   iconUseCommand,
@@ -190,6 +191,10 @@ import {
  *   Each file in the project's own source that uses the placeholder component
  *   the CLI writes for a missing icon, read only where the icon feature gate
  *   is on; null otherwise.
+ *   Experimental: may change or be removed in a patch release.
+ * @property {Array<{file: string, imports: Array<{line: number, module: string, export: string, why: 'unlisted'|'earlier'|'unresolved', set: string|null, definitions: string[], replacement: {set: string, module: string, export: string}|null}>}>|null} [iconImports]
+ *   Each file in the project's own source with icon imports that do not
+ *   match its icon sets, read only when the placeholders are; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
@@ -1336,6 +1341,114 @@ export function checkIconPlaceholders(ctx) {
 }
 
 /**
+ * The icon imports in the project's own source that do not match its icon
+ * sets (AST-084): each file and import, with the icon of the list that draws
+ * the same meaning. An import from a set the list leaves out, or from a set
+ * later in the list than one that draws the same meaning, still renders, so
+ * the check warns, as for a placeholder. An icon-named import of a package
+ * that does not resolve and that package.json does not declare (a set the
+ * project uninstalled) breaks the build, so the check fails, as `icon-sets`
+ * fails for a set the list names that is not installed. Only a project where
+ * the icon feature gate is on, and whose main set is decided, gets the check.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconImports(ctx) {
+  const choice = ctx.iconSets?.choice;
+  const main = choice?.configured ?? choice?.set?.name;
+  if (!choice || !main || ctx.iconImports == null) return null;
+  const id = 'icon-imports';
+  const label = 'Icon imports';
+  const found = ctx.iconImports;
+  if (found.length === 0) {
+    return {
+      id,
+      label,
+      status: 'pass',
+      message:
+        'Every icon import in your code comes from the set your list picks for it.',
+    };
+  }
+  const missing = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why === 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  const other = found.flatMap(({file, imports}) =>
+    imports
+      .filter(each => each.why !== 'unresolved')
+      .map(each => ({file, ...each})),
+  );
+  /**
+   * Each file once, its imports grouped by the module they come from and the
+   * module that replaces them: `file (from → to: Old → New, …; from: Old
+   * (why), …)`.
+   * @param {typeof other} rows
+   */
+  const byFile = rows => {
+    /** @type {Map<string, Map<string, string[]>>} */
+    const files = new Map();
+    for (const row of rows) {
+      const groups = files.get(row.file) ?? new Map();
+      const group = row.replacement
+        ? `${row.module} → ${row.replacement.module}`
+        : row.module;
+      const names = groups.get(group) ?? [];
+      const name = row.replacement
+        ? `${row.export} → ${row.replacement.export}`
+        : row.why === 'unresolved'
+          ? row.export
+          : `${row.export} (${row.definitions.length > 0 ? `no set in your list has "${row.definitions.join('", "')}"` : 'its set maps it to no Astryx meaning'})`;
+      if (!names.includes(name)) names.push(name);
+      groups.set(group, names);
+      files.set(row.file, groups);
+    }
+    return [...files]
+      .map(
+        ([file, groups]) =>
+          `${file} (${[...groups]
+            .map(([group, names]) => `${group}: ${names.join(', ')}`)
+            .join('; ')})`,
+      )
+      .join(', ');
+  };
+  /** @param {number} n @param {string} what */
+  const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
+  /** @param {typeof other} rows */
+  const fileCount = rows => new Set(rows.map(row => row.file)).size;
+  const parts = [];
+  if (missing.length > 0) {
+    parts.push(
+      `${count(missing.length, 'icon import')} in ${count(fileCount(missing), 'file')} name a package that is not installed, so the build fails: ${byFile(missing)}.`,
+    );
+  }
+  if (other.length > 0) {
+    const sets = [...new Set(other.map(row => row.set))].join(', ');
+    parts.push(
+      `${count(other.length, 'icon import')} in ${count(fileCount(other), 'file')} come from ${sets}, not the set your list (experimental.iconSet) picks for that meaning: ${byFile(other)}.`,
+    );
+  }
+  const fixes = [];
+  if (missing.length > 0) {
+    fixes.push(
+      'Replace each import of a package that is not installed with the icon `astryx experimental icon <meaning>` prints; or install that package again, and doctor names the icon of your list that draws the same meaning.',
+    );
+  }
+  if (other.length > 0) {
+    fixes.push(
+      `Import each icon named after → from the module named after →. An icon with no → needs a set in your list that has its meaning, or your own choice of icon: \`${iconUseCommand(main, [...(choice.backups ?? []).map(each => each.selector), '<set>'], choice.variant)}\`.`,
+    );
+  }
+  return {
+    id,
+    label,
+    status: missing.length > 0 ? 'fail' : 'warn',
+    message: parts.join(' '),
+    fix: fixes.join(' '),
+  };
+}
+
+/**
  * Check 10 — report the detected package manager, and say so when the project's
  * own declaration disagrees with what is on disk.
  *
@@ -2427,6 +2540,7 @@ export const SYNC_CHECKS = [
   checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
+  checkIconImports,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
@@ -2505,7 +2619,7 @@ export async function runChecks(options = {}) {
   let configuredIntegrations = null;
   /** @type {string|null} */
   let projectError = null;
-  /** @type {DoctorContext['iconSets']} */
+  /** @type {Awaited<ReturnType<import('../../foundation/config/project.mjs').Project['iconSets']>> | null} */
   let iconSets = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
@@ -2638,6 +2752,7 @@ export async function runChecks(options = {}) {
     iconSets,
     // Set after the docs checks, below.
     iconPlaceholders: null,
+    iconImports: null,
     base: project?.base.ok ? project.base.base : coreBase(),
   };
   const readsCore = ctx.base?.core !== false;
@@ -2661,7 +2776,9 @@ export async function runChecks(options = {}) {
   // scans its source for placeholders: no other project gets the check.
   if (placeholderMainSet(iconSets)) {
     try {
-      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+      const projectDir = findPackageRoot(cwd) ?? cwd;
+      ctx.iconPlaceholders = findIconPlaceholders(projectDir);
+      ctx.iconImports = findIconImports(projectDir, iconSets);
     } catch {
       // A scan that fails leaves the icon facts unknown.
       ctx.iconSets = null;

@@ -690,7 +690,19 @@ message}`) names each template or namespace doc that sets `stability`, and
   for the FR19 declaration in the exact shape the CLI writes, under any
   name, and for its uses; a commented-out or quoted copy never counts. It
   warns while any use remains, naming each file and the definitions its
-  uses' comments record, with both fixes, and passes when none remain. The template `icons` report and
+  uses' comments record, with both fixes, and passes when none remain.
+  Doctor's `icon-imports` check runs on the same projects and reads the same
+  source for imports that do not match the list: an import from an installed set, or from the library a set
+  wraps (read through the set's generated module), draws the definitions that
+  set's `map` names; the check warns when that set is not in the list, or
+  when a set earlier in the list draws one of those definitions, naming each
+  file and import with that earlier set's icon (FR9's rule), or saying that
+  no set in the list has the meaning; an import from the main set or the
+  library it wraps always matches. It fails for an import of a package
+  that does not resolve from the file and that the project's package.json
+  does not declare, when every name it imports follows the icon export
+  contract (`<Name>Icon`); a type-only, default, or namespace import never
+  counts. It passes when no such import remains. The template `icons` report and
   `experimental icon --list` carry the same status and reason, and
   `experimental icon` with `--set` (with words or `--all-icons`) or
   `<set>/<id>`, `experimental icon use`, and `discover <package>/<set>` name a
@@ -751,8 +763,8 @@ message}`) names each template or namespace doc that sets `stability`, and
 - `architecture:cli-surface`: the `experimental` command group and
   `experimental icon` commands with their response types, the
   `experimental.iconSets` manifest root, the `icon-set` and `icon-definition`
-  descriptor kinds, the `cli/experimental` docs namespace, the `icon-sets`
-  and `icon-placeholders` Doctor checks, the icon-set checks, the
+  descriptor kinds, the `cli/experimental` docs namespace, the `icon-sets`,
+  `icon-placeholders`, and `icon-imports` Doctor checks, the icon-set checks, the
   `template_icon_undeclared` next note, and the `iconSets` and `olderCliNotes`
   validate fields.
 - Docs site: the experimental `DOCSITE_ICON_SET` build setting.
