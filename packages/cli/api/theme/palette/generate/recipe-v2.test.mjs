@@ -13,6 +13,7 @@ import {describe, expect, it} from 'vitest';
 import {
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
+  PALETTE_RECIPE_V3,
   generatePaletteSet,
 } from './generator.mjs';
 import {hexToOklch} from './color.mjs';
@@ -171,9 +172,68 @@ describe('palette recipes', () => {
     expect(hexToOklch(amber(PALETTE_RECIPE_V2)).C).toBeGreaterThan(0.09);
   });
 
+  it("v3 keeps a dusty seed's pale tints at or below its own chroma, where its gamut is wide", () => {
+    // A muted olive: yellow-greens hold a lot of chroma when pale, so the
+    // tint is not shared, and coordination must not raise it to chartreuse.
+    const olive = '#66662e';
+    const seed = hexToOklch(olive).C;
+    const v3 = ramp(olive, 50, PALETTE_RECIPE_V3).families[0].light.colors;
+    const v2 = ramp(olive, 50, PALETTE_RECIPE_V2).families[0].light.colors;
+    for (const stop of [85, 90, 95])
+      expect(hexToOklch(v3[stop]).C, `stop ${stop}`).toBeLessThanOrEqual(seed);
+    // v2 stays as it shipped: it draws the tint above its middle stronger.
+    expect(hexToOklch(v2[85]).C).toBeGreaterThan(seed);
+    // The middle of the ramp is still v2's (and so v1's).
+    for (const stop of [30, 50, 70]) expect(v3[stop]).toBe(v2[stop]);
+  });
+
+  it('v2 draws exactly what it first shipped with', () => {
+    // The ramps v2 drew when it first shipped: a recipe never changes once
+    // released, so a palette that names it keeps its colors.
+    const SHIPPED = {
+      '#66662e@50': {
+        light: '#979637,#b2b14c,#bfbf61,#cccd76,#d9da8c,#e7e8a5,#f4f5c0',
+        dark: '#343300,#3f3e00,#4b4a00',
+      },
+      '#2563eb@50': {
+        light: '#528aff,#85abf3,#a2b9e6,#b6c7e7,#c8d5ed,#dae3f3,#edf1f9',
+        dark: '#072872,#0e3384,#173f96',
+      },
+      '#c2603d@30': {
+        light: '#d07454,#ea9172,#eda58c,#debfb4,#e2d0ca,#ece0db,#f5efed',
+        dark: '#531d07,#63260f,#723018',
+      },
+      '#16a34a@80': {
+        light: '#20ac51,#5ac574,#74d188,#8ddc9c,#a5e7b1,#bcf3c5,#d4feda',
+        dark: '#003c14,#00491b,#005621',
+      },
+      '#777777@50': {
+        light: '#919191,#ababab,#b9b9b9,#c6c6c6,#d4d4d4,#e2e2e2,#f1f1f1',
+        dark: '#303030,#3b3b3b,#474747',
+      },
+    };
+    for (const [key, want] of Object.entries(SHIPPED)) {
+      const [seed, vibrancy] = key.split('@');
+      const f = generatePaletteSet({
+        recipe: PALETTE_RECIPE_V2,
+        vibrancy: Number(vibrancy),
+        families: [
+          {id: 'f', seed, ...(seed === '#777777' ? {kind: 'neutral'} : {})},
+        ],
+      }).families[0];
+      expect(
+        [60, 70, 75, 80, 85, 90, 95].map(s => f.light.colors[s]).join(','),
+        key,
+      ).toBe(want.light);
+      expect([20, 25, 30].map(s => f.dark.colors[s]).join(','), key).toBe(
+        want.dark,
+      );
+    }
+  });
+
   it('refuses a recipe it does not know, naming the ones it does', () => {
     expect(() => ramp(VIVID, 50, 'astryx-oklch-v9')).toThrow(
-      /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2\)/,
+      /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2, astryx-oklch-v3\)/,
     );
   });
 });
