@@ -331,6 +331,13 @@ before any work when the package is not a base the run can read (FR2).
   `ERR_BASE_AMBIGUOUS`; INV21's adapter seam reaches a base adapter only
   through the check; INV30's package set holds the active base in Core's
   place.
+- `architecture:cli-surface` INV28: the `hook --list` and `swizzle --list`
+  envelopes name the run's active base as their `package`, and `build`'s
+  `frame` and `foundation` are empty in a run on another base (FR1).
+- `spec:AST-040`: FR11's upgrade target is the installed version of the
+  run's active base, so a project on another base needs no Core; such a run
+  checks no copied composition and keeps the agent-docs version `init`
+  writes (FR1).
 - `spec:AST-017`: FR14's commands and options appear in help unless the
   active base does not serve them, and the manifest lists them all with
   `available` (FR7); `--base` meets FR15 with the matrix above.

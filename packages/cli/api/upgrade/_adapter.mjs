@@ -32,6 +32,7 @@ import {
 import {runIntegrationCodemods} from '../../assets/codemods/integration-runner.mjs';
 import {
   AgentDocsHomeError,
+  agentDocsVersion,
   assertAgentDocsTarget,
   installAgentDocs,
   inspectAgentDocs,
@@ -56,7 +57,11 @@ import {resolveProviders} from '../../foundation/integrations/provider-resolutio
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
 import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
-import {runBase, splitForBase} from '../../foundation/bases/resolve.mjs';
+import {
+  isBaseIntegration,
+  runBase,
+  splitForBase,
+} from '../../foundation/bases/resolve.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
@@ -226,6 +231,29 @@ export function detectInstalledTargetVersion(cwd) {
     // Unreadable package.json: no version to target.
     return null;
   }
+}
+
+/**
+ * Does this run's upgrade read Core? Core's copied compositions and the Core
+ * version the agent-docs block names belong to a run on Core. A run on
+ * another base reads none of them.
+ * @returns {boolean}
+ */
+export function upgradeReadsCore() {
+  const run = runBase();
+  return !run.ok || run.base.core;
+}
+
+/**
+ * The version the agent-docs block names after an upgrade: the target Core's
+ * in a run on Core, else the version `init` writes, so an upgrade and a later
+ * `init` agree.
+ * @param {string} cwd
+ * @param {string} targetVersion
+ * @returns {string}
+ */
+export function upgradeAgentDocsVersion(cwd, targetVersion) {
+  return upgradeReadsCore() ? targetVersion : agentDocsVersion(cwd);
 }
 
 /**
@@ -793,9 +821,14 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   );
   const {ledger} = resolved;
   // Only integrations that are the run's base or build on it run codemods,
-  // the --integration packages included.
+  // the --integration packages included. Every base the project load found
+  // counts, whether or not the config lists it.
+  const bases = [
+    ...project.loadedIntegrations,
+    ...project.integrationsLeftOut.map(({integration}) => integration),
+  ].filter(isBaseIntegration);
   const integrations = project.base.ok
-    ? splitForBase(resolved.integrations, project.base.base).kept
+    ? splitForBase(resolved.integrations, project.base.base, bases).kept
     : resolved.integrations;
   return {
     postCodemodHooks,

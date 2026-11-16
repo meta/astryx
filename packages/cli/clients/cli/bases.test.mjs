@@ -1197,6 +1197,95 @@ describe('a non-Core base shows no Core outside its content', () => {
   );
 
   it(
+    'checks no copied composition on another base, in a run or with --registry',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'));
+      fs.symlinkSync(
+        CORE_ROOT,
+        path.join(dir, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+      write(path.join(dir, 'src', '.astryx', 'card.json'), '{}\n');
+      const base = ['--base', '@acme/native-ui'];
+      const json = astryx(
+        ['--json', ...base, 'upgrade', '--from', '1.0.0', '--path', 'src'],
+        dir,
+      );
+      expect(json.status).toBe(0);
+      expect(json.json().data.to).toBe('2.1.0');
+      expect(json.json().data.registryCompositions).toBeUndefined();
+      const text = astryx(
+        [...base, 'upgrade', '--from', '1.0.0', '--path', 'src'],
+        dir,
+      );
+      expect(text.status).toBe(0);
+      const registry = astryx(
+        ['--json', ...base, 'upgrade', '--registry', '--path', 'src'],
+        dir,
+      );
+      expect(registry.status).toBe(0);
+      expect(registry.json().data).toMatchObject({ok: true, found: 0});
+    },
+    SLOW,
+  );
+
+  it(
+    'runs the codemods of a listed integration built on a base the config does not list',
+    () => {
+      const dir = project({
+        '@acme/native-ui': CONTENT_BASE,
+        '@acme/native-charts': {
+          manifest: "export default {codemods: './codemods'};\n",
+          peers: {'@acme/native-ui': '*'},
+          files: {
+            'codemods/2.0.0/charts.mjs':
+              "export default {type: 'code', title: 'charts', transform: file => file.source};\n",
+          },
+        },
+      });
+      write(
+        path.join(dir, 'astryx.config.mjs'),
+        "export default {integrations: ['@acme/native-charts']};\n",
+      );
+      write(path.join(dir, 'src', 'a.js'), 'export const a = 1;\n');
+      const r = astryx(
+        ['--json', 'upgrade', '--from', '1.0.0', '--path', 'src'],
+        dir,
+      );
+      expect(r.status).toBe(0);
+      expect(r.json().data).toMatchObject({
+        codemods: 1,
+        integrations: ['@acme/native-charts'],
+      });
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps the agent-docs version init writes when upgrade --apply refreshes',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const init = astryx(['--json', 'init'], dir);
+      expect(init.status).toBe(0);
+      const cli = JSON.parse(
+        fs.readFileSync(path.resolve(import.meta.dirname, '../../package.json'), 'utf8'),
+      ).version;
+      const agents = path.join(dir, 'AGENTS.md');
+      const written = fs.readFileSync(agents, 'utf8');
+      expect(written).toContain(`Astryx v${cli}`);
+      const r = astryx(['--json', 'upgrade', '--from', '1.0.0', '--apply'], dir);
+      expect(r.status).toBe(0);
+      expect(r.json().data.agentDocs).toMatchObject({
+        status: 'current',
+        installedVersion: cli,
+      });
+      expect(fs.readFileSync(agents, 'utf8')).toBe(written);
+    },
+    SLOW,
+  );
+
+  it(
     'checks in doctor that the active base is installed, and no Core or Core themes',
     () => {
       const dir = project({'@acme/native-ui': CONTENT_BASE});

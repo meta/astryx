@@ -33,7 +33,10 @@ import {
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {logger} from '../../logger.mjs';
-import {detectInstalledTargetVersion} from '../_adapter.mjs';
+import {
+  detectInstalledTargetVersion,
+  upgradeReadsCore,
+} from '../_adapter.mjs';
 
 const SKIP_DIRS = new Set([
   '.cache',
@@ -1147,6 +1150,14 @@ export async function registryUpgrade(options = {}, ctx = {}) {
   const cwd = ctx.cwd ?? process.cwd();
   if (ctx.origin != null) {
     logger.log(`Project root: ${path.relative(ctx.origin, cwd) || '.'}`);
+  }
+  // Copied compositions come from Core, so a run on another base checks
+  // none of them.
+  if (!upgradeReadsCore()) {
+    logger.log(
+      'No ShadCN composition receipts checked: they come from Core, and the active base is not Core.\n',
+    );
+    return {type: 'upgrade.registry', data: emptySummary(options.apply ?? false)};
   }
   const installed = detectInstalledTargetVersion(cwd);
   const expectedVersion =
