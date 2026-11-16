@@ -20,6 +20,7 @@ import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
+  PLACE_LAYERS,
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
@@ -71,6 +72,8 @@ try {
         await page.evaluate(SETTLE_ANIMATIONS);
         // Text a part cuts when narrow gets the room it needs (FIT_CELLS).
         await page.evaluate(FIT_CELLS);
+        // An overlay drawn after its part sits under its opener (PLACE_LAYERS).
+        await page.evaluate(PLACE_LAYERS);
         // A whole-page picture makes the page see a resize; a part that
         // redraws on it (a responsive chart) would start over and be
         // pictured empty. The page's script is held while it is taken.
