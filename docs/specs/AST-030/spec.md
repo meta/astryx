@@ -397,7 +397,7 @@ they are separately named.
   pre-merge restart, is exempt from both limits, and when the limits cannot be
   looked up the suite runs. Merge-queue entries, `main`, release checks and the
   visual, accessibility and RTL owners a maintainer opts a pull request into
-  with their `ci:run-*` labels are unaffected by these per-author limits. Every
+  with their `ci:run-*` labels are unaffected by these per-author limits. So is a pull request labelled `release-critical` (DEC-30): its run starts at once, without waiting for room, and its heavy suites are never held. Every
   run of the CI and Main workflows, of any event, waits for room before its jobs
   start, except two CI workflow jobs. A pull-request run's `superseded-runs`
   sweep starts with the run (below). The Storybook build starts as soon as there
@@ -1147,7 +1147,7 @@ admission job succeeded, and any run that waited out about its whole longest
 wait counts, room on its last look or not; until then it ranks as a waiter. Runs that wait out the same burst then start
 one at a time instead of together. A `main` run is never stopped.
 
-CI can still pass ninety in five bounded ways, the first three rare:
+CI can still pass ninety in six bounded ways, the first three rare:
 
 - A run that has waited its longest (two hours for `main`, twelve minutes for
   a pull request) starts whatever the load, even while a `main` check waits, at
@@ -1170,6 +1170,9 @@ CI can still pass ninety in five bounded ways, the first three rare:
   limit (it usually ends within seconds).
 - Small workflows can run more jobs at once than the eighteen counted for them:
   they peaked at twenty in a day's runs, two over, while their jobs ran.
+- A pull request labelled `release-critical` starts at once whatever the
+  load (DEC-30). CI is over by at most that run's jobs while it runs; such pull
+  requests are rare.
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would
@@ -1442,6 +1445,25 @@ also covers specs tagged `@pr-a11y release-only` and runs a release spec when
 a pull request changes a component it visits, because a release spec that
 renders a component through a page imports none of it; a visit that cannot be
 resolved runs the spec.
+
+### DEC-30 — A release-critical pull request is admitted at once
+
+**Reference:** `spec:AST-030/DEC-30`
+**Decider:** `cixzhang`, `2026-11-16 08:24 PT`
+
+A pull request labelled `release-critical` starts its CI run at once, whatever
+the load, and still runs every suite it would otherwise run, in full. DEC-16's
+wait for room and FR16's per-author holds do not apply to it. The label counts
+only when a person with write access to the repository applied it, and it is
+for the release pull request, a fix forward for a regression in the current
+release range, and a change that unblocks a consumer's upgrade. Such pull
+requests are rare, so admitting them at once costs little room, and a release
+or a fix forward never waits behind ordinary pull requests. The owner's words:
+"What is release critical? CI should just allow them they're not that common".
+
+Rejected: queueing release-critical pull requests ahead of others inside
+DEC-16's wait (a full CI still delays them), and running a reduced suite for
+them (a release change needs its full checks).
 
 ## Open questions
 
