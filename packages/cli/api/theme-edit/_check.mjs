@@ -4870,6 +4870,50 @@ function checkOne(
         },
       );
   }
+  {
+    // A fill or text color a part's own element never declares, which an
+    // element inside it paints from a token (a keyboard key's chip, a list
+    // item's label text): the property set on the part is painted over
+    // there, so it would never show. The token, set on the part, reaches the inner element.
+    const prop = String(s.thing);
+    if (
+      !unset &&
+      s.on &&
+      !String(s.thing).startsWith('--') &&
+      !FAMILIES[s.on] &&
+      /^(background(-color)?|color)$/.test(prop)
+    ) {
+      const rec = ctx.C.MAP[s.on];
+      const props =
+        prop === 'background' || prop === 'background-color'
+          ? ['background', 'background-color']
+          : [prop];
+      const innerToks = Object.entries(rec?.inside ?? {})
+        .filter(([, ps]) =>
+          /** @type {string[]} */ (ps).some(x => props.includes(x)),
+        )
+        .map(([t]) => t)
+        .filter(t => /^--color-/.test(t));
+      // (A media surface inside a part, a toast's, sets the text tokens of
+      // what it holds from the color set on the part: never painted over.)
+      if (
+        rec &&
+        !rec.media &&
+        innerToks.length &&
+        !props.some(x => rec.own?.[x]) &&
+        !(rec.line ?? []).some((/** @type {string} */ x) => props.includes(x))
+      )
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${s.on} draws no ${prop} of its own: an element inside it paints it from ${innerToks.join(', ')}, which paints over a ${prop} set on ${s.on}, so it would never show.`,
+          {
+            run: innerToks
+              .slice(0, 2)
+              .map(t => setLine(slug, t, v, {...s, only: undefined}, unset)),
+          },
+        );
+    }
+  }
   // A part drawn under an invisible native input (a checkbox's box, a
   // switch): the input takes the pointer and the focus, so a hover, press
   // or focus state on the part's own element never applies. Named with the

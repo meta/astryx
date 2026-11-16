@@ -130,6 +130,11 @@ export const OVERRIDES = [
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
+  // (A keyboard key, "the key chips", is Core's Kbd, never a badge.)
+  [
+    /\b(kbds?|keyboard (keys?|shortcuts?|chips?)|key ?(chips?|caps?)|shortcut keys?)\b/,
+    {on: 'kbd'},
+  ],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],

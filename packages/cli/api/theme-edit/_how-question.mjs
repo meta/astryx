@@ -15146,6 +15146,14 @@ export function draftAnswer(ctx, env, question) {
           k,
         ),
       ) &&
+      // (Nor one an element inside it paints, a keyboard key's chip.)
+      !Object.entries(C.MAP[one(on)].inside ?? {}).some(
+        ([t, ps]) =>
+          /^--color-/.test(t) &&
+          /** @type {string[]} */ (ps).some(x =>
+            /^(background|background-color|color)$/.test(x),
+          ),
+      ) &&
       !/\b(background|bg|fill(ed)?|gradient)\b/.test(c.text)
     )
       return {
