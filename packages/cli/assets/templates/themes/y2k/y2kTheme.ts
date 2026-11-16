@@ -428,10 +428,52 @@ export const y2kTheme = defineTheme({
       },
     },
 
+    // Coloured cards keep their pastel fill in dark mode, so their text
+    // takes dark ink there: the nearest neutral stops that read at 4.5:1.
     card: {
       base: {
         borderRadius: '0px',
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:cyan': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:gray': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:green': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:orange': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:pink': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:purple': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:red': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:teal': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
+      },
+      'variant:yellow': {
+        '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
     },
 

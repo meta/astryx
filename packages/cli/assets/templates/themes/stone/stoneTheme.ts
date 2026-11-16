@@ -449,9 +449,71 @@ export const stoneTheme = defineTheme({
     typeahead: INPUT_STATUS_VARS,
     tokenizer: INPUT_STATUS_VARS,
 
+    // Secondary text on a coloured card steps to the nearest neutral stop
+    // that reads at 4.5:1 on that fill in dark mode.
     card: {
       base: {
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:cyan': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:gray': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:green': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:orange': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:pink': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:purple': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:red': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:teal': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
+      },
+      'variant:yellow': {
+        '--color-text-secondary': lightDark(
+          neutral.light[40],
+          neutral.dark[85],
+        ),
       },
     },
 

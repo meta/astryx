@@ -306,10 +306,45 @@ export const matchaTheme = defineTheme({
         borderRadius: 'var(--radius-full)',
       },
     },
+    // Secondary text on a coloured or muted card steps to the nearest neutral
+    // stop that reads at 4.5:1 on that fill.
     card: {
       base: {
         borderRadius: 'var(--radius-page)',
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:cyan': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:gray': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:green': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:orange': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:pink': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:purple': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:red': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:teal': {
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+      },
+      'variant:yellow': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+      'variant:muted': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
       },
     },
     section: {

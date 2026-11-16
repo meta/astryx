@@ -114,7 +114,7 @@ export const chocolateTheme = defineTheme({
 
     // Text
     '--color-text-primary': ['#4a3520', '#EDE4D4'],
-    '--color-text-secondary': ['#B88859', '#c4a882'],
+    '--color-text-secondary': ['#805324', '#c4a882'],
     '--color-text-disabled': ['#C4AC95', '#6b5540'],
     '--color-text-accent': ['#8C5927', '#d4a06a'],
     '--color-on-dark': '#FFFCF7',
@@ -140,7 +140,7 @@ export const chocolateTheme = defineTheme({
     // Icon
     '--color-icon-accent': ['#8C5927', '#d4a06a'],
     '--color-icon-primary': ['#4a3520', '#EDE4D4'],
-    '--color-icon-secondary': ['#B88859', '#c4a882'],
+    '--color-icon-secondary': ['#805324', '#c4a882'],
     '--color-icon-disabled': ['#C4AC95', '#6b5540'],
 
     // Surface variants

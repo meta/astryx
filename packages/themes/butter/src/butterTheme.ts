@@ -523,9 +523,13 @@ export const butterTheme = defineTheme({
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
+      // The muted fill turns dark in dark mode: its text follows the mode.
       'variant:muted': {
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[45],
+        '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+        '--color-text-secondary': lightDark(
+          neutral.light[45],
+          neutral.dark[70],
+        ),
       },
     },
 
