@@ -43,6 +43,7 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Selector} from '@astryxdesign/core/Selector';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowLeftIcon,
   LinkIcon,
@@ -254,7 +255,7 @@ const ATTACHMENT_ICONS = {
   file: DocumentTextIcon,
 };
 
-// Identical for every row, so it is built once rather than per render.
+// The parts of every row's Delete that do not depend on the row.
 const ATTACHMENT_DELETE: DropdownMenuOption = {
   label: 'Delete',
   icon: TrashIcon,
@@ -584,6 +585,7 @@ function SubtasksSection({
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
@@ -644,13 +646,30 @@ function AttachmentsSection() {
                           uniqueID: `edit-${attachment.id}`,
                         }),
                     },
-                    ATTACHMENT_DELETE,
+                    {
+                      ...ATTACHMENT_DELETE,
+                      onClick: () =>
+                        confirm.show({
+                          title: `Delete ${attachment.title}?`,
+                          description: "This demo won't delete anything.",
+                          actionLabel: 'Delete',
+                          onAction: () => {
+                            confirm.hide();
+                            // Demo only: replace this toast with the call that performs the action.
+                            showToast({
+                              body: `Demo: ${attachment.title} would be deleted here`,
+                              uniqueID: `delete-${attachment.id}`,
+                            });
+                          },
+                        }),
+                    },
                   ]}
                 />
               </HStack>
             </ClickableCard>
           ))}
         </VStack>
+        {confirm.element}
       </VStack>
     </Section>
   );
