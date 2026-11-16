@@ -575,16 +575,27 @@ export function SideNavItem({
   // so it is held shut whenever the item is not a collapsed leaf: a tooltip
   // open when the rail expands must not come back on the next collapse.
   const isRailLeaf = isCollapsed && !hasChildren;
+  // A collapsed item with children shows the same label tooltip on keyboard
+  // focus only. A hover opens its flyout instead, and the tooltip closes when
+  // the flyout opens.
+  const isRailGroup = isCollapsed && hasChildren;
+  const [isGroupLabelShown, setIsGroupLabelShown] = useState(false);
+  const hideGroupLabel = useCallback(() => setIsGroupLabelShown(false), []);
   const railTooltip = useTooltip({
     placement: 'end',
     // A disabled leaf's row is the trigger (see the collapsed path). It is not
     // focusable itself, so `auto` would never hear the focus that bubbles up
     // from its control.
     focusTrigger: 'always',
-    isEnabled: isRailLeaf,
-    isOpen: isRailLeaf ? undefined : false,
+    isEnabled: isRailLeaf || isRailGroup,
+    isOpen: isRailLeaf
+      ? undefined
+      : isRailGroup && isGroupLabelShown && !popover.isOpen,
+    // Escape asks a held-open tooltip to close.
+    onHide: hideGroupLabel,
   });
   const railLeafRef = useMergedRefs(ref, railTooltip.ref);
+  const railGroupRef = useMergedRefs(mergedTriggerRef, railTooltip.ref);
 
   // The row's root registers with its SideNav, so a collapse that removes the
   // focused row can hand focus to the toggle or the nearest row still in the
@@ -724,16 +735,31 @@ export function SideNavItem({
       return (
         <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
           <button
-            ref={mergedTriggerRef}
+            ref={railGroupRef}
             type="button"
             {...rest}
             {...hoverTriggerProps}
             aria-label={collapsedAccessibleLabel}
+            aria-describedby={joinIds(
+              rest['aria-describedby'],
+              railTooltip.describedBy,
+            )}
             data-testid={testId}
             {...popover.triggerProps}
-            {...collapsedItemStyles}>
+            {...collapsedItemStyles}
+            onFocus={event => {
+              rest.onFocus?.(event);
+              if (event.currentTarget.matches(':focus-visible')) {
+                setIsGroupLabelShown(true);
+              }
+            }}
+            onBlur={event => {
+              rest.onBlur?.(event);
+              setIsGroupLabelShown(false);
+            }}>
             {collapsedIcon}
           </button>
+          {railTooltip.renderTooltip(label)}
           {popover.render(
             <div
               {...stylex.props(styles.popoverSurface)}
