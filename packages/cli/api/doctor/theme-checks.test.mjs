@@ -1567,6 +1567,24 @@ describe('app-theme doctor checks', () => {
     );
   });
 
+  it('check 9 keeps the stylesheet step for a self-hosted family, naming no package it would guess', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Acme Sans',
+        fontCss:
+          '/* No font stylesheets: no installed package loads them. */\n',
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.fix).toMatch(
+      /^Add the missing font stylesheet export or local <slug>\.fonts\.css, then /,
+    );
+    expect(result.fix).not.toContain('@fontsource/acme-sans');
+  });
+
   it('check 9 warns when an external import cannot prove the named family', async () => {
     const {dir} = await fixture([
       {

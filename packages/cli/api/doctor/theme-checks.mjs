@@ -1936,13 +1936,14 @@ export async function checkAppThemes(cwd) {
   }
   // A family with no loader in a stylesheet the app imports loads once
   // the package that loads it is installed and the theme's stylesheet is
-  // written again, so the fix names that package.
+  // written again, so the fix names that package when a known one loads
+  // it; a self-hosted family keeps the stylesheet step.
   const fontInstall = fontFailures.some(f => f.missing)
     ? await fontPackagesInstallLine(
         state.projectDir,
         fontFailures.flatMap(f => f.missing ?? []),
       )
-    : null;
+    : {line: null, coversAll: false};
   checks.push(
     incompleteResolution
       ? {
@@ -1961,9 +1962,11 @@ export async function checkAppThemes(cwd) {
               .map(problem => `${problem.theme.slug}: ${problem.message}`)
               .join('; ')}).`,
             fix: `${
-              fontInstall && fontFailures.every(f => f.missing)
-                ? `Install the packages that load them (${fontInstall})`
-                : `Add the missing font stylesheet export or local <slug>.fonts.css${fontInstall ? ` (${fontInstall} installs the packages that load the named families)` : ''}`
+              fontInstall.line &&
+              fontInstall.coversAll &&
+              fontFailures.every(f => f.missing)
+                ? `Install the packages that load them (${fontInstall.line})`
+                : `Add the missing font stylesheet export or local <slug>.fonts.css${fontInstall.line ? ` (${fontInstall.line} installs the packages that load the open fonts among them)` : ''}`
             }, then ${fontFailures
               .map(problem =>
                 refreshThemeCommand(

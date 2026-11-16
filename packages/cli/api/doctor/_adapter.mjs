@@ -927,22 +927,28 @@ export function builtIntegrationPackages(target, cwd) {
 }
 
 /**
- * The install line for the packages that load font families, in the
- * project's package manager, or null when no family has one (a font a
- * system ships). The editor's font table names each package.
+ * The install line for the font families a known package loads (an open
+ * font the editor's table names), in the project's package manager, and
+ * whether it loads every family given. A family no known package loads (a
+ * self-hosted face) gets none: its package name would be a guess.
  * @param {string} projectDir
  * @param {string[]} families
- * @returns {Promise<string | null>}
+ * @returns {Promise<{line: string | null, coversAll: boolean}>}
  */
 export async function fontPackagesInstallLine(projectDir, families) {
   const {fontsourceSuggestion} = await import('../theme-edit/_settings.mjs');
   const {installLine} = await import('../theme-edit/_project.mjs');
+  const known = families.map(family => {
+    const s = fontsourceSuggestion(family);
+    return s?.known ? s.pkg : null;
+  });
   const packages = [
     ...new Set(
-      families
-        .map(family => fontsourceSuggestion(family)?.pkg)
-        .filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
+      known.filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
     ),
   ];
-  return packages.length ? installLine(projectDir, packages) : null;
+  return {
+    line: packages.length ? installLine(projectDir, packages) : null,
+    coversAll: known.every(Boolean),
+  };
 }
