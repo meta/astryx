@@ -53,20 +53,13 @@ async function mount(page: Page, story: string) {
   await expect(page.locator('.astryx-token').first()).toBeVisible();
   await page.evaluate(async () => document.fonts.ready);
   // A story's play function can scroll the strip, to its end and back to
-  // rest. Wait until it is done, so none of its scrolls land inside a case.
-  const phase = await page
-    .waitForFunction(() => {
-      const render = (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__
-        ?.currentRender;
-      // A render rests at "finished" or "completed", by Storybook version.
-      return render?.phase === 'finished' ||
-        render?.phase === 'completed' ||
-        render?.phase === 'errored'
-        ? render.phase
-        : false;
-    })
-    .then(async handle => handle.jsonValue());
-  expect(phase, `the ${story} story's play function`).not.toBe('errored');
+  // rest. Wait until Storybook has finished the render, play included, so
+  // none of its scrolls land inside a case.
+  await page.waitForFunction(
+    () =>
+      (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__?.currentRender
+        ?.phase === 'finished',
+  );
 }
 
 // The strip is the row's child that holds the tokens; the end controls are its
