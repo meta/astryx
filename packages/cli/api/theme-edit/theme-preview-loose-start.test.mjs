@@ -179,7 +179,13 @@ describe('a page from a description', () => {
   }, 240_000);
 
   it('is added from a closest page with no fit (a project without word weights)', async () => {
-    startOverride.next = s => ({...s, name: 'dashboard', basis: 'closest'});
+    // A project without word weights gives no fit, whatever build's own
+    // start for the idea carries.
+    startOverride.next = ({fit: _fit, ...s}) => ({
+      ...s,
+      name: 'dashboard',
+      basis: 'closest',
+    });
     const r = await themeEditPreviewAdd(CONCERT, {cwd, theme: 't'});
     expect(r.data.added.length).toBe(1);
   }, 240_000);
