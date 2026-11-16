@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
-import {Stack} from '@astryxdesign/core/Layout';
+import {Stack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 
@@ -28,7 +28,7 @@ export default function TokenizerOverflow() {
   const [layerValue, setLayerValue] = useState<SearchableItem[]>(users);
 
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+    <VStack maxWidth={400}>
       <Stack direction="vertical" gap={4}>
         <Stack direction="vertical" gap={1}>
           <Text type="supporting" color="secondary">
@@ -57,6 +57,6 @@ export default function TokenizerOverflow() {
           />
         </Stack>
       </Stack>
-    </div>
+    </VStack>
   );
 }

@@ -2,6 +2,7 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {useState} from 'react';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
@@ -24,7 +25,7 @@ const source: SearchSource = {
 export default function TokenizerShowcase() {
   const [value, setValue] = useState<SearchableItem[]>([tags[0], tags[1]]);
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+    <VStack maxWidth={400}>
       <Tokenizer
         label="Tags"
         placeholder="Search..."
@@ -32,6 +33,6 @@ export default function TokenizerShowcase() {
         value={value}
         onChange={setValue}
       />
-    </div>
+    </VStack>
   );
 }

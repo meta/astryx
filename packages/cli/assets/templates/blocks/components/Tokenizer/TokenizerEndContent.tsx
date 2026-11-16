@@ -5,7 +5,7 @@
 import {useState} from 'react';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
 import {Button} from '@astryxdesign/core/Button';
-import {Stack} from '@astryxdesign/core/Layout';
+import {Stack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 
@@ -28,7 +28,7 @@ export default function TokenizerEndContent() {
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
 
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+    <VStack maxWidth={400}>
       <Stack direction="vertical" gap={2}>
         <Text type="supporting" color="secondary">
           Action button in the end slot
@@ -42,6 +42,6 @@ export default function TokenizerEndContent() {
           endContent={<Button label="Apply" variant="primary" size="sm" />}
         />
       </Stack>
-    </div>
+    </VStack>
   );
 }

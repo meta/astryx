@@ -92,7 +92,7 @@ export default function PowerSearchSearchWithTable() {
   const filteredBooks = applyFilters(filters, books);
 
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 500px)'}}>
+    <VStack maxWidth={500}>
       <VStack gap={4}>
         <PowerSearch
           config={config}
@@ -103,6 +103,6 @@ export default function PowerSearchSearchWithTable() {
         />
         <Table data={filteredBooks} columns={columns} idKey="id" hasHover />
       </VStack>
-    </div>
+    </VStack>
   );
 }

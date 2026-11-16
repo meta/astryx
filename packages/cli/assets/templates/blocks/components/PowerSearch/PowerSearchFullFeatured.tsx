@@ -2,6 +2,7 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {useState} from 'react';
 import {PowerSearch} from '@astryxdesign/core/PowerSearch';
 import type {
@@ -94,13 +95,13 @@ export default function PowerSearchFullFeatured() {
   const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
 
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 300px)'}}>
+    <VStack maxWidth={300}>
       <PowerSearch
         config={config}
         filters={filters}
         onChange={newFilters => setFilters([...newFilters])}
         placeholder="Search..."
       />
-    </div>
+    </VStack>
   );
 }

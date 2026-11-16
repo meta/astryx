@@ -4,7 +4,7 @@
 
 import {useState} from 'react';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
-import {Stack} from '@astryxdesign/core/Layout';
+import {Stack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
@@ -27,7 +27,7 @@ export default function TokenizerIcon() {
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
 
   return (
-    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+    <VStack maxWidth={400}>
       <Stack direction="vertical" gap={2}>
         <Text type="supporting" color="secondary">
           Leading icon reinforces the search affordance
@@ -41,6 +41,6 @@ export default function TokenizerIcon() {
           startIcon={MagnifyingGlassIcon}
         />
       </Stack>
-    </div>
+    </VStack>
   );
 }
