@@ -501,13 +501,22 @@ export function useTypedDateField({
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
-    if (value !== lastFiredDate) {
+    const valueRetiresLastFiredDate = value !== lastFiredDate;
+    if (valueRetiresLastFiredDate) {
       setFiredEpoch(epoch => epoch + 1);
-      if (pendingInput !== null && isEntryReplaced) {
-        setPendingInput(null);
-        setIsRejectionCommitted(false);
-        setKeptText(null);
-      }
+    }
+    // An explicit clear is an outside value change even when no date was
+    // last reported. Without this branch, rejected text whose last fired
+    // date is already undefined survives a controlled clear. A value restored
+    // in the same Enter or blur render is excluded by isEntryReplaced.
+    if (
+      pendingInput !== null &&
+      isEntryReplaced &&
+      (valueRetiresLastFiredDate || value === undefined)
+    ) {
+      setPendingInput(null);
+      setIsRejectionCommitted(false);
+      setKeptText(null);
     }
   }
 
