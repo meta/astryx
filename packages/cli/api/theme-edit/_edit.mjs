@@ -206,6 +206,9 @@ import {
   isGraySeed,
   seedOf,
   isEditorTemp,
+  isLookToken,
+  lookCollapsed,
+  categoryNotes,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -6081,7 +6084,7 @@ async function changeOnce(
         was: before,
         parts: [],
         group: null,
-        changedTokens: r.changed,
+        changedTokens: lookCollapsed(r.changed).lines,
         changedPartTokens: r.changedParts ?? [],
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
@@ -7152,9 +7155,9 @@ async function changeOnce(
       '--color-text-secondary',
       '--color-border-emphasized',
     ];
-    const moved = /** @type {unknown[]} */ (r.changed ?? []).map(
-      c => String(c).split(/[\s:]/)[0],
-    );
+    const moved = /** @type {unknown[]} */ (r.changed ?? [])
+      .map(c => String(c).split(/[\s:]/)[0])
+      .filter(k => !isLookToken(k));
     if (!GRAYS_SHOWN.some(k => moved.includes(k)))
       notes.push(
         `neutral ${s.value} grows the same grays the ${data.like ?? 'base'} theme already shows, so its page, surfaces, text and borders keep their colors${moved.length ? ` (only ${[...new Set(moved)].join(', ')} changed)` : ''}: a gray sets the tint of the grays, not how light or dark the surfaces are. For dark surfaces: ${P} set ${slug} mode dark-only, or set --color-background-surface and --color-background-body to the colors you want`,
@@ -7210,6 +7213,20 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
+  // A change that moved the category or chart colors says why they keep the
+  // base theme's when the look would draw two hues alike (an accent change
+  // says it with the accent's notes).
+  if (lookCollapsed(r.changed).look.length && dialOfToken !== 'accent') {
+    const look = paletteMapping(
+      cwd,
+      slug,
+      data,
+      base,
+      ctx.project.core.tokenDefaults,
+    );
+    for (const n of look ? categoryNotes(look, '') : [])
+      if (!notes.includes(n)) notes.push(n);
+  }
   // A change that changed nothing writes nothing, the preview included,
   // once preview.html was rendered from the theme as it is now (a retry
   // after a render that failed renders it).
@@ -7292,7 +7309,7 @@ async function changeOnce(
             onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
           }
         : null,
-      changedTokens: r.changed,
+      changedTokens: lookCollapsed(r.changed).lines,
       changedPartTokens: r.changedParts ?? [],
       styled,
       kept,
@@ -8837,6 +8854,41 @@ function partValues(ctx, data, res, mode) {
 function colorsReport(pal, data, built, slug = '', own = {}) {
   if (!pal)
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
+  /**
+   * The category colors (badges, tokens and card tints) and chart colors:
+   * why a themed look leaves them at the base theme's, or that the build
+   * still shows the base theme's where the palette now derives them.
+   */
+  const lookNote = () => {
+    const c = pal.categories;
+    if (!c) return [];
+    if (c.badges !== 'derived' || c.chart !== 'derived') {
+      const said = categoryNotes(pal, '');
+      if (said.length) return said;
+      return [
+        `category colors (badges, tokens and card tints) and chart colors keep the base theme's: the CLI's own palette could not be read, so none is grown from your look`,
+      ];
+    }
+    const behind = Object.entries(pal.tokens).filter(
+      ([k, v]) =>
+        isLookToken(k) &&
+        !(k in own) &&
+        !data.settings.some(
+          x => x.source === 'token' && x.thing === k && !x.on && !x.when,
+        ) &&
+        modes.some(
+          m =>
+            built?.[m]?.[k] &&
+            built[m][k].trim().toLowerCase() !==
+              String(v[m].color).toLowerCase(),
+        ),
+    );
+    return behind.length
+      ? [
+          `category colors (badges, tokens and card tints) and chart colors still show the base theme's in this build (${behind.length} values): your palette grows them from your look now, and the next change rebuilds them, for example ${P} set ${slug} vibrancy ${pal.vibrancy}`,
+        ]
+      : [];
+  };
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
     /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
@@ -8895,7 +8947,8 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
       seed: fam.seed,
       tokens: Object.fromEntries(
         Object.entries(pal.tokens)
-          .filter(([, v]) => v.family === fam.id)
+          // The category and chart colors are said in one note (lookNote).
+          .filter(([k, v]) => v.family === fam.id && !isLookToken(k))
           .map(([k, v]) => [
             k,
             // Each mode says what it shows: the exact setting where one is
@@ -8928,6 +8981,7 @@ function colorsReport(pal, data, built, slug = '', own = {}) {
       ...pairings
         .filter(c => c.note || !c.pass || c.stop !== c.preferred)
         .map(pairingNote),
+      ...lookNote(),
     ].filter(
       n =>
         !Object.keys(ownBy).some(k =>
@@ -9663,7 +9717,7 @@ async function undoTheme(theme, options) {
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
-      changedTokens: committed.changed,
+      changedTokens: lookCollapsed(committed.changed).lines,
       changedPartTokens: committed.changedParts ?? [],
       problems: committed.problems,
       newProblems: [

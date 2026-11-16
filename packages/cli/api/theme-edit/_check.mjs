@@ -90,6 +90,7 @@ import {
 import {
   PALETTE_DIALS,
   PALETTE_TOKENS,
+  isLookToken,
   VIBRANCY_DEFAULT,
   vibrancyMoves,
   paletteToken,
@@ -8093,6 +8094,7 @@ function statusTwin(C, recorded, thing, when) {
  */
 const dialWrites = token =>
   PALETTE_TOKENS.has(token) ||
+  isLookToken(token) ||
   /^--(text-(heading|display)-\d-weight|radius-|spacing-|size-element-|font-size-)/.test(
     token,
   );
