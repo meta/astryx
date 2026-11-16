@@ -71,7 +71,7 @@ import * as fs from 'node:fs';
 import * as nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
@@ -81,6 +81,7 @@ import {jitiCacheDir} from './jiti-cache.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
+import {ownModuleHooks} from './own-modules.mjs';
 import {
   LISTED,
   PRESENT,
@@ -375,6 +376,15 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
   const realEnv = process.env;
   /** @type {{deregister: () => void} | null} */
   let hooks = null;
+  // An installed CLI resolves imports between its own modules by path while
+  // the recorder is armed (own-modules.mjs). Registered before the recorder's
+  // hooks, so the recorder still sees each import and each load.
+  const own =
+    withoutRecording(buildId) == null
+      ? null
+      : ownModuleHooks(`${pathToFileURL(cliFolder()).href}/`);
+  /** @type {{deregister: () => void} | null} */
+  let ownHooks = null;
   /** @param {string | symbol} name */
   const noteEnv = name => {
     if (typeof name === 'string' && !env.has(name)) {
@@ -414,17 +424,22 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     },
   });
   const disarm = () => {
-    try {
-      hooks?.deregister();
-    } catch {
-      // A hook that cannot be removed is inert: it only notes modules.
+    for (const handle of [hooks, ownHooks]) {
+      try {
+        handle?.deregister();
+      } catch {
+        // A hook that cannot be removed is inert: it notes modules, or
+        // resolves the CLI's own as Node would.
+      }
     }
     hooks = null;
+    ownHooks = null;
     if (process.env === proxy) process.env = realEnv;
   };
   const arm = () => {
     if (hooks) return true;
     try {
+      if (own) ownHooks = registerHooks(own);
       hooks = registerHooks({
         /**
          * @param {string} url
