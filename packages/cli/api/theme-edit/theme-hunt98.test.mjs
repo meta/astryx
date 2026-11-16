@@ -51,7 +51,15 @@ const CASES =
     ['corners', 'rounded-lg', {}, [/ set b corners 8px$/], / corners round$/],
     ['corners', 'rounded-md', {}, [/ set b corners 6px$/], / corners round$/],
     ['corners', 'rounded-sm', {}, [/ set b corners 2px$/], / corners round$/],
-    ['corners', 'rounded', {}, [/ set b corners 4px$/], / corners round$/],
+    // The bare word is also English for round: the round rung first, then
+    // Tailwind's size.
+    [
+      'corners',
+      'rounded',
+      {},
+      [/ set b corners round$/, / set b corners 4px$/],
+      null,
+    ],
     ['corners', 'rounded-full', {}, [/ set b corners pill$/], null],
     // A label or spec that is no setting word: how, or the family.
     ['accent', 'tw:red-500', {}, [/ how accent$/], /\btab\b/],

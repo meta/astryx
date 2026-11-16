@@ -5840,7 +5840,20 @@ function checkOne(
           // mean (rounded-none and not round are square, rounded-full is
           // pill, rounded-[12px] is 12px).
           const tw = /^rounded-\[(.+)\]$/.exec(lower)?.[1];
+          // A rung said as an English word made from it (`rounded` is
+          // round, `squared` square) is that rung, ahead of Tailwind's
+          // class of the same letters (its `rounded` is 4px, which on most
+          // bases is sharper than asked).
+          const rung = CORNERS.map(([n]) => n).find(
+            n => lower === `${n}ed` || lower === `${n}d`,
+          );
+          // Tailwind's own size for those letters is offered after it.
+          const tailwindToo =
+            rung && TAILWIND_RADIUS[lower] && TAILWIND_RADIUS[lower] !== rung
+              ? TAILWIND_RADIUS[lower]
+              : null;
           const opposite =
+            rung ??
             TAILWIND_RADIUS[lower] ??
             (tw && lengthPx(tw) != null
               ? `${Math.round(Number(lengthPx(tw)) * 100) / 100}px`
@@ -5866,7 +5879,7 @@ function checkOne(
                     )[0] ?? null));
           refuse(
             E.ERR_THEME_BAD_VALUE,
-            `corners takes ${DIALS.corners.values}, not "${v}"${bareNumber ? ' (a number needs its unit: px or rem)' : ''}.`,
+            `corners takes ${DIALS.corners.values}, not "${v}"${bareNumber ? ' (a number needs its unit: px or rem)' : ''}${tailwindToo ? ` ("${v}" reads as ${rung}; Tailwind's ${lower} class is ${tailwindToo})` : ''}.`,
             {
               ...(meant ? {didYouMean: [meant]} : {}),
               // The same scope, flags included.
@@ -5885,6 +5898,9 @@ function checkOne(
                       meant
                         ? setLine(slug, 'corners', meant, s)
                         : `${HOW} corners`,
+                      ...(tailwindToo
+                        ? [setLine(slug, 'corners', tailwindToo, s)]
+                        : []),
                     ],
             },
           );
