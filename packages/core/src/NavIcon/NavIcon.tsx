@@ -29,6 +29,7 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    // The mark stays a circle in every theme, as the radio indicator does.
     borderRadius: '50%',
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],
