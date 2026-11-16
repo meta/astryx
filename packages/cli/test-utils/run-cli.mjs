@@ -264,8 +264,9 @@ async function runNow(args, cwd, allCommands, run) {
   // removed `cwd`.
   if (run.finished) return NOT_STARTED;
   // Commander's own exits (parse errors, --help, --version, unknown option)
-  // throw a CommanderError instead of calling process.exit.
-  program.exitOverride();
+  // throw a CommanderError instead of calling process.exit: the JSON shim
+  // installs that override on every command, the program included, and tags
+  // the error with the command that refused it, as in a run of the bin.
 
   /** @type {string[]} */
   const out = [];

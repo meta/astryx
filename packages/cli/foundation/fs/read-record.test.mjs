@@ -472,6 +472,25 @@ describe('an exact run', () => {
     expect(unchangedSince(loader)).toBe(false);
   });
 
+  it('takes a list of states once per record, however often a run hands it in', () => {
+    const {file} = scratch();
+    /** @type {[string, string][]} */
+    const kept = [[file, 'present']];
+    /** @type {Map<string, string>} */
+    const run = new Map();
+    /** @type {Map<string, string>} */
+    const other = new Map();
+    recordReads(run, () => recordStates(kept));
+    // A list does not change once handed in; one that did shows whether the
+    // second hand-in read it again.
+    kept.push([`${file}.other`, '-']);
+    recordReads(run, () => recordStates(kept));
+    expect([...run.keys()]).toEqual([file]);
+    // Another record takes it in full.
+    recordReads(other, () => recordStates(kept));
+    expect([...other.keys()]).toEqual([file, `${file}.other`]);
+  });
+
   it('asks for a state only when the rule could keep it', () => {
     let asked = 0;
     const state = () => {

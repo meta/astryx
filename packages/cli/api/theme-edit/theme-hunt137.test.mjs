@@ -17,7 +17,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -25,6 +25,14 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -223,10 +231,11 @@ describe('one mode', () => {
       expect(card.first[0]).toMatch(
         /^set n box-shadow '.*light-dark\(transparent, .*' --on card$/,
       );
-      const pop = await answer('make context-menu shadows blue in light mode');
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      const pop = await answer('make trigger-menu shadows blue in light mode');
       expect(pop.first).toEqual([]);
       expect(pop.text).toMatch(
-        /what context-menu shows in dark mode is unknown/,
+        /what trigger-menu shows in dark mode is unknown/,
       );
       const removal = await answer('remove card shadows in dark mode');
       expect(removal.first).toEqual([]);

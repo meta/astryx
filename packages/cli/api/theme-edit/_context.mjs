@@ -48,6 +48,7 @@ import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
+  ownTokenEntries,
   builtFontFamilies,
   builtFontWeights,
   fontPackages,
@@ -72,12 +73,19 @@ import {
   renderPreview,
   renderSheet,
   screenshot,
+  pageInTheWay,
+  inTheWayPhrase,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  customPropertyValues,
   fontKey,
   importedFontFamilies,
 } from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  hasGenericFamily,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 
 const E = ERROR_CODES;
 
@@ -151,6 +159,12 @@ export async function context(cwd) {
     unchecked,
     uncheckedCode,
     derived: await derivedVars(project.coreDir),
+    /**
+     * The pictures the running command takes after its build (its --png),
+     * so the build names as removed only the ones it does not take again.
+     * @type {{sheet: string | null} | null}
+     */
+    takesPictures: null,
   };
 }
 
@@ -463,6 +477,20 @@ export async function pictures(project, shots, modes) {
         !editorWrote(project.cwd, /** @type {string} */ (slug), out)
       );
     });
+  // The record of the editor's pictures is a plain file, or none yet.
+  // Something else at its name (a pipe, a folder) is left as it is and
+  // named, and no picture is taken: a picture the record cannot hold would
+  // read as a file of yours on the next run.
+  for (const slug of new Set(shots.map(s => themeOf(s.png)))) {
+    if (!slug) continue;
+    const record = themeFiles(project.cwd, slug).pictures;
+    const st = fs.lstatSync(record, {throwIfNoEntry: false});
+    if (st && !st.isFile() && !st.isSymbolicLink())
+      return {
+        files,
+        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move it, then run the command again`,
+      };
+  }
   /** Pictures skipped for a link at their name. @type {string[]} */
   const linked = [];
   if (blocked.length)
@@ -765,7 +793,7 @@ export function fontNotes(ctx, data) {
         fontOf(s.value).fallbacks.split(',')[0]?.trim() || 'system-ui';
       notes.push(
         /^(-apple-system|blinkmacsystemfont)$/.test(family)
-          ? `"${named}" names the macOS interface font, which only macOS has: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
+          ? `"${named}" names the interface font of ${system}, and only there: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
           : `"${named}" ships only on ${system}: other systems show the next font in the stack (${next}).${near ? ` The closest open font, which loads everywhere, is ${near}: ${P} set ${data.name} font ${near}${on}` : ''}`,
       );
       continue;
@@ -805,6 +833,66 @@ export function fontNotes(ctx, data) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
   }
+  notes.push(...loneFamilyNotes(ctx, data));
+  return notes;
+}
+
+/** What each font role's family token sets, for a note. */
+const ROLE_TEXT = /** @type {Record<string, string>} */ ({
+  body: 'body text uses',
+  heading: 'headings use',
+  code: 'code uses',
+});
+
+/**
+ * A note for each font role the theme's build gives one family and no
+ * fallback at all (`--font-family-heading: Lora`, as Core builds a heading
+ * family given no fallbacks of its own, or an exact token set so): text in
+ * it has no font while that one loads, or if it is missing. The way to a
+ * list is named where the family came from: the setting, run with a list
+ * (the family's own open-font fallbacks, else the font dial's), or the
+ * theme's own source.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function loneFamilyNotes(ctx, data) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const notes = [];
+  const own = customPropertyValues(css);
+  for (const role of Object.keys(ROLE_TEXT)) {
+    const token = `--font-family-${role}`;
+    const value = own.get(token)?.at(-1);
+    if (!value || /var\(/i.test(value) || hasGenericFamily(value)) continue;
+    const named = namedFontFamilies(value);
+    if (named.length !== 1) continue;
+    const family = named[0].replace(/^["']|["']$/g, '');
+    const fallbacks =
+      Object.values(OPEN_FONTS).find(f => fontKey(f.family) === fontKey(family))
+        ?.fallbacks ?? fontOf(family).fallbacks;
+    const list = `${value.trim()}, ${fallbacks}`;
+    const setting = data.settings.find(
+      s => s.source === 'token' && s.thing === token && !s.on && !s.when,
+    );
+    const typography = ownTokenEntries(ctx.project.cwd, data.name).some(
+      e => e.kind === 'typography' && e.key === `${role}.family`,
+    );
+    const fix = setting
+      ? `give a list: ${P} set ${data.name} ${token} ${quoteCommandArgument(list)}`
+      : typography
+        ? `give typography.${role} its fallbacks in themes/${data.name}/${data.name}.theme.ts (such as fallbacks: '${fallbacks}')`
+        : `give ${token} a list in themes/${data.name}/${data.name}.theme.ts (such as '${list}')`;
+    notes.push(
+      `${ROLE_TEXT[role]} only ${family}, with no fallback while it loads or if it is missing; to fall back, ${fix}`,
+    );
+  }
   return notes;
 }
 
@@ -821,7 +909,6 @@ export function fontNotes(ctx, data) {
 export function baseWeightNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  const used = builtFontWeights(ctx, data.name) ?? [];
   const built = builtFontFamilies(ctx, data.name);
   const packages = fontPackages(ctx, data);
   /**
@@ -829,6 +916,9 @@ export function baseWeightNotes(ctx, data) {
    * @param {number[]} faces the weights it loads @param {string} fix
    */
   const gap = (family, by, faces, fix) => {
+    // The weights text in this family uses: those set beside it, and the
+    // ones every text reads (never a weight only another family uses).
+    const used = builtFontWeights(ctx, data.name, family) ?? [];
     const missing = used.filter(w => !faces.includes(w));
     if (missing.length)
       notes.push(
@@ -987,6 +1077,37 @@ export function styledChanges(before, after, base) {
 }
 
 /**
+ * The line that says which pictures to open after a run that took them:
+ * the sample page's and the open states' (every menu, tooltip, popover and
+ * list drawn open), of the mode shown first (light when the theme has
+ * both). Null when this run took neither.
+ * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
+ * @returns {string | null}
+ */
+export function lookAtPictures(files) {
+  /** @param {string} name */
+  const one = name =>
+    files.find(f => path.basename(f) === `${name}.png`) ??
+    files.find(f => path.basename(f) === `${name}-dark.png`);
+  const preview = one('preview');
+  const open = one(`sheet-${OPEN_SECTION}`);
+  if (!preview && !open) return null;
+  const dark =
+    files.some(f => /-dark\.png$/.test(f)) &&
+    files.some(f => /(?<!-dark)\.png$/.test(f));
+  return `open ${[
+    ...(preview
+      ? [
+          `${preview} (the sample page, a tooltip, a menu and a list drawn open below it)`,
+        ]
+      : []),
+    ...(open
+      ? [`${open} (every menu, tooltip, popover and list, drawn open)`]
+      : []),
+  ].join(' and ')}${dark ? '; the -dark pictures show the dark mode' : ''}`;
+}
+
+/**
  * The page of the theme's open states (every menu, tooltip, popover and
  * list drawn open: the overlays section of the sheet), made and stamped
  * with the build it shows, and where its picture goes. The sample page
@@ -995,14 +1116,25 @@ export function styledChanges(before, after, base) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<{html: string, png: string}>}
+ * @returns {Promise<{html: string, png: string} | {problem: string}>} the
+ *   page and its picture, or why neither is made: something of yours at the
+ *   page's name (a file the editor did not write, a link, a folder) is never
+ *   written over, as a picture of yours is not
  */
 export async function openStatesPage(ctx, slug, data) {
   const f = themeFiles(ctx.project.cwd, slug);
   const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  const png = path.join(f.dir, `sheet-${OPEN_SECTION}.png`);
+  const shownHtml = shown(ctx.project.cwd, html);
+  const skipped = `so ${shown(ctx.project.cwd, png)} (the open states) was not taken`;
+  const inWay = pageInTheWay(html);
+  if (inWay)
+    return {
+      problem: `${inTheWayPhrase(shownHtml, inWay, 'the open states page')}, ${skipped}; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
+    };
   await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
   stampSheet(html, slug, ctx.project.cwd);
-  return {html, png: path.join(f.dir, `sheet-${OPEN_SECTION}.png`)};
+  return {html, png};
 }
 
 /**
@@ -1018,33 +1150,48 @@ export async function previewAfter(ctx, slug, data, png) {
   let preview = null;
   let cause = ctx.unchecked ?? null;
   const f0 = themeFiles(ctx.project.cwd, slug);
-  try {
-    preview = await renderPreview(ctx, slug, data);
-  } catch (e) {
-    // The change is already saved: any failure here leaves it unchecked.
-    const code = /** @type {any} */ (e)?.code;
-    cause ??= isRenderFailure(e)
-      ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
-        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
-        : // A folder (or another thing) where preview.html goes: the page
-          // was rendered, and could not be written there.
-          code === ERROR_CODES.ERR_WRITE_FAILED ||
-            (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
-          ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
-          : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  // Something of yours at preview.html (a file, a link, a pipe) is left as
+  // it is: the sample page is not made, so the change is not rendered,
+  // which the result says. (A folder there is named by the write that
+  // fails, below.)
+  const inWay = pageInTheWay(f0.preview);
+  const previewInWay =
+    inWay === 'file' || inWay === 'link' || inWay === 'other' ? inWay : null;
+  if (previewInWay)
+    cause ??= `${inTheWayPhrase(shown(ctx.project.cwd, f0.preview), previewInWay, 'the sample page')}, so the sample page was not made and the change was not rendered; move ${previewInWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug}`;
+  else
+    try {
+      preview = await renderPreview(ctx, slug, data);
+    } catch (e) {
+      // The change is already saved: any failure here leaves it unchecked.
+      const code = /** @type {any} */ (e)?.code;
+      cause ??= isRenderFailure(e)
+        ? renderCause(ctx.project, /** @type {Error} */ (e).message)
+        : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+          ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+          : // A folder (or another thing) where preview.html goes: the page
+            // was rendered, and could not be written there.
+            code === ERROR_CODES.ERR_WRITE_FAILED ||
+              (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
+            ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
+            : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
   const f = themeFiles(ctx.project.cwd, slug);
   /** The pages photographed: the sample page, and with it the open states. */
   const shotPages = [{html: f.preview, png: f.previewPng}];
+  /** Why the open states were not taken, said with the pictures. @type {string | null} */
+  let openProblem = null;
   // Made before the sections are judged, so it is current, never marked.
-  if (png && preview)
-    try {
-      shotPages.push(await openStatesPage(ctx, slug, data));
-    } catch (e) {
+  if (png && preview) {
+    const open = await openStatesPage(ctx, slug, data).catch(e => {
       if (/** @type {any} */ (e)?.lockLost) throw e;
-      // It could not be rendered: the sample page's picture is taken alone.
-    }
+      return {
+        problem: `the open states page could not be made (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so ${shown(ctx.project.cwd, path.join(f.dir, `sheet-${OPEN_SECTION}.png`))} was not taken`,
+      };
+    });
+    if ('problem' in open) openProblem = open.problem;
+    else shotPages.push(open);
+  }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -1054,13 +1201,7 @@ export async function previewAfter(ctx, slug, data, png) {
     fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
   ).filter(n => {
     if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
-    const file = path.join(f.dir, n);
-    try {
-      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
-    } catch {
-      return false;
-    }
-    return markSheetStale(file, slug, ctx.project.cwd);
+    return markSheetStale(path.join(f.dir, n), slug, ctx.project.cwd);
   });
   const shots =
     png && preview
@@ -1069,7 +1210,8 @@ export async function previewAfter(ctx, slug, data, png) {
   return {
     preview,
     pictures: shots.files,
-    pictureProblem: shots.problem,
+    pictureProblem:
+      [openProblem, shots.problem].filter(Boolean).join('; ') || null,
     notChecked: notChecked(cause),
     ...(sheetStale && !sectionsStale.length
       ? {
@@ -1150,6 +1292,8 @@ export function stampSheet(file, slug, cwd) {
  * @param {string} cwd
  */
 function markSheetStale(file, slug, cwd) {
+  // Only the editor's own sheet: a file of yours there is never written.
+  if (pageInTheWay(file) != null) return false;
   let html;
   try {
     html = fs.readFileSync(file, 'utf8');

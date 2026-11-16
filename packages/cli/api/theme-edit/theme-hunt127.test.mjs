@@ -129,15 +129,32 @@ describe('hunt127', () => {
     expect(JSON.stringify(r.data)).toContain('Inter, serif');
   }, 120_000);
 
+  it('a dial saved in other letters is read as the dial, as set reads it', async () => {
+    const file = path.join(cwd, 'themes', 'b', 'b.settings.json');
+    const before = fs.readFileSync(file, 'utf8');
+    try {
+      const data = JSON.parse(before);
+      data.settings = [
+        ...(data.settings ?? []).filter(
+          (/** @type {any} */ x) => x.thing !== 'corners',
+        ),
+        {thing: 'CORNERS', value: 'pill', source: 'dial'},
+      ];
+      fs.writeFileSync(file, JSON.stringify(data));
+      await themeEditSet('b', '--spacing-4', '12px', {cwd});
+      expect(JSON.parse(fs.readFileSync(file, 'utf8')).settings).toContainEqual(
+        expect.objectContaining({thing: 'corners', value: 'pill'}),
+      );
+    } finally {
+      fs.writeFileSync(file, before);
+    }
+  }, 240_000);
+
   it('a saved entry set repairs gets that repair beside the undo', async () => {
     const file = path.join(cwd, 'themes', 'b', 'b.settings.json');
     const before = fs.readFileSync(file, 'utf8');
     try {
       for (const [entry, lines] of [
-        [
-          {thing: 'CORNERS', value: 'pill', source: 'dial'},
-          [/ set b corners pill$/],
-        ],
         [{thing: 'corners', value: 8, source: 'dial'}, [/ set b corners 8px$/]],
         [
           {thing: '--spacing-2', value: 8, source: 'token'},

@@ -30,6 +30,13 @@ const NEAR_NAME_SCORE = 19.6;
 const SYNONYM_SCORE = 90;
 /** The score a name with exactly the typed words gets: an exact name's. */
 const SAME_WORDS_SCORE = 100;
+/**
+ * The least score a name gets when it is some of the typed words in a row
+ * (`Toast` for `ToastProvider`): above every keyword that only partly matches
+ * the typed name (70), below a name that shares the typed compound name's
+ * words (72 and up).
+ */
+const NAME_PART_SCORE = 71;
 
 /**
  * A word with one trailing plural `s` removed (`tabs` → `tab`), leaving short
@@ -442,6 +449,41 @@ function compoundMatch(typed, name) {
 }
 
 /**
+ * A suggestion score for a component whose whole name is some of the typed
+ * words in a row (`Toast` for `ToastProvider`), or null. A name that covers
+ * more of the typed letters scores a little higher, so `Collapsible` ranks
+ * above `Card` for `CollapsibleCard`. Names shorter than four letters do not
+ * count, as in the name parts `searchComponents` finds.
+ * @param {string[]} typed - {@link nameWords} of the typed name
+ * @param {string} name
+ * @returns {{score: number, reason: string} | null}
+ */
+function namePartMatch(typed, name) {
+  const words = nameWords(name);
+  const letters = words.join('').length;
+  if (words.length >= typed.length || letters < 4) return null;
+  if (!containsRun(typed, words)) return null;
+  const coverage = letters / typed.join('').length;
+  return {
+    score: NAME_PART_SCORE + coverage / 2,
+    reason: 'name is part of the name typed',
+  };
+}
+
+/**
+ * Whether `run` sits in `words` as a contiguous run.
+ * @param {string[]} words
+ * @param {string[]} run
+ * @returns {boolean}
+ */
+function containsRun(words, run) {
+  for (let i = 0; i + run.length <= words.length; i++) {
+    if (run.every((w, j) => words[i + j] === w)) return true;
+  }
+  return false;
+}
+
+/**
  * Rank component suggestions for a name that resolved to nothing.
  *
  * Every component `searchComponents` scored keeps its score. A component whose
@@ -449,10 +491,15 @@ function compoundMatch(typed, name) {
  * like an exact name; one of whose synonyms is the typed name (see
  * {@link synonymMatches}) like an exact keyword; one whose name shares the
  * typed compound name's words (see {@link compoundMatch}) just below a
- * one-letter typo of a name. Equal scores put synonym matches first, then order by how many of the typed words the
- * name carries, then by how early the keyword that matched sits in the
- * component's keywords, then by edit distance, then by shared leading letters,
- * then by name. The caller decides how many to print.
+ * one-letter typo of a name. When a keyword only partly matched the typed
+ * name, a name that is some of the typed words in a row (see
+ * {@link namePartMatch}) ranks above it: name evidence for a typed word beats
+ * keyword evidence for it. Equal
+ * scores put synonym matches first, then order by how many of the typed words
+ * the name carries, then, among names that carry every typed word, by how few
+ * other words the name has, then by how early the keyword that matched sits in
+ * the component's keywords, then by edit distance, then by shared leading
+ * letters, then by name. The caller decides how many to print.
  * @param {string} needle - the typed component name (no `XDS` prefix)
  * @param {Array<{name: string, score: number, reason: string, keywordAt?: number}>} results - `searchComponents` output
  * @param {string[]} allNames - every component name
@@ -467,6 +514,7 @@ export function rankComponentSuggestions(
 ) {
   const term = needle.toLowerCase();
   const typed = nameWords(needle);
+  const typedWords = new Set(typed);
   /** @type {Map<string, {name: string, score: number, reason: string, keywordAt: number}>} */
   const byName = new Map();
   for (const r of results) {
@@ -515,6 +563,25 @@ export function rankComponentSuggestions(
       });
     }
   }
+  // When a keyword only partly matched the typed name, a name that is some
+  // of the typed words outranks it: name evidence for a typed word beats
+  // keyword evidence for it.
+  const partialKeyword = results.some(
+    r => r.keywordAt !== undefined && r.score < SYNONYM_SCORE,
+  );
+  for (const name of partialKeyword ? allNames : []) {
+    const match = namePartMatch(typed, name);
+    if (!match) continue;
+    const prior = byName.get(name);
+    if (!prior || match.score > prior.score) {
+      byName.set(name, {
+        name,
+        score: match.score,
+        reason: match.reason,
+        keywordAt: Infinity,
+      });
+    }
+  }
   /** @param {string} name */
   const lead = name => {
     const lower = name.toLowerCase();
@@ -541,11 +608,23 @@ export function rankComponentSuggestions(
       ? count + 0.5
       : count;
   };
+  /**
+   * How many words a name has beyond the typed ones, when it carries every
+   * typed word: the fewer, the closer the name. Names that miss a typed word
+   * all count the same, so a typo keeps the order below.
+   */
+  const extraWords = (/** @type {string} */ name) => {
+    const words = nameWords(name);
+    const have = new Set(words);
+    if (!typed.every(w => have.has(w))) return Infinity;
+    return words.filter(w => !typedWords.has(w)).length;
+  };
   return [...byName.values()]
     .map(r => ({
       ...r,
       synonym: synonyms.has(r.name) ? 1 : 0,
       shared: shared(r.name),
+      extra: extraWords(r.name),
       distance: levenshteinDistance(term, r.name.toLowerCase()),
       lead: lead(r.name),
     }))
@@ -554,6 +633,7 @@ export function rankComponentSuggestions(
         b.score - a.score ||
         b.synonym - a.synonym ||
         b.shared - a.shared ||
+        a.extra - b.extra ||
         a.keywordAt - b.keywordAt ||
         a.distance - b.distance ||
         b.lead - a.lead ||

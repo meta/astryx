@@ -11,13 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {cssUnescape} from '../text/css-escape.mjs';
-
-/**
- * postcss, loaded the first time a stylesheet is read: most commands read
- * none, and start without it.
- * @returns {typeof import('postcss').default}
- */
-const postcss = () => createRequire(import.meta.url)('postcss');
+import {postcss} from '../runtime/lazy-dependencies.mjs';
 
 /** @param {string} family */
 export const fontKey = family =>
@@ -120,6 +114,46 @@ export function declarationValues(css, property) {
       });
   } catch {
     // A stylesheet that does not parse declares nothing known here.
+  }
+  return out;
+}
+
+/**
+ * Each rule of a stylesheet's text that names a font, a weight or a font
+ * style: the values of its `font-family` and `font` declarations, of its
+ * `font-weight` ones and of its `font-style` ones, in source order. What
+ * one rule sets goes together (the weight or the italic a part gives the
+ * family it sets).
+ * @param {string} css
+ * @returns {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>}
+ */
+export function fontRules(css) {
+  /** @type {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>} */
+  const out = [];
+  try {
+    postcss()
+      .parse(css)
+      .walkRules(rule => {
+        /** @type {{families: string[], fonts: string[], weights: string[], styles: string[]}} */
+        const one = {families: [], fonts: [], weights: [], styles: []};
+        rule.each(node => {
+          if (node.type !== 'decl') return;
+          const prop = node.prop.toLowerCase();
+          if (prop === 'font-family') one.families.push(node.value);
+          else if (prop === 'font') one.fonts.push(node.value);
+          else if (prop === 'font-weight') one.weights.push(node.value);
+          else if (prop === 'font-style') one.styles.push(node.value);
+        });
+        if (
+          one.families.length ||
+          one.fonts.length ||
+          one.weights.length ||
+          one.styles.length
+        )
+          out.push(one);
+      });
+  } catch {
+    // A stylesheet that does not parse names nothing known here.
   }
   return out;
 }
