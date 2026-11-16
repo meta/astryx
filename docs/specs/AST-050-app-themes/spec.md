@@ -226,9 +226,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   check warns once in text mode, naming the missing stubs, and its exit code
   and result stay as the other outputs decide; `--json` stays silent. Any other
   missing output, the module's `.d.ts` and `.variants.d.ts` included, is
-  stale. It warns when the path `--out` names does not end in
-  `.css`, and the import it prints names the file as
-  written. `theme build --watch` rebuilds when the source or any local file it
+  stale. A path `--out` names that is another kind of file a stylesheet
+  has, a TypeScript declaration file (`.d.ts`) or a source map
+  (`.css.map`), is refused with `ERR_INVALID_ARGUMENT`, naming the `.css`
+  path to give, and nothing is written. Any other path `--out` names that
+  does not end in `.css` builds with a warning naming the `.css` path meant,
+  and the import it prints names the file as written. `theme build --watch` rebuilds when the source or any local file it
   imports changes. `--check` and `integration verify` treat CRLF and LF line
   endings as the same text. An import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
@@ -266,9 +269,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      Core;
   8. the default theme is one of the added themes;
   9. every font family an added theme names is a system font or is loaded by a
-     font stylesheet the module imports (a warning that names the family when
-     this cannot be shown, as when the stylesheet imports its fonts from a font
-     service);
+     font stylesheet the module imports, with an `@font-face` rule or a font
+     service URL that names the family (a warning that names the family when
+     this cannot be shown, as when the stylesheet imports a font service URL
+     that does not name it);
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once.
 

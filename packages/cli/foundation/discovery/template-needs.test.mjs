@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {
   extractImportedPackages,
   analyzeTemplateNeeds,
+  parsedSpecifiers,
 } from './template-needs.mjs';
 
 // ── extractImportedPackages ─────────────────────────────────────────────────
@@ -410,5 +411,15 @@ describe('analyzeTemplateNeeds', () => {
     const result = analyzeTemplateNeeds(source, dir);
     expect(result.notes).toEqual([]);
     expect(result.missingPackages).toEqual([]);
+  });
+});
+
+describe('parsedSpecifiers', () => {
+  it('reads a template literal with nothing put in it as the string it holds', () => {
+    expect(
+      parsedSpecifiers(
+        'await import(`../shared.ts`);\nrequire(`./a.css`);\nawait import(`./${x}.ts`);',
+      ),
+    ).toEqual(['../shared.ts', './a.css']);
   });
 });
