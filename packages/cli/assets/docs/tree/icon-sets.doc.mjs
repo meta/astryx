@@ -22,9 +22,11 @@ export const docs = {
     'icon definition',
     'icons.json',
     'integration icons',
+    'icon pack',
+    'local icon set',
   ],
   description:
-    'Ship an icon set: register each icon against an icon definition, so apps find icons by meaning and templates use your icons.',
+    'Ship an icon set, or make one inside your app: register each icon against an icon definition, so apps find icons by meaning and templates use your icons.',
   sections: [
     {
       id: 'experimental',
@@ -51,6 +53,51 @@ export const docs = {
       ],
     },
     {
+      id: 'in-your-app',
+      title: 'Make a set inside your app',
+      content: [
+        {
+          type: 'prose',
+          text: "When no published icon set fits, make one in your own app. The app's package can hold the set, so you make and install no other package, and nothing is published. In the app's folder, with Heroicons as the example:",
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: `npm install @heroicons/react
+astryx experimental icon new-set heroicons --from @heroicons/react/24/outline
+astryx integration check
+astryx experimental icon map --pairs close=x-mark,search=magnifying-glass
+astryx integration check
+astryx experimental icon use heroicons`,
+        },
+        {
+          type: 'prose',
+          text: "`new-set` wraps every icon of the library, writes the set in `icon-sets/`, and declares it in `astryx.integration.mjs`. The set's icons import from your app's package name, so add the entry its receipt names: `index.js` and `index.d.ts`, each with `export * from './icon-sets/heroicons/heroicons.generated.js';`, and `main`, `types`, and `exports` in package.json. A package can import itself by name through its `exports`, so your code and copied templates find the icons. `integration check` lists each built-in definition the set does not map yet, with a suggested icon when one fits. Check each meaning, then map them all in one `map --pairs` run; when the library has no icon for a meaning, map the closest one. When the check passes, `use` makes the set the app's main set: `astryx experimental icon <meaning>` finds its icons, and copied templates follow it.",
+        },
+        {
+          type: 'prose',
+          text: "Core components draw their own icons (close, chevrons, status) from the theme. To draw them from your set too, extend the app's theme in code with the set's theme map, imported by your app's package name, and pass the result to `<Theme>`:",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {themeIcons} from 'app'; // your app's package name
+import {themes, defaultThemeSlug} from './astryx-themes';
+
+export const appTheme = defineTheme({
+  name: 'app',
+  extends: themes[defaultThemeSlug],
+  icons: themeIcons,
+});`,
+        },
+        {
+          type: 'prose',
+          text: 'An app that is never published sets `"private": true` in package.json. The receipt then leaves out the steps for a published package: peers, the `typecheck` script, the strict check, and the description. To keep the set apart from your app code, run the same commands in a folder with its own private package.json, install that folder in the app (`npm install ./icons`), and run `use` in the app.',
+        },
+      ],
+    },
+    {
       id: 'add-an-icon-set',
       title: 'Add an icon set',
       content: [
@@ -65,7 +112,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The set's icons import from your package by name, so your package's entry must re-export the generated module. The command writes only the set's own files: your entry, `exports`, `main`, `types`, `files`, peers, and scripts are yours, and the receipt names each change to make as text to copy. For an entry file in the package (and the declaration file package.json names) that is the line `export * from './icon-sets/outline/outline.generated.js';`, relative to it; for a package with no entry, `index.js` and `index.d.ts` with that line and the package.json `main`, `types`, and `exports` that name them; for a built or CommonJS entry, the line to add to the source it is built from. `integration check` names the same change until you make it, and the receipt also names the peers and the `typecheck` script to add. `integration check --strict` type-checks the set's doc files with your package's TypeScript; the receipt says when it is missing (`npm install -D typescript@6`).",
+          text: "The set's icons import from your package by name, so your package's entry must re-export the generated module. The command writes only the set's own files: your entry, `exports`, `main`, `types`, `files`, peers, and scripts are yours, and the receipt names each change to make as text to copy. For an entry file in the package (and the declaration file package.json names) that is the line `export * from './icon-sets/outline/outline.generated.js';`, relative to it; for a package with no entry, `index.js` and `index.d.ts` with that line and the package.json `main`, `types`, and `exports` that name them; for a built or CommonJS entry, the line to add to the source it is built from. `integration check` names the same change until you make it, and, for a package that is not private, the receipt also names the peers and the `typecheck` script to add. `integration check --strict` type-checks the set's doc files with your package's TypeScript; the receipt says when it is missing (`npm install -D typescript@6`).",
         },
       ],
     },

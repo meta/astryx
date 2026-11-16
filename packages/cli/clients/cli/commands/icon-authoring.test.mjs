@@ -1851,6 +1851,32 @@ describe('blind run 4 fixes', () => {
       'Run `integration check --strict` in your build; add to package.json "scripts": `"typecheck": "astryx integration check --strict"`.',
     );
   });
+
+  it('a private package, such as the app itself, gets no publishing notes and ends with the step that turns the set on', async () => {
+    const pkgFile = path.join(pkg, 'package.json');
+    const manifest = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
+    fs.writeFileSync(
+      pkgFile,
+      `${JSON.stringify({...manifest, private: true}, null, 2)}\n`,
+    );
+    const {code, body} = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'outline',
+      '--from',
+      '@acme/glyph-library',
+    ]);
+    expect(code).toBe(0);
+    const notes = body.data.notes.join(' ');
+    expect(notes).not.toContain('Declare the peers');
+    expect(notes).not.toContain('"typecheck"');
+    expect(notes).not.toContain('description is a placeholder');
+    expect(notes).not.toContain('--strict');
+    expect(body.data.notes.at(-1)).toBe(
+      "When `integration check` passes, turn the set on in the app: `astryx experimental icon use outline`. Run it in the app's folder; when this package is not the app, install it in the app first.",
+    );
+  });
 });
 
 describe('blind run 5 fixes', () => {
