@@ -2811,7 +2811,7 @@
 ]
 },
 "NavIcon":{
-"what":"A small circular, accent-colored icon container used as a logo/brand mark inside TopNav or PageNav headers.",
+"what":"A small circular, accent-colored icon container used as a logo/brand mark inside TopNavHeading or SideNavHeading.",
 "synonyms":[
 "logo badge",
 "app icon circle",

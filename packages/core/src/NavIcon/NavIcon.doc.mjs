@@ -56,7 +56,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Decide what assistive technology announces through the icon you pass: NavIcon adds no role or name of its own. Hide the icon when the heading text already names the product.',
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,
@@ -100,7 +100,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Decide what assistive technology announces through the icon you pass: NavIcon adds no role or name of its own. Hide the icon when the heading text already names the product.',
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,
@@ -133,7 +133,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Decide what assistive technology announces through the icon you pass: NavIcon adds no role or name of its own. Hide the icon when the heading text already names the product.',
+          'NavIcon adds no role or name of its own, so the icon you pass decides what assistive technology announces. An Icon is hidden from screen readers unless you give it a label.',
       },
       {
         guidance: false,

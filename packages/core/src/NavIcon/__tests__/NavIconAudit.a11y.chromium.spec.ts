@@ -39,7 +39,6 @@ type AuditCase = {
   viewport: Viewport;
   /** How many NavIcons the story renders. */
   count: number;
-  run?: (page: Page, check: Check, frame: FrameSink) => Promise<void>;
 };
 
 const DESKTOP = {width: 1180, height: 800};
@@ -253,12 +252,51 @@ async function axeRoot(page: Page) {
   );
 }
 
+/**
+ * Walks Tab from the top of the page until focus returns to the first stop or
+ * leaves the page, and records whether each stop sits inside a NavIcon.
+ */
+async function tabStops(page: Page) {
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  const list: {label: string; inNavIcon: boolean}[] = [];
+  let first: string | null = null;
+  for (let i = 0; i < MAX_TAB_STOPS; i++) {
+    await page.keyboard.press('Tab');
+    const stop = await page.evaluate(sel => {
+      const el = document.activeElement;
+      if (el == null || el === document.body) {
+        return null;
+      }
+      const key = `${el.tagName}#${Array.from(el.parentElement?.children ?? []).indexOf(el)}:${el.textContent?.trim().slice(0, 40) ?? ''}:${Math.round(el.getBoundingClientRect().left)},${Math.round(el.getBoundingClientRect().top)}`;
+      return {key, inNavIcon: el.closest(sel) != null};
+    }, NAV_ICON);
+    if (stop == null) {
+      return {list, wrapped: true};
+    }
+    if (stop.key === first) {
+      return {list, wrapped: true};
+    }
+    first ??= stop.key;
+    list.push({label: stop.key, inNavIcon: stop.inNavIcon});
+  }
+  return {list, wrapped: false};
+}
+
 type NavIconRead = Awaited<ReturnType<typeof navIcons>>[number];
 
+/** Same sRGB channels within 1, and the same alpha within 0.01. */
 const same = (a: number[], b: number[]) =>
-  a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 1);
+  a.length === 4 &&
+  b.length === 4 &&
+  a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= 1) &&
+  Math.abs(a[3] - b[3]) <= 0.01;
 
-/** FR1, FR2, FR3 and AR1 for one container. */
+/** Tab presses before the walk gives up on wrapping. */
+const MAX_TAB_STOPS = 40;
+
+/** Checks one container's markup, box, paint, and semantics. */
 function checkNavIcon(check: Check, icon: NavIconRead, label: string) {
   check(icon.tag === 'SPAN', `${label} is a ${icon.tag}`);
   check(
@@ -275,6 +313,12 @@ function checkNavIcon(check: Check, icon: NavIconRead, label: string) {
     Math.abs(icon.box.width - icon.tokens.sizeMd) <= EPSILON &&
       Math.abs(icon.box.height - icon.tokens.sizeMd) <= EPSILON,
     `${label} box ${icon.box.width}x${icon.box.height}, size token ${icon.tokens.sizeMd}`,
+  );
+  check(
+    icon.tokens.accent[3] === 1 &&
+      icon.tokens.onAccent[3] === 1 &&
+      icon.tokens.sizeMd > 0,
+    `${label} tokens did not resolve: ${JSON.stringify(icon.tokens)}`,
   );
   check(icon.borderRadius === '50%', `${label} radius ${icon.borderRadius}`);
   check(
@@ -468,8 +512,14 @@ async function runCase(page: Page, item: AuditCase) {
     );
     check(!focusInside, 'Tab focused a NavIcon or its content');
     await frame('after-tab', {focusInside});
-    if (item.run != null) {
-      await item.run(page, check, frame);
+    const stops = await tabStops(page);
+    check(
+      stops.list.every(stop => !stop.inNavIcon),
+      `a Tab stop is in a NavIcon: ${JSON.stringify(stops.list)}`,
+    );
+    check(stops.wrapped, `Tab did not wrap within ${MAX_TAB_STOPS} presses`);
+    if (item.group !== 'standalone') {
+      check(stops.list.length > 0, 'the story has no Tab stop to walk');
     }
   } catch (error) {
     check(false, `run threw: ${String(error)}`);
