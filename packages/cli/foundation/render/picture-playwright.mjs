@@ -6,13 +6,15 @@
  * @input argv: the Playwright entry file, the page (.html), the picture
  *   (.png), the color mode, and a browser to use instead of Playwright's own
  * @output the picture at the path given, and on stdout the fonts it drew
- *   its text in (font-probe.mjs); on failure, Playwright's error on stderr
- *   and exit code 1
+ *   its text in (font-probe.mjs) and the text it draws cut short
+ *   (cut-short.mjs); on failure, Playwright's error on stderr and exit
+ *   code 1
  * @position run by `screenshot` in api/theme-edit/_preview.mjs through
  *   `runBrowser`, which gives it a temp folder of its own, its time bound and its stop
  */
 
 import {pathToFileURL} from 'node:url';
+import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {PICTURE_WINDOW} from './picture-window.mjs';
 import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
@@ -50,6 +52,15 @@ try {
     })().catch(() => null);
     if (fonts)
       process.stdout.write(`${FONT_PROBE_PREFIX}${JSON.stringify(fonts)}\n`);
+    // The text the picture draws cut short, measured on the page as the
+    // picture shows it. A page that runs no script measures nothing, and
+    // the picture stands: nothing is said.
+    try {
+      const cut = await page.evaluate(cutShortText);
+      process.stdout.write(`${CUT_SHORT_PREFIX}${JSON.stringify(cut)}\n`);
+    } catch {
+      // Not measured.
+    }
   } finally {
     await browser.close();
   }

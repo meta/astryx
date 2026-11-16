@@ -426,16 +426,99 @@ export function reactCopies(project) {
 const notChecked = cause =>
   cause ? {code: E.ERR_THEME_NOT_CHECKED, cause} : null;
 
+/** The sample page, as a note about its pictures names it. */
+export const SAMPLE_PAGE_NAME = 'the sample page';
+
 /**
- * Pictures of HTML files, on request.
+ * Text one page's pictures draw cut short in one part, as the browser
+ * measured it: the page and its picture, the part (null when the text sits
+ * in none), its texts, the one mode it was cut in when only one was, and
+ * whether every text is drawn whole once the part keeps its width
+ * (`flex-shrink: 0`, applied in the page and measured).
+ * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean}} CutShort
+ */
+
+/** The texts named, the first six and how many more. @param {string[]} texts */
+const someTexts = texts =>
+  `${texts
+    .slice(0, 6)
+    .map(t => JSON.stringify(t))
+    .join(', ')}${texts.length > 6 ? `, and ${texts.length - 6} more` : ''}`;
+
+/**
+ * The note for text a page's pictures draw cut short.
+ * @param {CutShort} c
+ */
+export function cutShortNote(c) {
+  const n = c.texts.length;
+  const what = c.part
+    ? `${c.part} label${n === 1 ? '' : 's'}`
+    : `text${n === 1 ? '' : 's'}`;
+  return `${c.page} (${c.file}) draws ${n} ${what} cut short${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text no longer fits ${c.part ? `the ${c.part}` : 'its box'}`;
+}
+
+/**
+ * The problem for text a page's pictures draw cut short, with the line that
+ * keeps it whole: the part keeps its width (`flex-shrink 0` on it), offered
+ * only when the browser measured every text whole with it; else no line,
+ * and that the line was measured and does not.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {CutShort} c
+ * @returns {{problem: string, fix: string | null}}
+ */
+export function cutShortProblem(ctx, slug, c) {
+  const label = c.part ? `${c.part} labels` : 'text';
+  const problem = `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
+  if (c.part && c.whole && ctx.project.target.has(c.part))
+    return {problem, fix: `${P} set ${slug} flex-shrink 0 --on ${c.part}`};
+  return {
+    problem: c.part
+      ? `${problem}; keeping the ${c.part}'s width (flex-shrink 0) was measured and does not draw them whole there, so no one line fixes it`
+      : problem,
+    fix: null,
+  };
+}
+
+/**
+ * Pictures of HTML files, on request. A shot with a `name` is a page laid
+ * out so its text fits in the base theme (the sample page): the text its
+ * pictures draw cut short, as the browser measured it, comes back in
+ * `cutShort`, one entry for each part on each page ({@link cutShortNote},
+ * {@link cutShortProblem}). The sheets (the open
+ * states among them) have no name: their cells are narrow, and the full
+ * sheet cuts long labels short in every theme.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string}>} shots
+ * @param {Array<{html: string, png: string, name?: string}>} shots
  * @param {Array<'light' | 'dark'>} modes
- * @returns {Promise<{files: string[], problem: string | null}>}
+ * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[]}>}
  */
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /**
+   * The text drawn cut short, by page, then by part: its texts, the modes
+   * it was drawn so in, whether keeping the part's width draws every one
+   * whole, and the page's picture.
+   * @type {Map<string, {file: string, parts: Map<string, {texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   */
+  const cut = new Map();
+  /** One entry for each part on each page, from what was measured. */
+  const cutShortNotes = () =>
+    [...cut].flatMap(([name, page]) =>
+      [...page.parts].map(
+        ([part, {texts, modes: drawnIn, whole}]) =>
+          /** @type {CutShort} */ ({
+            page: name,
+            file: page.file,
+            part: part || null,
+            texts: [...texts],
+            only:
+              modes.length > 1 && drawnIn.size === 1 ? [...drawnIn][0] : null,
+            whole,
+          }),
+      ),
+    );
   /** What a later browser's success says of an earlier one. @type {string[]} */
   const notes = [];
   /** One run for every picture: a browser that failed is not tried again. */
@@ -488,6 +571,7 @@ export async function pictures(project, shots, modes) {
     if (st && !st.isFile())
       return {
         files,
+        cutShort: [],
         problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
       };
   }
@@ -496,9 +580,10 @@ export async function pictures(project, shots, modes) {
   if (blocked.length)
     return {
       files,
+      cutShort: [],
       problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
     };
-  for (const {html, png} of shots) {
+  for (const {html, png, name} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
       if (isLink(out)) {
@@ -530,6 +615,7 @@ export async function pictures(project, shots, modes) {
       if (fs.existsSync(part) && !fs.lstatSync(part).isFile())
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
       // A folder it cannot write gets no picture: named before the browser
@@ -539,6 +625,7 @@ export async function pictures(project, shots, modes) {
       } catch (e) {
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
@@ -553,6 +640,7 @@ export async function pictures(project, shots, modes) {
           .map(f => path.relative(project.cwd, f).split(path.sep).join('/'));
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: files.length
             ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r.reason}`
             : `No picture was taken: ${r.reason}`,
@@ -564,6 +652,7 @@ export async function pictures(project, shots, modes) {
         fs.rmSync(part, {force: true});
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
         };
       }
@@ -585,6 +674,23 @@ export async function pictures(project, shots, modes) {
         recordWritten(project.cwd, slug, [out]);
       }
       for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
+      // What the browser measured on a page laid out to fit, kept by page
+      // and part; nothing when its script measured nothing.
+      if (name && r.cutShort?.length) {
+        const page = cut.get(name) ?? {file: r.file, parts: new Map()};
+        cut.set(name, page);
+        for (const {part, text, whole} of r.cutShort) {
+          const at = page.parts.get(part ?? '') ?? {
+            texts: new Set(),
+            modes: new Set(),
+            whole: true,
+          };
+          page.parts.set(part ?? '', at);
+          at.texts.add(text);
+          at.modes.add(m);
+          at.whole &&= whole;
+        }
+      }
     }
   }
   if (linked.length) {
@@ -610,6 +716,7 @@ export async function pictures(project, shots, modes) {
     // Pictures were taken; a note says why an earlier browser did not, and
     // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
+    cutShort: cutShortNotes(),
   };
 }
 
@@ -1182,8 +1289,13 @@ export async function previewAfter(ctx, slug, data, png) {
             : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
     }
   const f = themeFiles(ctx.project.cwd, slug);
-  /** The pages photographed: the sample page, and with it the open states. */
-  const shotPages = [{html: f.preview, png: f.previewPng}];
+  /**
+   * The pages photographed: the sample page, and with it the open states.
+   * @type {Array<{html: string, png: string, name?: string}>}
+   */
+  const shotPages = [
+    {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
+  ];
   /** Why the open states were not taken, said with the pictures. @type {string | null} */
   let openProblem = null;
   // Made before the sections are judged, so it is current, never marked.
@@ -1211,10 +1323,13 @@ export async function previewAfter(ctx, slug, data, png) {
   const shots =
     png && preview
       ? await pictures(ctx.project, shotPages, modesOf(data))
-      : {files: [], problem: null};
+      : {files: [], problem: null, cutShort: []};
   return {
     preview,
     pictures: shots.files,
+    // Text the sample page's pictures draw cut short: a note and a problem
+    // of the change.
+    cutShort: shots.cutShort,
     pictureProblem:
       [openProblem, shots.problem].filter(Boolean).join('; ') || null,
     notChecked: notChecked(cause),

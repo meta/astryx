@@ -231,6 +231,9 @@ import {
   requireProject,
   context,
   pictures,
+  SAMPLE_PAGE_NAME,
+  cutShortNote,
+  cutShortProblem,
   openStatesPage,
   fontNotes,
   themeImageNotes,
@@ -1233,7 +1236,14 @@ async function newTheme(
   }
   refuseIfLockLost();
   fs.rmSync(marker, {force: true});
-  const p = await previewAndRoute(ctx, name, data, png, 'overview', 'new');
+  const {cutShort, ...p} = await previewAndRoute(
+    ctx,
+    name,
+    data,
+    png,
+    'overview',
+    'new',
+  );
   /** @type {string[]} */
   const notes = [
     ...keptNotes,
@@ -1241,6 +1251,7 @@ async function newTheme(
     ...(data.settings.some(s => s.thing === 'font')
       ? fontNotes(ctx, data)
       : []),
+    ...cutShort.map(cutShortNote),
   ];
   return {
     type: 'themeEdit.new',
@@ -5894,7 +5905,14 @@ async function changeOnce(
     } else
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
-    const p = await previewAndRoute(ctx, slug, data, png, 'overview', sub);
+    const {cutShort, ...p} = await previewAndRoute(
+      ctx,
+      slug,
+      data,
+      png,
+      'overview',
+      sub,
+    );
     const after = await baseResolved(ctx.project, data.like).catch(() => base);
     return {
       type: 'themeEdit.set',
@@ -5974,9 +5992,13 @@ async function changeOnce(
                 modesOf(data),
               ).slice(0, -1),
             ),
+          ...cutShort.map(cutShortNote),
         ],
         problems: r.problems,
-        newProblems: problemLines(r.newProblems),
+        newProblems: [
+          ...problemLines(r.newProblems),
+          ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
+        ],
         warnings: r.warnings,
         ...p,
       },
@@ -6872,7 +6894,7 @@ async function changeOnce(
   // package installed or removed since).
   if (r.unchanged && appCopyBehind(cwd, slug, copyFontsCss(ctx, slug, data)))
     writeAppCopy(ctx, slug, data);
-  const p =
+  const {cutShort, ...p} =
     r.unchanged &&
     !png &&
     fs.existsSync(f0.preview) &&
@@ -6881,6 +6903,8 @@ async function changeOnce(
           preview: shown(cwd, f0.preview),
           pictures: [],
           pictureProblem: null,
+          // No pictures: nothing measured.
+          cutShort: [],
           notChecked: null,
           previewStale: [],
           see: seeLine(cwd, slug, changeFocus(s)),
@@ -6916,7 +6940,9 @@ async function changeOnce(
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
           ? prev.value
           : null,
-      notes,
+      // What else to know, then the text the sample page's pictures draw
+      // cut short.
+      notes: [...notes, ...cutShort.map(cutShortNote)],
       // What the whole-theme change leaves out, with the lines that reach
       // it; the text output prints it right under the status line.
       leftOut: leftOutParts(ctx, slug, data, sub, s),
@@ -6939,6 +6965,9 @@ async function changeOnce(
       newProblems: [
         ...problemLines(r.newProblems),
         ...colorFails.map(problem => ({problem, fix: null})),
+        // Text the sample page's pictures draw cut short, with the line
+        // the browser measured as keeping it whole.
+        ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
       ],
       // How many misses the theme's own changes left (show lists each with
       // the line that reaches it), and on how many parts (a part can miss
@@ -7384,13 +7413,13 @@ export async function themeEditShow(theme, options = {}) {
           }
         })
       : null;
-  /** @type {{files: string[], problem: string | null}} */
+  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[]}} */
   const shots =
     png && !noPages
       ? await pictures(
           ctx.project,
           [
-            {html: f.preview, png: f.previewPng},
+            {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
             ...(open && !('problem' in open) ? [open] : []),
             // A section is photographed from its own sheet.
             section
@@ -7405,6 +7434,7 @@ export async function themeEditShow(theme, options = {}) {
       : // Pictures asked for but not taken: said, never a quiet none.
         {
           files: [],
+          cutShort: [],
           problem: png
             ? readOnly
               ? 'no picture was taken: show ran read-only (the project or its install cannot be written, so it could not hold the theme lock), and the pages the pictures are taken of were not made; run show --png where the project can be written'
@@ -7468,6 +7498,8 @@ export async function themeEditShow(theme, options = {}) {
         ...rebuiltNotes,
         ...(png ? [] : leftWords),
         ...sheet.notes,
+        // Text the sample page's pictures draw cut short.
+        ...shots.cutShort.map(cutShortNote),
         ...misplacedNotes(theme, data),
         ...(noReact
           ? [
@@ -7550,6 +7582,9 @@ export async function themeEditShow(theme, options = {}) {
       openProblems: [
         ...problemLines(shownChecks),
         ...colorProblems.map(problem => ({problem, fix: null})),
+        // Text the sample page's pictures draw cut short, with the line
+        // the browser measured as keeping it whole.
+        ...shots.cutShort.map(c => cutShortProblem(ctx, theme, c)),
       ],
       preview,
       previewStale,
@@ -9071,7 +9106,14 @@ async function undoTheme(theme, options) {
     : touched.includes('components')
       ? 'components'
       : 'overview';
-  const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
+  const {cutShort, ...p} = await previewAndRoute(
+    ctx,
+    theme,
+    prev,
+    png,
+    focus,
+    'undo',
+  );
   // What the step took back, for the headline: each setting, base and mode
   // it changed, in one line.
   const took = current ? stepTakesBack(current, prev) : [];
@@ -9118,7 +9160,12 @@ async function undoTheme(theme, options) {
       // What the step back changed, as a change reports it.
       changedTokens: committed.changed,
       problems: committed.problems,
-      newProblems: problemLines(committed.newProblems),
+      newProblems: [
+        ...problemLines(committed.newProblems),
+        ...cutShort.map(c => cutShortProblem(ctx, theme, c)),
+      ],
+      // Text the sample page's pictures draw cut short.
+      ...(cutShort.length ? {notes: cutShort.map(cutShortNote)} : {}),
       ...p,
     },
   };

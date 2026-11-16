@@ -63,7 +63,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading, and with `png` the text the sample page's pictures draw cut short; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -101,10 +101,10 @@
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
- * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds.
+ * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds; with `png`, the text the sample page's pictures draw cut short, as the browser measured it (one note for each part, with its labels).
  * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
- * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail. The text output leads with them, under the status line.
+ * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output leads with them, under the status line.
  * @property {number} [missed] - How many misses the theme's own changes left (show lists each, with the line that reaches it); the text output counts them near its top.
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} warnings - Warnings from the theme build.
@@ -145,8 +145,8 @@
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
- * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it. The text output ends with them.
- * @property {string[]} data.notes
+ * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it; with `png`, text the sample page's pictures draw cut short, with `flex-shrink 0` on its part when the browser measured that drawing it whole. The text output ends with them.
+ * @property {string[]} data.notes - What else to know; with `png`, the text the sample page's pictures draw cut short, as the browser measured it (one note for each part, with its labels).
  * @property {string} data.preview
  * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
  * @property {string} data.sheet - The theme-building page with every component.
@@ -190,7 +190,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[], newProblems: ThemeEditProblem[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[], newProblems: ThemeEditProblem[], notes?: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back; `notes`, with `png`, the text the sample page's pictures draw cut short.
  */
 
 /**

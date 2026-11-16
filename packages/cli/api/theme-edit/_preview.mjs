@@ -69,6 +69,7 @@ import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
+import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1852,14 +1853,17 @@ export function newPictureRun() {
  * gets its own time bound, and the next one its turn when one fails or
  * hangs. Not ok with a reason when none is there or every one failed: the
  * reason then names each one's real error. When a later browser took the
- * picture, `note` says why an earlier one did not.
+ * picture, `note` says why an earlier one did not. `cutShort` is the text
+ * the page draws cut short, measured in it by the browser that took the
+ * picture, each with whether its part keeping its width draws it whole;
+ * absent when that browser's script measured nothing.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
  * @param {PictureRun} [run] what earlier pictures of the same run learned:
  *   a browser that failed or hung there is not tried again
- * @returns {Promise<{ok: true, file: string, notes?: string[]} | {ok: false, reason: string, stopped?: string}>}
+ * @returns {Promise<{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean}>} | {ok: false, reason: string, stopped?: string}>}
  */
 export async function screenshot(
   project,
@@ -1949,6 +1953,7 @@ export async function screenshot(
             : []),
           ...pictureFontNotes(r.stdout ?? ''),
         ],
+        ...measuredCutShort(r.stdout ?? ''),
       };
     }
     const text = r.error ? String(r.error.message) : r.stderr;
@@ -2024,6 +2029,34 @@ export function pictureFontNotes(stdout) {
     );
   }
   return out;
+}
+
+/**
+ * The text a picture script measured cut short, from the line it prints
+ * after `CUT_SHORT_PREFIX`; nothing when it printed none that reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{cutShort?: Array<{part: string | null, text: string, whole: boolean}>}}
+ */
+function measuredCutShort(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(CUT_SHORT_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(CUT_SHORT_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    cutShort: found
+      .filter(x => x && typeof x.text === 'string')
+      .map(x => ({
+        part: typeof x.part === 'string' ? x.part : null,
+        text: x.text,
+        whole: x.whole === true,
+      })),
+  };
 }
 
 /** A Chrome or Chromium on this machine, at a usual place or on PATH. */
@@ -2538,7 +2571,8 @@ export function takeFirstAppCopy(cwd, slug) {
  * A stop or the bound asks the whole group to close, waits for it (killing
  * it past a short grace), then removes the temp folder and the `drop` files
  * (a picture part a stopped run leaves); a run that ends on its own removes
- * the temp folder only.
+ * the temp folder only, and gives what the script wrote on its standard
+ * output (`stdout`: what it measured in the page).
  * @param {string} script a picture script
  * @param {string[]} args
  * @param {number} [bound] milliseconds before the run is stopped
@@ -2615,7 +2649,9 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     });
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', d => {
-      if (stdout.length < 8000) stdout += d;
+      // Room for every line the script prints: the fonts, and the text cut
+      // short on a page of every component.
+      if (stdout.length < 64_000) stdout += d;
     });
     /** Set once the run is being stopped (bound, signal): it ends there. */
     let stopping = false;

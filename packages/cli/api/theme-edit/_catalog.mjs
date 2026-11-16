@@ -136,9 +136,12 @@ export const SAMPLE_PAGE = h(
           h('Switch', {label: 'Notify my team', value: true}),
           h('CheckboxInput', {label: 'Add to calendar', value: true}),
           h('ProgressBar', {label: 'Progress', value: 60, hasValueLabel: true}),
+          // The buttons wrap to a second row when a theme's buttons are
+          // wider than the card (a roomier padding, a larger text): a
+          // label is never cut short by the sample's own width.
           h(
             'HStack',
-            {gap: 2},
+            {gap: 2, wrap: 'wrap'},
             h('Button', {label: 'Save', variant: 'primary'}),
             h('Button', {label: 'Preview', variant: 'secondary'}),
             h('Button', {label: 'Cancel', variant: 'ghost'}),
