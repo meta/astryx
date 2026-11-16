@@ -297,8 +297,8 @@ export function createResizeGesture(
         return;
       }
       // Only the key map acts: a plain key, or Shift with an arrow. Other
-      // modified keys belong to the platform (word, line and document
-      // movement, text selection) and to app shortcuts, so they pass through.
+      // modified keys belong to the browser (history navigation, scrolling to
+      // the top or bottom) and to app shortcuts, so they pass through.
       if (
         event.altKey ||
         event.ctrlKey ||

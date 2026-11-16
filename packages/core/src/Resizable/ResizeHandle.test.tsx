@@ -192,8 +192,8 @@ describe('ResizeHandle', () => {
       for (const key of keys) {
         const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
         expect(isNotConsumed, key).toBe(true);
+        expect(separator, key).toHaveAttribute('aria-valuenow', '200');
       }
-      expect(separator).toHaveAttribute('aria-valuenow', '200');
     },
   );
 
