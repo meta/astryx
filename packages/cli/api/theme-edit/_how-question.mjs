@@ -17579,15 +17579,8 @@ export function draftAnswer(ctx, env, question) {
       }
       const pageMode = pageModeOf(c, String(color));
       const pm = pageMode ? {mode: pageMode} : {};
-      // (The main panel, drawn over the page with a fill of its own, shows
-      // that fill: the second line paints it with the frame, so the page
-      // looks the color asked.)
-      const panelRead = C.MAP['layout-content']
-        ? restRead(C.partReads('layout-content', 'background') ?? [], '')
-        : null;
-      const panel =
-        panelRead && panelRead !== '--color-background-body' ? panelRead : null;
-      // ("green text on a black page": the text color said with the page
+      // (The frame and main panel follow, below, for every page answer.)
+      // ("green text on a black page"": the text color said with the page
       // is the theme's text, in the page's mode, with it.)
       const ink = /\btext\b/.test(c.text) ? colorFor(c, 'text') : null;
       if (ink && ink !== color)
@@ -17616,16 +17609,8 @@ export function draftAnswer(ctx, env, question) {
           sequence: true,
         };
       return {
-        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
-        options: [
-          [set('--color-background-body', color, pm)],
-          [
-            set('background', color, {on: 'app-shell', ...pm}),
-            ...(panel
-              ? [set('background-color', color, {on: 'layout-content', ...pm})]
-              : []),
-          ],
-        ],
+        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
+        options: [[set('--color-background-body', color, pm)]],
       };
     }
     if (on === 'icons') {
@@ -24310,21 +24295,6 @@ export function draftAnswer(ctx, env, question) {
     // The page never takes the color the text takes in the same mode.
     const all = [...last.values()]
       .map(x => x.step)
-      // (The page joins as it shows: with the frame and main panel lines
-      // its own answer gives, so the main panel takes the color too.)
-      .flatMap(st => {
-        if (st.thing !== '--color-background-body' || st.on) return [st];
-        const page = drafts.find(
-          d =>
-            d.options.length === 2 &&
-            d.options[0].length === 1 &&
-            d.options[0][0].thing === st.thing &&
-            String(d.options[0][0].value) === String(st.value) &&
-            (d.options[0][0].mode ?? '') === (st.mode ?? '') &&
-            d.options[1].some(x => x.on === 'app-shell'),
-        );
-        return page ? [st, ...page.options[1]] : [st];
-      })
       .filter(
         (st, i, list) =>
           !(
@@ -26416,6 +26386,57 @@ export function draftAnswer(ctx, env, question) {
       : `${d.text}: nothing is written: ${[...new Set(why)].join('; ')}`;
     if (!kept.length) delete d.sequence;
   }
+  // A page color reaches the whole page: the body token, and the frame
+  // and main panel the app shell draws over it (each with its own fill,
+  // the main panel the surface), in the same mode, so no part of the
+  // page keeps the old color.
+  {
+    const panelRead = C.MAP['layout-content']
+      ? restRead(C.partReads('layout-content', 'background') ?? [], '')
+      : null;
+    const panel =
+      panelRead && panelRead !== '--color-background-body' ? panelRead : null;
+    if (TARGET.has('app-shell'))
+      for (const d of result) {
+        let grew = false;
+        d.options = d.options.map(o => {
+          const out = [];
+          for (const st of o) {
+            out.push(st);
+            if (
+              st.thing !== '--color-background-body' ||
+              st.on ||
+              st.verb !== 'set'
+            )
+              continue;
+            const same = (/** @type {Step} */ x, /** @type {string} */ on) =>
+              x.on === on && (x.mode ?? '') === (st.mode ?? '');
+            const m = st.mode ? {mode: st.mode} : {};
+            if (!o.some(x => same(x, 'app-shell'))) {
+              out.push(
+                set('background', String(st.value), {on: 'app-shell', ...m}),
+              );
+              grew = true;
+            }
+            if (panel && !o.some(x => same(x, 'layout-content'))) {
+              out.push(
+                set('background-color', String(st.value), {
+                  on: 'layout-content',
+                  ...m,
+                }),
+              );
+              grew = true;
+            }
+          }
+          return out;
+        });
+        if (grew) {
+          d.sequence = true;
+          if (!/the frame and the main panel/.test(d.text))
+            d.text = `${d.text}; the app shell's frame${panel ? ` and the main panel (layout-content, which draws ${panel})` : ''} take it too, so the whole page shows it`;
+        }
+      }
+  }
   // "bold white text in the header", "white text on the primary button":
   // a text color typed for a part, with no fill asked for it, is measured
   // on the fill the part shows (the page or surface, or its look's own);
@@ -26505,7 +26526,13 @@ export function draftAnswer(ctx, env, question) {
       const other = reads[0] === 'light' ? 'dark' : 'light';
       const g = failing(other);
       for (const st of inks) st.mode = reads[0];
-      d.text = `${d.text}, in ${reads[0]} mode only: ${on} is ${g ? hex(g.slice(0, 3)) : 'light'} in ${other} mode, where ${inks[0].value} would not read; for both modes, give ${on} a background too`;
+      // (A dark surface inside a light page, a toast's, draws the dark
+      // mode's colors there: a dark-mode line shows on it in light mode
+      // too, and the answer names it.)
+      const media = Object.entries(C.MAP)
+        .filter(([, x]) => x?.media && (x.contains ?? []).includes(one(on)))
+        .map(([k]) => k);
+      d.text = `${d.text}, in ${reads[0]} mode only: ${on} is ${g ? hex(g.slice(0, 3)) : 'light'} in ${other} mode, where ${inks[0].value} would not read; for both modes, give ${on} a background too${reads[0] === 'dark' && media.length ? `; inside ${media.slice(0, 3).join(', ')}, a dark surface on the light page, ${on} shows this dark-mode color in light mode too` : ''}`;
     }
   }
   // "make the primary button #0064E0", "pumpkin orange buttons": a fill
