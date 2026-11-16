@@ -1644,7 +1644,7 @@ export function settingsProblem(
     if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
       return s.source == null || s.source === ''
-        ? `${s.thing} has no source (dial, token or property)`
+        ? `${s.thing} has no source (dial, token or property)${unreadFieldsText(s)}`
         : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
@@ -1799,6 +1799,20 @@ function twinInLetters(s, read, data) {
     s.thing.toLowerCase() === read.toLowerCase() &&
     entryProblem({...s, thing: read}, data) == null
   );
+}
+
+/**
+ * The fields of a saved entry the editor does not read, said after what is
+ * wrong with it (`; it has "part", a field the editor does not read: a
+ * part is "on"`), or nothing.
+ * @param {any} s
+ */
+function unreadFieldsText(s) {
+  const unread = Object.keys(s).filter(
+    k => !ENTRY_FIELDS.includes(k) && !['parts', 'masked', 'note'].includes(k),
+  );
+  if (!unread.length) return '';
+  return `; it has ${unread.map(k => JSON.stringify(k)).join(', ')}, ${unread.length === 1 ? 'a field' : 'fields'} the editor does not read (the part a setting styles is "on")`;
 }
 
 /**
@@ -2370,9 +2384,12 @@ function damagedEntry(data, problem) {
     (Array.isArray(data?.settings) ? data.settings : []).find(
       (/** @type {any} */ s) =>
         (entryDamage(s) === 'source' &&
-          typeof s.source === 'string' &&
-          s.source !== '' &&
-          problem.startsWith(`${s.thing} has source `)) ||
+          ((typeof s.source === 'string' &&
+            s.source !== '' &&
+            problem.startsWith(`${s.thing} has source `)) ||
+            // An entry saved with no source its undo still names.
+            ((s.source == null || s.source === '') &&
+              problem.startsWith(`${s.thing} has no source `)))) ||
         (entryDamage(s) === 'mode' &&
           problem.startsWith(`${s.thing} has mode `)) ||
         (PLACE_SCOPES.some(k => entryDamage(s) === k) &&
@@ -10161,7 +10178,7 @@ function stepText(text, cwd, radii) {
 }
 
 /** The file's own top-level fields. */
-const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
+const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted', 'palette'];
 /** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
 const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
@@ -10225,6 +10242,15 @@ function topFieldNames(data) {
       TOP_FIELD_WORDS[lower]
         ? `the settings file writes the ${lower} as "${k}", read as ${field}`
         : `the settings file writes "${k}" in other letters, read as ${field}`,
+    );
+  }
+  // A field the editor does not read (`theme`, `modes`) is not used, and
+  // said, with the field it is a typo of.
+  for (const k of Object.keys(data)) {
+    if (TOP_FIELDS.includes(k)) continue;
+    const near = TOP_FIELDS.filter(f => typoNear(k.trim().toLowerCase(), f));
+    notes.push(
+      `the settings file has "${k}", a field the editor does not read${near.length === 1 ? ` (it reads "${near[0]}")` : ''}, so it is not used`,
     );
   }
   return notes;

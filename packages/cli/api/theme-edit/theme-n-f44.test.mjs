@@ -3,7 +3,9 @@
 /**
  * @file A set of a property typed in other letters fixes that property
  * listed twice, never a swap line that loops; a top-level `base` is the
- * base, with a note. Every offered line is followed.
+ * base, with a note, and any other top-level field the editor does not
+ * read is named; a saved entry with its part under "part" and no source
+ * names that field and gets its undo. Every offered line is followed.
  */
 
 import * as fs from 'node:fs';
@@ -125,6 +127,48 @@ describe('a top-level base', () => {
       expect((await cli(['set', 't', 'spacing', 'roomy'])).status).toBe(0);
       expect(saved().like).toBe('neutral');
       expect(saved().base).toBeUndefined();
+    },
+    T,
+  );
+});
+
+describe('a top-level field the editor does not read', () => {
+  it(
+    'is named, with the field it is a typo of',
+    async () => {
+      editFile(d => {
+        d.modes = 'dark-only';
+        d.theme = 'stone';
+      });
+      const r = await cli(['show', 't']);
+      expect(r.status).toBe(0);
+      const notes = r.json.data.notes.join('\n');
+      expect(notes).toMatch(
+        /has "modes", a field the editor does not read \(it reads "mode"\)/,
+      );
+      expect(notes).toMatch(/has "theme", a field the editor does not read/);
+    },
+    T,
+  );
+});
+
+describe('a saved entry with its part under "part" and no source', () => {
+  it(
+    'names the unread field and offers the undo that removes it',
+    async () => {
+      editFile(d => {
+        d.settings = [{thing: 'padding', value: '8px', part: 'card'}];
+      });
+      const r = await cli(['show', 't']);
+      expect(r.json.code).toBe('ERR_THEME_INVALID');
+      expect(r.json.error).toMatch(/"part", a field the editor does not read/);
+      const lines = offered(r.json);
+      expect(lines[0]).toEqual(['undo', 't', 'padding']);
+      expect(lines.some((/** @type {string[]} */ l) => l[0] === 'new')).toBe(
+        false,
+      );
+      expect((await cli(lines[0])).status).toBe(0);
+      expect(saved().settings).toEqual([]);
     },
     T,
   );
