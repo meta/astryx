@@ -1093,6 +1093,32 @@ describe('Tooltip layer mounts at its first show', () => {
     }
   });
 
+  it("keeps the hidden copy in a shadow root whose host moved into another window's document", async () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const frameDocument = iframe.contentDocument as Document;
+    const host = document.createElement('div');
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    shadowRoot.appendChild(container);
+    frameDocument.body.appendChild(frameDocument.adoptNode(host));
+    try {
+      render(
+        <Tooltip content="Save changes">
+          <button type="button">Save</button>
+        </Tooltip>,
+        {container},
+      );
+      const trigger = container.querySelector('button') as HTMLButtonElement;
+      await waitFor(() => {
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
+      });
+    } finally {
+      iframe.remove();
+    }
+  });
+
   it("keeps the hidden copy in a shadow root trigger's own root", async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -26,6 +26,7 @@ import {
 import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {isShadowRoot} from '../utils/nodeType';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -288,10 +289,9 @@ function descriptionRootOf(
   trigger: HTMLElement,
 ): DocumentFragment | HTMLElement {
   const root = trigger.getRootNode();
-  const ShadowRootOfWindow = trigger.ownerDocument.defaultView?.ShadowRoot;
-  return ShadowRootOfWindow != null && root instanceof ShadowRootOfWindow
-    ? root
-    : trigger.ownerDocument.body;
+  // The node type decides, so a shadow root whose host moved into another
+  // window's document still counts.
+  return isShadowRoot(root) ? root : trigger.ownerDocument.body;
 }
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
