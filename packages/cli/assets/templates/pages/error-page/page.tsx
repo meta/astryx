@@ -59,7 +59,7 @@ export default function ErrorPage() {
           icon={<Icon icon={ExclamationTriangleIcon} size="lg" />}
           headingLevel={1}
           title="Something went wrong"
-          description="We couldn't load this page. Try again in a moment, or check your connection."
+          description="We couldn't load this page. Try again in a moment, or use Check connection to see whether your browser is online."
           actions={
             <>
               <Button
