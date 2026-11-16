@@ -102,7 +102,8 @@ describe('FINAL-43 R03 and chaos45', () => {
     async test => {
       needsBases(test);
       expect((await answer('make the inputs 2.5rem high')).first).toEqual([
-        'min-height 2.5rem --on inputs',
+        '--size-element-md 40px --on inputs',
+        '--size-element-sm 36px --on inputs',
       ]);
       const neg = await answer('make the buttons -4px tall');
       expect(neg.all).toEqual([]);

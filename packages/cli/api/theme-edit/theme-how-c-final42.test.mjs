@@ -92,6 +92,7 @@ describe('FINAL-42', () => {
       needsBases(test);
       expect((await answer('make the inputs 4px shorter')).first).toEqual([
         '--size-element-md 28px --on inputs',
+        '--size-element-sm 24px --on inputs',
       ]);
       expect((await answer('make the buttons 2px taller')).first).toEqual([
         '--size-element-md 34px --on button',
@@ -99,9 +100,14 @@ describe('FINAL-42', () => {
       ]);
       // (A height value is a minimum; never one fixed height on a group
       // whose text area takes its height from its rows.)
+      // (The control heights the inputs read, on the group; never one
+      // fixed height, which would cut a text area to one line.)
       const tall = await answer('make the inputs 40px tall');
-      expect(tall.first).toEqual(['min-height 40px --on inputs']);
-      for (const c of tall.all) expect(c).not.toMatch(/^height /);
+      expect(tall.first).toEqual([
+        '--size-element-md 40px --on inputs',
+        '--size-element-sm 36px --on inputs',
+      ]);
+      for (const c of tall.all) expect(c).not.toMatch(/^(?:min-)?height /);
     },
     T,
   );

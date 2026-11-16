@@ -1738,7 +1738,12 @@ const QUESTIONS_3 = [
   ],
   [
     'make inputs taller (44px)',
-    {top: /^set q min-height 44px --on inputs$/, adds: /minHeight=44px/},
+    // (The control heights the inputs read, so they can shrink and a text
+    // area keeps its rows.)
+    {
+      top: /^set q --size-element-md 44px --on inputs && set q --size-element-sm 40px --on inputs$/,
+      adds: /--size-element-md=44px/,
+    },
   ],
   [
     'stakeholders think the grays are too warm',

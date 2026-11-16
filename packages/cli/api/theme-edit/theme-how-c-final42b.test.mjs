@@ -79,7 +79,10 @@ describe('amounts with a softening word', () => {
         /each ×2\b/,
       );
       expect((await answer('make the inputs exactly 36px high')).first).toEqual(
-        ['min-height 36px --on inputs'],
+        [
+          '--size-element-md 36px --on inputs',
+          '--size-element-sm 32px --on inputs',
+        ],
       );
     },
     T,

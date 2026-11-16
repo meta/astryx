@@ -6464,9 +6464,10 @@ export function draftAnswer(ctx, env, question) {
         .toLowerCase()
         .replace(/^(?:the|a|an|my)\s+/, '')
         .replace(/(?:'s|s'|s)$/, '');
+      // (A group drawn in a place, "the inputs in cards", is as plain as
+      // one part: every input, so it is kept to the place too.)
       const specific =
         by === 'beside' ||
-        FAMILIES[pick] != null ||
         pick === themeWide ||
         members.includes(pick) ||
         members.some(h => pick?.startsWith(`${h}-`)) ||
@@ -6540,6 +6541,50 @@ export function draftAnswer(ctx, env, question) {
         c.placeStrict = {holder: title.on, part: 'heading'};
         c.scopeWhy = `Core has no ${title.missing} part of its own: its title is a heading inside it, and this change is the heading's own setting, which ${title.on} cannot hold (it would change every heading); nothing is written`;
         continue;
+      }
+    }
+    // "the dialog buttons", "the button icon": a part's name said right
+    // before another's names the second inside the first (no catalog part
+    // goes by both words): kept to it, as "buttons in the dialog".
+    if (c.parts.length === 2 && !c.container) {
+      const at = (/** @type {{on: string}} */ p) =>
+        lex.parts
+          .filter(([, x]) => x.on === p.on && !x.when)
+          .map(([re]) => re.exec(c.text))
+          .filter(m => m != null)
+          .map(m => ({
+            start: /** @type {RegExpExecArray} */ (m).index,
+            end:
+              /** @type {RegExpExecArray} */ (m).index +
+              /** @type {RegExpExecArray} */ (m)[0].length,
+          }))
+          .sort((x, y) => x.start - y.start)[0] ?? null;
+      const [p1, p2] = c.parts;
+      const [a1, a2] = [at(p1), at(p2)];
+      const ordered =
+        a1 && a2
+          ? a1.start < a2.start
+            ? [p1, a1, p2, a2]
+            : [p2, a2, p1, a1]
+          : null;
+      if (ordered) {
+        const [holder, hAt, inner, iAt] = /** @type {any[]} */ (ordered);
+        const gap = c.text.slice(hAt.end, iAt.start);
+        // (Not a part's text or line, which their own readers place: a
+        // card's heading, a row's dividers.)
+        if (
+          /^\s+$/.test(gap) &&
+          !C.MAP[`${holder.on}-${inner.on}`] &&
+          C.MAP[holder.on] &&
+          !textOnlyPart(inner.on) &&
+          !(C.MAP[inner.on]?.line ?? []).length &&
+          inner.on !== 'divider'
+        ) {
+          c.parts = [inner];
+          c.container = holder.on;
+          c.placeStrict = {holder: holder.on, part: inner.on};
+          continue;
+        }
       }
     }
     // "the menu separators": a part's own divider that draws no line of
@@ -6813,15 +6858,31 @@ export function draftAnswer(ctx, env, question) {
     // (Kept to the place when the place draws the part: "buttons inside
     // cards". A place that draws none of it is no place of it, "the menu
     // item of the dropdown" read as a select.)
-    if (
-      c.container &&
-      !c.byState &&
-      c.parts.every(y =>
-        (FAMILIES[y.on] ?? [y.on]).some(m =>
-          (C.MAP[String(c.container)]?.contains ?? []).includes(m),
-        ),
-      )
-    )
+    // (Whether or not the place draws it, a part kept to a place it
+    // cannot be held to is never written everywhere: "menu items in the
+    // dialog" writes nothing unless a token on the dialog holds it. A
+    // place the part's own name already says, "the menu item of the
+    // dropdown", is the part itself, wherever it is.)
+    const placeWords = (
+      /\b(?:in|of|on|inside|within)\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z ]*)$/.exec(
+        inPlaceText,
+      )?.[1] ?? ''
+    ).split(/\s+/);
+    const drawn = c.parts.every(y =>
+      (FAMILIES[y.on] ?? [y.on]).some(m =>
+        (C.MAP[String(c.container)]?.contains ?? []).includes(m),
+      ),
+    );
+    const named = c.parts.every(y =>
+      y.on
+        .split('-')
+        .some(w => placeWords.includes(w) || placeWords.includes(`${w}s`)),
+    );
+    if (c.container && !c.byState && !drawn && named) {
+      c.container = undefined;
+      continue;
+    }
+    if (c.container && !c.byState)
       c.placeStrict = {
         holder: String(c.container),
         part: c.parts.map(x => x.on).join(', '),
@@ -7792,7 +7853,8 @@ export function draftAnswer(ctx, env, question) {
             .filter(
               r =>
                 /^--size-/.test(r.token) &&
-                r.props.includes('height') &&
+                (r.props.includes('height') ||
+                  r.props.includes('min-height')) &&
                 (!size ||
                   r.token.endsWith(`-${size}`) ||
                   r.when.some(w => w.split(/[\s,]/).includes(`size=${size}`))),
@@ -7879,7 +7941,9 @@ export function draftAnswer(ctx, env, question) {
         ? ['sm', 'small']
         : /\b(large|lg)\b/.test(c.text)
           ? ['lg', 'large']
-          : [];
+          : /\b(medium|md)\b/.test(c.text)
+            ? ['md', 'medium']
+            : [];
       const hit = size.find(s => vals.size.includes(s));
       if (hit) f.when = `size:${hit}`;
     }
@@ -9464,7 +9528,7 @@ export function draftAnswer(ctx, env, question) {
         .filter(
           w =>
             !priorOn ||
-            ['small', 'large'].includes(w) ||
+            ['small', 'medium', 'large'].includes(w) ||
             Object.values(
               C.variantValues(one(/** @type {string} */ (priorOn))) ?? {},
             )
@@ -9477,12 +9541,14 @@ export function draftAnswer(ctx, env, question) {
           variantWords.map(variant =>
             variant === 'small'
               ? 'size:sm'
-              : variant === 'large'
-                ? 'size:lg'
-                : variantKey(
-                    priorOn,
-                    variant === 'danger' ? 'destructive' : variant,
-                  ),
+              : variant === 'medium'
+                ? 'size:md'
+                : variant === 'large'
+                  ? 'size:lg'
+                  : variantKey(
+                      priorOn,
+                      variant === 'danger' ? 'destructive' : variant,
+                    ),
           ),
         ),
       ];
@@ -12095,6 +12161,16 @@ export function draftAnswer(ctx, env, question) {
         const sizeNamed = /^size:([\w-]+)$/.exec(String(pf.when ?? ''))?.[1];
         if (prop === 'height' && !pf.state && (!pf.when || sizeNamed)) {
           const sized = sizeSteps(on, down ? -n : n, undefined, sizeNamed);
+          // (A size the part's data never shows reading a control height,
+          // a button's large size: its height now is unknown, so nothing
+          // is written; never another size's height.)
+          if (sizeNamed && !sized?.steps.length) {
+            push({
+              text: `${on}'s ${sizeNamed} size reads no control height the editor knows (its part data lists ${[...new Set((C.partReads(one(on), 'size') ?? []).filter(r => /^--size-/.test(r.token)).map(r => r.token))].join(', ') || 'none'}): nothing is written; give a height, such as min-height 40px --on ${on} --when size:${sizeNamed}`,
+              options: [],
+            });
+            continue;
+          }
           if (sized?.steps.length) {
             const d = {
               text: `${on} ${down ? 'shorter' : 'taller'} by ${n}px: each control height it reads (${sized.toks.join(', ')}) ${down ? 'down' : 'up'} by ${n}px, on ${on} only (a part sized by its content or rows keeps its height)`,
@@ -14271,6 +14347,13 @@ export function draftAnswer(ctx, env, question) {
     }
     if (on === 'icons') {
       const color = colorFor(c, 'fill');
+      // (An icon's size is the size its own component is given; no theme
+      // token reaches it.)
+      if (!color && a === 'size')
+        return {
+          text: `an icon's size is the size its own component is given${c.container ? ` in ${c.container}` : ''}; no theme setting reaches it, so nothing is written`,
+          options: [],
+        };
       if (!color) return null;
       return {
         text: 'icon colors: --color-icon-primary for most icons, --color-icon-secondary for quieter ones',
@@ -16313,13 +16396,17 @@ export function draftAnswer(ctx, env, question) {
           }
           if (style && !color && !width)
             opts.push([set('border-style', style, f)]);
-          opts.push([
-            set(
-              prop,
-              `${width ?? '1px'} ${style ?? 'solid'} ${color ?? keptColor}`,
-              f,
-            ),
-          ]);
+          // (The shorthand writes one color for every state; when no color
+          // is asked and a longhand answers, it would paint a checked or
+          // error border the resting color, so it is not offered.)
+          if (color || !opts.length)
+            opts.push([
+              set(
+                prop,
+                `${width ?? '1px'} ${style ?? 'solid'} ${color ?? keptColor}`,
+                f,
+              ),
+            ]);
           return {text: `the border${where}`, options: opts};
         }
         // One mode on a part that draws no line now: a border would take
@@ -16796,7 +16883,12 @@ export function draftAnswer(ctx, env, question) {
         if (innerWeight.length)
           return {
             text: `${rung ?? value} text${where}: ${innerWeight.join(' and ')} on ${on}, which the text inside it reads for its weight`,
-            options: [innerWeight.map(tok => set(tok, value, {on}))],
+            // (On the status or variant asked, "the error banner's text".)
+            options: [
+              innerWeight.map(tok =>
+                set(tok, value, {on, ...(f.when ? {when: f.when} : {})}),
+              ),
+            ],
             sequence: innerWeight.length > 1,
           };
         return {
@@ -17659,11 +17751,61 @@ export function draftAnswer(ctx, env, question) {
             ),
         );
         // (A height is never below zero.)
+        // (One size named, "the medium buttons 36px tall": that size's own
+        // control height, on the part, never one height on every size.)
+        {
+          const sz = /^size:([\w-]+)$/.exec(String(f.when ?? ''))?.[1];
+          const px = tall ? lengthPx(tall) : null;
+          if (sz && px != null && px >= 0 && !f.state) {
+            const sized = sizeSteps(on, 0, px, sz);
+            if (sized?.steps.length)
+              return {
+                text: `the height${where}: ${sized.toks.join(', ')} ${tall}, the control height its ${sz} size reads, on ${on} only`,
+                options: [sized.steps],
+              };
+            return {
+              text: `${on}'s ${sz} size reads no control height the editor knows: nothing is written; give a height, such as min-height ${tall} --on ${on} --when size:${sz}`,
+              options: [],
+            };
+          }
+        }
         if (tall && /^-/.test(tall))
           return {
             text: `a height cannot be ${tall}: give a height of 0 or more, or say shorter by an amount`,
             options: [],
           };
+        // (A group with a member sized by rows, the inputs: a minimum never
+        // makes them shorter, so the control height they read is set on
+        // the group, the main size at the height asked, each other size by
+        // the same amount; the text area keeps its rows.)
+        if (tall && rowsSized && FAMILIES[on] && !f.state && !f.when) {
+          const px = lengthPx(tall);
+          const sized = px != null ? sizeSteps(on, 0, px) : null;
+          if (sized?.steps.length)
+            return {
+              text: `the height${where}: ${tall} for its main size, each control height it reads (${sized.toks.join(', ')}) moved by the same amount, on ${on} only (${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)`,
+              options: [sized.steps],
+              sequence: sized.steps.length > 1,
+            };
+        }
+        // (One size named with a way, "the small buttons taller": that
+        // size's control height one step, 4px, on the part.)
+        {
+          const sz = /^size:([\w-]+)$/.exec(String(f.when ?? ''))?.[1];
+          if (sz && !tall && !f.state && /\b(taller|shorter)\b/.test(c.text)) {
+            const down = /\bshorter\b/.test(c.text);
+            const sized = sizeSteps(on, down ? -4 : 4, undefined, sz);
+            return sized?.steps.length
+              ? {
+                  text: `the ${sz} ${on} ${down ? 'shorter' : 'taller'}: ${sized.toks.join(', ')} ${down ? 'down' : 'up'} 4px (one step), on ${on} only`,
+                  options: [sized.steps],
+                }
+              : {
+                  text: `${on}'s ${sz} size reads no control height the editor knows: nothing is written`,
+                  options: [],
+                };
+          }
+        }
         if (tall)
           return {
             text: `the height${where}: min-height ${tall}${rowsSized && FAMILIES[on] ? ` (never one fixed height: ${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)` : ''}`,
