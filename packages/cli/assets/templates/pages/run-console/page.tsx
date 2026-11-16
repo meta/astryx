@@ -823,7 +823,11 @@ export default function RunConsolePage() {
               status: 'cancelled',
               steps: run.steps.map(s =>
                 s.status === 'running' || s.status === 'pending'
-                  ? {...s, status: 'skipped' as const}
+                  ? {
+                      ...s,
+                      status: 'skipped' as const,
+                      log: logFor(s.name, 'skipped', run.tests),
+                    }
                   : s,
               ),
             }
