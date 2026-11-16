@@ -30,7 +30,10 @@
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them
- *   (foundation/suggest/name-index.mjs), each kept while every path it
+ *   (foundation/suggest/name-index.mjs), and by css-tree.mjs for what
+ *   `theme build` finds when it checks a theme's pseudo-class keys and token
+ *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), each kept
+ *   while every path it
  *   stamped but the CLI's own files (which its build id covers) is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
@@ -77,10 +80,14 @@ import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
+  LISTED,
   PRESENT,
+  RESOLVED,
   lookedUp,
   fileStamp,
   keepState,
+  listingStamp,
+  resolvedNow,
   recordReads,
   recordStates,
   stillInState,
@@ -1081,7 +1088,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * system can store times as coarsely as 2 s, so a change within one tick of
  * the last can leave a stamp as it was.
  */
-const SUMMARY_SETTLE_MS = 2000;
+export const SUMMARY_SETTLE_MS = 2000;
 
 /**
  * Whether every stamp in `stamps` was taken longer than
@@ -1092,7 +1099,9 @@ const SUMMARY_SETTLE_MS = 2000;
 function settled(stamps) {
   const limit = Date.now() - SUMMARY_SETTLE_MS;
   return stamps.every(([, stamp]) => {
-    if (stamp === '-') return true;
+    // A folder's listing and a resolved path hold no time.
+    if (stamp === '-' || stamp.startsWith(LISTED) || stamp.startsWith(RESOLVED))
+      return true;
     const [, mtime, ctime] = stamp.split(':').map(Number);
     return mtime < limit && ctime < limit;
   });
@@ -1101,7 +1110,8 @@ function settled(stamps) {
 /**
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
- * `make` stamped has the stamp it was stored with (the CLI's own files are
+ * `make` stamped has the stamp it was stored with, a folder's listing
+ * (read-record.mjs listingStamp) by its entries' names and types (the CLI's own files are
  * covered by the build id instead: inCliBuild), else the one
  * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
@@ -1113,18 +1123,23 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
- * @param {{accept?: (value: T) => boolean}} [options] - `accept`: whether a
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - `accept`: whether a
  *   stored value serves this call, else it is made again and stored over (a
- *   summary that holds more only once a caller asks for it).
+ *   summary that holds more only once a caller asks for it); `keep`: whether
+ *   a value just made is stored at all (a failed or partial answer is not).
  * @returns {T}
  */
-export function persistedSummary(key, make, {accept = () => true} = {}) {
+export function persistedSummary(
+  key,
+  make,
+  {accept = () => true, keep = () => true} = {},
+) {
   const at = summaryAt(key);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 
@@ -1134,21 +1149,21 @@ export function persistedSummary(key, make, {accept = () => true} = {}) {
  * @template T
  * @param {unknown[]} key
  * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
- * @param {{accept?: (value: T) => boolean}} [options] - As for
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - As for
  *   {@link persistedSummary}.
  * @returns {Promise<T>}
  */
 export async function persistedSummaryAsync(
   key,
   make,
-  {accept = () => true} = {},
+  {accept = () => true, keep = () => true} = {},
 ) {
   const at = summaryAt(key);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = await make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 
@@ -1189,7 +1204,7 @@ function storedSummary({file, entry}) {
       Array.isArray(stored.stamps) &&
       stored.stamps.every(
         (/** @type {[string, string]} */ [at, stamp]) =>
-          typeof at === 'string' && fileStamp(at) === stamp,
+          typeof at === 'string' && summaryStampNow(at, stamp) === stamp,
       )
     ) {
       try {
@@ -1204,6 +1219,20 @@ function storedSummary({file, entry}) {
     // No usable entry: made again.
   }
   return undefined;
+}
+
+/**
+ * What `at` gives now for a stamp of the kind `stamp` is: a folder's listing
+ * (read-record.mjs listingStamp), where a path resolves (resolvedNow), or a
+ * path's full stamp.
+ * @param {string} at
+ * @param {string} stamp
+ * @returns {string}
+ */
+function summaryStampNow(at, stamp) {
+  if (stamp.startsWith(LISTED)) return listingStamp(at);
+  if (stamp.startsWith(RESOLVED)) return resolvedNow(at);
+  return fileStamp(at);
 }
 
 /**

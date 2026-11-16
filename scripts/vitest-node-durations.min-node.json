@@ -780,7 +780,7 @@
     "packages/cli/test/drift/docs-drift.test.mjs": 1.5,
     "packages/cli/test/experimental-isolation.test.mjs": 47.2,
     "packages/cli/test/global-local.rows-16-39.test.mjs": 87.4,
-    "packages/cli/test/global-local.rows-40-58.test.mjs": 130.1,
+    "packages/cli/test/global-local.rows-40-59.test.mjs": 130.1,
     "packages/cli/test/global-local.test.mjs": 72.9,
     "packages/cli/test/global-mode-docs.test.mjs": 4.1,
     "packages/cli/test/global-mode-notes.test.mjs": 0.5,

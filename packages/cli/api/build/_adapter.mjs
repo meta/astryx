@@ -94,18 +94,22 @@ export async function loadPageTemplates(cwd) {
 /**
  * Every ready page template and every block the project can scaffold, from one
  * discovery: pages as {@link loadPageTemplates} returns them, blocks as
- * {@link BlockTemplate}. Discovery failures leave both empty.
+ * {@link BlockTemplate}, and how many page templates are not ready yet.
+ * Discovery failures leave all three empty.
  *
  * @param {string} cwd
- * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[]}>}
+ * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[], notReadyPages: number}>}
  */
 export async function loadTemplates(cwd) {
   let templates;
   try {
     templates = await discoverTemplates(cwd);
   } catch {
-    return {pages: [], blocks: []};
+    return {pages: [], blocks: [], notReadyPages: 0};
   }
+  const notReadyPages = templates.filter(
+    t => t.type === 'page' && t.isReady === false,
+  ).length;
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
     .map(t =>
@@ -135,7 +139,7 @@ export async function loadTemplates(cwd) {
       description: t.description || '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
     }));
-  return {pages, blocks};
+  return {pages, blocks, notReadyPages};
 }
 
 /**

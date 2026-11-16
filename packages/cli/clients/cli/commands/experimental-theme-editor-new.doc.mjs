@@ -35,7 +35,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, every menu, tooltip, popover and list drawn open (show adds sheet.png, every component), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
+        'Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds sheet.png, every component), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
     },
     {
       flag: '--corners <rung>',

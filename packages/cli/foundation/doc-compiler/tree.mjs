@@ -76,6 +76,7 @@ export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * @property {string} summary
  * @property {string | null} group the discovery group adoption reads, or null
  * @property {DocPlacement | undefined} placement
+ * @property {string[]} [keywords] the search keywords a guide declares
  * @property {any} [ref] what a reader needs to open the doc, carried as given
  */
 
@@ -99,6 +100,7 @@ export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * @property {string | null} [category] the topic's sidebar group:
  *   `foundations` puts it in Foundations; anything else, in Guides
  * @property {string} source where the topic comes from, for diagnostics
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string[]} [aliases] every other name the topic answers to: the
  *   topics it replaced, directly or through a chain
  */
@@ -117,7 +119,8 @@ export {KIND_GROUPS, TOPIC_LEVELS, topicLevel};
  * @property {string} name
  * @property {string} title
  * @property {string} summary
- * @property {string[]} [keywords] an authored namespace's search keywords
+ * @property {string[]} [keywords] the search keywords an authored namespace,
+ *   a guide, or a flat topic declares; a typed doc's are on its `ref.selfDoc`
  * @property {string | null} parent the parent's route; null at the top
  * @property {string | null} slot the parent slot this node sits in
  * @property {number | null} order
@@ -565,6 +568,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
         name: doc.name,
         title: doc.title,
         summary: doc.summary,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         parent: home.parentRoute,
         slot: home.slot,
         order: home.order,
@@ -611,6 +615,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
           name: topic.name,
           title: topic.title,
           summary: topic.summary,
+          ...(Array.isArray(topic.keywords) ? {keywords: topic.keywords} : {}),
           parent: level.route,
           slot: 'topics',
           order: i,
@@ -858,6 +863,7 @@ export async function loadTreeInputs({
         name: doc.name,
         title: doc.title,
         summary: doc.description,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         group: null,
         placement: doc.placement,
         ref: {topicFile: file},

@@ -23,13 +23,16 @@ import {CORE_PROVIDER_ID} from '../../../foundation/identity/providers.mjs';
 import {
   loadComponents,
   loadTemplates,
+  loadWeights,
   pageDestination,
   requireBuildCoreDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind} from './kind.mjs';
-import {rankPages} from './rank.mjs';
+import {pickStart, rankPages} from './rank.mjs';
+import {pickFit} from './weights.mjs';
 import {readNames} from './words.mjs';
+import {namedOutright} from './weights.mjs';
 import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
 
 /** A page at/above this score is a confident direct match. */
@@ -142,30 +145,43 @@ export async function kitSignals(query, options = {}) {
   const wantsPages = !type || type === 'template';
   const templates = wantsPages
     ? await loadTemplates(cwd)
-    : {pages: [], blocks: []};
+    : {pages: [], blocks: [], notReadyPages: 0};
   const catalog = templates.pages;
   // Search reads a page template the idea names in any case, separator or
   // with a neighbour-letter swap in a word of six or more letters as that template's own words
   // (readNames), as the page ranker does, so such a name matches by name.
   const searched = wantsPages ? readNames(query, catalog) : query;
+  // Search wider than the surfaced kit so a flood of doc matches cannot bury
+  // the page templates past the cutoff; the caller's `limit` still caps the
+  // kit below. A non-positive or non-integer limit is passed through
+  // unchanged so search rejects it (ERR_INVALID_ARGUMENT).
+  const wide =
+    Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit;
+  // A page template not ready yet is still a search match, but build reads
+  // search as if it were absent: it asks for one more result per such
+  // template, sets them aside, and keeps the same number of results, so none
+  // takes a block's or a component's place.
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
       await search(searched, {
         cwd,
         type,
-        // Search wider than the surfaced kit so a flood of doc matches cannot
-        // bury the page templates past the cutoff; the caller's `limit` still
-        // caps the kit below. A non-positive or non-integer limit is passed
-        // through unchanged so search rejects it (ERR_INVALID_ARGUMENT).
-        limit:
-          Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit,
+        limit: wide + (wide > 0 ? templates.notReadyPages : 0),
       })
     );
-  const results = result.data.results;
+  /** @param {SearchResultEntry} r */
+  const isReady = r =>
+    catalog.some(t => t.name === r.name && t.package === r.package);
+  /** @param {SearchResultEntry} r */
+  const notReadyPage = r =>
+    r.domain === 'template' && r.kind !== 'block' && !isReady(r);
+  const allResults = result.data.results;
+  const results = allResults.filter(r => !notReadyPage(r)).slice(0, wide);
   // The TOTAL number of matches, not the number that survived `limit`. The kit
   // below is deliberately small (≤3 pages, ≤5 blocks, ≤6 components) and
   // `results` is itself capped, so every other count here is a cap; this is the
-  // one field that says how much the query actually matched.
+  // one field that says how much the query actually matched. It is search's
+  // own total, so it also counts not-ready page templates that match.
   const matchCount = result.data.matchCount;
 
   /**
@@ -181,15 +197,30 @@ export async function kitSignals(query, options = {}) {
     return (coverage?.matched ?? 0) / total >= PAGE_COVERAGE;
   };
 
-  const matchedPages = results
-    .filter(
+  // Build starts only from ready page templates, and the kit reads only
+  // search's other results: a template not ready yet is no direct match, does
+  // not hold back the shell lift, is never listed, and takes no place from a
+  // page, block or component. The one exception is the reason: when the idea
+  // names a not-ready template that search matched directly, the reason says
+  // it is not ready yet.
+  /** @param {SearchResultEntry} r */
+  const pageMatch = r =>
+    r.domain === 'template' &&
+    r.kind !== 'block' &&
+    r.score >= PAGE_FLOOR &&
+    covers(r);
+  const matchedPages = results.filter(pageMatch).slice(0, 3);
+  // Any not-ready template the idea names and search matched directly, not
+  // only search's first: another not-ready template ranked above it must not
+  // hide the one the reader asked for.
+  const namedUnready =
+    allResults.find(
       r =>
-        r.domain === 'template' &&
-        r.kind !== 'block' &&
-        r.score >= PAGE_FLOOR &&
-        covers(r),
-    )
-    .slice(0, 3);
+        pageMatch(r) &&
+        !isReady(r) &&
+        r.score >= PAGE_DIRECT &&
+        namedOutright([r.name], readNames(query, [{name: r.name}]), [r])[0],
+    )?.name ?? null;
   const searchedBlocks = results.filter(
     r => r.domain === 'template' && r.kind === 'block',
   );
@@ -214,9 +245,18 @@ export async function kitSignals(query, options = {}) {
    * `start`, which always scaffolds. Copied rather than mutated: these entries
    * come from `search()` and are not this function's to modify.
    */
-  const pages = directMatch
-    ? matchedPages
-    : matchedPages.map(page => ({
+  // The kit names only page templates build could start from: a match the
+  // catalog holds as not ready is left out of the surfaced list, and the
+  // response's `directMatch` and `--skeleton` describe that list. The start
+  // is still chosen from every match (chooseStart).
+  const startable = matchedPages.filter(page =>
+    catalog.some(t => t.name === page.name && t.package === page.package),
+  );
+  const shownDirect =
+    directMatch && startable[0]?.name === matchedPages[0]?.name;
+  const pages = shownDirect
+    ? startable
+    : startable.map(page => ({
         ...page,
         command: `${page.command} --skeleton`,
       }));
@@ -258,14 +298,29 @@ export async function kitSignals(query, options = {}) {
         catalog,
         query,
         placeOf,
+        namedUnready,
       )
     : null;
   // Name the ranker's next two templates beside the start: the reader judges
   // meaning better than keywords do, and an acceptable template is in these
   // three far more often than it is the start alone.
+  // How clearly the pick model prefers the start over the other pages, for a
+  // reader that acts on a start only when the choice is clear.
+  const fit =
+    chosen && chosen.basis !== 'fallback'
+      ? pickFit(
+          chosen.name,
+          query,
+          ranked,
+          pickStart(ranked, 'page'),
+          catalog,
+          loadWeights(),
+        )
+      : null;
   /** @type {BuildStart | null} */
   const start = chosen && {
     ...chosen,
+    ...(fit === null ? {} : {fit}),
     alternatives: pickStartAlternatives(
       ranked,
       kind,
@@ -295,7 +350,7 @@ export async function kitSignals(query, options = {}) {
     query: String(query).trim(),
     idea: searched,
     matchCount,
-    directMatch,
+    directMatch: shownDirect,
     start,
     pages: pagesKept,
     blocks: blocksKept,

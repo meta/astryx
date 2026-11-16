@@ -11,13 +11,8 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {isAppShell, readNames} from './words.mjs';
-import {
-  blendOrder,
-  blendSummary,
-  sharesOwnWord,
-  weighStart,
-} from './weights.mjs';
+import {isAppShell} from './words.mjs';
+import {blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -80,6 +75,16 @@ const LIFT = [
   -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
 ];
 
+/**
+ * The `start.fit` at and above which a page-template start is a clear choice.
+ * Below it, the pick model's start agrees with labeled build requests less
+ * than half the time; at and above it, more than half the time. A reader that
+ * acts on a start only when the choice is clear (theme preview adding a page,
+ * wording that calls a start a good fit) compares `start.fit` with this one
+ * value.
+ */
+export const CLEAR_FIT = 0.4;
+
 /** The decision replaces the shell with a page when p >= 0.30. */
 const LIFT_AT = 0.3;
 
@@ -91,11 +96,9 @@ const LIFT_AT = 0.3;
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {PageTemplate[]} catalog
  * @param {string} idea
- * @param {string | null} [unsupported] a page the weights chose that shares no
- *   word with the idea; the lift may not bring it back
  * @returns {PageTemplate | null}
  */
-function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
+function liftFromShell(ranked, kind, catalog, idea) {
   const b = blendSummary(
     idea,
     ranked,
@@ -120,7 +123,6 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
   ];
   const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
   if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
-  if (b.best === unsupported) return null;
   return catalog.find(t => t.name === b.best) ?? null;
 }
 
@@ -132,8 +134,9 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
  *
  * `direct` means two independent signals agree: the start is also search's
  * direct match. The ranker sees only ready templates, so a template
- * still marked not ready is never the start; when search matched one directly
- * the reason names it, so the reader knows why the kit starts elsewhere.
+ * still marked not ready is never the start; when the idea names one that
+ * search matched directly, the reason says it is not ready yet and where build
+ * started instead. A not-ready template the idea does not name is never named.
  *
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
@@ -143,6 +146,8 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
  * @param {string} idea
  * @param {(t: PageTemplate) => string | null} [placeOf] the path a template
  *   is scaffolded to, quoted for a shell; null when none is known
+ * @param {string | null} [unready] a not-ready page template the idea names
+ *   and search matched directly; the reason says it is not ready yet
  * @returns {Omit<BuildStart, 'alternatives'> | null}
  */
 export function chooseStart(
@@ -153,14 +158,16 @@ export function chooseStart(
   catalog,
   idea,
   placeOf = () => null,
+  unready = null,
 ) {
   const direct = directMatch ? pages[0].name : null;
-  const unready =
-    direct && !catalog.some(t => t.name === direct) ? direct : null;
   // The reason never denies a match the same response reports: a direct
   // match the ranker outweighed is named, and so are the loose page matches
   // search listed when the kit falls back to the shell.
   const loose = pages.map(p => `\`${p.name}\``).join(', ');
+  /** @param {string} startName */
+  const notReady = startName =>
+    `\`${unready}\` isn't ready yet, so build started from \`${startName}\`.`;
   /**
    * A part's or an edit's reason, naming a direct match that is not the start.
    * @param {string} place
@@ -175,31 +182,20 @@ export function chooseStart(
   // scores, decide the start of a whole page, so it can differ from the
   // ranker's own pick, its head-noun family included. A part or an edit starts
   // where the ranker's placement rules put it (spec:AST-048/FR3).
-  const weighedPage =
+  const weighed =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
           weights: loadWeights(),
           newPage: asksForNewPage(idea, catalog),
         })
       : undefined;
-  // When the ranker proposes no page, a page the word weights lean to but
-  // whose own docs share no word with the idea is no start; the shell lift
-  // may not bring that same page back.
-  const unsupported =
-    weighedPage &&
-    !directMatch &&
-    !proposed &&
-    !sharesOwnWord(weighedPage, readNames(idea, catalog), catalog)
-      ? weighedPage
-      : null;
-  const weighed = unsupported ? null : weighedPage;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
   const pick =
     weighed === undefined
       ? proposed
       : weighed === null
-        ? isAppShell(proposed) || (proposed && direct && !unready)
+        ? isAppShell(proposed) || (proposed && direct)
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
@@ -208,7 +204,7 @@ export function chooseStart(
   // ready or not, keeps the start and reason it already has.
   const lifted =
     !direct && (!pick || pick.family === 'Shell')
-      ? liftFromShell(ranked, kind, catalog, idea, unsupported)
+      ? liftFromShell(ranked, kind, catalog, idea)
       : null;
   const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
   if (closest) {
@@ -219,7 +215,7 @@ export function chooseStart(
       ...asTemplate(closest, placeOf(closest)),
       basis: agrees ? 'direct' : 'closest',
       reason: unready
-        ? `\`${unready}\` matches but is not ready yet; this is the closest ready template.`
+        ? notReady(closest.name)
         : place
           ? placed(place, closest.name)
           : agrees
@@ -242,7 +238,7 @@ export function chooseStart(
         ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
-          ? `\`${unready}\` matches but is not ready yet, so start from the app shell.`
+          ? notReady(shell.name)
           : place
             ? placed(place, shell.name)
             : direct

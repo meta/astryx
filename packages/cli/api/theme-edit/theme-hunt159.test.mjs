@@ -99,9 +99,15 @@ describe('a bound already passed the way asked writes nothing', () => {
   }, 120_000);
 
   it('still moves toward a bound not yet reached', async () => {
+    // (The bound holds every radius the dial writes: the container's and
+    // the page's, which the dial makes larger, are held at it.)
     expect(
       writes(await how('ne', 'make the corners rounder but at most 20px')),
-    ).toEqual(['set ne corners 20px']);
+    ).toEqual([
+      'set ne corners 20px',
+      'set ne --radius-container 20px',
+      'set ne --radius-page 20px',
+    ]);
   }, 120_000);
 });
 
@@ -119,8 +125,10 @@ describe("headings' letter spacing", () => {
 
 describe('a part taller or wider by a length', () => {
   it('reads its height, and its inline padding half on each side', async () => {
+    // (Each control height the button reads, so every size keeps its own.)
     expect(writes(await how('ne', 'make buttons 4px taller'))).toEqual([
-      'set ne height 36px --on button',
+      'set ne --size-element-md 36px --on button',
+      'set ne --size-element-sm 32px --on button',
     ]);
     const wider = writes(await how('ne', 'make buttons 8px wider'));
     expect(wider).toHaveLength(1);

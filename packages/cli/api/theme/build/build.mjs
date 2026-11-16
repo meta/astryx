@@ -109,7 +109,22 @@ import {
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
-import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {keyPathLine, keyValueLine, nullThemeValues} from './null-values.mjs';
+import {typographyInputProblems} from './typography-values.mjs';
+import {sourcePlugins} from './source-syntax.mjs';
+import {
+  INPUT_DECLARATION_FILES,
+  inputFieldsFrom,
+  sourceFieldProblems,
+  sourceTypography,
+} from './input-fields.mjs';
+import {styleKeyProblems} from './style-keys.mjs';
+import {
+  bigIntAsText,
+  writtenPrimitives,
+  writtenValueProblems,
+} from './written-values.mjs';
+import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
   parsedSpecifiers,
@@ -159,6 +174,7 @@ import {generatedMark} from '../../theme-edit/_marks.mjs';
  */
 let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
+/** @type {string | null} */ let _coreThemeFile = null;
 
 /**
  * The bindings one Core provides: the namespaces interception spreads, the
@@ -171,6 +187,7 @@ let _coreRootModule = null;
  *   generateThemeRulesSplit: any,
  *   generateOnMediaCSS: any,
  *   generateAdaptationCSS: any,
+ *   themeFile?: string | null,
  * }} CoreBindings
  */
 
@@ -239,6 +256,7 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
+    core.themeFile = cliCoreThemeFile();
     core.rootModule = lazyRootModule(() =>
       fileURLToPath(import.meta.resolve('@astryxdesign/core')),
     );
@@ -285,6 +303,52 @@ function setCore(core) {
   _generateThemeRulesSplit = core.generateThemeRulesSplit;
   _generateOnMediaCSS = core.generateOnMediaCSS;
   _generateAdaptationCSS = core.generateAdaptationCSS;
+  _coreThemeFile = core.themeFile ?? null;
+}
+
+/**
+ * The tokens the chosen Core sets on each media surface by itself: the
+ * surfaces of a theme that sets none.
+ * @returns {{onDark?: Record<string, unknown>, onLight?: Record<string, unknown>}}
+ */
+function coreSurfaceTokens() {
+  try {
+    const bare = _defineTheme?.({name: 'astryx-defaults'});
+    return {onDark: bare?.__onDark?.tokens, onLight: bare?.__onLight?.tokens};
+  } catch {
+    return {};
+  }
+}
+
+/** @type {Map<string, import('./input-fields.mjs').InputFields | null>} */
+const _inputFields = new Map();
+/**
+ * The fields the chosen Core's theme input takes, from its type
+ * declarations; null when they cannot be read.
+ * @returns {import('./input-fields.mjs').InputFields | null}
+ */
+function coreInputFields() {
+  if (!_coreThemeFile) return null;
+  if (!_inputFields.has(_coreThemeFile))
+    _inputFields.set(
+      _coreThemeFile,
+      inputFieldsFrom(
+        INPUT_DECLARATION_FILES.map(file => {
+          try {
+            return fs.readFileSync(
+              path.join(
+                path.dirname(/** @type {string} */ (_coreThemeFile)),
+                file,
+              ),
+              'utf8',
+            );
+          } catch {
+            return null;
+          }
+        }),
+      ),
+    );
+  return _inputFields.get(_coreThemeFile) ?? null;
 }
 
 /**
@@ -421,6 +485,7 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
     generateOnMediaCSS: themeModule.generateOnMediaCSS,
     generateAdaptationCSS: themeModule.generateAdaptationCSS,
+    themeFile,
   };
 }
 
@@ -1109,9 +1174,11 @@ export function themeSourceFiles(filePath) {
 
 /**
  * Theme sources a missing build input probably meant, relative to `cwd`: the
- * same path with `/` for `\`; or, for a bare theme name, the theme sources in
- * `themes/<name>/` and `src/themes/<name>/` of the project, and `<name>` with a
- * theme source extension. A build output is never offered.
+ * same path with `/` for `\`; for a bare theme name, the theme sources in
+ * `themes/<name>/` and `src/themes/<name>/` of the project; the input with a
+ * theme source extension; and, for a path, a theme source in the same folder
+ * whose name is one edit from the one given (`t.them.ts`, `T.theme.ts`). A
+ * build output is never offered.
  * @param {string} file the input as given
  * @param {string} cwd
  * @returns {string[]} at most three paths
@@ -1127,19 +1194,53 @@ export function themeSourceGuesses(file, cwd) {
     const forward = path.resolve(cwd, file.replace(/\\/g, '/'));
     return isSource(forward) ? [shown(forward)] : [];
   }
-  if (/[/.]/.test(file)) return [];
-  const root = findPackageRoot(cwd) ?? cwd;
-  const guesses = [
-    path.join(root, 'themes', file),
-    path.join(root, 'src', 'themes', file),
-  ].flatMap(folder =>
-    themeFilesIn(folder).map(name => shown(path.join(folder, name))),
-  );
+  /** @type {string[]} */
+  const guesses = [];
+  if (!/[/.]/.test(file)) {
+    const root = findPackageRoot(cwd) ?? cwd;
+    for (const folder of [
+      path.join(root, 'themes', file),
+      path.join(root, 'src', 'themes', file),
+    ])
+      for (const name of themeFilesIn(folder))
+        guesses.push(shown(path.join(folder, name)));
+  }
   for (const extension of THEME_SOURCE_EXTENSIONS) {
     const candidate = path.resolve(cwd, file + extension);
     if (isSource(candidate)) guesses.push(shown(candidate));
   }
-  return guesses.slice(0, 3);
+  if (/[/.]/.test(file)) {
+    const given = path.resolve(cwd, file);
+    // A folder typed in other letters (themes/T/ for themes/t/) is the
+    // folder of that name there, when there is exactly one.
+    let folder = path.dirname(given);
+    if (!fs.existsSync(folder)) {
+      const parent = path.dirname(folder);
+      const want = path.basename(folder).toLowerCase();
+      /** @type {string[]} */
+      let names;
+      try {
+        names = fs
+          .readdirSync(parent, {withFileTypes: true})
+          .filter(d => d.isDirectory() && d.name.toLowerCase() === want)
+          .map(d => d.name);
+      } catch {
+        names = [];
+      }
+      if (names.length === 1) folder = path.join(parent, names[0]);
+    }
+    const base = path.basename(given);
+    // The name with its ending cut short or left off (`t`, `t.theme.`,
+    // `t.theme`): the theme source whose name it starts.
+    const stem = base.replace(/\.+$/, '').replace(/\.theme$/, '');
+    for (const name of themeFilesIn(folder))
+      if (
+        levenshteinDistance(name, base, 1, {swaps: true}) <= 1 ||
+        name.replace(/(\.theme)?\.[^.]+$/, '') === stem
+      )
+        guesses.push(shown(path.join(folder, name)));
+  }
+  return [...new Set(guesses)].slice(0, 3);
 }
 
 /**
@@ -1352,9 +1453,11 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, warnUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
  *   them; `rerun`: this build's command with another --out, or without one;
+ *   `warnUnmarked` (with `refuseUnmarked`): a header-less file is replaced
+ *   with a warning naming it, as a family build has always replaced one;
  *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
  *   the editor-folder warning instead of the logger (a watcher prints it
  *   once); `onWarning`: each warning's message too, for the result
@@ -1367,6 +1470,7 @@ function assertOutputsReplaceable(
     claimed,
     rerun,
     refuseUnmarked = false,
+    warnUnmarked = false,
     elsewhere = '--out',
     onEditorFolder,
     onWarning,
@@ -1377,6 +1481,8 @@ function assertOutputsReplaceable(
   const seen = new Set();
   /** @type {string | false} */
   let warnedOtherSource = false;
+  /** Header-less files replaced with a warning (`warnUnmarked`). @type {string[]} */
+  const unmarkedReplaced = [];
   // The same build without --out, with its other options.
   const beside = {
     name: rerun ? rerun(null) : buildSuggestion(rel(filePath), {}, cwd),
@@ -1469,6 +1575,10 @@ function assertOutputsReplaceable(
       stat.size > 0 &&
       !fileHead(write.dest).includes(GENERATED_MARKER)
     ) {
+      if (warnUnmarked) {
+        unmarkedReplaced.push(rel(write.dest));
+        continue;
+      }
       // Never advice to delete it: it may be the person's file (a settings
       // file, app source). A path that takes every output instead.
       const free = freeOutPath(writes);
@@ -1494,6 +1604,11 @@ function assertOutputsReplaceable(
   if (warnedOtherSource) {
     logger.warn(`Warning: ${warnedOtherSource}`);
     onWarning?.(warnedOtherSource);
+  }
+  if (unmarkedReplaced.length) {
+    const message = `${unmarkedReplaced.join(', ')} ${unmarkedReplaced.length > 1 ? 'have' : 'has'} no build header (an output from a CLI before 0.6.7, or a file of your own or another tool's), and this build of ${rel(filePath)} replaces ${unmarkedReplaced.length > 1 ? 'them' : 'it'}; to keep a file of your own there, build with another ${elsewhere}.`;
+    logger.warn(`Warning: ${message}`);
+    onWarning?.(message);
   }
   if (editorFolder) {
     const dir = path.dirname(writes[0].dest);
@@ -2524,7 +2639,7 @@ const THEME_MODULE_EXTENSIONS = [
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
 // prettier-ignore
 function parseRegistryModule(/** @type {string} */ source, /** @type {string} */ filePath) {
-  try { return parse(source, {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+  try { return parse(source, {sourceType: 'unambiguous', plugins: sourcePlugins(filePath)}); }
   catch (error) { throw registryGraphError(`Cannot inspect registry module ${filePath}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 // prettier-ignore
@@ -2552,7 +2667,9 @@ function resolveRegistryModule(/** @type {string} */ specifier, /** @type {strin
   try {
     const resolver = createJiti(parentPath, {extensions: THEME_MODULE_EXTENSIONS});
     if (commonJs) resolved = resolver.resolve(specifier);
-    else if (specifier.startsWith('.')) resolved = fileURLToPath(new URL(specifier, pathToFileURL(parentPath)));
+    // A relative import as written, else as the single build's loader reads
+    // it: with a module extension or a folder's index (`./icons` → icons.ts).
+    else if (specifier.startsWith('.')) { resolved = fileURLToPath(new URL(specifier, pathToFileURL(parentPath))); if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) resolved = resolver.resolve(specifier); }
     else if (path.isAbsolute(specifier)) resolved = specifier;
     else { const url = resolver.esmResolve(specifier); resolved = url.startsWith('file:') ? fileURLToPath(url) : url; }
   } catch (error) { throw registryGraphError(`Cannot resolve registry import "${specifier}" from ${parentPath}: ${error instanceof Error ? error.message : String(error)}`); }
@@ -2613,6 +2730,70 @@ function resolveThemeModule(specifier, fromFile) {
 }
 
 /**
+ * The sources of the themes a theme source extends, nearest first: the
+ * module each `extends: name` imports `name` from, when it is a relative
+ * import, then the one that module extends, a few hops at most. Empty when
+ * the source extends nothing it imports.
+ * @param {string} filePath
+ * @param {string} source
+ * @returns {Array<{file: string, source: string}>}
+ */
+function extendedThemeSources(filePath, source) {
+  /** @type {Array<{file: string, source: string}>} */
+  const chain = [];
+  let file = filePath;
+  let text = source;
+  for (let hop = 0; hop < 4; hop++) {
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parse(text, {
+        sourceType: 'unambiguous',
+        plugins: sourcePlugins(file),
+      });
+    } catch {
+      return chain;
+    }
+    /** @type {string | null} */
+    let base = null;
+    /** @param {any} node */
+    const find = node => {
+      if (base || !node || typeof node !== 'object') return;
+      if (
+        node.type === 'ObjectProperty' &&
+        !node.computed &&
+        (node.key?.name ?? node.key?.value) === 'extends' &&
+        node.value?.type === 'Identifier'
+      ) {
+        base = node.value.name;
+        return;
+      }
+      for (const [k, v] of Object.entries(node)) {
+        if (k === 'loc') continue;
+        if (Array.isArray(v)) v.forEach(find);
+        else if (v && typeof v === 'object' && v.type) find(v);
+      }
+    };
+    find(ast.program);
+    const from = ast.program.body.find(
+      (/** @type {any} */ st) =>
+        st.type === 'ImportDeclaration' &&
+        String(st.source?.value ?? '').startsWith('.') &&
+        st.specifiers.some((/** @type {any} */ x) => x.local?.name === base),
+    );
+    if (!from) return chain;
+    try {
+      file = resolveThemeModule(String(from.source.value), file);
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      return chain;
+    }
+    chain.push({file, source: text});
+  }
+  return chain;
+}
+
+/**
  * Errors that mean "the synchronous loader cannot evaluate this module", as
  * opposed to "this module is broken". Only the former may fall back to the
  * async path: a genuine author error (a throw, a missing import, a real syntax
@@ -2659,14 +2840,15 @@ function isSyncLoaderLimitation(error) {
  *
  * On Node 22.15 and later, on every path, a stylesheet that a module in the
  * theme's graph imports loads as an empty module (`withEmptyStylesheets`): a
- * base theme's module can import its own stylesheet for the app's bundler.
+ * base theme's module can import its own stylesheet for the app's bundler; an
+ * asset one imports (an icon registry's .svg, a picture) loads as its URL.
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
+ * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null, others?: string[], defaultHolds?: string[]}>}
  */
 // prettier-ignore
-async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined, /** @type {Set<string>} */ unbuilt = new Set(), /** @type {Set<string>} */ imported = new Set()) {
   const jiti =
     loader ??
     createJiti(import.meta.url, {
@@ -2690,7 +2872,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     const commonJsPatch = interception.patchCommonJs(filePath);
     try {
       try {
-        mod = await withEmptyStylesheets(async () => jiti(filePath));
+        mod = await withEmptyStylesheets(async () => jiti(filePath), {unbuilt, imported});
       } catch (error) {
         // Only a sync-loader limitation may fall back. Anything else is the
         // theme's own failure and belongs to the caller unchanged.
@@ -2708,6 +2890,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
             async: true,
             forceTranspile: true,
           }),
+          {unbuilt, imported},
         );
       }
     } finally {
@@ -2716,7 +2899,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await withEmptyStylesheets(() => jiti.import(filePath));
+    mod = await withEmptyStylesheets(() => jiti.import(filePath), {unbuilt, imported});
   }
 
   // Both loads hand back the module. The theme is read from the module's own
@@ -2742,13 +2925,48 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   if (isThemeObject(defaultExport)) {
     return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
+  // A default export that holds themes (`export default {light, dark}`) is
+  // no theme: named so, whether a theme is also exported by name or not. One
+  // with a name of its own is a theme (its `extends` holds its base).
+  const held =
+    hasDefault &&
+    defaultExport &&
+    typeof defaultExport === 'object' &&
+    typeof defaultExport.name !== 'string'
+      ? Object.entries(defaultExport)
+          .filter(([, value]) => isThemeObject(value))
+          .map(([key]) => key)
+      : [];
   if (isModule) {
-    for (const [exportName, value] of Object.entries(mod)) {
-      if (exportName === 'default' || exportName === 'module.exports') continue;
-      if (isThemeObject(value))
-        return {theme: value, exportName, degraded, colorModes};
+    // With no default, the first theme export is built; any other theme the
+    // module exports is named (`others`), so the build can say it was left
+    // out rather than build one of a pair without a word.
+    const themes = Object.entries(mod).filter(
+      ([exportName, value]) =>
+        exportName !== 'default' &&
+        exportName !== 'module.exports' &&
+        isThemeObject(value),
+    );
+    if (themes.length) {
+      const [[exportName, theme]] = themes;
+      const others = themes
+        .slice(1)
+        .filter(([, value]) => value !== theme)
+        .map(([name]) => name);
+      return {
+        theme,
+        exportName,
+        degraded,
+        colorModes,
+        ...(others.length ? {others} : {}),
+        ...(held.length ? {defaultHolds: held} : {}),
+      };
     }
   }
+  if (held.length)
+    throw new ThemeShapeError(
+      `The default export is an object holding themes (${held.join(', ')}), not a theme: export default the theme to build, or give each theme its own file.`,
+    );
   // The loader's interop answers a null default with the module itself, so
   // read the export as the module wrote it.
   const ownDefault = hasDefault
@@ -2763,6 +2981,23 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       `The default export is ${ownDefault === null ? 'null' : `a ${typeof ownDefault}`}, not a theme object.`,
     );
   }
+  // A Promise of a theme (an async helper's result, its await left out) is
+  // an object with no name: the build reads the export as it is and does
+  // not await it.
+  if (hasDefault && typeof ownDefault?.then === 'function') {
+    throw new ThemeShapeError(
+      'The default export is a Promise, not a theme object: the build reads the export as it is and does not await it. Export the theme itself, such as export default await …, or the defineTheme() result.',
+    );
+  }
+  // A doc (`{type: 'theme', name, description, …}`, read from a file not
+  // named as one) is no theme: `type` is no theme field, and a doc has no
+  // tokens.
+  if (
+    isPlainObject(defaultExport) &&
+    typeof defaultExport.type === 'string' &&
+    defaultExport.tokens === undefined
+  )
+    throw themeDocError(filePath, 'export');
   // A plain-object default export is the module's theme even when it has
   // no tokens of its own (local tokens, typography or component styles may
   // be all it defines), or no name: the build's validation says what it
@@ -2808,7 +3043,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
     const call = /\bdefineTheme\s*\(/.exec(text);
     const line =
-      keyPathLine(text, ['name']) ??
+      keyPathLine(text, ['name'], filePath) ??
       (call ? text.slice(0, call.index).split('\n').length : null);
     const stem = path
       .basename(filePath)
@@ -2866,12 +3101,13 @@ function isPlainObject(value) {
  * @returns {boolean}
  */
 function isThemeObject(value) {
-  return (
+  return Boolean(
     value &&
     typeof value === 'object' &&
     typeof value.name === 'string' &&
-    value.tokens &&
-    typeof value.tokens === 'object'
+    ((value.tokens && typeof value.tokens === 'object') ||
+      // A theme with no tokens of its own over a base it extends.
+      (value.extends !== value && isThemeObject(value.extends))),
   );
 }
 
@@ -2882,14 +3118,40 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null}>}
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[], unbuiltStylesheets?: string[], importedStylesheets?: string[]}>}
+ *   `others`: the module's other theme exports, left out (it has no theme
+ *   default); `defaultHolds`: the keys of a default export that holds themes
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+  // A doc module is not run as a theme.
+  if (DOC_FILE.test(filePath))
+    throw new Error(
+      `Failed to load theme from ${filePath}: ${themeDocError(filePath, 'name').message}`,
+      {cause: themeDocError(filePath, 'name')},
+    );
+  // A stylesheet the source imports that is not there yet loads as an empty
+  // module, and is named, so the build can refuse one it does not write.
+  /** @type {Set<string>} */
+  const unbuilt = new Set();
+  // A stylesheet the source imports that is there loads empty too, and is
+  // named, so the build can say its outputs do not carry it.
+  /** @type {Set<string>} */
+  const imported = new Set();
   try {
-    return await importThemeModule(filePath, interception, loader, pick);
+    const loaded = await importThemeModule(filePath, interception, loader, pick, unbuilt, imported);
+    return {
+      ...loaded,
+      ...(unbuilt.size ? {unbuiltStylesheets: [...unbuilt]} : {}),
+      ...(imported.size ? {importedStylesheets: [...imported]} : {}),
+    };
   } catch (jitiError) {
-    const je = /** @type {Error} */ (jitiError);
+    // A module may throw anything: what it threw is told as it is (a string,
+    // an object, null), never read as an Error it is not.
+    const je =
+      jitiError instanceof Error
+        ? jitiError
+        : new Error(`it threw ${thrownText(jitiError)}`);
     throw new Error(
       `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
       {cause: jitiError},
@@ -2908,6 +3170,27 @@ function standaloneInterception(filePath) {
   return _generateAdaptationCSS && themeFolderResolvesCore(filePath)
     ? undefined
     : interceptCore(_coreThemeModule, _coreRootModule);
+}
+
+/**
+ * Load a built theme module (`<name>.js`) as the app's bundler loads it:
+ * an import without its ending (a module beside the theme, `./icons`)
+ * resolves to the file it names in any theme source extension, and a
+ * stylesheet a module imports loads as an empty module. Nothing is cached,
+ * so a module built again is read again.
+ * @param {string} file
+ * @returns {Promise<Record<string, any>>}
+ */
+export async function loadBuiltThemeModule(file) {
+  const jiti = createJiti(import.meta.url, {
+    moduleCache: false,
+    ...jitiCacheOptions(),
+    jsx: true,
+    extensions: THEME_MODULE_EXTENSIONS,
+  });
+  return /** @type {Record<string, any>} */ (
+    await withEmptyStylesheets(() => jiti.import(file))
+  );
 }
 
 /**
@@ -3039,6 +3322,21 @@ const THEME_EXPORT_FIX =
   "Export the theme object: `export default defineTheme({name: 'my-theme', tokens: {...}})`, or a plain `export default {name: 'my-theme', tokens: {...}}`.";
 
 /**
+ * A thrown value that is not an Error, as text: a string as it is, an
+ * object as JSON where it can be, null and undefined by name.
+ * @param {unknown} value
+ */
+function thrownText(value) {
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (value === null || value === undefined) return String(value);
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * Why a theme module did not load, with the step that fixes it. A module
  * whose default export is null or a primitive trips the loader's interop
  * before the build reads it; that is a theme shape failure, not an import one.
@@ -3049,7 +3347,8 @@ function themeLoadReason(error) {
   const message = error.message;
   if (error instanceof ThemeShapeError)
     return `${message}\n${THEME_EXPORT_FIX}`;
-  if (error instanceof ThemeNameError) return message;
+  if (error instanceof ThemeNameError || error instanceof ThemeDocError)
+    return message;
   if (
     error instanceof TypeError &&
     /^Cannot read properties of (?:null|undefined)/.test(message) &&
@@ -3083,6 +3382,55 @@ class ThemeShapeError extends Error {}
 class ThemeNameError extends Error {}
 
 /**
+ * A module that is a doc, not a theme: a `*.doc.*` file (the name every doc
+ * of the CLI's has), or one whose default export is a doc (`{type: 'theme',
+ * …}`, a field no theme has). Nothing is built from it. `source` is the theme
+ * source beside it that the doc describes, when there is one.
+ */
+class ThemeDocError extends Error {
+  /** @param {string} message @param {string | null} source */
+  constructor(message, source) {
+    super(message);
+    this.source = source;
+  }
+}
+
+/** A doc module's name: `oceanTheme.doc.mjs`. */
+const DOC_FILE = /\.doc\.[cm]?[jt]sx?$/i;
+
+/**
+ * The theme source beside a doc that has its name, `oceanTheme.ts` beside
+ * `oceanTheme.doc.mjs`, or null.
+ * @param {string} docFile
+ */
+function themeSourceOfDoc(docFile) {
+  const stem = path.basename(docFile).replace(DOC_FILE, '');
+  for (const ext of THEME_SOURCE_EXTENSIONS) {
+    if (ext === '.json') continue;
+    const file = path.join(path.dirname(docFile), `${stem}${ext}`);
+    if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+  }
+  return null;
+}
+
+/**
+ * The refusal for a doc module read as a theme.
+ * @param {string} filePath
+ * @param {'name' | 'export'} by how it is known to be a doc
+ */
+function themeDocError(filePath, by) {
+  const source = themeSourceOfDoc(filePath);
+  const what =
+    by === 'name'
+      ? `${path.basename(filePath)} is a doc module (a *.doc.* file describes a theme, a component or a command for the docs)`
+      : `its default export is a doc (it has a type field, which no theme has, and no tokens)`;
+  return new ThemeDocError(
+    `${what}, not a theme, so nothing is built from it. Build the theme source itself${source ? `, ${path.basename(source)}` : ''}.`,
+    source,
+  );
+}
+
+/**
  * The command that moves a failed theme load forward: the install for a
  * package the theme imports and the app lacks, the same build for a file that
  * changed while it loaded, else the annotated template, which shows a theme
@@ -3093,6 +3441,18 @@ class ThemeNameError extends Error {}
  * @returns {import('../../../foundation/response/base').Suggestion[]}
  */
 function themeLoadSuggestions(error, shown, cwd, mode = {}) {
+  const doc = error.cause instanceof ThemeDocError ? error.cause : null;
+  if (doc?.source)
+    return [
+      {
+        name: buildSuggestion(
+          path.relative(cwd, doc.source) || doc.source,
+          mode,
+          cwd,
+        ),
+        reason: 'build the theme source the doc describes',
+      },
+    ];
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
     const {installCommand} = installCommandFor(
@@ -3134,7 +3494,93 @@ export function missingThemePackage(error) {
   const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
     message,
   )?.[1];
-  return specifier ? (packageNameOf(specifier) ?? null) : null;
+  // A name the project maps itself (tsconfig paths or baseUrl) is no
+  // package, however it is spelled: never one to install.
+  if (!specifier || projectMapsImport(specifier, importerOf(message)))
+    return null;
+  return packageNameOf(specifier) ?? null;
+}
+
+/**
+ * The module a "cannot find" error was imported from, as Node (`imported
+ * from …`) or the loader's require stack names it, or null.
+ * @param {string} message
+ * @returns {string | null}
+ */
+function importerOf(message) {
+  const from =
+    /imported from (\S+)/.exec(message)?.[1] ??
+    /Require stack:\s*\n- (.+)/.exec(message)?.[1];
+  if (!from) return null;
+  try {
+    return from.startsWith('file:') ? fileURLToPath(from) : from.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the project that holds `from` maps `specifier` itself: the nearest
+ * tsconfig.json or jsconfig.json names it in `compilerOptions.paths` (`@app/*`
+ * maps `@app/c`), or its `baseUrl` holds the file (`lib/c`). The theme loader
+ * maps neither, so such an import is a path alias, never a package.
+ * @param {string} specifier
+ * @param {string | null} from the importing module
+ * @returns {boolean}
+ */
+export function projectMapsImport(specifier, from) {
+  if (!from) return false;
+  for (let dir = path.dirname(from); ; dir = path.dirname(dir)) {
+    for (const name of ['tsconfig.json', 'jsconfig.json']) {
+      const file = path.join(dir, name);
+      /** @type {any} */
+      let config;
+      try {
+        // JSON with comments and trailing commas, as TypeScript reads it.
+        config = JSON.parse(
+          fs
+            .readFileSync(file, 'utf8')
+            .replace(
+              /("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+              (m, str) => str ?? '',
+            )
+            .replace(/,(\s*[}\]])/g, '$1'),
+        );
+      } catch {
+        continue;
+      }
+      const options = config?.compilerOptions ?? {};
+      const paths = Object.keys(
+        options.paths && typeof options.paths === 'object' ? options.paths : {},
+      );
+      if (
+        paths.some(pattern =>
+          pattern.endsWith('*')
+            ? specifier.startsWith(pattern.slice(0, -1))
+            : specifier === pattern,
+        )
+      )
+        return true;
+      if (typeof options.baseUrl === 'string') {
+        const base = path.resolve(dir, options.baseUrl, specifier);
+        if (
+          ['', ...THEME_MODULE_EXTENSIONS].some(ext => {
+            try {
+              return fs.statSync(base + ext).isFile();
+            } catch {
+              return false;
+            }
+          }) ||
+          THEME_MODULE_EXTENSIONS.some(ext =>
+            fs.existsSync(path.join(base, `index${ext}`)),
+          )
+        )
+          return true;
+      }
+      return false;
+    }
+    if (path.dirname(dir) === dir) return false;
+  }
 }
 
 /**
@@ -3168,7 +3614,8 @@ function unresolvedAlias(error) {
   return specifier &&
     !/^\.{0,2}\//.test(specifier) &&
     !path.isAbsolute(specifier) &&
-    !packageNameOf(specifier)
+    (!packageNameOf(specifier) ||
+      projectMapsImport(specifier, importerOf(message)))
     ? specifier
     : null;
 }
@@ -3209,7 +3656,13 @@ export async function validateThemePrivateInputs(
 
   const inputs = interception.lineageOf(theme);
   try {
-    return [...new Set(inputs.flatMap(input => validatePrivateVars(input)))];
+    return [
+      ...new Set(
+        inputs.flatMap(input =>
+          validatePrivateVars(input, {defineTheme: _defineTheme}),
+        ),
+      ),
+    ];
   } finally {
     interception.strip(theme);
   }
@@ -3351,6 +3804,45 @@ function componentIconViewExpression(valuesName, viewName) {
 }
 
 /**
+ * A relative import a module in `fromDir` writes, as a module in `toDir`
+ * writes it, so it names the same file; a package or absolute specifier is
+ * the same anywhere. The family module writes the theme source's imports
+ * this way, and a single build names it for an import it keeps as written.
+ * @param {string} specifier
+ * @param {string} fromDir
+ * @param {string} toDir
+ */
+function rebasedImport(specifier, fromDir, toDir) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../'))
+    return specifier;
+  if (path.resolve(fromDir) === path.resolve(toDir)) return specifier;
+  const moved = path
+    .relative(toDir, path.resolve(fromDir, specifier))
+    .split(path.sep)
+    .join('/');
+  return moved.startsWith('./') || moved.startsWith('../')
+    ? moved
+    : `./${moved}`;
+}
+
+/**
+ * Whether a relative import resolves from a module in `dir`, as the app's
+ * bundler reads it (with a module extension or a folder's index).
+ * @param {string} dir
+ * @param {string} specifier
+ */
+function moduleAnswers(dir, specifier) {
+  try {
+    const resolved = createJiti(path.join(dir, 'index.js'), {
+      extensions: THEME_MODULE_EXTENSIONS,
+    }).resolve(specifier);
+    return fs.statSync(resolved).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The icon and slot imports a single build's module carries, made to load
  * anywhere ({@link selfContainedImports}), with the compiled modules to
  * write. An import --icons-specifier names is written as given.
@@ -3430,6 +3922,33 @@ function keptWarnings(kept, cwd) {
   return kept.map(
     ({source, dest}) =>
       `${path.relative(cwd, dest) || dest} is a file this build did not write, so ${path.relative(cwd, source) || source} is not compiled there and the built module keeps importing that TypeScript or JSX source, which an app whose bundler does not compile TypeScript from node_modules cannot load. Move that file, or build to another --out.`,
+  );
+}
+
+/**
+ * Refuse a theme whose source imports a stylesheet that is not there, unless
+ * it is the stylesheet this build writes (which loads empty, so the first
+ * build from a clean checkout writes it).
+ * @param {string} filePath the theme source
+ * @param {string[]} unbuilt the stylesheets it imports that are not there
+ * @param {string} outPath the stylesheet this build writes
+ * @param {string} cwd
+ * @param {{check?: boolean, out?: string, iconsSpecifier?: string}} options
+ */
+function refuseMissingStylesheets(filePath, unbuilt, outPath, cwd, options) {
+  const missing = unbuilt.filter(
+    file => path.resolve(file) !== path.resolve(outPath),
+  );
+  if (missing.length === 0) return;
+  const shown = path.relative(cwd, filePath) || filePath;
+  throw new AstryxError(
+    `Failed to load theme from ${shown}: it imports ${missing.map(file => path.relative(cwd, file) || file).join(', ')}, which is not there and is not the stylesheet this build writes (${path.relative(cwd, outPath) || outPath}). Create the file, correct the import, or build what writes it first. Nothing was written.`,
+    themeLoadSuggestions(new Error('missing stylesheet'), shown, cwd, {
+      check: options.check,
+      out: options.out,
+      iconsSpecifier: options.iconsSpecifier,
+    }),
+    ERROR_CODES.ERR_THEME_LOAD,
   );
 }
 
@@ -3582,7 +4101,7 @@ function generateBuiltModule(
     }
   }
 
-  const tokensStr = JSON.stringify(resolvedTokens, null, 2)
+  const tokensStr = JSON.stringify(resolvedTokens, bigIntAsText, 2)
     .split('\n')
     .map((line, i) => (i === 0 ? line : '  ' + line))
     .join('\n');
@@ -3598,7 +4117,7 @@ function generateBuiltModule(
   const serializeField = (field, value, includeEmpty = false) => {
     if (value == null || (!includeEmpty && Object.keys(value).length === 0))
       return '';
-    const body = JSON.stringify(value, null, 2)
+    const body = JSON.stringify(value, bigIntAsText, 2)
       .split('\n')
       .map((line, i) => (i === 0 ? line : '  ' + line))
       .join('\n');
@@ -4101,6 +4620,38 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
 }
 
 /**
+ * The refusal of an option given an empty or blank value, which names
+ * nothing: what to give instead, and the command without it; null for any
+ * other value. Stable `theme build` refuses a blank --out with it; the
+ * editor's compile refuses an empty or blank --out and --icons-specifier.
+ * @param {string} flag
+ * @param {unknown} value
+ * @param {string} instead
+ * @param {string} without the command without the option
+ * @returns {AstryxError | null}
+ */
+export function blankOptionProblem(flag, value, instead, without) {
+  if (typeof value !== 'string' || value.trim()) return null;
+  return new AstryxError(
+    `${flag} is ${value === '' ? 'empty' : 'blank'}; ${instead}. Nothing was written.`,
+    [{name: without, reason: 'do this instead'}],
+    ERROR_CODES.ERR_INVALID_ARGUMENT,
+  );
+}
+
+/**
+ * The warning for an --icons-specifier given an empty or blank value, which
+ * a stable build writes as given (the built module imports its registry
+ * from it); null for any other value.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function blankSpecifierWarning(value) {
+  if (typeof value !== 'string' || value.trim()) return null;
+  return `--icons-specifier is ${value === '' ? 'empty' : 'blank'}, so the built module imports its icon registry from ${JSON.stringify(value)}, which nothing loads: name the registry module, or leave out --icons-specifier to keep the theme source's own import`;
+}
+
+/**
  * Compile a defineTheme file to CSS + CSS .d.ts + JS + JS .d.ts (and an
  * optional `.variants.d.ts`). Performs the writes and returns a `theme.build` receipt,
  * or `null` when the theme produced no CSS (nothing to build). Throws
@@ -4128,22 +4679,17 @@ async function themeBuildInternal(
   handOff = {},
 ) {
   // A blank --out names no file: the build would write files named by the
-  // spaces alone.
-  if (
-    typeof options.out === 'string' &&
-    options.out !== '' &&
-    !options.out.trim()
-  )
-    throw new AstryxError(
-      '--out is blank; name a file or folder, or leave out --out to write beside the source.',
-      [
-        {
-          name: buildSuggestion(file, {...options, out: undefined}, cwd),
-          reason: 'do this instead',
-        },
-      ],
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
+  // spaces alone. An empty one writes beside the source, as a build without
+  // --out does (the editor's compile refuses both, before it builds).
+  if (options.out !== '') {
+    const blank = blankOptionProblem(
+      '--out',
+      options.out,
+      'name a file or folder, or leave out --out to write beside the source',
+      buildSuggestion(file, {...options, out: undefined}, cwd),
     );
+    if (blank) throw blank;
+  }
   // A backslash in --out separates folders on every platform, as it does in
   // the other theme paths (a Windows path copied into a POSIX shell).
   if (typeof options.out === 'string' && options.out.includes('\\'))
@@ -4171,7 +4717,16 @@ async function themeBuildInternal(
       editorThemeRecord(dir)
     )
       (editorFolderListener ?? (w => logger.warn(w)))(
-        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
+        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.${
+          // The app imports the theme's app copy, which only the editor's
+          // own build writes (and its --check checks): this one neither
+          // writes it nor ${options.check ? 'checks' : 'updates'} it.
+          fs.existsSync(
+            path.join(path.dirname(dir), '..', 'src', 'themes', slug),
+          )
+            ? ` It ${options.check ? 'does not check' : 'does not write'} the app copy in src/themes/${slug}/, which the app imports; ${formatCliCommand(`experimental theme compile ${shellWord(path.relative(cwd, filePath).split(path.sep).join('/'))}${options.check ? ' --check' : ''}`, cwd)} ${options.check ? 'checks the build and the copy' : 'builds it and writes the copy'}.`
+            : ''
+        }`,
       );
   }
 
@@ -4180,8 +4735,12 @@ async function themeBuildInternal(
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
   }
-  // A compact report has no per-theme heading, so each warning names its file.
-  const source = report.compact ? `${path.relative(cwd, filePath)}: ` : '';
+  // A compact report has no per-theme heading, and a family's warnings are
+  // read together, so each warning names its file.
+  const source =
+    report.compact || handOff.prepareFamily
+      ? `${path.relative(cwd, filePath)}: `
+      : '';
 
   if (projectCore && !findProjectCoreDir(cwd)) {
     throw new AstryxError(
@@ -4205,6 +4764,14 @@ async function themeBuildInternal(
   let themeDef;
   /** The export actually selected by the loader, not the first AST match. */
   let themeExportName;
+  /** The module's other theme exports, which this build leaves out. @type {string[]} */
+  let leftOutThemes;
+  /** The keys of a default export that holds themes, not a theme. @type {string[]} */
+  let defaultHolds;
+  /** Stylesheets the source imports that are not there yet. @type {string[]} */
+  let unbuiltStylesheets;
+  /** Stylesheets the source imports that are there. @type {string[]} */
+  let importedStylesheets;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
   /** The one color mode the theme module exports, or null for both. */
@@ -4235,6 +4802,10 @@ async function themeBuildInternal(
     themeSource = before;
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
+    leftOutThemes = loaded.others ?? [];
+    defaultHolds = loaded.defaultHolds ?? [];
+    unbuiltStylesheets = loaded.unbuiltStylesheets ?? [];
+    importedStylesheets = loaded.importedStylesheets ?? [];
     loadDegradation = loaded.degraded;
     colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
@@ -4416,18 +4987,55 @@ async function themeBuildInternal(
   // anything is written, at the line that gives it. A null value keeps its
   // meaning (Core writes it as it is), so it is warned at its line.
   const shownSource = path.relative(cwd, filePath) || filePath;
-  const nulls = nullThemeValues(themeDef).map(n => ({
-    ...n,
-    line: keyPathLine(themeSource, n.path),
-  }));
-  /** @param {{path: string[], why: string, line: number | null}} n */
+  // A value the theme this one extends gives, and this file does not write,
+  // is that theme's: it is named as inherited, and a family leaves it to
+  // that theme's own member, which names its file and line.
+  const parentTheme = themeDef.extends ?? interception?.parentOf(themeDef);
+  // The files of the themes this source extends, to name the file and line
+  // that write a value this file does not.
+  const extendedSources = extendedThemeSources(filePath, themeSource);
+  /** @param {any} value @param {string[]} keys */
+  const valueAt = (value, keys) =>
+    keys.reduce(
+      (/** @type {any} */ v, k) =>
+        v !== null && typeof v === 'object' ? v[k] : undefined,
+      value,
+    );
+  /**
+   * @template {{path: string[]}} T
+   * @param {T[]} items
+   * @returns {Array<T & {line: number | null, inherited: boolean, elsewhere: boolean, from: {file: string, line: number} | null}>}
+   */
+  const placed = items =>
+    items.flatMap(item => {
+      const line = keyPathLine(themeSource, item.path, filePath);
+      /** @type {{file: string, line: number} | null} */
+      let from = null;
+      if (line == null)
+        for (const base of extendedSources) {
+          const at = keyPathLine(base.source, item.path, base.file);
+          if (at == null) continue;
+          from = {file: path.relative(cwd, base.file) || base.file, line: at};
+          break;
+        }
+      const inherited =
+        line == null &&
+        (from != null ||
+          (parentTheme != null &&
+            valueAt(parentTheme, item.path) !== undefined));
+      return inherited && handOff.prepareFamily
+        ? []
+        : [{...item, line, inherited, elsewhere: line == null, from}];
+    });
+  const nulls = placed(nullThemeValues(themeDef));
+  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null, at?: {file: string, line: number} | null}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.at ? ` (in ${n.at.file}, line ${n.at.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);
     throw new AstryxError(
-      `${shownSource} gives null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
+      `${shownSource} ${unbuildable.every(n => n.inherited || n.elsewhere) ? 'gets, from another file,' : 'gives'} null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
       first
         ? [
             {
@@ -4440,14 +5048,140 @@ async function themeBuildInternal(
     );
   }
 
+  // A part key Core cannot build as written: a pseudo key that is no single
+  // selector makes the browser drop other rules or style other elements,
+  // and a custom property with capitals is set under another name than
+  // var() reads. A theme that built before still builds the same: each is
+  // warned at its line, with the form that works.
+  const badKeys = placed(styleKeyProblems(themeDef));
+  // A value Core writes as it is but no browser reads (an object, a pair
+  // with a missing half, a token that reads itself or a var() no token
+  // sets): warned at its line, the output the same. A var() target is judged
+  // only against the Core that names its tokens.
+  const tokenDefaults = _coreThemeModule?.tokenDefaults;
+  const setNames = new Set([
+    ...Object.keys(tokenDefaults ?? {}),
+    ...[
+      themeDef,
+      themeDef.onDark ?? themeDef.__onDark,
+      themeDef.onLight ?? themeDef.__onLight,
+    ].flatMap((/** @type {any} */ s) => [
+      ...Object.keys(s?.tokens ?? {}),
+      ...Object.keys(s?.localTokens ?? {}),
+    ]),
+  ]);
+  const badValues = writtenValueProblems(themeDef, {
+    reads: tokenDefaults ? name => setNames.has(name) : undefined,
+    rootTokens: tokenDefaults,
+    surfaceDefaults: coreSurfaceTokens(),
+  });
+  const badValueLines = placed(badValues);
+  const cannotWrite = badValueLines.filter(n => n.unbuildable);
+  if (cannotWrite.length > 0) {
+    const first = cannotWrite.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives a value the build cannot write: ${cannotWrite.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  // defineTheme() drops a field it does not take, so only the source shows
+  // a misspelled one.
+  const fields = coreInputFields();
+  const badFields = fields
+    ? sourceFieldProblems(
+        {file: filePath, source: themeSource},
+        fields,
+        (from, specifier) => {
+          try {
+            const file = resolveThemeModule(specifier, from);
+            return {file, source: fs.readFileSync(file, 'utf8')};
+          } catch {
+            return null;
+          }
+        },
+      ).map(f => ({
+        path: f.path,
+        why: f.why,
+        line: f.file === filePath ? f.line : null,
+        at:
+          f.file === filePath || f.line == null
+            ? null
+            : {file: path.relative(cwd, f.file) || f.file, line: f.line},
+        inherited: false,
+        elsewhere: false,
+        from: null,
+      }))
+    : [];
+  // A typography value Core builds into something no browser uses (a font
+  // stack in one family, a quoted name with a space, a role weight with no
+  // type scale), or of a type the field does not take (a weight as a
+  // number): warned at its line, as the editor refuses it. Only what
+  // this file writes: a theme it extends is judged in its own file. A build
+  // that loads the project's own Core captures no input: the values the
+  // source writes are read from it.
+  // A build that loads the project's own Core also judges the typography
+  // the theme resolved to, which holds a value the source computes or
+  // imports (a family joined at run time).
+  const levels = fields?.levels ?? [];
+  const typographyInput =
+    interception?.inputOf(themeDef)?.typography ??
+    sourceTypography(themeSource, filePath);
+  /** @type {Map<string, {path: string[], why: string, value: unknown}>} */
+  const typographyProblems = new Map();
+  for (const t of [
+    ...typographyInputProblems(typographyInput, levels),
+    ...(interception
+      ? []
+      : typographyInputProblems(themeDef.__axes?.typography, levels)),
+  ])
+    if (!typographyProblems.has(t.path.join('.')))
+      typographyProblems.set(t.path.join('.'), t);
+  // Each at the line that writes it: its whole key path, a shorter one (a
+  // typography const), or its key beside that value (a role const, a
+  // spread); a value no line writes is named without one, never dropped.
+  const badTypography = [...typographyProblems.values()].map(t => {
+    let line = null;
+    for (let i = 0; line == null && i < t.path.length - 1; i += 1)
+      line = keyPathLine(themeSource, t.path.slice(i), filePath);
+    line ??= keyValueLine(themeSource, t.path.at(-1) ?? '', t.value, filePath);
+    return {...t, line, inherited: false, elsewhere: line == null, from: null};
+  });
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
+  const blankSpecifier = handOff.prepareFamily
+    ? null
+    : blankSpecifierWarning(options.iconsSpecifier);
   for (const w of [
     ...warnings,
+    ...(blankSpecifier ? [blankSpecifier] : []),
+    // A file of two themes and no default: one is built, and the other is
+    // named, with the way to build it.
+    ...(leftOutThemes.length || defaultHolds.length
+      ? [
+          `${
+            defaultHolds.length
+              ? `has a default export that holds themes (${defaultHolds.join(', ')}), not a theme, and exports ${leftOutThemes.length + 1} ${leftOutThemes.length ? 'themes' : 'theme'} by name`
+              : `exports ${leftOutThemes.length + 1} themes and no default`
+          } (${[themeExportName, ...leftOutThemes].join(', ')}), and this build builds ${themeExportName} only: export default the theme to build, or give each theme its own file`,
+        ]
+      : []),
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
+    ...badKeys.map(nullLine),
+    ...badValueLines.map(nullLine),
+    ...badTypography.map(nullLine),
+    ...badFields.map(nullLine),
   ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
@@ -4458,7 +5192,9 @@ async function themeBuildInternal(
   // output, receipt or success may say otherwise.
   // The message names no file: a batch and a family name the one it is
   // about, and a single build is about the file it was given.
-  const privateVarErrors = validatePrivateVars(themeDef);
+  const privateVarErrors = validatePrivateVars(themeDef, {
+    defineTheme: _defineTheme,
+  });
   if (privateVarErrors.length > 0) {
     const refusal = new AstryxError(
       `${privateVarErrors.join('\n')}\n${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
@@ -4532,12 +5268,28 @@ async function themeBuildInternal(
       'onLight',
       'adaptations',
     ];
+    // A theme defineTheme() made carries the surface data it adds (the
+    // `__onDark` key, set even when it is empty) or a built module's mark;
+    // any other object is raw input, a plain `{name, tokens}` included: only
+    // defineTheme() turns a [light, dark] pair into light-dark() and adds
+    // Core's media-surface rules. A theme with no tokens is raw input too,
+    // whatever it carries (a resolved theme always has its tokens).
+    const resolved =
+      themeDef.tokens !== undefined &&
+      (Object.hasOwn(themeDef, '__onDark') || themeDef.__built === true);
     const needsResolution =
+      !resolved ||
       INPUT_ONLY_FIELDS.some(field => themeDef[field] !== undefined) ||
       ('localTokens' in themeDef && themeDef.__localTokenLineage === undefined);
     if (needsResolution) {
       try {
-        resolvedTheme = _defineTheme({...themeDef});
+        // A field given as undefined is a field not given, as the checks
+        // above read it (`extends: undefined` names no base).
+        resolvedTheme = _defineTheme(
+          Object.fromEntries(
+            Object.entries(themeDef).filter(([, value]) => value !== undefined),
+          ),
+        );
       } catch (error) {
         const message =
           error instanceof Error
@@ -4649,6 +5401,12 @@ async function themeBuildInternal(
       );
     }
 
+    // Core writes a BigInt it meets as a value as its digits, but a BigInt
+    // inside an object it writes as JSON text throws: it gets the digits
+    // too. A boxed primitive in a part would be written as JSON text (with
+    // its quotes), where a token writes its text: it gets its primitive.
+    resolvedTheme = writtenPrimitives(resolvedTheme);
+
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
 
@@ -4700,16 +5458,23 @@ async function themeBuildInternal(
     // #3658: also emit attribute-specific rules so <Theme mode> can override
     // color-scheme. Inspect root and rule-owned values, not generated CSS, which
     // also carries theme-independent data-token defaults with light-dark().
-    const themeOwnValues = JSON.stringify([
-      resolvedTheme.tokens ?? {},
-      resolvedTheme.localTokens ?? {},
-      resolvedTheme.components ?? {},
-      ...(resolvedTheme.__adaptationRules ?? []).flatMap(
-        (
-          /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
-        ) => [rule.tokens ?? {}, rule.localTokens ?? {}, rule.components ?? {}],
-      ),
-    ]);
+    const themeOwnValues = JSON.stringify(
+      [
+        resolvedTheme.tokens ?? {},
+        resolvedTheme.localTokens ?? {},
+        resolvedTheme.components ?? {},
+        ...(resolvedTheme.__adaptationRules ?? []).flatMap(
+          (
+            /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
+          ) => [
+            rule.tokens ?? {},
+            rule.localTokens ?? {},
+            rule.components ?? {},
+          ],
+        ),
+      ],
+      bigIntAsText,
+    );
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')
@@ -4827,9 +5592,51 @@ async function themeBuildInternal(
     // The name's extension is what follows its last dot, a leading one too:
     // `.css` is a name with no stem, which writes hidden files.
     const file = path.basename(outPath);
+    // A name of another kind of file a stylesheet has never names the
+    // stylesheet: a TypeScript declaration file (`p.css.d.ts`, where CSS
+    // breaks every TypeScript file that imports the stylesheet) or a source
+    // map (`p.css.map`, which bundlers and devtools read as JSON).
+    const otherKind = /\.d\.[cm]?ts$/i.test(file)
+      ? {
+          suffix: /(?:\.css)?\.d\.[cm]?ts$/i,
+          what: 'a TypeScript declaration file, where a build writes types',
+        }
+      : /\.css\.map$/i.test(file)
+        ? {
+            suffix: /\.css\.map$/i,
+            what: "a stylesheet's source map, which bundlers and devtools read as JSON",
+          }
+        : null;
+    if (otherKind) {
+      const fixed = path
+        .join(
+          path.dirname(options.out),
+          `${file.replace(otherKind.suffix, '') || baseName}.css`,
+        )
+        .split(path.sep)
+        .join('/');
+      throw new AstryxError(
+        `--out ${options.out} names ${otherKind.what}, not the stylesheet. --out names the .css file, such as ${fixed}. Nothing was written.`,
+        [
+          {
+            name: buildSuggestion(
+              path.relative(cwd, filePath),
+              {iconsSpecifier: options.iconsSpecifier, out: fixed},
+              cwd,
+              handOff.commandWords,
+            ),
+            reason: 'the same build, naming the stylesheet',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     const dot = file.lastIndexOf('.');
     const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
-    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    // `p.css.bak` slips a suffix after the stylesheet's name: its stem is p.
+    const stem = (dot < 0 ? file : file.slice(0, dot))
+      .replace(/\.d$/, '')
+      .replace(/\.css$/i, '');
     if (ext !== '.css' || !stem) {
       const fixed = path
         .join(path.dirname(options.out), `${stem || baseName}.css`)
@@ -4850,6 +5657,29 @@ async function themeBuildInternal(
     }
   } else {
     outPath = path.join(path.dirname(filePath), `${baseName}.css`);
+  }
+  // A stylesheet the source imports that is not there yet loads empty only
+  // when it is the stylesheet this build writes (an app importing the source
+  // gets its CSS); any other is a missing file, refused before anything is
+  // written.
+  // A family member's are judged by the family build, which knows the
+  // family's stylesheet.
+  if (!handOff.prepareFamily)
+    refuseMissingStylesheets(
+      filePath,
+      unbuiltStylesheets,
+      outPath,
+      cwd,
+      options,
+    );
+  // A stylesheet the source imports for its side effect (`import
+  // './brand.css'`) loads empty, and the outputs do not carry it: said, so
+  // the app imports it beside the theme's stylesheet.
+  for (const file of importedStylesheets) {
+    if (path.resolve(file) === path.resolve(outPath)) continue;
+    const w = `${path.relative(cwd, filePath) || filePath} imports ${path.relative(cwd, file) || file}, which the built outputs do not carry (a theme's module and stylesheet hold only the theme): import it in your app beside ${path.relative(cwd, outPath) || outPath}.`;
+    warningMessages.push(w);
+    logger.warn(`Warning: ${w}`);
   }
   // The header names the source and command from the project root of the
   // outputs, so a build from any folder writes the same bytes, `--check`
@@ -4934,12 +5764,9 @@ async function themeBuildInternal(
         options.iconsSpecifier,
         {
           componentIconInfo: local?.componentIconInfo ?? componentIconInfo,
-          // A stylesheet named other than `.css` is named as written. A
-          // `.css` name keeps the theme's own name in the module, so the
-          // module is the same whatever `--out` names the stylesheet.
-          ...(path.extname(outPath).toLowerCase() === '.css'
-            ? {}
-            : {cssFileName: path.basename(outPath)}),
+          // The module's usage comment names the stylesheet this build
+          // writes beside it, whatever --out names it.
+          cssFileName: path.basename(outPath),
         },
       ) +
       // The one color mode, beside the theme export (a two-mode theme
@@ -4947,6 +5774,41 @@ async function themeBuildInternal(
       (colorModes
         ? `export const colorModes = [${JSON.stringify(colorModes[0])}];\n`
         : '');
+  // A relative registry or slot import is written as the theme source
+  // spells it: an app can put the compiled module beside the outputs. With
+  // the outputs in another folder (--out), one that nothing there answers to
+  // is said, with the import that names the source's own file from there.
+  if (!handOff.prepareFamily && path.resolve(outDir) !== path.dirname(filePath))
+    for (const spec of new Set(
+      [
+        ...((local?.iconInfo ?? iconInfo)?.imports ?? []),
+        ...((local?.componentIconInfo ?? componentIconInfo)?.imports ?? []),
+      ]
+        .filter(
+          binding =>
+            !(
+              options.iconsSpecifier !== undefined &&
+              binding.importPath === iconInfo?.iconsSpecifierImportPath &&
+              binding.localName === iconInfo?.iconsSpecifierLocalName
+            ),
+        )
+        .map(binding => binding.importPath)
+        .filter(spec => spec.startsWith('./') || spec.startsWith('../')),
+    )) {
+      // A compiled module this build writes answers to its import.
+      if (
+        local?.writes.some(
+          write => path.resolve(outDir, spec) === path.resolve(write.dest),
+        ) ||
+        moduleAnswers(outDir, spec)
+      )
+        continue;
+      const there = rebasedImport(spec, path.dirname(filePath), outDir);
+      const registry = spec === iconInfo?.iconsSpecifierImportPath;
+      const w = `${path.relative(cwd, jsPath)} imports '${spec}' as the theme source writes it, and nothing answers to it from ${path.relative(cwd, outDir) || '.'}/, so the built module does not load there: ${registry ? `give --icons-specifier '${there}' (the registry, from there)` : `the module is '${there}' from there`}, or put the compiled module there`;
+      warningMessages.push(w);
+      logger.warn(`  [warn] ${source}${w}`);
+    }
   const dtsContent =
     generatedHeader(headerSource, 'ts', buildCommand, versions) +
     generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName) +
@@ -4983,6 +5845,7 @@ async function themeBuildInternal(
       componentCount,
       warnings: warningMessages,
       unloadedFonts,
+      unbuiltStylesheets,
     };
   }
 
@@ -5481,10 +6344,7 @@ function familyRegistryInput(info, filePath, outDir, override, compileLocal) {
   if (!source.startsWith('./') && !source.startsWith('../')) return {info, specifier: undefined};
   const compiled = compileLocal?.(source, filePath);
   if (compiled) { let validate = path.relative(outDir, compiled.sourceFile).split(path.sep).join('/'); if (!validate.startsWith('./') && !validate.startsWith('../')) validate = `./${validate}`; return {info, specifier: compiled.specifier, validate}; }
-  const absolute = path.resolve(path.dirname(filePath), source);
-  let specifier = path.relative(outDir, absolute).split(path.sep).join('/');
-  if (!specifier.startsWith('./') && !specifier.startsWith('../')) specifier = `./${specifier}`;
-  return {info, specifier};
+  return {info, specifier: rebasedImport(source, path.dirname(filePath), outDir)};
 }
 /** Dependency-first load plan including local barrels between selected files. @param {string[]} files @param {string} cwd */
 // prettier-ignore
@@ -5499,7 +6359,7 @@ function planFamilySources(files, cwd) {
     const key = canonical(filePath), cached = reachableMemo.get(key); if (cached) return cached;
     if (visiting.has(key) || !fs.existsSync(key)) return new Set();
     visiting.add(key); /** @type {Set<string>} */ const found = new Set(), direct = new Set(); let ast;
-    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: sourcePlugins(key)}); }
     catch { visiting.delete(key); reachableMemo.set(key, found); return found; }
     for (const node of /** @type {any[]} */ (ast.program.body)) {
       const specifier = node.importKind !== 'type' ? node.source?.value : null; if (typeof specifier !== 'string' || (!specifier.startsWith('.') && !path.isAbsolute(specifier))) continue;
@@ -5523,8 +6383,33 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
+/** The require of this module, for the module cache a family build loads into. */
+const moduleRequire = createRequire(import.meta.url);
+
+/**
+ * Build a theme family. The members share one module cache while they load,
+ * so a theme they extend is one module; the modules the build loaded from
+ * outside installed packages are forgotten when it ends, so a later build
+ * in the same process reads each member as it is then, never as it was.
+ * @param {string[]} files
+ * @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options
+ * @param {{cwd?: string}} [ctx]
+ * @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint
+ */
+export async function themeBuildFamily(files, options, ctx = {}, handOff = {}) {
+  const cache = moduleRequire.cache;
+  const before = new Set(Object.keys(cache));
+  try {
+    return await buildFamily(files, options, ctx, handOff);
+  } finally {
+    for (const id of Object.keys(cache))
+      if (!before.has(id) && !id.split(/[\\/]/).includes('node_modules'))
+        delete cache[id];
+  }
+}
+
 /** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options @param {{cwd?: string}} [ctx] @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint */
-export async function themeBuildFamily(
+async function buildFamily(
   files,
   options,
   {cwd = process.cwd()} = {},
@@ -5544,6 +6429,10 @@ export async function themeBuildFamily(
       error instanceof Error ? error.message : 'Invalid family key.';
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
   }
+  // An empty --icons-specifier is written as given, as before: said once
+  // for the family.
+  const blankSpecifier = blankSpecifierWarning(options.iconsSpecifier);
+  if (blankSpecifier) logger.warn(`  [warn] ${blankSpecifier}`);
   await selectCore(cwd);
   const familyInterception = interceptCore(_coreThemeModule, _coreRootModule);
   // prettier-ignore
@@ -5631,6 +6520,17 @@ export async function themeBuildFamily(
   const root = members[0];
   const outDir = path.dirname(root.filePath);
   const outPath = path.join(outDir, `${baseName}.css`);
+  // A member may import the family's stylesheet (`import './k.css'` in the
+  // root, so an app importing the source gets the family's CSS): it loads
+  // empty, and the first build writes it. Any other is a missing file.
+  for (const member of members)
+    refuseMissingStylesheets(
+      member.filePath,
+      member.unbuiltStylesheets ?? [],
+      outPath,
+      cwd,
+      options,
+    );
   const cssDtsPath = `${outPath}.d.ts`;
   const jsPath = path.join(outDir, `${baseName}.js`);
   const dtsPath = path.join(outDir, `${baseName}.d.ts`);
@@ -5817,13 +6717,22 @@ export async function themeBuildFamily(
     js: path.relative(cwd, jsPath),
     dts: path.relative(cwd, dtsPath),
   };
+  /** What the output check warns of, for the result. @type {string[]} */
+  const outputWarnings = [];
   // A family build's outputs stay inside cwd too; check mode only reads them.
   if (!options.check) {
     confineOutputs(writes, cwd, FAMILY_REMEDY);
-    // Family outputs always go to the family's default paths, where a
-    // header-less file is an output of a CLI before 0.6.7: it is replaced.
+    // The family key is a name the person picks, as --out is: the outputs
+    // replace this build's own earlier outputs, and warn over another
+    // source's. A header-less file there is replaced as a family build has
+    // always replaced one (an output of a CLI before 0.6.7), with a warning
+    // naming it.
     assertOutputsReplaceable(writes, root.filePath, cwd, {
       elsewhere: '--family-key',
+      refuseUnmarked: true,
+      warnUnmarked: true,
+      // The result's warnings carry what text prints.
+      onWarning: message => outputWarnings.push(message),
     });
   }
   if (options.check) {
@@ -5885,8 +6794,20 @@ Or load the same stylesheet natively:
   // single build says it.
   const keptLocal = keptWarnings(localPlan.kept, cwd);
   for (const w of keptLocal) logger.warn(`Warning: ${w}`);
+  // Each member's warnings name the member they are about; a warning about
+  // the family's outputs (one it replaces, a module it leaves uncompiled)
+  // comes after them.
   const warnings = [
-    ...new Set([...members.flatMap(member => member.warnings), ...keptLocal]),
+    ...new Set([
+      ...members.flatMap(member =>
+        member.warnings.map(
+          (/** @type {string} */ w) =>
+            `${path.relative(cwd, member.filePath)}: ${w}`,
+        ),
+      ),
+      ...keptLocal,
+      ...outputWarnings,
+    ]),
   ];
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),

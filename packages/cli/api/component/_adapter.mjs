@@ -929,8 +929,9 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
  * spells or whose keyword it is, as foundation/suggest/other-command.mjs
  * ranks it), returns the same error with the command that reads that entry
  * among its suggestions, in the place foundation/suggest/other-command.mjs
- * gives it: a hook keyword hint stays behind a suggested component that
- * declares the same keyword or synonym. Returns `error` unchanged otherwise,
+ * gives it: a hint at the folded tier or a worse one stays behind a
+ * suggested component that declares the name as a keyword or synonym, and a
+ * hook keyword hint behind one that declares the same keyword. Returns `error` unchanged otherwise,
  * and when the check fails.
  * @param {unknown} error
  * @param {string} dirName
@@ -966,7 +967,7 @@ export async function withOtherCommandHint(
     });
     if (!hint) return error;
     const declared =
-      hint.tier === MATCH_TIER.keyword
+      hint.tier >= MATCH_TIER.folded
         ? await declaredNames(
             error.suggestions ?? [],
             coreDir,

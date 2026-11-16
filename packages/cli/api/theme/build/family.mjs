@@ -107,7 +107,13 @@ const themeSelector = name => `[data-astryx-theme=${JSON.stringify(name)}]`;
 /** @param {string[]} names */
 const familyScopeSelector = names =>
   `:where(${names.map(themeSelector).join(', ')})`;
-/** @param {string} rule @returns {{open: number, close: number}} */
+/**
+ * Where a rule's block opens and closes, or null when it cannot be read: a
+ * selector that leaves a parenthesis, quote or comment open (the build warns
+ * it at its line) hides the brace.
+ * @param {string} rule
+ * @returns {{open: number, close: number} | null}
+ */
 function ruleBounds(rule) {
   let open = -1;
   let depth = 0;
@@ -149,11 +155,17 @@ function ruleBounds(rule) {
       return {open, close: index};
     }
   }
-  throw new Error('Theme compiler emitted a malformed rule.');
+  return null;
 }
-/** @param {string} rule */
+/**
+ * A rule's declarations, keyed for factoring, or null when the rule cannot
+ * be read.
+ * @param {string} rule
+ */
 function declarationEntries(rule) {
-  const {open, close} = ruleBounds(rule);
+  const bounds = ruleBounds(rule);
+  if (!bounds) return null;
+  const {open, close} = bounds;
   const selector = rule.slice(0, open).trim();
   const body = rule.slice(open + 1, close);
   /** @type {string[]} */
@@ -206,8 +218,7 @@ function declarationEntries(rule) {
       start = index + 1;
     }
   }
-  if (body.slice(start).trim())
-    throw new Error('Theme compiler emitted an unterminated declaration.');
+  if (body.slice(start).trim()) return null;
   const counts = new Map();
   return declarations
     .map(declaration => {
@@ -218,16 +229,22 @@ function declarationEntries(rule) {
     })
     .map(entry => ({...entry, selector}));
 }
-/** @param {string[]} rules */
+/**
+ * A member's rules, keyed for factoring, or null when one cannot be read.
+ * @param {string[]} rules
+ */
 function ruleEntries(rules) {
   const counts = new Map();
-  return rules.map(rule => {
-    const {open} = ruleBounds(rule);
-    const selector = rule.slice(0, open).trim();
+  const entries = [];
+  for (const rule of rules) {
+    const bounds = ruleBounds(rule);
+    if (!bounds) return null;
+    const selector = rule.slice(0, bounds.open).trim();
     const occurrence = counts.get(selector) ?? 0;
     counts.set(selector, occurrence + 1);
-    return {key: `${selector}\0${occurrence}`, rule, selector};
-  });
+    entries.push({key: `${selector}\0${occurrence}`, rule, selector});
+  }
+  return entries;
 }
 /** @param {Array<Array<{key: string}>>} sequences @param {string} _description @returns {string[] | null} */
 function orderedKeys(sequences, _description) {
@@ -302,7 +319,14 @@ function completeMemberRules(members, field) {
 }
 /** @param {any[]} members @param {string} field */
 function factorRules(members, field) {
-  const ruleSequences = members.map(member => ruleEntries(member.css[field]));
+  const read = members.map(member => ruleEntries(member.css[field]));
+  // A rule this reader cannot split is no rule to share: each member keeps
+  // its own rules whole, as its single build writes them.
+  if (read.some(sequence => !sequence))
+    return completeMemberRules(members, field);
+  const ruleSequences = /** @type {NonNullable<(typeof read)[number]>[]} */ (
+    read
+  );
   const ruleMaps = ruleSequences.map(
     sequence => new Map(sequence.map(entry => [entry.key, entry])),
   );
@@ -311,10 +335,15 @@ function factorRules(members, field) {
   const ruleOrder = orderedKeys(ruleSequences, 'rule');
   if (!ruleOrder) return completeMemberRules(members, field);
   for (const ruleKey of ruleOrder) {
-    const declarations = ruleMaps.map(map => {
+    const parsed = ruleMaps.map(map => {
       const rule = map.get(ruleKey);
       return rule ? declarationEntries(rule.rule) : [];
     });
+    if (parsed.some(sequence => !sequence))
+      return completeMemberRules(members, field);
+    const declarations = /** @type {NonNullable<(typeof parsed)[number]>[]} */ (
+      parsed
+    );
     const declarationMaps = declarations.map(
       sequence => new Map(sequence.map(entry => [entry.key, entry])),
     );
