@@ -10424,17 +10424,17 @@ export async function contrastProblems(ctx, data, res) {
         // state.)
         const pairIn = pairState(pair);
         const stateFlag = pairIn ? ` --state ${pairIn}` : '';
-        // Secondary text (a placeholder, a caption) stays secondary: its
-        // own color moved toward black or white just far enough to read at
-        // 4.5:1, not the plain black or white of primary text.
+        // Text with a role of its own (secondary text, a placeholder, a
+        // link's accent, a status color) keeps it: its own color moved
+        // toward black or white just far enough to read at 4.5:1, not the
+        // plain black or white of primary text, which would make it read
+        // as body text.
         // (It reads on every ground that text sits on there: a token set on
         // a part reaches its text on each of the part's grounds.)
         const fgNow = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
-        const secondary =
+        const ownRole =
           fgNow &&
-          /^--color-text-(secondary|placeholder)/.test(
-            String(pair.fg.tokens?.[0]),
-          );
+          /^--color-text-(?!primary$)[\w-]+$/.test(String(pair.fg.tokens?.[0]));
         const page = parseColor(
           String(
             res[/** @type {'light' | 'dark'} */ (x.mode)][
@@ -10442,7 +10442,7 @@ export async function contrastProblems(ctx, data, res) {
             ],
           ),
         );
-        const groundsThere = secondary
+        const groundsThere = ownRole
           ? [
               x.ground,
               .../** @type {TextPair[]} */ (
@@ -10463,7 +10463,7 @@ export async function contrastProblems(ctx, data, res) {
             ]
           : [];
         const color = `'${
-          secondary
+          ownRole
             ? nearestReading(
                 /** @type {[number, number, number]} */ (fgNow),
                 /** @type {Array<[number, number, number]>} */ (groundsThere),
@@ -11025,7 +11025,21 @@ function borderContrastProblems(ctx, data, res, base) {
             : basePage,
           basePage,
         );
-        if (now != null && now < 3 && (was == null || was > now)) {
+        // What the theme drew there without this setting, on the same
+        // ground: a mode the setting leaves as the theme's own (a light-only
+        // border's dark half, the theme's border token) makes nothing
+        // fainter there, whatever the theme's dials did to that token.
+        const themeWas = measure(
+          inMode(`var(${bRead.token})`, mode, res[mode]),
+          ground || page,
+          page,
+        );
+        if (
+          now != null &&
+          now < 3 &&
+          (was == null || was > now) &&
+          (themeWas == null || themeWas > now + 0.005)
+        ) {
           const color = fixOn(ground || page, page, border);
           add(
             `border|${x.thing}|${t}|${mode}`,
@@ -11607,7 +11621,7 @@ function placeholderProblems(ctx, data, res, base) {
     const what = `the loading placeholder (${parts.slice(0, 3).join(', ')}, ${TOKEN} ${v}) is ${r.toFixed(2)}:1 on the page${surface ? ' or a surface' : ''} in ${m} at its brightest`;
     if (same) {
       out.push({
-        key: `placeholder|base|${m}`,
+        key: `placeholder|${m}`,
         text: `the base theme's ${what.slice(4)}, so it barely shows; the base theme draws it so`,
         fix: null,
       });
@@ -11646,6 +11660,8 @@ function placeholderProblems(ctx, data, res, base) {
       if (worst(c) >= PLACEHOLDER_SHOWS) fix = shade;
     }
     out.push({
+      // (The key the base's own note has: a change that leaves the
+      // placeholder as faint as the base drew it makes no new problem.)
       key: `placeholder|${m}`,
       text: `${what}; a placeholder needs ${PLACEHOLDER_SHOWS}:1 to show`,
       fix: fix
@@ -11811,7 +11827,9 @@ function scopedTextProblems(ctx, data, res) {
   const done = new Set();
   for (const x of data.settings.filter(scopedColor)) {
     const st = x.state ? String(x.state) : null;
-    const when = st ? null : String(x.when);
+    // (A state within a variant, a primary button's hover, is both: the
+    // variant's own text on the state's fill.)
+    const when = x.when ? String(x.when) : null;
     for (const t of partsOf(ctx, x)) {
       const scopeKey = `${t}|${st ?? ''}|${when ?? ''}`;
       if (done.has(scopeKey)) continue;
@@ -11819,16 +11837,20 @@ function scopedTextProblems(ctx, data, res) {
       /** A part-data condition is this scope. @param {string} w */
       const inScope = w => {
         const terms = w.split(' ')[0].split(',');
-        return st
-          ? new RegExp(`(^|[\\s,])${st}=`).test(w)
-          : terms.includes(String(when).replace(':', '='));
+        return (
+          (!st || new RegExp(`(^|[\\s,])${st}=`).test(w)) &&
+          (!when ||
+            String(when)
+              .split('+')
+              .every(c => terms.includes(c.replace(':', '='))))
+        );
       };
       /** A setting is on this part in this scope (or at rest), in a mode. @param {Setting} y @param {string} m @param {boolean} scoped */
       const here = (y, m, scoped) =>
         Boolean(y.on) &&
         (!y.mode || y.mode === m) &&
         (scoped
-          ? (y.state ?? null) === st && (st ? true : y.when === when)
+          ? (y.state ?? null) === st && (y.when ?? null) === when
           : !y.state && !y.when) &&
         partsOf(ctx, y).includes(t);
       /** The latest setting matching, scoped first, then at rest. @param {(y: Setting) => boolean} test @param {string} m */
@@ -11844,14 +11866,26 @@ function scopedTextProblems(ctx, data, res) {
       /** The part-data read for a group in this scope, else at rest. @param {string} group */
       const readOf = group => {
         const reads = ctx.C.partReads(t, group) ?? [];
+        /** The variant alone, its state left out. @param {string} w */
+        const inVariant = w => {
+          const terms = w.split(' ')[0].split(',');
+          return String(when)
+            .split('+')
+            .every(c => terms.includes(c.replace(':', '=')));
+        };
         return (
           reads.find(r => r.when.some(inScope)) ??
+          (when && st ? reads.find(r => r.when.some(inVariant)) : null) ??
           reads.find(r => r.when.includes('')) ??
           null
         );
       };
       for (const m0 of modes) {
         const m = /** @type {'light' | 'dark'} */ (m0);
+        // (A mode no write for this scope reaches, a light-only hover
+        // fill's dark, is drawn as the base draws it: nothing to measure.)
+        if (!data.settings.some(y => scopedColor(y) && here(y, m, true)))
+          continue;
         const page = parseColor(String(res[m]['--color-background-body']));
         if (!page) continue;
         const fillSet = latest(
@@ -11869,6 +11903,21 @@ function scopedTextProblems(ctx, data, res) {
           m,
         );
         const textRead = readOf('text');
+        // A part that draws no text, nor holds a part that does (a
+        // switch's track, a tab's underline), has none to measure, unless
+        // the theme gives it a color. (A table row's text is its cells'.)
+        const drawsText = (/** @type {string} */ q) =>
+          (ctx.C.partReads(q, 'text') ?? []).length > 0;
+        if (
+          !textRead &&
+          !colorSet &&
+          !(
+            /** @type {string[]} */ (
+              /** @type {any} */ (ctx.C.MAP[t])?.contains ?? []
+            ).some(drawsText)
+          )
+        )
+          continue;
         const textToken = textRead?.token ?? '--color-text-primary';
         const textValue = colorSet
           ? inMode(colorSet.value, m)
@@ -11887,8 +11936,16 @@ function scopedTextProblems(ctx, data, res) {
         const fg = compositeOver(fg0, alphaOf(textValue), ground);
         const r = ratio(fg, ground);
         if (r >= 4.5) continue;
-        const scope = st ? `--state ${st}` : `--when ${when}`;
-        const label = st ? st : String(when).replace(':', ' ');
+        const scope = [
+          ...(when ? [`--when ${when}`] : []),
+          ...(st ? [`--state ${st}`] : []),
+        ].join(' ');
+        const label = [
+          ...(when
+            ? [String(when).replace(/:/g, ' ').replace(/\+/g, ', ')]
+            : []),
+          ...(st ? [st] : []),
+        ].join(', ');
         const fix = nearestReading(fg, [ground], 4.5);
         // What draws the text: a color set there, else the token the text
         // reads, set on the part in that state or condition.

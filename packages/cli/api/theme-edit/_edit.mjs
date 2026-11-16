@@ -6827,36 +6827,78 @@ async function changeOnce(
     !s.state &&
     !s.when &&
     /^background(-color)?$/.test(s.thing)
-  )
+  ) {
+    // One note for each cause: the parts of a group whose fill covers the
+    // same paints (every input's status and disabled fills) are said
+    // together, with lines on the group, not once for each part.
+    /** @type {Map<string, {members: string[], rest: string | null, all: Set<string>, flags: Set<string>}>} */
+    const causes = new Map();
     for (const t of parts) {
       const {rest, covered} = coveredPaints(ctx, t, s.thing);
       if (!covered.length) continue;
-      const all = [...new Set(covered.map(c => `${c.cond} (${c.token})`))];
+      // (The cause is what the fill covers, by kind: the props and states
+      // Core paints a fill for, whatever their order or count on a part.)
+      const kinds = [
+        ...new Set(covered.map(c => String(c.cond).split('=')[0])),
+      ].sort();
+      const key = JSON.stringify([kinds, rest ?? null]);
+      const cause = causes.get(key) ?? {
+        members: [],
+        rest: rest ?? null,
+        all: new Set(),
+        flags: new Set(),
+      };
+      cause.members.push(t);
+      for (const c of covered) {
+        cause.all.add(`${c.cond} (${c.token})`);
+        if (c.flags) cause.flags.add(String(c.flags));
+      }
+      causes.set(key, cause);
+    }
+    // Each chain starts with the undo of the fill just set: while it
+    // stays, every variant and state keeps it.
+    const undo = `${P} undo ${slug} ${undoArgs(s)}`;
+    const modeFlag = s.mode ? ` --mode ${s.mode}` : '';
+    for (const {
+      members,
+      rest,
+      all: allSet,
+      flags: flagSet,
+    } of causes.values()) {
+      const all = [...allSet].sort();
       const named = [
         ...all.slice(0, 4),
         ...(all.length > 4 ? [`${all.length - 4} more`] : []),
       ];
+      const flags = [...flagSet];
+      // Lines go on the part as set when the cause is every part it
+      // styles (its group); else on each part the cause is.
+      const targets =
+        members.length === parts.length && s.on ? [s.on] : members;
       const lines = [
         ...new Set(
-          covered
-            .filter(c => c.flags)
-            .map(
-              c =>
-                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${t} ${c.flags}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          targets.flatMap(on =>
+            flags.map(
+              f =>
+                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${on} ${f}${modeFlag}`,
             ),
+          ),
         ),
       ];
-      // Each chain starts with the undo of the fill just set: while it
-      // stays, every variant and state keeps it.
-      const undo = `${P} undo ${slug} ${undoArgs(s)}`;
+      const who =
+        members.length > 3
+          ? `${members.slice(0, 3).join(', ')} and ${members.length - 3} more`
+          : members.join(', ');
+      const own = members.length > 1 ? 'their' : 'its';
       notes.push(
-        `${s.mode ? `in ${s.mode} mode, ` : ''}${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
+        `${s.mode ? `in ${s.mode} mode, ` : ''}${who}${members.length > 1 ? "'s fills now cover" : "'s fill now covers"} the fill Core gives ${members.length > 1 ? 'them' : 'it'} ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
           rest
-            ? `; to change only its fill at rest: ${undo}, then ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}${s.mode ? ` --mode ${s.mode}` : ''}`
+            ? `; to change only ${own} fill at rest: ${undo}, then ${targets.map(on => `${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${on}${modeFlag}`).join('; ')}`
             : ''
         }${lines.length ? `; to fill only one of them: ${undo}, then ${lines.slice(0, 3).join('; or ')}` : ''}`,
       );
     }
+  }
   // A color dial or token that a plain part's own fill covers no longer
   // reaches that part where Core paints with it: said.
   if (sub === 'set' && !s.on) {
