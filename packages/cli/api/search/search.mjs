@@ -126,7 +126,13 @@ async function searchCatalog(options) {
  * comparisons set it; build never does, so build reads every keyword.
  *
  * @param {string} query
- * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number, ownKeywords?: boolean}} [options]
+ * `readyTemplatesOnly` leaves every page template that is not ready yet out
+ * of the entries search ranks, as if it were absent: it takes no place, moves
+ * no order and adds nothing to `matchCount`. Only build sets it; search itself
+ * lists every template.
+ *
+ * @param {string} query
+ * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number, ownKeywords?: boolean, readyTemplatesOnly?: boolean}} [options]
  * @returns {Promise<import('./search.type.mjs').SearchResponse>}
  */
 export async function searchCore(query, options = {}) {
@@ -135,6 +141,28 @@ export async function searchCore(query, options = {}) {
     docPackageManager(options.cwd ?? process.cwd()),
     () => searchCoreRead(query, options),
   );
+}
+
+/** @type {WeakMap<object, object>} each gathered catalog without its not-ready page templates */
+const readyOnly = new WeakMap();
+
+/**
+ * A gathered catalog, or the same catalog without the page templates that are
+ * not ready yet. The narrowed catalog is kept per catalog, so a search that
+ * reuses a gather reuses its narrowed form too.
+ * @template {{all: any[]}} T
+ * @param {T} catalog
+ * @param {boolean} ready
+ * @returns {T}
+ */
+function withoutNotReady(catalog, ready) {
+  if (!ready || !catalog.all.some(c => c._notReady)) return catalog;
+  let narrowed = readyOnly.get(catalog);
+  if (!narrowed) {
+    narrowed = {...catalog, all: catalog.all.filter(c => !c._notReady)};
+    readyOnly.set(catalog, narrowed);
+  }
+  return /** @type {T} */ (narrowed);
 }
 
 /**
@@ -148,9 +176,12 @@ async function searchCoreRead(query, options) {
       rankLexical(
         query,
         options,
-        options.ownKeywords
-          ? await searchCatalog(options)
-          : await gatherCandidatesReused(options),
+        withoutNotReady(
+          options.ownKeywords
+            ? await searchCatalog(options)
+            : await gatherCandidatesReused(options),
+          options.readyTemplatesOnly === true,
+        ),
       ),
       options.cwd ?? process.cwd(),
     );
