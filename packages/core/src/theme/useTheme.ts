@@ -9,9 +9,12 @@
  * @position Theme hook; used by data viz, canvas, and non-CSS consumers
  *
  * Provides synchronous access to theme token values resolved for the
- * current color mode — no DOM reads on the provider path, no double render.
- * The returned `mode` is always 'light' | 'dark': 'system', and any value
- * outside the union, resolves through the OS preference.
+ * current color mode, with no double render. The returned `mode` is always
+ * 'light' | 'dark'. 'system', and any value outside the union, resolves the
+ * way a system Theme's CSS does: to the one scheme the page root names (a
+ * host that draws the page dark), else the OS preference; under a Theme that
+ * forces light or dark, to the OS preference. Only a system consumer under no
+ * forced Theme reads the root, through one shared observer.
  * Without a reachable ThemeContext it consults `<html data-theme>` and
  * `<html data-astryx-theme>` (kept in sync by Theme) via shared, refcounted
  * MutationObservers before assuming OS preference/default tokens. Provider-path
@@ -45,6 +48,11 @@ export interface ThemeContextValue {
   theme: DefinedTheme;
   /** The color mode prop passed to Theme */
   mode: ThemeMode;
+  /**
+   * What a `system` mode here follows: the page root's scheme, or the OS
+   * preference below a Theme that forces light or dark.
+   */
+  systemScheme?: 'root' | 'preference';
 }
 
 /**
@@ -199,6 +207,104 @@ function subscribeNoop(): () => void {
   return () => {};
 }
 
+// A system consumer under no forced Theme resolves the way a system Theme's
+// CSS does: from the one scheme the page root names, such as a host's
+// `color-scheme: dark`. One observer serves them all, and it runs only while
+// one listens.
+const rootSchemeListeners = new Set<() => void>();
+let rootSchemeObserver: MutationObserver | null = null;
+
+const STYLE_NODES = 'style, link[rel~="stylesheet"]';
+
+/** `light` or `dark` when the page root names only that scheme, else null. */
+function getRootSchemeSnapshot(): 'light' | 'dark' | null {
+  const declared: string | undefined = window.getComputedStyle(
+    document.documentElement,
+  ).colorScheme;
+  const names = (declared ?? '').split(/\s+/);
+  const light = names.includes('light');
+  const dark = names.includes('dark');
+  if (light === dark) {
+    return null;
+  }
+  return dark ? 'dark' : 'light';
+}
+
+/**
+ * Whether a change can change the root's scheme: one of the root's
+ * attributes, the text of a style element, or a style or stylesheet link that
+ * came or went in the head.
+ */
+function changesRootScheme(records: MutationRecord[]): boolean {
+  return records.some(record => {
+    const target = record.target;
+    if (target === document.documentElement) {
+      return true;
+    }
+    const element = target instanceof Element ? target : target.parentElement;
+    if (element?.closest('style') != null) {
+      return true;
+    }
+    return [...record.addedNodes, ...record.removedNodes].some(
+      node =>
+        node instanceof Element &&
+        (node.matches(STYLE_NODES) || node.querySelector(STYLE_NODES) != null),
+    );
+  });
+}
+
+function notifyRootSchemeListeners(records: MutationRecord[]): void {
+  if (!changesRootScheme(records)) {
+    return;
+  }
+  for (const listener of rootSchemeListeners) {
+    listener();
+  }
+}
+
+function subscribeRootScheme(onStoreChange: () => void): () => void {
+  rootSchemeListeners.add(onStoreChange);
+  // The reader's preference decides a root that names both schemes.
+  const query =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)')
+      : null;
+  query?.addEventListener('change', onStoreChange);
+  if (
+    rootSchemeListeners.size === 1 &&
+    typeof MutationObserver !== 'undefined'
+  ) {
+    rootSchemeObserver = new MutationObserver(notifyRootSchemeListeners);
+    rootSchemeObserver.observe(document.documentElement, {attributes: true});
+    rootSchemeObserver.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  }
+  return () => {
+    query?.removeEventListener('change', onStoreChange);
+    rootSchemeListeners.delete(onStoreChange);
+    if (rootSchemeListeners.size === 0 && rootSchemeObserver) {
+      rootSchemeObserver.disconnect();
+      rootSchemeObserver = null;
+    }
+  };
+}
+
+/**
+ * The one scheme the page root names, or null when it names both or none.
+ * With `watch` false it reads nothing and subscribes to nothing. Server
+ * rendering reads null, so it resolves the OS preference as before.
+ */
+function useRootScheme(watch: boolean): 'light' | 'dark' | null {
+  return useSyncExternalStore(
+    watch ? subscribeRootScheme : subscribeNoop,
+    watch ? getRootSchemeSnapshot : getNullThemeSnapshot,
+    getNullThemeSnapshot,
+  );
+}
+
 /**
  * Reads the root Theme's mode off `<html data-theme>`, live via the shared
  * MutationObserver. Null means no root Theme has synced it (none present,
@@ -291,7 +397,6 @@ export function useTheme(): UseThemeReturn {
   const rootAttrMode = useRootModeAttr(hasCtx);
   const rootThemeName = useRootThemeNameAttr(hasCtx);
 
-  // Resolve 'system' to 'light' | 'dark' using the OS preference
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
 
   const mode = ctx?.mode ?? rootAttrMode ?? 'system';
@@ -300,8 +405,13 @@ export function useTheme(): UseThemeReturn {
   // Anything outside light|dark (a stale persisted preference cast to
   // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
   // sync already treats it, so the declared return type holds.
-  const effectiveMode: 'light' | 'dark' =
-    mode === 'light' || mode === 'dark' ? mode : prefersDark ? 'dark' : 'light';
+  const forced = mode === 'light' || mode === 'dark';
+  const rootScheme = useRootScheme(
+    !forced && ctx?.systemScheme !== 'preference',
+  );
+  const effectiveMode: 'light' | 'dark' = forced
+    ? mode
+    : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
 
   // Build the full resolved map, memoized on theme + effective mode
   const tokens = useMemo(

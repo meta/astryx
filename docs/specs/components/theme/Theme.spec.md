@@ -32,8 +32,8 @@ system_specs: [spec:AST-108]
 | Public contract         | `Theme` with a required `theme` (a defined theme), `mode` (`light`, `dark`, `system`; default `system`), and `children`.                                 |
 | Behavior                | Applies a theme and color mode to its subtree through a layout-neutral wrapper. The outermost Theme also writes the theme and a forced mode to `<html>`. |
 | End-user impact         | Everything inside renders in the chosen theme and in light, dark, or the system's mode; browser chrome follows the root Theme.                           |
-| Builder impact          | None.                                                                                                                                                    |
-| Compatibility/readiness | Records shipped behavior; no public change.                                                                                                              |
+| Builder impact          | A `system` Theme takes the page root's scheme, so an app or host that sets the root's `color-scheme` decides it.                                         |
+| Compatibility/readiness | No API change. FR2 is a visible, non-breaking correction: a `system` Theme follows a host's dark or light root instead of the device.                    |
 | Review checks           | Reject a wrapper that affects layout, a nested Theme that changes `<html>`, or a `system` mode that writes a forced mode.                                |
 | Governing rules         | `architecture:theme-application` INV1–INV9; `architecture:theme-compilation`.                                                                            |
 
@@ -49,7 +49,10 @@ what the component itself renders. Consumer usage lives in `Theme.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: no API or default change. FR2 is a visible, non-breaking
+  correction: a `system` Theme takes the page root's scheme, so a page whose
+  root or host sets `color-scheme` to light or dark gets that scheme inside the
+  Theme, and `useTheme()` reports it (`architecture:theme-application` INV7)
 - Controlled/uncontrolled behavior: `theme` and `mode` are caller-owned
 - Migration decision: none
 

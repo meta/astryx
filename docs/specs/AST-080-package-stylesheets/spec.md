@@ -104,7 +104,7 @@ first.
   Astryx layer: `astryx-base` for package stylesheets and `reset` for
   `reset.css`. Core's stylesheet, prebuilt and source-built alike, also carries
   exactly one `@layer reset` block, before its `astryx-base` block, that holds
-  only `:where(html) { color-scheme: light dark; }`: the page root follows the
+  only `:where(html:not([data-theme])) { color-scheme: light dark; }`, the rule `reset.css` has for a root with no forced mode: the page root follows the
   reader's light or dark preference without `reset.css`, and a `system` Theme
   takes the root's scheme (`component:Theme` FR2). None of these files emits an
   unlayered rule or another layer. Each begins with the same order registration
@@ -249,8 +249,8 @@ first.
 
 ## Current-state impact
 
-- Core, Lab, Rich Text, and Charts already export one stylesheet each with every
-  rule inside `@layer astryx-base`, besides Core's FR3 root block in `reset`. Non-Core stylesheets omit the Core variable
+- Core, Lab, Rich Text, and Charts export one stylesheet each with every rule
+  inside `@layer astryx-base`, besides Core's FR3 root block in `reset`. Non-Core stylesheets omit the Core variable
   groups `astryx.css` declares. Core's prebuilt stylesheet carries the canonical
   data-token group; Lab relies on that stylesheet and adds no copy, under
   `spec:AST-066` FR3.

@@ -62,15 +62,15 @@ const squeezed = text => text.replace(/\s+/g, ' ').trim();
 
 /**
  * Assert Core's shape: the order line, the root block that holds only
- * `:where(html) { color-scheme: light dark }` in `reset`, then one
- * `astryx-base` block.
+ * `:where(html:not([data-theme])) { color-scheme: light dark }` in `reset`,
+ * then one `astryx-base` block.
  */
 function expectCoreLayers(css) {
   const statements = topLevelStatements(css);
   expect(statements[0]).toBe(ASTRYX_LAYER_ORDER);
   expect(statements).toHaveLength(3);
   expect(squeezed(statements[1])).toBe(
-    '@layer reset { :where(html) { color-scheme: light dark; } }',
+    '@layer reset { :where(html:not([data-theme])) { color-scheme: light dark; } }',
   );
   expect(statements[2].startsWith('@layer astryx-base {')).toBe(true);
 }
@@ -96,7 +96,7 @@ describe('package stylesheets register the Astryx layer order (spec:AST-080 FR3)
     });
     expectCoreLayers(css);
     expect(squeezed(CORE_ROOT_BLOCK)).toBe(
-      '@layer reset { :where(html) { color-scheme: light dark; } }',
+      '@layer reset { :where(html:not([data-theme])) { color-scheme: light dark; } }',
     );
   });
 

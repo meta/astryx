@@ -252,7 +252,7 @@ describe('the @astryx PostCSS plugin', () => {
     // The layer order first, so the block keeps it wherever it loads, then
     // Core's root block (spec:AST-080 FR3), then the compiled rules.
     expect(css).toMatch(
-      /^@layer reset, astryx-base, astryx-theme;\n\n@layer reset \{\n {2}:where\(html\) \{\n {4}color-scheme: light dark;\n {2}\}\n\}\n\n@layer astryx-base \{\n {2}\.x[a-z0-9]+\{color:red\}/,
+      /^@layer reset, astryx-base, astryx-theme;\n\n@layer reset \{\n {2}:where\(html:not\(\[data-theme\]\)\) \{\n {4}color-scheme: light dark;\n {2}\}\n\}\n\n@layer astryx-base \{\n {2}\.x[a-z0-9]+\{color:red\}/,
     );
     // It depends on the package's source, never on an app file.
     expect(messages).toEqual([

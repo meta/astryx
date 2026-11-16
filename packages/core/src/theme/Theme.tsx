@@ -64,7 +64,10 @@ import {createSharedContext} from '../utils/sharedContext';
 interface ThemeProps {
   /** Theme from defineTheme() */
   theme: DefinedTheme;
-  /** Color mode - 'system' follows OS preference */
+  /**
+   * Color mode. `system` takes the page's light or dark scheme: the reader's
+   * preference, unless the page or its host sets the root's scheme.
+   */
   mode?: ThemeMode;
   /** Children to render */
   children: React.ReactNode;
@@ -361,7 +364,11 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
-  const parentMode = use(ThemeContext)?.mode;
+  const parent = use(ThemeContext);
+  const parentForces = parent?.mode === 'light' || parent?.mode === 'dark';
+  const systemScheme = parentForces
+    ? 'preference'
+    : (parent?.systemScheme ?? 'root');
 
   registerTheme(theme);
 
@@ -373,22 +380,25 @@ export function Theme({
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
   useRootTextSizeSync(isNested);
 
-  // A system Theme takes the scheme around it: the page root's (Core's
-  // stylesheet and reset.css make it follow the reader's preference, and a
-  // host can set its own) or a system Theme's above it. Only under a Theme
-  // that forces light or dark does it declare `light dark`, to follow the
-  // reader's preference again.
+  // A system Theme takes the scheme around it. That is the page root's, or a
+  // system Theme's above it. Core's stylesheet and reset.css make the root
+  // follow the reader's preference, and a host can set its own. Under a Theme
+  // that forces light or dark, a system Theme declares `light dark`. Then it
+  // follows the reader's preference again.
   const colorSchemeStyle =
     mode === 'dark'
       ? wrapperStyles.dark
       : mode === 'light'
         ? wrapperStyles.light
-        : parentMode === 'light' || parentMode === 'dark'
+        : parentForces
           ? wrapperStyles.system
           : null;
 
   // Memoize the context value to prevent unnecessary re-renders
-  const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);
+  const ctxValue = useMemo(
+    () => ({theme, mode, systemScheme}),
+    [theme, mode, systemScheme],
+  );
 
   return (
     <ThemeContext value={ctxValue}>

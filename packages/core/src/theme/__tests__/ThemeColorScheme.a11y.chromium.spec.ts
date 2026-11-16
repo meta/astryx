@@ -6,10 +6,11 @@
  * @input The Core/Themes/ColorScheme story in a built Storybook, with the
  *   toolbar theme set to none, in Chromium
  * @output Real-engine proof that a system Theme takes the scheme of the page
- *   root, so a host that forces the root dark gets dark inside the Theme;
- *   that the root follows the reader's preference with and without reset.css;
- *   and that a system Theme under a Theme that forces light follows the
- *   reader's preference
+ *   root, so a host that forces the root dark gets dark inside the Theme and
+ *   from `useTheme()`; that the root follows the reader's preference with and
+ *   without reset.css; that a system Theme under a Theme that forces light
+ *   follows the reader's preference; and that a root Theme that forces dark
+ *   keeps the page dark when Core's stylesheet loads after reset.css
  * @position Run with `pnpm test:a11y-contract`. Which scheme an element
  *   resolves in needs a real engine.
  */
@@ -24,6 +25,7 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 
 const STORY = 'core-themes-colorscheme--cases';
+const FORCED_ROOT_STORY = 'core-themes-colorscheme--forced-root';
 /** Core's built stylesheet, which an app without reset.css still loads. */
 const ASTRYX_CSS_FILE = fileURLToPath(
   new URL('../../../dist/astryx.css', import.meta.url),
@@ -51,15 +53,22 @@ test.afterAll(async () => {
 async function openStory(
   page: Page,
   {
+    story = STORY,
     withoutReset = false,
+    withCoreStylesheet = withoutReset,
     hostScheme,
-  }: {withoutReset?: boolean; hostScheme?: string} = {},
+  }: {
+    story?: string;
+    withoutReset?: boolean;
+    withCoreStylesheet?: boolean;
+    hostScheme?: string;
+  } = {},
 ): Promise<void> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:none`,
+    `${storybook.origin}/iframe.html?id=${story}&viewMode=story&globals=astryxTheme:none`,
   );
-  await page.locator('[data-probe="root-system"]').waitFor();
-  if (withoutReset) {
+  await page.locator('[data-probe]').first().waitFor();
+  if (withCoreStylesheet) {
     if (!fs.existsSync(ASTRYX_CSS_FILE)) {
       throw new Error(
         'Build Core first: pnpm -F @astryxdesign/core build:css writes dist/astryx.css.',
@@ -117,6 +126,18 @@ async function schemes(page: Page): Promise<Record<string, string>> {
   );
 }
 
+/** The mode `useTheme()` reports at each probe. */
+async function hookModes(page: Page): Promise<Record<string, string>> {
+  return page.evaluate(() =>
+    Object.fromEntries(
+      Array.from(document.querySelectorAll('[data-probe]'), element => [
+        element.getAttribute('data-probe') ?? '',
+        element.getAttribute('data-hook-mode') ?? '',
+      ]),
+    ),
+  );
+}
+
 test.describe('the reader prefers light', () => {
   test.use({colorScheme: 'light'});
 
@@ -130,6 +151,31 @@ test.describe('the reader prefers light', () => {
       'system-under-light': LIGHT,
       'system-under-system': DARK,
     });
+    // useTheme() reads the host's root as the CSS does, once the host's
+    // stylesheet arrives.
+    await expect
+      .poll(async () => hookModes(page))
+      .toEqual({
+        'root-system': 'dark',
+        'forced-light': 'light',
+        'system-under-light': 'light',
+        'system-under-system': 'dark',
+      });
+  });
+
+  test('a root Theme that forces dark keeps the page dark when Core\u2019s stylesheet loads after reset.css', async ({
+    page,
+  }) => {
+    await openStory(page, {
+      story: FORCED_ROOT_STORY,
+      withCoreStylesheet: true,
+    });
+    expect(
+      await page.evaluate(
+        () => getComputedStyle(document.documentElement).colorScheme,
+      ),
+    ).toBe('dark');
+    expect(await schemes(page)).toEqual({page: DARK, 'forced-root': DARK});
   });
 
   test('with no host scheme, a system Theme is light', async ({page}) => {

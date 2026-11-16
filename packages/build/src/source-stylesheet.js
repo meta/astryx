@@ -414,13 +414,15 @@ const LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
 /**
  * The one block Core's stylesheet carries outside `astryx-base`
- * (spec:AST-080 FR3): the page root follows the reader's light or dark
- * preference without `reset.css`. A `system` Theme inherits the root's scheme
- * (component:Theme FR2). Zero specificity in the lowest layer, so a host or an
- * app that sets the root's scheme wins.
+ * (spec:AST-080 FR3): with no forced mode on the root, the page root follows
+ * the reader's light or dark preference without `reset.css`. It is
+ * `reset.css`'s own rule for that case, so either file can load last. A
+ * `system` Theme takes the root's scheme (component:Theme FR2). Zero
+ * specificity in the lowest layer, so a host or an app that sets the root's
+ * scheme wins.
  */
 const CORE_ROOT_BLOCK =
-  '@layer reset {\n  :where(html) {\n    color-scheme: light dark;\n  }\n}';
+  '@layer reset {\n  :where(html:not([data-theme])) {\n    color-scheme: light dark;\n  }\n}';
 
 /**
  * A stylesheet's block: the layer order, then `css` inside `@layer astryx-base`.
