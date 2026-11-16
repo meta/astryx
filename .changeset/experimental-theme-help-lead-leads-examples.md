@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] A theme command's `--help` leads with its first examples, before the options: "Start here:" for a command with more than three, and the rest follow the options under "More examples:", so the first step is visible without reading every option.
+[experimental] A theme command with more than three examples opens its `--help` with "Start here:" and its first three examples, before the options, so the first step is visible without reading every option. The full "Examples:" section stays after the options, as in every command's help.
 
 @josephfarina
