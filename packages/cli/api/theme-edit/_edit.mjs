@@ -138,6 +138,7 @@ import {
   setArgs,
   editedThemes,
   entryFieldNames,
+  propertySpelling,
   entryProblem,
   namesSetting,
   namesSettingAsTyped,
@@ -5180,8 +5181,18 @@ async function changeOnce(
   // The setting this command changes or removes may be the bad one; any
   // other bad setting still refuses (or is left out when this fixes one).
   const target = /** @type {Partial<import('./_settings.mjs').Setting>} */ ({
-    // An undo may name a saved entry exactly as written.
-    thing: sub === 'undo' ? typedThing : thing,
+    // An undo may name a saved entry exactly as written; a set names the
+    // setting as the settings file holds it (a property or token typed in
+    // other letters, `Background-Color`, is that property or token), so it
+    // is the change that fixes that setting listed twice.
+    thing:
+      sub === 'undo'
+        ? typedThing
+        : options.on && !String(thing).startsWith('--')
+          ? (propertySpelling(String(thing)) ?? thing)
+          : String(thing).startsWith('--')
+            ? String(thing).toLowerCase()
+            : thing,
     on: options.on,
     when: options.when,
     state: options.state,

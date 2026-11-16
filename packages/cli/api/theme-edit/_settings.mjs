@@ -10162,6 +10162,8 @@ function stepText(text, cwd, radii) {
 
 /** The file's own top-level fields. */
 const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
+/** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
+const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
 /**
  * What an entry as saved sets: its thing and scope, in any letters, so two
@@ -10193,7 +10195,8 @@ function topFieldNames(data) {
   /** @type {string[]} */
   const notes = [];
   for (const k of Object.keys(data)) {
-    const field = TOP_FIELDS.find(f => f === k.trim().toLowerCase());
+    const lower = k.trim().toLowerCase();
+    const field = TOP_FIELDS.find(f => f === lower) ?? TOP_FIELD_WORDS[lower];
     if (!field || field === k) continue;
     if (field in data) {
       if (
@@ -10219,7 +10222,9 @@ function topFieldNames(data) {
     data[field] = data[k];
     delete data[k];
     notes.push(
-      `the settings file writes "${k}" in other letters, read as ${field}`,
+      TOP_FIELD_WORDS[lower]
+        ? `the settings file writes the ${lower} as "${k}", read as ${field}`
+        : `the settings file writes "${k}" in other letters, read as ${field}`,
     );
   }
   return notes;
