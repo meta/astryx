@@ -4,7 +4,8 @@
 
 /**
  * @file useClipboard.ts
- * @input Uses React state/effect/callback; navigator.clipboard; useAnnounce
+ * @input Uses React state/effect/callback; navigator.clipboard (else a
+ *   selected hidden field and the copy command); useAnnounce
  * @output Exports useClipboard hook plus its options/return types
  * @position Core behavior hook; owns the copy-to-clipboard behavior shared by
  *   CodeBlock and Timestamp — the clipboard write, the transient "copied"
@@ -27,6 +28,85 @@ import {useAnnounce} from './useAnnounce';
  * register without lingering.
  */
 const DEFAULT_RESET_AFTER_MS = 2000;
+
+/**
+ * Whether this document may use the async Clipboard API to write. A frame
+ * whose permissions policy does not allow `clipboard-write` (a sandboxed
+ * viewer or an embed) refuses it, and the browser logs a policy violation for
+ * each try. Without a policy API, the write is tried.
+ */
+function clipboardWriteAllowed(): boolean {
+  const doc = document as Document & {
+    permissionsPolicy?: {allowsFeature?: (feature: string) => boolean};
+    featurePolicy?: {allowsFeature?: (feature: string) => boolean};
+  };
+  const policy = doc.permissionsPolicy ?? doc.featurePolicy;
+  return typeof policy?.allowsFeature === 'function'
+    ? policy.allowsFeature('clipboard-write')
+    : true;
+}
+
+/**
+ * Copy text through a selected, hidden text field and the browser's copy
+ * command, which a click can still run where the async Clipboard API is
+ * refused. Focus and the selection come back to where they were.
+ * @throws when the browser does not copy
+ */
+function copyThroughSelection(text: string): void {
+  const active = document.activeElement;
+  const selection = document.getSelection();
+  const ranges =
+    selection == null
+      ? []
+      : Array.from({length: selection.rangeCount}, (_, i) =>
+          selection.getRangeAt(i),
+        );
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.setAttribute('readonly', '');
+  field.setAttribute('aria-hidden', 'true');
+  field.tabIndex = -1;
+  // Off screen and inert: the field is there only to hold the selection.
+  field.style.position = 'fixed';
+  field.style.insetBlockStart = '0';
+  field.style.insetInlineStart = '-9999px';
+  field.style.opacity = '0';
+  field.style.pointerEvents = 'none';
+  document.body.append(field);
+  let copied: boolean;
+  try {
+    // The copy command copies what is selected in the focused element.
+    field.focus({preventScroll: true});
+    field.select();
+    copied = document.execCommand('copy');
+  } finally {
+    field.remove();
+    if (active instanceof HTMLElement) {
+      active.focus({preventScroll: true});
+    }
+    if (selection != null) {
+      selection.removeAllRanges();
+      for (const range of ranges) {
+        selection.addRange(range);
+      }
+    }
+  }
+  if (!copied) {
+    throw new Error('The browser did not copy the text.');
+  }
+}
+
+/**
+ * Write text to the clipboard: through the async Clipboard API where the
+ * document may use it, else through a selection and the copy command.
+ */
+async function writeClipboardText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText != null && clipboardWriteAllowed()) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  copyThroughSelection(text);
+}
 
 /**
  * Options for {@link useClipboard}.
@@ -54,8 +134,10 @@ export interface UseClipboardReturn {
   /**
    * Write `text` to the clipboard. On success, flips `isCopied` to true,
    * announces the configured message, and (re)starts the reset timer;
-   * resolves `true`. A clipboard rejection is a silent no-op that leaves the
-   * copied state unchanged and resolves `false`.
+   * resolves `true`. Where the document may not use the async Clipboard API
+   * (a frame whose permissions policy does not allow `clipboard-write`), the
+   * text is copied through a selection instead. A failed write is a silent
+   * no-op that leaves the copied state unchanged and resolves `false`.
    */
   copy: (text: string) => Promise<boolean>;
   /** True for `resetAfterMs` after the most recent successful copy. */
@@ -156,7 +238,7 @@ export function useClipboardCopy(
   const copy = useCallback(
     async (text: string): Promise<boolean> => {
       try {
-        await navigator.clipboard.writeText(text);
+        await writeClipboardText(text);
       } catch (error) {
         if (!isMountedRef.current) {
           onError?.(error);
