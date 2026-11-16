@@ -1459,7 +1459,28 @@ export function mapPalette(
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      each(m => {
+        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+        const from = fill[m] as StopRef;
+        const own = exactFill[m]
+          ? solid(exactFill[m] as string, m, f.id)
+          : null;
+        if (
+          own &&
+          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
+        ) {
+          return {...from, color: own};
+        }
+        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+      }),
+    );
     if (names.onMuted) {
       const onMuted = names.onMuted;
       put(
