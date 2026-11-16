@@ -7332,6 +7332,36 @@ export function draftAnswer(ctx, env, question) {
           !st.mode,
       )?.value ?? null;
   /**
+   * A token the theme sets on a part itself, or on a group it is in, with
+   * no variant or state, for a mode (none: one set for both): what that
+   * part shows for the token, before the theme's own value.
+   * @param {string} part
+   * @param {string} tok
+   * @param {'light' | 'dark'} [mode]
+   * @returns {string | null}
+   */
+  const tokenSetOn = (part, tok, mode) => {
+    const base = FAMILIES[part] ? FAMILIES[part][0] : part;
+    const ons = [
+      base,
+      part,
+      ...Object.keys(FAMILIES).filter(g => FAMILIES[g].includes(base)),
+    ];
+    return (
+      [...env.data.settings]
+        .reverse()
+        .find(
+          st =>
+            st.thing === tok &&
+            st.on != null &&
+            ons.includes(st.on) &&
+            !st.when &&
+            !st.state &&
+            (st.mode == null || st.mode === (mode ?? 'light')),
+        )?.value ?? null
+    );
+  };
+  /**
    * The theme's own whole-theme value for a dial (its last plain setting).
    * @param {string} thing
    */
@@ -12559,6 +12589,9 @@ export function draftAnswer(ctx, env, question) {
    * @returns {string | null}
    */
   function partPropNow(part, prop, live = false) {
+    // (A token set on the part itself is what it shows for that token.)
+    /** @param {string} t */
+    const onPartResolved = t => tokenSetOn(part, t) ?? resolvedValue(t);
     // The page is painted with the body tokens: its fill, the body
     // background; its text, the main text color.
     if (part === 'page') {
@@ -12568,7 +12601,7 @@ export function draftAnswer(ctx, env, question) {
           : prop === 'color'
             ? '--color-text-primary'
             : null;
-      return token ? (live ? `var(${token})` : resolvedValue(token)) : null;
+      return token ? (live ? `var(${token})` : onPartResolved(token)) : null;
     }
     const own = partValue(part, prop);
     if (own) return own;
@@ -12581,7 +12614,7 @@ export function draftAnswer(ctx, env, question) {
       const token =
         reads.find(x => x.props.includes('border-width'))?.token ??
         '--border-width';
-      return live ? `var(${token})` : current(token);
+      return live ? `var(${token})` : onPartResolved(token);
     }
     // A color: the text color (or fill) the part shows at rest.
     if (
@@ -12600,7 +12633,7 @@ export function draftAnswer(ctx, env, question) {
         restRead(C.partReads(one(part), group)) ??
         (group === 'text' ? '--color-text-primary' : null);
       if (!token) return null;
-      return live ? `var(${token})` : resolvedValue(token);
+      return live ? `var(${token})` : onPartResolved(token);
     }
     // The part's plain rule as built (both sides of a two-value padding).
     if (prop === 'padding') {
@@ -12615,7 +12648,7 @@ export function draftAnswer(ctx, env, question) {
           ? String(rule)
           : String(rule).replace(
               /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
-              (m, t) => resolvedValue(t) || m,
+              (m, t) => onPartResolved(t) || m,
             );
     }
     // A radius: what the part's own rule is built with (stone's pill
@@ -12637,7 +12670,7 @@ export function draftAnswer(ctx, env, question) {
           ? String(built)
           : String(built).replace(
               /var\(\s*(--[a-z0-9-]+)\s*\)/,
-              (m, t) => resolvedValue(t) || m,
+              (m, t) => onPartResolved(t) || m,
             );
     }
     const group = /** @type {Record<string, string>} */ ({
@@ -12665,7 +12698,7 @@ export function draftAnswer(ctx, env, question) {
       reads.find(r => r.when.some(w => /=(primary|md|medium)$/.test(w))) ??
       reads[0];
     if (!read) return null;
-    return live ? `var(${read.token})` : resolvedValue(read.token);
+    return live ? `var(${read.token})` : onPartResolved(read.token);
   }
 
   /**
@@ -20257,6 +20290,16 @@ export function draftAnswer(ctx, env, question) {
         x => x.at >= 0 && !(asked === 'focus-ring' && x.on === 'focus-ring'),
       )
       .sort((x, y) => x.at - y.at)[0]?.on;
+    // A token set on the part itself (or on its group), as the theme saves
+    // it, is what the part shows: "how thick are dividers" after
+    // `--border-width 3px --on divider` is 3px, never the theme's own.
+    /** @param {string} tok @param {'light' | 'dark'} [mode] */
+    const tokenOnPart = (tok, mode) =>
+      named ? tokenSetOn(named, tok, mode ?? readMode ?? 'light') : null;
+    /** @param {string} tok @param {'light' | 'dark'} [mode] */
+    const partNow = (tok, mode) => tokenOnPart(tok, mode) ?? current(tok, mode);
+    /** @param {string} tok */
+    const partResolved = tok => tokenOnPart(tok) ?? resolvedValue(tok);
     // Else any rule of the part that sets the property (in the state the
     // question names first: "disabled buttons" read their disabled rule),
     // the token it reads written out; a variant or a mode the question
@@ -20297,9 +20340,9 @@ export function draftAnswer(ctx, env, question) {
           )) ||
         fits.find(r => r.when.some(w => !w.includes(':'))) ||
         fits[0];
-      const v = pick ? resolvedValue(pick.token) || current(pick.token) : null;
+      const v = pick ? partResolved(pick.token) || partNow(pick.token) : null;
       if (v) return v;
-      if (asked === 'font-family') return current('--font-family-body') || null;
+      if (asked === 'font-family') return partNow('--font-family-body') || null;
       return null;
     };
     // (A value of any of the part's own axes but its size and status, which
@@ -20383,7 +20426,7 @@ export function draftAnswer(ctx, env, question) {
           '$2',
         )
         .replace(/var\(\s*(--[a-z0-9-]+)\s*\)/g, (_m, tok) =>
-          String(current(tok, mode) ?? _m),
+          String(partNow(tok, mode) ?? _m),
         )
         // (Each light-dark() color as the mode asked shows it.)
         .replace(
@@ -20443,10 +20486,10 @@ export function draftAnswer(ctx, env, question) {
           {},
       )[0];
       const tok = /var\(\s*(--[a-z0-9-]+)\s*\)/.exec(String(fill ?? ''))?.[1];
-      const surface = tok ? parseColor(current(tok, mode)) : null;
+      const surface = tok ? parseColor(partNow(tok, mode)) : null;
       if (!surface) return null;
       const [best] = ['--color-on-dark', '--color-on-light']
-        .map(t => ({t, c: parseColor(current(t, mode))}))
+        .map(t => ({t, c: parseColor(partNow(t, mode))}))
         .filter(x => x.c)
         .sort(
           (x, y) =>
@@ -20454,7 +20497,7 @@ export function draftAnswer(ctx, env, question) {
             ratio(/** @type {any} */ (x.c), surface),
         );
       return best
-        ? `${current(best.t, mode)} (${best.t}, on its ${current(/** @type {string} */ (tok), mode)} surface)${qModeSaid}`
+        ? `${partNow(best.t, mode)} (${best.t}, on its ${partNow(/** @type {string} */ (tok), mode)} surface)${qModeSaid}`
         : null;
     };
     // A status ("error inputs") or a state ("focused inputs", "selected
@@ -20521,7 +20564,7 @@ export function draftAnswer(ctx, env, question) {
           TOKENS,
         );
         if (tok && tok.includes(scope.status)) {
-          const v = current(tok, qMode ?? undefined);
+          const v = partNow(tok, qMode ?? undefined);
           if (v) return `${v}${qModeSaid} (${tok}, status ${scope.status})`;
         }
         return `no ${asked} it can read for status ${scope.status} (the part data records only its other statuses)`;
@@ -20555,7 +20598,7 @@ export function draftAnswer(ctx, env, question) {
       /** @param {string} v @param {boolean} [named] the token beside it */
       const shown = (v, named = true) => {
         const tok = /var\(\s*(--[a-z0-9-]+)\s*\)/.exec(v)?.[1];
-        return tok ? `${current(tok, mode)}${named ? ` (${tok})` : ''}` : v;
+        return tok ? `${partNow(tok, mode)}${named ? ` (${tok})` : ''}` : v;
       };
       const rest = at['background-color'][base];
       const suffix = `${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`;
@@ -20633,7 +20676,7 @@ export function draftAnswer(ctx, env, question) {
           .find(r => r.props.includes(asked))?.token ??
         (asked === 'color' ? '--color-text-primary' : null);
       if (!anyTok) return null;
-      const v = current(anyTok, readMode ?? 'light');
+      const v = partNow(anyTok, readMode ?? 'light');
       return v
         ? `${v}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`
         : null;
@@ -20658,7 +20701,7 @@ export function draftAnswer(ctx, env, question) {
       ].sort((x, y) => x.localeCompare(y, 'en', {numeric: true}));
       if (tokens.length < 2) return null;
       const vals = tokens
-        .map(t => [t, resolvedValue(t) || current(t, readMode ?? 'light')])
+        .map(t => [t, partResolved(t) || partNow(t, readMode ?? 'light')])
         .filter(([, v]) => v);
       if (new Set(vals.map(([, v]) => v)).size < 2) return null;
       return vals.map(([t, v]) => `${v} (${t})`).join(', ');
@@ -20686,7 +20729,7 @@ export function draftAnswer(ctx, env, question) {
               : ['light', 'dark']
       );
       const vals = modes
-        .map(m => [m, current(pageToken, m)])
+        .map(m => [m, partNow(pageToken, m)])
         .filter(([, v]) => v);
       return vals.length
         ? `${vals.map(([m, v]) => `${v}${modes.length > 1 || qMode ? ` in ${m} mode` : ''}`).join(', ')} (${pageToken}, which paints the page)`
@@ -20815,7 +20858,7 @@ export function draftAnswer(ctx, env, question) {
                                   : null;
     if (themeAsk?.tokens && !unshown) {
       const listed = themeAsk.tokens
-        .map(t => [t, resolvedValue(t) || current(t, shownModes[0])])
+        .map(t => [t, partResolved(t) || partNow(t, shownModes[0])])
         .filter(([, v]) => v);
       if (listed.length) {
         result.splice(0, result.length, {
@@ -20835,8 +20878,8 @@ export function draftAnswer(ctx, env, question) {
         .map(m => [
           m,
           color
-            ? current(themeAsk.token, m)
-            : resolvedValue(themeAsk.token) || current(themeAsk.token, m),
+            ? partNow(themeAsk.token, m)
+            : partResolved(themeAsk.token) || partNow(themeAsk.token, m),
         ])
         .filter(([, v]) => v);
       if (vals.length) {
