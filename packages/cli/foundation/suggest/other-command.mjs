@@ -256,6 +256,7 @@ export function otherCommand(typed, entries, from) {
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
+ * The first `pinned` suggestions always stay ahead of the hint.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
  * @param {Found | null} found
@@ -265,6 +266,7 @@ export function otherCommand(typed, entries, from) {
  *   alone?: boolean,
  *   namesOf?: (suggestion: T) => Array<string | undefined>,
  *   keywordsOf?: (suggestion: T) => string[],
+ *   pinned?: number,
  * }} options `namesOf` gives the names the command matched a suggestion by;
  *   by default its name. `keywordsOf` gives the keywords the suggestion's doc
  *   declares and the synonyms its search card lists; by default none
@@ -279,6 +281,7 @@ export function withOtherCommand(
     alone = false,
     namesOf = suggestion => [suggestion.name],
     keywordsOf = () => [],
+    pinned = 0,
   },
 ) {
   if (!found) return suggestions;
@@ -301,9 +304,9 @@ export function withOtherCommand(
     (found.tier === MATCH_TIER.keyword &&
       synonymMatches(typed, {own: {synonyms: keywordsOf(suggestion)}}).size >
         0);
-  let at = 0;
+  let at = Math.min(pinned, suggestions.length);
   suggestions.forEach((suggestion, index) => {
-    if (matchesAsWell(suggestion)) at = index + 1;
+    if (matchesAsWell(suggestion)) at = Math.max(at, index + 1);
   });
   return [
     ...suggestions.slice(0, at),
