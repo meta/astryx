@@ -10110,12 +10110,15 @@ export async function contrastProblems(ctx, data, res) {
       })(),
     })),
     ...borderContrastProblems(ctx, data, res, base),
+    ...stateTextProblems(ctx, data, res),
     // Pairs styled for one variant or state are not measured yet.
     ...(() => {
       const scoped = data.settings.filter(
         x =>
           (x.on &&
-            // A variant's own colors are measured with the variant pairs.
+            // A variant's own colors are measured with the variant pairs;
+            // a text color for a state, by stateTextProblems.
+            !(x.state && x.thing === 'color' && x.source === 'property') &&
             (x.state || (x.when && !/^variant:/.test(x.when))) &&
             (/^(color|background|background-color)$/.test(x.thing) ||
               /^--color-/.test(x.thing))) ||
@@ -10411,6 +10414,99 @@ function borderContrastProblems(ctx, data, res, base) {
         }
       }
     }
+  }
+  return [...out.values()];
+}
+
+/**
+ * Text contrast for a part's own text color in a state (a selected nav
+ * item's color): measured on the fill the part draws in that state, which
+ * is a fill the theme sets for it there, else the fill its part data reads
+ * in that state, else its resting fill (or the page). Below 4.5:1 is a
+ * problem, fixed with the nearest color that reads there, in that state.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function stateTextProblems(ctx, data, res) {
+  const modes = modesOf(data);
+  const modeFlag = (/** @type {string} */ m) =>
+    modes.length > 1 ? ` --mode ${m}` : '';
+  /** A value as one color in a mode. @param {unknown} v @param {'light' | 'dark'} m */
+  const inMode = (v, m) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(res[m][ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** @type {Map<string, ThemeProblem>} */
+  const out = new Map();
+  for (const [i, x] of data.settings.entries()) {
+    if (x.source !== 'property' || x.thing !== 'color' || !x.state || !x.on)
+      continue;
+    // A later color for the same state there replaces it in its modes.
+    const replacedIn = (/** @type {string} */ m) =>
+      data.settings
+        .slice(i + 1)
+        .some(
+          y =>
+            y.source === 'property' &&
+            y.thing === 'color' &&
+            y.state === x.state &&
+            y.on === x.on &&
+            (y.when ?? null) === (x.when ?? null) &&
+            (!y.mode || y.mode === m),
+        );
+    const st = String(x.state);
+    const term = new RegExp(`(^|[\\s,])${st}=\\S+`);
+    for (const t of partsOf(ctx, x))
+      for (const m0 of modes) {
+        if ((x.mode && x.mode !== m0) || replacedIn(m0)) continue;
+        const m = /** @type {'light' | 'dark'} */ (m0);
+        const page = parseColor(String(res[m]['--color-background-body']));
+        const fill = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              y.source === 'property' &&
+              /^background(-color)?$/.test(y.thing) &&
+              y.state === st &&
+              (!y.mode || y.mode === m) &&
+              partsOf(ctx, y).includes(t),
+          );
+        const reads = ctx.C.partReads(t, 'background') ?? [];
+        const read =
+          reads.find(r => r.when.some(w => term.test(w))) ??
+          reads.find(r => r.when.includes(''));
+        const groundValue = fill
+          ? inMode(fill.value, m)
+          : read
+            ? inMode(`var(${read.token})`, m)
+            : String(res[m]['--color-background-body']);
+        const g0 = parseColor(groundValue);
+        const fg0 = parseColor(inMode(x.value, m));
+        if (!g0 || !fg0 || !page) continue;
+        const ground = compositeOver(g0, alphaOf(groundValue), page);
+        const fg = compositeOver(fg0, alphaOf(inMode(x.value, m)), ground);
+        const r = ratio(fg, ground);
+        if (r >= 4.5) continue;
+        const key = `state-text|${t}|${st}|${x.when ?? ''}|${m}`;
+        if (out.has(key)) continue;
+        out.set(key, {
+          key,
+          text: `text in ${t} (${st}) is ${r.toFixed(2)}:1 in ${m} (${inMode(x.value, m)} on ${t}'s ${fill ? groundValue : read ? read.token : 'page'} there); text needs 4.5:1`,
+          fix: `${P} set ${data.name} color '${nearestReading(fg, [ground], 4.5)}' --on ${t}${x.when ? ` --when ${x.when}` : ''} --state ${st}${modeFlag(m)}`,
+        });
+      }
   }
   return [...out.values()];
 }

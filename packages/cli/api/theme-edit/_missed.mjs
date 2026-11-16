@@ -12,7 +12,7 @@
 import {COMMON_STATES} from './_tables.mjs';
 import {baseComponent, modesOf, partsOf} from './_settings.mjs';
 import {borderlessSurfaces, pillParts} from './_check.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {parseColor, ratio, splitTop} from './_color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
@@ -278,7 +278,129 @@ export function missedSteps(ctx, data, res, base) {
           : surfaceSteps(modes, true),
       });
     }
+    // A fill made from a status token the theme's own status color does
+    // not reach (an error toast's inverted red, after the danger color is
+    // set): still the base's red beside the theme's. Its line gives it the
+    // theme's status color in each mode, in the condition it is drawn in.
+    for (const st of Object.keys(STATUS)) {
+      if (
+        !data.settings.some(
+          x => x.source === 'dial' && x.thing === STATUS[st][0] && !x.on,
+        )
+      )
+        continue;
+      const own = new RegExp(`^--color-background-${st}-[\\w-]+$`);
+      for (const r of reads.filter(
+        (/** @type {any} */ r) => own.test(r.token) && !changed(r.token),
+      )) {
+        const cond = r.when
+          .map((/** @type {string} */ w) => /^([\w-]+)=([\w-]+)$/.exec(w))
+          .find(Boolean);
+        const when = cond ? `${cond[1]}:${cond[2]}` : undefined;
+        if (!r.when.includes('') && !when) continue;
+        if (covers(p, FILL)) continue;
+        const ms = modes.filter(
+          m => String(res[m]?.[STATUS[st][1]]) !== String(res[m]?.[r.token]),
+        );
+        if (!ms.length) continue;
+        found.push({
+          kind: 3,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}its fill is still the base's ${st} color (${r.token}), which the theme's ${STATUS[st][0]} color does not reach`,
+          aspect: 'background',
+          steps: ms.map(m => ({
+            thing: r.token,
+            value: String(res[m]?.[STATUS[st][1]]),
+            on: p,
+            ...(when ? {when} : {}),
+            mode: m,
+          })),
+        });
+      }
+    }
     if (!accent) continue;
+    // A color the base theme gives the part as its own accent, written as
+    // the color itself rather than the accent token (butter's nav links
+    // and outline buttons in its blue): the accent dial never reaches it.
+    // Listed for each variant (or at rest) whose color, in every mode the
+    // theme draws, is the base's accent there, with a line that points it
+    // at the accent token, where that changes the color built.
+    const baseParts = /** @type {Record<string, Record<string, any>>} */ (
+      base.components?.[p] ?? {}
+    );
+    /** A base literal in a mode: its half of light-dark(). @param {string} v @param {string} m */
+    const literal = (v, m) => {
+      const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
+      const halves = pair ? splitTop(pair[1], ',') : null;
+      const x = (
+        halves?.length === 2 ? halves[m === 'light' ? 0 : 1] : String(v)
+      ).trim();
+      return /^var\(/.test(x) ? null : parseColor(x);
+    };
+    const ACCENTS = [
+      '--color-accent',
+      '--color-text-accent',
+      '--color-icon-accent',
+    ];
+    for (const [key, look] of Object.entries(baseParts)) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      if (!look || typeof look !== 'object') continue;
+      for (const [prop, thing, token] of /** @type {const} */ ([
+        ['color', 'color', '--color-text-accent'],
+        ['backgroundColor', 'background-color', '--color-accent'],
+        ['borderColor', 'border-color', '--color-accent'],
+      ])) {
+        const v = look[prop];
+        if (typeof v !== 'string') continue;
+        const when = key === 'base' ? undefined : key;
+        const isBaseAccent = modes.every(m => {
+          const c = literal(v, m);
+          return (
+            c != null &&
+            ACCENTS.some(a => {
+              const b = parseColor(String(base[m]?.[a] ?? ''));
+              return b != null && b.every((x, k) => x === c[k]);
+            })
+          );
+        });
+        const moves = modes.some(
+          m => String(res[m]?.[token]) !== String(base[m]?.[token]),
+        );
+        if (
+          !isBaseAccent ||
+          !moves ||
+          data.settings.some(
+            x =>
+              x.on &&
+              !x.state &&
+              (x.when ?? undefined) === when &&
+              partsOf(ctx, x).includes(p) &&
+              (x.thing === thing ||
+                (thing === 'border-color' && /^border$/.test(x.thing))),
+          )
+        )
+          continue;
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}its ${thing === 'color' ? 'text' : thing.replace('-color', '')} is the base theme's own accent (${String(v)}), written as a color, which the accent leaves as it is`,
+          aspect:
+            thing === 'color'
+              ? 'text'
+              : thing === 'border-color'
+                ? 'border'
+                : 'background',
+          steps: [
+            {
+              thing,
+              value: `var(${token})`,
+              on: p,
+              ...(when ? {when} : {}),
+            },
+          ],
+        });
+      }
+    }
     // A status fill still the base's (a banner's, a badge's status
     // variants): the status color generated at the theme's vibrancy (its
     // dial), with the text that reads on it. Only where that changes the
