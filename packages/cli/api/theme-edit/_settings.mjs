@@ -11252,18 +11252,28 @@ function trackContrastProblems(ctx, data, res, base) {
   /** The parts that hold a part. @param {string} t */
   const holders = t =>
     Object.keys(map).filter(h => map[h]?.contains?.includes(t));
-  /** The token a part fills itself with at rest, or null. @param {string} t */
-  const fillToken = t =>
-    ctx.C.partReads(t, 'background').find(
-      r =>
-        r.token &&
-        r.when.includes('') &&
-        r.props.some(p => /^background(-color)?$/.test(p)),
-    )?.token ??
-    ctx.C.partReads(t, 'background').find(
+  /**
+   * The token a part fills itself with at rest, else in the first variant
+   * that fills it (a progress bar's fill reads the accent in its accent
+   * variant, each status color in its own), with that variant as a
+   * `--when` (`variant:accent`); null when it reads none.
+   * @param {string} t
+   * @returns {{token: string, when: string | null} | null}
+   */
+  const fillRead = t => {
+    const reads = ctx.C.partReads(t, 'background').filter(
       r => r.token && r.props.some(p => /^background(-color)?$/.test(p)),
-    )?.token ??
-    null;
+    );
+    const rest = reads.find(r => r.when.includes(''));
+    if (rest) return {token: rest.token, when: null};
+    const first = reads.find(r => r.when.some(w => /^[\w-]+=[\w-]+$/.test(w)));
+    const cond = first?.when.find(w => /^[\w-]+=[\w-]+$/.test(w));
+    return first && cond
+      ? {token: first.token, when: cond.replace('=', ':')}
+      : null;
+  };
+  /** The token a part fills itself with ({@link fillRead}). @param {string} t */
+  const fillToken = t => fillRead(t)?.token ?? null;
   /**
    * A token's color in a mode on a part: where the part or a part holding
    * it points the token at another value, that value, as the theme built
@@ -11301,22 +11311,25 @@ function trackContrastProblems(ctx, data, res, base) {
     return rgb ? {rgb, alpha: alphaOf(v), value: v.trim()} : null;
   };
   /**
-   * A part's own fill in a mode, as the theme sets it at rest (a later
-   * setting wins), read in that mode, or null.
-   * @param {string} t @param {'light' | 'dark'} m
+   * A part's own fill in a mode, as the theme sets it at rest, or in the
+   * variant measured (a fill set for that variant wins over one for every
+   * variant, as its rule is the more specific; else a later setting wins),
+   * read in that mode, or null.
+   * @param {string} t @param {'light' | 'dark'} m @param {string | null} [when]
    */
-  const ownFill = (t, m) => {
-    const hit = [...data.settings]
+  const ownFill = (t, m, when = null) => {
+    const sets = [...data.settings]
       .reverse()
-      .find(
+      .filter(
         x =>
           !x.state &&
-          !x.when &&
+          (!x.when || (when != null && x.when === when)) &&
           (!x.mode || x.mode === m) &&
           x.source === 'property' &&
           /^background(-color)?$/.test(x.thing) &&
           partsOf(ctx, x).includes(t),
       );
+    const hit = sets.find(x => x.when) ?? sets[0];
     if (!hit) return null;
     const halves = /^light-dark\((.*)\)$/is.exec(String(hit.value).trim());
     const one = halves
@@ -11350,6 +11363,10 @@ function trackContrastProblems(ctx, data, res, base) {
     );
     for (const fill of fills) {
       const fillTok = /** @type {string} */ (fillToken(fill));
+      // (The variant the fill is measured in, which its line names, so the
+      // line recolors that variant alone: the status variants keep theirs.)
+      const fillWhen = fillRead(fill)?.when ?? null;
+      const trackWhen = fillRead(track)?.when ?? null;
       for (const m of modesOf(data)) {
         const mode = /** @type {'light' | 'dark'} */ (m);
         const page = parseColor(String(res[mode]['--color-background-body']));
@@ -11357,10 +11374,10 @@ function trackContrastProblems(ctx, data, res, base) {
           String(base[mode]['--color-background-body']),
         );
         const tr =
-          ownFill(track, mode) ??
+          ownFill(track, mode, trackWhen) ??
           colorOn(trackToken, track, mode, res[mode], own, base.components);
         const fi =
-          ownFill(fill, mode) ??
+          ownFill(fill, mode, fillWhen) ??
           colorOn(fillTok, fill, mode, res[mode], own, base.components);
         const btr = colorOn(
           trackToken,
@@ -11409,7 +11426,7 @@ function trackContrastProblems(ctx, data, res, base) {
         out.push({
           key: `track|${track}|${fill}|${mode}`,
           text: `the ${fill} (${hex(fi.rgb)}) is ${now.toFixed(2)}:1 on the ${track} (${hex(ground)})${inside ? '' : ' and no better on the page'} in ${mode}; a value drawn on a track needs 3:1 to be read`,
-          fix: `${P} set ${data.name} background-color '${color}' --on ${trackMoved ? track : fill}${modeFlag(mode)}`,
+          fix: `${P} set ${data.name} background-color '${color}' --on ${trackMoved ? track : fill}${(trackMoved ? trackWhen : fillWhen) ? ` --when ${trackMoved ? trackWhen : fillWhen}` : ''}${modeFlag(mode)}`,
         });
       }
     }
