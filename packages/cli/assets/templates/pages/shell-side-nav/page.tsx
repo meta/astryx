@@ -129,7 +129,11 @@ function ConversationItem({
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const showMenu = isHovered || isMenuOpen;
+  // Keyboard focus inside the row shows the options button too, so Tab can
+  // reach it, and it stays mounted while its menu or confirmation holds focus
+  // so focus can return to it.
+  const [hasFocusWithin, setHasFocusWithin] = useState(false);
+  const showMenu = isHovered || isMenuOpen || hasFocusWithin;
   const showToast = useToast();
   const confirm = useImperativeAlertDialog();
   // Demo only: replace these toasts with the calls that act on the conversation.
@@ -142,7 +146,13 @@ function ConversationItem({
   return (
     <Stack
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}>
+      onMouseLeave={() => setIsHovered(false)}
+      onFocus={() => setHasFocusWithin(true)}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setHasFocusWithin(false);
+        }
+      }}>
       <SideNavItem
         label={label}
         href="#"
