@@ -5474,22 +5474,16 @@ async function changeOnce(
             : typed,
           e.code,
         );
-        // The setting whose scope is the one typed (no --on: the whole
-        // theme's) leads; with none of that scope, the message says so and
-        // the others are listed after it.
-        // The scope as typed is read as set's own check read it (`--on
-        // Card`, `cards`, `--mode drak`, `--state hovered`): the scope of
-        // the line its refusal offers for this setting.
-        /** @type {Record<string, string | undefined>} */
         /**
-         * The typed scope as set's own check reads it for a thing: the
-         * scope of the setting it reads, or of the `set|undo <theme> …`
-         * line its refusal offers.
-         * @param {string} th
-         * @param {string} val
+         * The scope the flags typed name, as a `set|undo <theme> …` line
+         * reads them back: the scope of the first such line offered, else
+         * the flags as typed (`--on Card`, `cards`, `--mode drak`,
+         * `--state hovered` are read by set's own check, which writes the
+         * line).
+         * @param {Array<{name: string}>} offered
          * @returns {Record<string, string | undefined>}
          */
-        const scopeAsRead = (th, val) => {
+        const scopeFromLines = offered => {
           /** @type {Record<string, string | undefined>} */
           const read = {
             on: flags.on,
@@ -5497,29 +5491,6 @@ async function changeOnce(
             state: flags.state,
             mode: flags.mode,
           };
-          if (!(flags.on || flags.when || flags.state || flags.mode))
-            return read;
-          /** @type {any[]} */
-          let offered;
-          try {
-            const got = checkSetting(
-              ctx,
-              slug,
-              structuredClone(data),
-              th,
-              val,
-              flags,
-              true,
-            );
-            return {
-              on: got.on,
-              when: got.when,
-              state: got.state,
-              mode: got.mode,
-            };
-          } catch (err) {
-            offered = /** @type {any} */ (err)?.suggestions ?? [];
-          }
           for (const x of offered) {
             const at = x.name.indexOf(' editor ');
             const words =
@@ -5546,35 +5517,42 @@ async function changeOnce(
           }
           return read;
         };
-        /** @type {Record<string, string | undefined>} */
-        const meant = {
-          on: flags.on,
-          when: flags.when,
-          state: flags.state,
-          mode: flags.mode,
-        };
-        for (const x of e.suggestions ?? []) {
-          const at = x.name.indexOf(' editor ');
-          const words =
-            at >= 0 ? splitCommand(x.name.slice(at + ' editor '.length)) : null;
-          if (
-            !words ||
-            !['set', 'undo'].includes(words[0]) ||
-            words[1] !== slug
-          )
-            continue;
-          for (const k of /** @type {const} */ ([
-            'on',
-            'when',
-            'state',
-            'mode',
-          ])) {
-            const n = words.indexOf(`--${k}`);
-            if (flags[k] != null && n > 0 && words[n + 1] != null)
-              meant[k] = words[n + 1];
+        /**
+         * The typed scope as set's own check reads it for a thing: the
+         * scope of the setting it reads, or of the line its refusal
+         * offers (scopeFromLines).
+         * @param {string} th
+         * @param {string} val
+         * @returns {Record<string, string | undefined>}
+         */
+        const scopeAsRead = (th, val) => {
+          if (!(flags.on || flags.when || flags.state || flags.mode))
+            return scopeFromLines([]);
+          try {
+            const got = checkSetting(
+              ctx,
+              slug,
+              structuredClone(data),
+              th,
+              val,
+              flags,
+              true,
+            );
+            return {
+              on: got.on,
+              when: got.when,
+              state: got.state,
+              mode: got.mode,
+            };
+          } catch (err) {
+            return scopeFromLines(/** @type {any} */ (err)?.suggestions ?? []);
           }
-          break;
-        }
+        };
+        // The setting whose scope is the one typed (no --on: the whole
+        // theme's) leads; with none of that scope, the message says so and
+        // the others are listed after it.
+        /** @type {Record<string, string | undefined>} */
+        const meant = scopeFromLines(e.suggestions ?? []);
         const sameScope = (/** @type {any} */ x) =>
           (x.on ?? null) === (meant.on ?? null) &&
           (x.when ?? null) === (meant.when ?? null) &&
