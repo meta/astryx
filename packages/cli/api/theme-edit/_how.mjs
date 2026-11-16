@@ -792,7 +792,7 @@ async function answer(subject, options, cwd) {
       ? {
           hint: `${
             results.length
-              ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
+              ? `No command does all of "${t}" on ${env.slug}; each result says why.`
               : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
           } See ${HOW} --help for the asks it understands.`,
           run: [

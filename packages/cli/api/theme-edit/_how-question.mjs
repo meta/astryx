@@ -431,6 +431,15 @@ const HUES = wordTable(
     gold: '#ca8a04',
     bronze: '#a16207',
     mauve: '#b784a7',
+    tan: '#d2b48c',
+    paper: '#f7f3e9',
+    // (Names said in two words, joined by the reader into one: "off-white",
+    // "ink blue", "grass green", "safety orange", "blue-gray".)
+    offwhite: '#faf8f3',
+    inkblue: '#1e3a5f',
+    grassgreen: '#4caf50',
+    safetyorange: '#ff6700',
+    bluegray: '#64748b',
   }),
 );
 /**
@@ -438,6 +447,13 @@ const HUES = wordTable(
  * said whole, never a word a typo is corrected to ("state" is no slate).
  */
 const PALETTE_NAMES = new Set([
+  'tan',
+  'paper',
+  'offwhite',
+  'inkblue',
+  'grassgreen',
+  'safetyorange',
+  'bluegray',
   'terracotta',
   'sage',
   'rust',
@@ -4288,6 +4304,111 @@ export function draftAnswer(ctx, env, question) {
       ', dark by default',
     )
     .replace(/\b(?:easy|easier|comfortable)\s+to\s+read\b/gi, 'larger text')
+    // ("off-white", "ink blue", "grass green", "safety orange", "slate
+    // blue-gray": a color named in two words is one name in the table.)
+    .replace(/\boff[- ]white\b/gi, 'offwhite')
+    .replace(/\bink[- ]blue\b/gi, 'inkblue')
+    .replace(/\bgrass[- ]green\b/gi, 'grassgreen')
+    .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
+    .replace(/\b(?:slate\s+)?blue[- ]gr[ae]y\b/gi, 'bluegray')
+    // ("pure white", "true black": that exact color, never a shade.)
+    .replace(
+      /(?<!\bnot\s)\b(?:pure|true|plain|solid)\s+(white|black)\b/gi,
+      (_m, w) => (String(w).toLowerCase() === 'white' ? '#ffffff' : '#000000'),
+    )
+    // ("amber for warnings", "red only for alerts": the role color.)
+    .replace(
+      /\b((?:[a-z]+\s+)?[a-z]+|#[0-9a-f]{3,8})\s+(?:only\s+|just\s+)?(?:for|reserved for|on)\s+(?:the\s+|all\s+)?(warnings?|success(?:es)?|info(?:rmation)?|notices?)\b/gi,
+      (m, color, role) =>
+        colorsIn(String(color).toLowerCase()).length
+          ? `${/^warn/i.test(role) ? 'warning' : /^succ/i.test(role) ? 'success' : 'info'} color ${color}`
+          : m,
+    )
+    // ("make it brighter and more cheerful": a livelier, more colorful
+    // theme.)
+    .replace(
+      /\bmore\s+(?:cheerful|lively|vibrant|joyful|fun)\b|\b(?:cheerful|lively|joyful)\b/gi,
+      'more colorful',
+    )
+    // ("tailwind shadow-sm"): the shadow sizes by their class names.
+    .replace(/\bshadow-(?:xs|sm)\b/gi, 'small shadow')
+    .replace(/\bshadow-(?:lg|xl|2xl)\b/gi, 'large shadow')
+    .replace(/\bshadow-md\b/gi, 'medium shadow')
+    // ("divided by 1px lines", "separated by thin lines": lines between,
+    // never an amount.)
+    .replace(/\b(?:divided|separated)\s+by\s+/gi, 'with ')
+    // ("be a #e8def8 pill": a fill of that color, pill-shaped.)
+    .replace(
+      /\b(?:(?:should|must|to)\s+)?(?:be\s+)?an?\s+(#[0-9a-f]{3,8}|[a-z]+)\s+(pill|capsule)\b/gi,
+      (m, color) =>
+        colorsIn(String(color).toLowerCase()).length
+          ? `with a ${color} background and pill corners`
+          : m,
+    )
+    // ("big touch targets": the controls a finger presses.)
+    .replace(
+      /\b(?:big|bigger|large|larger)\s+touch\s+targets?\b/gi,
+      'more spacing on buttons and inputs',
+    )
+    .replace(/\btouch\s+targets?\b/gi, 'buttons and inputs')
+    .replace(
+      /\brows?\s+(?:in|of)\s+(?:the\s+|a\s+)?(menus?|dropdowns?|lists?|selects?)\b/gi,
+      '$1 items',
+    )
+    // ("an off-white paper background": the page, in that color; "a paper
+    // background": the page, paper-colored.)
+    .replace(
+      /\b(#[0-9a-f]{3,8}|[a-z]+)\s+paper\s+(?=background|page)/gi,
+      (m, color) =>
+        colorsIn(String(color).toLowerCase()).length ? `${color} page ` : m,
+    )
+    .replace(/\bpaper\s+(?=background\b)/gi, 'paper page ')
+    // ("32px menu items", "40px rows": a length before an item noun is its
+    // height.)
+    .replace(
+      /\b(\d+(?:\.\d+)?px)\s+((?:menu |list |table )?(?:items?|rows?))\b(?!\s+(?:tall|high|height|padding|gap|spacing))/gi,
+      '$2 $1 tall',
+    )
+    // ("dividers between list items", "table rows with 1px lines": a line
+    // between items is each one's bottom border.)
+    .replace(
+      /\b(?:dividers?|lines?|rules?|separators?)\s+between\s+(?:the\s+)?((?:[a-z]+\s+)?(?:items?|rows?))\b/gi,
+      '1px bottom border on $1',
+    )
+    .replace(
+      /\b((?:[a-z]+\s+)?(?:items?|rows?))\s+with\s+(?:an?\s+)?(\d+px\s+)?(?:thin\s+)?(?:lines?|dividers?|rules?|separators?)\b/gi,
+      (_m, what, w) =>
+        `${w ? String(w).trim() : '1px'} bottom border on ${what}`,
+    )
+    // ("32px rows in the menu", "dividers between list rows": a menu's or a
+    // list's rows are its items.)
+    .replace(
+      /\brows?\s+(?:in|of)\s+(?:the\s+|a\s+)?(menus?|dropdowns?|lists?|selects?)\b/gi,
+      '$1 items',
+    )
+    .replace(/\b(menu|dropdown|list)\s+rows?\b/gi, '$1 items')
+    // ("make it calmer", "a calm dark mode": with no part named, the theme
+    // less vivid.)
+    // ("make it calmer", "calmer colors", "a calm dark mode": the theme's
+    // colors less vivid. Vibrancy has no mode of its own, so a mode said
+    // with it is the theme's.)
+    .replace(
+      /\bmake\s+(?:it|everything|the\s+(?:theme|colou?rs|palette|app))\s+(?:a\s+(?:bit|little)\s+|slightly\s+|much\s+)?(?:calm|calmer|quieter)\b|\b(?:calm|calmer|quieter)\s+(?:(?:dark|light)\s+mode|colou?rs|palette)\b/gi,
+      'less saturated',
+    )
+    // ("bold safety orange #ea580c accent": a word about the color itself,
+    // said before the color an accent is.)
+    .replace(
+      /\b(?:bold|bright|vivid|strong|punchy)\s+(?=(?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8})\s+(?:#[0-9a-f]{3,8}\s+)?accent\b)/gi,
+      '',
+    )
+    // ("a 2px dark border": the theme's stronger line color, its emphasized
+    // border, at that width; "darker" is a way, read by the way readers.)
+    .replace(
+      /\b(?:(\d+(?:\.\d+)?px)\s+)?(?:dark|strong)\s+(borders?|outlines?)\b/gi,
+      (_m, w, what) =>
+        `${String(what).replace(/s$/, '')} ${w ?? '1px'} solid var(--color-border-emphasized)`,
+    )
     // ("use the system font": the font named, never a part called so.)
     .replace(
       /\b(?:use|using|with|switch to|go with)\s+(?:the|a)\s+(system|serif|sans-serif|sans|monospace|mono|rounded|display)\s+(font|typeface|type)\b/gi,
@@ -4995,6 +5116,14 @@ export function draftAnswer(ctx, env, question) {
     .replace(
       /\b(overlay|backdrop|scrim)\s+(?:behind|under|beneath|below|for|of|around)\s+(?:the\s+|a\s+)?(?:dialogs?|modals?|drawers?|sheets?)\b/gi,
       '$1',
+    )
+    // ("dialogs with a dark overlay behind them": the same overlay, said
+    // after the dialog.)
+    .replace(
+      /\b(?:dialogs?|modals?|drawers?|sheets?)\s+with\s+(?:an?\s+)?((?:[a-z]+\s+)?)(overlay|backdrop|scrim)\s+(?:behind|under|beneath|below|around)\s+(?:them|it)\b/gi,
+      // (Its look said as an adjective, "dark", is the way: darker.)
+      (_m, adj, noun) =>
+        `${String(adj).replace(/^(dark|light)\s+$/i, '$1er ')}${noun}`,
     )
     // "the shadow sharper": less blur on the shadow, never sharper corners.
     .replace(
@@ -5767,7 +5896,7 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\boff[- ]?white\b/gi, (m, _at, whole) =>
       /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch)\(/i.test(String(whole))
         ? ' '
-        : '#fafafa',
+        : '#faf8f3',
     )
     .replace(/\boff[- ]?black\b/gi, '#111111')
     // "match the header color to the sidebar": the first part is the one to
