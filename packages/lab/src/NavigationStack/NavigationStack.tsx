@@ -26,14 +26,12 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactElement,
   type ReactNode,
-  type RefObject,
   type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -766,50 +764,54 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
 }
 
 /**
- * Whether the platform has just animated a history traversal itself: Safari's
- * edge swipe back or forward, or the back gesture of an iOS Home Screen app.
- * The browser says so with `hasUAVisualTransition` on the Navigation API's
- * `navigate` event and on `popstate`. The mark lasts two frames, long enough
- * for the app to commit the path change the traversal causes. `take` reads
- * the mark and clears it, so it applies to one transition only.
+ * Whether the browser has just animated a history traversal itself, such as
+ * Safari's edge swipe. The browser says so with `hasUAVisualTransition` on
+ * the Navigation API's `navigate` event and on `popstate`. The mark lasts two
+ * frames, long enough for the app to commit the path change the traversal
+ * causes. `take` reads the mark and clears it, so it applies to one
+ * transition only. `attach` listens on an element's window and returns the
+ * removal.
  */
-function usePlatformAnimatedTraversal(
-  containerRef: RefObject<HTMLElement | null>,
-): {take: () => boolean} {
+function usePlatformAnimatedTraversal(): {
+  attach: (element: Element) => () => void;
+  take: () => boolean;
+} {
   const markRef = useRef(false);
-  useEffect(() => {
-    const view = containerRef.current?.ownerDocument.defaultView;
-    if (view == null) {
-      return;
-    }
-    let frame = 0;
-    const mark = (event: Event) => {
-      if (Reflect.get(event, 'hasUAVisualTransition') !== true) {
-        return;
-      }
-      markRef.current = true;
-      view.cancelAnimationFrame(frame);
-      frame = view.requestAnimationFrame(() => {
-        frame = view.requestAnimationFrame(() => {
-          markRef.current = false;
-        });
-      });
-    };
-    // Capture runs first at the window, before an app's own popstate
-    // listener commits the path change.
-    view.addEventListener('popstate', mark, {capture: true});
-    const navigation: unknown = Reflect.get(view, 'navigation');
-    const navigationTarget =
-      navigation instanceof view.EventTarget ? navigation : null;
-    navigationTarget?.addEventListener('navigate', mark);
-    return () => {
-      view.cancelAnimationFrame(frame);
-      view.removeEventListener('popstate', mark, {capture: true});
-      navigationTarget?.removeEventListener('navigate', mark);
-    };
-  }, [containerRef]);
   return useMemo(
     () => ({
+      attach: (element: Element) => {
+        const view = element.ownerDocument.defaultView;
+        if (view == null) {
+          return () => {};
+        }
+        let frame = 0;
+        const mark = (event: Event) => {
+          if (Reflect.get(event, 'hasUAVisualTransition') !== true) {
+            return;
+          }
+          markRef.current = true;
+          view.cancelAnimationFrame(frame);
+          frame = view.requestAnimationFrame(() => {
+            frame = view.requestAnimationFrame(() => {
+              markRef.current = false;
+            });
+          });
+        };
+        // Capture runs first at the window, before an app's own popstate
+        // listener commits the path change.
+        view.addEventListener('popstate', mark, {capture: true});
+        const historyNavigation: unknown = Reflect.get(view, 'navigation');
+        const navigationTarget =
+          historyNavigation instanceof view.EventTarget
+            ? historyNavigation
+            : null;
+        navigationTarget?.addEventListener('navigate', mark);
+        return () => {
+          view.cancelAnimationFrame(frame);
+          view.removeEventListener('popstate', mark, {capture: true});
+          navigationTarget?.removeEventListener('navigate', mark);
+        };
+      },
       take: () => {
         const isMarked = markRef.current;
         markRef.current = false;
@@ -886,7 +888,7 @@ export function NavigationStack<T>({
   const t = useTranslator();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
-  const platformTraversal = usePlatformAnimatedTraversal(containerRef);
+  const platformTraversal = usePlatformAnimatedTraversal();
   const [registry] = useState<Registry>(() => new Map());
   // The last input decides whether a moved focus shows its ring.
   const {ref: trackModality, readModality} = useInteractionModalityTracking();
@@ -894,12 +896,15 @@ export function NavigationStack<T>({
     (element: HTMLDivElement | null) => {
       containerRef.current = element;
       const release = trackModality(element);
+      const detachTraversal =
+        element == null ? null : platformTraversal.attach(element);
       return () => {
         release?.();
+        detachTraversal?.();
         containerRef.current = null;
       };
     },
-    [trackModality],
+    [trackModality, platformTraversal],
   );
   // Screens whose large title has scrolled under the bar. The ref holds the
   // same set for the handlers and effects below; only the handler changes it.

@@ -66,8 +66,13 @@ function HistoryStack() {
   const [path, setPath] = useState<string[]>([]);
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
-      const state = event.state as {path?: string[]} | null;
-      setPath(state?.path ?? []);
+      // The probe's own two entries carry no path; they leave the stack.
+      const state = event.state as {path?: string[]; step?: number} | null;
+      if (state == null) {
+        setPath([]);
+      } else if (state.path != null) {
+        setPath(state.path);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -87,10 +92,13 @@ function HistoryStack() {
             history.pushState({path: next}, '', `?depth=${next.length}`);
             setPath(next);
           } else {
+            // The stack's swipe checks the path a frame after its release, so
+            // the pop is set now; the popstate that follows sets an equal path.
+            setPath(next);
             history.go(next.length - path.length);
           }
         }}
-        getKey={(entry: string) => entry}
+        getKey={(entry: string, index: number) => `${index}-${entry}`}
         renderScreen={(entry: string) => (
           <NavigationScreen title={entry}>
             <Rows />
