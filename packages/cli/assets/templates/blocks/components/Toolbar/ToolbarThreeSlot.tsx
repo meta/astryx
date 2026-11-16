@@ -10,6 +10,7 @@ import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
 import {ArrowLeftIcon} from '@heroicons/react/24/outline';
 import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 
 export default function ToolbarThreeSlot() {
   const showToast = useToast();
@@ -22,7 +23,7 @@ export default function ToolbarThreeSlot() {
           <Button
             label="Back"
             variant="ghost"
-            icon={<Icon icon={ArrowLeftIcon} />}
+            icon={<Icon icon={ArrowLeftIcon} xstyle={rtlStyles.mirror} />}
             isIconOnly
           />
         }
