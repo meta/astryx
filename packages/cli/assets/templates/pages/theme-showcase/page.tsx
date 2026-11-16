@@ -1104,6 +1104,7 @@ function ActionsCell() {
     <MoreMenu
       label="Row actions"
       size="sm"
+      // Demo only: replace these toasts with the calls that perform each action.
       items={[
         {
           label: 'Edit',
@@ -1125,7 +1126,7 @@ function ActionsCell() {
           label: 'Move to…',
           onClick: () =>
             showToast({
-              body: 'Demo: move to would happen here',
+              body: 'Demo: moving the item would happen here',
               uniqueID: 'row-move-to',
             }),
         },
