@@ -4190,7 +4190,7 @@ export default function TableFilterTemplate() {
                 onClick={() =>
                   // Demo only: replace this toast with the call that performs the action.
                   showToast({
-                    body: `Started “${NEXT_ACTION[activeJob.status]}” for ${activeJob.id}`,
+                    body: `Demo: “${NEXT_ACTION[activeJob.status]}” would start for ${activeJob.id} here`,
                     uniqueID: `next-${activeJob.id}`,
                   })
                 }
@@ -4200,6 +4200,13 @@ export default function TableFilterTemplate() {
                 variant="secondary"
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: editing ${activeJob.id} would open here`,
+                    uniqueID: `edit-${activeJob.id}`,
+                  })
+                }
               />
             </HStack>
           </VStack>
