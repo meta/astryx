@@ -98,3 +98,29 @@ describe('press feedback during partial hydration (AST-013 FR9)', () => {
     fingerUp(menu);
   });
 });
+
+// The press controller reads React's private element keys to tell hydrated
+// markup (isAwaitingHydration in pressFeedback.ts). If a React upgrade
+// renames them, the check fails safe and the mismatch above returns; this
+// canary says so loudly.
+describe('React still sets the element keys isAwaitingHydration reads', () => {
+  it('marks a hydrated root container and its elements', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(page(<Late />));
+    document.body.append(container);
+    await act(async () => {
+      root = hydrateRoot(container, page(<Late />));
+    });
+    const keysOf = (element: Element) => Object.keys(element).join(', ');
+    const button = container.querySelector('button');
+    expect(
+      Object.keys(container).some(key => key.startsWith('__reactContainer$')),
+      `React no longer sets __reactContainer$ on a root container (own keys: ${keysOf(container)}). Update isAwaitingHydration in utils/pressFeedback.ts.`,
+    ).toBe(true);
+    expect(
+      button != null &&
+        Object.keys(button).some(key => key.startsWith('__reactProps$')),
+      `React no longer sets __reactProps$ on a hydrated element. Update isAwaitingHydration in utils/pressFeedback.ts.`,
+    ).toBe(true);
+  });
+});

@@ -419,16 +419,22 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
 }
 
 /**
- * Whether the element is server markup inside a React root that React has not
- * hydrated yet, such as a Suspense boundary whose code is still loading. React
- * keeps its props on each element it owns, under an own key that starts with
- * `__reactProps$`, and marks its root's container with `__reactContainer$`.
- * An attribute written on such markup does not match the server's markup when
- * the boundary hydrates. An element outside any React root is not awaiting
- * hydration.
+ * Whether the element is server markup that React has not hydrated yet, such
+ * as a Suspense boundary whose code is still loading. An attribute written on
+ * such markup does not match the server's markup when the boundary hydrates.
+ *
+ * It reads React's own element keys, which are private: React keeps an
+ * element's props under an own key that starts with `__reactProps$`, and
+ * marks a root's container with an own key that starts with
+ * `__reactContainer$`. No public React API says whether an element has
+ * hydrated, and `usePressFeedback` gives the controller no element to
+ * register. The check fails safe: when React sets neither key (a React
+ * version that renames them, or an element outside any React root), every
+ * surface counts as hydrated and paints, as before this check. The canary in
+ * pressFeedback.hydration.test.tsx fails if React stops setting them.
  */
 function isAwaitingHydration(element: Element): boolean {
-  if (hasOwnKeyStartingWith(element, '__reactProps$')) {
+  if (hasReactProps(element)) {
     return false;
   }
   for (
@@ -436,11 +442,23 @@ function isAwaitingHydration(element: Element): boolean {
     ancestor != null;
     ancestor = ancestor.parentElement
   ) {
-    if (hasOwnKeyStartingWith(ancestor, '__reactContainer$')) {
+    if (hasReactProps(ancestor)) {
       return true;
+    }
+    if (hasOwnKeyStartingWith(ancestor, REACT_CONTAINER_KEY)) {
+      // Directly under a root: awaiting only if React marks elements in this
+      // root at all, so a renamed props key never stops every press.
+      return [...ancestor.querySelectorAll('*')].some(hasReactProps);
     }
   }
   return false;
+}
+
+const REACT_PROPS_KEY = '__reactProps$';
+const REACT_CONTAINER_KEY = '__reactContainer$';
+
+function hasReactProps(element: Element): boolean {
+  return hasOwnKeyStartingWith(element, REACT_PROPS_KEY);
 }
 
 function hasOwnKeyStartingWith(element: Element, prefix: string): boolean {
