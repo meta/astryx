@@ -932,7 +932,6 @@ const ABOUT_LINKS = [
   {label: 'Activity', icon: ChartColumn},
 ];
 
-/** The count reads as a noun; the button beside it has to read as a verb. */
 // Demo only: what each social count's button would do in a real app.
 const STAT_DEMO: Record<string, string> = {
   stars: 'Demo: the repository would be starred here',
@@ -940,6 +939,7 @@ const STAT_DEMO: Record<string, string> = {
   forks: 'Demo: a fork would be created here',
 };
 
+/** The count reads as a noun; the button beside it has to read as a verb. */
 const STAT_ACTION: Record<string, string> = {
   stars: 'Star',
   watching: 'Watch',
