@@ -37,9 +37,11 @@
 #   pull-request run still waiting here counts the jobs it runs, its waiting
 #   job and a Storybook build that found room, so waiting runs never hold each
 #   other back by more than they use; a waiting
-#   `main` run counts its whole peak. A run admitted in the last 45 seconds,
-#   before its jobs appear, counts at least its planned most. Every other
-#   workflow's run counts an estimate. A run not updated in two hours is a
+#   `main` run counts its whole peak. A matrix that limits its legs with
+#   `max-parallel` counts at most that many live legs: GitHub lists the legs
+#   it holds back as queued, but they hold no runner. A run admitted in the
+#   last 45 seconds, before its jobs appear, counts at least its planned
+#   most. Every other workflow's run counts an estimate. A run not updated in two hours is a
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
