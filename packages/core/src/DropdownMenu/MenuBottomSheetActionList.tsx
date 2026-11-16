@@ -36,6 +36,13 @@ const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
  * keeps its own press. A row that holds other rows, as a section does, has no
  * action of its own.
  */
+function canHitTestByPoint(): boolean {
+  return (
+    typeof document !== 'undefined' &&
+    typeof document.elementFromPoint === 'function'
+  );
+}
+
 function sheetElementAtPoint(
   list: HTMLElement | null,
   x: number,
@@ -112,7 +119,11 @@ export function MenuBottomSheetActionList({
   const menuPress = useMenuPress({
     menuRef: listRef,
     itemSelector: SHEET_ROW_SELECTOR,
-    hitTest: (x, y) => sheetElementAtPoint(listRef.current, x, y),
+    // A document without elementFromPoint (jsdom) keeps the hook's own
+    // lookup, which reads the event's target.
+    hitTest: canHitTestByPoint()
+      ? (x, y) => sheetElementAtPoint(listRef.current, x, y)
+      : undefined,
   });
 
   // `rowPath` names the row within the whole list: an index alone restarts in

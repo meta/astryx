@@ -32,36 +32,6 @@ function renderList() {
   );
 }
 
-// The touch sheet resolves a press by its point. jsdom has no
-// elementFromPoint, so a point resolves to the element the pointer event is
-// dispatched on.
-let pointerTarget: Element | null = null;
-const POINTER_TYPES = [
-  'pointerdown',
-  'pointermove',
-  'pointerup',
-  'pointercancel',
-];
-function recordPointerTarget(event: Event) {
-  pointerTarget = event.target instanceof Element ? event.target : null;
-}
-beforeEach(() => {
-  for (const type of POINTER_TYPES) {
-    document.addEventListener(type, recordPointerTarget, true);
-  }
-  Object.defineProperty(document, 'elementFromPoint', {
-    configurable: true,
-    value: () => pointerTarget,
-  });
-});
-afterEach(() => {
-  for (const type of POINTER_TYPES) {
-    document.removeEventListener(type, recordPointerTarget, true);
-  }
-  Reflect.deleteProperty(document, 'elementFromPoint');
-  pointerTarget = null;
-});
-
 describe('MenuBottomSheetActionList', () => {
   it('a cancelled finger clears the row it lit in the sheet\u2019s action list; a mouse keeps its highlight (spec:AST-094 FR28, spec:AST-017 FR59)', () => {
     const {unmount} = renderList();
@@ -99,6 +69,12 @@ describe('MenuBottomSheetActionList', () => {
   });
 
   describe('a press on the part of a row outside its action', () => {
+    // The sheet hit-tests by point where the document can: give jsdom an
+    // elementFromPoint before each sheet renders.
+    beforeEach(() => {
+      pointAt(document.body);
+    });
+
     /**
      * The hit test answers `element` for every point, as under a still finger.
      */

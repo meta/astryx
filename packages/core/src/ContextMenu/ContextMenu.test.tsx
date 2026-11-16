@@ -10,15 +10,7 @@
 
 import {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from 'vitest';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {
   render,
   screen,
@@ -128,36 +120,6 @@ beforeEach(() => {
 function openMenu() {
   fireEvent.contextMenu(screen.getByText('Right-click me'));
 }
-
-// The touch sheet resolves a press by its point. jsdom has no
-// elementFromPoint, so a point resolves to the element the pointer event is
-// dispatched on.
-let pointerTarget: Element | null = null;
-const POINTER_TYPES = [
-  'pointerdown',
-  'pointermove',
-  'pointerup',
-  'pointercancel',
-];
-function recordPointerTarget(event: Event) {
-  pointerTarget = event.target instanceof Element ? event.target : null;
-}
-beforeEach(() => {
-  for (const type of POINTER_TYPES) {
-    document.addEventListener(type, recordPointerTarget, true);
-  }
-  Object.defineProperty(document, 'elementFromPoint', {
-    configurable: true,
-    value: () => pointerTarget,
-  });
-});
-afterEach(() => {
-  for (const type of POINTER_TYPES) {
-    document.removeEventListener(type, recordPointerTarget, true);
-  }
-  Reflect.deleteProperty(document, 'elementFromPoint');
-  pointerTarget = null;
-});
 
 describe('ContextMenu', () => {
   it('renders trigger children', () => {
