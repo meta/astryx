@@ -349,11 +349,12 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  const {remeasure: _remeasure, ...result} = useOverflowInternal(
-    itemCount,
-    options,
-    {tracksRows: true},
-  );
+  const {
+    collapsedWidth: _collapsedWidth,
+    renderedWidth: _renderedWidth,
+    remeasure: _remeasure,
+    ...result
+  } = useOverflowInternal(itemCount, options, {tracksRows: true});
   return result;
 }
 
@@ -370,8 +371,20 @@ export function useOverflow(
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows, onMeasure}: {tracksRows: boolean; onMeasure?: () => void},
-): UseOverflowReturn & {remeasure: () => void} {
+  {
+    tracksRows,
+    tracksInlineBounds = false,
+    onMeasure,
+  }: {
+    tracksRows: boolean;
+    tracksInlineBounds?: boolean;
+    onMeasure?: () => void;
+  },
+): UseOverflowReturn & {
+  collapsedWidth: number;
+  renderedWidth: number | null;
+  remeasure: () => void;
+} {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -395,9 +408,17 @@ export function useOverflowInternal(
   const [measuredSizes] = useState<MeasuredSizes>(() => new WeakMap());
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
+  const [collapsedWidth, setCollapsedWidth] = useState(0);
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
   // The values last written to state. A measurement that matches them writes
   // nothing, so a resize that changes nothing renders nothing.
-  const appliedRef = useRef({visibleCount: itemCount, rows: 1, rowHeight: 0});
+  const appliedRef = useRef({
+    visibleCount: itemCount,
+    rows: 1,
+    rowHeight: 0,
+    collapsedWidth: 0,
+    renderedWidth: null as number | null,
+  });
   const containerElRef = useRef<HTMLElement | null>(null);
   const measureElRef = useRef<HTMLElement | null>(null);
   const observedElRef = useRef<HTMLElement | null>(null);
@@ -406,11 +427,27 @@ export function useOverflowInternal(
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
 
   const apply = useCallback(
-    (nextVisible: number, nextRows: number, nextRowHeight: number) => {
+    (
+      nextVisible: number,
+      nextRows: number,
+      nextRowHeight: number,
+      nextCollapsedWidth: number,
+      nextRenderedWidth: number | null,
+    ) => {
       const applied = appliedRef.current;
       if (applied.visibleCount !== nextVisible) {
         applied.visibleCount = nextVisible;
         setVisibleCount(nextVisible);
+      }
+      if (tracksInlineBounds) {
+        if (applied.collapsedWidth !== nextCollapsedWidth) {
+          applied.collapsedWidth = nextCollapsedWidth;
+          setCollapsedWidth(nextCollapsedWidth);
+        }
+        if (applied.renderedWidth !== nextRenderedWidth) {
+          applied.renderedWidth = nextRenderedWidth;
+          setRenderedWidth(nextRenderedWidth);
+        }
       }
       // A host that does not track rows renders from neither value, so they
       // are not written.
@@ -426,7 +463,7 @@ export function useOverflowInternal(
         setRowHeight(nextRowHeight);
       }
     },
-    [tracksRows],
+    [tracksInlineBounds, tracksRows],
   );
 
   const calculate: Measure = useCallback(
@@ -466,7 +503,7 @@ export function useOverflowInternal(
         : 0;
 
       if (children.length === 0) {
-        apply(0, 0, appliedRef.current.rowHeight);
+        apply(0, 0, appliedRef.current.rowHeight, 0, 0);
         return;
       }
 
@@ -486,6 +523,27 @@ export function useOverflowInternal(
         maxRows,
         collapseFrom,
       });
+
+      const spanWidth = (count: number): number => {
+        const shown =
+          collapseFrom === 'end'
+            ? widths.slice(0, count)
+            : widths.slice(widths.length - count);
+        const parts =
+          count < children.length && indicatorWidth > 0
+            ? [...shown, indicatorWidth]
+            : shown;
+        return (
+          parts.reduce((sum, w) => sum + w, 0) +
+          gap * Math.max(0, parts.length - 1)
+        );
+      };
+      const nextCollapsedWidth = tracksInlineBounds
+        ? spanWidth(Math.min(minVisibleItems, children.length))
+        : 0;
+      const nextRenderedWidth = tracksInlineBounds
+        ? spanWidth(nextVisible)
+        : null;
 
       // Folding to a new list height inside the resize step makes Chromium
       // report a loop error. That update renders after paint. The measure copy
@@ -521,6 +579,11 @@ export function useOverflowInternal(
         const changesRowHeight =
           (maxRows ?? 1) > 1 &&
           measuredRowHeight !== appliedRef.current.rowHeight;
+        const changesInlineBounds =
+          tracksInlineBounds &&
+          (nextCollapsedWidth !== appliedRef.current.collapsedWidth ||
+            (!observeParent &&
+              nextRenderedWidth !== appliedRef.current.renderedWidth));
         const observed =
           observeParent && container.parentElement
             ? container.parentElement
@@ -528,6 +591,7 @@ export function useOverflowInternal(
         if (
           changesParentFill ||
           changesRowHeight ||
+          changesInlineBounds ||
           (nextVisible !== appliedRef.current.visibleCount &&
             observedSizeFollowsItems(container, observed)) ||
           canChangeListHeight(
@@ -538,10 +602,23 @@ export function useOverflowInternal(
             maxRows ?? 1,
           )
         ) {
-          return () => apply(nextVisible, nextRows, measuredRowHeight);
+          return () =>
+            apply(
+              nextVisible,
+              nextRows,
+              measuredRowHeight,
+              nextCollapsedWidth,
+              nextRenderedWidth,
+            );
         }
       }
-      apply(nextVisible, nextRows, measuredRowHeight);
+      apply(
+        nextVisible,
+        nextRows,
+        measuredRowHeight,
+        nextCollapsedWidth,
+        nextRenderedWidth,
+      );
       return undefined;
     },
     [
@@ -552,6 +629,7 @@ export function useOverflowInternal(
       maxRows,
       collapseFrom,
       observeParent,
+      tracksInlineBounds,
       apply,
       measuredSizes,
     ],
@@ -637,6 +715,8 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    collapsedWidth: tracksInlineBounds ? collapsedWidth : 0,
+    renderedWidth: tracksInlineBounds ? renderedWidth : null,
     remeasure,
   };
 }

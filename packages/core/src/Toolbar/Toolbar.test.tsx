@@ -14,6 +14,7 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
+import {Badge} from '../Badge/Badge';
 import {OverflowList} from '../OverflowList/OverflowList';
 import {Button} from '../Button/Button';
 import {MoreMenu} from '../MoreMenu';
@@ -302,16 +303,16 @@ describe('Toolbar', () => {
       expect(endStyle.minWidth).not.toBe('0px');
     });
 
-    it('floors an OverflowList start lane at the trigger plus non-folding siblings', () => {
+    it('keeps a Badge and an observeSelf OverflowList floored at the collapsed trigger', async () => {
       const {rerender} = render(
         <Toolbar
           label="Actions"
-          gap={1}
           startContent={
             <>
-              <span data-testid="badge">5 selected</span>
+              <Badge label="5 selected" data-testid="badge" />
               <OverflowList
-                behavior="observeParent"
+                behavior="observeSelf"
+                data-testid="actions"
                 overflowRenderer={() => <Button label="+2" />}>
                 <Button label="Save" />
                 <Button label="Edit" />
@@ -321,15 +322,11 @@ describe('Toolbar', () => {
           endContent={<Button label="Clear" />}
         />,
       );
-      const badge = screen.getByTestId('badge');
-      const startLane = badge.parentElement!;
+      const startLane = screen.getByTestId('badge').parentElement!;
+      const actions = screen.getByTestId('actions');
       const measure = startLane.querySelector('[inert]') as HTMLElement;
       const indicator = measure.lastElementChild as HTMLElement;
 
-      Object.defineProperty(badge, 'offsetWidth', {
-        configurable: true,
-        value: 71,
-      });
       Object.defineProperty(indicator, 'offsetWidth', {
         configurable: true,
         value: 66,
@@ -338,24 +335,28 @@ describe('Toolbar', () => {
       rerender(
         <Toolbar
           label="Actions"
-          gap={2}
           startContent={
             <>
-              <span data-testid="badge">5 selected</span>
+              <Badge label="5 selected" data-testid="badge" />
               <OverflowList
-                behavior="observeParent"
+                behavior="observeSelf"
+                data-testid="actions"
                 overflowRenderer={() => <Button label="+2" />}>
                 <Button label="Save" />
                 <Button label="Edit" />
+                <Button label="Delete" />
               </OverflowList>
             </>
           }
           endContent={<Button label="Clear" />}
         />,
       );
+      await act(async () => {});
 
-      expect(badge.style.flexShrink).toBe('0');
-      expect(startLane.style.getPropertyValue('--_start-floor')).toBe('137px');
+      const startStyle = getComputedStyle(startLane);
+      expect(startStyle.minWidth).not.toBe('0');
+      expect(startStyle.minWidth).not.toBe('0px');
+      expect(actions.getAttribute('style')).toContain('66px');
     });
 
     it('keeps vertical two-slot lanes at natural height without horizontal flex-basis collapse', () => {

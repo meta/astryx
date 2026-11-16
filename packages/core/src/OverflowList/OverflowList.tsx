@@ -42,7 +42,10 @@ const styles = stylex.create({
     alignItems: 'center',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    minWidth: 0,
+    contain: 'inline-size',
+    inlineSize: '100%',
+    flexShrink: 10000,
+    minInlineSize: 0,
   },
   containerMultiRow: {
     display: 'flex',
@@ -73,6 +76,15 @@ const styles = stylex.create({
 const multiRowHeight = stylex.create({
   height: (maxRows: number, rowHeight: number, gapPx: number) => ({
     maxHeight: `calc(${rowHeight}px * ${maxRows} + ${gapPx}px * ${maxRows - 1})`,
+  }),
+});
+
+const inlineBounds = stylex.create({
+  min: (width: number) => ({
+    minInlineSize: `${width}px`,
+  }),
+  max: (width: number) => ({
+    maxInlineSize: `${width}px`,
   }),
 });
 
@@ -306,6 +318,8 @@ export function OverflowList({
     visibleCount,
     hasOverflow,
     rowHeight,
+    collapsedWidth,
+    renderedWidth,
     remeasure,
   } = useOverflowInternal(
     itemCount,
@@ -319,6 +333,7 @@ export function OverflowList({
     },
     {
       tracksRows: isMultiRow,
+      tracksInlineBounds: !isMultiRow,
       // The measured key moves with the measurement's result, so the report
       // never sees a key that is ahead of the visible set.
       onMeasure: () => setMeasuredKey(measurementKey),
@@ -406,6 +421,13 @@ export function OverflowList({
               rowHeight > 0 &&
               maxRows != null &&
               multiRowHeight.height(maxRows, rowHeight, gapPx),
+            !isMultiRow &&
+              collapsedWidth > 0 &&
+              inlineBounds.min(collapsedWidth),
+            !isMultiRow &&
+              renderedWidth != null &&
+              !(observeParent && hasOverflow) &&
+              inlineBounds.max(renderedWidth),
             observeParent && hasOverflow && styles.fillParent,
             xstyle,
           ),

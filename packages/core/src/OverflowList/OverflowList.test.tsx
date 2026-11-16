@@ -334,6 +334,27 @@ describe('OverflowList', () => {
       expect(within(vis).getByText('A')).toBeInTheDocument();
       expect(within(vis).getByText('B')).toBeInTheDocument();
       expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+      expect(vis.getAttribute('style')).not.toContain('40px');
+    });
+  });
+
+  describe('inline bounds', () => {
+    it('publishes its collapsed indicator width as minInlineSize', async () => {
+      await renderMeasured(
+        <OverflowList
+          gap={0}
+          data-w="60"
+          data-testid="ov"
+          overflowRenderer={indicator('more:', 36)}>
+          <button type="button" data-w="40">
+            A
+          </button>
+          <button type="button" data-w="40">
+            B
+          </button>
+        </OverflowList>,
+      );
+      expect(visibleContainer().getAttribute('style')).toContain('36px');
     });
   });
 

@@ -112,16 +112,12 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
-  // Take leftover row width; floor OverflowList lanes at their trigger and
-  // fixed siblings so the row wraps before any control clips.
+  // Take the leftover row width so collapsible start content (such as
+  // OverflowList) measures the space beside endContent.
   startFill: {
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: '0%',
-    minWidth: {
-      default: null,
-      ':has(.astryx-overflow-list)': 'var(--_start-floor, 0px)',
-    },
   },
   endKeep: {
     flexShrink: 0,
@@ -190,62 +186,6 @@ function lanesHaveWrapped(row: Element): boolean {
     Math.max(...boxes.map(box => box.top)) >=
       Math.min(...boxes.map(box => box.bottom))
   );
-}
-
-/**
- * Floor a two-slot horizontal start lane with an OverflowList at the trigger
- * and any non-folding siblings so the row wraps before controls clip.
- */
-function syncStartSlotFloor(row: HTMLElement): void {
-  const startSlot = row.firstElementChild;
-  if (!(startSlot instanceof HTMLElement)) {
-    return;
-  }
-  const list = startSlot.querySelector<HTMLElement>('.astryx-overflow-list');
-  if (list == null) {
-    startSlot.style.removeProperty('--_start-floor');
-    return;
-  }
-  const measure = list.previousElementSibling;
-  const indicator =
-    measure instanceof HTMLElement && measure.hasAttribute('inert')
-      ? measure.lastElementChild
-      : null;
-  const triggerWidth =
-    indicator instanceof HTMLElement
-      ? indicator.getBoundingClientRect().width || indicator.offsetWidth
-      : 0;
-
-  let siblingsWidth = 0;
-  let visibleCount = 0;
-  for (const child of startSlot.children) {
-    if (!(child instanceof HTMLElement) || child.hasAttribute('inert')) {
-      continue;
-    }
-    visibleCount += 1;
-    if (child === list || child.contains(list)) {
-      continue;
-    }
-    child.style.flexShrink = '0';
-    const prevMaxWidth = child.style.maxWidth;
-    child.style.maxWidth = 'none';
-    siblingsWidth +=
-      child.getBoundingClientRect().width || child.offsetWidth || 0;
-    child.style.maxWidth = prevMaxWidth;
-  }
-  const gap =
-    visibleCount > 1
-      ? parseFloat(getComputedStyle(startSlot).columnGap) || 0
-      : 0;
-  const floor = Math.ceil(
-    triggerWidth + siblingsWidth + gap * Math.max(0, visibleCount - 1),
-  );
-  const nextValue = floor > 0 ? `${floor}px` : '';
-  if (nextValue === '') {
-    startSlot.style.removeProperty('--_start-floor');
-  } else if (startSlot.style.getPropertyValue('--_start-floor') !== nextValue) {
-    startSlot.style.setProperty('--_start-floor', nextValue);
-  }
 }
 
 const blockPaddingVarForSize: Record<ElementSize, string> = {
@@ -394,32 +334,14 @@ export function Toolbar({
   // row keeps the indicator on its tab. The row reports a wrap after layout,
   // in a resize observation.
   const watchesWrap = hasCenterContent && hasBottomDivider;
-  const watchesStartFloor =
-    !hasCenterContent && orientation === 'horizontal' && hasStartContent;
   const [isWrapped, setIsWrapped] = useState(false);
   useAttachment(
     listRef,
-    row => {
-      if (watchesWrap) {
-        return observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)));
-      }
-      if (watchesStartFloor) {
-        const unobserveRow = observeResize(row, () => syncStartSlotFloor(row));
-        const measure = row.firstElementChild?.querySelector(
-          '.astryx-overflow-list',
-        )?.previousElementSibling;
-        const unobserveMeasure =
-          measure instanceof HTMLElement && measure.hasAttribute('inert')
-            ? observeResize(measure, () => syncStartSlotFloor(row))
-            : null;
-        return () => {
-          unobserveRow();
-          unobserveMeasure?.();
-        };
-      }
-      return () => {};
-    },
-    `${watchesWrap}:${watchesStartFloor}:${gap}:${size}`,
+    row =>
+      watchesWrap
+        ? observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)))
+        : () => {},
+    watchesWrap,
   );
   const dropsIndicatorOnRail = hasBottomDivider && !(watchesWrap && isWrapped);
 

@@ -53,10 +53,12 @@ async function readLanes(page: Page) {
       throw new Error('No toolbar');
     }
     const toolbarBox = toolbar.getBoundingClientRect();
-    // The three lane elements; the keyboard hint is not a lane.
+    // The lane elements; the keyboard hint is not a lane.
     const lanes = [...toolbar.children]
-      .filter((lane): lane is HTMLElement => lane instanceof HTMLElement)
-      .slice(0, 3)
+      .filter(
+        (lane): lane is HTMLElement =>
+          lane instanceof HTMLElement && !lane.hasAttribute('popover'),
+      )
       .map(lane => {
         const range = document.createRange();
         range.selectNodeContents(lane);
@@ -132,6 +134,25 @@ for (const [size, px] of [
     }
   });
 }
+
+test('a two-slot toolbar wraps without lane overlap when the lanes do not fit', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 220, height: 874});
+  await setDefaultFontSize(page, 16);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toolbar--bulk-actions&viewMode=story`,
+  );
+  await page.locator('[role="toolbar"]').waitFor();
+  const {scrollWidth, viewportWidth, lanes} = await readLanes(page);
+  expect(lanes).toHaveLength(2);
+  expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
+  for (const lane of lanes) {
+    expect(lane.left, lane.text).toBeGreaterThanOrEqual(0);
+    expect(lane.right, lane.text).toBeLessThanOrEqual(viewportWidth);
+  }
+  expect(lanes[1].top).toBeGreaterThanOrEqual(lanes[0].bottom - 1);
+});
 
 /** The selected tab's indicator, its tab, and the toolbar row, as boxes. */
 async function readIndicator(page: Page) {
