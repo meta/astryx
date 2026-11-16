@@ -536,6 +536,7 @@ function ActiveUsersChart() {
             stroke={chartColors.allUsers}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             type="linear"
@@ -544,6 +545,7 @@ function ActiveUsersChart() {
             stroke={chartColors.desktop}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
           <Line
             type="linear"
@@ -552,6 +554,7 @@ function ActiveUsersChart() {
             stroke={chartColors.mobile}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>
