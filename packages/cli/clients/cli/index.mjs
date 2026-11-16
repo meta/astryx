@@ -44,6 +44,7 @@ import {
   setupNudge,
 } from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
+import {intlDefaults} from '../../foundation/env/intl-defaults.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +55,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package
 // filesystem, no environment probe, no config — and it must run ahead of the
 // --version preflight below so even that early exit is recorded. The env
 // probe is deferred to delivery. See foundation/debug.
-debug.begin({cliVersion: pkg.version});
+debug.begin({cliVersion: pkg.version, intl: intlDefaults});
 
 /**
  * Intercept `astryx --version --json` (or `-V --json`) before Commander

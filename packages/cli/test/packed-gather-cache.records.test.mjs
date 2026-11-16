@@ -66,6 +66,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       "npm's list of the files an integration package packs",
     );
+    expect(plain).toContain(
+      'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
+    );
     // The row names the other checks that can make the folder.
     expect(plain).toContain(
       "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's `integration check` of itself, for npm's list.",
