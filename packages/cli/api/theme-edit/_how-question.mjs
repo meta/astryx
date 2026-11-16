@@ -3120,12 +3120,26 @@ function clausesOf(q, partWords) {
         break;
       }
       if (!m) continue;
-      // ("a medical records table view", "the card page": a screen named
-      // by what it shows, never that part.)
-      if (
-        /^\s+(?:views?|pages?|screens?|apps?|dashboards?|layouts?)\b/.test(
+      // ("a medical records table view", "the card page", "a radio station
+      // site", "a table booking app": a screen or product named by what it
+      // shows or is about, never that part. The words between the part word
+      // and the product noun, at most two, name no part and join nothing.)
+      const named =
+        /^((?:\s+[a-z]+){0,2}?)\s+(?:views?|pages?|screens?|apps?|sites?|websites?|portals?|dashboards?|layouts?|platforms?|stores?|shops?)\b/.exec(
           rest.slice((m.index ?? 0) + m[0].length),
-        )
+        );
+      if (
+        named &&
+        String(named[1])
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .every(
+            w =>
+              !/^(?:and|or|with|in|on|of|for|to|the|a|an|my|our|its|is|are|be|more|less|very)$/.test(
+                w,
+              ) && !partWords.some(([r]) => r.test(` ${w} `)),
+          )
       ) {
         rest = rest.replace(re, ' ');
         continue;
@@ -9378,6 +9392,46 @@ export function draftAnswer(ctx, env, question) {
         !/\bunderline|indicator\b/.test(c.text)
       )
         p.on = 'tab';
+  // "menus with 32px rows", "lists with tight rows": rows said of a part
+  // that holds no table rows are that part's own rows, the parts inside it
+  // that ride an Item (the element Core draws every list and menu row with),
+  // never every table's rows. A part with no such rows keeps the ask.
+  {
+    const itemProps = ctx.project.target.get('item')?.props ?? [];
+    /** @param {string} k */
+    const ridesItem = k =>
+      k !== 'item' &&
+      itemProps.length > 0 &&
+      Object.values(C.MAP[k]?.at ?? {}).some(byCond =>
+        Object.keys(byCond ?? {}).some(cond =>
+          itemProps.every(pr =>
+            cond
+              .split(/\s/)[0]
+              .split(',')
+              .some(x => x.startsWith(`${pr}=`)),
+          ),
+        ),
+      );
+    for (const c of clauses) {
+      if (!c.parts.some(p => p.on === 'table-row')) continue;
+      if (/\btables?\b/.test(c.text)) continue;
+      const holders = c.parts.filter(
+        p => p.on !== 'table-row' && p.on !== 'table-cell',
+      );
+      if (!holders.length) continue;
+      const members = holders.flatMap(h => FAMILIES[h.on] ?? [h.on]);
+      if (members.some(m => (C.MAP[m]?.contains ?? []).includes('table-row')))
+        continue;
+      const rows = [
+        ...new Set(
+          members.flatMap(m =>
+            [...(C.MAP[m]?.contains ?? [])].filter(ridesItem),
+          ),
+        ),
+      ];
+      if (rows.length) c.parts = rows.map(on => ({on}));
+    }
+  }
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
   // boxes): those parts (for a border, only pieces that draw one).
