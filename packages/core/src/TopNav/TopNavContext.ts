@@ -5,7 +5,7 @@
 /**
  * @file TopNavContext.ts
  * @input Layer-scoped React context
- * @output TopNavSlotContext and useTopNavSlot
+ * @output TopNavSlotContext, useTopNavSlot, and TopNavMegaMenuCloseContext
  * @position Navigation slot presentation defaults
  */
 
@@ -24,3 +24,12 @@ TopNavSlotContext.displayName = 'TopNavSlotContext';
 export function useTopNavSlot(): TopNavSlot {
   return use(TopNavSlotContext);
 }
+
+/**
+ * Closes the TopNavMegaMenu panel that holds the content, returning focus to
+ * its trigger; null outside a panel. Panel items call it on a pick.
+ */
+export const TopNavMegaMenuCloseContext = createLayerScopedContext<
+  (() => void) | null
+>('TopNavMegaMenuCloseContext', 1, null);
+TopNavMegaMenuCloseContext.displayName = 'TopNavMegaMenuCloseContext';

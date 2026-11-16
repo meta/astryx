@@ -57,7 +57,7 @@ import {Icon} from '../Icon';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {useTopNavSlot} from './TopNavContext';
+import {TopNavMegaMenuCloseContext, useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -537,28 +537,23 @@ function DefaultMegaMenu({
           role="group"
           aria-label={label}
           {...contentProps}
-          // Picking a link or button in the panel ends the visit, as a pick in
-          // TopNavMenu does: the panel closes and focus goes back to the
-          // trigger.
-          onClick={event => {
-            if ((event.target as Element).closest('a[href], button')) {
-              close();
-            }
-          }}
           {...stylex.props(styles.panelContainer)}>
-          <div {...stylex.props(styles.panelContent)}>
-            {/* Menu items section */}
-            {isRenderable(items) && (
-              <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
-                {items}
-              </Grid>
-            )}
+          {/* Items close the panel on a pick, as TopNavMenu items do. */}
+          <TopNavMegaMenuCloseContext value={close}>
+            <div {...stylex.props(styles.panelContent)}>
+              {/* Menu items section */}
+              {isRenderable(items) && (
+                <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
+                  {items}
+                </Grid>
+              )}
 
-            {/* Featured section */}
-            {isRenderable(featured) && (
-              <div {...stylex.props(styles.featured)}>{featured}</div>
-            )}
-          </div>
+              {/* Featured section */}
+              {isRenderable(featured) && (
+                <div {...stylex.props(styles.featured)}>{featured}</div>
+              )}
+            </div>
+          </TopNavMegaMenuCloseContext>
         </div>,
         {
           placement: 'below',
