@@ -87,7 +87,7 @@ function installed(cwd, like) {
 }
 
 describe('installRealBaseThemes', () => {
-  it('writes nothing in the theme packages or the CLI, with two fixtures installing at once', async () => {
+  it("leaves theme builds and the CLI's links unchanged, with two fixtures installing at once", async () => {
     const builds = themeBuilds();
     const scope = cliScope();
     const [a, b] = [fixture(FIXTURE_PACKAGES), fixture(FIXTURE_PACKAGES)];
@@ -152,6 +152,15 @@ describe('installRealBaseThemes', () => {
       /the half theme could not be built here/,
     );
     expect(fs.existsSync(installed(cwd, 'half'))).toBe(false);
+    // A name with no package is refused without writing anything.
+    expect(await installRealBaseThemes(cwd, ['none'], {themes})).toMatch(
+      /the none theme could not be built here: no package/,
+    );
+    expect(fs.existsSync(path.join(themes, 'none'))).toBe(false);
+    // A failed build leaves no build folder behind.
+    expect(
+      fs.readdirSync(path.join(half, 'node_modules/.astryx-test-built')),
+    ).toEqual([]);
     expect(await installRealBaseThemes(cwd, ['whole'], {themes})).toBe('');
     expect(fs.realpathSync(installed(cwd, 'whole'))).toBe(
       fs.realpathSync(whole),

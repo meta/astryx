@@ -85,12 +85,16 @@ export async function installRealBaseThemes(
       fs.symlinkSync(own, link, 'dir');
       continue;
     }
+    if (!fs.existsSync(path.join(own, 'package.json')))
+      return `the ${like} theme could not be built here: no package at ${own}`;
+    /** @type {string | undefined} */
+    let out;
     try {
       // Each install builds in a folder of its own: two installs at once
       // in one worker must not share one.
       const built = path.join(own, 'node_modules/.astryx-test-built');
       fs.mkdirSync(built, {recursive: true});
-      const out = path.relative(
+      out = path.relative(
         own,
         fs.mkdtempSync(path.join(built, `${process.pid}-`)),
       );
@@ -107,7 +111,6 @@ export async function installRealBaseThemes(
       fs.cpSync(path.join(own, out, 'dist'), path.join(link, 'dist'), {
         recursive: true,
       });
-      fs.rmSync(path.join(own, out), {recursive: true, force: true});
       // The icon registry the module imports is a separate package step;
       // these tests never read it, so an empty one stands in.
       const js = fs.readFileSync(path.join(link, 'dist', `${like}.js`), 'utf8');
@@ -121,6 +124,8 @@ export async function installRealBaseThemes(
         );
     } catch (e) {
       return `the ${like} theme could not be built here: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      if (out) fs.rmSync(path.join(own, out), {recursive: true, force: true});
     }
   }
   return '';
