@@ -2890,7 +2890,8 @@ describe('Selector', () => {
       const tooltip = screen.getByRole('tooltip', h);
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
-      fireEvent.mouseEnter(container);
+      fireEvent.pointerEnter(container, {pointerType: 'mouse'});
+      fireEvent.pointerMove(container, {pointerType: 'mouse'});
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });

@@ -136,6 +136,7 @@ describe('Tooltip', () => {
 
     const trigger = screen.getByRole('button', {name: 'Trigger'});
     fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger);
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(onOpenChange).not.toHaveBeenCalledWith(true);
 

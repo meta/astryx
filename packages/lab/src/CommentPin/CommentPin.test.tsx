@@ -599,7 +599,7 @@ describe('CommentPin', () => {
       name: 'Open annotation from Ada',
     });
     fireEvent.pointerEnter(marker, {pointerType: 'mouse'});
-    fireEvent.mouseEnter(marker);
+    fireEvent.pointerMove(marker, {pointerType: 'mouse'});
 
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(

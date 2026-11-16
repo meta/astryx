@@ -317,6 +317,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // A hover timer may start only after a pointer has entered and then moved.
+  // Leaving, pressing or dismissing disarms that sequence until the next
+  // pointerenter, so a small post-dismissal move cannot reopen the tip.
+  const hoverEligibleRef = useRef(false);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
   // Counts the renders in which the tooltip is disabled. A pending show
@@ -392,7 +396,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     isTouchPointerRef,
     isTouchInteraction,
-    handlePointerEnter,
+    handlePointerEnter: handleTouchPointerEnter,
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
     armOutsideDismiss,
@@ -410,6 +414,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     },
     handleReleaseInLayer,
     true,
+  );
+
+  const handlePointerEnter = useCallback(
+    (event: PointerEvent) => {
+      hoverEligibleRef.current = true;
+      handleTouchPointerEnter(event);
+    },
+    [handleTouchPointerEnter],
   );
 
   const isHeldOpen = useCallback(() => {
@@ -481,6 +493,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     clearTimeouts();
     const disabledRenders = disabledRendersRef.current;
     showTimeoutRef.current = setTimeout(() => {
+      showTimeoutRef.current = null;
       // A show runs only if the tooltip stayed enabled since it was
       // scheduled: nothing would close a tooltip that opens after a disable.
       if (disabledRendersRef.current === disabledRenders) {
@@ -517,14 +530,22 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     // A pointerenter can be caused by layout moving the trigger under a
     // stationary pointer. Only pointermove is evidence that the user entered
     // the trigger, so that case must not start the hover timer.
-    if (isTouchPointerRef.current) {
+    // Once started, the timer is not restarted by subsequent pointermoves:
+    // the delay is measured from the first move after entry.
+    if (
+      isTouchPointerRef.current ||
+      !hoverEligibleRef.current ||
+      showTimeoutRef.current != null ||
+      isLayerOpen
+    ) {
       return;
     }
     scheduleShow();
-  }, [isTouchPointerRef, scheduleShow]);
+  }, [isLayerOpen, isTouchPointerRef, scheduleShow]);
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
+      hoverEligibleRef.current = false;
       // On touch the synthesized mouseleave arrives with the next tap elsewhere,
       // which the outside-tap dismissal already handles — and handling it here
       // too would close the tooltip behind the tap-open bookkeeping's back.
@@ -645,6 +666,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      hoverEligibleRef.current = false;
+      clearTimeouts();
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict. A show() in a capture handler of this
@@ -658,16 +681,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (handleTouchPointerDown(event)) {
         // A pen in range starts the hover show before it lands. Left pending,
         // that show opens the layer during the press. The tap then closes it.
-        if (showTimeoutRef.current) {
-          clearTimeout(showTimeoutRef.current);
-          showTimeoutRef.current = null;
-        }
         return;
       }
       if (isOpen !== undefined) {
         return;
       }
-      clearTimeouts();
       hideLayer();
     },
     [
@@ -815,6 +833,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         if (interest === 'hover') {
           // Lazy truncation tooltips record hover only from pointermove. The
           // move may finish before this Tooltip attaches, so replay it here.
+          hoverEligibleRef.current = true;
           latest().handlePointerMove();
         } else if (interest === 'tap') {
           latest().answerTap(tapEvent);
@@ -939,6 +958,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
     },
     onDismiss: () => {
+      hoverEligibleRef.current = false;
       clearTimeouts();
       clearTapOpen();
       dropHold();

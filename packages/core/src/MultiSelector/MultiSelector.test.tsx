@@ -2348,7 +2348,8 @@ describe('MultiSelector', () => {
       const tooltip = screen.getByRole('tooltip', h);
       expect(tooltip).toHaveTextContent('Select a table first');
 
-      fireEvent.mouseEnter(container);
+      fireEvent.pointerEnter(container, {pointerType: 'mouse'});
+      fireEvent.pointerMove(container, {pointerType: 'mouse'});
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });

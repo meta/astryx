@@ -2522,7 +2522,8 @@ describe('Tokenizer', () => {
         'You need edit access to change members',
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
-      fireEvent.mouseEnter(wrapper);
+      fireEvent.pointerEnter(wrapper, {pointerType: 'mouse'});
+      fireEvent.pointerMove(wrapper, {pointerType: 'mouse'});
       await waitFor(() => expect(isOpen(tooltip)).toBe(true));
       fireEvent.mouseLeave(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(false));

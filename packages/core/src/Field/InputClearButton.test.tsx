@@ -83,7 +83,8 @@ describe('InputClearButton', () => {
     expect(tooltip).toHaveTextContent(/^Clear$/);
     expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
 
-    fireEvent.mouseEnter(button);
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.pointerMove(button, {pointerType: 'mouse'});
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     showPopover.mockRestore();
   });

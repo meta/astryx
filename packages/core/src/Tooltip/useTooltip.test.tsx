@@ -108,6 +108,9 @@ describe('useTooltip — show delay', () => {
     render(<Harness delay={0} onShow={onShow} />);
 
     fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    // Chromium sends a native mouseenter as part of the same entry sequence;
+    // it must not stand in for the movement that proves the pointer moved.
+    fireEvent.mouseEnter(trigger());
     tick(1000);
 
     expect(onShow).not.toHaveBeenCalled();
@@ -130,6 +133,20 @@ describe('useTooltip — show delay', () => {
     hover(trigger());
     tick(200);
 
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not restart the show delay on each pointer move', () => {
+    const onShow = vi.fn();
+    render(<Harness delay={200} onShow={onShow} />);
+
+    hover(trigger());
+    tick(150);
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(49);
+    expect(onShow).not.toHaveBeenCalled();
+
+    tick(1);
     expect(onShow).toHaveBeenCalledTimes(1);
   });
 
@@ -579,6 +596,46 @@ describe('useTooltip — Escape dismissal', () => {
 
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('does not reopen from a move after Escape until the pointer re-enters', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    render(<Harness delay={0} onShow={onShow} onHide={onHide} />);
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(document, {key: 'Escape'});
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(0);
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseLeave(trigger());
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not reopen from a move after a press until the pointer re-enters', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    render(<Harness delay={0} onShow={onShow} onHide={onHide} />);
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerDown(trigger(), {pointerType: 'mouse'});
+    fireEvent.pointerMove(trigger(), {pointerType: 'mouse'});
+    tick(0);
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onShow).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseLeave(trigger());
+    hover(trigger());
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(2);
   });
 
   it('ignores an Escape that carries the IME keyCode 229', () => {

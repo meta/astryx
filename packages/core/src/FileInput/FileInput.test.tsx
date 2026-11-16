@@ -1443,7 +1443,8 @@ describe('FileInput', () => {
       const surface = document.querySelector(
         '.astryx-file-input',
       ) as HTMLElement;
-      fireEvent.mouseEnter(surface);
+      fireEvent.pointerEnter(surface, {pointerType: 'mouse'});
+      fireEvent.pointerMove(surface, {pointerType: 'mouse'});
       await waitFor(() => {
         expect(tooltip).toHaveAttribute('popover-open');
       });
