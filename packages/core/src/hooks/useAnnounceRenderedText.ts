@@ -92,6 +92,11 @@ export interface AnnounceRenderedTextOptions {
    * a custom layout. Applied to the element's descendants.
    */
   exclude?: string;
+  /**
+   * Speak once per occasion. Text that changes later under the same occasion
+   * stays silent, as a notification is announced once when it is shown.
+   */
+  isOncePerOccasion?: boolean;
 }
 
 /**
@@ -143,7 +148,8 @@ export function renderedText(element: HTMLElement, exclude?: string): string {
  * Announce the text of a rendered element through the shared polite live
  * region, once per occasion.
  *
- * Announces when the element appears and whenever its rendered text changes.
+ * Announces when the element appears and whenever its rendered text changes,
+ * or only when it appears for an occasion with `isOncePerOccasion`.
  * Pass `isShown: false` for every state where the element is not on screen —
  * including while loading — and the hook stays silent and re-arms.
  *
@@ -169,11 +175,13 @@ export function useAnnounceRenderedText(
     fallbackText,
     announce: ownerAnnounce,
     exclude,
+    isOncePerOccasion = false,
   }: AnnounceRenderedTextOptions = {},
 ): void {
   const ownAnnounce = useAnnounce();
   const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
+  const announcedOccasionRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
   // hydrated from server HTML, is part of the page the person arrived at.
@@ -231,6 +239,10 @@ export function useAnnounceRenderedText(
       return;
     }
     spokenRef.current = spoken;
+    if (isOncePerOccasion && announcedOccasionRef.current === occasion) {
+      return;
+    }
+    announcedOccasionRef.current = occasion;
     const isPageLoad =
       (isFirstRun && renderedWithPage) || document.readyState !== 'complete';
     if (skipFirstRender && isPageLoad) {

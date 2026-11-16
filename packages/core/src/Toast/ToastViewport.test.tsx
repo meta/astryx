@@ -3266,10 +3266,16 @@ describe('toast announcements via singleton live regions', () => {
     act(() => {
       resolveAmount();
     });
+    expect(screen.getByText('$120.00')).toBeInTheDocument();
+    // Dismissing renders the card again with the new words on screen.
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
-    expect(screen.getByText('$120.00')).toBeInTheDocument();
     expect(announceSpy).toHaveBeenCalledTimes(1);
   });
 
