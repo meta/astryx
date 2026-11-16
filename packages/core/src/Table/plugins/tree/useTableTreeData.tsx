@@ -19,8 +19,9 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. A ref callback on each <tr> sets its
- * aria-level, as selection's row styling does. Each subscription ends when
+ * affected cells, not the whole body. A ref callback on each <tr> records
+ * its depth and links the expander to its child rows (disclosure pattern),
+ * as selection's row styling does. Each subscription ends when
  * its row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
@@ -32,12 +33,22 @@ import {
   use,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {
+  clearTreeLevel,
+  setTreeLevel,
+  treeLevelOf,
+} from '../../../privateAttributes/treeLevel.stylex';
+import {
+  treeExpanderIn,
+  treeExpanderProps,
+} from '../../../privateAttributes/treeExpander.stylex';
 import {
   colorVars,
   focusVars,
@@ -232,18 +243,63 @@ function useRowSnapshot<T extends Record<string, unknown>>(
 // Row ARIA (imperative, mirrors selection's row styling)
 // =============================================================================
 
-// aria-expanded is valid on a row only in a treegrid, so it stays on the
-// expander button. aria-level is also treegrid-only, but Chromium exposes it
-// as the row's depth, so rows keep it.
+// Tree tables follow the disclosure pattern, not a treegrid: Table has no
+// grid keyboard model (arrow keys between cells and rows), so claiming
+// treegrid would promise navigation that isn't there. Rows therefore carry
+// no aria-level or aria-expanded. Each parent row's expander button carries
+// aria-expanded and, while expanded, aria-controls naming its child rows.
+// Indentation stays visual. A private mark records each row's depth so the
+// expander can find its children among the rendered rows.
+
+/** A DOM id for a row, from the table's id prefix and the row's own id. */
+function rowDomId(prefix: string, id: string): string {
+  return `${prefix}-${id.replace(/[^\w-]/g, ch => `_${ch.charCodeAt(0)}`)}`;
+}
+
 function applyRowTreeAria(
   el: HTMLTableRowElement,
   meta: TableTreeRowMeta | undefined,
+  idPrefix: string,
 ): void {
+  // Rows rendered by an earlier version may still carry aria-level.
+  el.removeAttribute('aria-level');
+  const ownsId = el.id === '' || el.id.startsWith(`${idPrefix}-`);
   if (!meta) {
-    el.removeAttribute('aria-level');
+    clearTreeLevel(el);
+    if (ownsId) {
+      el.removeAttribute('id');
+    }
     return;
   }
-  el.setAttribute('aria-level', String(meta.level + 1));
+  setTreeLevel(el, meta.level);
+  if (ownsId) {
+    el.id = rowDomId(idPrefix, meta.id);
+  }
+  const expander = treeExpanderIn(el);
+  if (expander == null) {
+    return;
+  }
+  const childIds: string[] = [];
+  if (meta.hasChildren && meta.isExpanded) {
+    for (
+      let row = el.nextElementSibling;
+      row != null;
+      row = row.nextElementSibling
+    ) {
+      const level = treeLevelOf(row);
+      if (level == null || level <= meta.level) {
+        break;
+      }
+      if (level === meta.level + 1 && row.id !== '') {
+        childIds.push(row.id);
+      }
+    }
+  }
+  if (childIds.length > 0) {
+    expander.setAttribute('aria-controls', childIds.join(' '));
+  } else {
+    expander.removeAttribute('aria-controls');
+  }
 }
 
 // =============================================================================
@@ -384,7 +440,8 @@ function TreeExpander({
         onToggle();
       }}
       aria-label={ariaLabel}
-      aria-expanded={isExpanded}>
+      aria-expanded={isExpanded}
+      {...treeExpanderProps}>
       <Icon
         icon="chevronRight"
         size="xsm"
@@ -534,6 +591,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
     storeRef.current = createTreeStore(configRef);
   }
   const store = storeRef.current;
+  const rowIdPrefix = useId();
 
   // Notify subscribers on every render — useSyncExternalStore only
   // re-renders cells whose snapshot actually changed. Row ref subscribers
@@ -706,6 +764,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
             applyRowTreeAria(
               el,
               cfg.hasExpandableRows ? cfg.getRowMeta(item) : undefined,
+              rowIdPrefix,
             );
           };
           apply();
@@ -775,6 +834,6 @@ export function useTableTreeData<T extends Record<string, unknown>>(
         };
       },
     };
-  }, [store]);
+  }, [store, rowIdPrefix]);
   return registerCountIndependentPlugin(plugin);
 }
