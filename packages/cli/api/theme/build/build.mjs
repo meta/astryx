@@ -5122,7 +5122,8 @@ async function themeBuildInternal(
     : [];
   // A typography value Core builds into something no browser uses (a font
   // stack in one family, a quoted name with a space, a role weight with no
-  // type scale): warned at its line, as the editor refuses it. Only what
+  // type scale), or of a type the field does not take (a weight as a
+  // number): warned at its line, as the editor refuses it. Only what
   // this file writes: a theme it extends is judged in its own file. A build
   // that loads the project's own Core captures no input: the values the
   // source writes are read from it.

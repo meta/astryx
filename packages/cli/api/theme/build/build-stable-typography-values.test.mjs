@@ -203,4 +203,21 @@ describe('stable build typography values', () => {
       );
     }
   });
+
+  it('names a weight given as a number as a type mismatch, not a weight no browser reads', async () => {
+    const r = await build(
+      "{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: 600}}",
+    );
+    const line = typographyWarnings(r).join('\n');
+    expect(line).toMatch(
+      /typography\.body\.weight .*a typography weight is text, and 600 is a number: a type mismatch.*write '600'/,
+    );
+    expect(line).not.toMatch(/no weight the browser reads/);
+    const off = await build(
+      "{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: 1200}}",
+    );
+    expect(typographyWarnings(off).join('\n')).toMatch(
+      /1200 is a number that is no weight .*a type mismatch.*write '600'/,
+    );
+  });
 });

@@ -110,15 +110,14 @@ export function isHeadingLevel(key, levels) {
  */
 export function typographyValueProblem(key, value) {
   const field = key.split('.').pop();
-  // A weight is a CSS value Core writes as it is: text, never a number.
+  // A weight is typed as text. A number is a type mismatch: the theme's
+  // types refuse it, while Core still writes a weight from 1 to 1000 that
+  // the browser reads.
   if (field === 'weight' || key.split('.').includes('weights')) {
+    if (typeof value === 'number' && value >= 1 && value <= 1000)
+      return `a typography weight is text, and ${value} is a number: a type mismatch the theme's types refuse (Core still writes ${value}, which the browser reads as that weight); write '${value}' (or a weight token, such as 'var(--font-weight-bold)')`;
     if (typeof value !== 'string')
-      return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describe(value)} is not text: write ${
-        // A CSS weight is 1 to 1000: any other number is no example.
-        typeof value === 'number' && value >= 1 && value <= 1000
-          ? `'${value}'`
-          : "'600'"
-      } (or a weight token, such as 'var(--font-weight-bold)')`;
+      return `a typography weight is text, and ${describe(value)} is ${typeof value === 'number' ? 'a number that is no weight (a weight is 1 to 1000)' : 'not text'}: a type mismatch the theme's types refuse, and no weight the browser reads; write '600' (or a weight token, such as 'var(--font-weight-bold)')`;
   }
   if (field === 'family') {
     if (typeof value !== 'string')
