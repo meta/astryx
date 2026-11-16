@@ -233,7 +233,11 @@ works on is `spec:AST-040` FR9's.
   would.** Outside a project, every copy answers itself, the global copy
   included (FR6, FR9). The answering release MUST answer as it would in a new
   project that installs only that release of Core, the computer-level
-  integrations (FR12), and any integration a programmatic host approves (FR1).
+  integrations (FR12), any integration a programmatic host approves (FR1),
+  and, in a hosted run, each package that the `package.json` of the root that
+  serves the run lists in `dependencies` or `optionalDependencies`: a page that
+  `render` renders takes those packages, and `template`, `build` and
+  `theme eject` do not name them as missing.
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
   command that needs Core answers from the carried Core when the run's base is
@@ -253,7 +257,9 @@ works on is `spec:AST-040` FR9's.
   `upgrade` judge or change a project and MUST NOT read the carried Core.
   Output outside a project MUST NOT give advice that works only inside one, such
   as a step that sets up, configures, or refreshes a project the folder does not
-  have.
+  have. So in a folder that no `package.json` holds, `template`, `build` and
+  `theme eject` name a package a page needs that nothing provides as missing,
+  with no install command, for the project that uses the page.
 - **FR4 — Every command declares what it does outside a project.** Every
   command and subcommand MUST declare one of three values in its command doc,
   and `astryx manifest` MUST publish that value as the command's

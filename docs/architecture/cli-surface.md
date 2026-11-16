@@ -675,8 +675,8 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   - Outside a project, a page that `render` renders also takes from the root
     that serves the run each package that root's `package.json` lists in
     `dependencies` or `optionalDependencies`, such as an icon library its host
-    installed for pages, and `template` does not name those packages as ones
-    to install.
+    installed for pages, and `template`, `build` and `theme eject` do not name
+    those packages as missing (`spec:AST-081` FR3).
   - Enumeration through a root reads only the packages INV14 or `spec:AST-081`
     FR12 name, and the packages its `package.json` lists for the bullet above;
     a root's own config is never read.

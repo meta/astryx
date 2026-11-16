@@ -24,7 +24,7 @@ import {
   walk,
 } from './template-source-tree.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {CLI_ROOT, findPackageRoot, findWorkspaceRoot} from '../fs/paths.mjs';
 import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {servingRootPackages} from '../runtime/package-root.mjs';
@@ -377,7 +377,13 @@ export function analyzeTemplateNeeds(source, cwd) {
     p => !(p in projectDeps) && !provided.includes(p),
   );
 
-  const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
+  // In a folder that no package.json holds, an install would make the folder
+  // a project, so the missing packages are named for the project that uses
+  // the page instead.
+  const unpackaged = findPackageRoot(cwd) == null;
+  const {installCommand, noCommandReason} = unpackaged
+    ? {installCommand: null, noCommandReason: null}
+    : installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);
@@ -389,9 +395,11 @@ export function analyzeTemplateNeeds(source, cwd) {
   const notes = [];
   if (missing.length > 0) {
     notes.push(
-      installCommand
-        ? `Install missing dependencies: ${installCommand}`
-        : (noCommandReason ?? ''),
+      unpackaged
+        ? `Missing dependencies: ${missing.join(', ')}. Install them in the project that uses this page.`
+        : installCommand
+          ? `Install missing dependencies: ${installCommand}`
+          : (noCommandReason ?? ''),
     );
   }
   if (stylexCompilerNeeded) {

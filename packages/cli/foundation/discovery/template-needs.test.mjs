@@ -452,16 +452,24 @@ describe('analyzeTemplateNeeds in a hosted run', () => {
     );
     const outside = temp('tmpl-needs-outside-');
 
-    expect(analyzeTemplateNeeds(source, outside).missingPackages).toEqual([
-      '@heroicons/react',
-      'recharts',
-    ]);
+    // A folder no package.json holds gets no install step, which would make
+    // it a project.
+    expect(analyzeTemplateNeeds(source, outside)).toMatchObject({
+      missingPackages: ['@heroicons/react', 'recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: @heroicons/react, recharts. Install them in the project that uses this page.',
+      ],
+    });
     activateHostedRun({startingRoot: set});
     const result = analyzeTemplateNeeds(source, outside);
-    expect(result.missingPackages).toEqual(['recharts']);
-    expect(result.notes[0]).toMatch(
-      /^Install missing dependencies: npm install recharts/,
-    );
+    expect(result).toMatchObject({
+      missingPackages: ['recharts'],
+      installCommand: null,
+      notes: [
+        'Missing dependencies: recharts. Install them in the project that uses this page.',
+      ],
+    });
   });
 
   it('still names it inside a project, which installs its own packages', () => {
