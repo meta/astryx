@@ -365,6 +365,39 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
+  it("carries the page-pick model's probability on a page-template start only", async () => {
+    const page = await build('a kanban board for sprint tasks', {cwd: REPO});
+    if (page.type !== 'build.kit') throw new Error(page.type);
+    const fit = page.data.start?.fit;
+    expect(typeof fit).toBe('number');
+    expect(fit).toBeGreaterThanOrEqual(0);
+    expect(fit).toBeLessThanOrEqual(1);
+    const shell = await build('news feed', {cwd: REPO});
+    if (shell.type !== 'build.kit') throw new Error(shell.type);
+    expect(shell.data.start?.basis).toBe('fallback');
+    expect(shell.data.start).not.toHaveProperty('fit');
+    // The word tables do not list the template this starts from, so it has no
+    // fit.
+    const unlisted = await build('a table of orders', {cwd: REPO});
+    if (unlisted.type !== 'build.kit') throw new Error(unlisted.type);
+    expect(unlisted.data.start?.basis).not.toBe('fallback');
+    expect(unlisted.data.start).not.toHaveProperty('fit');
+  });
+
+  it('reads a clear page pick at or above CLEAR_FIT and a loose one below it', async () => {
+    const {CLEAR_FIT} = await import('./kit/start.mjs');
+    const clear = await build('a kanban board for sprint tasks', {cwd: REPO});
+    if (clear.type !== 'build.kit') throw new Error(clear.type);
+    expect(clear.data.start?.fit).toBeGreaterThanOrEqual(CLEAR_FIT);
+    const loose = await build(
+      'a page for a sports team with fixtures, results and the squad',
+      {cwd: REPO},
+    );
+    if (loose.type !== 'build.kit') throw new Error(loose.type);
+    expect(loose.data.start?.basis).not.toBe('fallback');
+    expect(loose.data.start?.fit).toBeLessThan(CLEAR_FIT);
+  });
+
   it('does not start from a page that matched one incidental word', async () => {
     // A work-item detail page mentions a feed in its description. That is a
     // worse start for a news feed than the app shell.
