@@ -1291,6 +1291,33 @@ describe('Stepper', () => {
       expect(screen.getAllByRole('listitem')).toHaveLength(4);
     });
 
+    it.each(['separated', 'on-track'] as const)(
+      'gives the summary description its theme target (%s)',
+      indicatorPosition => {
+        atWidth(
+          320,
+          <Stepper activeStep={1} indicatorPosition={indicatorPosition}>
+            <Step step={0} label="Cart" />
+            <Step
+              step={1}
+              label="Shipping"
+              description="Where it goes"
+              status="error"
+            />
+            <Step step={2} label="Delivery" />
+            <Step step={3} label="Payment" />
+          </Stepper>,
+        );
+        const summary = document.querySelector<HTMLElement>(SUMMARY);
+        expect(summary).not.toBeNull();
+
+        const description = within(summary!).getByText('Where it goes');
+        expect(description).toHaveClass('astryx-step-description');
+        expect(description).toHaveAttribute('data-progress', 'in-progress');
+        expect(description).toHaveAttribute('data-status', 'error');
+      },
+    );
+
     it('places the compact summary directly against the track', () => {
       atWidth(320, fourSteps({}));
       const frame = document.querySelector<HTMLElement>(FRAME);
