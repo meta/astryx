@@ -90,6 +90,13 @@ function scaffold() {
   writeDoc(docsDir, guide('orchard', 'press-cider', 'Make apple juice'));
   writeDoc(docsDir, guide('orchard', 'store-fruit', 'Keep the harvest'));
   writeDoc(docsDir, guide('cellar', 'fruit-store', 'Keep the harvest cool'));
+  writeDoc(
+    docsDir,
+    guide('cellar', 'start-here', 'Set up the racks', [
+      'set up',
+      'quick start',
+    ]),
+  );
 }
 
 /**
@@ -185,6 +192,28 @@ describe('a docs miss named by words', () => {
       // The list is still every child of the namespace the route reaches.
       const none = await read('orchard/zzzz-nope');
       expect([...names].sort()).toEqual([...routes(none)].sort());
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps first the route the typed words name, ahead of pages that only share other words',
+    async () => {
+      for (const typed of ['set-up-orchard', 'orchard quick start']) {
+        const error = await read(typed);
+        expect(error.code, typed).toBe('ERR_UNKNOWN_TOPIC');
+        expect(routes(error)[0], typed).toBe('orchard');
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'suggests the page that declares the words when no route is named',
+    async () => {
+      const error = await read('racks set up');
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      expect(routes(error)[0]).toBe('cellar/start-here');
     },
     SLOW,
   );

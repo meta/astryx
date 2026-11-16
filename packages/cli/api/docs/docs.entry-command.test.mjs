@@ -229,23 +229,43 @@ describe('docs() for a name another command reads', () => {
   );
 
   it(
-    'keeps the docs that share a word after the command, one fewer',
+    'adds no doc that shares a word only by its title or keywords when a command leads',
     async () => {
-      const plain = await docs('theme-swatch', undefined, {cwd: bareDir}).catch(
-        e => e,
-      );
-      expect(plain.suggestions.length).toBeGreaterThan(1);
-      const error = await docs('theme-swatch', undefined, {cwd: tmpDir}).catch(
+      const error = await docs('zorblet-card', undefined, {cwd: tmpDir}).catch(
         e => e,
       );
       expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
       expect(error.suggestions).toEqual([
         {
-          name: 'astryx component ThemeSwatch',
-          reason: 'a component, not a docs topic',
+          name: 'astryx component ZorbletCard',
+          reason: expect.stringContaining('not a docs topic'),
         },
-        ...plain.suggestions.slice(0, -1),
       ]);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps the docs that share a word after the command, one fewer',
+    async () => {
+      const error = await docs('theme-swatch', undefined, {cwd: tmpDir}).catch(
+        e => e,
+      );
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      const [command, ...rest] = error.suggestions;
+      expect(command).toEqual({
+        name: 'astryx component ThemeSwatch',
+        reason: 'a component, not a docs topic',
+      });
+      // The topics and namespaces that share a word follow, never a page
+      // found only by its title or keywords.
+      expect(rest.length).toBeGreaterThan(0);
+      for (const suggestion of rest) {
+        expect(suggestion.name).toContain('theme');
+        expect(['available topic', 'docs namespace']).toContain(
+          suggestion.reason,
+        );
+      }
       for (const suggestion of error.suggestions) {
         expect(Object.keys(suggestion).sort()).toEqual(['name', 'reason']);
       }

@@ -289,11 +289,7 @@ describe('docs() dispatcher routing', () => {
 
   it('an unknown flat topic is cut where the matches get weaker', async () => {
     const error = await docs('authoring-at-meta').catch(e => e);
-    const names = error.suggestions.map(s => s.name);
-    // The broader page comes first, and none of its children repeat it.
-    expect(names[0]).toBe('authoring');
-    expect(names.some(name => name.startsWith('authoring/'))).toBe(false);
-    expect(names.length).toBeLessThanOrEqual(5);
+    expect(error.suggestions.map(s => s.name)).toEqual(['authoring']);
     // One-letter words do not narrow it: `a11y` keeps the whole browse list.
     const browse = await docs('zzzz-nope').catch(e => e);
     const a11y = await docs('a11y').catch(e => e);

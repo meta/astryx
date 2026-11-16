@@ -86,6 +86,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   carriesTypedWord,
+  nameWords,
   orderDocSuggestions,
   orderRouteSuggestions,
   typedWordTest,
@@ -2223,8 +2224,8 @@ const WORD_MATCH_SUGGESTIONS = 5;
 /**
  * The docs whose route, title or declared keywords carry a typed word, closest
  * first and cut where the matches get weaker (orderDocSuggestions): `theming`
- * names the topic titled Theming. At most as many as a component miss
- * suggests. An experimental doc is never suggested for a word.
+ * names the topic titled Theming. An experimental doc is never suggested for a
+ * word.
  * @param {DocsTree} tree
  * @param {string} topic
  * @returns {Array<{name: string, reason: string}>}
@@ -2238,25 +2239,73 @@ function wordMatches(tree, topic) {
         !isExperimentalTreeNode(tree, node),
     )
     .map(node => ({name: node.route, reason: node.summary}));
-  return orderDocPages(tree, topic, named, true).slice(
+  return orderDocPages(tree, topic, named, true);
+}
+
+/**
+ * Whether the typed text holds every word of a route: the route is named,
+ * by its leading path segments (`widgets/quick-start` names `widgets`) or its
+ * whole spelling inside the text (`set-up-widgets` names `widgets`).
+ * @param {string} topic
+ * @param {string} route
+ * @returns {boolean}
+ */
+function namesRoute(topic, route) {
+  const typed = new Set(nameWords(topic));
+  const words = nameWords(route);
+  return words.length > 0 && words.every(word => typed.has(word));
+}
+
+/**
+ * A list ordered by words, with the route the first list leads with kept
+ * first when the typed text names it: a word ordering never demotes a route
+ * the reader typed.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} first the list as route words order it
+ * @param {T[]} byWords the same docs or others, ordered by words
+ * @returns {T[]}
+ */
+function namedFirst(topic, first, byWords) {
+  const lead = first[0];
+  if (lead == null || !namesRoute(topic, lead.name)) return byWords;
+  return [lead, ...byWords.filter(entry => entry.name !== lead.name)];
+}
+
+/**
+ * The word matches that take the place of the every-doc list: the named route
+ * that list leads with stays first, and the list is never longer than the one
+ * it replaces, nor than {@link WORD_MATCH_SUGGESTIONS} with `taken` entries
+ * already before it.
+ * @param {string} topic
+ * @param {Array<{name: string, reason: string}>} everyDoc ordered and cut
+ * @param {Array<{name: string, reason: string}>} byWords
+ * @param {number} taken
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function fewerWordMatches(topic, everyDoc, byWords, taken) {
+  return namedFirst(topic, everyDoc, byWords).slice(
     0,
-    WORD_MATCH_SUGGESTIONS,
+    Math.min(everyDoc.length, WORD_MATCH_SUGGESTIONS - taken),
   );
 }
 
 /**
  * The error for a docs argument that names nothing. For a route, it suggests
  * every child of the deepest namespace the route reaches, closest first by
- * each child's route, title and keywords. Otherwise it suggests the docs
- * whose name or route the argument spells, when more than one does; failing
- * that, the docs whose route, title or declared keywords carry a typed word
- * ({@link wordMatches}); failing that, the topics and top-level namespaces,
+ * each child's route, title and keywords, with a child the route names kept
+ * first. Otherwise it suggests the docs whose own name it is, or whose route
+ * it spells with hyphens; failing that, the topics and top-level namespaces,
  * closest first and cut where the matches get weaker (every one of them when
  * none shares a word with the argument). When the argument matches a component, hook or template
  * (exact, folded or last segment), the command that reads that entry joins the list as
  * foundation/suggest/other-command.mjs places it, and the list keeps its
  * length; when no suggested doc
  * shares a word with the argument, that command is the only suggestion.
+ * When no command joins, the docs whose route, title or declared keywords
+ * carry a typed word ({@link wordMatches}) take the place of the topics and
+ * namespaces, the named route that list leads with first, in a list no
+ * longer than the one they replace.
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
  * @param {{cwd?: string}} [options]
@@ -2288,27 +2337,18 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     }
   }
   if (suggestions.length === 0 && typeof topic === 'string') {
-    // The docs whose own name or route it spells (`doctor` is
-    // cli/commands/doctor, `theme-build` is the command doc `theme build`)
-    // when more than one does, so the read could not pick one.
-    const spells = spelledBy(topic);
+    // The docs whose own name it is (`doctor` is cli/commands/doctor), or whose
+    // route it spells with hyphens (`cli-host-entry` is cli/host-entry).
+    const wanted = topic.toLowerCase();
     suggestions = [...tree.nodes.values()]
       .filter(
         node =>
-          spells != null &&
           !node.ref?.flatTopic &&
-          (spells(node.name) || spells(node.route)) &&
-          !isExperimentalTreeNode(tree, node),
+          (node.name.toLowerCase() === wanted ||
+            node.route.replaceAll('/', '-').toLowerCase() === wanted),
       )
       .map(node => ({name: node.route, reason: node.summary}));
   }
-  // The docs a typed word names by their route, title or keywords, already
-  // in order.
-  const byWords =
-    suggestions.length === 0 && typeof topic === 'string'
-      ? wordMatches(tree, topic)
-      : [];
-  if (byWords.length > 0) suggestions = byWords;
   // Every topic and namespace: the list a name no doc shares a word with gets.
   let everyDoc = false;
   if (suggestions.length === 0) {
@@ -2321,20 +2361,31 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
     ];
   }
   if (typeof topic === 'string' && routeChildren) {
-    suggestions = orderDocPages(tree, topic, suggestions, false);
-  } else if (typeof topic === 'string' && byWords.length === 0) {
+    suggestions = namedFirst(
+      topic,
+      orderRouteSuggestions(topic, suggestions, {closest: false}),
+      orderDocPages(tree, topic, suggestions, false),
+    );
+  } else if (typeof topic === 'string') {
     suggestions = orderRouteSuggestions(topic, suggestions, {closest: true});
   }
+  // In place of the every-doc list: the docs a typed word names by their
+  // route, title or keywords.
+  const byWords =
+    everyDoc && typeof topic === 'string' ? wordMatches(tree, topic) : [];
   // A route that moved names where it went, ahead of the usual suggestions
   // (spec:AST-046 FR9, FR6).
   const moved = movedRoute(topic, tree);
   if (moved) {
+    const after = (/** @type {Array<{name: string, reason: string}>} */ list) =>
+      list.filter(entry => entry.name !== moved.route);
+    const rest =
+      byWords.length > 0
+        ? fewerWordMatches(String(topic), after(suggestions), after(byWords), 1)
+        : after(suggestions);
     return new AstryxError(
       `Unknown topic "${String(topic)}". It moved to "${moved.route}"${notLoaded(catalog)}`,
-      [
-        {name: moved.route, reason: moved.summary},
-        ...suggestions.filter(entry => entry.name !== moved.route),
-      ],
+      [{name: moved.route, reason: moved.summary}, ...rest],
       ERROR_CODES.ERR_UNKNOWN_TOPIC,
     );
   }
@@ -2361,6 +2412,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
         })
       : null;
   if (hint && elsewhere) {
+    // Another command's entry leads; word matches never join its list.
     const sharesAWord =
       !everyDoc ||
       suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
@@ -2369,6 +2421,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
         from: 'docs',
         alone: !sharesAWord,
       }) ?? [];
+  } else if (byWords.length > 0) {
+    suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
   }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,
