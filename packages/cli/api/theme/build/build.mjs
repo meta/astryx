@@ -6827,6 +6827,8 @@ async function buildFamily(
   const rootBases = new Map();
   /** The receipt's account of that base. @type {{theme: string, package: string | null, export: string | null} | null} */
   let familyBase = null;
+  /** The root whose base it is, for the text line. */
+  let familyBaseOf = '';
   for (const member of members) {
     if (!member.unselectedBase) continue;
     // The root's own `extends`, and where its binding comes from: an import
@@ -6839,6 +6841,7 @@ async function buildFamily(
       !path.isAbsolute(binding.importPath)
         ? binding
         : null;
+    familyBaseOf = member.theme.name;
     familyBase = {
       theme: member.unselectedBase,
       package: fromPackage ? packageOfSpecifier(fromPackage.importPath) : null,
@@ -7028,6 +7031,13 @@ async function buildFamily(
   }
   writeBuildOutputs(writes);
   for (const output of Object.values(outputs)) logger.log(`[ok] ${output}`);
+  // The base the outputs require, as the receipt's `base` says it.
+  if (familyBase)
+    logger.log(
+      familyBase.package
+        ? `  requires ${familyBase.package} (${familyBase.export}) for ${familyBaseOf}'s base ${familyBase.theme}`
+        : `  ${familyBaseOf}'s base ${familyBase.theme} is a local theme${familyBase.export ? ` (${familyBase.export})` : ''} the family does not select`,
+    );
   const themeBindings = members.map(member => bindings.get(member.theme.name));
   // From the outputs' project root, whatever folder the build ran in: the
   // snippet is relative to a file in that project's src/.

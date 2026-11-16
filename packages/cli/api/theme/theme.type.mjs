@@ -31,7 +31,11 @@
  * `warnings` are defects the theme author should fix. `notices` are advisories
  * about a correct theme — most of them cannot be fixed in a theme file at all,
  * so folding them into `warnings` makes a clean build look dirty.
- * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[]}} data
+ * `base`, on a `--family` build only, is the theme the family's root extends
+ * that the family does not select: `package` is the installed package it comes
+ * from, a requirement of the outputs (null for a local base), and `export` the
+ * name the root imports it by (null for a theme the root's file defines).
+ * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[], base?: {theme: string, package: string | null, export: string | null}}} data
  */
 
 /**

@@ -182,6 +182,10 @@ describe('a family whose root extends a base the family does not select', () => 
       package: '@fixture/base-theme',
       export: 'baseTheme',
     });
+    // The text says the same, as the receipt does.
+    expect(r.lines.join('\n')).toContain(
+      "requires @fixture/base-theme (baseTheme) for ocean's base base",
+    );
   });
 
   it('a family whose root extends nothing, or only selected themes, has no base in its receipt', async () => {
@@ -206,6 +210,7 @@ describe('a family whose root extends a base the family does not select', () => 
     );
     expect(r.err).toBeUndefined();
     expect(r.result.data.base).toBeUndefined();
+    expect(r.lines.join('\n')).not.toContain('requires');
     expect(Object.hasOwn(r.result.data, 'base')).toBe(false);
   });
 
@@ -235,6 +240,9 @@ describe('a family whose root extends a base the family does not select', () => 
       package: null,
       export: 'sharedTheme',
     });
+    expect(r.lines.join('\n')).toContain(
+      "ocean's base shared is a local theme (sharedTheme) the family does not select",
+    );
     expect(fs.readFileSync(path.join(dir, 'fam/k.css'), 'utf8')).toContain(
       '#654321',
     );
