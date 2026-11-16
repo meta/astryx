@@ -13,10 +13,18 @@
 export {
   NavigationScreen,
   NavigationStack,
+  useNavigationScreen,
+  useNavigationScroller,
   useNavigationStack,
 } from './NavigationStack';
+export {useNavigationLink} from './useNavigationLink';
+export type {NavigationLinkProps} from './useNavigationLink';
 export type {
+  NavigationChangeOptions,
   NavigationScreenProps,
+  NavigationScreenState,
+  NavigationScroller,
   NavigationStackApi,
   NavigationStackProps,
+  NavigationTransition,
 } from './NavigationStack';
