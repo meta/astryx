@@ -2,7 +2,7 @@
 
 'use client';
 
-import {Fragment, useState, useMemo, useEffect} from 'react';
+import {Fragment, useState, useMemo} from 'react';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Layout, LayoutHeader, LayoutContent} from '@astryxdesign/core/Layout';
 import {TopNav} from '@astryxdesign/core/TopNav';
@@ -21,6 +21,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {useHotkeys} from '@astryxdesign/core/hooks';
 import {
   PlayIcon,
   MagnifyingGlassIcon,
@@ -182,16 +183,12 @@ export default function ShellNav() {
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const searchSource = useMemo(() => createStaticSource(COMMANDS), []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsPaletteOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Both combos on every platform, as the page has always accepted.
+  const openPalette = () => setIsPaletteOpen(true);
+  useHotkeys([
+    {keys: 'meta+k', onPress: openPalette, allowInInputs: true},
+    {keys: 'ctrl+k', onPress: openPalette, allowInInputs: true},
+  ]);
 
   return (
     <>
