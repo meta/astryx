@@ -73,7 +73,7 @@
  * @property {object} data
  * @property {string} data.query
  * @property {boolean} data.hasResults False when search returned nothing. The kit still names a template in `start`.
- * @property {number} data.matchCount Total ranked search matches for the query — counted before the search `limit`, the kit's score floors, and its per-group caps, so it is never a cap read back.
+ * @property {number} data.matchCount Total ranked search matches for the query — counted before the search `limit`, the kit's score floors, and its per-group caps, so it is never a cap read back. It is search's own total, so it also counts page templates that are not ready yet.
  * @property {boolean} data.directMatch True when the first entry of `pages` is search's confident direct match. Build reads only ready page templates from search, so a template that is not ready yet is never the direct match.
  * @property {BuildStart | null} data.start The page template to start from (see `BuildStart.basis`), else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search that build could start from (≤3): a template the catalog holds as not ready is left out. Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.

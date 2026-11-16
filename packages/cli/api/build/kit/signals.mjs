@@ -178,7 +178,8 @@ export async function kitSignals(query, options = {}) {
   // The TOTAL number of matches, not the number that survived `limit`. The kit
   // below is deliberately small (≤3 pages, ≤5 blocks, ≤6 components) and
   // `results` is itself capped, so every other count here is a cap; this is the
-  // one field that says how much the query actually matched.
+  // one field that says how much the query actually matched. It is search's
+  // own total, so it also counts not-ready page templates that match.
   const matchCount = result.data.matchCount;
 
   /**
@@ -194,11 +195,12 @@ export async function kitSignals(query, options = {}) {
     return (coverage?.matched ?? 0) / total >= PAGE_COVERAGE;
   };
 
-  // Build starts only from ready page templates, so only search's ready page
-  // matches steer the start: a template not ready yet is no direct match, does
-  // not hold back the shell lift, and is never listed. The one exception is
-  // the reason: when the idea names a not-ready template that search matched
-  // directly, the reason says it is not ready yet.
+  // Build starts only from ready page templates, and the kit reads only
+  // search's other results: a template not ready yet is no direct match, does
+  // not hold back the shell lift, is never listed, and takes no place from a
+  // page, block or component. The one exception is the reason: when the idea
+  // names a not-ready template that search matched directly, the reason says
+  // it is not ready yet.
   /** @param {SearchResultEntry} r */
   const pageMatch = r =>
     r.domain === 'template' &&
