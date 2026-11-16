@@ -15,7 +15,11 @@
  *   not found. A resolved entry is already real.
  */
 
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {persistedSummary} from '../fs/gather-cache.mjs';
+import {loadedFiles} from '../fs/loaded-files.mjs';
+import {fileStamp} from '../fs/read-record.mjs';
 
 const require = createRequire(import.meta.url);
 const CSS_TREE = require.resolve('css-tree');
@@ -47,3 +51,62 @@ let selectors = null;
  */
 export const mdnCssSelectors = () =>
   (selectors ??= fromCssTree('mdn-data/css/selectors.json'));
+
+/**
+ * What `answer` gives for `inputs`, a function of them, css-tree and the MDN
+ * data it ships alone. The answer is kept beside the kept gathers
+ * (fs/gather-cache.mjs persistedSummary) and read back, with no css-tree
+ * loaded, while the inputs and every file of css-tree's code and data that
+ * worked it out are unchanged.
+ * @template T
+ * @param {string} kind what the answer is
+ * @param {string[]} inputs
+ * @param {(inputs: string[]) => T} answer
+ * @returns {T}
+ */
+export function keptCssTreeAnswer(kind, inputs, answer) {
+  let current = false;
+  return persistedSummary(
+    [
+      'css-tree-answer',
+      kind,
+      createHash('sha256').update(JSON.stringify(inputs)).digest('hex'),
+    ],
+    () => {
+      const value = answer(inputs);
+      /** @type {[string, string][]} */
+      const stamps = cssTreeFiles().map(file => {
+        if (!loadedStamps.has(file)) loadedStamps.set(file, fileStamp(file));
+        return [file, /** @type {string} */ (loadedStamps.get(file))];
+      });
+      // Kept only while the files are still those this process loaded:
+      // after a reinstall, the answer is the old css-tree's.
+      current = stamps.every(([file, stamp]) => fileStamp(file) === stamp);
+      return {value, stamps};
+    },
+    {keep: () => current},
+  );
+}
+
+/**
+ * Each file of css-tree's code and data this process has read, with its
+ * stamp when the process first found it loaded.
+ * @type {Map<string, string>}
+ */
+const loadedStamps = new Map();
+
+/**
+ * Every file of css-tree's code that is loaded, and each MDN data file it
+ * has read, for a kept answer worked out with them.
+ * @returns {string[]}
+ */
+function cssTreeFiles() {
+  const data = [
+    'mdn-data/css/properties.json',
+    'mdn-data/css/selectors.json',
+  ].map(file => fromCssTree.resolve(file));
+  return [
+    ...loadedFiles([CSS_TREE]),
+    ...data.filter(file => fromCssTree.cache[file] !== undefined),
+  ];
+}

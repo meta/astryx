@@ -16,7 +16,10 @@
  *           the same values.
  */
 
-import {cssTree} from '../../../foundation/runtime/css-tree.mjs';
+import {
+  cssTree,
+  keptCssTreeAnswer,
+} from '../../../foundation/runtime/css-tree.mjs';
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isBlock = value =>
@@ -80,12 +83,14 @@ function tokenValueProblem(key, value, reads) {
  * not start with exactly two dashes (`-color-accent`, `---color-border`),
  * or an empty value.
  * @param {string} key @param {unknown} value
+ * @param {(name: string) => boolean} isProperty whether a name is a CSS
+ *   property's
  */
-function tokenNameProblem(key, value) {
+function tokenNameProblem(key, value, isProperty) {
   if (value === undefined) return null;
   // A CSS property set on the theme's root (Core sets color-scheme on a
   // surface) styles it; any other name is no declaration a browser reads.
-  if (!key.startsWith('--') && key in cssTree().lexer.properties) return null;
+  if (!key.startsWith('--') && isProperty(key)) return null;
   if (!key.startsWith('--'))
     return `${key} is no token name: the build writes it as a declaration on the theme's root, which no browser reads as a token; a token name starts with two dashes, such as --${key.replace(/^-+/, '')}`;
   if (key.startsWith('---'))
@@ -157,6 +162,56 @@ export function cycleProblem(name, values) {
  * @returns {WrittenValueProblem[]}
  */
 export function writtenValueProblems(theme, {reads} = {}) {
+  /** @type {Array<{surface: any, at: string[]}>} */
+  const surfaces = [
+    {surface: theme, at: []},
+    {surface: theme.onDark ?? theme.__onDark, at: ['onDark']},
+    {surface: theme.onLight ?? theme.__onLight, at: ['onLight']},
+  ];
+  const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
+  if (Array.isArray(rules))
+    rules.forEach((rule, i) =>
+      surfaces.push({
+        surface: rule?.value,
+        at: ['adaptations', 'rules', String(i), 'value'],
+      }),
+    );
+  /**
+   * A surface's tokens or local tokens: a defined theme's tokens are
+   * resolved (a pair is already its light-dark() text); the ones its author
+   * wrote are `__inputTokens`.
+   * @param {any} surface @param {string} map
+   */
+  const valuesOf = (surface, map) =>
+    map === 'tokens' && '__inputTokens' in surface
+      ? surface.__inputTokens
+      : surface[map];
+  /** @param {any} surface */
+  const judged = surface => isBlock(surface) && !('__built' in surface);
+
+  // The token names that are no custom property's, which only css-tree
+  // tells apart: a CSS property's, or no token's.
+  /** @type {Set<string>} */
+  const plainNames = new Set();
+  for (const {surface} of surfaces) {
+    if (!judged(surface)) continue;
+    for (const map of ['tokens', 'localTokens']) {
+      const values = valuesOf(surface, map);
+      if (isBlock(values))
+        for (const [k, v] of Object.entries(values))
+          if (v !== undefined && !k.startsWith('--')) plainNames.add(k);
+    }
+  }
+  const names = [...plainNames].sort();
+  const properties = new Set(
+    names.length === 0
+      ? []
+      : keptCssTreeAnswer('css-property-names', names, names =>
+          names.filter(name => name in cssTree().lexer.properties),
+        ),
+  );
+  const isProperty = (/** @type {string} */ name) => properties.has(name);
+
   /** @type {WrittenValueProblem[]} */
   const out = [];
   /** @param {any} node @param {string[]} at @param {number} depth */
@@ -181,25 +236,22 @@ export function writtenValueProblems(theme, {reads} = {}) {
     );
   /** @param {any} surface @param {string[]} at */
   const visit = (surface, at) => {
-    if (!isBlock(surface) || '__built' in surface) return;
-    // A defined theme's tokens are resolved (a pair is already its
-    // light-dark() text); the ones its author wrote are `__inputTokens`.
-    /** @param {string} map */
-    const valuesOf = map =>
-      map === 'tokens' && '__inputTokens' in surface
-        ? surface.__inputTokens
-        : surface[map];
+    if (!judged(surface)) return;
     // Tokens and local tokens are set on the same element.
     const onElement = {
-      ...(isBlock(valuesOf('localTokens')) ? valuesOf('localTokens') : {}),
-      ...(isBlock(valuesOf('tokens')) ? valuesOf('tokens') : {}),
+      ...(isBlock(valuesOf(surface, 'localTokens'))
+        ? valuesOf(surface, 'localTokens')
+        : {}),
+      ...(isBlock(valuesOf(surface, 'tokens'))
+        ? valuesOf(surface, 'tokens')
+        : {}),
     };
     for (const map of ['tokens', 'localTokens']) {
-      const values = valuesOf(map);
+      const values = valuesOf(surface, map);
       if (isBlock(values))
         for (const [k, v] of Object.entries(values)) {
           const why =
-            tokenNameProblem(k, v) ??
+            tokenNameProblem(k, v, isProperty) ??
             tokenValueProblem(k, v, reads) ??
             cycleProblem(k, onElement);
           if (why) out.push({path: [...at, map, k], why});
@@ -211,13 +263,6 @@ export function writtenValueProblems(theme, {reads} = {}) {
           for (const [key, rules] of Object.entries(styles))
             part(rules, [...at, 'components', name, key], 0);
   };
-  visit(theme, []);
-  visit(theme.onDark ?? theme.__onDark, ['onDark']);
-  visit(theme.onLight ?? theme.__onLight, ['onLight']);
-  const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
-  if (Array.isArray(rules))
-    rules.forEach((rule, i) =>
-      visit(rule?.value, ['adaptations', 'rules', String(i), 'value']),
-    );
+  for (const {surface, at} of surfaces) visit(surface, at);
   return out;
 }
