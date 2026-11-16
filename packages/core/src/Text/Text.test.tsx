@@ -675,6 +675,52 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       }
     });
 
+    it('opens the tooltip on the next hover when text that changed to fit is cut off by a resize', async () => {
+      const {showPopover, restore} = withOverflowAndPopover();
+      try {
+        function Changing({label}: {label: string}) {
+          return (
+            <TextMeasureOnInterestContext value={true}>
+              <Text type="body" maxLines={1}>
+                {label}
+              </Text>
+            </TextMeasureOnInterestContext>
+          );
+        }
+        const {rerender} = render(<Changing label={LABEL} />);
+        const text = screen.getByText(LABEL);
+        setWidths(text, 400);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+        await waitFor(
+          () => {
+            expect(showPopover).toHaveBeenCalled();
+          },
+          {timeout: 3000},
+        );
+        fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+        fireEvent.mouseLeave(text);
+        // The data changes to text that fits; the tooltip goes.
+        setWidths(text, 80);
+        rerender(<Changing label="Short" />);
+        await waitFor(() => {
+          expect(text).not.toHaveAttribute('aria-describedby');
+        });
+        // A column resize cuts it off, with no content change.
+        showPopover.mockClear();
+        setWidths(text, 400);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        await waitFor(
+          () => {
+            expect(showPopover).toHaveBeenCalled();
+          },
+          {timeout: 3000},
+        );
+      } finally {
+        restore();
+      }
+    });
+
     it('measures again at each hover, so text that stops fitting shows its tooltip', async () => {
       render(
         <TextMeasureOnInterestContext value={true}>

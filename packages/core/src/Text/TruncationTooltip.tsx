@@ -77,7 +77,8 @@ export interface TruncationTooltipInterest {
 
 /**
  * Tracks the interaction that mounts a truncated element's tooltip, while
- * `isEnabled`, until the mounted tooltip reads it. A finger's arrival does not
+ * `isEnabled` or, with `measure`, while the interaction measures the text
+ * truncated, until the mounted tooltip reads it. A finger's arrival does not
  * count: only a press that the touch trigger's recognizer takes for a tap
  * does. Once the tooltip has read the interaction, its own listeners take
  * over.
@@ -121,19 +122,16 @@ export function useTruncationTooltipInterest(
     isRead: false,
   });
   const tapRecognizer = useTapRecognizer();
-  // Text that measures on interest can stop fitting after its tooltip read an
-  // interaction: the tooltip unmounted while the text fit, and the one that
-  // mounts again reads the next interaction.
-  const wasTruncatedRef = useRef(false);
+  // A tooltip that read an interaction unmounts while the text fits. When the
+  // text is cut off again, the next tooltip reads the next interaction.
   const measureInterest = useCallback((): boolean => {
     if (measure == null) {
       return isEnabled;
     }
     const isTruncated = measure();
-    if (isTruncated && !wasTruncatedRef.current) {
+    if (isTruncated && !isEnabled) {
       interestRef.current.isRead = false;
     }
-    wasTruncatedRef.current = isTruncated;
     return isTruncated;
   }, [isEnabled, measure]);
   const want = useCallback(
