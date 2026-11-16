@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Button|Banner|Field)/
+// @pr-a11y scope ^packages/core/src/(Button|Banner|Field|Timestamp)/
 
 /**
  * @file ButtonTooltipInName.a11y.chromium.spec.ts
  * @input Uses @astryxdesign/a11y-spec (the Chromium harness and the static
- *   Storybook server) and the checked-in Banner and TextInput stories
+ *   Storybook server) and the checked-in Banner, TextInput and Timestamp
+ *   stories
  * @output Proves in the accessibility tree that a Core Button whose name
  *   contains its short tooltip exposes no description, while the tooltip
  *   still shows on hover
@@ -81,3 +82,24 @@ for (const {part, storyId, name, tooltip} of CASES) {
     ).toBeVisible();
   });
 }
+
+test('Timestamp\'s copy button is named once: its "Copy" tooltip shows but adds no description', async ({
+  page,
+}) => {
+  await mountStory(page, 'core-timestamp--per-entry-copyable');
+  // Focus opens the hover card; the next Tab reaches its copy button.
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  const button = page.getByRole('button', {name: /^Copy /});
+  await expect(button).toBeFocused();
+  const cdp = await page.context().newCDPSession(page);
+  const computed = await (
+    await createChromiumHarness({page, subject: button, cdp}).subject()
+  ).computed();
+
+  expect(computed.name).toMatch(/^Copy \S/);
+  expect(computed.description).toBe('');
+  await expect(
+    page.getByRole('tooltip').filter({hasText: /^Copy$/}),
+  ).toBeVisible();
+});
