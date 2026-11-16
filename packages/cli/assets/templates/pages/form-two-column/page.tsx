@@ -94,7 +94,7 @@ export default function FormTwoColumnPage() {
       <Section maxWidth={1100} width="100%" padding={10} variant="transparent">
         <VStack gap={10}>
           {/* Two-column; stacks to one column below ~520px. */}
-          <Grid columns={{minWidth: 320}} align="center" gap={10}>
+          <Grid columns={{minWidth: 320, max: 2}} align="center" gap={10}>
             <VStack gap={6}>
               <VStack gap={3}>
                 <Text type="display-1" as="h1">

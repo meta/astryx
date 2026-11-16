@@ -315,9 +315,11 @@ const CONTROL_ROW = 28; // one row of size="sm" buttons
 const COLUMN_GAP = 12; // the column's gap={3}
 
 // The dropzone column next to the thumbnail. flexBasis:0 lets it shrink below
-// its intrinsic width instead of pushing the row wider than the form measure.
+// its intrinsic width instead of pushing the row wider than the form measure;
+// the floor makes it wrap under the cover once it would be narrower than the
+// cover itself, so its buttons keep their labels on a phone.
 // StackItem already resets min-width, so that half of the job is done for us.
-const coverColumn: CSSProperties = {flexBasis: 0};
+const coverColumn: CSSProperties = {flexBasis: 0, minWidth: COVER_WIDTH};
 // Fills what the buttons beneath it leave, so the column ends level with the
 // cover. A definite height rather than `height: 100%` or a flex-grow, because
 // Field sizes its control to content: there is no resolved height above the
@@ -728,28 +730,32 @@ export default function FormWizardVerticalPage() {
                     types. */}
                 <Text type="label">Publish audiobook</Text>
               </StackItem>
-              <Button
-                label="Cancel"
-                variant="ghost"
-                onClick={() =>
-                  // Demo only: replace this toast with the call that performs the action.
-                  showToast({
-                    body: 'Demo: leaving the audiobook flow would return you to the app here',
-                    uniqueID: 'cancel-audiobook',
-                  })
-                }
-              />
-              <Button
-                label="Save & exit"
-                variant="secondary"
-                onClick={() =>
-                  // Demo only: replace this toast with the call that saves the draft.
-                  showToast({
-                    body: 'Demo: the draft would be saved here',
-                    uniqueID: 'save-exit',
-                  })
-                }
-              />
+              <StackItem>
+                <Button
+                  label="Cancel"
+                  variant="ghost"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: leaving the audiobook flow would return you to the app here',
+                      uniqueID: 'cancel-audiobook',
+                    })
+                  }
+                />
+              </StackItem>
+              <StackItem>
+                <Button
+                  label="Save & exit"
+                  variant="secondary"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that saves the draft.
+                    showToast({
+                      body: 'Demo: the draft would be saved here',
+                      uniqueID: 'save-exit',
+                    })
+                  }
+                />
+              </StackItem>
             </HStack>
             {!hasRail && headerStepper}
           </VStack>
