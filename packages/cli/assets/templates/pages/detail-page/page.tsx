@@ -416,10 +416,7 @@ function InvoiceCard() {
             </HStack>
           </StackItem>
           <HStack gap={2}>
-            <Button
-              label="Refund"
-              variant="ghost"
-            />
+            <Button label="Refund" variant="ghost" />
             <Button
               label="Send Invoice"
               variant="secondary"
