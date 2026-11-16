@@ -292,15 +292,16 @@ describe('asks it used to drop', () => {
       expect(pop.first.join('\n')).toMatch(
         /light-dark\(rgba\(0, 0, 0, 0\.1\), transparent\).*0 4px 12px light-dark\(transparent, #00000080\)' --on popover$/,
       );
-      // (What a context menu shows in the other mode is unknown here: Core
+      // (What a trigger menu shows in the other mode is unknown here: Core
       // draws it only once a press opens it, so a one-mode shadow that would
       // blank it is refused with that reason.)
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
       const menu = await answer(
-        'context-menu shadow 0 4px 12px #00000080 in dark mode',
+        'trigger-menu shadow 0 4px 12px #00000080 in dark mode',
       );
       expect(menu.first).toEqual([]);
       expect(menu.text).toMatch(
-        /what context-menu shows in light mode is unknown/,
+        /what trigger-menu shows in light mode is unknown/,
       );
       // A card shows no shadow at rest (its selection ring is a state of
       // its own): the light half is transparent too.
@@ -315,8 +316,9 @@ describe('asks it used to drop', () => {
   it(
     'a shadow on a part that shows none it can read is a change',
     async () => {
-      expect((await answer('context-menu shadow bigger')).first).toEqual([
-        "set q box-shadow 'var(--shadow-high)' --on context-menu",
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      expect((await answer('trigger-menu shadow bigger')).first).toEqual([
+        "set q box-shadow 'var(--shadow-high)' --on trigger-menu",
       ]);
     },
     T,

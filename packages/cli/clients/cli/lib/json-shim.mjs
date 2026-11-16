@@ -327,14 +327,261 @@ function unknownGroupWord(group) {
   let root = group;
   while (root.parent) root = root.parent;
   const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv);
-  const words = argv.slice(2).filter(w => !String(w).startsWith('-'));
-  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
-  const next = words[chain.length];
   const names = group.commands.flatMap((/** @type {any} */ c) => [
     c.name(),
     ...c.aliases(),
   ]);
+  // The words that are no option, and no option's value: the word after an
+  // option the group does not read is its value unless it names one of the
+  // group's subcommands (`preview --theme t`: t is --theme's).
+  /** @type {string[]} */
+  const words = [];
+  const typed = argv.slice(2).map(String);
+  for (let i = 0; i < typed.length; i++) {
+    const w = typed[i];
+    if (!w.startsWith('-')) {
+      words.push(w);
+      continue;
+    }
+    const next = typed[i + 1];
+    if (
+      words.length >= chain.length &&
+      !w.includes('=') &&
+      next != null &&
+      !next.startsWith('-') &&
+      !names.includes(next)
+    )
+      i++;
+  }
+  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
+  const next = words[chain.length];
   return next != null && !names.includes(next) ? next : null;
+}
+
+/**
+ * Options typed after a group with no subcommand at all (`preview --theme
+ * t`, `editor --mode light`): each option as typed, with its value, and the
+ * subcommands that take every one of them; null when a word that is no
+ * option's value follows (an unknown subcommand) or a subcommand does.
+ * @param {any} group
+ * @returns {{group: string, typed: string[], takers: any[]} | null}
+ */
+function optionsWithoutSubcommand(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv)
+    .slice(2)
+    .map(String);
+  let at = 0;
+  for (const word of chain) {
+    while (at < argv.length && argv[at] !== word) at++;
+    if (at === argv.length) return null;
+    at++;
+  }
+  const rest = argv.slice(at);
+  if (!rest.length || !rest[0].startsWith('-')) return null;
+  const subs = /** @type {any[]} */ (group.commands);
+  /** @type {string[]} */
+  const flags = [];
+  /** @type {string[]} */
+  const typed = [];
+  for (let i = 0; i < rest.length; i++) {
+    const token = rest[i];
+    // A word that is no option's value: a subcommand or an unknown word,
+    // which other readers name.
+    if (!token.startsWith('-')) return null;
+    const [flag, inline] = token.split(/=(.*)/su);
+    const program = (root.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+    const next = rest[i + 1];
+    const value =
+      inline ??
+      (next != null &&
+      !next.startsWith('-') &&
+      !(program && !(program.required || program.optional)) &&
+      !subs.some(c => c.name() === next || c.aliases().includes(next))
+        ? rest[++i]
+        : undefined);
+    // The program's own options (`--json`) are read wherever they are.
+    if (program) continue;
+    flags.push(flag);
+    typed.push(
+      value === undefined ? flag : `${flag} ${quoteCommandArgument(value)}`,
+    );
+  }
+  if (!typed.length) return null;
+  const takers = subs.filter(c =>
+    flags.every(f =>
+      (c.options ?? []).some(
+        (/** @type {any} */ o) => o.long === f || o.short === f,
+      ),
+    ),
+  );
+  return {group: chain.join(' '), typed, takers};
+}
+
+/**
+ * Options typed before a group's real subcommand (`preview --theme t list`,
+ * `editor --mode light set t accent red`): the subcommand, the options it
+ * takes (each with its value, where it takes one) and the ones it does not,
+ * and the command with those it takes moved after it; null when no word after
+ * the options is one of the group's subcommands. An option's value is never
+ * read as a subcommand.
+ * @param {any} group
+ * @returns {{sub: string, line: string, moved: string[], dropped: string[]} | null}
+ */
+function optionsBeforeSubcommand(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv).slice(2);
+  // The group's own words, in order, then what follows them.
+  let at = 0;
+  for (const word of chain) {
+    while (at < argv.length && argv[at] !== word) at++;
+    if (at === argv.length) return null;
+    at++;
+  }
+  const rest = argv.slice(at);
+  if (!rest.length || !String(rest[0]).startsWith('-')) return null;
+  const subs = /** @type {any[]} */ (group.commands);
+  /** The command a list of commands names by a word. @param {any[]} list @param {unknown} w */
+  const named = (list, w) =>
+    list.find(c => c.name() === w || c.aliases().includes(w));
+  /** @type {any} */
+  let sub = null;
+  let index = -1;
+  /** The subcommand words from the group's own on (`editor set`). @type {string[]} */
+  let subWords = [];
+  let end = -1;
+  /**
+   * The command the words from rest[i] on name: a subcommand, into a nested
+   * group (`theme --mode dark editor set …`) as far as the words go; null
+   * when rest[i] names none.
+   * @param {number} i
+   */
+  const resolve = i => {
+    const first = String(rest[i]).startsWith('-') ? null : named(subs, rest[i]);
+    if (!first) return null;
+    let target = first;
+    const words = [first.name()];
+    let j = i + 1;
+    while (target.commands?.length && named(target.commands, rest[j])) {
+      target = named(target.commands, rest[j]);
+      words.push(target.name());
+      j++;
+    }
+    return {target, words, end: j};
+  };
+  /** Whether a command takes a flag with a value. @param {any} cmd @param {string} flag */
+  const takesValue = (cmd, flag) =>
+    (cmd.options ?? []).some(
+      (/** @type {any} */ o) =>
+        (o.long === flag || o.short === flag) && (o.required || o.optional),
+    );
+  for (let i = 1; i < rest.length && !sub; i++) {
+    const found = resolve(i);
+    if (!found) continue;
+    // The word straight after an option that this command, or a later one
+    // named after it, takes with a value is that value (`--on set set t …`,
+    // `--on show set t …`), never the subcommand.
+    const prev = String(rest[i - 1]);
+    if (prev.startsWith('-') && !prev.includes('=')) {
+      let valued = takesValue(found.target, prev);
+      for (let k = i + 1; !valued && k < rest.length; k++) {
+        const later = resolve(k);
+        if (later && takesValue(later.target, prev)) valued = true;
+      }
+      if (valued) continue;
+    }
+    sub = found.target;
+    index = i;
+    subWords = found.words;
+    end = found.end;
+  }
+  if (!sub) return null;
+  /** @type {string[]} */
+  const moved = [];
+  /** @type {string[]} */
+  const dropped = [];
+  // The program's own options (`--json`) are read wherever they are typed:
+  // never moved, named, or carried into the line.
+  const own = (/** @type {string} */ flag) =>
+    (root.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+  const before = rest.slice(0, index);
+  for (let i = 0; i < before.length; i++) {
+    const token = String(before[i]);
+    if (!token.startsWith('-')) continue;
+    const [flag, inline] = token.split(/=(.*)/su);
+    const program = own(flag);
+    if (program) {
+      if ((program.required || program.optional) && inline == null) i++;
+      continue;
+    }
+    const opt = (sub.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+    // The word after an option is its value when the option takes one, or
+    // when no subcommand reads it (it is not an option itself).
+    const next = before[i + 1];
+    const takesValue = opt
+      ? Boolean(opt.required || opt.optional)
+      : next != null && !String(next).startsWith('-');
+    const value =
+      inline ??
+      (takesValue && next != null && !String(next).startsWith('-')
+        ? String(before[++i])
+        : undefined);
+    const typed =
+      value === undefined ? flag : `${flag} ${quoteCommandArgument(value)}`;
+    (opt ? moved : dropped).push(typed);
+  }
+  /** @type {string[]} */
+  const after = [];
+  const tail = rest.slice(end).map(String);
+  for (let i = 0; i < tail.length; i++) {
+    const program = own(tail[i].split('=')[0]);
+    if (program) {
+      if ((program.required || program.optional) && !tail[i].includes('=')) i++;
+      continue;
+    }
+    after.push(quoteCommandArgument(tail[i]));
+  }
+  const line = [
+    getCliInvocation(process.cwd()),
+    ...chain,
+    ...subWords,
+    ...after,
+    ...moved,
+  ].join(' ');
+  return {sub: [...chain, ...subWords].join(' '), line, moved, dropped};
+}
+
+/**
+ * Whether a parse error came from a theme editor or preview command, whose
+ * missing-argument message names what was given.
+ * @param {unknown} err
+ */
+function isEditorCommand(err) {
+  const parts = [];
+  for (
+    let node = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+    node;
+    node = node.parent
+  )
+    parts.unshift(node.name());
+  return (
+    parts.slice(1, 3).join(' ') === 'experimental theme' &&
+    ['editor', 'preview'].includes(parts[3])
+  );
 }
 
 /**
@@ -357,6 +604,20 @@ function usageSuggestion(err, code) {
     ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
+  // An experimental theme command missing its argument (`experimental
+  // theme compile`): its usage and help, as the project runs the CLI.
+  // Stable commands (`theme build`) keep their output as released.
+  if (
+    code === 'commander.missingArgument' &&
+    parts.slice(1, 3).join(' ') === 'experimental theme'
+  ) {
+    const words = parts.slice(1).join(' ');
+    const invocation = getCliInvocation(process.cwd());
+    return [
+      {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
+  }
   if (code !== 'commander.optionMissingArgument') return undefined;
   // The command's usage with the option in it, as it takes its value
   // (`astryx theme build --out <path> <files...>`).
@@ -439,8 +700,32 @@ export function setEditorThemeList(list) {
 }
 
 /**
+ * The options a command was given on its command line, as they were typed
+ * (`--on card --mode dark --only`), so a line offered for it keeps them:
+ * dropped, a line for one part or mode would change the whole theme.
+ * @param {any} cmd the Commander command
+ * @returns {string} the options, or ''
+ */
+function typedOptions(cmd) {
+  /** @type {string[]} */
+  const out = [];
+  for (const opt of cmd?.options ?? []) {
+    const key = opt.attributeName();
+    if (cmd.getOptionValueSource?.(key) !== 'cli') continue;
+    const value = cmd.getOptionValue(key);
+    const flag = opt.long ?? opt.short;
+    if (typeof value === 'boolean') out.push(flag);
+    else
+      for (const v of Array.isArray(value) ? value : [value])
+        out.push(`${flag} ${quoteCommandArgument(String(v))}`);
+  }
+  return out.join(' ');
+}
+
+/**
  * The theme editor's usage and help suggestions for a missing argument, as
- * the project runs the CLI.
+ * the project runs the CLI. A line that names the missing word keeps the
+ * options typed (typedOptions).
  * @param {any} cmd
  * @returns {Array<{name: string, reason: string}>}
  */
@@ -449,6 +734,9 @@ function editorMissingSuggestions(cmd) {
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
   const words = parts.slice(1).join(' ');
   const invocation = getCliInvocation(process.cwd());
+  const typed = typedOptions(cmd);
+  const withTyped = (/** @type {string} */ line) =>
+    typed ? `${line} ${typed}` : line;
   // No theme named, and the app has exactly one editor theme: the command
   // on that theme, when the theme is all it takes.
   const wants = (cmd?.registeredArguments ?? []).filter(
@@ -465,7 +753,7 @@ function editorMissingSuggestions(cmd) {
     if (themes.length === 1)
       return [
         {
-          name: `${invocation} ${words} ${themes[0]}`,
+          name: withTyped(`${invocation} ${words} ${themes[0]}`),
           reason: `do this instead: ${themes[0]} is the theme here`,
         },
         {
@@ -483,7 +771,9 @@ function editorMissingSuggestions(cmd) {
     if (themes.length === 1 && !given.includes(themes[0]))
       return [
         {
-          name: `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          name: withTyped(
+            `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          ),
           reason: `do this instead: ${themes[0]} is the theme here`,
         },
         {
@@ -502,7 +792,7 @@ function editorMissingSuggestions(cmd) {
   if (free)
     return [
       {
-        name: `${invocation} ${words} ${free.word}`,
+        name: withTyped(`${invocation} ${words} ${free.word}`),
         reason: `do this instead: ${free.reason}`,
       },
       {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
@@ -718,6 +1008,67 @@ export function handleCommanderError(err) {
   const chain = [];
   for (let node = group; node?.parent; node = node.parent)
     chain.unshift(node.name());
+  // Options typed before one of the group's subcommands: the subcommand is
+  // what was meant, with the options it takes after it.
+  const early =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? optionsBeforeSubcommand(group)
+      : null;
+  if (early) {
+    const help = `${getCliInvocation(process.cwd())} ${early.sub} --help`;
+    return finishParseError(err, code, message, exitCode, {
+      message: early.dropped.length
+        ? `${early.dropped.join(', ')} ${early.dropped.length > 1 ? 'are' : 'is'} typed before ${early.sub}, which takes no such option.`
+        : `${early.moved.join(', ')} ${early.moved.length > 1 ? 'go' : 'goes'} after the subcommand: ${early.sub} takes ${early.moved.length > 1 ? 'them' : 'it'} there.`,
+      suggestions: [
+        {
+          name: early.line,
+          reason: early.dropped.length
+            ? `do this instead: without ${early.dropped.join(', ')}${early.moved.length ? `, with ${early.moved.join(', ')} after the subcommand` : ''}`
+            : 'do this instead: the options after the subcommand',
+        },
+        {name: help, reason: 'the options it takes'},
+      ],
+    });
+  }
+  // Options with no subcommand at all (`preview --theme t`): no option's
+  // value is a subcommand; the subcommands that take them are named.
+  const bare =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? optionsWithoutSubcommand(group)
+      : null;
+  if (bare) {
+    const inv = getCliInvocation(process.cwd());
+    const these = bare.typed.join(' ');
+    const many = bare.typed.length > 1;
+    return finishParseError(err, code, message, exitCode, {
+      message: bare.takers.length
+        ? `${bare.typed.join(', ')} ${many ? 'are' : 'is'} typed with no subcommand of ${bare.group}; ${bare.takers.map(c => c.name()).join(', ')} ${bare.takers.length > 1 ? 'take' : 'takes'} ${many ? 'them' : 'it'}.`
+        : `${bare.group} needs a subcommand, and none of its subcommands takes ${bare.typed.join(', ')}.`,
+      suggestions: [
+        // A subcommand that needs nothing more runs with the options; one
+        // that needs its own words shows them.
+        ...bare.takers.slice(0, 3).map(c =>
+          (c.registeredArguments ?? []).some(
+            (/** @type {any} */ a) => a.required,
+          )
+            ? {
+                name: `${inv} ${bare.group} ${c.name()} --help`,
+                reason: `${c.name()} takes ${these}; what else it needs`,
+              }
+            : {
+                name: `${inv} ${bare.group} ${c.name()} ${these}`,
+                reason: `do this instead: ${c.name()} with ${these}`,
+              },
+        ),
+        {name: `${inv} ${bare.group} --help`, reason: 'its subcommands'},
+      ],
+    });
+  }
   const word =
     code === 'commander.unknownOption' &&
     group?.commands?.length &&
@@ -849,7 +1200,9 @@ function finishParseError(err, code, message, exitCode, read, errorCode) {
   // would name the wrong thing.
   const cleaned = answer
     ? answer.message
-    : code === 'commander.missingArgument' && suggestions?.length === 2
+    : code === 'commander.missingArgument' &&
+        suggestions?.length === 2 &&
+        isEditorCommand(err)
       ? editorMissingMessage(err, message)
       : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {

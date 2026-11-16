@@ -94,7 +94,9 @@ describe('what a change says', () => {
       expect(see).toMatch(/show t --png writes themes\/t\/preview\.png/);
       expect(see).toContain('themes/t/sheet-overlays.png');
       const at = lines.findIndex(l =>
-        /^missed: +\d+ parts? the theme's changes did not reach/.test(l),
+        /^missed: +\d+ miss(es)? on \d+ parts? the theme's changes did not reach/.test(
+          l,
+        ),
       );
       expect(at).toBeGreaterThan(-1);
       expect(at).toBeLessThan(6);
@@ -114,7 +116,9 @@ describe('what a change says', () => {
       const out = (await runCli([...ED, 'show', 't'], {cwd})).stdout
         .trimEnd()
         .split('\n');
-      const at = out.findIndex(l => /^missed \(\d+ parts?/.test(l));
+      const at = out.findIndex(l =>
+        /^missed \(\d+ miss(es)? on \d+ parts?/.test(l),
+      );
       expect(at).toBeGreaterThan(-1);
       // The generated files stay last, right after the missed block.
       const files = out.findIndex(l => /^colorFiles:/.test(l));

@@ -73,9 +73,9 @@ describe('a weight or style word typed with a typo after a known family', () => 
       ]);
   }, 240_000);
 
-  it('is refused for a style word too, never saved as a family of that name', async () => {
-    expect(await offered('Courier New Itallic')).toContain(
-      `font '"Courier New Itallic"'`,
+  it('is refused for a style word too, answered as the exact word is', async () => {
+    expect(await offered('Courier New Itallic')).toEqual(
+      await offered('Courier New Italic'),
     );
   }, 120_000);
 });
