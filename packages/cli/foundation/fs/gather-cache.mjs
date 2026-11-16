@@ -34,8 +34,9 @@
  *   `theme build` finds when it checks a theme's pseudo-class keys and token
  *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), each kept
  *   while every path it
- *   stamped but the CLI's own files (which its build id covers) is
- *   unchanged, in any command. The commands whose runs keep the other
+ *   stamped but the CLI's own files (which its build id and the folder it
+ *   runs from, both in every entry's key, stand for) is unchanged, in any
+ *   command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
@@ -584,6 +585,18 @@ function entryFile(dir, key, id) {
   return path.join(dir, `gather-${hash}.json`);
 }
 
+/** @type {string | undefined} */
+let cliFolderAnswer;
+
+/**
+ * The real path of the folder this CLI runs from, once per process: a copy
+ * installed in another folder (a patched one) keeps its own entries.
+ * @returns {string}
+ */
+function cliFolder() {
+  return (cliFolderAnswer ??= withoutRecording(() => realDir(CLI_ROOT)));
+}
+
 /**
  * Everything an entry is for, as text: stored in the entry and compared on
  * every read, so an entry copied under another entry's name is not used.
@@ -594,7 +607,8 @@ function entryFile(dir, key, id) {
 function entryKey(key, id) {
   return JSON.stringify([
     FORMAT,
-    id,
+    // The build and the folder it runs from stand for the CLI's own files.
+    [id, cliFolder()],
     process.version,
     process.platform,
     process.arch,
@@ -633,6 +647,7 @@ function staleReason(stamps, env) {
   // The environment as it is, never through the run's recording proxy:
   // checking an entry is no read the run's own gathers depend on.
   const real = run?.realEnv ?? process.env;
+  const own = CLI_ROOT + path.sep;
   for (const [name, value] of env) {
     const current = name.startsWith(PRESENCE)
       ? presenceState(real, name.slice(PRESENCE.length))
@@ -644,6 +659,10 @@ function staleReason(stamps, env) {
     }
   }
   for (const [file, state] of stamps) {
+    // The CLI's own files are the build id's and the CLI's folder's to stand
+    // for (both are in the entry's key), as for a summary: they are kept
+    // for the code a derived value depends on, never checked one by one.
+    if (file.startsWith(own)) continue;
     if (!stillInState(file, state)) {
       return 'a file or folder it read changed';
     }

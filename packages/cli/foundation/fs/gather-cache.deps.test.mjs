@@ -45,9 +45,9 @@ vi.mock('./paths.mjs', async importOriginal => ({
 let cache;
 const savedCache = process.env.XDG_CACHE_HOME;
 const STORE = path.join(TEMP_ROOT, 'cache', 'astryx', 'catalogs');
-// Under the CLI's root, so its files count as the CLI's own, which a value
-// derived from a kept gather keys on.
-const DATA = path.join(FAKE_CLI_ROOT, 'data');
+// Outside the CLI's root: a kept entry checks these files on every read,
+// while the CLI's own files are its build id's to stand for.
+const DATA = path.join(TEMP_ROOT, 'data');
 
 const identity = {
   encode: (/** @type {any} */ value) => value,
@@ -315,8 +315,9 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
               identity,
             );
           }
+          // Keyed by what it is worked out from, as search's entry table is.
           const derived = cache.persistedDerived(
-            ['shared-test', 'derived'],
+            ['shared-test', 'derived', last],
             () => {
               ran.push('derived');
               return last.length;
