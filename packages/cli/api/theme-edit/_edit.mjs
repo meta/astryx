@@ -6786,10 +6786,33 @@ async function changeOnce(
           (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0] === k,
         ),
     );
-    if (followers.length)
+    // The parts the base theme draws from a follower besides its own
+    // token (neutral's progress and switch tracks, from the emphasized
+    // border) move with it too.
+    /** @param {string} token */
+    const drawnFrom = token =>
+      Object.entries(
+        /** @type {{components?: Record<string, Record<string, unknown>>}} */ (
+          base
+        ).components ?? {},
+      )
+        .filter(([, keys]) =>
+          Object.values(keys).some(
+            b =>
+              b &&
+              typeof b === 'object' &&
+              Object.values(b).some(
+                v => typeof v === 'string' && v.includes(`var(${token})`),
+              ),
+          ),
+        )
+        .map(([t]) => t);
+    if (followers.length) {
+      const also = [...new Set(followers.flatMap(drawnFrom))];
       notes.push(
-        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'the frames of inputs and selectors, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"}); an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
+        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'the frames of inputs and selectors, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"})${also.length ? `, and so do the parts the base theme draws from ${followers.length === 1 ? 'it' : 'them'}: ${also.join(', ')}` : ''}; an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
       );
+    }
   }
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.

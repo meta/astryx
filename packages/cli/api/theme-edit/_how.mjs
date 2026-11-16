@@ -1038,14 +1038,45 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   );
   const group = familyOf(key);
   const states = settableStates(ctx, env.slug, env.data, key);
+  // A token the base theme points at another one on the part or a part
+  // around it (neutral's progress track reads the muted fill, which it
+  // points at the emphasized border there): that token is what it shows.
+  const blocks =
+    /** @type {{components?: Record<string, Record<string, Record<string, unknown>>>}} */ (
+      env.base
+    ).components ?? {};
+  const around = [
+    key,
+    ...Object.keys(C.MAP).filter(t => C.MAP[t]?.contains?.includes(key)),
+  ];
+  /** @param {string} token */
+  const pointedAt = token => {
+    for (const t of around) {
+      const v = blocks[t]?.base?.[token];
+      const to =
+        typeof v === 'string'
+          ? /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1]
+          : null;
+      if (to) return {token: to, on: t};
+    }
+    return null;
+  };
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
-      C.partReads(key, g).map(r => ({
-        token: r.token,
-        props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
-      })),
+      C.partReads(key, g).map(r => {
+        const to = r.token ? pointedAt(r.token) : null;
+        return {
+          token: r.token,
+          ...(to
+            ? {
+                shows: `${to.token} (the ${env.data.like ?? 'base'} theme points ${r.token} at it on ${to.on})`,
+              }
+            : {}),
+          props: r.props,
+          when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
+        };
+      }),
     ]),
   );
   const components = [
