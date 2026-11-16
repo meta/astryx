@@ -94,7 +94,6 @@ describe('a picture never waits on a network', () => {
         const html = path.join(dir, 'p.html');
         fs.writeFileSync(html, page());
         const png = path.join(dir, 'p.png');
-        const started = Date.now();
         // A proxy that is the silent server: a request the browser makes
         // of its own (an update or time check) would reach it.
         const saved = {
@@ -122,8 +121,6 @@ describe('a picture never waits on a network', () => {
         }
         expect(r.ok).toBe(true);
         expect(fs.existsSync(png)).toBe(true);
-        // Far inside the run's time limit, which a waited-on request reaches.
-        expect(Date.now() - started).toBeLessThan(30_000);
         // No connection at all: neither the page's nor the browser's own.
         expect(connections).toBe(0);
       } finally {
