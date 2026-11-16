@@ -14,7 +14,6 @@ import {
   isDefinedTheme,
 } from './defineTheme';
 import {resolveThemeToken} from './tokens';
-import {getRegisteredTheme} from './themeRegistry';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -329,39 +328,29 @@ describe('defineTheme', () => {
     expect(theme.tokens['--color-accent']).toBe('light-dark(#0077B6, #48CAE4)');
   });
 
-  it('defines a plain-object base before merging it, as its own input is', () => {
+  it('refuses a plain-object base, which defineTheme() has not built', () => {
     const plainBase = {
       name: 'plain-base',
       tokens: {'--color-accent': ['#ffffff', '#000000']},
-      typography: {body: {family: 'Lato'}},
     };
-    const child = defineTheme({
-      name: 'plain-base-child',
-      extends: plainBase as unknown as DefinedTheme,
-    });
-    expect(child.tokens['--color-accent']).toBe('light-dark(#ffffff, #000000)');
-    const definedBase = defineTheme(plainBase as DefineThemeInput);
-    const fromDefined = defineTheme({
-      name: 'plain-base-child',
-      extends: definedBase,
-    });
-    expect(child.tokens).toEqual(fromDefined.tokens);
-    expect(child.__inputTokens).toEqual(fromDefined.__inputTokens);
-  });
-
-  it('leaves the theme registered under a plain base name as it was', () => {
-    const real = defineTheme({
-      name: 'registered-base',
-      tokens: {'--color-accent': '#123456'},
-    });
-    defineTheme({
-      name: 'registered-base-child',
-      extends: {
-        name: 'registered-base',
-        tokens: {'--color-accent': '#abcdef'},
-      },
-    });
-    expect(getRegisteredTheme('registered-base')).toBe(real);
+    expect(() =>
+      defineTheme({
+        name: 'plain-base-child',
+        extends: plainBase as unknown as DefinedTheme,
+      }),
+    ).toThrow(/`extends` must be a theme from defineTheme\(\)/);
+    expect(() =>
+      defineTheme({
+        name: 'plain-base-child',
+        extends: {name: 'plain-base', tokens: {}},
+      }),
+    ).toThrow(/`extends` must be a theme from defineTheme\(\)/);
+    expect(
+      defineTheme({
+        name: 'defined-base-child',
+        extends: defineTheme(plainBase as DefineThemeInput),
+      }).tokens['--color-accent'],
+    ).toBe('light-dark(#ffffff, #000000)');
   });
 
   it('passes through string values as-is', () => {

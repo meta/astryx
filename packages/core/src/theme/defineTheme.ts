@@ -712,25 +712,19 @@ export const tokenDefaults: Record<string, string> = {
 // =============================================================================
 
 /**
+ * Whether a theme carries a field only defineTheme() writes (`__inputTokens`,
+ * always present on its result) or a built theme module's `__built`. A plain
+ * object with a name and tokens is theme input, not a theme: its values are
+ * not built (a light/dark pair is still an array), so it is no base.
+ */
+function isBuiltTheme(theme: DefinedTheme): boolean {
+  return '__inputTokens' in theme || theme.__built === true;
+}
+
+/**
  * Describe a rejected `extends` value for the error message — enough to tell a
  * missed import (`undefined`) from a module namespace or a plain object.
  */
-/**
- * Whether a value is a theme input written as a plain object, not a theme
- * defineTheme() returned: it has a name, and none of the private fields
- * (`__inputTokens`, `__built`) a defined or built theme carries.
- */
-function isPlainThemeInput(value: unknown): value is DefineThemeInput {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof (value as {name?: unknown}).name === 'string' &&
-    !('styles' in value) &&
-    !Object.keys(value).some(key => key.startsWith('__'))
-  );
-}
-
 function describeBadBase(value: unknown): string {
   if (value === undefined) {
     return 'undefined';
@@ -828,42 +822,23 @@ export function defineTheme<
 >(
   input: DefineThemeInput<IconVariants, Base>,
 ): ResolvedDefinedTheme<ThemeIconVariant<IconVariants, Base>> {
-  const theme = buildTheme(input);
-  registerTheme(theme);
-  return theme;
-}
-
-/**
- * The theme defineTheme() returns, not registered: a plain-object base is
- * built through it so the base never takes the name of a theme registered
- * for other callers.
- */
-function buildTheme<
-  const IconVariants extends ReadonlyArray<string> | undefined = undefined,
-  Base extends DefinedTheme | undefined = undefined,
->(
-  input: DefineThemeInput<IconVariants, Base>,
-): ResolvedDefinedTheme<ThemeIconVariant<IconVariants, Base>> {
   // Pre-seed from the base theme when `extends` is provided (lowest precedence).
   // A base that is not a theme is refused rather than ignored: `extends` used
   // to inherit nothing when its value was undefined, which is what a named
   // import silently resolving to the wrong module hands over, and the theme
   // then built into a plausible-looking stylesheet missing everything it was
   // supposed to inherit.
-  // A base written as a plain theme input (light/dark pairs, typography, its
-  // own extends) is first defined the way this theme's own input is, so its
-  // values merge as built values, never as raw input.
-  const given: unknown = input.extends;
-  const base = isPlainThemeInput(given)
-    ? (buildTheme(given) as DefinedTheme as Base)
-    : input.extends;
-  if ('extends' in input && !isDefinedTheme(base)) {
+  if (
+    'extends' in input &&
+    !(isDefinedTheme(input.extends) && isBuiltTheme(input.extends))
+  ) {
     throw new Error(
       `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got ${describeBadBase(input.extends)}. ` +
         `Check that the import naming your base theme resolves to its source and exports that name — ` +
         `a generated \`<theme>.js\` artifact sitting next to the source exports \`<name>Theme\`, not the source's own export.`,
     );
   }
+  const base = input.extends;
 
   // The theme's own value axes and the resolved base an `extends` supplies.
   // The same axis metadata is retained so adaptation rules can complete partial
@@ -1020,6 +995,7 @@ function buildTheme<
     __axes,
   };
 
+  registerTheme(theme);
   return theme;
 }
 
