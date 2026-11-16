@@ -737,9 +737,7 @@ export default function DashboardTemplate() {
       height="fill"
       content={
         <LayoutContent padding={6}>
-          <VisuallyHidden>
-            <Heading level={1}>Dashboard</Heading>
-          </VisuallyHidden>
+          <VisuallyHidden as="h1">Dashboard</VisuallyHidden>
           <VStack gap={6}>
             {/* Active Users Chart */}
             <VStack gap={6}>
