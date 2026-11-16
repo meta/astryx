@@ -5,9 +5,9 @@
  *   installs them has them.
  * @input A linked fixture's path and the bundled theme names it needs.
  * @output An empty string, or why a theme could not be installed.
- * @position Test support. A checkout that built only Core has no theme
- *   `dist`: the theme is then built as its package build's theme step does,
- *   from its own source with its own installed packages.
+ * @position Test support. A checkout with no complete theme build, including
+ *   its separate icon registry, gets a fixture build from the theme's own
+ *   source with its own installed packages.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +34,11 @@ export async function installRealBaseThemes(cwd, likes) {
       `theme-${like}`,
     );
     fs.rmSync(link, {recursive: true, force: true});
-    if (fs.existsSync(path.join(own, 'dist', `${like}.js`))) {
+    // The theme step writes its module before the package's icon step.
+    if (
+      fs.existsSync(path.join(own, 'dist', `${like}.js`)) &&
+      fs.existsSync(path.join(own, 'dist', 'icons.mjs'))
+    ) {
       fs.symlinkSync(own, link, 'dir');
       continue;
     }
