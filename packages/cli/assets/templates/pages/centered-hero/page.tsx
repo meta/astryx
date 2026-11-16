@@ -11,8 +11,7 @@ import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Section} from '@astryxdesign/core/Section';
 import {ArrowRightIcon} from '@heroicons/react/20/solid';
 
-const IMAGE_URL =
-  '/template-assets/light-scene-horizontal-1.png';
+const IMAGE_URL = '/template-assets/light-scene-horizontal-1.png';
 
 const heroImage: CSSProperties = {
   width: '100%',
@@ -53,11 +52,12 @@ export default function CenteredHero() {
                 <Button
                   label="Get started"
                   variant="primary"
+                  href="#"
                   endContent={
                     <Icon icon={ArrowRightIcon} size="sm" color="inherit" />
                   }
                 />
-                <Button label="Learn more" variant="secondary" />
+                <Button label="Learn more" variant="secondary" href="#" />
               </HStack>
             </VStack>
             <Section variant="transparent" padding={0}>
