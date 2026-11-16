@@ -21,12 +21,10 @@
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {persistedSummary} from '../../../foundation/fs/gather-cache.mjs';
-import {
-  loadedFileStamps,
-  loadedFiles,
-} from '../../../foundation/fs/loaded-files.mjs';
+import {loadedCodeStamps} from '../../../foundation/fs/loaded-files.mjs';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
@@ -367,10 +365,12 @@ function compileModule(files, file, source, rewrite) {
         require.resolve('@babel/core'),
         ...options.plugins.map(([plugin]) => String(plugin)),
       ];
-      // Kept only while Babel's files are those this process loaded: after
-      // a reinstall, the JavaScript is the old Babel's.
-      const {stamps, unchangedSinceStart} = loadedFileStamps(
-        loadedFiles(roots),
+      // Kept only while Babel's files, and the package folders its
+      // modules were found in, are those this process loaded: after a
+      // reinstall, the JavaScript is the old Babel's.
+      const {stamps, unchangedSinceStart} = loadedCodeStamps(
+        fileURLToPath(import.meta.url),
+        roots,
       );
       current = unchangedSinceStart;
       return {value: code, stamps};

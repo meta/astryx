@@ -47,6 +47,9 @@ const babelAsked = vi.hoisted(() => ({count: 0}));
 /** Whether Babel's files read as a reinstall while this process runs left them, and when. */
 const reinstalled = vi.hoisted(() => ({now: false, at: 0}));
 
+/** Whether a reinstall pointed @babel/core at another copy of @babel/generator. */
+const relinked = vi.hoisted(() => ({now: false}));
+
 vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
   const real = /** @type {any} */ (await importOriginal());
   return {
@@ -60,6 +63,13 @@ vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
       const [size, , , ino] = stamp.split(':');
       return `${size}:${reinstalled.at}:${reinstalled.at}:${ino}`;
     },
+    // The old copy stays on disk; only the folder the lookup takes points
+    // elsewhere.
+    resolvedNow: (/** @type {string} */ file) =>
+      relinked.now &&
+      file.endsWith(path.join('node_modules', '@babel', 'generator'))
+        ? `real:${path.join(path.sep, 'another', '@babel', 'generator')}`
+        : real.resolvedNow(file),
   };
 });
 
@@ -193,6 +203,7 @@ beforeEach(() => {
   if (savedBabelEnv === undefined) delete process.env.BABEL_ENV;
   else process.env.BABEL_ENV = savedBabelEnv;
   reinstalled.now = false;
+  relinked.now = false;
 });
 
 afterAll(() => {
@@ -333,6 +344,27 @@ describe('the JavaScript a theme build compiles', () => {
       );
       expect({part, stamped}).toEqual({part, stamped: true});
     }
+  }, 60_000);
+
+  it('compiles again after a reinstall points @babel/core at another copy of one of its packages', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    build();
+    const [name] = keptCompiles();
+    const {stamps} = JSON.parse(
+      fs.readFileSync(path.join(STORE, name), 'utf8'),
+    );
+    // The folder @babel/core's lookup took for @babel/generator is stamped
+    // by the real path it resolves to.
+    expect(
+      stamps.some(
+        (/** @type {[string, string]} */ [file, stamp]) =>
+          file.endsWith(path.join('node_modules', '@babel', 'generator')) &&
+          stamp.startsWith('real:'),
+      ),
+    ).toBe(true);
+    expect(build().asked).toBe(0);
+    relinked.now = true;
+    expect(build().asked).toBe(2);
   }, 60_000);
 
   it('keeps nothing compiled by the Babel this process loaded once a reinstall changes its files', async () => {
