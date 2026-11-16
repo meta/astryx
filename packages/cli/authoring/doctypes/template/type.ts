@@ -188,9 +188,7 @@ export type TemplateCategory =
   | 'Tools - Page Editor'
   | 'Tools - IDE'
   | 'Tools - Incident Console'
-  | 'Tools - Run Console'
   | 'Tools - Kanban Board'
-  | 'Tools - Review Workspace'
   | 'Tools - Notebook/Report Page'
   | 'Tools - Diff Compare Viewer'
   | 'Tools - Search Results Page'
@@ -200,7 +198,6 @@ export type TemplateCategory =
   | 'Content - Product Detail'
   | 'Content - Work Item Detail'
   | 'Content - Course Detail'
-  | 'Content - Portal'
   | 'Content - Product List'
   | 'Content - Documentation Catalog'
   | 'Content - Documentation Design'
@@ -218,10 +215,6 @@ export type TemplateCategory =
   | 'Gallery - Mixed'
   | 'Gallery - Side'
   | 'Gallery - Product'
-  // Status
-  | 'Status - Not Found'
-  | 'Status - Access Denied'
-  | 'Status - Error'
   // Shell
   | 'Shell - Left Sidebar'
   | 'Shell - Top Nav'
