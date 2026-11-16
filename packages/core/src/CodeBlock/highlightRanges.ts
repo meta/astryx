@@ -137,9 +137,9 @@ function applyLineRanges(
     return;
   }
 
-  // The text node is the first child of the line div.
-  // In range mode, lines render plain text so this is always a Text node.
-  const textNode = lineDiv.firstChild;
+  // In range mode a line holds one content element (its dir="ltr" code)
+  // whose only child is the line's text.
+  const textNode = lineDiv.firstElementChild?.firstChild ?? null;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
     return;
   }
