@@ -5760,6 +5760,11 @@
       "name": "template-work-item-detail",
       "path": "templates/work-item-detail",
       "aliases": []
+    },
+    {
+      "name": "template-written-report",
+      "path": "templates/written-report",
+      "aliases": []
     }
   ]
 }

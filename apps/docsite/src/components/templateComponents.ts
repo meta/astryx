@@ -136,6 +136,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/welcome-portal/page'),
   'work-item-detail': () =>
     import('../../../../packages/cli/assets/templates/pages/work-item-detail/page'),
+  'written-report': () =>
+    import('../../../../packages/cli/assets/templates/pages/written-report/page'),
 };
 
 export const TEMPLATE_COMPONENTS: Record<
