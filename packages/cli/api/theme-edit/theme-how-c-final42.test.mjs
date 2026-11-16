@@ -66,21 +66,23 @@ const T = 300_000;
 
 describe('FINAL-42', () => {
   it.each([
-    "make the dropdown menu's separators red",
-    "make the menus' separators thicker",
-    'make the menu separators thicker',
+    [
+      "make the dropdown menu's separators red",
+      "--color-border '#dc2626' --on dropdown-menu-divider",
+    ],
+    [
+      "make the menus' separators thicker",
+      '--border-width 2px --on dropdown-menu-divider',
+    ],
+    [
+      'make the menu separators thicker',
+      '--border-width 2px --on dropdown-menu-divider',
+    ],
   ])(
-    '%s: the divider, never the menu painted or a refusal',
-    async (q, test) => {
+    "%s: the menu's own divider, never the menu painted nor every divider",
+    async (q, line, test) => {
       needsBases(test);
-      const r = await answer(q);
-      expect(r.first.length, q).toBeGreaterThan(0);
-      // (The menu's own divider when the census records its line, else
-      // every divider with the place note.)
-      for (const c of r.first)
-        expect(c, q).toMatch(/--on (?:dropdown-menu-)?divider\b/);
-      for (const c of r.all) expect(c, q).not.toMatch(/--on dropdown-menu\b/);
-      expect(r.text, q).not.toMatch(/couldn't work out/);
+      expect((await answer(q)).all, q).toEqual([line]);
     },
     T,
   );

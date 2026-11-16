@@ -5,7 +5,8 @@
  *       what Core builds from them.
  * @input A theme's raw `typography` input; the heading levels Core's input
  *        types take.
- * @output typographyValueProblem(): one field's problem; noLevelWhy() and
+ * @output typographyValueProblem(): one field's problem; isHeadingLevel():
+ *         a weights key as Core reads it; noLevelWhy() and
  *         noScaleWeightWhy(): the two block rules' reasons;
  *         typographyInputProblems(): every problem in a typography block.
  * @position Shared by the editor, which refuses each problem, and by theme
@@ -40,6 +41,62 @@ function describe(value) {
   }
 }
 
+/** The weight names Core reads as its weight tokens. */
+const CORE_WEIGHT_NAMES = ['normal', 'medium', 'semibold', 'bold'];
+
+/**
+ * Whether text is a weight the browser reads where Core writes it: one of
+ * Core's weight names, a CSS weight keyword in any case, a number from 1 to
+ * 1000, a global keyword, or a function (a var(), a calc()).
+ * @param {string} value
+ */
+function isFontWeight(value) {
+  const v = value.trim();
+  if (CORE_WEIGHT_NAMES.includes(v)) return true;
+  if (/^(normal|bold|bolder|lighter|inherit|initial|unset|revert)$/i.test(v))
+    return true;
+  if (/^[a-z-]+\(.*\)$/i.test(v)) return true;
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)(e[-+]?\d+)?$/i.test(v)) return false;
+  const n = Number(v);
+  return n >= 1 && n <= 1000;
+}
+
+/**
+ * Core's weight name a slip is near (`semi-bold` is semibold), or null.
+ * @param {string} value
+ */
+function nearWeightName(value) {
+  const flat = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '');
+  return CORE_WEIGHT_NAMES.find(n => n === flat) ?? null;
+}
+
+/**
+ * Why a weight given as text is no weight the browser reads, or null. The
+ * editor judges the same text as the weight token it builds; theme build
+ * judges it here.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function weightTextProblem(value) {
+  if (typeof value !== 'string' || isFontWeight(value)) return null;
+  const near = nearWeightName(value);
+  return `"${value.trim()}" is no font weight, so the browser drops the weight Core writes from it and the text keeps the weight around it: write a number from 1 to 1000 in quotes, ${CORE_WEIGHT_NAMES.join(', ')} (Core's weight names), or a weight token, such as ${near ? `'${near}'` : "'600'"}`;
+}
+
+/**
+ * Whether a key of a role's `weights` is a heading level as Core reads it:
+ * Core takes `Number(key)`, so `1`, `'01'` and `'1.0'` are all level 1.
+ * @param {string} key
+ * @param {string[]} levels
+ */
+export function isHeadingLevel(key, levels) {
+  const n = Number(String(key).trim());
+  return String(key).trim() !== '' && levels.includes(String(n));
+}
+
 /**
  * What is wrong with one typography field, or null. Core writes a family
  * as it is, in double quotes when it holds a space, so a family with a
@@ -53,17 +110,15 @@ function describe(value) {
  */
 export function typographyValueProblem(key, value) {
   const field = key.split('.').pop();
-  // A weight is a CSS value Core writes as it is: text, never a number.
-  if (
-    (field === 'weight' || key.split('.').includes('weights')) &&
-    typeof value !== 'string'
-  )
-    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describe(value)} is not text: write ${
-      // A CSS weight is 1 to 1000: any other number is no example.
-      typeof value === 'number' && value >= 1 && value <= 1000
-        ? `'${value}'`
-        : "'600'"
-    } (or a weight token, such as 'var(--font-weight-bold)')`;
+  // A weight is typed as text. A number is a type mismatch: the theme's
+  // types refuse it, while Core still writes a weight from 1 to 1000 that
+  // the browser reads.
+  if (field === 'weight' || key.split('.').includes('weights')) {
+    if (typeof value === 'number' && value >= 1 && value <= 1000)
+      return `a typography weight is text, and ${value} is a number: a type mismatch the theme's types refuse (Core still writes ${value}, which the browser reads as that weight); write '${value}' (or a weight token, such as 'var(--font-weight-bold)')`;
+    if (typeof value !== 'string')
+      return `a typography weight is text, and ${describe(value)} is ${typeof value === 'number' ? 'a number that is no weight (a weight is 1 to 1000)' : 'not text'}: a type mismatch the theme's types refuse, and no weight the browser reads; write '600' (or a weight token, such as 'var(--font-weight-bold)')`;
+  }
   if (field === 'family') {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
@@ -142,10 +197,10 @@ export const roleWeightTokens = role =>
  * is left to the field reader, which names it from the source.
  * @param {unknown} typography the raw `typography` input
  * @param {string[]} [levels] the heading levels Core's input takes
- * @returns {Array<{path: string[], why: string}>}
+ * @returns {Array<{path: string[], why: string, value: unknown}>}
  */
 export function typographyInputProblems(typography, levels = []) {
-  /** @type {Array<{path: string[], why: string}>} */
+  /** @type {Array<{path: string[], why: string, value: unknown}>} */
   const out = [];
   if (!typography || typeof typography !== 'object') return out;
   const t = /** @type {Record<string, any>} */ (typography);
@@ -163,16 +218,22 @@ export function typographyInputProblems(typography, levels = []) {
         for (const [level, w] of Object.entries(value)) {
           const key = `${block}.weights.${level}`;
           const why =
-            levels.length && !levels.includes(level)
+            levels.length && !isHeadingLevel(level, levels)
               ? noLevelWhy(level, levels, key)
-              : typographyValueProblem(key, w);
+              : (typographyValueProblem(key, w) ?? weightTextProblem(w));
           if (why)
-            out.push({path: ['typography', block, 'weights', level], why});
+            out.push({
+              path: ['typography', block, 'weights', level],
+              why,
+              value: w,
+            });
         }
         continue;
       }
-      const why = typographyValueProblem(`${block}.${field}`, value);
-      if (why) out.push({path: ['typography', block, field], why});
+      const why =
+        typographyValueProblem(`${block}.${field}`, value) ??
+        (field === 'weight' ? weightTextProblem(value) : null);
+      if (why) out.push({path: ['typography', block, field], why, value});
     }
   }
   if (!t.scale)
@@ -184,6 +245,7 @@ export function typographyInputProblems(typography, levels = []) {
         const key = `${role}.${field}`;
         out.push({
           path: ['typography', role, field],
+          value: r[field],
           why: noScaleWeightWhy(
             key,
             role,

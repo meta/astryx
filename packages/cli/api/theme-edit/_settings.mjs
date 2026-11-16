@@ -592,6 +592,48 @@ export function namesSettingAsTyped(text) {
 }
 
 /**
+ * The dial settings text holds, in any form set reads them: a JSON object
+ * (`{"accent":"red"}`), `key=value` or `key: value` pairs apart at `;`
+ * (`corners: pill; accent: red`), or `dial value` items apart at `,`
+ * (`accent red, corners pill`); null when it holds none, or anything else.
+ * @param {unknown} text
+ * @returns {Array<[string, string]> | null}
+ */
+export function dialSettingsInText(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  const dial = (/** @type {string} */ k) => {
+    const w = k.trim().toLowerCase();
+    return Object.hasOwn(DIALS, w) ? w : null;
+  };
+  if (/^\{/.test(t))
+    try {
+      const entries = Object.entries(JSON.parse(t));
+      return entries.length && entries.every(([k]) => dial(k))
+        ? entries.map(([k, v]) => [/** @type {string} */ (dial(k)), String(v)])
+        : null;
+    } catch {
+      return null;
+    }
+  const pairs = t
+    .split(/\s*;\s*/)
+    .filter(Boolean)
+    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x));
+  if (pairs.length && pairs.every(m => m && dial(m[1])))
+    return pairs.map(m => [
+      /** @type {string} */ (dial(/** @type {RegExpExecArray} */ (m)[1])),
+      /** @type {RegExpExecArray} */ (m)[2].trim(),
+    ]);
+  const items = t
+    .split(/\s*[,;]\s*/)
+    .map(x => x.trim().split(/\s+/))
+    .filter(x => x[0]);
+  return items.length && items.every(x => x.length > 1 && dial(x[0]))
+    ? items.map(x => [/** @type {string} */ (dial(x[0])), x.slice(1).join(' ')])
+    : null;
+}
+
+/**
  * The themes the editor made in the app (a settings file of its own), by
  * name, or with `changed` the one an editor command changed last first: the
  * undo history is written only by an editor command, so its time is the
@@ -943,6 +985,20 @@ export function loadTheme(
           .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
           .sort()
       : [];
+    // A theme here with a setting pasted onto it (`t=accent`, `t: accent`):
+    // that theme, never a new one named after both.
+    const head = String(slug ?? '').split(/\s*[=:]\s*|\s+/)[0];
+    if (
+      !same &&
+      head !== String(slug ?? '').trim() &&
+      slugOk(head) &&
+      fs.existsSync(themeFiles(cwd, head).settings)
+    )
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}); ${head} is a theme here.`,
+        {didYouMean: [head], run: [`${P} show ${head}`]},
+      );
     // Settings typed where the theme goes (`corners, accent`,
     // `corners:pill`, `{"corners":"pill"}`): never a theme to make or a
     // list of themes; each theme here is offered to look at.
@@ -960,13 +1016,20 @@ export function loadTheme(
       const existing = words.filter(
         w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
       );
+      // A list none of whose words is a theme here (a value, `Inter,
+      // Arial`) names no theme at all: a look at each theme here, never a
+      // new one named after a word of it.
       refuse(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
-        `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`,
+        existing.length
+          ? `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`
+          : `"${String(slug ?? '').slice(0, 80)}" names no theme here; the theme comes first.`,
         {
           run: existing.length
             ? existing.map(w => `${P} show ${w}`)
-            : [`${P} new ${words[0]}`],
+            : have.length
+              ? have.slice(0, 3).map(h => `${P} show ${h}`)
+              : [`${P} new ${words[0]}`],
         },
       );
     }
@@ -1722,35 +1785,74 @@ function entryFieldOf(k) {
 }
 
 /**
- * The keys of an entry that write a field it already holds the editor's
- * way (`Value` beside `value`), each with that field.
+ * Whether a saved entry is a twin, in other letters only, of a setting the
+ * theme holds (`Accent` beside `accent`) with a value that setting takes:
+ * that setting listed twice, which a change of it fixes, rather than
+ * damage its own undo removes (a twin in another form, `var(--x)`, or with
+ * a value the setting does not take).
+ * @param {any} s
+ * @param {string} read the setting's name as the editor writes it
+ * @param {any} data
+ */
+function twinInLetters(s, read, data) {
+  return (
+    s.thing.toLowerCase() === read.toLowerCase() &&
+    entryProblem({...s, thing: read}, data) == null
+  );
+}
+
+/**
+ * The keys of an entry grouped by the field each writes, in the order
+ * written; `setting` (the thing as the editor prints it) is the thing.
  * @param {any} entry
- * @returns {Array<{key: string, field: string}>}
+ * @returns {Map<string, string[]>}
+ */
+function entryFieldGroups(entry) {
+  /** @type {Map<string, string[]>} */
+  const groups = new Map();
+  for (const key of Object.keys(entry)) {
+    const field = entryFieldOf(key);
+    if (!field) continue;
+    const as = field === 'setting' ? 'thing' : field;
+    groups.set(as, [...(groups.get(as) ?? []), key]);
+  }
+  return groups;
+}
+
+/**
+ * The keys of an entry that write a field it writes another way too
+ * (`Value` beside `value`, `On` beside `--on`, `setting` beside `thing`),
+ * each with that field and the key that is read: the editor's own
+ * spelling, else the first written.
+ * @param {any} entry
+ * @returns {Array<{key: string, field: string, read: string}>}
  */
 export function entryFieldTwins(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-  return Object.keys(entry).flatMap(key => {
-    const field = entryFieldOf(key);
-    return field && field !== key && field in entry ? [{key, field}] : [];
+  return [...entryFieldGroups(entry)].flatMap(([field, keys]) => {
+    if (keys.length < 2) return [];
+    const read = keys.includes(field) ? field : keys[0];
+    return keys.filter(k => k !== read).map(key => ({key, field, read}));
   });
 }
 
 /**
  * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
  * or spelled as their flags (`--on`) read as those fields, as setting
- * names are read in any case; a field written both ways keeps the editor's
- * own, and the other spelling is dropped (entryFieldTwins names it).
+ * names are read in any case; a field written several ways is read once,
+ * from the key entryFieldTwins names, and the others are dropped.
  * Anything else as it is. The one reader for a typed entry and a saved one.
  * @param {any} entry
  * @returns {any}
  */
 export function entryFieldNames(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+  const dropped = new Set(entryFieldTwins(entry).map(t => t.key));
   return Object.fromEntries(
     Object.entries(entry).flatMap(([k, x]) => {
+      if (dropped.has(k)) return [];
       const field = entryFieldOf(k);
-      if (!field || field === k) return [[k, x]];
-      return field in entry ? [] : [[field, x]];
+      return [[field ?? k, x]];
     }),
   );
 }
@@ -1795,20 +1897,43 @@ function readTypedEntries(data, notes) {
     // A field written both ways is read the editor's way, and said; the
     // next save writes the entry once.
     const twins = entryFieldTwins(saved);
-    for (const {key, field} of twins)
+    const named =
+      typeof fields?.thing === 'string'
+        ? fields.thing
+        : typeof fields?.setting === 'string'
+          ? fields.setting
+          : JSON.stringify(saved);
+    for (const {key, read} of twins)
       notes.push(
-        `${typeof saved.thing === 'string' ? saved.thing : JSON.stringify(saved)} writes both "${field}" and "${key}"; "${field}" is read (${JSON.stringify(saved[field])}, not ${JSON.stringify(saved[key])})`,
+        `${named} writes both "${read}" and "${key}"; "${read}" is read (${JSON.stringify(saved[read])}, not ${JSON.stringify(saved[key])})`,
       );
     const renamed = Object.keys(
       saved && typeof saved === 'object' ? saved : {},
     ).some(k => {
       const field = entryFieldOf(k);
-      return field != null && field !== k && !(field in saved);
+      return (
+        field != null &&
+        field !== k &&
+        !twins.some(t => t.key === k) &&
+        !(field in saved)
+      );
     });
     if (renamed)
       notes.push(
         `${JSON.stringify(saved)} writes its field names in other letters, read as ${JSON.stringify(fields)}`,
       );
+    // A field the editor does not read (`modes`, `part`) is not used, and
+    // said, with the field it is a typo of; the editor's own result fields
+    // (show's `parts`) are no part of a setting.
+    if (typeof fields?.thing === 'string')
+      for (const k of Object.keys(fields)) {
+        if (ENTRY_FIELDS.includes(k) || ['parts', 'masked', 'note'].includes(k))
+          continue;
+        const near = ENTRY_FIELDS.filter(f => typoNear(k.toLowerCase(), f));
+        notes.push(
+          `${named} has "${k}", a field the editor does not read${near.length === 1 ? ` (it reads "${near[0]}")` : ''}, so it is not used`,
+        );
+      }
     const s = printedEntry(fields);
     if (s !== fields)
       notes.push(
@@ -1923,19 +2048,26 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
-      // Not when the theme holds that dial already: the entry is then
-      // damage its own undo removes, never a second copy of the dial.
+      // When the theme holds that dial already, the entry is damage its
+      // own undo removes, never a second copy of the dial; but a twin in
+      // other letters with a value the dial takes is that dial listed
+      // twice (twinInLetters), which a change of it fixes.
       const held = data.settings.some(
         (/** @type {any} */ x) => x !== s && x?.thing === read && !x.on,
       );
-      if (read !== s.thing && DIALS[read] && !held) {
+      if (
+        read !== s.thing &&
+        DIALS[read] &&
+        (!held || twinInLetters(s, read, data))
+      ) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
     }
     // A CSS property saved in another form on a part (`Background-Color`,
     // `background color`) is that property, as set reads the name typed
-    // (the one property-name reader), unless the part holds it already.
+    // (the one property-name reader), unless the part holds it already
+    // (then a twin in other letters is that property listed twice).
     if (
       s.on &&
       !s.thing.startsWith('--') &&
@@ -1947,10 +2079,29 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         (/** @type {any} */ x) =>
           x !== s && x && keyOf(x) === keyOf({...s, thing: read}),
       );
-      if (read && !held) {
+      if (read && (!held || twinInLetters(s, read, data))) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
+    }
+    // A token saved in other letters (`--Color-Accent`) is that token, as
+    // set reads the name typed; with the theme holding it already, the two
+    // are that token listed twice.
+    if (
+      s.thing.startsWith('--') &&
+      s.thing !== s.thing.toLowerCase() &&
+      ['token', undefined, null, ''].includes(s.source) &&
+      (!data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s &&
+          x?.thing === s.thing.toLowerCase() &&
+          (x.on ?? null) === (s.on ?? null),
+      ) ||
+        twinInLetters(s, s.thing.toLowerCase(), data))
+    ) {
+      const read = s.thing.toLowerCase();
+      notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+      s.thing = read;
     }
     // A token saved in another form (`var(--color-accent)`) is that token,
     // as set reads the name typed (the one thing reader).
@@ -1963,6 +2114,8 @@ function readEntryWords(data, early = /** @type {string[]} */ ([])) {
         String(entry.value ?? '') === String(s.value ?? '')
           ? String(entry.thing ?? '')
           : '';
+      // Not when the theme holds that token already: the entry is then
+      // damage its own undo removes.
       const held = data.settings.some(
         (/** @type {any} */ x) =>
           x !== s && x?.thing === read && (x.on ?? null) === (s.on ?? null),
@@ -4690,9 +4843,17 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
 export function compileTheme(ctx, data, base) {
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
-  readSavedStates(ctx, data);
-  // A setting the editor no longer accepts never reaches the build.
-  data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
+  // A setting the editor no longer accepts never reaches the build; a
+  // saved state is built as the part's own (the entry stays as saved).
+  data = {
+    ...data,
+    settings: data.settings
+      .filter(s => !valueProblem(s))
+      .map(s => {
+        const read = savedStateRead(ctx, s);
+        return read && read !== s.state ? {...s, state: read} : s;
+      }),
+  };
   const TOKENS = ctx.project.core.tokenDefaults;
   // The base theme's type scale, read back from its sizes: base text, and
   // the ratio (2xl is three steps above base).
@@ -9076,8 +9237,22 @@ export async function contrastProblems(ctx, data, res) {
       /** @type {any} */ (p).groundWhen ?? when,
     );
   };
+  /**
+   * The mode a side of a pair is drawn in: the scheme of Core's media
+   * surface around it (a lightbox's dark island draws what it holds in its
+   * dark scheme, whatever the page's mode), for the text and the fill of a
+   * part inside it; else the page's mode. The ground the surface itself
+   * draws stays in the page's mode.
+   * @param {TextPair} p @param {'fg' | 'bg'} side @param {string} m
+   */
+  const inScheme = (p, side, m) => {
+    const drawnIn = /** @type {any} */ (p).drawnIn;
+    if (!drawnIn) return m;
+    return side === 'fg' || p.bg !== /** @type {any} */ (p).over ? drawnIn : m;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const value = (p, side, m) => {
+  const value = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     const s = p[side];
     const tokens = side === 'fg' ? textTokens(p, m, value) : s.tokens;
     return (
@@ -9107,7 +9282,8 @@ export async function contrastProblems(ctx, data, res) {
     );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const baseValue = (p, side, m) => {
+  const baseValue = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     // Lifted text on the tint is held to 4.5:1, never excused by an
     // unlifted base pair.
     if (onTint(p, m) != null) return null;
@@ -9343,13 +9519,15 @@ export async function contrastProblems(ctx, data, res) {
               ],
             },
             mediaOf: m,
+            drawnIn: side,
+            pageOf: q,
             ...(ground ? {over: {target: m, tokens: [ground], raw: null}} : {}),
           }),
         );
       }
     }
   }
-  const {problems, unchecked} = ctx.C.contrast(
+  const {problems: measured, unchecked} = ctx.C.contrast(
     value,
     baseValue,
     modesOf(data),
@@ -9363,6 +9541,17 @@ export async function contrastProblems(ctx, data, res) {
     },
     [...variantPairs, ...headerPairs, ...ownTextPairs, ...mediaPairs],
   );
+  // Text on a media surface is drawn in the surface's scheme whatever the
+  // page's mode: one problem for it, not one for each mode.
+  const mediaProblems = new Set();
+  const problems = measured.filter(x => {
+    const p = /** @type {any} */ (x.pair);
+    if (!p?.drawnIn) return true;
+    const k = `${x.part}|${p.when ?? ''}|${p.drawnIn}`;
+    if (mediaProblems.has(k)) return false;
+    mediaProblems.add(k);
+    return true;
+  });
   const slug = data.name;
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
@@ -9373,7 +9562,7 @@ export async function contrastProblems(ctx, data, res) {
       // What the problem is, whatever its ratio: the text, the token or
       // property that draws it, what it sits on, its variant and mode.
       key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
-      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
+      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${/** @type {any} */ (x.pair)?.drawnIn ? `${/** @type {any} */ (x.pair).drawnIn} (${/** @type {any} */ (x.pair).mediaOf} draws it in its ${/** @type {any} */ (x.pair).drawnIn} scheme)` : x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
       // The fix sets what draws the text: the setting that wins in CSS,
       // where one does, else the text token where the text sits.
       fix: (() => {
@@ -9426,8 +9615,37 @@ export async function contrastProblems(ctx, data, res) {
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
         const onMedia = /** @type {any} */ (pair).mediaOf;
+        // (On a media surface the part is drawn in the surface's scheme: a
+        // color for that mode reaches it there, and the page's parts in
+        // that mode, which sit on a ground of the same kind.)
+        const drawnIn = /** @type {any} */ (pair).drawnIn;
+        // (When the part's own fill lets the surface's ground through (a
+        // transparent button) and the same text on the page in that mode
+        // needs the other color, the two grounds disagree, and no color on
+        // the part fixes both: no line.)
+        if (onMedia && drawnIn) {
+          const q = /** @type {TextPair} */ (/** @type {any} */ (pair).pageOf);
+          const v = q ? value(q, 'bg', drawnIn) : null;
+          const page = parseColor(
+            String(
+              res[/** @type {'light' | 'dark'} */ (drawnIn)][
+                '--color-background-body'
+              ],
+            ),
+          );
+          const c = parseColor(String(v ?? ''));
+          const a = alphaOf(String(v ?? ''));
+          const through =
+            !/gradient\(|url\(/.test(String(v ?? '')) && (!c || a < 1);
+          const ground = !through
+            ? null
+            : c && page
+              ? compositeOver(c, a, page)
+              : page;
+          if (ground && plainOn(ground) !== plainOn(x.ground)) return null;
+        }
         if (x.textPart && (onMedia || autoMediaPart(ctx, x.textPart)))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(drawnIn ?? x.mode)}`;
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.
         // (Text on a ground part's variants that need opposite text: a color
@@ -9944,6 +10162,8 @@ function stepText(text, cwd, radii) {
 
 /** The file's own top-level fields. */
 const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
+/** The top-level field a word the editor uses for it names (`base` is the like field: `set t base`). */
+const TOP_FIELD_WORDS = /** @type {Record<string, string>} */ ({base: 'like'});
 
 /**
  * What an entry as saved sets: its thing and scope, in any letters, so two
@@ -9975,7 +10195,8 @@ function topFieldNames(data) {
   /** @type {string[]} */
   const notes = [];
   for (const k of Object.keys(data)) {
-    const field = TOP_FIELDS.find(f => f === k.trim().toLowerCase());
+    const lower = k.trim().toLowerCase();
+    const field = TOP_FIELDS.find(f => f === lower) ?? TOP_FIELD_WORDS[lower];
     if (!field || field === k) continue;
     if (field in data) {
       if (
@@ -10001,7 +10222,9 @@ function topFieldNames(data) {
     data[field] = data[k];
     delete data[k];
     notes.push(
-      `the settings file writes "${k}" in other letters, read as ${field}`,
+      TOP_FIELD_WORDS[lower]
+        ? `the settings file writes the ${lower} as "${k}", read as ${field}`
+        : `the settings file writes "${k}" in other letters, read as ${field}`,
     );
   }
   return notes;
@@ -10469,30 +10692,45 @@ export function partState(ctx, part, state) {
 }
 
 /**
- * Read each saved entry's state on a part as `set` reads a typed one: each
- * of its pieces in the part's own spelling (toggle-button's `is-pressed` or
- * `ispressed` is its isPressed), in place, with a note; the next change
- * saves it that way. The loader reads only what needs no census (case, a
- * colon, a CSS state's words); this is the census half of the one state
- * reader, which the saved-setting check and the build both run.
+ * A saved entry's state on a part as `set` reads a typed one: each of its
+ * pieces in the part's own spelling (toggle-button's `is-pressed` or
+ * `ispressed` is its isPressed), or null when it reads as no state of the
+ * part or as itself. The census half of the one state reader (the loader
+ * reads what needs no census: case, a colon, a CSS state's words): the
+ * saved-setting check and the build read the state through it, and leave
+ * the entry as saved, so a build stamped from the settings matches the
+ * file; a change saves the read state (readSavedStates).
+ * @param {Ctx} ctx
+ * @param {any} s
+ * @returns {string | null}
+ */
+export function savedStateRead(ctx, s) {
+  if (
+    !s ||
+    typeof s.on !== 'string' ||
+    typeof s.state !== 'string' ||
+    !ctx.project.target.has(s.on)
+  )
+    return null;
+  const read = partState(ctx, s.on, s.state);
+  const states = partStates(ctx, s.on);
+  return read.split('+').every(p => states.includes(p)) ? read : null;
+}
+
+/**
+ * Read each saved entry's state on a part in place, as savedStateRead
+ * reads it, with a note: what a change does before it saves the settings,
+ * so the file then holds the part's own spelling.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  */
 export function readSavedStates(ctx, data) {
   for (const s of data.settings ?? []) {
-    if (
-      !s ||
-      typeof s.on !== 'string' ||
-      typeof s.state !== 'string' ||
-      !ctx.project.target.has(s.on)
-    )
-      continue;
-    const read = partState(ctx, s.on, s.state);
-    const states = partStates(ctx, s.on);
-    if (read === s.state || !read.split('+').every(p => states.includes(p)))
-      continue;
+    const read = savedStateRead(ctx, s);
+    const was = SAVED_STATE.get(s) ?? s?.state;
+    if (!read || (read === s.state && was === s.state)) continue;
     ENTRY_NOTES.get(data)?.push(
-      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(SAVED_STATE.get(s) ?? s.state)}, read as ${read}`,
+      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(was)}, read as ${read}`,
     );
     s.state = read;
   }

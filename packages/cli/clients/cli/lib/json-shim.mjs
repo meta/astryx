@@ -768,6 +768,30 @@ function editorMissingSuggestions(cmd) {
   const given = (cmd?.args ?? []).map(String);
   if (given.length && wants[0]?.name() === 'theme' && cmd.name() !== 'new') {
     const themes = editorThemesHere(process.cwd());
+    // A whole command pasted as one word (`set 'set t accent red'`, `set
+    // 'npx … editor set t accent red'`): the command it is, its words read
+    // as typed, when its theme is one here.
+    if (given.length === 1 && /\s/.test(given[0])) {
+      const pasted = given[0]
+        .trim()
+        .replace(/^.*?\beditor\s+/, '')
+        .replace(new RegExp(`^${cmd.name()}\\s+`), '')
+        .split(/\s+/);
+      if (themes.includes(pasted[0]))
+        return [
+          {
+            name: withTyped(
+              `${invocation} ${words} ${pasted.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+            ),
+            reason:
+              'do this instead: the command pasted as one word, read as its words',
+          },
+          {
+            name: `${invocation} ${words} --help`,
+            reason: 'what each argument is',
+          },
+        ];
+    }
     if (themes.length === 1 && !given.includes(themes[0]))
       return [
         {

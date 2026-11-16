@@ -63,6 +63,13 @@ const build = async typography => {
   return captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
 };
 
+/** Build a theme source given whole. @param {string} source */
+const buildSource = async source => {
+  fs.mkdirSync(path.join(dir, 'p'), {recursive: true});
+  fs.writeFileSync(path.join(dir, 'p/p.ts'), source);
+  return captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+};
+
 async function captured(run) {
   /** @type {string[]} */
   const lines = [];
@@ -128,6 +135,89 @@ describe('stable build typography values', () => {
     );
     expect(typographyWarnings(level).join('\n')).toMatch(
       /typography\.heading\.weights\.h1 .*no heading level/,
+    );
+  });
+
+  it('warns a family wherever the theme writes it: a const, a role const, a computed value', async () => {
+    const head = "import {defineTheme} from '@astryxdesign/core/theme';\n";
+    for (const [body, line] of [
+      [
+        "const TYPO = {body: {family: 'Inter, Arial'}};\nexport default defineTheme({name: 'p', typography: TYPO});\n",
+        2,
+      ],
+      [
+        "const body = {family: 'Inter, Arial'};\nexport default defineTheme({name: 'p', typography: {body}});\n",
+        2,
+      ],
+      [
+        "const fams = ['Inter', 'Arial'];\nexport default defineTheme({name: 'p', typography: {body: {family: fams.join(', ')}}});\n",
+        3,
+      ],
+    ]) {
+      const r = await buildSource(head + body);
+      expect(typographyWarnings(r).join('\n'), String(body)).toMatch(
+        new RegExp(
+          `typography\\.body\\.family \\(line ${line}\\): .*one family name`,
+        ),
+      );
+    }
+  });
+
+  it('warns a role weight that is no font weight, and takes one a browser reads', async () => {
+    for (const weight of ['semi-bold', '1200']) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: '${weight}'}}`,
+      );
+      expect(typographyWarnings(r).join('\n'), weight).toMatch(
+        /typography\.body\.weight .*is no font weight/,
+      );
+    }
+    for (const weight of [
+      'semibold',
+      'Bold',
+      '450',
+      'var(--font-weight-bold)',
+    ]) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: '${weight}'}}`,
+      );
+      expect(typographyWarnings(r), weight).toEqual([]);
+    }
+  });
+
+  it('reads a heading level as Core does, a number key included', async () => {
+    for (const key of ["'01'", "'1.0'", "'+1'"]) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, heading: {weights: {${key}: '800'}}}`,
+      );
+      expect(typographyWarnings(r), key).toEqual([]);
+    }
+    for (const key of ['7', '0']) {
+      const r = await build(
+        `{scale: {base: 16, ratio: 1.25}, heading: {weights: {${key}: '800'}}}`,
+      );
+      expect(typographyWarnings(r).join('\n'), key).toMatch(
+        new RegExp(
+          `typography\\.heading\\.weights\\.${key} .*no heading level`,
+        ),
+      );
+    }
+  });
+
+  it('names a weight given as a number as a type mismatch, not a weight no browser reads', async () => {
+    const r = await build(
+      "{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: 600}}",
+    );
+    const line = typographyWarnings(r).join('\n');
+    expect(line).toMatch(
+      /typography\.body\.weight .*a typography weight is text, and 600 is a number: a type mismatch.*write '600'/,
+    );
+    expect(line).not.toMatch(/no weight the browser reads/);
+    const off = await build(
+      "{scale: {base: 16, ratio: 1.25}, body: {family: 'Lato', weight: 1200}}",
+    );
+    expect(typographyWarnings(off).join('\n')).toMatch(
+      /1200 is a number that is no weight .*a type mismatch.*write '600'/,
     );
   });
 });

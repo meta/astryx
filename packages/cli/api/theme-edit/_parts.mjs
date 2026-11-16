@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 23;
+const PART_DATA_VERSION = 24;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -1234,6 +1234,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       !d.cond &&
       /^(background(-color)?|border(-[a-z-]+)?-color)$/.test(d.prop) &&
       expand(d.value, env, tokens).size > 0;
+    // (Every part the parent element carries: a menu's separator is a
+    // divider too.)
     const lineOf =
       !ownsTarget &&
       empty &&
@@ -1246,11 +1248,15 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         ? parent.target
         : null;
     if (lineOf) lined.add(lineOf);
+    const lineParts = lineOf ? (parent.all ?? [lineOf]) : [];
     // An element can carry several targets (a shell's side nav region is a
-    // layout panel too): its declarations are each one's own.
-    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
+    // layout panel too): its declarations are each one's own. What an
+    // element without one draws is each of its parent's.
+    for (const t of ownsTarget
+      ? named.map(c => c.slice(7))
+      : (parent.all ?? [target])) {
       if (!t) continue;
-      const asOwn = ownsTarget || t === lineOf;
+      const asOwn = ownsTarget || lineParts.includes(t);
       const T = (map[t] ??= {
         own: {},
         at: {},
@@ -1290,7 +1296,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         // A line's paint and its thickness (a size read from the border
         // width) are the part's; its layout is not.
         const lineProp =
-          t === lineOf &&
+          lineParts.includes(t) &&
           (paints(d) ||
             /^border(-[a-z-]+)?-(width|style)$/.test(d.prop) ||
             (/^(height|width|block-size|inline-size)$/.test(d.prop) &&

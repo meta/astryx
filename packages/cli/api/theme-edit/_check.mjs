@@ -30,6 +30,7 @@ import {
   keywordsOf,
   matchType,
   matchValue,
+  varReferences,
   numbersIn,
   propertyGrammar,
   takesPercentage,
@@ -126,7 +127,7 @@ import {
   ARIA_STATES,
   partState,
   partStates,
-  readSavedStates,
+  savedStateRead,
   propertySpelling,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
@@ -803,8 +804,6 @@ const COLOR_DIAL_WORDS = (() => {
  * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
-  // A saved state in a spelling set reads (is-pressed) is the part's own.
-  readSavedStates(ctx, data);
   // The setting the command replaces (its thing in the same scope); a
   // setting of the same thing elsewhere is still checked.
   const skipThing = typeof skip === 'string' ? skip : skip.thing;
@@ -895,7 +894,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
       if (
         t &&
         s.state &&
-        !statesHold(partStates(ctx, /** @type {string} */ (s.on)), s.state)
+        !statesHold(
+          partStates(ctx, /** @type {string} */ (s.on)),
+          // A state in a spelling set reads (is-pressed) is the part's own.
+          savedStateRead(ctx, s) ?? s.state,
+        )
       )
         return scope(`"${s.state}" is not a state of ${s.on}`);
       if (t && s.when) {
@@ -1488,14 +1491,20 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       }
     }
     // Words only (no number or size): part of the name unless the whole
-    // name is unknown and the name without them is known.
+    // name is unknown and a family the editor knows starts the name before
+    // them (Inter Bold, Inter Tight Bold). A family it does not know may end
+    // in such a word (Archivo Black), so its name is kept whole; a number is
+    // no word of a family, so it is read as a weight after any name.
+    const knownStart = base
+      .split(/\s+/)
+      .some((_, i, all) => knownFamily(ctx, all.slice(0, i + 1).join(' ')));
     if (
       tail.every(
         t =>
           t.kind === 'style' ||
           (t.kind === 'weight' && !/^[-+.\d]/.test(t.text)),
       ) &&
-      !(!knownFamily(ctx, name) && knownFamily(ctx, base))
+      !(!knownFamily(ctx, name) && knownStart)
     ) {
       kept.push(name);
       continue;
@@ -3370,6 +3379,10 @@ function paintedTogether(ctx, part, pieces) {
   const named = (/** @type {string} */ cond, /** @type {string} */ p) => {
     const aria = ARIA_STATES[/** @type {keyof typeof ARIA_STATES} */ (p)];
     if (aria) return cond.includes(`${aria.attr}=`);
+    // (A doc state Core marks with its ARIA attribute, a toggle button's
+    // isPressed by aria-pressed.)
+    const asAria = /^is([A-Z][a-z]+)$/.exec(p)?.[1]?.toLowerCase();
+    if (asAria && cond.includes(`aria-${asAria}=`)) return true;
     return (
       new RegExp(`(^|[\\s,])${kebab(p)}=`).test(cond) ||
       new RegExp(`:${p}(?![\\w-])`).test(cond) ||
@@ -6559,7 +6572,16 @@ function checkOne(
             t,
             baseComponentReads(ctx.project.cwd, data.like, t).has(thing)
               ? null
-              : C.checkTokenOn(slug, t, thing, v, P, s.when),
+              : C.checkTokenOn(
+                  slug,
+                  t,
+                  thing,
+                  v,
+                  P,
+                  s.when,
+                  // (The state and the mode asked go on the line too.)
+                  `${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                ),
           ]),
       );
       const recorded = results.filter(([, r]) => !r?.soft);
@@ -6706,9 +6728,28 @@ function checkOne(
         E.ERR_MISSING_ARGUMENT,
         `${prop} is a CSS property, so it needs --on <part|group>. For the whole theme use a dial or a token.`,
         {
-          // The theme-wide dial or token for it, when there is one; never
-          // a part that was not named.
+          // A part named in the value as a label (`'card: #eeeeee'`, pasted
+          // from notes): that value on that part. Else the theme-wide dial
+          // or token for it, when there is one; never a part that was not
+          // named.
           run: [
+            ...(() => {
+              const label = /^\s*([a-z][a-z -]*?)\s*:\s*(\S.*)$/i.exec(
+                String(v ?? ''),
+              );
+              if (!label) return [];
+              const word = label[1].trim().toLowerCase().replace(/\s+/g, '-');
+              const on = [
+                word,
+                word.replace(/e?s$/, ''),
+                word.replace(/s$/, ''),
+              ].find(w => ctx.project.target.has(w) || FAMILIES[w]);
+              return on
+                ? [
+                    `${P} set ${slug} ${prop} ${quoteCommandArgument(label[2].trim())} --on ${on}`,
+                  ]
+                : [];
+            })(),
             ...(v && WHOLE_THEME_EQUIVALENT[prop]
               ? [
                   `${P} set ${slug} ${WHOLE_THEME_EQUIVALENT[prop]} ${quoteCommandArgument(v)}`,
@@ -7309,6 +7350,20 @@ function checkOne(
 
   // A dial by another name or case: Accent, gray, saturation, error.
   const lower = thing.toLowerCase();
+  // `like`, the word show prints for the base and new's --like: base.
+  if (!hint && lower === 'like')
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. The base is set with base.`,
+      {
+        didYouMean: ['base'],
+        run: [
+          unset
+            ? `${P} undo ${slug} base`
+            : `${P} set ${slug} base ${quoteCommandArgument(v || 'none')}`,
+        ],
+      },
+    );
   const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
   if (!hint && aliases.length)
     return refuse(
@@ -7522,12 +7577,17 @@ export {familySpaces};
  * @returns {{token: string, kind: string, takes: string, message: string} | null}
  */
 function tokenKindMismatch(ctx, prop, v) {
-  for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi)) {
+  // A value no stand-in makes work (text glued to the var(), as in
+  // `var(--x)px`) is wrong around the token, never for the token's kind.
+  if (!matchValue(prop, v)) return null;
+  for (const ref of varReferences(v)) {
+    const m = /^var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)$/i.exec(ref.text);
+    if (!m) continue;
     const token = m[1];
     if (!ctx.C.isToken(token)) continue;
     const kind = ctx.C.typeOf(token);
     if (kind === 'other') continue;
-    const sample = v.replace(m[0], exampleOf(kind, token));
+    const sample = `${v.slice(0, ref.at)} ${exampleOf(kind, token)} ${v.slice(ref.at + ref.text.length)}`;
     if (matchValue(prop, sample)) continue;
     const takes =
       matchValue(prop, '1px') && !matchValue(prop, 'red')

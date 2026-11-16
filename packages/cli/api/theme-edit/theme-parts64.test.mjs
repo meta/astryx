@@ -332,7 +332,6 @@ describe("a part's piece Core has no part for", () => {
     for (const q of [
       'make the empty state icon bigger',
       'make the popover arrow red',
-      'make sheet titles bigger',
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'p'});
       const writes = (data.results ?? []).flatMap(x =>

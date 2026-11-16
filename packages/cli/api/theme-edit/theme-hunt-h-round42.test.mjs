@@ -96,9 +96,12 @@ describe('a part named as the color', () => {
     ).toEqual([
       `set ${t} background-color 'var(--color-success-muted)' --on button`,
     ]);
+    // (Neutral writes its destructive button's own fill: the muted error.)
     expect(
       writes(await how(t, 'make the badges the color of the danger buttons')),
-    ).toEqual([`set ${t} background-color 'var(--color-error)' --on badge`]);
+    ).toEqual([
+      `set ${t} background-color 'var(--color-error-muted)' --on badge`,
+    ]);
   }, 240_000);
 
   it('its words are never the change asked: cards the button color are filled', async () => {
