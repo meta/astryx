@@ -466,6 +466,10 @@ function keyProblem(key, value, kind, pseudoProblem) {
   if (isBlock(value)) {
     if (key.startsWith(':') && kind !== 'pseudo') return pseudoProblem(key);
     if (kind === 'style' && MODE_KEYS.includes(key)) return null;
+    // Variants written as other styling libraries write them: named with
+    // the style keys that write them, by the build and the editor alike.
+    const keys = kind === 'style' ? variantMapKeys(key, value) : null;
+    if (keys) return variantMapMessage(key, keys);
     return `${key} holds a block, but ${kind === 'pseudo' ? 'a pseudo key holds properties only' : `only a pseudo key (':hover', '::before')${kind === 'style' ? ' or @light / @dark' : ''} holds one here`}, so the build writes it as a declaration the browser drops`;
   }
   if (key.startsWith(':') || key.startsWith('@')) return null;
@@ -702,11 +706,6 @@ export function styleKeyProblems(theme) {
   const block = (node, at, kind, depth) => {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
-      const keys = kind === 'style' ? variantMapKeys(k, v) : null;
-      if (keys) {
-        out.push({path: [...at, k], why: variantMapMessage(k, keys)});
-        continue;
-      }
       const why = keyProblem(k, v, kind, key => checked(key).problem);
       if (why) {
         out.push({path: [...at, k], why});
