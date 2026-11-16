@@ -1446,7 +1446,7 @@ export async function checkAppThemes(cwd) {
             ),
           ),
         ),
-      ].join(' '),
+      ].join('; '),
     });
   } else if (unshippedImports.length > 0) {
     checks.push({

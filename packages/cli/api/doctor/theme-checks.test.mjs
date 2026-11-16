@@ -981,7 +981,12 @@ describe('app-theme doctor checks', () => {
     });
   });
 
-  it("check 1, in a fresh clone that lists the theme packages, says to install the project's dependencies once", async () => {
+  /**
+   * A fresh clone of an app that added the neutral and stone themes: its
+   * `node_modules` holds Core but neither theme package.
+   * @param {string[]} listed the theme packages the app's package.json lists
+   */
+  async function freshCloneWithThemes(listed) {
     const dir = fs.mkdtempSync(
       path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'),
     );
@@ -994,8 +999,7 @@ describe('app-theme doctor checks', () => {
         private: true,
         dependencies: {
           '@astryxdesign/core': CLI_VERSION,
-          '@astryxdesign/theme-neutral': CLI_VERSION,
-          '@astryxdesign/theme-stone': CLI_VERSION,
+          ...Object.fromEntries(listed.map(name => [name, CLI_VERSION])),
         },
       }),
     );
@@ -1036,6 +1040,14 @@ describe('app-theme doctor checks', () => {
     // The project's dependencies are not installed yet.
     for (const packageDir of packageDirs)
       fs.rmSync(packageDir, {recursive: true});
+    return dir;
+  }
+
+  it("check 1, in a fresh clone that lists the theme packages, says to install the project's dependencies once", async () => {
+    const dir = await freshCloneWithThemes([
+      '@astryxdesign/theme-neutral',
+      '@astryxdesign/theme-stone',
+    ]);
 
     const owners = check(await checkAppThemes(dir), 'theme-owners');
     expect(owners).toMatchObject({
@@ -1046,6 +1058,19 @@ describe('app-theme doctor checks', () => {
       ].join(' '),
       fix: 'pnpm install',
     });
+  });
+
+  it('check 1, in a fresh clone that lists only one of two theme packages, names each fix as its own command', async () => {
+    const dir = await freshCloneWithThemes(['@astryxdesign/theme-neutral']);
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    // The listed theme's install stays a command of its own, before the
+    // steps that add the other theme.
+    const steps = owners.fix.split('; ');
+    expect(steps[0]).toBe('pnpm install');
+    expect(steps.slice(1).join('; ')).toContain('@astryxdesign/theme-stone');
+    expect(steps.at(-1)).toMatch(/ theme add stone\b/);
   });
 
   it('check 2 fails when the generated module is hand-edited', async () => {
