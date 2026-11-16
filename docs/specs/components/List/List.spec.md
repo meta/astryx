@@ -212,6 +212,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ListItem row paint | Stops at the content (`flush`), reaches past it by the row inset (`padded`, `outset`), or reaches the host edge (`bleed`).                                                              | `component:List/DEC-3`   | Supporting surface | FR3–FR6            |
 | Row content        | The row's first content (its marker, start content, or label) sits inside the row inset (`padded`) or on the host content line when the host inset allows (`flush`, `outset`, `bleed`). | `component:List/DEC-3`   | Prominent          | FR2–FR5            |
 
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision                                                                                                                                                                                                            | Intent or reason                                                                                                                    | Applies to                                                                                      | Allowed variation                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DD1 | The reorder handle's grip is the `drag` icon, a six-dot grip by default, drawn at the `sm` icon size in the secondary icon color. The handle paints no hover fill; only reorder mode fills it, as a pressed toggle. | Six dots read as "drag to move"; three lines read as a menu and match the menu icon. A bare glyph keeps a row's resting look quiet. | The reorder handle of every reorderable List row, and of Lab collections that use List's handle | A theme redraws the grip through `componentIcons['list-reorder-handle']` or `icons.drag`. The handle's box, focus ring, and reorder-mode fill stay. |
+
 ## Family and system relationships
 
 - `architecture:container-padding` owns host publication, eligibility,
@@ -237,8 +245,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one control reordering adds to a row, at its trailing edge,
+  with its grip icon inside it (`spec:AST-103` FR5). The reorder controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 
