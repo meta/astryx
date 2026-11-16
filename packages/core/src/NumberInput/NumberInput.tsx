@@ -898,7 +898,8 @@ export function NumberInput({
   }, [formatValue, value]);
 
   // Preserve pending text while editing. Otherwise show the formatted value
-  // at rest and the raw numeric value while focused so it remains editable.
+  // at rest and, while focused, the plain number with the locale's decimal
+  // separator so it remains editable.
   const displayValue = useMemo(() => {
     if (holdDraft !== null) {
       return formatEditableNumber(holdDraft, locale);

@@ -237,7 +237,7 @@ function checkField(check: Check, field: Field, label: string) {
   check(field.name !== '', `${label} has no label`);
   check(field.control != null, `${label} has no number-input control box`);
   check(field.tabIndex === 0, `${label} tabindex ${field.tabIndex}`);
-  if (field.value !== '' && field.valueContrast != null) {
+  if (field.ariaDisabled !== 'true' && field.valueContrast != null) {
     check(
       field.valueContrast >= MIN_TEXT_CONTRAST,
       `${label} value contrast ${field.valueContrast}`,
@@ -256,7 +256,10 @@ function checkField(check: Check, field: Field, label: string) {
     );
   }
   for (const button of field.buttons) {
-    check(button.box != null, `${label} button ${button.name} has no box`);
+    check(
+      button.box != null && button.box.width > 0 && button.box.height > 0,
+      `${label} button ${button.name} renders no box: ${JSON.stringify(button.box)}`,
+    );
   }
 }
 
@@ -523,7 +526,16 @@ for (const mode of ['light', 'dark'] as const) {
           (await field.getAttribute('aria-valuenow')) === '100',
           'a disabled field stepped',
         );
-        await page.waitForTimeout(600);
+        const tooltipShown = await page
+          .getByRole('tooltip')
+          .filter({hasText: 'Editing is locked'})
+          .first()
+          .waitFor({state: 'visible', timeout: 5000})
+          .then(
+            () => true,
+            () => false,
+          );
+        check(tooltipShown, 'the reason tooltip did not open');
         const tooltip = await page.evaluate(() =>
           Array.from(document.querySelectorAll('[role="tooltip"]')).map(
             t => t.textContent?.trim() ?? '',
@@ -617,6 +629,24 @@ async function runCase(page: Page, item: AuditCase) {
       `${list.length} spinbuttons, expected ${item.count}`,
     );
     list.forEach((field, index) => checkField(check, field, `field ${index}`));
+    if (item.story === 'core-numberinput--default') {
+      check(
+        list[0]?.placeholderContrast != null,
+        'the placeholder contrast was not measured',
+      );
+    }
+    if (item.story === 'core-numberinput--with-units') {
+      check(
+        list[0]?.units === '%' && list[0]?.unitsContrast != null,
+        `the units text was not measured: ${list[0]?.units}`,
+      );
+    }
+    if (item.story === 'core-numberinput--with-value') {
+      check(
+        list[0]?.valueContrast != null,
+        'the value contrast was not measured',
+      );
+    }
     const axe = await axeRoot(page);
     check(axe.length === 0, `axe: ${axe.join(' | ')}`);
     await frame('rest', {list, axe});

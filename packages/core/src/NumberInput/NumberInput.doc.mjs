@@ -528,7 +528,7 @@ export const docsZh = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        '输入有值且可编辑（未禁用、非只读）时显示清除 (×) 按鈕。启用后， onChange 回调还接受 null 表示用户已清空输入。',
+        '输入有值且可编辑（未禁用、非只读）时显示清除 (×) 按钮。启用后， onChange 回调还接受 null 表示用户已清空输入。',
       default: 'false',
     },
     {

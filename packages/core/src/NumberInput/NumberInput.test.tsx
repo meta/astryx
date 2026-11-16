@@ -472,7 +472,7 @@ describe('NumberInput', () => {
       expect(input).toHaveAttribute('aria-valuetext', '$4,200');
     });
 
-    it('shows the raw numeric value while focused and restores formatting on blur', () => {
+    it('shows the plain number while focused and restores formatting on blur', () => {
       render(
         <NumberInput
           label="Revenue"
