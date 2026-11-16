@@ -18,6 +18,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {oklabCoordinates} from '../theme/palette/generate/color.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -129,22 +130,19 @@ describe('the fills made from the surface', () => {
 
   it('a fill the base keeps between page and surface never passes the page', () => {
     // Neutral's dark cards, popovers and muted fill are its page's shade:
-    // with a page and a surface set, they stay at the page's lightness or
-    // above, never darker than the page.
-    /** @param {string} hex */
-    const lum = hex => {
-      const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
-    const page = lum(valueOf('pm', '--color-background-body')[1]);
-    const surface = lum(valueOf('pm', '--color-background-surface')[1]);
+    // with a page and a surface set, their measured lightness stays from
+    // the page's up to the surface's, never darker than the page.
+    /** @param {string} color */
+    const lightness = color => oklabCoordinates(color)[0];
+    const page = lightness(valueOf('pm', '--color-background-body')[1]);
+    const surface = lightness(valueOf('pm', '--color-background-surface')[1]);
     for (const k of [
       '--color-background-card',
       '--color-background-popover',
       '--color-background-muted',
     ]) {
-      const v = lum(valueOf('pm', k)[1]);
-      expect(v, k).toBeGreaterThanOrEqual(page - 1);
+      const v = lightness(valueOf('pm', k)[1]);
+      expect(v, k).toBeGreaterThanOrEqual(page);
       expect(v, k).toBeLessThanOrEqual(surface);
     }
   });

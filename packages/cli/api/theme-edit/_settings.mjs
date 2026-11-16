@@ -6956,23 +6956,25 @@ export function compileTheme(ctx, data, base) {
         const [sl, sa, sb] = oklabCoordinates(surface);
         const [fromL] = oklabCoordinates(from);
         const [baseSurfaceL] = oklabCoordinates(baseSurface);
-        let l = sl + fromL - baseSurfaceL;
+        const l = Math.max(0, Math.min(1, sl + fromL - baseSurfaceL));
+        let color = oklabCoordinatesToHex([l, sa, sb]);
         if (basePage && page) {
           const [basePageL] = oklabCoordinates(basePage);
           const [pageL] = oklabCoordinates(page);
-          const between = (
+          const inside = (
             /** @type {number} */ x,
             /** @type {number} */ a,
             /** @type {number} */ b,
-          ) => x >= Math.min(a, b) - 1e-6 && x <= Math.max(a, b) + 1e-6;
-          if (between(fromL, basePageL, baseSurfaceL))
-            l = Math.max(Math.min(pageL, sl), Math.min(Math.max(pageL, sl), l));
+          ) => x >= Math.min(a, b) && x <= Math.max(a, b);
+          // Measured on the color written, so rounding never carries it
+          // past the page: at or past a bound, it is that bound's color.
+          if (
+            inside(fromL, basePageL, baseSurfaceL) &&
+            !inside(oklabCoordinates(color)[0], pageL, sl)
+          )
+            color = Math.abs(l - pageL) <= Math.abs(l - sl) ? page : surface;
         }
-        putTok(
-          k,
-          oklabCoordinatesToHex([Math.max(0, Math.min(1, l)), sa, sb]),
-          m,
-        );
+        putTok(k, color, m);
       }
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
