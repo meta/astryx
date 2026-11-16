@@ -2,6 +2,7 @@
 
 'use client';
 
+import {VStack} from '@astryxdesign/core/Layout';
 import {
   DocumentDuplicateIcon,
   PencilIcon,
@@ -23,10 +24,10 @@ export default function MoreMenuBottomSheet() {
         border: '1px solid var(--color-border-emphasized)',
         borderRadius: '12px',
       }}>
-      <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+      <VStack gap={1}>
         <strong>Quarterly plan</strong>
         <span>Updated a few minutes ago</span>
-      </div>
+      </VStack>
       <MoreMenu
         presentation="bottom-sheet"
         label="Project actions"
