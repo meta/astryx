@@ -314,31 +314,31 @@ export const matchaTheme = defineTheme({
         padding: 'var(--spacing-3)',
       },
       'variant:blue': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:cyan': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:gray': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:green': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:orange': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:pink': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:purple': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:red': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:teal': {
-        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[60]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[25]}, ${neutral.dark[70]})`,
       },
       'variant:yellow': {
         '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
