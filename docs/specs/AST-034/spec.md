@@ -47,8 +47,13 @@ replacement uses one aggregate output trio so consumers never assemble the famil
 
 - **FR1 — Selected themes form one valid lineage.** The selected themes MUST form one
   connected, acyclic `extends` tree with exactly one root. Every selected non-root
-  member's parent MUST also be selected. Duplicate names or identities, missing
-  ancestors, and cycles MUST fail before family output is published. Descendants at
+  member's parent MUST also be selected. The root MAY extend a theme the family
+  does not select: its CSS, export and declaration carry that base as the root's
+  standalone build does, and the module imports a package base for the
+  registries the root inherits from it. A root base that is a local file and
+  supplies registries is refused, naming the base to select. Duplicate names or
+  identities, missing ancestors, and cycles MUST fail before family output is
+  published, a missing ancestor named with the member whose base it is. Descendants at
   any depth are valid; a family is not limited to one root and its direct children.
 - **FR2 — The CLI emits one caller-keyed output trio.** The stable command shape is:
 

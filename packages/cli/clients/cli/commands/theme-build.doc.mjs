@@ -42,7 +42,7 @@ export const doc = {
     {
       flag: '--family',
       description:
-        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
+        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. The selected themes form one extends tree with one root: the base of every other member is selected, and the root may extend a theme the family does not select (such as an installed theme package), which its outputs carry as its standalone build does; a member whose base is missing is refused naming that base (ERR_THEME_INVALID). Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
     },
     {
       flag: '--family-key <key>',

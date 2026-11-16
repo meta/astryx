@@ -3680,7 +3680,7 @@ export async function validateThemePrivateInputs(
  *   import { defaultIconRegistry } from './icons';
  *   icons: defaultIconRegistry,
  * @param {string} filePath
- * @param {'icons' | 'indicators' | 'componentIcons'} field
+ * @param {'icons' | 'indicators' | 'componentIcons' | 'extends'} field the field (`extends`: the base a theme imports)
  * @returns {{exportName: string, importPath: string} | null}
  */
 function extractRegistryInfo(filePath, field) {
@@ -6798,12 +6798,43 @@ async function buildFamily(
     const specifier = planned?.renamed.get(importPath);
     return sourceFile && specifier ? {specifier, sourceFile} : null;
   };
+  // The root's own base, when the family does not select it: a package
+  // theme the module imports, as the root's standalone module does, for the
+  // registries it inherits (icons, indicators, slot functions).
+  /** @type {Map<string, {binding: string, importLine: string}>} */
+  const rootBases = new Map();
+  for (const member of members) {
+    if (!member.unselectedBase) continue;
+    const inherits = [
+      themeIconEntries(member.sourceParent),
+      member.sourceParent?.indicators,
+      themeComponentIcons(member.sourceParent),
+    ].some(value => value && Object.keys(value).length > 0);
+    if (!inherits) continue;
+    const from = extractRegistryInfo(member.filePath, 'extends');
+    if (
+      !from ||
+      from.importPath.startsWith('.') ||
+      path.isAbsolute(from.importPath)
+    )
+      throw new AstryxError(
+        `Theme "${member.theme.name}" extends "${member.unselectedBase}", which the family does not select and whose icons the family module can carry only from a package it imports. Select "${member.unselectedBase}" too, or build "${member.theme.name}" on its own.`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    const binding = `${bindings.get(member.theme.name)}Base`;
+    rootBases.set(member.theme.name, {
+      binding,
+      importLine: `import { ${from.exportName} as ${binding} } from ${JSON.stringify(from.importPath)};\n`,
+    });
+  }
   const js = members
     .map(member => {
       const themeBinding = bindings.get(member.theme.name);
+      const base = rootBases.get(member.theme.name) ?? null;
       const parentBinding = member.parentName
         ? bindings.get(member.parentName)
-        : null;
+        : (base?.binding ?? null);
       // prettier-ignore
       const icon = familyRegistryInput(member.iconInfo, member.filePath, outDir, options.iconsSpecifier, compileLocal);
       // prettier-ignore
@@ -6813,9 +6844,9 @@ async function buildFamily(
       const ownIcons = icon.info ? `${themeBinding}Icons` : null;
       // A parent with function entries keeps them in `__icons`; its `icons`
       // is the node view.
-      const parent = members.find(
-        other => other.theme.name === member.parentName,
-      );
+      const parent =
+        members.find(other => other.theme.name === member.parentName) ??
+        (base ? {theme: member.sourceParent} : undefined);
       const inheritedIcons = parentBinding
         ? `${parentBinding}.${hasFunctionIconEntry(themeIconEntries(parent?.theme)) ? '__icons' : 'icons'}`
         : null;
@@ -6844,6 +6875,7 @@ async function buildFamily(
         compileLocal,
       });
       return (
+        (base?.importLine ?? '') +
         indicatorImport +
         generateBuiltModule(member.theme, iconImports, icon.specifier, {
           themeBinding,
