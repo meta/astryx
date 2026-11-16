@@ -47,78 +47,65 @@ function clipboardWriteAllowed(): boolean {
 }
 
 /**
- * The element the copy field goes in: the open dialog that holds focus, else
- * the document's body. An open modal dialog makes the rest of the page inert,
- * and an inert field copies nothing while the copy command still reports
- * success. Focus stays inside the topmost modal dialog while one is open.
- */
-function copyFieldHost(): HTMLElement {
-  const active = document.activeElement;
-  const dialog =
-    active instanceof Element ? active.closest('dialog[open]') : null;
-  return dialog instanceof HTMLElement ? dialog : document.body;
-}
-
-/**
- * Copy text through a selected, hidden text field and the browser's copy
- * command, which a click can still run where the async Clipboard API is
- * refused. Focus and the selection come back to where they were.
+ * Copy text with the browser's copy command, which a click can still run where
+ * the async Clipboard API is refused. The text goes in through the `copy` event
+ * the command fires, so no element takes focus or the selection: a control in
+ * a hover card or an open modal dialog keeps both.
  * @throws when the browser does not copy
  */
-function copyThroughSelection(text: string): void {
-  const active = document.activeElement;
-  const selection = document.getSelection();
-  const ranges =
-    selection == null
-      ? []
-      : Array.from({length: selection.rangeCount}, (_, i) =>
-          selection.getRangeAt(i),
-        );
-  const field = document.createElement('textarea');
-  field.value = text;
-  field.setAttribute('readonly', '');
-  field.setAttribute('aria-hidden', 'true');
-  field.tabIndex = -1;
-  // Off screen and inert: the field is there only to hold the selection.
-  field.style.position = 'fixed';
-  field.style.insetBlockStart = '0';
-  field.style.insetInlineStart = '-9999px';
-  field.style.opacity = '0';
-  field.style.pointerEvents = 'none';
-  copyFieldHost().append(field);
+function copyThroughCopyCommand(text: string): void {
+  const activation = (
+    navigator as Navigator & {userActivation?: {isActive: boolean}}
+  ).userActivation;
+  if (activation?.isActive === false) {
+    throw new Error('The copy command runs only in a click or a key press.');
+  }
+  let written = false;
+  const write = (event: ClipboardEvent): void => {
+    if (event.clipboardData == null) {
+      return;
+    }
+    event.clipboardData.setData('text/plain', text);
+    event.preventDefault();
+    // The copy is the hook's own, so the page's copy handlers do not change it.
+    event.stopImmediatePropagation();
+    written = true;
+  };
+  window.addEventListener('copy', write, true);
   let copied: boolean;
   try {
-    // The copy command copies what is selected in the focused element.
-    field.focus({preventScroll: true});
-    field.select();
     copied = document.execCommand('copy');
   } finally {
-    field.remove();
-    if (active instanceof HTMLElement) {
-      active.focus({preventScroll: true});
-    }
-    if (selection != null) {
-      selection.removeAllRanges();
-      for (const range of ranges) {
-        selection.addRange(range);
-      }
-    }
+    window.removeEventListener('copy', write, true);
   }
-  if (!copied) {
+  if (!copied || !written) {
     throw new Error('The browser did not copy the text.');
   }
 }
 
 /**
- * Write text to the clipboard: through the async Clipboard API where the
- * document may use it, else through a selection and the copy command.
+ * The async Clipboard API comes first. Where the frame refuses it, the copy
+ * command copies instead: the policy says so before a try, which the browser
+ * would log as a violation, and a write the browser refuses says so after.
  */
 async function writeClipboardText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText != null && clipboardWriteAllowed()) {
-    await navigator.clipboard.writeText(text);
+  if (!clipboardWriteAllowed()) {
+    copyThroughCopyCommand(text);
     return;
   }
-  copyThroughSelection(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === 'NotAllowedError')) {
+      throw error;
+    }
+    try {
+      copyThroughCopyCommand(text);
+    } catch {
+      // The browser's refusal says more than the copy command's failure.
+      throw error;
+    }
+  }
 }
 
 /**

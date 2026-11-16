@@ -62,28 +62,67 @@ async function storyFrame(page: Page): Promise<Frame> {
   return frame;
 }
 
-test('copies the exact code in a frame without clipboard access, outside and inside an open dialog', async ({
-  page,
-  context,
-}) => {
+/**
+ * Show the story in a sandboxed frame from the other origin, and count the
+ * copy commands it runs. `allow` delegates `clipboard-write` to the frame.
+ */
+async function openStory(
+  page: Page,
+  context: BrowserContext,
+  allow: string,
+): Promise<Frame> {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: host.origin,
   });
   await page.goto(`${host.origin}/iframe.html`);
   await page.setContent(
-    `<iframe id="frame" title="Story" style="width: 900px; height: 700px; border: 0" src="${framed.origin}/iframe.html?id=core-codeblock--copy-in-a-dialog&viewMode=story"></iframe>`,
+    `<iframe id="frame" title="Story" sandbox="allow-scripts allow-same-origin" allow="${allow}" style="width: 900px; height: 700px; border: 0" src="${framed.origin}/iframe.html?id=core-codeblock--copy-in-a-dialog&viewMode=story"></iframe>`,
   );
   const story = await storyFrame(page);
   await story.getByRole('button', {name: 'Open dialog'}).waitFor();
-  // The frame may not use the async Clipboard API.
-  expect(
-    await story.evaluate(() => {
-      const doc = document as Document & {
-        featurePolicy?: {allowsFeature: (feature: string) => boolean};
-      };
-      return doc.featurePolicy?.allowsFeature('clipboard-write');
-    }),
-  ).toBe(false);
+  await story.evaluate(() => {
+    const counted = window as Window & {copyCommands?: number};
+    counted.copyCommands = 0;
+    const run = document.execCommand.bind(document);
+    document.execCommand = (...args: Parameters<Document['execCommand']>) => {
+      counted.copyCommands = (counted.copyCommands ?? 0) + 1;
+      return run(...args);
+    };
+  });
+  return story;
+}
+
+/** Whether the frame's permissions policy lets it use the async Clipboard API. */
+async function asyncClipboardAllowed(
+  story: Frame,
+): Promise<boolean | undefined> {
+  return story.evaluate(() => {
+    const doc = document as Document & {
+      featurePolicy?: {allowsFeature: (feature: string) => boolean};
+    };
+    return doc.featurePolicy?.allowsFeature('clipboard-write');
+  });
+}
+
+/** How many copy commands the frame ran. */
+async function copyCommands(story: Frame): Promise<number | undefined> {
+  return story.evaluate(
+    () => (window as Window & {copyCommands?: number}).copyCommands,
+  );
+}
+
+test('copies with the copy command in a sandboxed frame that refuses the async API, outside and inside an open dialog', async ({
+  page,
+  context,
+}) => {
+  const violations: string[] = [];
+  page.on('console', message => {
+    if (message.text().includes('Clipboard API has been blocked')) {
+      violations.push(message.text());
+    }
+  });
+  const story = await openStory(page, context, '');
+  expect(await asyncClipboardAllowed(story)).toBe(false);
 
   await story.getByRole('button', {name: 'Copy code'}).first().click();
   expect(await readClipboard(context)).toBe('npm install outside');
@@ -91,12 +130,28 @@ test('copies the exact code in a frame without clipboard access, outside and ins
   await page.bringToFront();
   await story.getByRole('button', {name: 'Open dialog'}).click();
   const dialog = story.getByRole('dialog');
-  await dialog.getByRole('button', {name: 'Copy code'}).click();
+  const copyInDialog = dialog.getByRole('button', {name: 'Copy code'});
+  await copyInDialog.click();
   expect(await readClipboard(context)).toBe('npm install inside');
-  // Focus stays in the dialog after the copy.
+  // The copy moved no focus: the control that copied still has it.
   expect(
     await story.evaluate(
       () => document.activeElement?.closest('dialog[open]') != null,
     ),
   ).toBe(true);
+  expect(await copyCommands(story)).toBe(2);
+  // The refused API was never tried, so the browser logged no violation.
+  expect(violations).toEqual([]);
+});
+
+test('copies with the async Clipboard API where the sandboxed frame is allowed to', async ({
+  page,
+  context,
+}) => {
+  const story = await openStory(page, context, 'clipboard-write');
+  expect(await asyncClipboardAllowed(story)).toBe(true);
+
+  await story.getByRole('button', {name: 'Copy code'}).first().click();
+  expect(await readClipboard(context)).toBe('npm install outside');
+  expect(await copyCommands(story)).toBe(0);
 });
