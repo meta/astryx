@@ -28,7 +28,7 @@ export const OVERRIDES = [
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
   [
-    /\b(table header|column headers?|table headings?)\b/,
+    /\b(table headers?|column headers?|table headings?)\b/,
     {on: 'table-header-cell'},
   ],
   [
@@ -53,6 +53,9 @@ export const OVERRIDES = [
   // A context menu is its own part in Core (its items are the dropdown
   // menu's items, which it reuses).
   [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  // (Menus said plainly are every menu, the menus group; a dropdown menu,
+  // or one menu, is the dropdown menu.)
+  [/\b(?<!dropdown )menus\b/, {on: 'menus'}],
   [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
   // A part's own header or footer ("dialog header", "card footer") is that
   // part's, never the app's top bar or footer.

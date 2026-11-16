@@ -274,7 +274,8 @@ describe('FINAL-39 readers', () => {
         'set n border none --on card',
         'set n border none --on dialog',
         'set n border none --on popover',
-        'set n box-shadow none --on dropdown-menu',
+        // (Menus said plainly are every menu, the menus group.)
+        'set n box-shadow none --on menus',
       ]);
       expect((await answer('make the links on cards red')).first).toEqual([
         "set n --color-text-accent '#dc2626' --on card",

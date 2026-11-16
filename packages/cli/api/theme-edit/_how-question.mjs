@@ -15060,6 +15060,28 @@ export function draftAnswer(ctx, env, question) {
               sequence: states.length > 1,
             };
         }
+        // A part that is the underline itself, asked for a color or a
+        // thickness ("a 2px black underline" on tabs): its fill and its
+        // height, the line Core draws, never a text decoration it has no
+        // text for.
+        if (!c.neg && /-indicator$/.test(one(on))) {
+          const at = C.MAP[one(on)]?.at ?? {};
+          const tall = ['height', 'min-height', 'block-size'].find(k => at[k]);
+          const px = /\b(\d+(?:\.\d+)?)\s*px\b/.exec(c.text)?.[1];
+          const color = c.colors[0];
+          const steps = [
+            ...(color && at['background-color']
+              ? [set('background-color', color, f)]
+              : []),
+            ...(px && tall ? [set(tall, `${px}px`, f)] : []),
+          ];
+          if (steps.length)
+            return {
+              text: `the underline${where}: ${one(on)} draws it as its fill${tall ? ` and its ${tall}` : ''}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         const value = c.neg ? 'none' : 'underline';
         return {
           text: `${c.neg ? 'no underline' : 'underlined'}${where}: text-decoration`,

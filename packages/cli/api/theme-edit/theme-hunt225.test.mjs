@@ -109,8 +109,9 @@ describe("a color named like another part's", () => {
     const lines = writes(
       await how('ne', 'make the menus grey like the dialogs'),
     );
+    // (Menus said plainly are every menu, the menus group.)
     expect(lines).toEqual([
-      "set ne background-color 'var(--color-background-surface)' --on dropdown-menu",
+      "set ne background-color 'var(--color-background-surface)' --on menus",
     ]);
     await follow(lines);
   }, 120_000);

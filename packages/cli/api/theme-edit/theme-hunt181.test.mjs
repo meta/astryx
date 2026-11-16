@@ -167,7 +167,8 @@ describe('subjects, keeps and lists', () => {
         ).first,
       ).toEqual([
         'set n box-shadow none --on popover',
-        'set n box-shadow none --on dropdown-menu',
+        // (Menus said plainly are every menu, the menus group.)
+        'set n box-shadow none --on menus',
         'set n box-shadow none --on tooltip',
       ]);
       const list = await answer(
