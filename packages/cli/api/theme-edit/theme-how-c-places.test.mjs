@@ -2,10 +2,10 @@
 
 /**
  * @file `editor how`: an element named in a place it cannot be kept to
- * ("the dialog's buttons", "the menu separators") writes nothing and says
- * why, unless the answer holds there (a token set on the place, "the
- * card's links"); "the controls N tall" moves the control heights every
- * control reads.
+ * ("the dialog's buttons") writes nothing and says why, unless the answer
+ * holds there (a token set on the place, "the card's links"); the menu
+ * separators are the menu's own divider; "the controls N tall" moves the
+ * control heights every control reads.
  *
  * @position api/theme-edit — tests
  */

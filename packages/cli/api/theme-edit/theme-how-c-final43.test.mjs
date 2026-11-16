@@ -108,7 +108,9 @@ describe('FINAL-43', () => {
       needsBases(test);
       const r = await answer('make the card green and the shadows softer');
       expect(r.first[0]).toBe("background-color '#16a34a' --on card");
-      expect(r.first.slice(1).every(c => /^--shadow-/.test(c))).toBe(true);
+      const shadows = r.first.slice(1);
+      expect(shadows.length).toBeGreaterThan(0);
+      expect(shadows.every(c => /^--shadow-/.test(c))).toBe(true);
     },
     T,
   );
