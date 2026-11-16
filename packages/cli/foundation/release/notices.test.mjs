@@ -25,6 +25,7 @@ import {
   oldGlobalLines,
   projectLag,
   alignCliAndCore,
+  addMatchingCore,
   addVerbFor,
   lastNoticeSkip,
   recordNoticeSkip,
@@ -38,6 +39,7 @@ import {
   updateGlobalState,
 } from './global-state.mjs';
 import {
+  CLI_VERSION,
   cleanupFixtures,
   installCore,
   installStandInCli,
@@ -430,6 +432,51 @@ describe('the packages that move with Core', () => {
     installCore(kit, '0.7.1');
     expect(projectLag({cwd: kit, current: '0.7.1', stateDir})?.install).toBe(
       'npm install -E @astryxdesign/core@0.7.3 @astryxdesign/cli@0.7.3',
+    );
+  });
+});
+
+describe('addMatchingCore', () => {
+  it("adds a package Astryx releases with Core at the project's Core release, saved exactly where Core is pinned", () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'npm install -E @astryxdesign/theme-stone@0.7.10',
+    );
+    // With the project's package manager.
+    fs.rmSync(path.join(app, 'package-lock.json'));
+    fs.writeFileSync(
+      path.join(app, 'pnpm-lock.yaml'),
+      "lockfileVersion: '9.0'\n",
+    );
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'pnpm add -E @astryxdesign/theme-stone@0.7.10',
+    );
+  });
+
+  it('adds it at the Core range a project declares when no Core is installed, quoted for the shell', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '^0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      'npm install "@astryxdesign/theme-stone@^0.7.10"',
+    );
+  });
+
+  it('adds it at the release of the CLI that answers when the project has no Core', () => {
+    const app = project(tempDir(), {});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    expect(addMatchingCore(app, '@astryxdesign/theme-stone')).toBe(
+      `npm install @astryxdesign/theme-stone@${CLI_VERSION}`,
+    );
+  });
+
+  it('adds any other package at the version the package manager picks', () => {
+    const app = project(tempDir(), {'@astryxdesign/core': '0.7.10'});
+    writeJson(path.join(app, 'package-lock.json'), {lockfileVersion: 3});
+    installCore(app, '0.7.10');
+    expect(addMatchingCore(app, '@acme/themes')).toBe(
+      'npm install @acme/themes',
     );
   });
 });

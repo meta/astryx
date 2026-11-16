@@ -1066,11 +1066,15 @@ describe('app-theme doctor checks', () => {
     const owners = check(await checkAppThemes(dir), 'theme-owners');
     expect(owners.status).toBe('fail');
     // The listed theme's install stays a command of its own, before the
-    // steps that add the other theme.
+    // steps that add the other theme: with the project's package manager, at
+    // the Core release its exact Core peer needs, then the theme again.
     const steps = owners.fix.split('; ');
     expect(steps[0]).toBe('pnpm install');
-    expect(steps.slice(1).join('; ')).toContain('@astryxdesign/theme-stone');
-    expect(steps.at(-1)).toMatch(/ theme add stone\b/);
+    expect(steps[1]).toBe(
+      `pnpm add -E @astryxdesign/theme-stone@${CLI_VERSION}`,
+    );
+    expect(steps[2]).toMatch(/ theme add stone$/);
+    expect(steps).toHaveLength(3);
   });
 
   it('check 2 fails when the generated module is hand-edited', async () => {
