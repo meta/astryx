@@ -40,6 +40,7 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {Table, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   BarChart,
   Bar,
@@ -783,6 +784,7 @@ function SectionHeading({title, hint}: {title: string; hint?: string}) {
 // ============= MAIN =============
 
 export default function FunnelCohortAnalyticsPage() {
+  const showToast = useToast();
   const [segment, setSegment] = useState<Segment>('all');
   const [funnelWindow, setFunnelWindow] = useState<FunnelWindow>('30d');
 
@@ -833,6 +835,13 @@ export default function FunnelCohortAnalyticsPage() {
                 label="Export"
                 variant="secondary"
                 icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: this funnel and cohort report would export here',
+                    uniqueID: 'export-funnel',
+                  })
+                }
               />
             </HStack>
           </HStack>
@@ -883,27 +892,29 @@ export default function FunnelCohortAnalyticsPage() {
                 hint="Signup week × weeks since signup"
               />
               <Card padding={6}>
-                <VStack gap={8}>
-                  <Table<CohortRow>
-                    data={cohortRows}
-                    columns={cohortColumns}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                  />
-                  <HStack gap={4} vAlign="center" wrap="wrap">
-                    <Text type="supporting" color="secondary">
-                      Retention:
-                    </Text>
-                    <HStack gap={2} vAlign="center">
-                      <Token size="sm" color="red" label="< 32%" />
-                      <Token size="sm" color="orange" label="32–40%" />
-                      <Token size="sm" color="yellow" label="40–50%" />
-                      <Token size="sm" color="teal" label="50–70%" />
-                      <Token size="sm" color="green" label="≥ 70%" />
-                    </HStack>
+                <Table<CohortRow>
+                  data={cohortRows}
+                  columns={cohortColumns}
+                  idKey="id"
+                  density="balanced"
+                  dividers="rows"
+                />
+                <HStack
+                  gap={4}
+                  vAlign="center"
+                  wrap="wrap"
+                  paddingBlockStart={8}>
+                  <Text type="supporting" color="secondary">
+                    Retention:
+                  </Text>
+                  <HStack gap={2} vAlign="center">
+                    <Token size="sm" color="red" label="< 32%" />
+                    <Token size="sm" color="orange" label="32–40%" />
+                    <Token size="sm" color="yellow" label="40–50%" />
+                    <Token size="sm" color="teal" label="50–70%" />
+                    <Token size="sm" color="green" label="≥ 70%" />
                   </HStack>
-                </VStack>
+                </HStack>
               </Card>
             </VStack>
           </VStack>

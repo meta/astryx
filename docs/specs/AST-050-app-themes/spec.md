@@ -269,9 +269,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      Core;
   8. the default theme is one of the added themes;
   9. every font family an added theme names is a system font or is loaded by a
-     font stylesheet the module imports (a warning that names the family when
-     this cannot be shown, as when the stylesheet imports its fonts from a font
-     service);
+     font stylesheet the module imports, with an `@font-face` rule or a font
+     service URL that names the family (a warning that names the family when
+     this cannot be shown, as when the stylesheet imports a font service URL
+     that does not name it);
   10. no two added themes write different rules outside their own theme scope
       for the same selector, because every added stylesheet loads at once.
 

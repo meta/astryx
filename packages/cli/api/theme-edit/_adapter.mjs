@@ -973,7 +973,7 @@ export function editorThemeRefusal(err, cwd) {
 /** The shared typo rule, for a typed subcommand. */
 export {booleanWord, typoNear, typoOf} from './_normal.mjs';
 // How a setting is named in a result: one wording for the API and the CLI.
-export {describe, namesSetting} from './_settings.mjs';
+export {describe, namesSetting, needsPart} from './_settings.mjs';
 
 /**
  * The editor themes of the app the folder `cwd` is in, by name; none when

@@ -86,7 +86,10 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   carriesTypedWord,
+  nameWords,
+  orderDocSuggestions,
   orderRouteSuggestions,
+  typedWordTest,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -487,7 +490,7 @@ async function flatTopicInputs(catalog, {placement = false} = {}) {
   const topics = [];
   for (const entry of catalog.entries()) {
     const aliases = catalog.aliasesOf(entry);
-    let {title, description, category} = entry;
+    let {title, description, category, keywords} = entry;
     if (
       category === undefined ||
       (!placement && (title == null || description == null))
@@ -497,6 +500,9 @@ async function flatTopicInputs(catalog, {placement = false} = {}) {
         title ??= file.doc?.title;
         description ??= file.doc?.description;
         category ??= file.doc?.category;
+        if (keywords === undefined && Array.isArray(file.doc?.keywords)) {
+          keywords = file.doc.keywords;
+        }
       } catch {
         // A topic that does not load is reported where it is read.
       }
@@ -509,6 +515,7 @@ async function flatTopicInputs(catalog, {placement = false} = {}) {
       // Rendered once, with the tree's other summaries (buildProjectTree).
       summary: description ?? '',
       category: category ?? null,
+      ...(keywords ? {keywords} : {}),
       source: `${entry.package}:${entry.name}`,
       ...(aliases.length > 0 ? {aliases} : {}),
     });
@@ -1246,23 +1253,42 @@ function ownsNode(node, owner) {
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
- * @param {{owner?: string, references?: boolean}} [options] `owner`: only the
- *   docs this package owns. `references`: instead of the links, each reference
- *   block that cannot include what it names; a reader loses that content,
- *   where a link that names no doc still prints as written
+ * @param {{owner?: string, references?: boolean, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only the docs this package owns. `references`: instead of the
+ *   links, each reference block that cannot include what it names; a reader
+ *   loses that content, where a link that names no doc still prints as
+ *   written. `absent`: true for a target the run leaves out on purpose, such
+ *   as a Core doc in a run whose base is not Core; a link to it is no problem.
+ *   A target that names no provider names one of its own doc's provider.
  * @returns {Promise<string[]>}
  */
 export async function docsLinkProblems(
   catalog,
   tree,
-  {owner, references = false} = {},
+  {owner, references = false, absent} = {},
 ) {
   /** @type {string[]} */
   const problems = [];
-  /** @param {string} where @param {LinkProblem[]} found */
-  const note = (where, found) => {
+  /**
+   * @param {LinkProblem} problem
+   * @param {string | undefined} provider the provider of the doc it sits in
+   */
+  const leftOut = (problem, provider) => {
+    if (absent == null) return false;
+    const target = parseLinkTarget(problem.target);
+    if ('error' in target) return false;
+    const owning = target.provider ?? provider;
+    return owning != null && absent({...target, provider: owning});
+  };
+  /**
+   * @param {string} where
+   * @param {string | undefined} provider
+   * @param {LinkProblem[]} found
+   */
+  const note = (where, provider, found) => {
     for (const problem of found) {
       if ((problem.include === true) !== references) continue;
+      if (leftOut(problem, provider)) continue;
       problems.push(
         `${where}${problem.section ? ` \u00a7 ${problem.section}` : ''}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
@@ -1271,7 +1297,7 @@ export async function docsLinkProblems(
   for (const entry of catalog.entries()) {
     if (owner != null && !ownsTopic(entry, owner)) continue;
     try {
-      note(entry.name, await topicLinkProblems(catalog, entry));
+      note(entry.name, entry.package, await topicLinkProblems(catalog, entry));
     } catch {
       // The topic budget check reports a topic that does not load.
     }
@@ -1280,12 +1306,20 @@ export async function docsLinkProblems(
     if (owner != null && !ownsNode(node, owner)) continue;
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
-        note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
+        note(
+          node.route,
+          node.provider,
+          await topicLinkProblems(catalog, guideEntry(node)),
+        );
       } catch {
         // As above.
       }
     } else if (node.ref?.selfDoc) {
-      note(node.route, (await nodeContent(catalog, tree, node)).problems);
+      note(
+        node.route,
+        node.provider,
+        (await nodeContent(catalog, tree, node)).problems,
+      );
     }
   }
   return problems;
@@ -1835,7 +1869,8 @@ export async function resolveDocsArgument(topic, {cwd} = {}, loaded) {
   if (typeof topic !== 'string' || topic === '')
     return {kind: 'unknown', catalog};
   const tree = await projectTree(catalog);
-  const owner = nameOwner(tree, catalog, topic);
+  const owner =
+    nameOwner(tree, catalog, topic) ?? spelledOwner(tree, catalog, topic);
   if (owner == null) return {kind: 'unknown', catalog};
   if (owner.kind === 'topic')
     return {kind: 'topic', catalog, entry: owner.entry};
@@ -1902,6 +1937,114 @@ function childOwner(tree, name) {
         (unstuttered != null && node.route.toLowerCase() === unstuttered)),
   );
   return matches.length === 1 ? {kind: 'node', node: matches[0]} : null;
+}
+
+/**
+ * A route's or name's words, for comparing spellings: lowercase, split at
+ * spaces, hyphens, slashes, dots and underscores, and sorted, so neither the
+ * separators nor the word order count.
+ * @param {string} text
+ * @returns {string}
+ */
+function spellingKey(text) {
+  return text
+    .toLowerCase()
+    .split(/[\s/._-]+/u)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
+/**
+ * The doc a reader names in another spelling of its own route, or of the name
+ * {@link childOwner} reads: `theme customize`, `customize/theme` and
+ * `theme.customize` all spell `theme/customize`. Only the separators and the
+ * word order differ, so the words are the doc's own and the read opens it. A
+ * route spelled this way answers before a name. When two docs share the
+ * spelling, the read falls through to the suggestion list. An experimental
+ * doc never answers: its project reaches it only by its marked route.
+ * @param {DocsTree} tree
+ * @param {DocsCatalog} catalog
+ * @param {string} topic
+ * @returns {ReturnType<typeof nameOwner>}
+ */
+function spelledOwner(tree, catalog, topic) {
+  const spells = spelledBy(topic);
+  if (spells == null) return null;
+  const nodes = [...tree.nodes.values()];
+  const routes = nodes.filter(
+    node => spells(node.route) && !isExperimentalTreeNode(tree, node),
+  );
+  if (routes.length > 0) {
+    return routes.length === 1
+      ? nameOwner(tree, catalog, routes[0].route)
+      : null;
+  }
+  const names = nodes.filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      spells(node.name) &&
+      !isExperimentalTreeNode(tree, node),
+  );
+  return names.length === 1 ? {kind: 'node', node: names[0]} : null;
+}
+
+/**
+ * A test for whether a text spells the typed one ({@link spellingKey}), or
+ * null when the typed text has no words. Two spellings hold the same
+ * characters besides separators, so a text of another length is no spelling
+ * and its words are never split.
+ * @param {string} topic
+ * @returns {((text: string) => boolean) | null}
+ */
+function spelledBy(topic) {
+  const wanted = spellingKey(topic);
+  if (wanted === '') return null;
+  const size = letterCount(topic);
+  return text => letterCount(text) === size && spellingKey(text) === wanted;
+}
+
+/**
+ * How many characters of a text are not separators, as {@link spellingKey}
+ * splits them.
+ * @param {string} text
+ * @returns {number}
+ */
+function letterCount(text) {
+  return text.replace(/[\s/._-]+/gu, '').length;
+}
+
+/**
+ * The search keywords a page declares.
+ * @param {TreeNode | undefined} node
+ * @returns {string[]}
+ */
+function declaredKeywords(node) {
+  if (node == null) return [];
+  const selfDoc = /** @type {any} */ (node.ref)?.selfDoc;
+  return [
+    ...(node.keywords ?? []),
+    ...(Array.isArray(selfDoc?.keywords) ? selfDoc.keywords : []),
+  ].filter(name => typeof name === 'string' && name !== '');
+}
+
+/**
+ * Docs suggestions ordered by each page's route, title and declared keywords
+ * (orderDocSuggestions).
+ * @template {{name: string}} T
+ * @param {DocsTree} tree
+ * @param {string} topic
+ * @param {T[]} suggestions
+ * @param {boolean} closest
+ * @returns {T[]}
+ */
+function orderDocPages(tree, topic, suggestions, closest) {
+  return orderDocSuggestions(topic, suggestions, {
+    closest,
+    titleOf: s => tree.get(s.name)?.title,
+    keywordsOf: s => declaredKeywords(tree.get(s.name)),
+  });
 }
 
 /**
@@ -2102,17 +2245,94 @@ function movedRoute(topic, tree) {
   return null;
 }
 
+/** The most docs a miss suggests for the words its argument shares with them. */
+const WORD_MATCH_SUGGESTIONS = 5;
+
+/**
+ * The docs whose route, title or declared keywords carry a typed word, closest
+ * first and cut where the matches get weaker (orderDocSuggestions): `theming`
+ * names the topic titled Theming. An experimental doc is never suggested for a
+ * word.
+ * @param {DocsTree} tree
+ * @param {string} topic
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function wordMatches(tree, topic) {
+  const carries = typedWordTest(topic);
+  const named = [...tree.nodes.values()]
+    .filter(
+      node =>
+        [node.route, node.title, ...declaredKeywords(node)].some(carries) &&
+        !isExperimentalTreeNode(tree, node),
+    )
+    .map(node => ({name: node.route, reason: node.summary}));
+  return orderDocPages(tree, topic, named, true);
+}
+
+/**
+ * Whether the typed text holds every word of a route: the route is named,
+ * by its leading path segments (`widgets/quick-start` names `widgets`) or its
+ * whole spelling inside the text (`set-up-widgets` names `widgets`).
+ * @param {string} topic
+ * @param {string} route
+ * @returns {boolean}
+ */
+function namesRoute(topic, route) {
+  const typed = new Set(nameWords(topic));
+  const words = nameWords(route);
+  return words.length > 0 && words.every(word => typed.has(word));
+}
+
+/**
+ * A list ordered by words, with the route the first list leads with kept
+ * first when the typed text names it: a word ordering never demotes a route
+ * the reader typed.
+ * @template {{name: string}} T
+ * @param {string} topic
+ * @param {T[]} first the list as route words order it
+ * @param {T[]} byWords the same docs or others, ordered by words
+ * @returns {T[]}
+ */
+function namedFirst(topic, first, byWords) {
+  const lead = first[0];
+  if (lead == null || !namesRoute(topic, lead.name)) return byWords;
+  return [lead, ...byWords.filter(entry => entry.name !== lead.name)];
+}
+
+/**
+ * The word matches that take the place of the every-doc list: the named route
+ * that list leads with stays first, and the list is never longer than the one
+ * it replaces, nor than {@link WORD_MATCH_SUGGESTIONS} with `taken` entries
+ * already before it.
+ * @param {string} topic
+ * @param {Array<{name: string, reason: string}>} everyDoc ordered and cut
+ * @param {Array<{name: string, reason: string}>} byWords
+ * @param {number} taken
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function fewerWordMatches(topic, everyDoc, byWords, taken) {
+  return namedFirst(topic, everyDoc, byWords).slice(
+    0,
+    Math.min(everyDoc.length, WORD_MATCH_SUGGESTIONS - taken),
+  );
+}
+
 /**
  * The error for a docs argument that names nothing. For a route, it suggests
- * every child of the deepest namespace the route reaches, closest first.
- * Otherwise it suggests the docs the argument names in another spelling, or
- * failing that the topics and top-level namespaces, closest first and cut
- * where the matches get weaker (every one of them when none shares a word
- * with the argument). When the argument matches a component, hook or template
+ * every child of the deepest namespace the route reaches, closest first by
+ * each child's route, title and keywords, with a child the route names kept
+ * first. Otherwise it suggests the docs whose own name it is, or whose route
+ * it spells with hyphens; failing that, the topics and top-level namespaces,
+ * closest first and cut where the matches get weaker (every one of them when
+ * none shares a word with the argument). When the argument matches a component, hook or template
  * (exact, folded or last segment), the command that reads that entry joins the list as
  * foundation/suggest/other-command.mjs places it, and the list keeps its
  * length; when no suggested doc
  * shares a word with the argument, that command is the only suggestion.
+ * When no command joins, the docs whose route, title or declared keywords
+ * carry a typed word ({@link wordMatches}) take the place of the topics and
+ * namespaces, the named route that list leads with first, in a list no
+ * longer than the one they replace.
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
  * @param {{cwd?: string}} [options]
@@ -2167,21 +2387,32 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       ...catalog.names().map(name => ({name, reason: 'available topic'})),
     ];
   }
-  if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions, {
-      closest: !routeChildren,
-    });
+  if (typeof topic === 'string' && routeChildren) {
+    suggestions = namedFirst(
+      topic,
+      orderRouteSuggestions(topic, suggestions, {closest: false}),
+      orderDocPages(tree, topic, suggestions, false),
+    );
+  } else if (typeof topic === 'string') {
+    suggestions = orderRouteSuggestions(topic, suggestions, {closest: true});
   }
+  // In place of the every-doc list: the docs a typed word names by their
+  // route, title or keywords.
+  const byWords =
+    everyDoc && typeof topic === 'string' ? wordMatches(tree, topic) : [];
   // A route that moved names where it went, ahead of the usual suggestions
   // (spec:AST-046 FR9, FR6).
   const moved = movedRoute(topic, tree);
   if (moved) {
+    const after = (/** @type {Array<{name: string, reason: string}>} */ list) =>
+      list.filter(entry => entry.name !== moved.route);
+    const rest =
+      byWords.length > 0
+        ? fewerWordMatches(String(topic), after(suggestions), after(byWords), 1)
+        : after(suggestions);
     return new AstryxError(
       `Unknown topic "${String(topic)}". It moved to "${moved.route}"${notLoaded(catalog)}`,
-      [
-        {name: moved.route, reason: moved.summary},
-        ...suggestions.filter(entry => entry.name !== moved.route),
-      ],
+      [{name: moved.route, reason: moved.summary}, ...rest],
       ERROR_CODES.ERR_UNKNOWN_TOPIC,
     );
   }
@@ -2208,6 +2439,7 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
         })
       : null;
   if (hint && elsewhere) {
+    // Another command's entry leads; word matches never join its list.
     const sharesAWord =
       !everyDoc ||
       suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
@@ -2216,6 +2448,8 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
         from: 'docs',
         alone: !sharesAWord,
       }) ?? [];
+  } else if (byWords.length > 0) {
+    suggestions = fewerWordMatches(String(topic), suggestions, byWords, 0);
   }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,

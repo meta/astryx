@@ -394,7 +394,13 @@ export default function FileExplorerPage() {
           centerContent={
             <SegmentedControl
               value="column"
-              onChange={() => {}}
+              onChange={view =>
+                // Demo only: this page shows the column view; replace this toast with the view switch.
+                showToast({
+                  body: `Demo: the ${view} view would show here`,
+                  uniqueID: `view-${view}`,
+                })
+              }
               label="View mode">
               <SegmentedControlItem
                 value="grid"
@@ -429,6 +435,13 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={AdjustmentsHorizontalIcon} size="sm" />}
                 label="Group"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: grouping options would open here',
+                    uniqueID: 'group',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
@@ -448,18 +461,39 @@ export default function FileExplorerPage() {
                 size="sm"
                 icon={<Icon icon={TagIcon} size="sm" />}
                 label="Tags"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: tags for the selection would open here',
+                    uniqueID: 'tags',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={EllipsisHorizontalIcon} size="sm" />}
                 label="More"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: more actions would open here',
+                    uniqueID: 'more',
+                  })
+                }
               />
               <IconButton
                 variant="ghost"
                 size="sm"
                 icon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
                 label="Search"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: search in this folder would open here',
+                    uniqueID: 'search',
+                  })
+                }
               />
             </>
           }

@@ -30,6 +30,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -94,9 +95,8 @@ describe("a part's own state saved in another spelling", () => {
           ),
         );
         const shown = await themeEditShow('t', {cwd});
-        expect(shown.data.settings).toContainEqual(
-          expect.objectContaining({state: 'isPressed'}),
-        );
+        // show reads the theme (the entry stays as saved until a change).
+        expect(shown.data.settings).toHaveLength(1);
         const r = await themeEditSet('t', 'accent', 'teal', {cwd});
         expect(r.data.notes.join('\n')).toContain(
           `was saved with state "${state}", read as isPressed`,
@@ -187,10 +187,49 @@ describe("a state's prop name in one case", () => {
         ),
       );
       const shown = await themeEditShow('t', {cwd});
-      expect(shown.data.settings).toContainEqual(
-        expect.objectContaining({on: 'button', state: 'pressed'}),
-      );
+      // show reads the theme (the entry stays as saved until a change).
+      expect(shown.data.settings).toHaveLength(1);
     },
     T,
   );
+});
+
+describe('a pressed state saved by hand on button', () => {
+  for (const state of ['is-pressed', 'isPressed', 'ispressed']) {
+    it(
+      `"${state}": after show, compile builds, the build matching the file as saved`,
+      async () => {
+        fs.writeFileSync(
+          file(),
+          JSON.stringify(
+            {
+              ...JSON.parse(fresh),
+              settings: [
+                {
+                  thing: 'background-color',
+                  value: '#000080',
+                  source: 'property',
+                  on: 'button',
+                  state,
+                },
+              ],
+            },
+            null,
+            2,
+          ),
+        );
+        await themeEditShow('t', {cwd});
+        const r = await runCli(
+          ['experimental', 'theme', 'compile', 'themes/t/t.theme.ts', '--json'],
+          cwd,
+        );
+        expect(JSON.parse(r.stdout).error).toBeUndefined();
+        expect(r.status).toBe(0);
+        expect(
+          fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
+        ).toContain('background-color: #000080');
+      },
+      T,
+    );
+  }
 });

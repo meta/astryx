@@ -29,6 +29,7 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -37,6 +38,7 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -182,7 +184,13 @@ function componentDetailBlocks(
         out.push(
           section('Showcase'),
           record(
-            {...showcase, displayName: owned(showcase, showcase.displayName)},
+            {
+              ...showcase,
+              displayName: owned(
+                showcase,
+                markNotReady(showcase.displayName, showcase.isReady),
+              ),
+            },
             {fields: ['displayName', 'description']},
           ),
         );
@@ -191,7 +199,10 @@ function componentDetailBlocks(
         out.push(
           section('Examples'),
           records(
-            examples.map(block => ({...block, name: owned(block, block.name)})),
+            examples.map(block => ({
+              ...block,
+              name: owned(block, markNotReady(block.name, block.isReady)),
+            })),
             {fields: ['name', 'description']},
           ),
         );
@@ -201,7 +212,11 @@ function componentDetailBlocks(
           section(
             `Related: ${related.length} blocks that use ${result.data.component}`,
           ),
-          list(related.map(block => owned(block, block.name))),
+          list(
+            related.map(block =>
+              owned(block, markNotReady(block.name, block.isReady)),
+            ),
+          ),
         );
       }
       if (!showcase && examples.length === 0 && related.length === 0) {
@@ -317,7 +332,10 @@ export function registerComponent(program) {
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
         [
-          `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
+          // The example is a Core import, so a run on another base leaves it out.
+          currentNonCoreBase()
+            ? 'Import from the path shown'
+            : `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
           `Usage: ${run} component <name> [name...]`,
         ].join('\n'),
       );

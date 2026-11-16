@@ -88,8 +88,8 @@ export default function TopNavMegaMenuBlock() {
       }
       endContent={
         <>
-          <Button label="Sign in" variant="ghost" />
-          <Button label="Get started" variant="primary" />
+          <Button href={'#'} label="Sign in" variant="ghost" />
+          <Button href={'#'} label="Get started" variant="primary" />
         </>
       }
     />

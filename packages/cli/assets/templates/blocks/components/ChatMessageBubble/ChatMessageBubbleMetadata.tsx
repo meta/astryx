@@ -14,8 +14,14 @@ import {Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
 import {HStack} from '@astryxdesign/core/Layout';
+import {useToast} from '@astryxdesign/core/Toast';
+import {useClipboard} from '@astryxdesign/core/hooks';
+
+const MESSAGE = 'Your deployment finished successfully. All 14 checks passed.';
 
 export default function ChatMessageBubbleMetadata() {
+  const showToast = useToast();
+  const {copy} = useClipboard();
   return (
     <ChatMessageList style={{maxWidth: 500}}>
       <ChatMessage
@@ -40,7 +46,11 @@ export default function ChatMessageBubbleMetadata() {
                     size="sm"
                     icon={<Icon icon="copy" size="sm" />}
                     isIconOnly
-                    onClick={() => {}}
+                    onClick={() =>
+                      void copy(MESSAGE).then(copied =>
+                        showToast({body: copied ? 'Copied' : 'Could not copy'}),
+                      )
+                    }
                   />
                   <Text type="supporting" color="secondary">
                     Claude Opus 4.6
@@ -49,7 +59,7 @@ export default function ChatMessageBubbleMetadata() {
               }
             />
           }>
-          Your deployment finished successfully. All 14 checks passed.
+          {MESSAGE}
         </ChatMessageBubble>
       </ChatMessage>
       <ChatMessage sender="user">

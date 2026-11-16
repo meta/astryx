@@ -326,9 +326,10 @@ export function makeCompiler(project, parts) {
    * @param {string} value
    * @param {string} P
    * @param {string} [when] the --when the token is set under (`variant:strong`)
+   * @param {string} [also] the rest of the flags the setting carries (` --state hover --mode dark`), kept on the lines offered
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P, when) {
+  function checkTokenOn(theme, target, token, value, P, when, also = '') {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -340,7 +341,13 @@ export function makeCompiler(project, parts) {
     const g = groupOfToken(token);
     // Under a variant: only what the part reads in that variant's rules (or
     // rules that name no variant) counts.
-    const [wProp, wVal] = String(when ?? '').split(':');
+    // (Several conditions, `variant:ghost+size:sm`: a rule counts when it
+    // names none of them otherwise; the message names the first.)
+    const whens = String(when ?? '')
+      .split('+')
+      .map(w => w.split(':'))
+      .filter(([p, v]) => p && v);
+    const [wProp, wVal] = whens[0] ?? [];
     if (wProp && wVal && allReads(target).has(token)) {
       const conds = [
         ...Object.values(MAP[target]?.own ?? {}).flatMap(
@@ -349,8 +356,10 @@ export function makeCompiler(project, parts) {
       ];
       const inVariant = (/** @type {string} */ c) => {
         const attrs = c.split(' ')[0].split(',');
-        const own = attrs.find(a => a.startsWith(`${wProp}=`));
-        return !own || own === `${wProp}=${wVal}`;
+        return whens.every(([p, v]) => {
+          const own = attrs.find(a => a.startsWith(`${p}=`));
+          return !own || own === `${p}=${v}`;
+        });
       };
       // (What a line inside the part declares is recorded as the part's
       // own already; any other part inside it that reads the token takes
@@ -381,7 +390,7 @@ export function makeCompiler(project, parts) {
             .slice(0, 3)
             .map(
               t =>
-                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}${also}`,
             ),
           also: [],
         };

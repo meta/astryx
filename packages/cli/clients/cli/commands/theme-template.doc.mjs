@@ -39,6 +39,7 @@ export const doc = {
     {label: 'Somewhere else', cli: 'astryx theme template src/themes/starter.ts'},
   ],
   outsideProject: 'same',
+  requires: ['themes.template'],
   exitCodes: [
     {
       code: 0,

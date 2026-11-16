@@ -36,7 +36,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Module, {createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {format} from 'node:util';
+import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
@@ -1123,12 +1123,75 @@ function fail(code, message, detail) {
   parentPort?.postMessage({ok: false, error: {code, message, detail}, logs});
 }
 
+/**
+ * A compile error's text without colour codes (Babel colours its code frame
+ * where a terminal or CI asks for colour), and the absolute path Babel puts
+ * before the message, when it names one.
+ * @param {any} err
+ * @returns {{text: string, named?: string}}
+ */
+function compileText(err) {
+  const text = stripVTControlCharacters(String(err?.message ?? err));
+  const lead = /^(.*?): /.exec(text)?.[1];
+  return lead && path.isAbsolute(lead) ? {text: text.slice(lead.length + 2), named: lead} : {text};
+}
+
+/**
+ * Where a compile error points: the file, as a path from the project, and the
+ * line its location or code frame marks (`> 3 |   gap,`), with the token the
+ * carets under that line mark.
+ * @param {any} err
+ * @returns {{file?: string, line?: number, column?: number, token?: string, source?: string}}
+ */
+function compileSite(err) {
+  const {text, named} = compileText(err);
+  const fromRoot = named ? path.relative(root, named) : '';
+  const file = named
+    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
+    : undefined;
+  const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
+  const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
+  const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
+  // An aliased import (`gap as space`) is read by its local name.
+  const token = frame
+    ? frame[2].slice(frame[3].length, frame[3].length + frame[4].length).split(/\s+as\s+/).pop()
+    : undefined;
+  return {
+    ...(file ? {file} : {}),
+    ...(line ? {line} : {}),
+    ...(column ? {column} : {}),
+    ...(token ? {token} : {}),
+    ...(named ? {source: named} : {}),
+  };
+}
+
+/**
+ * The module an import declaration names, read from the line of one of its
+ * names onward (an import can span lines).
+ * @param {string} file
+ * @param {number} line
+ * @returns {string | undefined}
+ */
+function importedFrom(file, line) {
+  let lines;
+  try {
+    lines = fs.readFileSync(file, 'utf8').split('\n').slice(line - 1, line + 40);
+  } catch {
+    return undefined;
+  }
+  for (const text of lines) {
+    const from = /\bfrom\s*(['"])([^'"]+)\1/.exec(text);
+    if (from) return from[2];
+  }
+  return undefined;
+}
+
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
-  if (err?.renderCode) return fail(err.renderCode, String(err.message).replace(/^\/[^:\n]*: /, ''));
+  if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
-  const message = String(err?.message ?? err).replace(/^\/[^:\n]*: /, '');
+  const message = compileText(err).text;
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',
@@ -1154,9 +1217,23 @@ function classify(e) {
     return fail('ERR_FILE_NOT_FOUND', `The page imports ${missing[1]}, which does not exist`, {module: missing[1]});
   }
   if (err?.code === 'BABEL_PARSE_ERROR' || err?.reasonCode || /SyntaxError|Unexpected token/.test(`${err?.name} ${message}`)) {
-    const loc = err?.loc ? `:${err.loc.line}:${err.loc.column + 1}` : '';
-    return fail('ERR_RENDER_COMPILE', `The page does not compile${loc ? ` (line ${err.loc.line})` : ''}: ${message.split('\n')[0]}`, {
-      ...(err?.loc ? {line: err.loc.line, column: err.loc.column + 1} : {}),
+    const site = compileSite(err);
+    const where = [site.file, site.line ? `line ${site.line}` : ''].filter(Boolean).join(', ');
+    let reason = message.split('\n')[0];
+    // StyleX reads at build time each value a style uses; an imported value
+    // only from a file it can read, which it says without naming the import.
+    if (reason.startsWith('Could not resolve the path to the imported file')) {
+      const spec = site.source && site.line ? importedFrom(site.source, site.line) : undefined;
+      const value = site.token ? `\`${site.token}\`` : 'an imported value';
+      reason =
+        spec && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)
+          ? `StyleX could not find ${spec}, which ${value} comes from, at build time. Check that the file exists, or that its package is installed where the page is.`
+          : `StyleX could not read ${value}${spec ? ` from ${spec}` : ''} at build time. A value a style uses must be written in the style, or come from a .stylex.ts or .stylex.js file that defines it with stylex.defineVars or stylex.defineConsts.`;
+    }
+    return fail('ERR_RENDER_COMPILE', `The page does not compile${where ? ` (${where})` : ''}: ${reason}`, {
+      ...(site.file ? {file: site.file} : {}),
+      ...(site.line ? {line: site.line} : {}),
+      ...(site.column ? {column: site.column} : {}),
     });
   }
   const browser = /\b(window|document|localStorage|sessionStorage|navigator|location|matchMedia|requestAnimationFrame|IntersectionObserver|ResizeObserver|HTMLElement|customElements) is not defined/.exec(message);
