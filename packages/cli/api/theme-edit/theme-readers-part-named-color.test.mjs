@@ -218,6 +218,7 @@ describe('words', () => {
 describe('keeps', () => {
   it('a kept focus ring stays kept, in one mode too', async () => {
     const t = await fresh('k1');
+    // (Kept as Core draws an invalid field while focused: its own ring.)
     const keep = writes(
       await how(
         t,
@@ -225,7 +226,7 @@ describe('keeps', () => {
       ),
     );
     expect(keep).toContain(
-      `set ${t} box-shadow none --on inputs --when status:error --state focus-within`,
+      `set ${t} box-shadow 'inset 0 0 0 2px var(--color-accent-muted)' --on text-input --when status:error --state focus-within --only`,
     );
     await follow(keep);
     const dark = writes(
@@ -238,7 +239,7 @@ describe('keeps', () => {
       "set q0 box-shadow 'inset 0 0 0 2px light-dark(var(--color-accent-muted), #dc2626)' --on inputs --state focus-within",
     );
     expect(dark).toContain(
-      'set q0 box-shadow none --on inputs --when status:error --state focus-within',
+      "set q0 box-shadow 'inset 0 0 0 2px var(--color-accent-muted)' --on text-input --when status:error --state focus-within --only",
     );
   }, 240_000);
 

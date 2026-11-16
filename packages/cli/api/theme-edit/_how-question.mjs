@@ -14409,6 +14409,28 @@ export function draftAnswer(ctx, env, question) {
         const tokenNow = resolvedValue(st.thing) || current(st.thing);
         if (tokenNow) return set(st.thing, tokenNow, {...flags, on: p.on});
       }
+      // A shadow asked in a state ("the focus ring on inputs, but keep the
+      // invalid ones"): the kept part's shadow in that state, under its
+      // kept status or variant, from what Core draws for it there; the
+      // part's plain shadow in that state when the status draws none of
+      // its own.
+      if (st.thing === 'box-shadow' && st.state && !p.state) {
+        const inState = Object.entries(
+          C.MAP[one(p.on)]?.at?.['box-shadow'] ?? {},
+        ).filter(([k]) =>
+          new RegExp(`(?:^|\\s):${st.state}(?![\\w-])`).test(k),
+        );
+        const [axisName, axisValue] = String(p.when ?? '').split(':');
+        const scoped = p.when
+          ? inState.find(([k]) =>
+              new RegExp(`\\b${axisName}=${axisValue}\\b`).test(k),
+            )
+          : undefined;
+        const plain = inState.find(([k]) => !/\bstatus=/.test(k));
+        const value = (scoped ?? plain)?.[1];
+        if (value != null)
+          return set('box-shadow', String(value), {...flags, state: st.state});
+      }
       // The shadow it has now, written out (the tokens it reads may be set
       // to none in the same answer).
       // Its shadow at rest; none when it has none.
