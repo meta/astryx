@@ -6253,7 +6253,15 @@ export function draftAnswer(ctx, env, question) {
           return {
             part: {on: holder},
             holder,
-            refuse: `${elsewhere[0].k} is the part that is ${elsewhere[0].st}, and the part data never draws one inside ${holder} (it draws ${holder} closed), so a change there cannot be kept to ${holder}: nothing is written`,
+            // (The part is another component's, drawn in the layer the
+            // place opens: a date picker's calendar is the plain Calendar.
+            // The honest alternative, said, never offered as a step.)
+            refuse: (() => {
+              const {k, st} = elsewhere[0];
+              const comp = ctx.project.target.get(k)?.component ?? k;
+              const own = ctx.project.target.get(holder)?.component ?? holder;
+              return `${own}'s ${comp.toLowerCase()} is the plain ${comp}, drawn in the layer ${own} opens: ${k} there is every ${comp}'s, so a change there reaches every ${comp.toLowerCase()}; nothing is written. To change every ${comp.toLowerCase()}'s ${st} ${k.split('-').at(-1)} instead, set it --on ${k} --state ${st}`;
+            })(),
           };
       }
       if (!pick) continue;

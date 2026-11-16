@@ -6728,9 +6728,28 @@ function checkOne(
         E.ERR_MISSING_ARGUMENT,
         `${prop} is a CSS property, so it needs --on <part|group>. For the whole theme use a dial or a token.`,
         {
-          // The theme-wide dial or token for it, when there is one; never
-          // a part that was not named.
+          // A part named in the value as a label (`'card: #eeeeee'`, pasted
+          // from notes): that value on that part. Else the theme-wide dial
+          // or token for it, when there is one; never a part that was not
+          // named.
           run: [
+            ...(() => {
+              const label = /^\s*([a-z][a-z -]*?)\s*:\s*(\S.*)$/i.exec(
+                String(v ?? ''),
+              );
+              if (!label) return [];
+              const word = label[1].trim().toLowerCase().replace(/\s+/g, '-');
+              const on = [
+                word,
+                word.replace(/e?s$/, ''),
+                word.replace(/s$/, ''),
+              ].find(w => ctx.project.target.has(w) || FAMILIES[w]);
+              return on
+                ? [
+                    `${P} set ${slug} ${prop} ${quoteCommandArgument(label[2].trim())} --on ${on}`,
+                  ]
+                : [];
+            })(),
             ...(v && WHOLE_THEME_EQUIVALENT[prop]
               ? [
                   `${P} set ${slug} ${WHOLE_THEME_EQUIVALENT[prop]} ${quoteCommandArgument(v)}`,

@@ -125,7 +125,12 @@ describe('an element named in a part', () => {
         .flatMap((/** @type {any} */ r) => r.commands)
         .filter((/** @type {string} */ c) => / editor set /.test(c)),
     ).toEqual([]);
-    expect(JSON.stringify(today.data.results)).toMatch(/nothing is written/);
+    // (The date picker's calendar is the plain Calendar in its popover: the
+    // alternative is named, changing every calendar, never offered as a
+    // step.)
+    expect(JSON.stringify(today.data.results)).toMatch(
+      /DateInput's calendar is the plain Calendar, drawn in the layer DateInput opens.*reaches every calendar; nothing is written.*--on calendar-day --state today/,
+    );
     expect(
       (await top('make the highlighted option in the selector blue', 'e'))
         .commands,
@@ -196,5 +201,17 @@ describe('a state typed with an ARIA prefix', () => {
       state: 'aria-pressed',
     });
     expect(r.data.setting).toMatchObject({state: 'isPressed'});
+  }, 240_000);
+});
+
+describe('a part named in the value', () => {
+  it('offers the value on that part when --on is missing', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('l', {cwd, like: 'neutral'});
+    const r = await refusal(() =>
+      themeEditSet('l', 'background-color', 'card: #eeeeee', {cwd}),
+    );
+    expect(r.code).toBe('ERR_MISSING_ARGUMENT');
+    expect(r.run[0]).toMatch(/ set l background-color '#eeeeee' --on card$/);
   }, 240_000);
 });
