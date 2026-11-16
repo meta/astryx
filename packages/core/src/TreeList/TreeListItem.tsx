@@ -122,14 +122,18 @@ const styles = stylex.create({
   // when its own treeitem publishes focus (`--_tree-focus-z` on `wrapper`).
   // The ring is the row's outline, so it cannot be lifted on its own: a
   // focused row that is also filled (selected or hovered) covers the guides at
-  // that row. That is the accepted trade-off (DD3). Applied with
-  // `focusWithinOrPublished`, which every row uses, so it lifts only the row
-  // whose ring is showing.
+  // that row. That is the accepted trade-off (DD3). Its conditions match the
+  // ring's, so only the row whose ring shows rises above the guides.
   focusLift: {
     zIndex: {
       default: 'var(--_tree-focus-z, auto)',
       ':has(:focus-visible)': 2,
     },
+  },
+  // The lift for a plain row, whose ring comes only from its treeitem's own
+  // focus: a control in its start or end content rings itself.
+  publishedFocusLift: {
+    zIndex: 'var(--_tree-focus-z, auto)',
   },
   // Per-level indent, drawn INSIDE the row box: the row (`contentWrapper`)
   // stays full width, so a nested row's hover and selected fill spans the
@@ -748,10 +752,11 @@ export function TreeListItem({
                   xstyle,
                 )
               : // A plain row has no action, but it is still a tab stop in the
-                // tree's roving focus, so it draws the same focus ring.
-                focusOutlineProps.focusWithinOrPublished(
+                // tree's roving focus, so it draws the focus ring when the
+                // treeitem itself has focus.
+                focusOutlineProps.published(
                   styles.contentWrapper,
-                  styles.focusLift,
+                  styles.publishedFocusLift,
                   densityStyles[density],
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,

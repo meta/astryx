@@ -437,10 +437,54 @@ describe('TreeList', () => {
       getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
     ).toBe(FOCUS_OUTLINE);
     const ringClasses = stylex
-      .props(focusOutlineStyles.focusWithinOrPublished)
+      .props(focusOutlineStyles.published)
       .className!.split(' ');
     for (const cls of ringClasses) {
       expect(row.className.split(' ')).toContain(cls);
+    }
+  });
+
+  it('does not ring a plain row when focus is on a control in its end content', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {
+            id: 'budget',
+            label: 'Budget',
+            endContent: <button type="button">Pin</button>,
+          },
+        ]}
+      />,
+    );
+    const item = screen.getByText('Budget').closest('li')!;
+    const row = screen
+      .getByText('Budget')
+      .closest<HTMLElement>('.astryx-tree-list-item')!;
+
+    await user.tab();
+    expect(item).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Pin'})).toHaveFocus();
+
+    // The treeitem no longer publishes focus, and the row has no ring keyed
+    // on focus inside it, so only the Pin button shows a ring.
+    expect(getComputedStyle(item).getPropertyValue('--_focus-outline')).toBe(
+      'none',
+    );
+    // The classes the focus-inside ring adds over the published one carry
+    // its `:has(:focus-visible)` branch; a plain row must not compose them.
+    const published = stylex
+      .props(focusOutlineStyles.published)
+      .className!.split(' ');
+    const focusInside = stylex
+      .props(focusOutlineStyles.focusWithinOrPublished)
+      .className!.split(' ')
+      .filter(cls => !published.includes(cls));
+    expect(focusInside.length).toBeGreaterThan(0);
+    const rowClasses = row.className.split(' ');
+    for (const cls of focusInside) {
+      expect(rowClasses).not.toContain(cls);
     }
   });
 
@@ -1093,8 +1137,8 @@ describe('TreeList', () => {
 
     it('lifts every row, plain ones included, since every row draws a focus ring', () => {
       // A plain row (no onClick, href or children) is still a tab stop in the
-      // tree's roving focus, so it draws the ring and takes the lift like any
-      // other row (DD3).
+      // tree's roving focus, so it draws the ring and takes a lift keyed on its
+      // treeitem's own focus (DD3).
       render(
         <TreeList
           items={[
@@ -1112,7 +1156,7 @@ describe('TreeList', () => {
       );
       const rowOf = (label: string) =>
         screen.getByText(label).closest<HTMLElement>('.astryx-tree-list-item')!;
-      expect(rowOf('Plain').className).toContain('focusLift');
+      expect(rowOf('Plain').className).toContain('publishedFocusLift');
       expect(rowOf('Run').className).toContain('focusLift');
       expect(rowOf('Root').className).toContain('focusLift');
     });

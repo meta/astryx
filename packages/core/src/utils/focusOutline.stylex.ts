@@ -202,6 +202,16 @@ export const focusOutlineStyles = stylex.create({
       ':focus-visible': FOCUS_OUTLINE_OFFSET,
     },
   },
+  /**
+   * Rings only from the variables an ancestor publishes with
+   * {@link focusOutlineStyles.publishFocusVisibleVars}, never from focus on a
+   * descendant: for a row with no action of its own, whose inner controls ring
+   * themselves. One focus move shows one ring.
+   */
+  published: {
+    outline: 'var(--_focus-outline, none)',
+    outlineOffset: 'var(--_focus-outline-offset, 0)',
+  },
   focusWithinOrPublished: {
     outline: {
       default: 'var(--_focus-outline, none)',
@@ -243,6 +253,7 @@ export const focusOutlineProps = {
   publishFocusVisibleVars: makeFocusOutlineProps(
     focusOutlineStyles.publishFocusVisibleVars,
   ),
+  published: makeFocusOutlineProps(focusOutlineStyles.published),
   focusWithinOrPublished: makeFocusOutlineProps(
     focusOutlineStyles.focusWithinOrPublished,
   ),
