@@ -39,8 +39,9 @@
  *   folder it runs from, both in every entry's key, stand for) is
  *   unchanged, in any command. Through `persistedValue`, the stored docs
  *   (foundation/doc-compiler/stored-docs.mjs keptParse) keep each stored
- *   doc's parse by the doc's text, which with the build id is all the parse
- *   depends on, in a run that keeps catalogs. The commands whose runs keep the other
+ *   doc's parse by the doc's text and the zod release the parsers load,
+ *   which with the build id are all the parse depends on, in a run that
+ *   keeps catalogs. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
