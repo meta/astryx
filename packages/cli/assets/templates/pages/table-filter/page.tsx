@@ -4339,6 +4339,7 @@ export default function TableFilterTemplate() {
   return (
     <>
       <Layout
+        role="main"
         height="fill"
         padding={0}
         xstyle={styles.pageShell}

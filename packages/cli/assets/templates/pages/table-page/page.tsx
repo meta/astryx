@@ -858,6 +858,7 @@ export default function InvoiceLineItemsTemplate() {
 
   return (
     <Layout
+      role="main"
       height="fill"
       contentWidth={960}
       content={

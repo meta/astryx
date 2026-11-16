@@ -1345,6 +1345,7 @@ export default function ConnectedAccountsTemplate() {
   return (
     <RangeContext.Provider value={range}>
       <Layout
+        role="main"
         height="auto"
         contentWidth={1200}
         xstyle={styles.wash}

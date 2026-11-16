@@ -572,6 +572,7 @@ export default function IncidentConsolePage() {
 
   return (
     <Layout
+      role="main"
       height="fill"
       header={
         <LayoutHeader hasDivider>

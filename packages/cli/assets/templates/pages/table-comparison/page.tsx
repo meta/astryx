@@ -1403,6 +1403,7 @@ export default function ModelComparisonTemplate() {
 
   return (
     <Layout
+      role="main"
       height="auto"
       // Caps the matrix on a wide display. Past roughly this width the columns
       // stop being scannable as a group — the eye has to travel too far between

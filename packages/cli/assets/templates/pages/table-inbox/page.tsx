@@ -2434,6 +2434,7 @@ export default function SupportInboxTemplate() {
   return (
     <>
       <Layout
+        role="main"
         ref={surfaceRef}
         height="fill"
         header={
