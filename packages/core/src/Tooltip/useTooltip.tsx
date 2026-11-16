@@ -334,19 +334,17 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     mount: layerMount,
   } = layer;
   // Until the layer mounts, `aria-describedby` names a hidden copy of the
-  // description, so a screen reader reads it before the tooltip opens. The
-  // layer's own mount store decides the swap, so the copy leaves in the
-  // commit that mounts the layer: the two are never in the page together,
-  // and a show that waits for its trigger keeps the copy until it runs.
+  // description, so a screen reader reads it before the tooltip opens.
+  // The layer's mount store decides the swap. The copy leaves in the commit
+  // that mounts the layer. A show that waits for its trigger keeps the copy.
   const isLayerMounted = useSyncExternalStore(
     layerMount.subscribe,
     layerMount.isMounted,
     isNotMounted,
   );
   const descriptionId = `${layerId}-description`;
-  // The copy renders through a portal, which a server render cannot do, so a
-  // server render and the render that hydrates it carry no description and
-  // no reference to one.
+  // A server render cannot portal. Server and hydrating markup carry no copy
+  // and no reference to it.
   const isHydrating = useIsHydrating();
   // A trigger in a shadow root or another document keeps the copy where its
   // `aria-describedby` can name it.
