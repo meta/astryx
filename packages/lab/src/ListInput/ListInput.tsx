@@ -218,11 +218,12 @@ const styles = stylex.create({
     containerName: 'list-input',
   },
   // Where the handles start their records and show only on hover or focus,
-  // each hangs outside its record. The group pads that room at its start, and reaches out
-  // into its container's padding by as much of it as the padding holds. So a
-  // clipping container never cuts a handle, and the records move in only by
-  // the room the padding lacks. Outside a container that sets its padding,
-  // the group reaches the whole room.
+  // each hangs outside its record. The group pads that room at its start, and
+  // reaches out into its container's padding by as much of it as the padding
+  // holds. So a clipping container never cuts a handle, and the records move
+  // in only by the room the padding lacks. Outside a container that publishes
+  // its padding, the group reaches none of it: the records move in by the
+  // whole room.
   groupWithHangingHandles: {
     marginInlineStart: {
       default: `calc(-1 * ${HANG_REACH})`,

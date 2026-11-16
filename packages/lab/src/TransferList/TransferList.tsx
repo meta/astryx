@@ -158,41 +158,44 @@ export interface TransferListProps<T extends string = string> extends Omit<
 const styles = stylex.create({
   // Core List's reorder handle sits at its row's start or end (the owner's
   // `handle.placement`). Where it shows only on hover or focus, it hangs
-  // 30 px outside the row's content. The panel clips. So in a reorderable
-  // selection, the panel's heading and rows move in 20 px on that side, and
-  // the labels stay under the heading. Where the handle shows in its row, it
-  // takes 28 px and the row's 8 px gap: always, or under a coarse pointer. A
-  // row without a handle then clears it. So every label and every Remove
-  // keeps its column. SYNC: core List/ListReorderHandle.tsx HANDLE_SIZE and
-  // REORDER_HANDLE_HANG.
-  hangRoomAtStart: {
+  // outside the row's content, and core List keeps that room on its side
+  // (30 px less the row gap). The selected panel's heading moves in by the
+  // same room at the start, so the labels stay under it. Where the handle
+  // shows in its row, it takes 28 px and the row's gap: always, or under a
+  // coarse pointer. A row without a handle then clears it, so every label
+  // and every Remove keeps its column. SYNC: core List/ListReorderHandle.tsx
+  // HANDLE_SIZE, REORDER_HANDLE_HANG and END_REACH.
+  headingPastHangingHandle: {
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
-      '@media (pointer: coarse)': spacingVars['--spacing-3'],
-    },
-  },
-  hangRoomAtEnd: {
-    paddingInlineEnd: {
-      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
-      '@media (pointer: coarse)': spacingVars['--spacing-3'],
+      default: `calc(${spacingVars['--spacing-3']} + 30px - ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
     },
   },
   clearsHandleAtStart: {
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      default: spacingVars['--spacing-3'],
       '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
     },
   },
   clearsShownHandleAtStart: {
     paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
   },
-  // At the end, the handle joins the row's end slot after Remove. It
-  // overlaps the row's end padding by 8 px, so a row without one keeps its
-  // Remove 20 px clear.
+  // While a search pauses reordering, core List keeps no room, so a row keeps
+  // the room of the handles that hang at its end itself.
+  endRoomWhileSearching: {
+    paddingInlineEnd: {
+      default: `calc(${spacingVars['--spacing-3']} + 30px - ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
+  // At the end, a handle that always shows joins the row's end slot after
+  // Remove and reaches 8 px into the row's end padding, so a row without one
+  // keeps its Remove 20 px clear. An adaptive handle under a coarse pointer
+  // follows the slot, after the row's gap.
   clearsHandleAtEnd: {
     marginInlineEnd: {
       default: 0,
-      '@media (pointer: coarse)': 20,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-2']} + 20px)`,
     },
   },
   clearsShownHandleAtEnd: {
@@ -661,19 +664,14 @@ export function TransferList<T extends string = string>({
   // An ordering list is read for its order, so its handles show by default.
   const isHandleAlwaysVisible =
     (owner?.handle?.revealBehavior ?? 'always') === 'always';
-  const hangRoom =
-    keepsHandleRoom && !isHandleAlwaysVisible
-      ? isHandleAtEnd
-        ? styles.hangRoomAtEnd
-        : styles.hangRoomAtStart
-      : null;
-  // The selected panel's heading starts in its labels' column.
+  // The selected panel's heading starts in its labels' column. Core List
+  // keeps the room of handles that hang, so the rows need none of their own.
   const headingRoom =
     keepsHandleRoom && !isHandleAtEnd
       ? isHandleAlwaysVisible
         ? styles.clearsShownHandleAtStart
-        : styles.clearsHandleAtStart
-      : hangRoom;
+        : styles.headingPastHangingHandle
+      : null;
   const reorderSelected = useCallback(
     ({key, to: toIndex}: ReorderMove) => {
       const shown = selectedOptions.map(option => option.value);
@@ -766,12 +764,14 @@ export function TransferList<T extends string = string>({
         // A row without a handle keeps its Remove in the movable rows'
         // column, clear of where their handles sit.
         xstyle={[
-          isOrdering &&
-            isHandleAtEnd &&
-            !canMove(option.value) &&
+          isHandleAtEnd &&
             (isHandleAlwaysVisible
-              ? styles.clearsShownHandleAtEnd
-              : styles.clearsHandleAtEnd),
+              ? isOrdering &&
+                !canMove(option.value) &&
+                styles.clearsShownHandleAtEnd
+              : keepsHandleRoom &&
+                (!isOrdering || !canMove(option.value)) &&
+                styles.clearsHandleAtEnd),
           isDisabled && styles.removeInDisabledRow,
         ]}
       />
@@ -823,18 +823,26 @@ export function TransferList<T extends string = string>({
           isDisabled={isDisabled}
           xstyle={[
             styles.item,
-            hangRoom,
             // A row that keeps its place has no handle: its label keeps the
             // movable rows' column, clear of where their handles sit.
             // While a search pauses reordering, no row has a handle, and
             // every row clears its place. So nothing moves as the query
             // changes.
+            // Core List keeps the room of handles that hang only while it
+            // orders; while a search pauses it, the row keeps that room.
             keepsHandleRoom &&
               !isHandleAtEnd &&
               (!isOrdering || !canMove(option.value)) &&
               (isHandleAlwaysVisible
                 ? styles.clearsShownHandleAtStart
-                : styles.clearsHandleAtStart),
+                : isOrdering
+                  ? styles.clearsHandleAtStart
+                  : styles.headingPastHangingHandle),
+            keepsHandleRoom &&
+              isHandleAtEnd &&
+              !isHandleAlwaysVisible &&
+              !isOrdering &&
+              styles.endRoomWhileSearching,
             isDisabled && styles.disabledItem,
           ]}
           data-transfer-list-row={option.value}

@@ -103,8 +103,8 @@ const GRIP_SIZE = '1rem';
 /**
  * How far a hanging handle sits outside its row's content, px: its own side
  * and a small clearance. The grip's edge then sits 8 px from the content.
- * SYNC: lab ListInput/ListInput.tsx and TransferList/TransferList.tsx
- * REORDER_HANDLE_HANG, which lay out around it.
+ * SYNC: lab ListInput/ListInput.tsx REORDER_HANDLE_HANG and the handle
+ * clearances in lab TransferList/TransferList.tsx, which lay out around it.
  */
 const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
 /** The hanging handle's inner margin: it gives back the row's gap. */

@@ -500,6 +500,25 @@ describe('List reorderable', () => {
     },
   );
 
+  it('keeps an adaptive handle at the end out of the end slot, so where it hangs it covers none of the end content', () => {
+    render(
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {revealBehavior: 'adaptive'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    // The row's own last child, after the end slot that holds the content.
+    expect(inbox.lastElementChild).toBe(handleOf('Inbox'));
+    expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+    expect(handleOf('Inbox').previousElementSibling).not.toContainElement(
+      handleOf('Inbox'),
+    );
+  });
+
   it("puts the handle at the row's start, before its start content, with handle.placement 'start'", () => {
     render(
       <List

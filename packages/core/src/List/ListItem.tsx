@@ -488,10 +488,16 @@ export function ListItem({
   // The handle reads the rest of its placement from the list.
   const isHandleAtStart = reorder?.options.handle?.placement === 'start';
   // The handle is the one element reordering adds to a row. At the end of a
-  // row with end content, it joins the end slot. Otherwise it is the row's
-  // own child, at the edge it sits at (ItemTrailingContext), since a slot of
-  // its own would be a second element.
-  const isHandleInEndSlot = hasHandle && !isHandleAtStart && endContent != null;
+  // row with end content, a handle that always shows joins the end slot.
+  // Otherwise it is the row's own child, at the edge it sits at
+  // (ItemTrailingContext), since a slot of its own would be a second element.
+  // An adaptive handle stays out of the slot: where it hangs, it gives back
+  // the row's gap, and in the slot that would cover the end content.
+  const isHandleInEndSlot =
+    hasHandle &&
+    !isHandleAtStart &&
+    endContent != null &&
+    reorder.options.handle?.revealBehavior !== 'adaptive';
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
   const rowAlign =
