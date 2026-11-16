@@ -83,10 +83,28 @@ const CLEAR_BUTTON_HIT_AREA: TouchHitAreaOptions = {
   growth: clearButtonGrowth,
 };
 
+// The glyph button is 20 px square. Under a coarse pointer, Button's shared
+// touch band grows its target. Under a fine pointer its own `::after`, Button's
+// decoration slot, grows it to the 24 px minimum (WCAG 2.2 SC 2.5.8). The
+// growth goes only into space no other control takes: up and down into the
+// field's padding, and toward the field's end. It never reaches toward the
+// text, so a click at the end of the text still places the caret.
+// StyleX reads these at build time.
+const NOT_TOUCH = '@media not (pointer: coarse)';
+const BLOCK_GROWTH = 'calc((24px - 20px) / -2)';
+const END_GROWTH = 'calc(20px - 24px)';
+
 const styles = stylex.create({
   button: {
     height: '20px',
     flexShrink: 0,
+    '::after': {
+      content: {default: null, [NOT_TOUCH]: '""'},
+      position: {default: null, [NOT_TOUCH]: 'absolute'},
+      insetBlock: {default: null, [NOT_TOUCH]: BLOCK_GROWTH},
+      insetInlineStart: {default: null, [NOT_TOUCH]: 0},
+      insetInlineEnd: {default: null, [NOT_TOUCH]: END_GROWTH},
+    },
   },
 });
 
