@@ -210,8 +210,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
   loads it when the input is one of its own outputs, naming the source that
   output was built from, or when the input is not a theme module. Each output's
   header names its source from the project root of the outputs, so a build
-  from any folder writes the same outputs. At a path `--out` names, it
-  replaces its own earlier outputs. It replaces the output of another theme
+  from any folder writes the same outputs. Beside its source and at a path
+  `--out` names, it replaces only its own earlier outputs: a file whose header
+  has the build's mark, or whose content has the shape a release that wrote no
+  header gave. It never replaces any other file there. The build fails with
+  `ERR_FILE_EXISTS` before it writes anything, names the file, and says to
+  build with `--out` or to move or rename the file. It replaces the output of another theme
   source that still exists and warns, naming both sources, once every output
   of the build may be written. A backslash in `--out` separates folders.
   Building a theme the theme editor made (`<slug>.theme.ts` beside
