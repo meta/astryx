@@ -14,6 +14,7 @@
  */
 
 import {createRequire} from 'node:module';
+import {performance} from 'node:perf_hooks';
 import {fileStamp} from './read-record.mjs';
 
 /**
