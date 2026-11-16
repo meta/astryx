@@ -362,7 +362,9 @@ async function run(program, call, render, answer) {
 const changeOptions = o => ({
   cwd: process.cwd(),
   on: o.on,
-  when: o.when,
+  // (--when given for several props, a ghost small button: all at once,
+  // joined as Core's own keys join them.)
+  when: flagValues('when').length > 1 ? flagValues('when').join('+') : o.when,
   state: o.state,
   mode: o.mode,
   only: o.only ?? false,
@@ -874,8 +876,11 @@ function lookupBlocks(d) {
  */
 function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
+  // (--when takes one value per prop: those are joined, all at once.)
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
+    const props = all.map(w => String(w).split(':')[0].trim().toLowerCase());
+    if (flag === 'when' && new Set(props).size === all.length) continue;
     if (new Set(all).size > 1)
       return cliError(
         `--${flag} was given twice (${all.join(', ')}); give it once.`,

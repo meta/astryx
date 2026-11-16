@@ -902,13 +902,14 @@ export function storedProblems(ctx, slug, data, skip = '') {
         )
       )
         return scope(`"${s.state}" is not a state of ${s.on}`);
-      if (t && s.when) {
-        const [prop, value] = String(s.when).split(':');
-        const values = ctx.C.variantValues(/** @type {string} */ (s.on));
-        if (!(prop in values)) return scope(`${s.on} has no prop "${prop}"`);
-        if (values[prop].length && !values[prop].includes(value))
-          return scope(`${s.on} has no ${prop} "${value}"`);
-      }
+      if (t && s.when)
+        for (const w of String(s.when).split('+')) {
+          const [prop, value] = w.split(':');
+          const values = ctx.C.variantValues(/** @type {string} */ (s.on));
+          if (!(prop in values)) return scope(`${s.on} has no prop "${prop}"`);
+          if (values[prop].length && !values[prop].includes(value))
+            return scope(`${s.on} has no ${prop} "${value}"`);
+        }
       return null;
     })();
     if (problem) found.push(problem);
@@ -4416,7 +4417,14 @@ function checkOne(
         ],
       });
   if (flags.on) s.on = flags.on.trim();
-  if (flags.when) s.when = flags.when.trim();
+  // (Several conditions in one order, by prop, so an undo or a change
+  // later finds them whatever order they were typed in.)
+  if (flags.when)
+    s.when = flags.when
+      .trim()
+      .split(/\s*\+\s*/)
+      .sort()
+      .join('+');
   // A state in any case or spelling of its words (focusVisible,
   // focus_visible, 'focus visible') is the state, written as CSS writes it.
   if (flags.state) s.state = stateSpelling(flags.state);
@@ -4754,49 +4762,79 @@ function checkOne(
     if (s.when) {
       const variants = C.variantValues(s.on);
       const conditions = Object.keys(variants);
-      const reading = whenReading(s.when, t.props, variants);
-      // A prop and value in other letters, with spaces or `=` between
-      // (`Variant: Primary`, `variant=primary`): the working command.
-      if (reading.written)
-        refuse(
-          E.ERR_THEME_UNKNOWN_VARIANT,
-          `--when "${s.when}" is written ${reading.written}.`,
-          {
-            didYouMean: [reading.written],
-            run: [
-              setLine(slug, thing, v, {...s, when: reading.written}, unset),
-            ],
-          },
-        );
-      const [p, wv, ...more] = s.when.split(':');
-      if (!wv || more.length)
-        refuse(
-          E.ERR_THEME_BAD_VALUE,
-          '--when takes <prop>:<value>, such as variant:primary.',
-          {run: [`${HOW} ${s.on}`]},
-        );
-      const whenRun = reading.meant
-        ? [setLine(slug, thing, v, {...s, when: reading.meant}, unset)]
-        : [];
-      if (!t.props.includes(p) && !conditions.includes(p))
-        refuse(
-          E.ERR_THEME_UNKNOWN_VARIANT,
-          `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
-          {
-            didYouMean: nearest(p, t.props),
-            run: [...whenRun, `${HOW} ${s.on}`],
-          },
-        );
-      const vals = variants[p] ?? [];
-      if (vals.length && !vals.includes(wv))
-        refuse(
-          E.ERR_THEME_UNKNOWN_VARIANT,
-          `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
-          {
-            didYouMean: nearest(wv, vals),
-            run: [...whenRun, `${HOW} ${s.on}`],
-          },
-        );
+      // Several conditions, one per prop (`variant:ghost+size:sm`): each is
+      // checked as one alone is, and a line that fixes one keeps the rest.
+      const pieces = String(s.when).split('+');
+      /** @param {number} i @param {string} w */
+      const withPiece = (i, w) =>
+        pieces.map((x, j) => (j === i ? w : x)).join('+');
+      const seenProps = new Set();
+      for (const [i, when] of pieces.entries()) {
+        const reading = whenReading(when, t.props, variants);
+        // A prop and value in other letters, with spaces or `=` between
+        // (`Variant: Primary`, `variant=primary`): the working command.
+        if (reading.written)
+          refuse(
+            E.ERR_THEME_UNKNOWN_VARIANT,
+            `--when "${when}" is written ${reading.written}.`,
+            {
+              didYouMean: [withPiece(i, reading.written)],
+              run: [
+                setLine(
+                  slug,
+                  thing,
+                  v,
+                  {...s, when: withPiece(i, reading.written)},
+                  unset,
+                ),
+              ],
+            },
+          );
+        const [p, wv, ...more] = when.split(':');
+        if (!wv || more.length)
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            '--when takes <prop>:<value>, such as variant:primary.',
+            {run: [`${HOW} ${s.on}`]},
+          );
+        if (seenProps.has(p))
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `--when names ${p} twice (${s.when}); a part has one ${p} at a time.`,
+            {run: [`${HOW} ${s.on}`]},
+          );
+        seenProps.add(p);
+        const whenRun = reading.meant
+          ? [
+              setLine(
+                slug,
+                thing,
+                v,
+                {...s, when: withPiece(i, reading.meant)},
+                unset,
+              ),
+            ]
+          : [];
+        if (!t.props.includes(p) && !conditions.includes(p))
+          refuse(
+            E.ERR_THEME_UNKNOWN_VARIANT,
+            `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
+            {
+              didYouMean: nearest(p, t.props),
+              run: [...whenRun, `${HOW} ${s.on}`],
+            },
+          );
+        const vals = variants[p] ?? [];
+        if (vals.length && !vals.includes(wv))
+          refuse(
+            E.ERR_THEME_UNKNOWN_VARIANT,
+            `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
+            {
+              didYouMean: nearest(wv, vals),
+              run: [...whenRun, `${HOW} ${s.on}`],
+            },
+          );
+      }
     }
     const states = partStates(ctx, s.on);
     // A state the part lists in camelCase (toggle-button's isPressed) typed
@@ -5144,17 +5182,22 @@ function checkOne(
         variants[k] = [...new Set([...(variants[k] ?? []), ...vals])];
     const states = [...new Set(members.flatMap(([m]) => partStates(ctx, m)))];
     if (s.when) {
-      const [p, wv, ...more] = s.when.split(':');
-      const fits = members.some(([m, t]) => {
-        if (
-          !wv ||
-          more.length ||
-          !(t.props.includes(p) || p in C.variantValues(m))
-        )
-          return false;
-        const vals = C.variantValues(m)[p] ?? [];
-        return !vals.length || vals.includes(wv);
-      });
+      // (Several conditions: a member that has every one.)
+      const fits = members.some(([m, t]) =>
+        String(s.when)
+          .split('+')
+          .every(w => {
+            const [p, wv, ...more] = w.split(':');
+            if (
+              !wv ||
+              more.length ||
+              !(t.props.includes(p) || p in C.variantValues(m))
+            )
+              return false;
+            const vals = C.variantValues(m)[p] ?? [];
+            return !vals.length || vals.includes(wv);
+          }),
+      );
       if (!fits) {
         const reading = whenReading(s.when, props, variants);
         const when = reading.written ?? reading.meant;

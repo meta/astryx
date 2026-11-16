@@ -42,7 +42,7 @@ export const doc = {
       flag: '--when <prop:value>',
       param: 'options.when',
       description:
-        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); needs --on',
+        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
     },
     {
       flag: '--state <state>',

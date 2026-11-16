@@ -4204,7 +4204,8 @@ function scopeProblem(s) {
   // (Several states at once are joined by +: `checked+disabled`.)
   if (s.state != null && !STATE_NAME.test(s.state))
     return `${s.thing} has state "${s.state}", which is not a state name`;
-  if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
+  // (Several, one per prop, are joined by +: `variant:ghost+size:sm`.)
+  if (s.when != null && !/^[\w-]+:[\w.-]+(?:\+[\w-]+:[\w.-]+)*$/.test(s.when))
     return `${s.thing} has --when "${s.when}", which is not prop:value`;
   if ((s.when != null || s.state != null) && s.on == null)
     return `${s.thing} has a variant or state but no part`;
@@ -5681,8 +5682,16 @@ export function compileTheme(ctx, data, base) {
       tg?.stateValues,
     );
     if (s.state && slot.key !== (s.when ?? 'base')) return null;
-    const [k, v] = s.when ? String(s.when).split(':') : [];
-    return `.astryx-${target}${s.when ? `[data-${k}="${v}"]` : ''}${slot.pseudo ?? ''}`;
+    const attrs = s.when
+      ? String(s.when)
+          .split('+')
+          .map(w => {
+            const [k, v] = w.split(':');
+            return `[data-${k}="${v}"]`;
+          })
+          .join('')
+      : '';
+    return `.astryx-${target}${attrs}${slot.pseudo ?? ''}`;
   };
 
   /**
