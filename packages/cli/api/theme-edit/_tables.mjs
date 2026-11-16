@@ -10,7 +10,14 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  appleFaceGeneric,
+  collectUnloadedFonts,
+  systemFontFamilies,
+} from '../theme/build/font-warning.mjs';
+
+export {appleFaceGeneric, systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -115,6 +122,45 @@ export const CORNERS = [
   ['round', 16],
   ['pill', 9999],
 ];
+/**
+ * The step `corners more` and `less` take between round and pill: half as
+ * round again as round, so one step more from round is not a pill.
+ */
+export const ROUND_TO_PILL_STEP = `${(CORNERS.find(([n]) => n === 'round')?.[1] ?? 16) * 1.5}px`;
+/**
+ * The density words, the one table every reading of room uses: words for
+ * more room (roomy), for less (dense), and complaints that there is too
+ * little (crowded). An ask names the density it wants; after "too" the
+ * word names the density there is, so the change goes the other way.
+ */
+export const DENSITY = /** @type {const} */ ({
+  roomy: [
+    'airy',
+    'airier',
+    'spacious',
+    'roomy',
+    'roomier',
+    'loose',
+    'looser',
+    'relaxed',
+    'comfortable',
+    'sparse',
+    'padded',
+    'generous',
+    'spread out',
+  ],
+  dense: ['dense', 'denser', 'compact', 'tight', 'tighter', 'condensed'],
+  crowded: ['cramped', 'crowded', 'packed'],
+});
+
+/**
+ * The density words of the kinds given, as one alternation for a regular
+ * expression.
+ * @param {...keyof typeof DENSITY} kinds
+ */
+export const densityWords = (...kinds) =>
+  kinds.flatMap(k => DENSITY[k]).join('|');
+
 /** @type {Array<[string, number]>} */
 export const SPACING = [
   ['tight', 0.75],
@@ -181,46 +227,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'segoe ui light',
-      'segoe ui semilight',
-      'segoe ui semibold',
-      'segoe ui black',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */
@@ -242,7 +251,9 @@ export const oneSystemOf = family =>
  * @param {string} family without quotes
  */
 export const isDesktopFamily = family =>
-  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+  isSystemFamily(family) &&
+  !ONE_SYSTEM_FAMILIES.has(familyKey(family)) &&
+  !appleFaceGeneric(family);
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:
@@ -303,6 +314,25 @@ export const OPEN_FONTS = wordTable(
     ]),
   ),
 );
+
+/**
+ * The CSS font-family stack a font dial word stands for (a preset such as
+ * mono, or an open font such as inter): its family, quoted when it holds a
+ * space, then its fallbacks. Null for any other word. A part's font-family
+ * takes this stack, never the word itself, which names no family.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function fontStack(word) {
+  const w = String(word).trim().toLowerCase();
+  const [family, fallbacks] = FONTS[w]
+    ? FONTS[w]
+    : OPEN_FONTS[w]
+      ? [OPEN_FONTS[w].family.replace(/"/g, ''), OPEN_FONTS[w].fallbacks]
+      : [null, null];
+  if (!family) return null;
+  return `${/\s/.test(family) ? `"${family}"` : family}, ${fallbacks}`;
+}
 
 /**
  * Brand fonts no package loads, and the closest open font, for the warning
@@ -415,10 +445,13 @@ export const DIALS = wordTable({
   corners: {
     help:
       'How round corners are. Rungs: ' +
-      CORNERS.map(
-        ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
-      ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      CORNERS.flatMap(([n, v]) => [
+        ...(n === 'pill'
+          ? [`${ROUND_TO_PILL_STEP} (the step between round and pill)`]
+          : []),
+        `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
+      ]).join(', ') +
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -440,8 +473,7 @@ export const DIALS = wordTable({
       'set my spacing more',
       'set my spacing roomy --on card',
     ],
-    words:
-      'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
+    words: `spacing space room density padding gap gaps margin breathing spread ${densityWords('roomy', 'dense', 'crowded').replace(/\|/g, ' ')}`,
   },
   accent: {
     help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave in light, and in dark too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses shade 70, where the official themes put a dark fill, or the shade nearest it that passes both, and the result says so. Text on the fill is the neutral color\'s white or near-black (pure white or black without a neutral color), whichever reads on it. The fill never moves: when no text reads on it, or a pale fill does not stand out from the light page, the result says so. Other tokens move to a nearby shade when they must read: text at 4.5:1, the focus ring at 3:1. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
@@ -730,9 +762,11 @@ export const THING_HINTS = wordTable({
     const w = v.trim().toLowerCase();
     const rung = SPACING.some(([n]) => n === w)
       ? w
-      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+      : new RegExp(`^(?:${densityWords('roomy')})$`).test(w)
         ? 'roomy'
-        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+        : new RegExp(
+              `^(?:${densityWords('dense', 'crowded')}|small|less)$`,
+            ).test(w)
           ? 'compact'
           : null;
     return [
@@ -753,6 +787,7 @@ export const DESIGN = wordTable(
     gradient: '"linear-gradient(#ffffff, #d1d5db)"',
     glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
     bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
+    'sunken bevel': '"inset 1px 1px 0 #9ca3af, inset -1px -1px 0 #ffffff"',
     raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
     flat: 'none',
     sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
@@ -776,6 +811,145 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
 
+/**
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
+ */
+export const CSS_PSEUDO_CLASSES = new Set([
+  'active',
+  'active-view-transition',
+  'active-view-transition-type',
+  'any-link',
+  'autofill',
+  'blank',
+  'buffering',
+  'checked',
+  'closed',
+  'current',
+  'default',
+  'defined',
+  'dir',
+  'disabled',
+  'empty',
+  'enabled',
+  'first',
+  'first-child',
+  'first-of-type',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'fullscreen',
+  'future',
+  'has',
+  'has-slotted',
+  'heading',
+  'host',
+  'host-context',
+  'hover',
+  'in-range',
+  'indeterminate',
+  'interest-source',
+  'interest-target',
+  'invalid',
+  'is',
+  'lang',
+  'last-child',
+  'last-of-type',
+  'left',
+  'link',
+  'local-link',
+  'modal',
+  'muted',
+  'not',
+  'nth-child',
+  'nth-col',
+  'nth-last-child',
+  'nth-last-col',
+  'nth-last-of-type',
+  'nth-of-type',
+  'only-child',
+  'only-of-type',
+  'open',
+  'optional',
+  'out-of-range',
+  'past',
+  'paused',
+  'picture-in-picture',
+  'placeholder-shown',
+  'playing',
+  'popover-open',
+  'read-only',
+  'read-write',
+  'required',
+  'right',
+  'root',
+  'scope',
+  'seeking',
+  'stalled',
+  'state',
+  'target',
+  'target-after',
+  'target-before',
+  'target-current',
+  'target-within',
+  'user-invalid',
+  'user-valid',
+  'valid',
+  'visited',
+  'volume-locked',
+  'where',
+  'xr-overlay',
+]);
+
+/**
+ * The pseudo-elements of CSS (the `::name` forms browsers ship), by name: the
+ * names a part's `::name` block is read against. The four CSS 2 ones also
+ * take one colon.
+ */
+export const CSS_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'backdrop',
+  'before',
+  'checkmark',
+  'column',
+  'cue',
+  'cue-region',
+  'details-content',
+  'file-selector-button',
+  'first-letter',
+  'first-line',
+  'grammar-error',
+  'highlight',
+  'marker',
+  'part',
+  'picker',
+  'picker-icon',
+  'placeholder',
+  'scroll-button',
+  'scroll-marker',
+  'scroll-marker-group',
+  'search-text',
+  'selection',
+  'slotted',
+  'spelling-error',
+  'target-text',
+  'view-transition',
+  'view-transition-group',
+  'view-transition-image-pair',
+  'view-transition-new',
+  'view-transition-old',
+]);
+
+/** The pseudo-elements CSS 2 wrote with one colon, which browsers still read. */
+export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'before',
+  'first-letter',
+  'first-line',
+]);
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',
@@ -787,17 +961,15 @@ export const COMMON_STATES = [
 ];
 
 /**
- * Mode words a value or a saved entry may be labeled with, and the mode
- * each means: `set` reads a typed label by it, and loading reads a saved
- * entry's mode by it.
+ * Words for a mode, and the mode each means, beside the mode's own name in
+ * its written forms (dark-only, darkmode, mode dark), which modeWord reads:
+ * the table of the one mode reader.
  */
 export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
-  light: 'light',
-  'light-mode': 'light',
   day: 'light',
-  dark: 'dark',
-  'dark-mode': 'dark',
+  daytime: 'light',
   night: 'dark',
+  nighttime: 'dark',
 });
 
 // These tables are looked up by words people type: with no prototype,
@@ -819,3 +991,16 @@ for (const table of [
   MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);

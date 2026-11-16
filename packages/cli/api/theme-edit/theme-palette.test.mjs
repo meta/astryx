@@ -452,13 +452,21 @@ describe('color dials through the palette generator', () => {
     expect((await ask('brand color #7c3aed')).commands).toContain(
       `set ${theme} accent '#7c3aed'`,
     );
+    // (Core's own blue is as colorful as sRGB lets it be: a vibrancy moves
+    // it no further, and seeding it draws its text a deeper, less colorful
+    // shade, which the answer says instead of offering a change that dulls
+    // it.)
     const more = await ask('make it more colorful');
-    expect(more.commands).toContain(`set ${theme} vibrancy more`);
+    expect(`${more.commands}\n${more.text}`).toMatch(
+      new RegExp(`set ${theme} vibrancy (?:more|\\d+)|would get duller`),
+    );
     // A theme whose colors are all grays has no color to take out, and
     // says so instead of suggesting a change that does nothing.
+    // (Or the first vibrancy, in steps of 10, at which the accents it
+    // shows are less saturated than now; or refused when none is.)
     const less = await ask('less saturated');
     expect(`${less.commands}\n${less.text}`).toMatch(
-      new RegExp(`set ${theme} vibrancy less|is a gray`),
+      new RegExp(`set ${theme} vibrancy (?:less|\\d+)|is a gray|accent wash`),
     );
     // Explanations name the commands in words and pick no color.
     expect((await ask('dark mode colors')).text).toContain('--mode dark');
@@ -1213,7 +1221,6 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', "accent '#64748b'"],
       ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
       ['destructive', "danger '#64748b'"],
@@ -1596,7 +1603,7 @@ describe('fonts some systems ship, and part properties by their grammar', () => 
     expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
     const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
     expect(gill.data.notes.join(' ')).toContain(
-      '"Gill Sans" ships only on macOS',
+      '"Gill Sans" ships only on Apple platforms (macOS, iOS and iPadOS)',
     );
     const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
     fs.mkdirSync(pkgDir, {recursive: true});
@@ -1911,9 +1918,10 @@ describe('colors final-3', () => {
 
   it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
     for (const [family, note] of [
-      ['Ubuntu', 'is not a system font'],
+      ['Acme Sans', 'is not a system font'],
+      ['Ubuntu', 'ships only on Linux'],
       ['Segoe UI', 'ships only on Windows'],
-      ['Menlo', 'ships only on macOS'],
+      ['Monaco', 'ships only on macOS'],
     ]) {
       const r = await themeEditSet('p', 'font', family, {cwd});
       expect(r.data.notes.join(' '), family).toContain(note);
@@ -1992,12 +2000,13 @@ describe('colors10', () => {
   it('leaves the theme build its own font list, and names commands for a font step', async () => {
     const {collectUnloadedFonts} =
       await import('../theme/build/font-warning.mjs');
-    // As the build has always read it: Ubuntu warns, Roboto does not.
+    // As the build has always read it: a family no system ships warns,
+    // Roboto (and Ubuntu, a Linux interface font) does not.
     expect(
       collectUnloadedFonts({
-        tokens: {'--font-family-body': 'Ubuntu, Roboto, sans-serif'},
+        tokens: {'--font-family-body': 'Acme Sans, Ubuntu, Roboto, sans-serif'},
       }),
-    ).toEqual(['Ubuntu']);
+    ).toEqual(['Acme Sans']);
     const step = await refusal(() => themeEditSet('p', 'font', 'more', {cwd}));
     expect(step.code).toBe('ERR_THEME_BAD_VALUE');
     expect(step.run.length).toBeGreaterThan(0);
@@ -2094,11 +2103,10 @@ describe('colors10, final-4', () => {
 
 describe('colors11: refusals name a command that works', () => {
   it('reads a dial typed in other letters as the dial', async () => {
-    const r = await refusal(() => themeEditSet('p', 'Font', 'inter', {cwd}));
-    expect(r.message).toContain('The dial for that is font');
-    expect(r.run).toContain(
-      r.run.find(x => / set p font inter$/.test(x)) ?? 'missing',
-    );
+    // One thing-name reader: a dial name in other letters is the dial.
+    const r = await themeEditSet('p', 'Font', 'inter', {cwd});
+    expect(r.data.setting.thing).toBe('font');
+    await themeEditUndo('p', {cwd});
   });
 
   it('splits a font shorthand on a part into commands that work', async () => {
@@ -2142,7 +2150,7 @@ describe('colors11: refusals name a command that works', () => {
 });
 
 describe('colors12', () => {
-  it('splits a per-mode part color at its own comma, in either order', async () => {
+  it('keeps a per-mode part color whole in its own mode block, in either order', async () => {
     for (const [first, second] of [
       [
         ['dark', 'rgb(0, 0, 255)'],
@@ -2167,9 +2175,17 @@ describe('colors12', () => {
       });
       const [light, dark] =
         first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
-      expect(read('p.settings.ts')).toContain(
-        JSON.stringify(`light-dark(${light}, ${dark})`),
-      );
+      // Each mode's color, commas and all, in that mode's block.
+      const src = read('p.settings.ts');
+      for (const [m, v] of [
+        ['light', light],
+        ['dark', dark],
+      ])
+        expect(src).toMatch(
+          new RegExp(
+            `"@${m}": \\{\\s*"backgroundColor": ${JSON.stringify(v).replace(/[()[\]{}.*+?^$|\\]/g, '\\$&')}`,
+          ),
+        );
       for (const m of ['light', 'dark'])
         await themeEditUndo('p', {
           cwd,
@@ -2292,7 +2308,8 @@ describe('colors14', () => {
         themeEditSet('p', prop, value, {cwd, on: 'card'}),
       );
       expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
-      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+      // A negative is no size of the other sign: how, never its positive.
+      expect(bad.run[0], prop).toMatch(new RegExp(` how ${prop}$`));
     }
     await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
@@ -2766,7 +2783,8 @@ describe('parts24', () => {
       JSON.stringify((await themeEditShow('p', {cwd})).data),
     ).not.toContain('padding-top');
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'button'});
-  });
+    // (Twenty-six edits, each with its checks.)
+  }, 120_000);
 
   it('keeps a background on variants when a blend mode comes later', async () => {
     const {findOverrides} = await import('./_settings.mjs');

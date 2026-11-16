@@ -3,7 +3,7 @@
 /**
  * @file The fifty-seventh pass: a saved entry written in a form the input
  * cleanup repairs (`Corners`, `var(--radius-element)`, `backgroundColor`,
- * state `Hover`, an em dash) is removed by the undo its refusal suggests,
+ * an em dash) is removed by the undo its refusal suggests,
  * and only that entry: a valid neighbor the cleaned name also matches
  * stays.
  */
@@ -105,22 +105,6 @@ const CASES = [
       value: '#000',
       source: 'property',
       on: 'button',
-    },
-  ],
-  [
-    {
-      thing: 'opacity',
-      value: '0.5',
-      source: 'property',
-      on: 'button',
-      state: 'Hover',
-    },
-    {
-      thing: 'opacity',
-      value: '0.8',
-      source: 'property',
-      on: 'button',
-      state: 'hover',
     },
   ],
 ];

@@ -4,7 +4,7 @@
  * @file lazy-dependencies.test.mjs
  * @input The heavy dependencies foundation/runtime/lazy-dependencies.mjs
  *   loads on first use, and the public API entry point
- * @output Each resolves to the same file for `require` as for `import`, the
+ * @output Each gives the same module for `require` as for `import`, the
  *   API's exports keep their names and shapes, and importing the API loads
  *   none of those dependencies
  */
@@ -75,16 +75,18 @@ const API_EXPORTS = {
 };
 
 describe('lazy dependencies', () => {
-  it('resolve to the same file for require as for import', () => {
+  it('give the same module for require as for import', async () => {
     const require = createRequire(
       pathToFileURL(
         path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
       ),
     );
     for (const pkg of LAZY_PACKAGES) {
-      expect(require.resolve(pkg), pkg).toBe(
-        fileURLToPath(import.meta.resolve(pkg)),
-      );
+      const required = require.resolve(pkg);
+      if (required === fileURLToPath(import.meta.resolve(pkg))) continue;
+      // An ES module entry beside the CommonJS one (postcss) must hand on
+      // what the CommonJS entry exports.
+      expect(require(pkg), pkg).toBe((await import(pkg)).default);
     }
   });
 
@@ -140,13 +142,24 @@ describe('lazy dependencies', () => {
     // (on every supported Node, unlike module hooks).
     const script = `
       import {createRequire} from 'node:module';
+      const scan = () => {
+        const loaded = new Set();
+        for (const file of Object.keys(createRequire(import.meta.url).cache)) {
+          const m = file.match(/node_modules[\\\\/]((?:@[^\\\\/]+[\\\\/])?[^\\\\/]+)[\\\\/]/g);
+          if (m) loaded.add(m[m.length - 1].slice(13, -1).replace(/\\\\/g, '/'));
+        }
+        return [...loaded];
+      };
       await import(${JSON.stringify(pathToFileURL(API).href)});
-      const loaded = new Set();
-      for (const file of Object.keys(createRequire(import.meta.url).cache)) {
-        const m = file.match(/node_modules[\\\\/]((?:@[^\\\\/]+[\\\\/])?[^\\\\/]+)[\\\\/]/g);
-        if (m) loaded.add(m[m.length - 1].slice(13, -1).replace(/\\\\/g, '/'));
-      }
-      process.stdout.write(JSON.stringify([...loaded]));
+      const afterApi = scan();
+      // One first use, so the scan is shown to see a load.
+      const lazy = await import(${JSON.stringify(
+        pathToFileURL(
+          path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
+        ).href,
+      )});
+      lazy.postcss();
+      process.stdout.write(JSON.stringify({afterApi, afterUse: scan()}));
     `;
     const result = spawnSync(
       process.execPath,
@@ -154,8 +167,8 @@ describe('lazy dependencies', () => {
       {encoding: 'utf8'},
     );
     expect(result.status, result.stderr).toBe(0);
-    const loaded = JSON.parse(result.stdout);
-    expect(loaded.length).toBeGreaterThan(0);
-    for (const pkg of LAZY_PACKAGES) expect(loaded).not.toContain(pkg);
+    const {afterApi, afterUse} = JSON.parse(result.stdout);
+    expect(afterUse).toContain('postcss');
+    for (const pkg of LAZY_PACKAGES) expect(afterApi).not.toContain(pkg);
   }, 60_000);
 });

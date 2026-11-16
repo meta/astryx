@@ -14,7 +14,7 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
 import {shadowAlphaScaled} from './_how-question.mjs';
 import {
@@ -23,6 +23,14 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -183,13 +191,16 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'an except on a part how cannot pin is said, never invented',
+    'an except on a part keeps the radius it reads now',
     async test => {
       needsBase(test);
       const r = await answer('make containers rounder except selectable cards');
-      expect(r.commands.some(c => /selectable-card/.test(c))).toBe(false);
-      expect(r.commands.some(c => /--on containers/.test(c))).toBe(false);
-      expect(r.text).toMatch(/cannot be kept apart/);
+      expect(r.commands.some(c => /corners more --on containers/.test(c))).toBe(
+        true,
+      );
+      expect(
+        r.commands.some(c => /border-radius \S+ --on selectable-card/.test(c)),
+      ).toBe(true);
     },
     T,
   );
@@ -213,7 +224,7 @@ describe('wrong writes that are no longer accepted', () => {
     async test => {
       needsBase(test);
       expect((await answer('blue card background')).first[0]).toBe(
-        "set t background '#2563eb' --on card",
+        "set t background-color '#2563eb' --on card",
       );
     },
     T,
@@ -307,8 +318,8 @@ describe('clear asks it used to drop', () => {
         (await answer('card background: light mode #eee, dark mode #222'))
           .first,
       ).toEqual([
-        "set t background '#eee' --on card --mode light",
-        "set t background '#222' --on card --mode dark",
+        "set t background-color '#eee' --on card --mode light",
+        "set t background-color '#222' --on card --mode dark",
       ]);
     },
     T,

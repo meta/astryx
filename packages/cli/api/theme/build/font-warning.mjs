@@ -25,6 +25,7 @@
  *   beyond the CLI invocation the human help names (formatCliCommand), so the
  *   `--json` receipt and the human output share one source of truth.
  */
+import {cssUnescape} from '../../../foundation/text/css-escape.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 // font-family values that never need loading: CSS generic families, the ui-*
@@ -50,58 +51,222 @@ const GENERIC_KEYWORDS = new Set([
   'revert-layer',
 ]);
 
-// Families a clean machine already has: the members of core's own default
-// stacks (tokens.stylex.ts typographyDefaults) plus the classic web-safe
-// macOS/Windows set. Deliberately short — an unknown family warns, and for a
-// preinstalled rarity that is a one-line false alarm, not a broken theme.
-const SYSTEM_FAMILIES = new Set([
-  '-apple-system',
-  'blinkmacsystemfont',
-  'segoe ui',
-  'segoe ui emoji',
-  'segoe ui symbol',
-  // The weights Windows ships as families of their own.
-  'segoe ui light',
-  'segoe ui semilight',
-  'segoe ui semibold',
-  'segoe ui black',
-  'roboto',
-  'helvetica',
-  'helvetica neue',
-  'arial',
-  'arial black',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'monaco',
-  'consolas',
-  'menlo',
-  'courier',
-  'courier new',
-  'georgia',
-  'times',
-  'times new roman',
-  'verdana',
-  'tahoma',
-  'trebuchet ms',
-  'impact',
-  'palatino',
-  'cambria',
-  'calibri',
-  'lucida grande',
-  'lucida console',
-  'gill sans',
-  'brush script mt',
-  'snell roundhand',
-  'old english text mt',
+/**
+ * The fonts the systems ship, by the platform that ships them, as their
+ * own font lists name them, by lowercase name: `everywhere` for a family
+ * macOS and Windows both ship (a theme may name it as its font), else the
+ * one platform (or family of platforms) that has it. The one table: the build's font notice, the
+ * editor's "ships only on" notes and its install lines all read it. A
+ * family both a system ships and Fontsource publishes (Roboto, Cascadia
+ * Code) stays where the editor's open-font table names its package.
+ */
+export const SYSTEM_FONTS_BY_PLATFORM = {
+  everywhere: [
+    'helvetica',
+    'arial',
+    'arial black',
+    'courier',
+    'courier new',
+    'georgia',
+    'times',
+    'times new roman',
+    'verdana',
+    'tahoma',
+    'trebuchet ms',
+    'impact',
+    'comic sans ms',
+  ],
+  // The families Apple ships with macOS, iOS and iPadOS alike (Safari's
+  // -apple-system is the interface font on each).
+  'Apple platforms (macOS, iOS and iPadOS)': [
+    '-apple-system',
+    'helvetica neue',
+    'apple color emoji',
+    'menlo',
+    'palatino',
+    'gill sans',
+    'snell roundhand',
+    'avenir',
+    'avenir next',
+    'avenir next condensed',
+    'optima',
+    'futura',
+    'didot',
+    'baskerville',
+    'bodoni 72',
+    'hoefler text',
+    'american typewriter',
+    'cochin',
+    'copperplate',
+    'rockwell',
+    'marker felt',
+    'noteworthy',
+    'chalkboard se',
+    'chalkduster',
+    'zapfino',
+    'papyrus',
+    'arial rounded mt bold',
+    'pingfang sc',
+    'pingfang tc',
+    'pingfang hk',
+    'hiragino sans',
+    'hiragino mincho pron',
+    'apple sd gothic neo',
+  ],
+  // The families only the Mac has (BlinkMacSystemFont is Chrome's name for
+  // the Mac interface font; Chrome on iOS reads only -apple-system).
+  macOS: [
+    'arial narrow',
+    'andale mono',
+    'blinkmacsystemfont',
+    'monaco',
+    'lucida grande',
+    'geneva',
+    'big caslon',
+    'iowan old style',
+    'athelas',
+    'seravek',
+    'skia',
+    'superclarendon',
+    'chalkboard',
+    'apple chancery',
+    'herculanum',
+    'phosphate',
+    'trattatello',
+    'hiragino sans gb',
+    'hiragino kaku gothic pron',
+  ],
+  Windows: [
+    'segoe ui',
+    'segoe ui emoji',
+    'segoe ui symbol',
+    'segoe ui historic',
+    // The weights Windows ships as families of their own.
+    'segoe ui light',
+    'segoe ui semilight',
+    'segoe ui semibold',
+    'segoe ui black',
+    'segoe ui variable',
+    'segoe ui variable display',
+    'segoe ui variable text',
+    'segoe ui variable small',
+    'segoe print',
+    'segoe script',
+    'segoe fluent icons',
+    'segoe mdl2 assets',
+    'consolas',
+    'cambria',
+    'cambria math',
+    'calibri',
+    'calibri light',
+    'candara',
+    'corbel',
+    'constantia',
+    'bahnschrift',
+    'sitka',
+    'sitka text',
+    'sitka small',
+    'sitka heading',
+    'sitka display',
+    'sitka banner',
+    'sitka subheading',
+    'franklin gothic medium',
+    'gabriola',
+    'ebrima',
+    'gadugi',
+    'ink free',
+    'javanese text',
+    'leelawadee ui',
+    'lucida console',
+    'lucida sans unicode',
+    'microsoft sans serif',
+    'mv boli',
+    'myanmar text',
+    'nirmala ui',
+    'palatino linotype',
+    'sylfaen',
+    'symbol',
+    'webdings',
+    'wingdings',
+    'marlett',
+    'brush script mt',
+    'old english text mt',
+    'microsoft yahei',
+    'microsoft yahei ui',
+    'microsoft jhenghei',
+    'microsoft jhenghei ui',
+    'simsun',
+    'simhei',
+    'nsimsun',
+    'meiryo',
+    'yu gothic',
+    'yu mincho',
+    'ms gothic',
+    'ms mincho',
+    'malgun gothic',
+    // The same Windows fonts by their Chinese names.
+    '微软雅黑',
+    '宋体',
+    '黑体',
+  ],
+  'Android and ChromeOS': ['roboto', 'noto color emoji'],
+  // Noto is the interface font of Android and ChromeOS and the default of
+  // most Linux desktops (system stacks name Noto Sans for them).
+  'Android, ChromeOS and Linux': ['noto sans', 'noto serif', 'noto sans mono'],
   // Linux staples — the shipped themes' fallback stacks name these on
-  // purpose (e.g. neutral's code stack ends in Liberation Mono).
-  'liberation mono',
-  'liberation sans',
-  'liberation serif',
-  'dejavu sans',
-  'dejavu sans mono',
+  // purpose (e.g. neutral's code stack ends in Liberation Mono) — and the
+  // interface fonts of the GNOME and Ubuntu desktops.
+  Linux: [
+    'liberation mono',
+    'liberation sans',
+    'liberation serif',
+    'dejavu sans',
+    'dejavu sans mono',
+    'cantarell',
+    'ubuntu',
+    'ubuntu mono',
+  ],
+};
+
+/**
+ * Apple's own interface faces, by lowercase name, with the generic family
+ * that reaches each. Apple systems hide them from a lookup by family name,
+ * so a page reaches them only through these generics: by name, every
+ * system shows the next font in the stack. No package loads them.
+ */
+export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
+  'sf pro': 'system-ui',
+  'sf pro text': 'system-ui',
+  'sf pro display': 'system-ui',
+  'sf pro rounded': 'ui-rounded',
+  'sf compact': 'system-ui',
+  'sf compact text': 'system-ui',
+  'sf compact display': 'system-ui',
+  'sf compact rounded': 'ui-rounded',
+  'sf mono': 'ui-monospace',
+  'new york': 'ui-serif',
+});
+
+/**
+ * The generic family that reaches one of Apple's interface faces, or null
+ * for any other family.
+ * @param {string} family without quotes
+ * @returns {string | null}
+ */
+export function appleFaceGeneric(family) {
+  return (
+    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
+    null
+  );
+}
+
+/**
+ * Every family a system ships, by lowercase name, and Apple's interface
+ * faces: nothing loads those either, and no install line applies to them.
+ */
+const SYSTEM_FAMILIES = new Set([
+  ...Object.values(SYSTEM_FONTS_BY_PLATFORM).flat(),
+  ...Object.keys(APPLE_FACE_GENERICS),
 ]);
 
 /**
@@ -127,11 +292,21 @@ function splitFamilies(value) {
     // /s: a quoted name may span lines (template-literal theme sources).
     const quoted = /^(["']).*\1$/s.test(name);
     if (quoted) name = name.slice(1, -1);
-    name = name.trim().replace(/\s+/g, ' ');
+    // The name as CSS reads it (`Gill\ Sans` is Gill Sans).
+    name = cssUnescape(name).trim().replace(/\s+/g, ' ');
     if (!name || (!quoted && /[()]/.test(name))) continue;
     families.push(name);
   }
   return families;
+}
+
+/**
+ * The system families the build counts as loaded (the one list), lower
+ * case: what a typed family is checked against for a typo.
+ * @returns {string[]}
+ */
+export function systemFontFamilies() {
+  return [...SYSTEM_FAMILIES];
 }
 
 /**
@@ -147,23 +322,151 @@ export function namedFontFamilies(value) {
 }
 
 /**
- * Collect the font families a resolved theme names but does not load —
- * every `--font-family-*` token plus every component-override `fontFamily`,
- * minus generics, CSS-wide keywords, `var()` references, and known system
- * families. Source order, first-seen casing, deduped case-insensitively.
- *
- * @param {{tokens?: Record<string, string>, components?: object, typography?: {body?: {family?: string, fallbacks?: string}, heading?: {family?: string, fallbacks?: string}, code?: {family?: string, fallbacks?: string}}}} resolvedTheme
+ * Whether a CSS font-family value ends in a generic family (`serif`,
+ * `sans-serif`, `system-ui`, ...): the family the browser shows when none
+ * of the named ones is there.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function hasGenericFamily(value) {
+  return splitFamilies(value).some(family =>
+    GENERIC_KEYWORDS.has(family.toLowerCase()),
+  );
+}
+
+/**
+ * The family list of a CSS `font` shorthand: what follows its size (and
+ * line height), as the shorthand's grammar puts it last. A system font
+ * keyword (`caption`, `menu`, ...) or a value with no size names none.
+ * @param {string} value
+ * @returns {string}
+ */
+export function fontShorthandFamilyList(value) {
+  // A size has a unit (a bare number is a weight); a line height may
+  // follow it after a slash.
+  const size =
+    /(?<=^|\s)(?:[+-]?(?:\d+\.?\d*|\.\d+)(?:[a-z]+|%)|xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|larger|smaller|(?:calc|clamp|min|max|var)\([^)]*\))(?:\s*\/\s*\S+)?\s+(?=\S)/i;
+  // The first size: a family name after it may hold anything.
+  const m = size.exec(String(value));
+  return m ? String(value).slice(m.index + m[0].length) : '';
+}
+
+/**
+ * The weight a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`300 16px Inter`, `italic bold 1rem/1.2 Inter`): a number from
+ * 1 to 1000 or a weight keyword; null when it gives none (400 then).
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function fontShorthandWeight(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  // The words before the size: style, variant, weight and stretch.
+  for (const word of head.split(/\s+/)) {
+    if (/^(normal|bold|bolder|lighter)$/i.test(word)) return word.toLowerCase();
+    const n = Number(word);
+    if (/^\d+(\.\d+)?$/.test(word) && n >= 1 && n <= 1000) return word;
+  }
+  return null;
+}
+
+/**
+ * The style a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`italic bold 1rem Inter`): italic or oblique, or null when it
+ * gives none (normal then).
+ * @param {string} value
+ * @returns {'italic' | 'oblique' | null}
+ */
+export function fontShorthandStyle(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  const word = head
+    .split(/\s+/)
+    .map(w => w.toLowerCase())
+    .find(w => w === 'italic' || w === 'oblique');
+  return /** @type {'italic' | 'oblique' | undefined} */ (word) ?? null;
+}
+
+/**
+ * A font value with each `var(--x, ...)` it reads replaced by the values
+ * `lookup` gives for `--x` (each of them, when several places set it): the
+ * family lists the theme's own values make it show. A `var()` the theme
+ * gives no value reads as nothing, its fallback included (the property may
+ * come from the app, so the fallback is not a family this theme declares).
+ * @param {string} value
+ * @param {(name: string) => string[]} lookup
+ * @param {number} [depth]
  * @returns {string[]}
  */
-export function collectUnloadedFonts(resolvedTheme) {
+export function expandFontVars(value, lookup, depth = 0) {
+  const text = String(value);
+  const at = text.search(/var\(\s*--/i);
+  if (at < 0 || depth > 8) return [text];
+  // The var() call, to its matching parenthesis.
+  let level = 0;
+  let end = -1;
+  for (let i = at + 3; i < text.length; i++) {
+    if (text[i] === '(') level++;
+    else if (text[i] === ')' && --level === 0) {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) return [text];
+  const inner = text.slice(at + 4, end);
+  const comma = inner.indexOf(',');
+  const name = (comma < 0 ? inner : inner.slice(0, comma)).trim();
+  // A fallback is not a family this theme declares: the property may come
+  // from the app.
+  const given = lookup(name);
+  const choices = given.length > 0 ? given : [''];
+  return choices
+    .flatMap(choice =>
+      expandFontVars(
+        text.slice(0, at) + choice + text.slice(end + 1),
+        lookup,
+        depth + 1,
+      ),
+    )
+    .slice(0, 32);
+}
+
+/**
+ * Collect the font families a resolved theme names but does not load —
+ * every `--font-family-*` token plus every component-override `fontFamily`
+ * and the families of a `font` shorthand, each `var()` of the theme's own
+ * properties read as their values,
+ * minus generics, CSS-wide keywords, other `var()` references, and known system
+ * families. Source order, first-seen casing, deduped case-insensitively.
+ *
+ * @param {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object, typography?: {body?: {family?: string, fallbacks?: string}, heading?: {family?: string, fallbacks?: string}, code?: {family?: string, fallbacks?: string}}}} resolvedTheme
+ * @param {{tokens?: Record<string, string>, localTokens?: Record<string, string>}} [outer]
+ *   the theme a rule's values sit in, whose own properties they read too
+ * @returns {string[]}
+ */
+export function collectUnloadedFonts(resolvedTheme, outer = undefined) {
   const seen = new Set();
   /** @type {string[]} */
   const unloaded = [];
+  // A family the theme holds in one of its own properties, read by var(),
+  // is a family it names.
+  /** @param {string} name @returns {string[]} */
+  const lookup = name =>
+    [resolvedTheme, outer].flatMap(at =>
+      [at?.tokens?.[name], at?.localTokens?.[name]].filter(
+        v => typeof v === 'string',
+      ),
+    );
 
   /** @param {unknown} value */
   const consider = value => {
     if (typeof value !== 'string') return;
-    for (const family of splitFamilies(value)) {
+    const families = expandFontVars(value, lookup).flatMap(splitFamilies);
+    for (const family of families) {
       const key = family.toLowerCase();
       if (GENERIC_KEYWORDS.has(key) || SYSTEM_FAMILIES.has(key)) continue;
       if (seen.has(key)) continue;
@@ -202,6 +505,9 @@ export function collectUnloadedFonts(resolvedTheme) {
     if (!node || typeof node !== 'object') return;
     for (const [key, value] of Object.entries(node)) {
       if (key === 'fontFamily') consider(value);
+      // A `font` shorthand names its families last.
+      else if (key === 'font' && typeof value === 'string')
+        consider(fontShorthandFamilyList(value));
       else walk(value);
     }
   };
@@ -217,13 +523,19 @@ export function collectUnloadedFonts(resolvedTheme) {
  *
  * @param {string} themeName
  * @param {string[]} families
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatFontLoadingHelp(themeName, families) {
+export function formatFontLoadingHelp(
+  themeName,
+  families,
+  recipe = fontLoadingRecipe,
+) {
   const named = families.map(f => `"${f}"`).join(', ');
   return `
 [note] Theme "${themeName}" names fonts it does not load: ${named}
-${fontLoadingRecipe(families)}`;
+${recipe(families)}`;
 }
 
 /**
@@ -231,16 +543,21 @@ ${fontLoadingRecipe(families)}`;
  * do not load, with the themes that name it, then one recipe for all of them.
  *
  * @param {Array<{family: string, themes: string[]}>} entries
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatBatchFontLoadingHelp(entries) {
+export function formatBatchFontLoadingHelp(
+  entries,
+  recipe = fontLoadingRecipe,
+) {
   const named = entries
     .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
     .join('\n');
   return `
 [note] The built themes name fonts they do not load:
 ${named}
-${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+${recipe(entries.map(entry => entry.family))}`;
 }
 
 /**

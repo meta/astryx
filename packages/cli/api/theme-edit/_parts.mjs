@@ -28,10 +28,16 @@ import {
   renderPage,
   RenderError,
 } from '../../foundation/render/render-page.mjs';
-import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {
+  SAMPLE_PAGE,
+  SAMPLE_SOURCE,
+  elementNames,
+  pageSource,
+} from './_catalog.mjs';
+import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
-/** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 7;
+/** Bump when the shape of the cached part data, or which parts it reaches, changes. */
+const PART_DATA_VERSION = 23;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -52,18 +58,27 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
- * @property {Record<string, Record<string, string>>} [inline] - state -> property -> the token Core paints it with as an inline style in that state, which outranks any theme rule
+ * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {Record<string, string[]>} [held] - the tokens the parts inside it draw with there, at rest, and the properties they set with each
+ * @property {string[]} [line] - the properties a line inside it with no target of its own draws (a divider's line), recorded as the part's: a setting on the part's own element does not reach them
+ * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
+ * @property {string[]} [mediaSides] - the sides that media surface took where the census drew it (`dark`, `light`)
+ * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ *   `over`: the region the part sits in (a header), whose background shows
+ *   through a see-through background of the part's own, else the page
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 
 /**
  * A sample value for a required prop the doc declares, from its type: the
- * component's name for text, false for a flag, the first value of a union.
+ * component's name for text, false for a flag, the first value of a union,
+ * else null where the type allows it.
  * Undefined for a type with no plain sample, such as a function.
  * @param {string} name
  * @param {string} type
@@ -80,9 +95,14 @@ function sampleOf(name, type) {
   if (t === 'string' || /ReactNode$/.test(t)) return name;
   if (t === 'boolean') return false;
   if (t === 'number') return 1;
+  // A search source: the page's sample one, a few fixed items.
+  if (/^SearchSource\b/.test(t)) return SAMPLE_SOURCE;
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  // A value the type lets be null (a file input's chosen file): none
+  // chosen, when nothing plainer stands for it.
+  if (/(^|\|)\s*null\s*(\||$)/.test(type)) return null;
   return undefined;
 }
 
@@ -94,6 +114,8 @@ function sampleOf(name, type) {
  * @param {unknown} selected
  */
 function slotItems(slot, selected) {
+  // (A group of many values, a checkbox list's, selects by a list.)
+  if (Array.isArray(selected)) selected = selected[0];
   return [1, 2, 3].map(i => {
     const props = {...(slot.props ?? {})};
     if (typeof props.label === 'string') props.label = `${props.label} ${i}`;
@@ -136,23 +158,70 @@ export function demoProps(project, name) {
   )
     return null;
   const props = given ?? {};
+  // A search source its defaults leave out (a command palette's) is the
+  // page's sample one: without it the part lists nothing.
+  if (given)
+    for (const [p, d] of Object.entries(info.props ?? {}))
+      if (!(p in props) && /^SearchSource\b/.test(d.type))
+        props[p] = SAMPLE_SOURCE;
   if (!given)
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
       if (p === 'children' && d.slots.length) continue;
-      const v = sampleOf(name, d.type);
+      // A value the type allows to be null (`T | null`, nothing chosen yet)
+      // with no plain sample is null.
+      // A prop the doc suggests elements for (a nav icon's icon) takes the
+      // first of them: a plain sample would draw its own text in their place.
+      const v =
+        d.slots?.[0] ??
+        sampleOf(name, d.type) ??
+        (/(^|\|)\s*null\s*($|\|)/.test(d.type) ? null : undefined);
       // A required prop with no plain sample, such as a render function:
       // the component cannot be shown from its doc alone.
       if (v === undefined) return null;
       props[p] = v;
     }
   const kids = info.props?.children;
-  const slot = kids?.slots?.[0];
+  // A part whose children are required and whose doc suggests none (a
+  // dropdown menu's submenu, whose children are its flyout's rows) gets
+  // three of its parent's item part (DropdownMenuItem), as a group gets its
+  // slot's: drawn open, an empty flyout shows nothing of the theme.
+  const parentItem =
+    kids?.required && !kids.slots?.length && info.subComponentOf
+      ? `${info.subComponentOf}Item`
+      : null;
+  const slot =
+    kids?.slots?.[0] ??
+    (parentItem && project.components[parentItem]?.props?.label
+      ? {__element: parentItem, props: {label: 'Item'}}
+      : undefined);
   if (!('children' in props) && kids) {
     if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
-      if (info.props.value && !('value' in props) && slot.props?.value != null)
-        props.value = `${String(slot.props.value)}-1`;
+      if (
+        info.props.value &&
+        !('value' in props) &&
+        slot.props?.value != null
+      ) {
+        // A group that holds many values (a checkbox list's `string[]`)
+        // takes them as a list.
+        const first = `${String(slot.props.value)}-1`;
+        props.value = /\[\]\s*$/.test(String(info.props.value.type ?? ''))
+          ? [first]
+          : first;
+      }
       props.children = slotItems(slot, props.value);
+      // The first item shows the icon its doc lets it take (a menu row's
+      // leading icon), so the paint Core gives an item's icon is read.
+      const iconProp = Object.entries(
+        project.components[slot.__element]?.props ?? {},
+      ).find(
+        ([p, d]) =>
+          /^(icon|startIcon|leadingIcon)$/.test(p) &&
+          /IconType|IconName/.test(String(/** @type {any} */ (d)?.type ?? '')),
+      )?.[0];
+      const first = /** @type {any} */ (props.children)[0];
+      if (iconProp && first && first.props?.[iconProp] == null)
+        first.props = {...first.props, [iconProp]: 'check'};
     }
   }
   return props;
@@ -224,7 +293,16 @@ export function catalogVariants(project, name, cap, opts = {}) {
   const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
-  for (const p of ['variant', 'status', 'color'])
+  // Every prop that changes the look, one sample per value (a variant, a
+  // status, a toast's type, an avatar's shape); a size is read at the one
+  // size drawn.
+  // (A number scale, a heading's level, is drawn below.)
+  for (const p of Object.keys(values).filter(
+    k =>
+      !/^(size|density|elevation)$/.test(k) &&
+      info.props?.[k] &&
+      !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
+  ))
     for (const v of values[p] ?? [])
       variants.push({
         label: v,
@@ -238,6 +316,12 @@ export function catalogVariants(project, name, cap, opts = {}) {
   // The states the doc names that a prop sets: checked (a boolean value)
   // and disabled. The label says the state shown.
   const states = new Set(info.targets.flatMap(t => t.states ?? []));
+  // A value the doc lists beside true and false (a checkbox's
+  // 'indeterminate'): rendered too, so the look Core gives it is read.
+  if (states.has('checked'))
+    for (const word of literals(info.props?.value?.type ?? ''))
+      if (word !== 'true' && word !== 'false')
+        variants.push({label: word, props: {...base, value: word}});
   if (states.has('checked') && info.props?.value?.type.startsWith('boolean')) {
     const on = base.value !== true;
     variants.push({
@@ -268,8 +352,30 @@ export function catalogVariants(project, name, cap, opts = {}) {
       String(/** @type {any} */ (doc)?.type ?? '').trim() === 'boolean' &&
       base[p] !== true
     )
-      variants.push({label: p, props: {...base, [p]: true}});
+      variants.push({
+        label: p,
+        props: {...base, [p]: true, ...flagNeeds(info, p, base)},
+      });
   return variants.slice(0, cap);
+}
+
+/**
+ * What a look flag needs to show its look: the prop its name starts with
+ * (`isIconOnly` reads `icon`), given the first element its doc suggests when
+ * the sample leaves it empty. Without it an icon-only button is an empty
+ * square.
+ * @param {any} info
+ * @param {string} flag
+ * @param {Record<string, unknown>} base
+ * @returns {Record<string, unknown>}
+ */
+function flagNeeds(info, flag, base) {
+  const word = /^(?:is|has)([A-Z][a-z0-9]*)/.exec(flag)?.[1];
+  const prop = word ? word[0].toLowerCase() + word.slice(1) : '';
+  const slot = info.props?.[prop]?.slots?.[0];
+  return prop && prop !== flag && slot && base[prop] == null
+    ? {[prop]: slot}
+    : {};
 }
 
 /**
@@ -282,7 +388,7 @@ export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   for (const name of Object.keys(project.components))
-    for (const v of catalogVariants(project, name, 16))
+    for (const v of catalogVariants(project, name, 24))
       items.push({
         name,
         label: v.label,
@@ -375,9 +481,17 @@ function sweepRenders(themes) {
  * @param {string} file name inside the render folder
  * @param {string} source
  * @param {Array<{name: string, from: string}>} [extra] files copied beside it
+ * @param {{openLayers?: boolean}} [opts] `openLayers`: the overlays it shows
+ *   or opens are drawn and added after its markup
  * @returns {Promise<{html: string, markup: string}>}
  */
-export async function renderGenerated(project, file, source, extra = []) {
+export async function renderGenerated(
+  project,
+  file,
+  source,
+  extra = [],
+  opts = {},
+) {
   const dir = renderDir(project);
   // A lookup in an app with no themes must not leave a themes/ folder.
   const themes = path.dirname(dir);
@@ -393,14 +507,9 @@ export async function renderGenerated(project, file, source, extra = []) {
       );
     })();
   fs.mkdirSync(dir, {recursive: true});
-  // Stopped by a signal, the render folder still goes.
-  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
-  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
-    cleanup();
-    process.kill(process.pid, sig);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  // Stopped by a signal (the terminal closing too), the render folder
+  // still goes.
+  const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
   // Demo images point at the docs site's own folder (`/template-assets/…`),
   // which a page opened from disk cannot reach: the inline placeholder
@@ -418,6 +527,7 @@ export async function renderGenerated(project, file, source, extra = []) {
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
     // per-process name never reaches the file.
@@ -426,6 +536,20 @@ export async function renderGenerated(project, file, source, extra = []) {
     const end = body.indexOf('<script type=');
     return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
+    // A theme file too large for a page to carry is the file's size, not
+    // React: it is named with its size and where it is.
+    if (e instanceof RenderError && e.code === 'ERR_RENDER_ASSET_TOO_LARGE') {
+      const d = /** @type {{file?: string, bytes?: number, limit?: number}} */ (
+        e.detail ?? {}
+      );
+      throw new AstryxError(
+        d.file && d.bytes && d.limit
+          ? `${path.relative(project.cwd, d.file).split(path.sep).join('/')} is ${(d.bytes / 1048576).toFixed(1)} MB, more than the ${d.limit / 1048576} MB a preview page carries per file: use a smaller copy of it (the app itself can keep the large one).`
+          : e.message,
+        [],
+        ERROR_CODES.ERR_RENDER_ASSET_TOO_LARGE,
+      );
+    }
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
       // A render stopped by its time limit on the editor's own page is the
@@ -456,13 +580,34 @@ export async function renderGenerated(project, file, source, extra = []) {
       fs.rmSync(f, {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
+    untrack();
   }
 }
 
 /** @param {unknown} v @returns {v is Record<string, unknown>} */
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Part data read from a cache file, by file, with the file's identity, size
+ * and time when it was read. Shared by every command in the process, so it
+ * is frozen.
+ * @type {Map<string, {stamp: string, data: PartData}>}
+ */
+const readParts = new Map();
+
+/**
+ * Freeze a parsed value and everything in it.
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
 
 /**
  * The part data for the installed Core, from the cache or built now.
@@ -472,7 +617,15 @@ const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
 export async function partData(project) {
   const file = path.join(project.cacheDir, 'parts.json');
   try {
-    const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // The file is read again only when it changed: every command reads it,
+    // and parsing it costs more than the rest of a small command.
+    const st = fs.statSync(file);
+    const stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    const kept = readParts.get(file);
+    const cached =
+      kept?.stamp === stamp
+        ? kept.data
+        : deepFreeze(JSON.parse(fs.readFileSync(file, 'utf8')));
     // A file that parses but has the wrong shape (a hand edit, a cut-off
     // write) is built again, as a file that does not parse is.
     if (
@@ -481,8 +634,10 @@ export async function partData(project) {
       isRecord(cached.map) &&
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
-    )
+    ) {
+      readParts.set(file, {stamp, data: cached});
       return cached;
+    }
   } catch {
     // Not built yet, or unreadable: build it.
   }
@@ -510,7 +665,11 @@ const RING_TOKENS = {
  * Add the focus ring a control draws on its indicator at focus time (Core's
  * `useIndicatorFocusRing`, used by a control whose input is visually
  * hidden): an inline style the server render never shows, read from the
- * focus outline tokens on the control's own `-indicator` part.
+ * focus outline tokens. The tokens are read by the indicator always (it
+ * never takes focus itself, so no state reaches the ring), and the outline
+ * properties are painted inline, which no theme rule can replace. The
+ * indicator is the control's own `-indicator` target, or for a part of
+ * another component (a radio list's item), that component's.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Record<string, PartRecord>} map
  */
@@ -529,9 +688,20 @@ function addIndicatorRings(project, map) {
       continue;
     }
     if (!source.includes('useIndicatorFocusRing')) continue;
-    for (const t of info.targets) {
-      const key = t.className.replace(/^astryx-/, '');
-      if (!key.endsWith('-indicator')) continue;
+    /** @param {import('./_project.mjs').ComponentInfo | undefined} c */
+    const indicators = c =>
+      (c?.targets ?? [])
+        .map(t => t.className.replace(/^astryx-/, ''))
+        .filter(k => k.endsWith('-indicator'));
+    const own = indicators(info);
+    const keys = own.length
+      ? own
+      : indicators(
+          info.subComponentOf
+            ? project.components[info.subComponentOf]
+            : undefined,
+        );
+    for (const key of keys) {
       const rec = (map[key] ??= {
         own: {},
         inside: {},
@@ -539,11 +709,8 @@ function addIndicatorRings(project, map) {
         contains: [],
       });
       for (const [prop, token] of Object.entries(RING_TOKENS)) {
-        const p = (rec.own[prop] ??= {tokens: {}, values: []});
-        p.tokens[token] = [
-          ...new Set([...(p.tokens[token] ?? []), ':focus-visible']),
-        ];
-        if (!p.values.includes(`var(${token})`)) p.values.push(`var(${token})`);
+        rec.inside[token] = [...new Set([...(rec.inside[token] ?? []), prop])];
+        (rec.inline ??= {})[''] = {...rec.inline?.[''], [prop]: token};
       }
     }
   }
@@ -630,10 +797,14 @@ function addInlineStatePaint(project, map) {
 async function buildPartData(project) {
   const {items, imports} = catalogItems(project);
   const all = [...items, {name: 'sample-page', label: '', tree: SAMPLE_PAGE}];
+  // Overlays (a tooltip, a menu's list) are drawn open too: the server
+  // markup holds none of them.
   const {markup} = await renderGenerated(
     project,
     'catalog.mjs',
     pageSource({items: all, imports, theme: null, layout: 'catalog'}),
+    [],
+    {openLayers: true},
   );
   let css = '';
   try {
@@ -645,7 +816,32 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens);
+  // The overlays drawn open add the parts the server markup cannot hold (a
+  // tooltip, a menu's items); a part the page shows already keeps what it
+  // reads there, never a look another component gives it inside an overlay
+  // (a dialog's round close button).
+  const at = markup.indexOf('<div data-astryx-open-layers=');
+  const decls = declarations(css);
+  const result = walkMarkup(
+    at < 0 ? markup : markup.slice(0, at),
+    decls,
+    tokens,
+    project.target,
+  );
+  if (at >= 0) {
+    const layers = walkMarkup(markup.slice(at), decls, tokens, project.target);
+    const added = Object.keys(layers.map).filter(k => !(k in result.map));
+    for (const k of added) result.map[k] = layers.map[k];
+    const seen = new Set(result.pairs.map(x => JSON.stringify(x)));
+    for (const x of layers.pairs)
+      if (
+        [x.text, x.fg.target, x.bg.target].some(t =>
+          added.includes(String(t)),
+        ) &&
+        !seen.has(JSON.stringify(x))
+      )
+        result.pairs.push(x);
+  }
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
@@ -688,6 +884,88 @@ export function coreFallback(project, name) {
     }
   }
   return null;
+}
+
+/** @type {Map<string, string>} */
+const coreCssCache = new Map();
+
+/**
+ * Core's stylesheet text, read once; empty with no stylesheet.
+ * @param {any} project
+ * @returns {string}
+ */
+function coreCss(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return '';
+  }
+  let css = coreCssCache.get(file);
+  if (css == null) {
+    try {
+      css = fs.readFileSync(file, 'utf8');
+    } catch {
+      css = '';
+    }
+    coreCssCache.set(file, css);
+  }
+  return css;
+}
+
+/**
+ * The properties a keyframes rule of Core's animates (a tooltip's entrance
+ * animates opacity and transform), and the transform functions it uses.
+ * Empty when Core has no such rule.
+ * @param {any} project
+ * @param {string} name
+ * @returns {{props: string[], transforms: string[]}}
+ */
+export function coreKeyframes(project, name) {
+  const css = coreCss(project);
+  const at = css.indexOf(`@keyframes ${name}{`);
+  if (at < 0) return {props: [], transforms: []};
+  let depth = 0;
+  let end = at;
+  for (let j = css.indexOf('{', at); j < css.length; j++) {
+    if (css[j] === '{') depth++;
+    else if (css[j] === '}' && --depth === 0) {
+      end = j;
+      break;
+    }
+  }
+  const body = css.slice(at, end);
+  return {
+    props: [
+      ...new Set([...body.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map(m => m[1])),
+    ].filter(p => p !== 'animation-timing-function'),
+    transforms: [
+      ...new Set([...body.matchAll(/\b([a-z]+[XYZ3d]*)\(/g)].map(m => m[1])),
+    ].filter(f => /^(?:translate|scale|rotate|skew)/.test(f)),
+  };
+}
+
+/**
+ * Every value Core's stylesheet gives a variable of its own (a card's
+ * `--_card-elevation` is a shared shadow at each elevation; its
+ * `--_card-ring` is a colored ring), deduplicated. Empty with no
+ * stylesheet.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string[]}
+ */
+export function coreVarValues(project, name) {
+  const css = coreCss(project);
+  if (!css) return [];
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    ...new Set(
+      [...css.matchAll(new RegExp(`${esc}\\s*:\\s*([^;}]+)`, 'g'))].map(m =>
+        m[1].trim(),
+      ),
+    ),
+  ];
 }
 
 /** @type {Map<string, Set<string>>} */
@@ -760,6 +1038,30 @@ export function multipliedTokens(project) {
 }
 
 /**
+ * The stylesheet without its forced-colors blocks: what Core draws for a
+ * high-contrast system mode (a button's 1px ButtonText border) is no look
+ * a theme gives, so the part data never reads it as the part's.
+ * @param {string} css
+ */
+function withoutForcedColors(css) {
+  let out = '';
+  let i = 0;
+  const re = /@media\s*\(\s*forced-colors\s*:\s*active\s*\)\s*\{/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    out += css.slice(i, m.index);
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (; j < css.length && depth; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}') depth--;
+    }
+    i = j;
+    re.lastIndex = j;
+  }
+  return out + css.slice(i);
+}
+
+/**
  * Atomic class -> its declarations, with the condition (pseudo-class,
  * attribute) each one applies under.
  * @param {string} css
@@ -768,7 +1070,7 @@ export function multipliedTokens(project) {
 export function declarations(css) {
   /** @type {Map<string, Array<{prop: string, value: string, cond: string}>>} */
   const decls = new Map();
-  for (const m of css.matchAll(
+  for (const m of withoutForcedColors(css).matchAll(
     /\.(x[a-z0-9]+)((?:\.x[a-z0-9]+|[:[][^{]*)?)\{([^{}]*)\}/g,
   )) {
     const [, cls, rest, body] = m;
@@ -841,15 +1143,27 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @param {string} html
  * @param {ReturnType<typeof declarations>} decls
  * @param {Set<string>} tokens
+ * @param {Map<string, {props: string[], states: string[]}>} [targets] the theming targets by key: the visual props and runtime states each declares are the data attributes read as its conditions
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
-export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+export function walkMarkup(html, decls, tokens, targets = new Map()) {
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
-  const stack = [{env: {}, target: null, fg: null, bg: null}];
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
+  const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
+  /**
+   * Text drawn by a part with its paint: one pair per part, text and
+   * ground.
+   * @param {string} target @param {PaintSide} fg @param {PaintSide} bg @param {string} sample
+   */
+  const addPair = (target, fg, bg, sample) => {
+    const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
+    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+  };
+  /** The parts whose paint is a line inside them. @type {Set<string>} */
+  const lined = new Set();
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -857,15 +1171,8 @@ export function walkMarkup(html, decls, tokens) {
     if (text !== undefined) {
       const top = stack[stack.length - 1];
       const t = text.trim();
-      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t)) {
-        const k = `${top.target}|${top.fg.target}:${top.fg.tokens.join('+') || top.fg.raw}|${top.bg.target}:${top.bg.tokens.join('+') || top.bg.raw}`;
-        pairs.set(k, {
-          text: top.target,
-          fg: top.fg,
-          bg: top.bg,
-          sample: t.slice(0, 30),
-        });
-      }
+      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
+        addPair(top.target, top.fg, top.bg, t);
       continue;
     }
     if (close) {
@@ -875,14 +1182,35 @@ export function walkMarkup(html, decls, tokens) {
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);
-    const dataAttrs = Object.fromEntries(
-      [
-        ...attrs.matchAll(
-          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight)="([^"]*)"/g,
-        ),
-      ].map(x => [x[1], x[2]]),
-    );
     const parent = stack[stack.length - 1];
+    // The theming targets the element carries (else the one it sits in).
+    const keys = cls
+      .filter(c => c.startsWith('astryx-') && !c.startsWith('astryx-theme'))
+      .map(c => c.slice(7));
+    const declaredBy = (keys.length ? keys : [parent.target])
+      .map(k => (k ? targets.get(k) : undefined))
+      .filter(t => t != null);
+    const props = new Set(declaredBy.flatMap(t => t.props));
+    const states = new Set(declaredBy.flatMap(t => t.states));
+    // A data attribute the element's target declares (a visual prop or a
+    // runtime state, written by `themeProps` as `data-<name>`) is a
+    // condition of what the part reads.
+    const dataAttrs = Object.fromEntries(
+      [...attrs.matchAll(/\bdata-([a-z][\w-]*)="([^"]*)"/g)]
+        .filter(x => props.has(x[1]) || states.has(x[1]))
+        .map(x => [x[1], x[2]]),
+    );
+    // The place another component puts a part in (the current page's
+    // button in a pagination, a pressed toggle) is a condition of what that
+    // component styles it with there, never the part's look at rest. A part
+    // that marks the place with a runtime state of its own (a selected tab)
+    // is conditioned by that state already.
+    const ownState = Object.keys(dataAttrs).some(k => states.has(k));
+    const context = ownState
+      ? []
+      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
+          .filter(x => x[2] !== 'false')
+          .map(x => `${x[1]}=${x[2]}`);
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
@@ -892,25 +1220,95 @@ export function walkMarkup(html, decls, tokens) {
     );
     const target = named[0]?.slice(7) ?? parent.target;
     const ownsTarget = named.length > 0;
-    if (target) {
-      const T = (map[target] ??= {
+    // An empty element with no target of its own inside a part that paints
+    // nothing at rest (a divider's line): what it paints is the part's own
+    // paint, under the part's conditions, so the readers find it as the
+    // part's (its fill, its line color and its thickness).
+    const empty =
+      Boolean(selfClose) ||
+      VOID.has(tag.toLowerCase()) ||
+      html.startsWith(`</${tag}>`, (m.index ?? 0) + m[0].length);
+    const paints = (
+      /** @type {{prop: string, value: string, cond: string}} */ d,
+    ) =>
+      !d.cond &&
+      /^(background(-color)?|border(-[a-z-]+)?-color)$/.test(d.prop) &&
+      expand(d.value, env, tokens).size > 0;
+    const lineOf =
+      !ownsTarget &&
+      empty &&
+      parent.target != null &&
+      own.some(paints) &&
+      (lined.has(parent.target) ||
+        !Object.keys(map[parent.target]?.own ?? {}).some(p =>
+          /^background(-color)?$/.test(p),
+        ))
+        ? parent.target
+        : null;
+    if (lineOf) lined.add(lineOf);
+    // An element can carry several targets (a shell's side nav region is a
+    // layout panel too): its declarations are each one's own.
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
+      if (!t) continue;
+      const asOwn = ownsTarget || t === lineOf;
+      const T = (map[t] ??= {
         own: {},
         at: {},
         inside: {},
         attrs: {},
         contains: new Set(),
+        tags: new Set(),
+        innerCorners: new Set(),
+        media: false,
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
-      const cond0 = Object.entries(dataAttrs)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(',');
+      // Core's media surface inside the part (a toast's inverted surface):
+      // it sets the text tokens of what it holds from the on-dark color
+      // where it is dark and the on-light color where it is light (Core's
+      // onMediaTokens), so the part's text reads one of them in each mode.
+      else if (/\bdata-astryx-media="/.test(attrs)) {
+        T.media = true;
+        const side = /\bdata-astryx-media="(dark|light)"/.exec(attrs)?.[1];
+        if (side) (T.mediaSides ??= new Set()).add(side);
+        for (const t of ['--color-on-dark', '--color-on-light'])
+          if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
+      }
+      const cond0 = ownsTarget
+        ? [
+            ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+            ...context,
+          ].join(',')
+        : parent.cond;
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
+        // (An inherited background paints nothing of its own: it reads no
+        // token, and what shows is its parent's.)
         const toks = expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
-        if (ownsTarget) {
+        // A line's paint and its thickness (a size read from the border
+        // width) are the part's; its layout is not.
+        const lineProp =
+          t === lineOf &&
+          (paints(d) ||
+            /^border(-[a-z-]+)?-(width|style)$/.test(d.prop) ||
+            (/^(height|width|block-size|inline-size)$/.test(d.prop) &&
+              toks.has('--border-width')));
+        if (!ownsTarget)
+          for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
+        if (asOwn && (ownsTarget || lineProp)) {
+          // (Drawn by the line inside the part, not the part's own element:
+          // a setting on the part does not reach it.)
+          if (lineProp && !ownsTarget) {
+            (T.line ??= new Set()).add(d.prop);
+            // (Undone at the end for a part that holds other parts: its
+            // own element is no bare line.)
+            if (!T.own[d.prop])
+              (T.lineAdded ??= []).push([d.prop, cond || 'always', toks]);
+            else if (!(T.at[d.prop] ?? {})[cond || 'always'])
+              (T.lineAdded ??= []).push([d.prop, cond || 'always', toks, true]);
+          }
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
           (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
             d.value,
@@ -922,7 +1320,7 @@ export function walkMarkup(html, decls, tokens) {
           );
           for (const t of toks)
             (P.tokens[t] ??= new Set()).add(cond || 'always');
-        } else for (const t of toks) (T.inside[t] ??= new Set()).add(d.prop);
+        }
       }
     }
     let fg = parent.fg;
@@ -938,17 +1336,100 @@ export function walkMarkup(html, decls, tokens) {
       }
       if (d.prop === 'background-color') {
         const t = [...expand(d.value, env, tokens)];
-        if (t.length || !/transparent/.test(d.value))
+        if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
       }
     }
-    if (ownsTarget && target)
+    // An input's text is its value, and its placeholder where it has none:
+    // attributes, not text nodes, drawn in the input's text color (the
+    // placeholder in its own ::placeholder color) on the ground it sits on.
+    if (tag.toLowerCase() === 'input' && target && fg && bg) {
+      const attr = (/** @type {string} */ n) =>
+        new RegExp(`\\b${n}="([^"]*)"`).exec(attrs)?.[1]?.trim() ?? '';
+      const type = attr('type') || 'text';
+      if (
+        !/^(checkbox|radio|hidden|range|color|file|submit|button|reset|image)$/.test(
+          type,
+        )
+      ) {
+        if (attr('value')) addPair(target, fg, bg, attr('value'));
+        const ph = own.find(
+          d => d.prop === 'color' && /placeholder/.test(d.cond ?? ''),
+        );
+        if (attr('placeholder') && ph) {
+          const t = [...expand(ph.value, env, tokens)];
+          addPair(
+            target,
+            {target, tokens: t, raw: t.length ? null : ph.value},
+            bg,
+            attr('placeholder'),
+          );
+        } else if (attr('placeholder') && !attr('value'))
+          addPair(target, fg, bg, attr('placeholder'));
+      }
+    }
+    // (Each part an element carries holds what is inside it: a checkbox
+    // list's root is a field too.)
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
-        if (anc.target && anc.target !== target)
-          map[anc.target].contains.add(target);
+        for (const at of anc.all ?? (anc.target ? [anc.target] : []))
+          if (at !== t) {
+            map[at].contains.add(t);
+            // What the parts inside it draw with there, at rest (a table
+            // row's cells' border color; a toast's ghost button declares
+            // none).
+            const A = map[at];
+            for (const d of own)
+              if (!d.cond && !d.prop.startsWith('--'))
+                for (const tk of expand(d.value, env, tokens))
+                  ((A.held ??= {})[tk] ??= new Set()).add(d.prop);
+          }
+    if (ownsTarget) {
+      for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
+      // Corners Core draws on a part by its place among its siblings (a
+      // button group's first and last buttons): the radius token they read
+      // is the enclosing part's corners.
+      if (parent.target && !named.includes(`astryx-${parent.target}`))
+        for (const d of own)
+          if (/^border-(start|end)-(start|end)-radius$/.test(d.prop))
+            for (const tok of expand(d.value, env, tokens))
+              if (/^--radius-/.test(tok))
+                map[parent.target].innerCorners.add(tok);
+    }
+    // (The conditions a part's own element is drawn under go to what it
+    // holds.)
+    const condHere = ownsTarget
+      ? [
+          ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+          ...context,
+        ].join(',')
+      : parent.cond;
     if (!selfClose && !VOID.has(tag.toLowerCase()))
-      stack.push({env, target, fg, bg});
+      stack.push({
+        env,
+        target,
+        all: ownsTarget ? named.map(c => c.slice(7)) : parent.all,
+        fg,
+        bg,
+        cond: condHere,
+      });
   }
+  // A part that holds other parts (a layout, an outline, a slider's
+  // control) is no bare line: what an empty element inside it painted
+  // stays what that element draws.
+  for (const v of Object.values(map))
+    if (v.contains.size && v.lineAdded) {
+      for (const [prop, cond, toks, kept] of v.lineAdded) {
+        if (!kept) {
+          delete v.own[prop];
+          delete v.at[prop];
+          continue;
+        }
+        delete v.at[prop]?.[cond];
+        for (const tk of toks) v.own[prop]?.tokens[tk]?.delete(cond);
+      }
+      v.line = undefined;
+    }
   /** @type {Record<string, PartRecord>} */
   const out = {};
   for (const [t, v] of Object.entries(map)) {
@@ -975,6 +1456,18 @@ export function walkMarkup(html, decls, tokens) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      tags: [...v.tags],
+      innerCorners: [...v.innerCorners],
+      ...(v.media ? {media: true} : {}),
+      ...(v.mediaSides?.size ? {mediaSides: [...v.mediaSides].sort()} : {}),
+      ...(v.line?.size ? {line: [...v.line]} : {}),
+      ...(v.held
+        ? {
+            held: Object.fromEntries(
+              Object.entries(v.held).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
     };
   }
   return {map: out, pairs: [...pairs.values()]};

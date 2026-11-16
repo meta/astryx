@@ -11,7 +11,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -32,7 +32,16 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -175,6 +184,11 @@ describe('spacing and scope', () => {
     });
     const r = await refusal(() => themeEditShow('m', {cwd}));
     expect(r.run[0]).toMatch(/set m mode both$/);
+    // The base that reads as no theme is refused with its own line, never
+    // dropped on the way.
+    const base = await refusal(() => themeEditSet('m', 'mode', 'both', {cwd}));
+    expect(base.run[0]).toMatch(/set m base neutral$/);
+    await themeEditSet('m', 'base', 'neutral', {cwd});
     await themeEditSet('m', 'mode', 'both', {cwd});
     await themeEditShow('m', {cwd});
     fs.rmSync(path.join(cwd, 'themes/m'), {recursive: true, force: true});
@@ -259,14 +273,20 @@ describe('astracat on #11262', () => {
     fs.rmSync(big, {force: true});
   }, 240_000);
 
-  it('a one-mode color on a part keeps the other mode as a color, never inherit', async () => {
+  it('a one-mode color on a part writes nothing in the other mode, never inherit', async () => {
     await themeEditSet('t', 'background-color', '#00ff00', {
       cwd,
       on: 'tab',
       mode: 'dark',
     });
-    expect(read('themes/t/t.css')).not.toMatch(/light-dark\(inherit/);
-    expect(read('themes/t/t.css')).toMatch(/light-dark\([^,]+, #00ff00\)/);
+    const css = read('themes/t/t.css');
+    expect(css).not.toMatch(/light-dark\(inherit/);
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'dark')).toBe(
+      '#00ff00',
+    );
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'light')).toBe(
+      undefined,
+    );
     await themeEditUndo('t', {cwd});
   }, 240_000);
 });
@@ -304,8 +324,11 @@ describe('chaos round 3', () => {
     // A leftover is one more than ten minutes old.
     const old = new Date(Date.now() - 11 * 60_000);
     fs.utimesSync(left, old, old);
-    await themeEditSet('t', 'corners', 'small', {cwd});
-    await themeEditUndo('t', {cwd});
+    // The render itself clears a stopped render's folder.
+    await withRealRenders(async () => {
+      await themeEditSet('t', 'corners', 'small', {cwd});
+      await themeEditUndo('t', {cwd});
+    });
     expect(fs.existsSync(left)).toBe(false);
   }, 240_000);
 

@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
@@ -23,6 +23,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -126,16 +134,21 @@ describe('hunt41 N3: a suggested new name is free and valid', () => {
 
 describe('hunt41 N4: a base typed as its package name', () => {
   it('stays that base, with its install line when it is not installed', async () => {
-    for (const like of [
-      '@astryxdesign/theme-butter',
-      'theme-butter',
-      'BUTTER',
-    ]) {
+    for (const like of ['@astryxdesign/theme-butter', 'theme-butter']) {
       const err = await refusal(() => themeEditNew('b', {cwd, like}));
       expect(err.run.join('\n'), like).toMatch(/ new b --like butter$/m);
       expect(err.run[0], like).toMatch(
         /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
       );
+    }
+    // The base in any case is that base (the one case rule): the same
+    // refusal as butter itself, its install line first.
+    for (const like of ['butter', 'BUTTER']) {
+      const err = await refusal(() => themeEditNew('b', {cwd, like}));
+      expect(err.run[0], like).toMatch(
+        /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
+      );
+      expect(err.run.join('\n'), like).toMatch(/ new b$/m);
     }
     for (const v of [
       'butter',

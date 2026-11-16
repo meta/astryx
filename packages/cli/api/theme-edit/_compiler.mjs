@@ -10,6 +10,7 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
@@ -107,19 +108,67 @@ export function makeCompiler(project, parts) {
     return null;
   }
 
+  /** @type {Map<string, boolean>} */
+  const paintsMemo = new Map();
+  /**
+   * Whether a visual prop changes a color the part paints: two of its
+   * rules that differ only in that prop's value give a color property
+   * different values.
+   * @param {string} target @param {string} prop
+   */
+  function paintsBy(target, prop) {
+    const id = `${target}|${prop}`;
+    const known = paintsMemo.get(id);
+    if (known != null) return known;
+    let found = false;
+    for (const [p, rules] of Object.entries(MAP[target]?.at ?? {})) {
+      if (!/(^|-)color$|^background(-color)?$|^fill$|^stroke$/.test(p))
+        continue;
+      /** @type {Map<string, Set<string>>} */
+      const byRest = new Map();
+      for (const [key, value] of Object.entries(rules)) {
+        const [attrs, ...css] = key.split(' ');
+        const list = attrs.includes('=') ? attrs.split(',') : [];
+        if (!list.some(kv => kv.startsWith(`${prop}=`))) continue;
+        const rest = [
+          ...list.filter(kv => !kv.startsWith(`${prop}=`)),
+          ...css,
+        ].join(' ');
+        const seen = byRest.get(rest) ?? new Set();
+        seen.add(String(value));
+        byRest.set(rest, seen);
+      }
+      if ([...byRest.values()].some(v => v.size > 1)) {
+        found = true;
+        break;
+      }
+    }
+    paintsMemo.set(id, found);
+    return found;
+  }
+
   /** A condition, kept to what a person can act on. @param {string} target @param {string} cond */
   function shortCond(target, cond) {
     if (cond === 'always') return '';
     const attrs = MAP[target]?.attrs ?? {};
     const [attrPart, ...css] = cond.split(' ');
+    const t = TARGET.get(target);
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
-        return (
-          k === 'selected' ||
-          (['variant', 'status', 'tone', 'color'].includes(k) &&
-            (attrs[k]?.length ?? 0) > 1)
-        );
+        // Only the part's own visual props are read down to what a person
+        // acts on (a size or an elevation the render happened to use is not
+        // a condition). Anything else stays: a runtime state of the part, a
+        // prop of another target on the same element (a selectable card's
+        // selection on its card), and the place another component puts the
+        // part in (the part data's aria context conditions); none is the
+        // part at rest.
+        if (!t?.props.includes(k) || t.states.includes(k)) return true;
+        // A look prop drawn in more than one value that changes a color
+        // the part paints (a variant, a status, a toast's type) tells its
+        // renders apart; one that changes only a size or a weight (a
+        // heading's level) is read as the part, as a size the render used.
+        return (attrs[k]?.length ?? 0) > 1 && paintsBy(target, k);
       },
     );
     const cssPart = (attrPart.includes('=') ? css : [attrPart, ...css])
@@ -137,6 +186,32 @@ export function makeCompiler(project, parts) {
    * @returns {Read[]}
    */
   function partReads(target, group) {
+    // The part data never changes while the compiler lives, and the checks
+    // ask for the same part many times in one command: each answer is made
+    // once, and handed out frozen so no caller can change it for the next.
+    const key = `${target}\0${group ?? ''}`;
+    const known = readsOf.get(key);
+    if (known) return known;
+    const reads = freshReads(target, group);
+    for (const r of reads) {
+      Object.freeze(r.props);
+      Object.freeze(r.when);
+      Object.freeze(r);
+    }
+    Object.freeze(reads);
+    readsOf.set(key, reads);
+    return reads;
+  }
+  /** @type {Map<string, Read[]>} */
+  const readsOf = new Map();
+
+  /**
+   * {@link partReads}, made anew.
+   * @param {string} target
+   * @param {string | null} group
+   * @returns {Read[]}
+   */
+  function freshReads(target, group) {
     const own = MAP[target]?.own ?? {};
     /** @type {Map<string, {token: string, props: Set<string>, when: Set<string>}>} */
     const out = new Map();
@@ -250,9 +325,10 @@ export function makeCompiler(project, parts) {
    * @param {string} token
    * @param {string} value
    * @param {string} P
+   * @param {string} [when] the --when the token is set under (`variant:strong`)
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P) {
+  function checkTokenOn(theme, target, token, value, P, when) {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -262,6 +338,55 @@ export function makeCompiler(project, parts) {
       };
     }
     const g = groupOfToken(token);
+    // Under a variant: only what the part reads in that variant's rules (or
+    // rules that name no variant) counts.
+    const [wProp, wVal] = String(when ?? '').split(':');
+    if (wProp && wVal && allReads(target).has(token)) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const inVariant = (/** @type {string} */ c) => {
+        const attrs = c.split(' ')[0].split(',');
+        const own = attrs.find(a => a.startsWith(`${wProp}=`));
+        return !own || own === `${wProp}=${wVal}`;
+      };
+      // (What a line inside the part declares is recorded as the part's
+      // own already; any other part inside it that reads the token takes
+      // it.)
+      const inside =
+        !MAP[target]?.line?.length &&
+        (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (conds.length && !conds.some(inVariant) && !inside) {
+        const there = [
+          ...new Set(
+            Object.values(MAP[target]?.own ?? {}).flatMap(x =>
+              Object.entries(x.tokens ?? {})
+                .filter(([, cs]) =>
+                  /** @type {string[]} */ (cs).some(inVariant),
+                )
+                .map(([t]) => t)
+                .filter(
+                  t =>
+                    groupOfToken(t) === g &&
+                    /^--color-/.test(t) === /^--color-/.test(token),
+                ),
+            ),
+          ),
+        ];
+        return {
+          message: `${target} (${wProp} ${wVal}) never reads ${token}: only its other ${wProp}s do.${there.length ? ` There it reads ${there.slice(0, 4).join(', ')}.` : ''}`,
+          run: there
+            .slice(0, 3)
+            .map(
+              t =>
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+            ),
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.
@@ -402,7 +527,53 @@ export function makeCompiler(project, parts) {
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
       out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+    // A state Core marks with more than one value (a checkbox's checked and
+    // indeterminate looks) is a condition --when names by value.
+    for (const st of TARGET.get(target)?.states ?? [])
+      if ((seen[st] ?? []).some(v => v !== st)) out[st] = seen[st];
     return out;
+  }
+
+  /**
+   * The color stops of a background made of gradients, or null when any
+   * layer is an image or any stop has no color the editor can name.
+   * @param {string} v
+   * @returns {string[] | null}
+   */
+  function gradientStops(v) {
+    /** The parts between commas outside parentheses. @param {string} x */
+    const top = x =>
+      splitTop(x, ',')
+        .map(part => part.trim())
+        .filter(Boolean);
+    /** @type {string[]} */
+    const stops = [];
+    for (const layer of top(v)) {
+      const m =
+        /^(?:repeating-)?(?:linear|radial|conic)-gradient\((.*)\)$/s.exec(
+          layer,
+        );
+      if (!m) {
+        // A layer that is one color (the shorthand's last) is a stop too.
+        if (/url\(|gradient\(/.test(layer)) return null;
+        stops.push(layer);
+        continue;
+      }
+      for (const arg of top(m[1])) {
+        // The direction, shape or position comes first, with no color.
+        if (
+          /^(to\b|at\b|from\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+            arg,
+          )
+        )
+          continue;
+        // A stop is its color and up to two positions after it.
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        if (!color || /^-?[\d.]+(%|px|rem|em)?$/.test(color)) continue;
+        stops.push(color);
+      }
+    }
+    return stops.length ? stops : null;
   }
 
   /**
@@ -426,13 +597,18 @@ export function makeCompiler(project, parts) {
     extra = [],
   ) {
     /**
-     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * The opaque colors the eye sees for a pair, or null with no fixed color:
+     * a see-through background is drawn over what is beneath it (the region
+     * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
+     * @param {unknown} [beneath]
      */
-    const drawn = (fg, bg, m) => {
+    const drawn = (fg, bg, m, beneath = page(m)) => {
       /** @type {[number, number, number]} */
       const ground =
-        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+        parseColor(beneath) ??
+        parseColor(page(m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
@@ -441,12 +617,72 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
+    /**
+     * The color a one-layer linear or radial gradient has where centered
+     * text sits: the middle of a linear one, the center of a radial one,
+     * between the stops around that place; null for any other (several
+     * layers, a conic or repeating one, a stop with no fixed color).
+     * @param {string} v
+     * @returns {string | null}
+     */
+    const colorBehindText = v => {
+      const m = /^(linear|radial)-gradient\((.*)\)$/s.exec(v.trim());
+      if (!m || splitTop(v.trim(), ',').length !== 1) return null;
+      const args = splitTop(m[2], ',').map(x => x.trim());
+      if (
+        args[0] &&
+        /^(to\b|at\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+          args[0],
+        )
+      )
+        args.shift();
+      /** @type {Array<{c: [number, number, number], a: number, at: number | null}>} */
+      const stops = [];
+      for (const arg of args) {
+        const pos = /\s(-?[\d.]+)%$/.exec(arg);
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        const c = parseColor(color);
+        if (!c) return null;
+        stops.push({
+          c,
+          a: alphaOf(color),
+          at: pos ? Number(pos[1]) / 100 : null,
+        });
+      }
+      if (stops.length < 2) return null;
+      // Positions a stop leaves out are spread evenly, as CSS spreads them.
+      stops.forEach((x, i) => {
+        if (x.at == null) x.at = i / (stops.length - 1);
+      });
+      const at = m[1] === 'linear' ? 0.5 : 0;
+      const i = stops.findIndex(x => /** @type {number} */ (x.at) >= at);
+      if (i <= 0) {
+        const x = stops[Math.max(0, i)];
+        return `rgba(${x.c.join(', ')}, ${x.a})`;
+      }
+      const [lo, hi] = [stops[i - 1], stops[i]];
+      const span =
+        /** @type {number} */ (hi.at) - /** @type {number} */ (lo.at);
+      const f = span > 0 ? (at - /** @type {number} */ (lo.at)) / span : 0;
+      const mix = lo.c.map((v0, k) => Math.round(v0 + (hi.c[k] - v0) * f));
+      return `rgba(${mix.join(', ')}, ${lo.a + (hi.a - lo.a) * f})`;
+    };
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
+    // A census pair the caller measures again per variant (`replaces`) is
+    // measured only as those.
+    const replaced = new Set(
+      extra.map((/** @type {any} */ x) => x.replaces).filter(Boolean),
+    );
     for (const p of [...parts.pairs, ...extra]) {
+      if (replaced.has(p)) continue;
+      // Text drawn in a disabled color marks an inactive control, which
+      // needs no 4.5:1 (and must stay dimmer than the live text beside it).
+      if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
+        continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -455,9 +691,54 @@ export function makeCompiler(project, parts) {
         continue;
       for (const m of modes) {
         const fg = value(p, 'fg', m);
-        const bg = value(p, 'bg', m);
-        if (/gradient|url\(/.test(String(bg))) continue;
-        const pair = drawn(fg, bg, m);
+        const whole = value(p, 'bg', m);
+        // The region a part sits in shows through its see-through background.
+        const region = p.over ? {...p, bg: p.over} : null;
+        const beneath = region ? value(region, 'bg', m) : page(m);
+        const baseBeneath = region ? baseValue(region, 'bg', m) : page(m);
+        // Over a region, only a see-through background shows it: an opaque
+        // one is measured as the pair itself already is.
+        if (
+          region &&
+          !(/** @type {any} */ (p).mediaOf) &&
+          alphaOf(whole) >= 1 &&
+          !/gradient|url\(/.test(String(whole))
+        )
+          continue;
+        // A gradient is measured where the text sits on it: a linear or
+        // radial one at the color it has under the text (its middle, or its
+        // center), so a glossy highlight at an edge is not taken for the
+        // ground; any other at each of its color stops, the worst one
+        // counting. An image, or a stop with no fixed color, is not checked.
+        const behind = /gradient/.test(String(whole))
+          ? colorBehindText(String(whole))
+          : null;
+        const stops = behind
+          ? [behind]
+          : /gradient|url\(/.test(String(whole))
+            ? gradientStops(String(whole))
+            : [whole];
+        if (!stops) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const measured = stops.map(stop => ({
+          stop,
+          pair: drawn(fg, stop, m, beneath),
+        }));
+        if (stops.length > 1 && measured.some(x => !x.pair)) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const worst = measured.reduce((a, b) =>
+          a.pair &&
+          b.pair &&
+          ratio(b.pair[0], b.pair[1]) < ratio(a.pair[0], a.pair[1])
+            ? b
+            : a,
+        );
+        const bg = worst.stop;
+        const pair = worst.pair;
         if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
@@ -474,9 +755,17 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        const was = drawn(
+          baseValue(p, 'fg', m),
+          baseValue(p, 'bg', m),
+          m,
+          baseBeneath,
+        );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${m}`;
+        // Pairs alike in color are one problem only when they read the same
+        // token on the same part: text on another token or on another part
+        // is another fix, and shows as they part ways.
+        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${p.bg.target ?? ''}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -491,16 +780,32 @@ export function makeCompiler(project, parts) {
               ? String(fg)
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg:
-            bg !== baseValue(p, 'bg', m)
-              ? String(bg)
-              : (p.bg.tokens[0] ?? String(bg)),
+          // What shows through a see-through background, when it is the
+          // region the part sits in.
+          over:
+            region && alphaOf(bg) < 1
+              ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
+              : null,
+          bg: behind
+            ? `${bg}, its gradient where the text sits`
+            : stops.length > 1
+              ? `${bg}, a stop of its gradient`
+              : bg !== baseValue(p, 'bg', m)
+                ? String(bg)
+                : (p.bg.tokens[0] ?? String(bg)),
+          // What a fix needs: the token the text reads, the part that draws
+          // it, the variant it was measured in, and the opaque color the
+          // text sits on.
+          fgToken: p.fg.tokens[0] ?? null,
+          textPart: p.fg.target ?? null,
+          when: /** @type {any} */ (p).when ?? null,
+          ground: pair[1],
+          pair: p,
         });
       }
     }
     return {
-      problems: out.slice(0, 8),
-      more: Math.max(0, out.length - 8),
+      problems: out,
       unchecked: [...unchecked],
     };
   }

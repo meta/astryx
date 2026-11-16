@@ -18,6 +18,7 @@ applies_to:
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
+    packages/core/src/reset.css,
   ]
 verified_by:
   [
@@ -35,6 +36,8 @@ verified_by:
     packages/cli/api/theme/build/build.public-component-vars.test.mjs,
     packages/cli/api/theme/build/build.adaptation-core-compat.test.mjs,
     packages/cli/api/theme/build/build.packed-old-core.test.mjs,
+    packages/core/src/reset.test.ts,
+    packages/core/src/reset.font.a11y.chromium.spec.ts,
   ]
 deciding_specs:
   [
@@ -244,9 +247,11 @@ Platform-specific details stay inside that compiler.
   the element's color mode is that mode, as Theme resolves it. Outside media
   surfaces the theme root's `data-theme` decides, and a root mode other than
   `light` or `dark` follows the system preference. Inside the theme's media
-  surfaces a block applies as the `onDark` and `onLight` overrides do: inside
-  any surface of its mode, so where surfaces of both modes enclose an element
-  both blocks apply and the light block wins a property both set. The mode
+  surfaces the nearest surface decides: a block applies where the closest
+  media surface around the element is of its mode, so a light surface inside
+  a dark one takes only the light block. This holds for up to five surfaces
+  of alternating modes nested one in another; deeper, the block writes
+  nothing. The mode
   conditions sit on the style key's selector before any pseudo-class, press
   state, or pseudo-element, add no specificity, and add no scope proximity, so
   a block weighs the same on a surface as at the root. The rules follow the
@@ -256,6 +261,14 @@ Platform-specific details stay inside that compiler.
   A block takes the same derived variables and container padding as the style
   key. On a media surface only the block of the surface's mode is written. A
   theme without color-mode blocks has no mode rules in its CSS.
+- **INV19 — The body font token reaches text outside the theme root.** When a
+  theme declares `--font-family-body`, the web compiler gives the theme's scope
+  root `font-family: var(--font-family-body)`. Core's reset gives `html` the
+  same declaration at zero specificity in the `reset` layer, with no fallback,
+  and `body` inherits it. So text that a library adds to `body` outside the
+  theme root, such as a span that measures a label, uses the font that the
+  token names at the page root. A page where no stylesheet defines the token
+  keeps the browser's default font. An app's own `html` or `body` font wins.
 
 This record does not own:
 
@@ -367,6 +380,7 @@ tiers.
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                                                                                        | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                                                                                           | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
 | INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, media surfaces one and more deep, explicit Text and Heading props alike at the root and on a surface, a press, Pagination's current page and a text field's status border kept in the other mode) | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
+| INV19            | `generateThemeRules.test.ts` (the scope-root font rule), `reset.test.ts` (the `html` rule, none on `body`), and `reset.font.a11y.chromium.spec.ts` (a label measured in a span in `body` has its drawn width in the theme root; a page with no token keeps its font)                                                                                                                                                                                   | Text measured or drawn in `body` uses a different font from the token at the page root, or a page with no token changes font                                                                                                                                                                      |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                                                                                        | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                                                                              | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

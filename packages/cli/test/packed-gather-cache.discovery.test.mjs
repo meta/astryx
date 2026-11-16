@@ -35,6 +35,7 @@ import {
   themeEntries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -344,11 +345,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             fs
               .readdirSync(path.join(tmp, CACHE_NAME))
               .map(name => path.join(tmp, CACHE_NAME, name))
-              .filter(
-                file =>
-                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
-                  'component.list',
-              )
+              .filter(file => readKept(file).value?.type === 'component.list')
               .map(file => [file, fs.statSync(file).ino]),
           );
         for (const ask of [
@@ -462,9 +459,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             .readdirSync(path.join(tmp, CACHE_NAME))
             .filter(name =>
               Array.isArray(
-                JSON.parse(
-                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
-                ).value?.wired,
+                readKept(path.join(tmp, CACHE_NAME, name)).value?.wired,
               ),
             );
         // Nothing wired yet: kept, then read back, as a fresh run answers.
@@ -490,6 +485,33 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(wired).not.toEqual(unwired);
         expect(wired).toEqual(themes(freshTmp()));
         expect(themes(tmp)).toEqual(wired);
+        // An edit to the app's source scans the wiring again, while the docs
+        // checks, which never read the app, are read back. So it is in a
+        // project that names an icon set, which scans the app's source for
+        // placeholder icons too.
+        const providers = path.join(other.dir, 'app', 'providers.tsx');
+        for (const iconSet of [false, true]) {
+          if (iconSet) {
+            fs.writeFileSync(
+              path.join(other.dir, 'astryx.config.mjs'),
+              "export default {experimental: {iconSet: 'acme'}};\n",
+            );
+            const report = JSON.parse(
+              run(['doctor'], {tmp, cwd: other.dir}).stdout,
+            );
+            expect(
+              report.data.checks.map((/** @type {{id: string}} */ c) => c.id),
+            ).toContain('icon-placeholders');
+          }
+          const docsKept = doctorEntries(tmp);
+          expect(docsKept.size).toBeGreaterThan(0);
+          const wiringFile = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
+          const wiringKept = fs.statSync(wiringFile).ino;
+          fs.appendFileSync(providers, '// edited\n');
+          expect(themes(tmp)).toEqual(wired);
+          expect(fs.statSync(wiringFile).ino).not.toBe(wiringKept);
+          expect(doctorEntries(tmp)).toEqual(docsKept);
+        }
         // An edit to the theme module alone scans again, as a fresh run does.
         const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
         const before = fs.statSync(keptEntry).ino;
