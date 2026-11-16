@@ -536,20 +536,13 @@ function handOff(
     // that stops in time. On Windows, Ctrl-C reaches every process in the
     // console and a forwarded SIGINT would end the child abruptly, so this
     // process only outlives it.
-    let interruptWaiting = false;
     const onInterrupt = () => {
       if (process.platform === 'win32' || !running()) return;
       if (interruptAtOnce) {
         forward('SIGINT');
         return;
       }
-      // One interrupt passed on per grace: a run started again gets a
-      // terminal's Ctrl-C both from the terminal and from the copy that
-      // started it.
-      if (interruptWaiting) return;
-      interruptWaiting = true;
       setTimeout(() => {
-        interruptWaiting = false;
         if (running()) forward('SIGINT');
       }, INTERRUPT_GRACE_MS).unref();
     };

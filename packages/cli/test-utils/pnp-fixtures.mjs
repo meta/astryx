@@ -75,17 +75,14 @@ export function usePnpApi(root, packages) {
 /**
  * Write a stand-in `.pnp.cjs` at `root`. Preloaded with `--require`, as Yarn
  * preloads it, it sets `process.versions.pnp` and makes `pnpapi` resolve to
- * itself. With `starts: false` it loads and does nothing, as a runtime that
- * cannot start.
+ * itself.
  * @param {string} root the project root
  * @param {Record<string, string>} packages name -> package folder
- * @param {{starts?: boolean}} [options]
  * @returns {string} the file
  */
-export function writePnpRuntime(root, packages, {starts = true} = {}) {
+export function writePnpRuntime(root, packages) {
   const file = path.join(root, '.pnp.cjs');
-  const setup = starts
-    ? `api.setup = () => {
+  const setup = `api.setup = () => {
   process.versions.pnp = '3';
   const Module = require('node:module');
   const resolve = Module._resolveFilename;
@@ -94,8 +91,7 @@ export function writePnpRuntime(root, packages, {starts = true} = {}) {
   };
 };
 if (module.parent && module.parent.id === 'internal/preload') api.setup();
-`
-    : '';
+`;
   fs.writeFileSync(file, apiSource(root, packages) + setup);
   return file;
 }

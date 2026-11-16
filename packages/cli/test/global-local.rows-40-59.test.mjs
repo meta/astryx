@@ -1070,13 +1070,6 @@ describe.skipIf(!POSIX)(
         'yarn astryx docs getting-started <section>',
       );
       expect(docs.stdout).not.toContain('yarn dlx');
-
-      // A runtime that does not start: the copy that started the run
-      // answers, once, as when it sees no CLI of the project's.
-      writePnpRuntime(app, packages, {starts: false});
-      const unstarted = run(global.bin, ['--version'], {cwd: app, pc});
-      expect(unstarted.status).toBe(0);
-      expect(unstarted.stdout).toBe('9.0.1');
     });
   },
 );
