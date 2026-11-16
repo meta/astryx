@@ -34,6 +34,8 @@ import {
   GENERATION_INPUT_KEYS,
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
+  PALETTE_RECIPE,
+  PALETTE_RECIPE_V2,
   PALETTE_WHITE,
   generateTonalPalette,
   modesForStrategy,
@@ -1146,10 +1148,13 @@ function planPalette(cwd, slug, data, base) {
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
   const notes = [];
-  const config =
-    existing && typeof existing === 'object' && !Array.isArray(existing)
-      ? {...existing}
-      : {};
+  const own =
+    existing && typeof existing === 'object' && !Array.isArray(existing);
+  // A new palette is made with the newest recipe; a palette the theme
+  // already has keeps the one it was made with (none named is the first),
+  // so its colors never move with a CLI upgrade. Moving it is a choice
+  // made in its config.
+  const config = own ? {...existing} : {recipe: PALETTE_RECIPE_V2};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
   // Every theme's palette has both modes: a one-mode theme keeps both
   // halves of its colors (its mode is the one the app's <Theme> is given),
@@ -1336,6 +1341,24 @@ function planPalette(cwd, slug, data, base) {
   if (inOrder.length === slots.length)
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
+  // A color change on a palette made with the first recipe says what the
+  // newer one does, and how to choose it.
+  /** @param {any} c */
+  const colorsOf = c =>
+    JSON.stringify([
+      c?.vibrancy ?? null,
+      (Array.isArray(c?.families) ? c.families : []).map(
+        (/** @type {any} */ f) => [f?.id, String(f?.seed ?? '').toLowerCase()],
+      ),
+    ]);
+  if (
+    own &&
+    (config.recipe ?? PALETTE_RECIPE) === PALETTE_RECIPE &&
+    colorsOf(existing) !== colorsOf(config)
+  )
+    notes.push(
+      `${file} makes its colors with the ${PALETTE_RECIPE} recipe it was made with, whose pale shades stay at the edge of what a screen shows whatever the vibrancy; "recipe": "${PALETTE_RECIPE_V2}" there makes them follow the vibrancy and each color's own strength (its colors change once)`,
+    );
   const dead = deadKeys(config);
   if (dead.length)
     notes.push(

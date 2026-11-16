@@ -194,7 +194,9 @@ describe('a one-mode theme', () => {
     const w = writes(await how('blo', 'make it more colorful'));
     expect(w[0]).toMatch(/^set blo accent '#[0-9a-f]{6}'$/);
     expect(w).toHaveLength(2);
-    expect(w[1]).toMatch(/^set blo vibrancy (60|70|80|90|100)$/);
+    // The first step that makes them more saturated: under the newest
+    // palette recipe one step (more) already does.
+    expect(w[1]).toMatch(/^set blo vibrancy (more|60|70|80|90|100)$/);
   }, 120_000);
 
   it('tells the value of the mode it shows, and none for a mode it never shows', async () => {

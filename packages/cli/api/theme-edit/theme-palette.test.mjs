@@ -81,6 +81,8 @@ describe('color dials through the palette generator', () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const config = JSON.parse(read('palette.config.json'));
     expect(config).toEqual({
+      // A new palette is made with the newest recipe.
+      recipe: 'astryx-oklch-v2',
       modeStrategy: 'light-and-dark',
       families: [
         {

@@ -9,7 +9,7 @@ export const doc = {
   displayName: 'generateTonalPalette()',
   summary: 'Generate candidate tonal palette data without filesystem effects.',
   description:
-    'Runs the versioned astryx-oklch-v1 authoring recipe. The returned candidate ' +
+    "Runs the recipe the request names: astryx-oklch-v1 when it names none (a config written before v2 regenerates the same colors), or astryx-oklch-v2, whose pale stops follow the vibrancy and each seed's own chroma. The returned candidate " +
     'contains exact hex values for review; it does not modify a theme, write files, ' +
     'perform semantic mapping, or make accessibility claims. Stop numbers remain ' +
     'stable across layouts, and requested decimal stops are emitted explicitly. ' +
