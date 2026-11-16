@@ -1079,14 +1079,21 @@ export function withoutCssEscapes(v) {
   return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
 }
 
+/** What a value isSafeValue refuses holds, for the refusal's words. */
+export const UNSAFE_VALUE =
+  'it has a ; { } < > or a newline, a comment, !important, an unclosed bracket or quote, or an old browser hack (\\9, \\0) at its end';
+
 /**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
- * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
- * and a base64 data URL are values, and nothing can end the declaration.
+ * `url(data:…)`, no `;{}`; brackets and quotes closed; no old browser hack's
+ * escape at its end (`8px\9`: a browser reads it as part of the last word
+ * and drops the value). So `content: "a;b"` and a base64 data URL are
+ * values, and nothing can end the declaration.
  * @param {string} v
  */
 export function isSafeValue(v) {
+  if (/\\[09]\s*$/.test(v)) return false;
   // A shell comment ("# direct"), as a command run without a shell passes
   // it, is a comment too.
   // `</` (a closing tag), control characters, comments and !important are

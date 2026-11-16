@@ -77,6 +77,7 @@ import {
   colorAsCssReads,
   isNumber,
   isSafeValue,
+  UNSAFE_VALUE,
   withoutCssEscapes,
   isSize,
   parseColor,
@@ -597,17 +598,14 @@ export function pastedFont(v) {
  */
 function valueMeant(type, value) {
   // `!important` is not part of a token's value (the theme places its
-  // rules itself): the value without it.
+  // rules itself), nor is a trailing `;` or an old browser hack's escape:
+  // the value without them (the one copy-debris cleanup).
   /** @type {string} */
-  let p = (
+  let p = withoutCopyDebris(
     type === 'font' || type === 'font-family'
       ? pastedFont(value) || value
-      : pastedDeclaration(value)?.value || typedPlain(value)
-  )
-    .replace(/;+\s*$/, '')
-    .replace(/\s*!\s*important\s*$/i, '')
-    .replace(/;+\s*$/, '')
-    .trim();
+      : pastedDeclaration(value)?.value || typedPlain(value),
+  );
   // Copy debris around it (a trailing comma, a stray quote or bracket).
   p = withoutDebris(p).trim();
   const q = /^(["'])(.*)\1$/.exec(p);
@@ -1808,7 +1806,7 @@ function checkTypedValue(
   if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.${/!\s*important/i.test(value) ? ' !important is not used: the theme places its own rules.' : ''}`,
+      `"${value}" cannot be a CSS value: ${UNSAFE_VALUE}.${/!\s*important/i.test(value) ? ' !important is not used: the theme places its own rules.' : ''}`,
       {
         run: [
           `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? exampleOf(type, name))}`,
@@ -7088,7 +7086,7 @@ function checkOne(
     if (!isSafeValue(v))
       refuse(
         E.ERR_THEME_BAD_VALUE,
-        `"${v}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
+        `"${v}" cannot be a CSS value: ${UNSAFE_VALUE}.`,
         {
           // The value without its copy debris, when that is one.
           run: [
