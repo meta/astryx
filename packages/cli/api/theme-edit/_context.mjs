@@ -144,7 +144,7 @@ export async function context(cwd) {
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
     uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
-      version: 0,
+      censusKey: '',
       coreKey: project.coreKey,
       map: {},
       pairs: [],

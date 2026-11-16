@@ -17,7 +17,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
@@ -36,8 +38,36 @@ import {
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
-/** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 27;
+/**
+ * What the cached part data is built by: a fingerprint of this file and
+ * every file it imports by a relative path, read once. Any change to the
+ * code that draws and reads the census builds it again, with no number to
+ * bump by hand (the installed Core is the cache folder's own key).
+ */
+const CENSUS_KEY = (() => {
+  const hash = createHash('sha256');
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} file */
+  const walk = file => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    /** @type {string} */
+    let src;
+    try {
+      src = fs.readFileSync(file, 'utf8');
+    } catch {
+      return;
+    }
+    hash.update(`${path.basename(file)}\0${src}\0`);
+    for (const m of src.matchAll(
+      /(?:\bfrom|\bimport\s*\(?)\s*['"](\.{1,2}\/[^'"]+)['"]/g,
+    ))
+      walk(path.resolve(path.dirname(file), m[1]));
+  };
+  walk(fileURLToPath(import.meta.url));
+  return hash.digest('hex').slice(0, 16);
+})();
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -76,7 +106,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide, within?: string[]}} TextPair
  *   `over`: the region the part sits in (a header), whose background shows
  *   through a see-through background of the part's own, else the page
- * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
+ * @typedef {{censusKey: string, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 
 /** The days a sample date and range of days stand on. */
@@ -652,7 +682,7 @@ export async function partData(project) {
     // A file that parses but has the wrong shape (a hand edit, a cut-off
     // write) is built again, as a file that does not parse is.
     if (
-      cached.version === PART_DATA_VERSION &&
+      cached.censusKey === CENSUS_KEY &&
       cached.coreKey === project.coreKey &&
       isRecord(cached.map) &&
       Object.values(cached.map).every(isRecord) &&
@@ -868,7 +898,7 @@ async function buildPartData(project) {
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
-    version: PART_DATA_VERSION,
+    censusKey: CENSUS_KEY,
     coreKey: project.coreKey,
     ...result,
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
