@@ -170,7 +170,9 @@ describe('readers the lists lean on', () => {
       expect(
         (await answer('side nav selected items should be #dbeafe')).first,
       ).toEqual([
-        "set n background-color '#dbeafe' --on side-nav-item --state selected",
+        // (A light fill the dark mode's light text would not read on: the
+        // light mode's.)
+        "set n background-color '#dbeafe' --on side-nav-item --state selected --mode light",
       ]);
       expect(
         (await answer('in dark mode, cards should be outlined in #ff0000'))

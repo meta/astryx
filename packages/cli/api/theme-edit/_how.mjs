@@ -715,35 +715,52 @@ async function answer(subject, options, cwd) {
       FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
-    // (Never ahead of a value the question gives the same thing: "tooltips
-    // #1f2328 with white text" is that fill and that text, not the
-    // missed list's.)
+    // (A missed entry never says otherwise than the question: where the
+    // question gives the part a fill or a text color, the missed list's
+    // fill or text for it is not offered, "tooltips #1f2328 with white
+    // text"; and where the question writes the part at all, its own
+    // answer leads and the missed list follows, "secondary buttons white
+    // …" before a disabled-primary entry.)
     const asked = h.drafts.flatMap(d => d.options.flat());
-    const contradicts = (/** @type {any} */ st) =>
-      asked.some(
-        a =>
-          a.on === st.on &&
-          (a.state ?? '') === (st.state ?? '') &&
-          (a.thing === st.thing ||
-            (/^background(?:-color)?$/.test(a.thing) &&
-              /^background(?:-color)?$/.test(st.thing))) &&
-          String(a.value) !== String(st.value),
+    /** @param {any} st */
+    const family = st =>
+      /^background(?:-color)?$|^--color-background-|^--color-[a-z]+-muted$/.test(
+        String(st.thing),
+      )
+        ? 'fill'
+        : st.thing === 'color' || /^--color-(?:text|on)-/.test(String(st.thing))
+          ? 'text'
+          : null;
+    // (An ask to match the rest, "tooltips grey like the rest", is the
+    // missed list's own ask: it leads.)
+    const matching =
+      /\b(?:like the rest|like everything else|match(?:es|ing)? the (?:theme|rest)|same as the rest)\b/i.test(
+        t,
       );
     const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
       x =>
         parts.includes(x.part) &&
         x.steps.length &&
-        !x.steps.some(st => contradicts({...st, on: st.on ?? x.part})),
+        (matching ||
+          !x.steps.some(st => {
+            const f = family(st);
+            return (
+              f != null && asked.some(a => a.on === x.part && family(a) === f)
+            );
+          })),
     );
-    h.drafts.unshift(
-      .../** @type {any[]} */ (
-        mine.map(x => ({
-          text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
-          options: [x.steps.map(st => ({verb: 'set', ...st}))],
-          ...(x.steps.length > 1 ? {sequence: true} : {}),
-        }))
-      ),
+    const entries = /** @type {any[]} */ (
+      mine.map(x => ({
+        text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
+        options: [x.steps.map(st => ({verb: 'set', ...st}))],
+        ...(x.steps.length > 1 ? {sequence: true} : {}),
+      }))
     );
+    const written = new Set(
+      matching ? [] : asked.map(a => a.on).filter(Boolean),
+    );
+    h.drafts.unshift(...entries.filter((_, k) => !written.has(mine[k].part)));
+    h.drafts.push(...entries.filter((_, k) => written.has(mine[k].part)));
   }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);

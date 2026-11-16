@@ -2243,13 +2243,17 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     /\bloading\b(?! (bars?|placeholders?|skeletons?|spinners?|states?|indicators?))/,
     'loading',
   ],
-  [/\b(unchecked|not checked|unticked)\b/, 'unchecked'],
+  [
+    /\b(unchecked|not checked|unticked|when off|turned off|toggled off|switched off|is off)\b/,
+    'unchecked',
+  ],
 ]);
 
 /**
  * One clause, read.
  * @typedef {object} Clause
  * @property {string} text
+ * @property {string} [joint] - the words that joined the clause to the one before ("with", "and", ",", ";")
  * @property {Array<{on: string, when?: string, role?: string, level?: string, missing?: string}>} parts
  * @property {string[]} aspects
  * @property {boolean} neg
@@ -2809,18 +2813,33 @@ function clausesOf(q, partWords) {
         ? `${a} & ${b} ${noun}`
         : m,
   );
-  const pieces = (
-    /\bswap\b/.test(bothStates)
-      ? bothStates.replace(/\band\b/g, '&')
-      : sharedAsk(bothStates, partWords)
-  )
-    .split(
+  // (Each piece keeps the words that joined it to the one before, "with",
+  // "and", a comma or a sentence's end: the clause-scope reader reads them.)
+  /** @type {Array<{text: string, joint: string}>} */
+  const pieces = [];
+  {
+    const split = (
+      /\bswap\b/.test(bothStates)
+        ? bothStates.replace(/\band\b/g, '&')
+        : sharedAsk(bothStates, partWords)
+    ).split(
       // A font stack ("Georgia, serif") is one value, not two asks.
-      /;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b)/,
-    )
-    .map(s => s.trim())
-    .filter(Boolean);
-  return pieces.map(text => {
+      /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b))/,
+    );
+    let joint = '';
+    for (let k = 0; k < split.length; k++) {
+      const piece = split[k] ?? '';
+      if (k % 2) {
+        joint += piece;
+        continue;
+      }
+      const text = piece.trim();
+      if (!text) continue;
+      pieces.push({text, joint});
+      joint = '';
+    }
+  }
+  return pieces.map(({text, joint}) => {
     /** @type {Clause['parts']} */
     const parts = [];
     // A property name is not a part: "backdrop-filter" names no backdrop.
@@ -3200,8 +3219,18 @@ function clausesOf(q, partWords) {
     const tooMore = new RegExp(
       `\\btoo (?:small|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short|${densityWords('dense', 'crowded')})\\b`,
     );
+    // "softer corners", "gentler corners": a corner is softened by
+    // rounding it, so the way is more (a softer shadow or color is still
+    // less; "soften the corners" is read by the corner rungs).
+    const softCorners =
+      /\b(?:softer|gentler|smoother|friendlier|less harsh)\b/.test(text) &&
+      /\b(?:corners?|radius|radii)\b/.test(text) &&
+      !/\b(?:shadows?|colou?rs?|text|borders?|backgrounds?|fills?)\b/.test(
+        text,
+      );
     // "half again", "a third again": more by that share, never less.
     const dir =
+      softCorners ||
       /\bnot (\w+ ){0,2}enough\b|\b(half|a third|a quarter|1\/2|1\/3|1\/4) again\b/.test(
         text,
       )
@@ -3316,6 +3345,7 @@ function clausesOf(q, partWords) {
           /\b(not|except)( for| on| in| the)* [a-z]/.test(negText)));
     return {
       text,
+      joint,
       parts,
       ...(colorRef ? {colorRef} : {}),
       ...(refSpan ? {colorRefSpan: refSpan} : {}),
@@ -5699,6 +5729,183 @@ export function draftAnswer(ctx, env, question) {
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
   for (const c of clauses) ownAspects.set(c, [...c.aspects]);
+  // ── Clause scope. How each clause is joined to the one before it, and
+  // the clause a list hangs from: the clause-scope reader (scopeOf, below)
+  // reads these to decide each clause's part, state and mode.
+  /**
+   * @typedef {{
+   *   sep: 'break' | 'colon' | 'with' | 'and' | 'comma' | 'none',
+   *   list: 'colon' | 'with' | null,
+   * }} Join
+   */
+  /** @type {WeakMap<Clause, Join>} */
+  const joinOf = new WeakMap();
+  {
+    /** @type {'colon' | 'with' | null} */
+    let list = null;
+    for (let i = 0; i < clauses.length; i++) {
+      const c = clauses[i];
+      // (A sentence's end as the words were asked: a ";" a reader put in,
+      // "replace the shadow with a border", ends no sentence; it ties the
+      // two halves of one ask.)
+      const gap = String(c.joint ?? '')
+        .toLowerCase()
+        .replace(/[;.!?\n]/g, ch => (asked0.includes(ch) ? ch : ' and '));
+      /** @type {Join['sep']} */
+      const sep =
+        i === 0
+          ? 'none'
+          : /[;.!?\n]/.test(gap)
+            ? 'break'
+            : /\bwith\b/.test(gap)
+              ? 'with'
+              : /\b(?:and|plus|also|but|then|y|et|und)\b|&/.test(gap)
+                ? 'and'
+                : 'comma';
+      if (sep === 'break' || sep === 'none') list = null;
+      // ("white cards with …": the part's with-list, to the end of the
+      // sentence.)
+      if (sep === 'with' && list !== 'colon') list = 'with';
+      joinOf.set(c, {
+        sep,
+        list: sep === 'break' || sep === 'none' ? null : list,
+      });
+      // ("cards: …": the part's own list, after its colon; the part named
+      // before the colon, never "Notion look: serif headings".)
+      const head = /^([^:]+):\s*\S/.exec(c.text)?.[1];
+      if (
+        head &&
+        c.parts.length &&
+        lex.parts.some(
+          ([re, x]) => c.parts.some(p => p.on === x.on) && re.test(` ${head} `),
+        )
+      )
+        list = 'colon';
+    }
+  }
+  /** What a later clause's own words make the whole theme's. */
+  const THEME_ASPECTS = ['family', 'fontsize', 'leading', 'tracking', 'motion'];
+  /** Type aspects, a text part's own. */
+  const TYPE_ASPECTS = [
+    'family',
+    'fontsize',
+    'leading',
+    'tracking',
+    'weight',
+    'case',
+    'italic',
+  ];
+  /**
+   * The clause-scope reader: whether a clause that names no part takes the
+   * part (and state) of the clause before it, or is the whole theme's.
+   * A clause takes the part before it only as a modifier of it: said with
+   * "with", in the part's own colon list ("cards: white background, 1px
+   * border"), with only its way, value or color ("rounder and darker"),
+   * as a state of it ("; when focused a 2px ring"), as the text color of a
+   * part that holds text ("a dark card, white text"), or joined by "and"
+   * with a look the part has. Anything else, a dial or text size or font,
+   * a sentence of its own, a comma item with its own look ("big buttons,
+   * thick borders"), is the whole theme's.
+   * @param {Clause} c
+   * @param {Clause | undefined} before the nearest clause before with a part
+   * @returns {'own' | 'inherit' | 'theme'}
+   */
+  const scopeOf = (c, before) => {
+    const first = (/** @type {string} */ on) =>
+      FAMILIES[on] ? FAMILIES[on][0] : on;
+    if (c.parts.length) return 'own';
+    if (!before) return 'theme';
+    const j = joinOf.get(c) ?? {sep: 'comma', list: null};
+    const own = ownAspects.get(c) ?? c.aspects;
+    const subject =
+      /^(?:the\s+|my\s+|our\s+)?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(c.text);
+    const bare =
+      !subject?.[2] ||
+      /^colou?r$/.test(subject[2]) ||
+      !aspectsOf(subject[2]).length;
+    // The whole theme, said in so many words, or a theme color or dial as
+    // the subject ("and the accent darker", "the text bigger").
+    if (
+      /\b(?:everything|everywhere|the whole (?:theme|app|ui|site|page)|across the board|all of it|surfaces)\b/.test(
+        c.text,
+      ) ||
+      (bare &&
+        (ROLE_WORDS.test(subject?.[1] ?? '') ||
+          Object.hasOwn(DIALS, subject?.[1] ?? ''))) ||
+      /^the\s+(?:text|shadows|corners)\b(?!-)/.test(c.text) ||
+      /^text\s+colou?r\b/.test(c.text) ||
+      /\b(?:main|body|all)\s+text\b/.test(c.text)
+    )
+      return 'theme';
+    // A state of the part before ("; when focused a 2px ring"), or the ask
+    // after a clause that only sets where or when ("when I tab to a link,
+    // show a thick outline", "only in dark mode and only on cards, darker
+    // background", "buttons only, a bit rounder").
+    if (c.state) return 'inherit';
+    if (
+      clauses[clauses.indexOf(c) - 1] === before &&
+      !before.colors.length &&
+      !before.lengths.length &&
+      !before.dir &&
+      (before.state ||
+        /^(?:(?:only|just)\s+)?(?:when|while|on|in|for|if|inside|within)\b|\b(?:only|just)\b/.test(
+          before.text,
+        ))
+    )
+      return 'inherit';
+    if (j.sep === 'break' || j.sep === 'none') return 'theme';
+    // A size or variant of the part before ("small buttons 6px, large stay
+    // pill"; "the ghost ones").
+    {
+      const vals = Object.values(
+        C.variantValues(first(before.parts[0]?.on ?? '')) ?? {},
+      ).flat();
+      if (
+        /\b(?:small|medium|large|sm|md|lg)\b/.test(c.text) ||
+        vals.some(v => new RegExp(`\\b${v}\\b`).test(c.text))
+      )
+        return 'inherit';
+    }
+    // A look taken away from the part before ("rounded buttons, no
+    // shadow"; never "serif headings, no shadows": a text part's look is
+    // its type).
+    if (c.neg && own.length && !before.parts.every(p => textOnlyPart(p.on)))
+      return 'inherit';
+    // A CSS property named with its value ("card padding-block 20px,
+    // padding-inline 16px"): a declaration list, the part's.
+    if (c.named) return 'inherit';
+    // A text part's own type ("headings 600 weight and -0.02em tracking").
+    if (
+      own.length &&
+      own.every(a => TYPE_ASPECTS.includes(a)) &&
+      before.parts.every(p => textOnlyPart(p.on))
+    )
+      return 'inherit';
+    // A text color after the page: the theme's text ("a black page with
+    // green text"; a page holds no text of its own).
+    const pageBefore = before.parts.every(p =>
+      /^(?:page|body|app-shell)$/.test(p.on),
+    );
+    if (own.length && own.every(a => a === 'text') && pageBefore)
+      return 'theme';
+    if (j.sep === 'with' || j.list === 'colon') return 'inherit';
+    // Only a way, a value or a color: the same part.
+    if (!own.length) return 'inherit';
+    // (The theme's spacing said as a dial, never a part's padding or gap.)
+    if (
+      own.some(a => THEME_ASPECTS.includes(a)) ||
+      (own.includes('spacing') &&
+        !/\b(?:padding|gaps?|margins?|inset)\b|\bpadding-/.test(c.text))
+    )
+      return 'theme';
+    // A text color: the part's, when it holds text.
+    if (own.every(a => a === 'text'))
+      return c.colors.length && !before.parts.every(p => textOnlyPart(p.on))
+        ? 'inherit'
+        : 'theme';
+    if (j.list === 'with' || j.sep === 'and') return 'inherit';
+    return 'theme';
+  };
   // "a high contrast compact theme", "a dark theme with more contrast": the
   // theme-wide looks the readers take as a whole clause (contrast, the
   // theme's mode) said among other words are each a clause of their own.
@@ -6557,9 +6764,19 @@ export function draftAnswer(ctx, env, question) {
       c.unknownSubject = true;
       continue;
     }
-    // (Nor a clause whose subject is the whole theme's: "and the accent
-    // darker", "and the text bigger".)
-    if (!c.parts.length && themeSubject(c)) continue;
+    // (Nor a clause the scope reader gives the whole theme: "and the
+    // accent darker", "and the text bigger".)
+    if (
+      !c.parts.length &&
+      scopeOf(
+        c,
+        clauses
+          .slice(0, i)
+          .reverse()
+          .find(x => x.parts.length && !x.except),
+      ) === 'theme'
+    )
+      continue;
     if (!c.parts.length) {
       const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
         c.text,
@@ -7855,6 +8072,10 @@ export function draftAnswer(ctx, env, question) {
     const [a, b] = [clauses[i - 1], clauses[i]];
     if (a.except || b.except || !a.mode || !b.mode || a.mode === b.mode)
       continue;
+    // (Never across a sentence: "…; secondary text #4d4d4d in light
+    // mode" is a subject of its own, not the other half of the pair
+    // before it.)
+    if (joinOf.get(b)?.sep === 'break') continue;
     if (!a.parts.length !== !b.parts.length) {
       const [from, to] = a.parts.length ? [a, b] : [b, a];
       to.parts = from.parts.map(p => ({...p}));
@@ -7902,22 +8123,9 @@ export function draftAnswer(ctx, env, question) {
       !(c.aspects.length && c.aspects.every(a => a === 'family')) &&
       !unknownLead(c) &&
       !unknownSlot(c.text) &&
-      !themeSubject(c) &&
-      // (The page's text is the theme's text: "sepia page …, dark brown
-      // text" never paints the page.)
-      !(
-        before.parts.every(p => /^(?:page|body|app-shell)$/.test(p.on)) &&
-        /\btext\b/.test(c.text)
-      ) &&
-      // "serif headings, no shadows": a type part does not take a shadow,
-      // corner or border ask.
-      !(
-        before.parts.every(p => ['heading', 'body', 'code'].includes(p.on)) &&
-        c.aspects.length &&
-        c.aspects.every(a =>
-          ['shadow', 'corners', 'border', 'spacing'].includes(a),
-        )
-      ) &&
+      // (The clause-scope reader decides: a modifier of the part before
+      // takes it; anything else is the whole theme's.)
+      scopeOf(c, before) === 'inherit' &&
       // (A second ask said with only its way or its color, "rounder and
       // darker", "rounder and red", is about the same part.)
       (c.aspects.length ||
@@ -8081,6 +8289,46 @@ export function draftAnswer(ctx, env, question) {
     )
   )
     for (const c of clauses) c.mode = null;
+  // "in dark mode: page #202020, cards #2b2b2b, card border #1d1d1d,
+  // accent #4cc2ff": a mode said at the head of a sentence, before its
+  // colon, is the mode of every clause in that sentence (an ask that is
+  // the same in both modes, the corners, keeps none).
+  for (let i = 0; i < clauses.length; i++) {
+    const c = clauses[i];
+    if (
+      !c.mode ||
+      c.except ||
+      !/^\s*(?:(?:only\s+)?(?:in|for)\s+)?(?:light|dark)(?:[- ](?:mode|theme))?\s*:/i.test(
+        c.text,
+      )
+    )
+      continue;
+    for (let k = i + 1; k < clauses.length; k++) {
+      const o = clauses[k];
+      if (joinOf.get(o)?.sep === 'break') break;
+      if (
+        o.mode ||
+        o.except ||
+        (o.aspects.length &&
+          o.aspects.every(a =>
+            [
+              'corners',
+              'spacing',
+              'size',
+              'fontsize',
+              'weight',
+              'family',
+              'case',
+              'italic',
+              'leading',
+              'tracking',
+            ].includes(a),
+          ))
+      )
+        continue;
+      o.mode = c.mode;
+    }
+  }
   // "only in dark mode, …": a clause that only names a mode scopes every
   // clause after it.
   for (let i = 0; i < clauses.length; i++) {
@@ -8162,6 +8410,39 @@ export function draftAnswer(ctx, env, question) {
     if (!m || !modal) return '';
     const other = m === 'light' ? 'dark' : 'light';
     return ` in ${m} mode${c.mode ? '' : ` (a ${m} color: the ${other} mode keeps its own page, so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`}`;
+  };
+  /**
+   * The one mode a text color is readable in (at least `min`:1 against
+   * that mode's page), on a theme that draws both modes, when the other
+   * mode's page would make it unreadable and the ask names no mode and
+   * not both; else null.
+   * @param {Clause} c
+   * @param {string} color
+   * @param {number} [min]
+   * @returns {'light' | 'dark' | null}
+   */
+  const readableModeOf = (c, color, min = 3) => {
+    if (c.mode || !modal) return null;
+    if (
+      /\b(?:everywhere|both modes|all modes|always|in every mode)\b/i.test(
+        `${c.text} ${question}`,
+      )
+    )
+      return null;
+    const rgb = parseColor(color);
+    if (!rgb) return null;
+    /** @param {'light' | 'dark'} m */
+    const r = m => {
+      const page = parseColor(current('--color-background-body', m));
+      return page ? ratio(rgb, page) : Infinity;
+    };
+    const [l, d] = [r('light'), r('dark')];
+    if (l >= min !== d >= min) return l >= min ? 'light' : 'dark';
+    // (Neither page reaches it: the page it reads clearly better on, so
+    // the other keeps its own.)
+    if (l < min && d < min && Math.max(l, d) >= 3 && Math.abs(l - d) >= 0.5)
+      return l > d ? 'light' : 'dark';
+    return null;
   };
   const modeOf = (/** @type {Clause} */ c) =>
     c.mode && modal ? {mode: c.mode} : {};
@@ -9764,6 +10045,24 @@ export function draftAnswer(ctx, env, question) {
     // A typed color always wins over a color word.
     const own = kind === 'text' ? colorsIn(ownText) : [];
     if (own.length) return themeShade(c, own[0]);
+    // ("green text on a black page": the color said with the fill's own
+    // word is the fill, never the text's.)
+    if (kind === 'fill' && c.colors.length > 1) {
+      const fillWord =
+        /(?:(?:light|dark|pale|deep)\s+)?(?:#[0-9a-f]{3,8}|[a-z]+)\s+(?:page|background|bg|surface|fill|backdrop)s?\b/i.exec(
+          c.text,
+        );
+      const said = fillWord ? colorsIn(fillWord[0]) : [];
+      if (said.length) return themeShade(c, said[0]);
+      // (Else never the color said before "text".)
+      const textWord =
+        /(?:(?:light|dark|pale|deep)\s+)?(?:#[0-9a-f]{3,8}|[a-z]+)\s+(?:text|labels?|writing|words|letters)\b/i.exec(
+          c.text,
+        );
+      const ink = textWord ? colorsIn(textWord[0])[0] : undefined;
+      const other = c.colors.find(x => x !== ink);
+      if (ink && other) return themeShade(c, other);
+    }
     if (
       kind === 'fill' &&
       c.colors.length &&
@@ -9870,6 +10169,43 @@ export function draftAnswer(ctx, env, question) {
     if (steps.length) tops.push({clause: c, steps});
   };
 
+  // "switches: track #e5e7eb when off": a part whose only selection
+  // state is checked draws its unchecked look at rest, so the clause is
+  // its resting look with the checked one kept, never every state.
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    const c = clauses[i];
+    if (
+      c.state !== 'unchecked' ||
+      c.except ||
+      !c.parts.length ||
+      !c.parts.every(
+        p =>
+          statesOf(p.on).includes('checked') &&
+          !statesOf(p.on).includes('unchecked'),
+      )
+    )
+      continue;
+    c.state = null;
+    // (Its state words are read: the resting look, checked kept.)
+    c.text = c.text
+      .replace(
+        /\b(?:unchecked|not checked|unticked|when off|turned off|toggled off|switched off|is off)\b/g,
+        ' ',
+      )
+      .replace(/\s+/g, ' ')
+      .trim();
+    clauses.splice(i + 1, 0, {
+      ...c,
+      text: `except checked ${c.parts.map(p => p.on).join(' and ')}`,
+      aspects: [],
+      colors: [],
+      lengths: [],
+      dir: null,
+      decl: {},
+      state: 'checked',
+      except: true,
+    });
+  }
   // A mode said at the end of a run of clauses on one part, joined by
   // "with" or "and" ("secondary buttons white with a 1px border and a
   // small shadow in light mode"), is the mode of the whole run, up to the
@@ -15010,6 +15346,20 @@ export function draftAnswer(ctx, env, question) {
         : null;
       const panel =
         panelRead && panelRead !== '--color-background-body' ? panelRead : null;
+      // ("green text on a black page": the text color said with the page
+      // is the theme's text, in the page's mode, with it.)
+      const ink = /\btext\b/.test(c.text) ? colorFor(c, 'text') : null;
+      if (ink && ink !== color)
+        return {
+          text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}, and the text on it: --color-text-primary`,
+          options: [
+            [
+              set('--color-background-body', color, pm),
+              set('--color-text-primary', ink, pm),
+            ],
+          ],
+          sequence: true,
+        };
       return {
         text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
         options: [
@@ -15447,11 +15797,25 @@ export function draftAnswer(ctx, env, question) {
       }
       if (a === 'text') {
         const color = colorFor(c, 'text');
-        if (color)
+        if (color) {
+          // (One mode's page would make it unreadable: the other mode
+          // only, as the main text is.)
+          // (Muted text is small and quiet: held to 4.5:1, as body text
+          // is.)
+          const one1 = readableModeOf(c, color, 4.5);
           return {
-            text: 'the secondary text color: --color-text-secondary',
-            options: [[set('--color-text-secondary', color, modeOf(c))]],
+            text: `the secondary text color: --color-text-secondary${one1 ? ` in ${one1} mode only: on the ${one1 === 'light' ? 'dark' : 'light'} page ${color} would not be readable` : ''}`,
+            options: [
+              [
+                set(
+                  '--color-text-secondary',
+                  color,
+                  one1 ? {mode: one1} : modeOf(c),
+                ),
+              ],
+            ],
           };
+        }
       }
       // Anything else ("secondary text is too low contrast"): as asked of
       // the whole theme, which reads the secondary text words itself.
@@ -20980,47 +21344,6 @@ export function draftAnswer(ctx, env, question) {
     return null;
   }
 
-  /**
-   * Whether a later clause's own subject is the whole theme's: a role color
-   * or a dial ("the accent darker", "the spacing tighter") or the theme's
-   * text said as a subject ("the text bigger"); such a clause takes no part
-   * from the clause before.
-   * @param {Clause} c
-   */
-  function themeSubject(c) {
-    // (The subject alone, before its way or value: "accent text" and
-    // "font-weight 500" name a part's own text color and weight.)
-    const m = /^(?:the\s+|my\s+|our\s+)?([a-z]+)\b(?!-)(?:\s+([a-z-]+))?/.exec(
-      c.text,
-    );
-    const subject = m?.[1] ?? '';
-    const next = m?.[2] ?? '';
-    const bare = !next || /^colou?r$/.test(next) || !aspectsOf(next).length;
-    return (
-      (bare && (ROLE_WORDS.test(subject) || Object.hasOwn(DIALS, subject))) ||
-      // ("and the shadows softer", "and the corners rounder": the
-      // theme's, said as their own subject.)
-      /^the\s+(?:text|shadows|corners)\b(?!-)/.test(c.text) ||
-      // ("text color #303030": the theme's text, said with its color; and
-      // after a ";", "; 14px text", "; main text #f7f8f8", "; text #fff".)
-      /^text\s+colou?r\b/.test(c.text) ||
-      (new RegExp(
-        String.raw`(?:[;.]|,(?=\s*(?:the\s+)?(?:main\s+|body\s+|all\s+)?(?:[a-z]+er|bigger|smaller|larger|roomier|tighter)\b|\s*(?:the\s+)?(?:main|body|all)\s+text\b))\s*${c.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-      ).test(question) &&
-        // (After a separator, a clause about the theme's text or a dial,
-        // said with up to two words before it: "larger text", "dark brown
-        // text", "roomier spacing".)
-        /^(?:the\s+)?(?:[a-z0-9#.%-]+\s+){0,2}(?:text|spacing|density|type|typography)\b(?!-)/.test(
-          c.text.trim(),
-        )) ||
-      // ("make everything more compact", "the whole theme warmer": the
-      // whole theme, said in so many words.)
-      /\b(?:everything|everywhere|the whole (?:theme|app|ui|site|page)|across the board|all of it)\b/.test(
-        c.text,
-      )
-    );
-  }
-
   /** @param {string} text */
   function unknownPart(text) {
     const m =
@@ -22524,96 +22847,235 @@ export function draftAnswer(ctx, env, question) {
     });
     return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
   }
-  // A surface's fill ("white cards", "cards: white background") on a theme
-  // that draws both modes: a clearly light color is the light mode's, a
-  // clearly dark one the dark mode's, as a page color is; the other mode
-  // keeps its own, so its text stays readable.
-  for (const d of result) {
-    let kept = '';
-    for (const o of d.options)
-      for (const st of o) {
-        if (
-          st.mode ||
-          !st.on ||
-          !/^background(?:-color)?$/.test(st.thing) ||
-          // (A surface the page shows through, never an inverted one, a
-          // tooltip's, which is dark in light mode by design; and an opaque
-          // color only: a see-through fill reads either page.)
-          !(C.partReads(one(st.on), 'background') ?? []).some(r =>
-            /^--color-background-(?:card|surface|body|popover|elevated)$/.test(
-              r.token,
-            ),
-          ) ||
-          (C.partReads(one(st.on), 'background') ?? []).some(r =>
-            /inverted/.test(r.token),
-          ) ||
-          alphaOf(String(st.value ?? '')) < 1
+  // The light/dark color rule (the mode half of the clause-scope reader):
+  // on a theme that draws both modes, a color one mode cannot carry is not
+  // written to it. A clearly light fill on a part whose dark-mode text
+  // would not read on it ("white cards", "secondary buttons: background
+  // #f6f8fa", "the info banner subtle gray") is the light mode's; a
+  // clearly dark fill on a panel that sits on the page ("cards #0f1011")
+  // the dark mode's, its own text with it; a clearly light border or line
+  // color ("cards: 1px border #e5e7eb", "borders #e3e8ee") the light
+  // mode's. Said, with the other mode's line. A color word said for the
+  // one mode it cannot carry ("subtle gray in dark mode") is that hue's
+  // tone for the mode. A one-mode theme, or an ask that says both modes,
+  // writes it as asked.
+  {
+    const bothAsked =
+      /\b(?:(?:in\s+)?(?:both|all)\s+modes|every\s+mode|everywhere|light\s+and\s+dark|dark\s+and\s+light)\b/i.test(
+        question,
+      );
+    const clear = (/** @type {string} */ v) => {
+      const rgb = parseColor(v);
+      if (!rgb || alphaOf(v) < 1) return null;
+      return ratio(rgb, [0, 0, 0]) >= 12
+        ? 'light'
+        : ratio(rgb, [255, 255, 255]) >= 12
+          ? 'dark'
+          : null;
+    };
+    /**
+     * The text color a part (in a variant, when one is named) draws in a
+     * mode.
+     * @param {string} on
+     * @param {string | undefined} when
+     * @param {'light' | 'dark'} mode
+     */
+    const inkOf = (on, when, mode) => {
+      const reads = (C.partReads(one(on), 'text') ?? []).filter(r =>
+        /^--color-/.test(r.token),
+      );
+      const v = when ? /^variant:([\w-]+)$/.exec(when)?.[1] : null;
+      const r =
+        (v && reads.find(x => x.when.some(w => w.trim() === `variant=${v}`))) ||
+        reads.find(x => x.when.includes('')) ||
+        reads[0];
+      // (A part with no text color of its own that holds others, a card:
+      // the main text the parts inside it read; one that holds none, a
+      // switch, draws no text to keep readable.)
+      if (
+        !r &&
+        !(C.MAP[one(on)]?.contains ?? []).some(
+          x => (C.partReads(x, 'text') ?? []).length > 0,
         )
-          continue;
-        const m = pageModeOf(
-          /** @type {any} */ ({mode: null, text: question}),
-          String(st.value ?? ''),
-        );
-        if (!m) continue;
-        // (Dark only for a panel that sits on the page, a card's, a
-        // popover's: a dark header or sidebar in light mode is chrome
-        // asked for as it is.)
-        if (
-          m === 'dark' &&
-          !(C.partReads(one(st.on), 'background') ?? []).some(r =>
-            /^--color-background-(?:card|popover|elevated)$/.test(r.token),
+      )
+        return null;
+      return parseColor(
+        String(current(r?.token ?? '--color-text-primary', mode) ?? ''),
+      );
+    };
+    /** @param {Step} x @param {Step} st */
+    const ownText = (x, st) =>
+      x !== st &&
+      x.on === st.on &&
+      (x.thing === 'color' || /^--color-text-/.test(x.thing));
+    /** A color typed in the question, never a color word read. */
+    const typed = (/** @type {string} */ v) =>
+      question.toLowerCase().includes(String(v).toLowerCase());
+    /**
+     * A light color word's tone for the dark mode: the hue's dark shade,
+     * else the color taken well down.
+     * @param {string} v
+     */
+    const darkTone = v => {
+      const hue = Object.keys(SHADED.light ?? {})
+        .concat(Object.keys(SHADED.pale ?? {}))
+        .find(w => SHADED.light?.[w] === v || SHADED.pale?.[w] === v);
+      return (hue && SHADED.dark?.[hue]) || shiftKeepAlpha(v, -0.6) || null;
+    };
+    for (const d of result) {
+      /** @type {Set<string>} */
+      const notes = new Set();
+      for (const o of d.options)
+        for (const st of o) {
+          if (!st.on && !/^--color-border(?:-[a-z]+)?$/.test(st.thing))
+            continue;
+          // (A fill token set on the part, "--color-accent-muted on
+          // table-row when selected", is its fill too.)
+          const fill =
+            /^background(?:-color)?$/.test(st.thing) ||
+            (!!st.on &&
+              /^--color-(?:background-[a-z-]+|[a-z]+-muted)$/.test(st.thing));
+          const line =
+            st.thing === 'border' ||
+            st.thing === 'border-color' ||
+            /^--color-border(?:-[a-z]+)?$/.test(st.thing);
+          if (!fill && !line) continue;
+          const v =
+            st.thing === 'border'
+              ? (/#[0-9a-f]{3,8}\b/i.exec(String(st.value ?? ''))?.[0] ?? '')
+              : String(st.value ?? '');
+          const kind = clear(v);
+          if (!kind || !modal) continue;
+          // A color word said for the one mode it cannot carry: the hue's
+          // tone for that mode.
+          if (
+            fill &&
+            st.on &&
+            st.mode === 'dark' &&
+            kind === 'light' &&
+            !typed(v)
+          ) {
+            const ink = inkOf(st.on, st.when, 'dark');
+            const rgb = parseColor(v);
+            const tone = darkTone(v);
+            if (ink && rgb && ratio(rgb, ink) < 3 && tone && parseColor(tone)) {
+              st.value = tone;
+              notes.add(
+                `(in dark mode, ${v} would leave ${one(st.on)}'s text unreadable, so the dark mode takes the hue's dark tone, ${tone})`,
+              );
+            }
+            continue;
+          }
+          if (st.mode || bothAsked) continue;
+          if (line) {
+            if (kind !== 'light' || /light-dark\(/.test(String(st.value)))
+              continue;
+            // (A border shorthand keeps its width in both modes: only its
+            // color is the light mode's, the dark mode keeping the theme's
+            // border color.)
+            if (st.thing === 'border')
+              st.value = String(st.value).replace(
+                v,
+                `light-dark(${v}, var(--color-border))`,
+              );
+            else st.mode = 'light';
+            notes.add(
+              `(a light ${st.on ? 'border' : 'border color'}, in light mode only: on the dark page it would be a glaring edge, so the dark mode keeps its own; for the dark mode too, set a dark color with --mode dark, or say "in both modes")`,
+            );
+            continue;
+          }
+          if (!st.on) continue;
+          // (A fill whose own text the same answer sets is that look in
+          // every mode: "a navy header with white text".)
+          if (
+            result.some(e =>
+              e.options.some(oo => oo.some(x => !x.mode && ownText(x, st))),
+            )
           )
+            continue;
+          const rgb = parseColor(v);
+          const other = kind === 'light' ? 'dark' : 'light';
+          const ink = inkOf(st.on, st.when, other);
+          if (!rgb || !ink || ratio(rgb, ink) >= 3) continue;
+          // (A dark fill only on a panel that sits on the page, a card's,
+          // a popover's: a dark header or sidebar in light mode is chrome
+          // asked for as it is.)
+          if (
+            kind === 'dark' &&
+            !(C.partReads(one(st.on), 'background') ?? []).some(r =>
+              /^--color-background-(?:card|popover|elevated)$/.test(r.token),
+            )
+          )
+            continue;
+          st.mode = kind;
+          notes.add(
+            `(in ${kind} mode only: a ${kind} fill, and the ${other} mode keeps its own so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`,
+          );
+        }
+      for (const n of notes) if (!d.text.includes(n)) d.text += ` ${n}`;
+    }
+  }
+  // A fill given to every variant of a part ("navy buttons"): a variant
+  // whose own text would barely show on it (a secondary button's dark
+  // label on navy, under 3:1) keeps its fill; the others take it, each by
+  // name, and the answer says which kept theirs.
+  for (const d of result)
+    for (const o of d.options) {
+      for (let i = o.length - 1; i >= 0; i--) {
+        const st = o[i];
+        if (
+          !st.on ||
+          st.when ||
+          st.state ||
+          st.only ||
+          !/^background(?:-color)?$/.test(st.thing) ||
+          FAMILIES[st.on]
         )
           continue;
-        // (A dark surface with its own text set in the same answer, "a
-        // navy header with white text", is a look asked for in every mode:
-        // its text goes with it.)
+        const fill = parseColor(String(st.value ?? ''));
+        if (!fill || alphaOf(String(st.value)) < 1) continue;
+        // (Its text given in the same answer: the ask's own look.)
         if (
-          m === 'dark' &&
           o.some(
             x =>
               x !== st &&
               x.on === st.on &&
-              !x.mode &&
-              (x.thing === 'color' || /^--color-text-/.test(x.thing)),
+              (x.thing === 'color' || /^--color-(?:text|on)-/.test(x.thing)),
           )
         )
           continue;
-        st.mode = m;
-        kept = m;
-        // (Its own text set without a mode goes with it.)
-        for (const x of o)
-          if (
-            x !== st &&
-            x.on === st.on &&
-            !x.mode &&
-            (x.thing === 'color' || /^--color-text-/.test(x.thing))
-          )
-            x.mode = m;
+        const variants = C.variantValues(one(st.on)).variant ?? [];
+        // (Role variants only, a part with a main variant, a button's
+        // primary: a tone family, a badge's statuses, each pairs its text
+        // with its own fill and is recolored as a whole.)
+        if (variants.length < 2 || !variants.includes('primary')) continue;
+        /** @type {Map<string, string>} */
+        const ink = new Map();
+        for (const r of C.partReads(one(st.on), 'text') ?? []) {
+          if (!/^--color-/.test(r.token)) continue;
+          for (const w of r.when) {
+            const m = /^variant=([\w-]+)$/.exec(w.trim());
+            if (m && !ink.has(m[1])) ink.set(m[1], r.token);
+          }
+        }
+        const mode = /** @type {'light' | 'dark'} */ (st.mode ?? 'light');
+        const lost = variants.filter(v => {
+          const t = ink.get(v);
+          const rgb = t ? parseColor(String(current(t, mode) ?? '')) : null;
+          return rgb != null && ratio(fill, rgb) < 3;
+        });
+        if (!lost.length || lost.length === variants.length) continue;
+        o.splice(
+          i,
+          1,
+          ...variants
+            .filter(v => !lost.includes(v))
+            .map(v => ({...st, when: `variant:${v}`})),
+        );
+        if (!/keep their own fill|keeps its own fill/.test(d.text))
+          d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own fill' : 'keeps its own fill'}: ${lost.length > 1 ? 'their' : 'its'} text would barely show on ${st.value}; give ${lost.length > 1 ? 'them' : 'it'} a text color too to change ${lost.length > 1 ? 'them' : 'it'})`;
       }
-    // A clearly light whole-theme border color ("borders #e3e8ee") is the
-    // light mode's: on the dark page it would be a glaring edge on every
-    // card and input, so the dark mode keeps its own.
-    for (const o of d.options)
-      for (const st of o) {
-        if (st.mode || st.on || st.thing !== '--color-border') continue;
-        if (
-          pageModeOf(
-            /** @type {any} */ ({mode: null, text: question}),
-            String(st.value ?? ''),
-          ) !== 'light' ||
-          alphaOf(String(st.value ?? '')) < 1
-        )
-          continue;
-        st.mode = 'light';
-        if (!/a light border/.test(d.text))
-          d.text += ` (a light border, in light mode only: on the dark page it would be a glaring edge, so the dark mode keeps its own; for the dark mode too, set a dark color with --mode dark, or say "in both modes")`;
-      }
-    if (kept && !/keeps its own/.test(d.text)) {
-      const other = kept === 'light' ? 'dark' : 'light';
-      d.text += ` (in ${kept} mode only: a ${kept} fill, and the ${other} mode keeps its own so its text stays readable; for the ${other} mode too, set a ${other} color with --mode ${other}, or say "in both modes")`;
     }
-  }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides

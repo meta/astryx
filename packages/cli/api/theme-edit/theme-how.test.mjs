@@ -657,8 +657,10 @@ const QUESTIONS = [
     {
       parts: ['table-row'],
       // Core paints the selected wash inline from this token.
-      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
-      adds: /table-row\.selected\.--color-accent-muted=#/,
+      // (A light wash the dark mode's light text would not read on: the
+      // light mode's.)
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected --mode light$/,
+      adds: /table-row\.selected.*--color-accent-muted/,
     },
   ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
@@ -1783,7 +1785,7 @@ const QUESTIONS_3 = [
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
     {
-      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background-color '#f3f4f6' --on table-header-cell$/,
+      top: /^set q --color-background-muted '#f9fafb' --on table-row --mode light && set q background-color '#f3f4f6' --on table-header-cell --mode light$/,
     },
   ],
   [
@@ -2322,7 +2324,8 @@ const QUESTIONS_G = [
     // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
     {
-      top: /^set q --color-border '#e5e7eb' --on divider && set q --color-border-emphasized '#e5e7eb' --on divider$/,
+      // (A light line, the light mode's: on the dark page a glaring edge.)
+      top: /^set q --color-border '#e5e7eb' --on divider --mode light && set q --color-border-emphasized '#e5e7eb' --on divider --mode light$/,
     },
   ],
   // a CSS property named in the question is set as named
@@ -2775,8 +2778,11 @@ const QUESTIONS_H = [
     {top: null, text: /button has no loading state/},
   ],
   [
+    // (Unchecked is the box at rest: the checked look kept.)
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checkbox-indicator has no unchecked state/},
+    {
+      top: /^set q border-width 2px --on checkbox-indicator --only && set q border-width 1px --on checkbox-indicator --state checked --only/,
+    },
   ],
   [
     'heading color red',
@@ -2914,7 +2920,10 @@ const QUESTIONS_I = [
   ],
   [
     'card border 2px #e5e7eb',
-    {top: /^set q border '2px solid #e5e7eb' --on card$/},
+    // (A light line keeps the dark mode's own border color.)
+    {
+      top: /^set q border '2px solid light-dark\(#e5e7eb, var\(--color-border\)\)' --on card$/,
+    },
   ],
   ['card border width 2px', {top: /^set q border-width 2px --on card$/}],
   ['card outline width 2px', {top: /^set q outline-width 2px --on card$/}],

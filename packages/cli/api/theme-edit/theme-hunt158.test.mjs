@@ -157,7 +157,7 @@ describe('excepts, lists and removals', () => {
       expect(
         (await answer('side nav selected items should be #dbeafe')).first,
       ).toEqual([
-        "set n background-color '#dbeafe' --on side-nav-item --state selected",
+        "set n background-color '#dbeafe' --on side-nav-item --state selected --mode light",
       ]);
     },
     T,
