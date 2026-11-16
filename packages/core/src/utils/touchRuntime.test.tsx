@@ -13,11 +13,22 @@
 import {act, render} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  __forgetLoadedPartsForTest,
   __resetTouchRuntimeForTest,
+  createTouchPart,
   getTouchRuntime,
   LOAD_CAP_MS,
+  useTouchPart,
   useTouchRuntime,
 } from './touchRuntime';
+
+/** A component's touch part. */
+const part = createTouchPart(async () => ({name: 'part'}));
+
+function PartReader({onRender}: {onRender: (loaded: boolean) => void}) {
+  onRender(useTouchPart(part) != null);
+  return null;
+}
 
 function Reader({onRender}: {onRender: (loaded: boolean) => void}) {
   onRender(useTouchRuntime() != null);
@@ -111,6 +122,42 @@ describe('shared touch loader', () => {
     document.body.dispatchEvent(new Event('pointerdown', {bubbles: true}));
     await settleImport();
     expect(getTouchRuntime()).toBeNull();
+    expect(idle).toHaveLength(1);
+  });
+
+  it('loads a part with the runtime, after first paint at idle', async () => {
+    const seen: boolean[] = [];
+    render(<PartReader onRender={loaded => seen.push(loaded)} />);
+    expect(seen.at(-1)).toBe(false);
+    expect(frames).toHaveLength(1);
+    paint();
+    await settleImport();
+    expect(seen.at(-1)).toBe(false);
+    idle[0].callback({didTimeout: false, timeRemaining: () => 50});
+    await settleImport();
+    expect(getTouchRuntime()).not.toBeNull();
+    expect(seen.at(-1)).toBe(true);
+  });
+
+  it('loads a part that first mounts after the page load started at that mount, not on a press', async () => {
+    render(<Reader onRender={() => {}} />);
+    paint();
+    idle[0].callback({didTimeout: false, timeRemaining: () => 50});
+    await settleImport();
+    expect(getTouchRuntime()).not.toBeNull();
+    // The page load ran before the part's component mounted, and a press
+    // loads nothing.
+    __forgetLoadedPartsForTest();
+    document.body.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    await settleImport();
+
+    const seen: boolean[] = [];
+    render(<PartReader onRender={loaded => seen.push(loaded)} />);
+    expect(seen[0]).toBe(false);
+    await settleImport();
+    expect(seen.at(-1)).toBe(true);
+    // No new schedule: the page's one load already ran.
+    expect(frames).toHaveLength(0);
     expect(idle).toHaveLength(1);
   });
 

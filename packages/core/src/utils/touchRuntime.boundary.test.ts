@@ -6,7 +6,8 @@
  *   BottomSheet entries, and every core source file
  * @output The source boundary check for `architecture:react-component-runtime`
  *   INV13's shared touch loader: no entry's static graph reaches the animator
- *   or the gesture host, and only the loader imports the runtime module
+ *   or the gesture host, only the loader imports the runtime module, and a
+ *   touch part loads only from its own component, through the loader
  * @position Testing; the loader's timing is in touchRuntime.test.tsx
  */
 
@@ -119,4 +120,34 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
       /^\s*import\s+(?!type\b)[^;]*['"]\.\/touchRuntimeModules['"]/m,
     );
   });
+
+  it.each([
+    [
+      'SegmentedControl/segmentedTouchPart',
+      'SegmentedControl/SegmentedControl.tsx',
+    ],
+    ['Switch/switchTouchPart', 'Switch/Switch.tsx'],
+  ])(
+    'loads the touch part %s only from its component, through the loader',
+    (part, component) => {
+      const name = part.split('/')[1];
+      const importers = sourceFiles(coreSrc)
+        .filter(file =>
+          new RegExp(`['"]\\.{1,2}/(?:[A-Za-z]+/)?${name}['"]`).test(
+            code(readFileSync(file, 'utf8')),
+          ),
+        )
+        .map(file => relative(coreSrc, file));
+      expect(importers).toEqual([component]);
+      const source = code(readFileSync(join(coreSrc, component), 'utf8'));
+      expect(source).toMatch(
+        new RegExp(
+          `createTouchPart\\(\\s*async \\(\\) => import\\('\\./${name}'\\)`,
+        ),
+      );
+      expect(staticImports(join(coreSrc, component))).not.toContain(
+        join(coreSrc, `${part}.tsx`),
+      );
+    },
+  );
 });

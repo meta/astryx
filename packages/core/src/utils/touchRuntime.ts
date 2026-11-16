@@ -28,7 +28,7 @@
 // ride the on-screen keyboard: the ride moves the field with the animator.
 
 import {useEffect, useSyncExternalStore} from 'react';
-import {createModuleLoader} from './moduleLoader';
+import {createModuleLoader, type ModuleLoader} from './moduleLoader';
 import type {TouchRuntime} from './touchRuntimeModules';
 
 export type {TouchRuntime} from './touchRuntimeModules';
@@ -42,7 +42,10 @@ export const LOAD_CAP_MS = 2000;
 
 let runtime: TouchRuntime | null = null;
 let isScheduled = false;
+let hasLoadStarted = false;
 const listeners = new Set<() => void>();
+const parts = new Set<ModuleLoader<unknown>>();
+const loadedParts = new Map<ModuleLoader<unknown>, unknown>();
 
 /** The loaded touch runtime, or `null` before the page has loaded it. */
 export function getTouchRuntime(): TouchRuntime | null {
@@ -56,23 +59,43 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function publish(loaded: TouchRuntime): void {
-  runtime = loaded;
+function notify(): void {
   for (const listener of [...listeners]) {
     listener();
   }
+}
+
+function publish(loaded: TouchRuntime): void {
+  runtime = loaded;
+  notify();
 }
 
 const runtimeModule = createModuleLoader(
   async () => import('./touchRuntimeModules'),
 );
 
-async function load(): Promise<void> {
+async function loadPart(part: ModuleLoader<unknown>): Promise<void> {
   try {
-    publish((await runtimeModule.load()).touchRuntime);
+    loadedParts.set(part, await part.load());
+    notify();
   } catch {
-    // A chunk that fails to load leaves the page on taps, clicks and keys.
+    // A part that fails to load leaves its component on taps, clicks and
+    // keys.
   }
+}
+
+async function load(): Promise<void> {
+  hasLoadStarted = true;
+  await Promise.all([
+    runtimeModule.load().then(
+      loaded => publish(loaded.touchRuntime),
+      () => {
+        // A chunk that fails to load leaves the page on taps, clicks and
+        // keys.
+      },
+    ),
+    ...[...parts].map(loadPart),
+  ]);
 }
 
 function whenIdle(view: Window, start: () => void): void {
@@ -113,19 +136,67 @@ export function useTouchRuntime(): TouchRuntime | null {
   return current;
 }
 
-/** Test only: loads the runtime now and makes every reader see it. */
+/**
+ * A component's touch part: the touch code only that component uses, in a
+ * module only that component imports. The loader loads it with the shared
+ * runtime, so a page loads only the parts of the components it renders.
+ * `importPart` is the part module's `import()`.
+ */
+export function createTouchPart<T>(
+  importPart: () => Promise<T>,
+): ModuleLoader<T> {
+  const part = createModuleLoader(importPart);
+  parts.add(part);
+  return part;
+}
+
+/**
+ * A touch part once the page has loaded it, else `null`. Its first mount
+ * schedules the page's one touch load, which loads the part with the shared
+ * runtime. A part that first mounts after that load has started loads at
+ * this mount. Never on an input.
+ */
+export function useTouchPart<T>(part: ModuleLoader<T>): T | null {
+  const current = useSyncExternalStore(
+    subscribe,
+    () => (loadedParts.get(part) as T | undefined) ?? null,
+    () => null,
+  );
+  // Syncs the part's load with its first mount.
+  useEffect(() => {
+    if (hasLoadStarted) {
+      void loadPart(part);
+    } else {
+      scheduleTouchRuntimeLoad();
+    }
+  }, [part]);
+  return current;
+}
+
+/** Test only: loads the runtime and every part now; every reader sees them. */
 export async function __loadTouchRuntimeForTest(): Promise<TouchRuntime> {
-  const loaded = (await runtimeModule.load()).touchRuntime;
-  publish(loaded);
   isScheduled = true;
-  return loaded;
+  await load();
+  if (runtime == null) {
+    throw new Error('The touch runtime did not load.');
+  }
+  return runtime;
+}
+
+/**
+ * Test only: forgets the loaded parts and keeps the runtime, as on a page
+ * where a component's part was not loaded with the page load.
+ */
+export function __forgetLoadedPartsForTest(): void {
+  loadedParts.clear();
+  notify();
 }
 
 /** Test only: forgets the loaded runtime and any scheduled load. */
 export function __resetTouchRuntimeForTest(): void {
   runtime = null;
   isScheduled = false;
-  for (const listener of [...listeners]) {
-    listener();
-  }
+  hasLoadStarted = false;
+  loadedParts.clear();
+  notify();
 }

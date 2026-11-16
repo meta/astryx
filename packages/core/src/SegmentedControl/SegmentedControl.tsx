@@ -45,7 +45,13 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import type {SegmentedSelection} from './useSegmentedSelectionMotion';
 import {isPressAwaitingClick} from '../Layer/gestureCounter';
-import {useTouchRuntime} from '../utils/touchRuntime';
+import {createTouchPart, useTouchPart} from '../utils/touchRuntime';
+
+// The selection motion and press tracking load only on a page that renders
+// a SegmentedControl.
+const segmentedTouchPart = createTouchPart(
+  async () => import('./segmentedTouchPart'),
+);
 
 export interface SegmentedControlProps extends Omit<
   BaseProps<HTMLDivElement>,
@@ -337,10 +343,10 @@ export function SegmentedControl({
   // Every pointer's press is tracked. A drag from the selected segment
   // carries the lens, and the lift commits the segment nearest the pointer.
   // A lift off the control commits the segment under the pointer's
-  // horizontal position. The motion and the tracking
-  // come with the shared touch runtime, which loads after first paint. Until
-  // then a tap or a click selects, and the selection moves at once.
-  const touchRuntime = useTouchRuntime();
+  // horizontal position. The motion and the tracking are this control's
+  // touch part, which the touch loader loads after first paint. Until then a
+  // tap or a click selects, and the selection moves at once.
+  const touchPart = useTouchPart(segmentedTouchPart);
   const motionSelectionRef = useRef<SegmentedSelection | null>(null);
   // A press that has not reached its click keeps a focus move from
   // selecting: the press selects through its click, so a caller's
@@ -505,8 +511,8 @@ export function SegmentedControl({
         {children}
         {hint.hintElement}
       </div>
-      {touchRuntime != null && (
-        <touchRuntime.SegmentedMotion
+      {touchPart != null && (
+        <touchPart.SegmentedMotion
           trackRef={trackRef}
           value={value}
           isPresenting={isTouchPresentation}

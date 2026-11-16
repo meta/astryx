@@ -173,8 +173,8 @@ one pending load per module, caches a success, and resets after a failure.
   scroll belongs to the loaded surface, which reads the `click` that follows
   a tap. The one exception is the shared touch loader
   (`architecture:react-component-runtime` INV13), whose `import()` loads the
-  touch modules once per page after first paint; a surface module still
-  imports them statically.
+  touch modules, and a component's touch part through it, at most once per
+  page after first paint; a surface module still imports them statically.
 - **INV9 — A check holds the boundaries per entry.** A CI check builds each
   entry in the entry list (Text, Heading, Button, IconButton, Link, Table,
   List, CheckboxList, Selector, DropdownMenu, and each entry an owner adds)
