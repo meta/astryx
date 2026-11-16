@@ -177,5 +177,16 @@ describe('mergeProps', () => {
         style: {margin: 0, color: 'red', fontSize: 12},
       });
     });
+
+    it('preserves previous style when fourth argument is falsy', () => {
+      const result = mergeProps(
+        {className: 'c'},
+        {style: {color: 'red'}},
+        undefined,
+        // @ts-expect-error testing falsy style runtime resilience
+        false,
+      );
+      expect(result.style).toEqual({color: 'red'});
+    });
   });
 });

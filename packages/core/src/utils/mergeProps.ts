@@ -119,13 +119,13 @@ export function mergeProps(
   if (styleCount === 0) {
     delete merged.style;
   } else if (styleCount === 1) {
-    merged.style = s4 ?? s3 ?? s2 ?? s1;
+    merged.style = s4 || s3 || s2 || s1;
   } else {
     merged.style = {
-      ...(s1 ?? {}),
-      ...(s2 ?? {}),
-      ...(s3 ?? {}),
-      ...(s4 ?? {}),
+      ...(s1 || {}),
+      ...(s2 || {}),
+      ...(s3 || {}),
+      ...(s4 || {}),
     };
   }
 
