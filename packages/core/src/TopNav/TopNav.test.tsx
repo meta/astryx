@@ -428,6 +428,31 @@ describe('TopNavHeading', () => {
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
   });
 
+  it("holds a NavHeadingMenu's items in its own named menu, with no menu inside it", async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    render(
+      <TopNavHeading
+        heading="Acme"
+        menu={
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Docs" href="/docs" />
+            <NavHeadingMenuItem label="Status" href="/status" />
+          </NavHeadingMenu>
+        }
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Acme, Open menu'}));
+    const menus = screen.getAllByRole('menu', {hidden: true});
+    expect(menus).toHaveLength(1);
+    expect(menus[0]).toHaveAccessibleName('Acme');
+    for (const name of ['Docs', 'Status']) {
+      expect(menus[0]).toContainElement(
+        screen.getByRole('menuitem', {name, hidden: true}),
+      );
+    }
+  });
+
   it('includes the visible heading in the menu trigger name without hrefs', () => {
     render(<TopNavHeading heading="Acme" menu={<div>Menu content</div>} />);
     expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');

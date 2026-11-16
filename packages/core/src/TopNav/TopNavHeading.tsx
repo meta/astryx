@@ -42,7 +42,10 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
-import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
+import {
+  NavHeadingCloseContext,
+  NavHeadingMenuHostContext,
+} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -650,7 +653,9 @@ export function TopNavHeading({
               onPointerDown={productMenuPointerDown}
               {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingCloseContext>
             </div>
           </div>,
@@ -736,7 +741,9 @@ export function TopNavHeading({
               onPointerDown={productMenuPointerDown}
               {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
-                {menu}
+                <NavHeadingMenuHostContext value>
+                  {menu}
+                </NavHeadingMenuHostContext>
               </NavHeadingCloseContext>
             </div>
           </div>,
