@@ -49,7 +49,10 @@ describe("a base theme's font stylesheet", () => {
         face('Figtree', '400', 'c.woff2') +
         face('Fraunces', '100 900', 'd.woff2'),
     );
-    const sheet = baseFontsSheet(ctx, /** @type {any} */ ({like: 'b', name: 't'}));
+    const sheet = baseFontsSheet(
+      ctx,
+      /** @type {any} */ ({like: 'b', name: 't'}),
+    );
     expect(sheet?.spec).toBe('@astryxdesign/theme-b/fonts.css');
     expect(sheet?.families).toEqual(['Figtree', 'Fraunces']);
     expect(sheet?.remote).toEqual([]);
@@ -63,7 +66,10 @@ describe("a base theme's font stylesheet", () => {
       'service',
       "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
     );
-    const sheet = baseFontsSheet(ctx, /** @type {any} */ ({like: 'b', name: 't'}));
+    const sheet = baseFontsSheet(
+      ctx,
+      /** @type {any} */ ({like: 'b', name: 't'}),
+    );
     expect(sheet?.families).toEqual(['Figtree']);
     expect(sheet?.remote).toHaveLength(1);
     expect(sheet?.weights.get('Figtree')).toEqual([400, 700]);
