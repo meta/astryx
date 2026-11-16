@@ -6680,6 +6680,25 @@ export function compileTheme(ctx, data, base) {
   const headingWeightTokens = Object.keys(TOKENS).filter(k =>
     /^--text-(heading|display)-\d-weight$/.test(k),
   );
+  /**
+   * The parts Core draws as a heading element (h1 to h6) whose own rule
+   * reads none of the headings' tokens for a property (an empty state's
+   * title, a semibold weight and the inherited family): the headings dial
+   * and a heading font reach them there.
+   * @param {string} prop
+   * @param {(token: string) => boolean} heading
+   */
+  const headingElements = (prop, heading) =>
+    Object.entries(ctx.C.MAP)
+      .filter(
+        ([t, rec]) =>
+          ctx.project.target.has(t) &&
+          [...(rec?.tags ?? [])].some((/** @type {string} */ g) =>
+            /^h[1-6]$/.test(g),
+          ) &&
+          !Object.keys(rec?.own?.[prop]?.tokens ?? {}).some(heading),
+      )
+      .map(([t]) => t);
   // Dials first, then exact tokens and part properties: an exact setting
   // always wins over a dial, whatever the order they were made in.
   // A dial on a part (a font for one role, corners on cards) comes after
@@ -6897,9 +6916,15 @@ export function compileTheme(ctx, data, base) {
         if (s.axis === 'tracking')
           block({...s, mode: undefined}, 'heading').letterSpacing =
             HEADING_TRACKING[s.value];
-        else
+        else {
           for (const k of headingWeightTokens)
             putTok(k, HEADING_WEIGHTS[s.value]);
+          for (const t of headingElements('font-weight', k =>
+            headingWeightTokens.includes(k),
+          ))
+            block({...s, mode: undefined}, t).fontWeight =
+              HEADING_WEIGHTS[s.value];
+        }
       } else if (s.thing === 'text-size') {
         theme.typography ??= {};
         // The ratio is type's wherever it sits in the settings.
@@ -7294,6 +7319,27 @@ export function compileTheme(ctx, data, base) {
       const f = fontOf(heading);
       theme.typography.heading = {family: f.family, fallbacks: f.fallbacks};
     }
+  }
+  // A heading font of its own, other than the body's, reaches the parts
+  // drawn as a heading element that inherit the body's family (an empty
+  // state's title); where the two are one family nothing is written.
+  {
+    const said = [...data.settings]
+      .reverse()
+      .find(
+        x => x.source === 'dial' && x.thing === 'font' && x.on === 'heading',
+      );
+    const headingFamily = theme.typography?.heading?.family;
+    const bodyFamily =
+      theme.typography?.body?.family ??
+      fontOf(base.light['--font-family-body'] ?? '').family;
+    if (said && headingFamily && headingFamily !== bodyFamily)
+      for (const t of headingElements(
+        'font-family',
+        k => k === '--font-family-heading',
+      ))
+        block({...said, on: undefined, mode: undefined}, t).fontFamily =
+          'var(--font-family-heading)';
   }
   // A scale steeper or flatter than the standard one changes the headings;
   // the steps below the base text size keep the standard ratio, so small
@@ -12741,12 +12787,17 @@ export function positionalCornerToken(ctx, part) {
   return null;
 }
 
-/** The radius tokens the corners dial moves. */
+/**
+ * The radius tokens the corners dial moves: every step Core's radius scale
+ * derives from its base (all but none and full), the chat surfaces' too,
+ * which track the page step.
+ */
 export const DIAL_RADII = [
   '--radius-element',
   '--radius-inner',
   '--radius-container',
   '--radius-page',
+  '--radius-chat',
 ];
 
 /**
@@ -13354,7 +13405,8 @@ export function radiusAt(base, value, token) {
       pill ? atPill : Math.min(atPill, px * ratio(token, 1.25)),
     );
   }
-  if (token === '--radius-page') {
+  // (The chat surfaces track the page step, as Core's scale draws them.)
+  if (token === '--radius-page' || token === '--radius-chat') {
     const atPill = Math.max(32, 1.5 * roundPx * ratio(token, 2.5));
     return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
   }

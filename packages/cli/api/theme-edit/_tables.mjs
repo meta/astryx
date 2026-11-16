@@ -79,6 +79,7 @@ export const FAMILIES = wordTable({
     'complex-selector',
     'typeahead',
     'tokenizer',
+    'file-input',
   ],
   containers: [
     'card',
