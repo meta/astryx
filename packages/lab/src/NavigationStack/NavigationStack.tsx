@@ -767,13 +767,12 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
 type TransitionClock = {at?: number; start?: 'next-frame'};
 
 /**
- * The clock of a transition. A finger's release keeps the time of its
- * release, so the spring continues from the frame the finger left. A
- * transition from rest leaves the start to the animator: it starts when the
- * browser commits it, so a heavy commit or a later listener's block delays
- * the motion instead of skipping into it. Started in an input event's own
- * task (a tap on a row, a key), it starts at the first frame after that
- * task, however long the task runs.
+ * The clock of a transition. A finger's release keeps its release time, so
+ * the spring continues from the frame the finger left. A transition from rest
+ * leaves its start to the animator. The browser's commit then dates it. So a
+ * heavy commit or a later listener's block delays the motion. It never skips
+ * ahead. In an input event's own task (a tap on a row, a key), the motion
+ * starts at the first frame after that task.
  */
 function transitionClock(
   releasedAt: number | undefined,
@@ -785,6 +784,19 @@ function transitionClock(
   return isInputTask ? {start: 'next-frame'} : {};
 }
 
+/** The pointer, key and touch events a person's press dispatches. */
+const INPUT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'click',
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'touchstart',
+  'touchend',
+  'keydown',
+  'keyup',
+]);
+
 /**
  * The page is dispatching an input event (a pointer, a key, a touch) now.
  * The fallback for a push the app starts outside the stack's own handlers.
@@ -794,7 +806,7 @@ function isDispatchingInput(view: Window | null | undefined): boolean {
     return false;
   }
   const event: unknown = Reflect.get(view, 'event');
-  return event instanceof view.UIEvent;
+  return event instanceof view.Event && INPUT_EVENT_TYPES.has(event.type);
 }
 
 /**
@@ -1601,7 +1613,9 @@ export function NavigationStack<T>({
   // icon remembers the control itself.
   const rememberActivation = useCallback((event: SyntheticEvent) => {
     // A transition this click or key starts runs in its task: React commits
-    // it before the task ends, and the next task clears the mark.
+    // it before the task ends, and the next task clears the mark. The mark
+    // does not depend on when an engine clears window.event around the
+    // microtask in which React commits.
     inputTaskRef.current = true;
     const view = containerRef.current?.ownerDocument.defaultView;
     view?.setTimeout(() => {
