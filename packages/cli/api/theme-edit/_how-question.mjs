@@ -115,7 +115,9 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
       '圆|丸く|丸い|둥글게|둥근',
       'rounded',
     ],
-    ['cuadrad[oa]s|carrés|eckige\\p{L}*', '四角|方形|네모', 'square'],
+    // ("eckiger": more angular, a step, never all the way square.)
+    ['eckiger(?:e[nrs]?)?', '(?!)', 'sharper'],
+    ['cuadrad[oa]s|carrés|eckig(?:e\\p{L}*)?', '四角|方形|네모', 'square'],
     ['esquinas?|coins|ecken|углы', '角', 'corners'],
     [
       'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
@@ -852,7 +854,7 @@ const NOT_COLORS = new Set([
  * The words for the product a look is for, the app, the site, a page, a
  * dashboard or a view: the whole theme's subject, never a part.
  */
-const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?)`;
+const PRODUCT_WORDS = String.raw`(?:views?|pages?|screens?|apps?|dashboards?|layouts?|sites?|websites?|tools?|products?|platforms?|portals?)`;
 
 /** Lengths written in a clause, in order. @param {string} c */
 const lengthsIn = c =>
@@ -3572,11 +3574,12 @@ function clausesOf(q, partWords, words = null) {
       ) &&
       !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
+    // ("why is everything so round": "so" in a why-complaint is "too".)
     const tooLess = new RegExp(
-      `\\btoo (?:big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall|${densityWords('roomy')})\\b`,
+      `(?:\\btoo|(?<=\\bwhy (?:is|are)\\b[^.?!]*)\\bso) (?:big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall|${densityWords('roomy')})\\b`,
     );
     const tooMore = new RegExp(
-      `\\btoo (?:small|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short|${densityWords('dense', 'crowded')})\\b`,
+      `(?:\\btoo|(?<=\\bwhy (?:is|are)\\b[^.?!]*)\\bso) (?:small|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short|${densityWords('dense', 'crowded')})\\b`,
     );
     // "softer corners", "gentler corners": a corner is softened by
     // rounding it, so the way is more (a softer shadow or color is still
@@ -5000,7 +5003,7 @@ export function draftAnswer(ctx, env, question) {
   const GATE =
     /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using)|don'?t (touch|change)(?! (the )?(dark|light) mode)|leave (?!(?:the )?(?:dark|light) mode)[a-z ]+ alone|who made|just what i wanted|eyes hurt|is a great)\b|^\s*(yeah|oh sure|sure|great|wow)\b|,\s*nice[.!]*\s*$/i;
   const QUESTION_CLAUSE =
-    /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
+    /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why (?:are|is) [^?]*\bso [a-z]+\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why (?:are|is) [^?]*\bso [a-z]+\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
   // "if you can", "if possible": politeness, not a condition. "no fewer
   // than 2px": the number, the value asked; beside a way ("smaller but no
   // less than 64px") a lower bound on it, as the bound reader names it.
@@ -5281,9 +5284,10 @@ export function draftAnswer(ctx, env, question) {
     )
     // "the selected tab text white and the others gray", "primary buttons
     // blue and the others gray": the others are the same parts but that
-    // state or variant, read as an except, its own ask.
+    // state or variant, read as an except, its own ask. (Joined by a
+    // comma the same: "…white, the others gray".)
     .replace(
-      /^(.*?)\band\s+(?:all\s+)?the\s+(?:others?|rest)\b([^,;.\n]*)/gim,
+      /^(.*?)(?:\band\s+|,\s*)(?:all\s+)?the\s+(?:others?|rest)\b([^,;.\n]*)/gim,
       (m, before, after) => {
         const pairs = [
           ...String(before).matchAll(
@@ -5670,8 +5674,10 @@ export function draftAnswer(ctx, env, question) {
         ))
     )
       return true;
-    // "why are my headings not bold", "I hate the purple": asks.
+    // "why are my headings not bold", "why is everything so round", "I
+    // hate the purple": asks.
     if (/^why (?:are|is|aren'?t|isn'?t)\b.*\bnot\b/.test(t)) return true;
+    if (/^why (?:are|is)\b.*\bso [a-z]+\b/.test(t)) return true;
     if (/^(?:i )?(?:hate|dislike|(?:am )?not a fan of|don'?t like)\b/.test(t))
       return true;
     // A description of the look wanted ("stronger shadow on dialogs",
@@ -6867,9 +6873,26 @@ export function draftAnswer(ctx, env, question) {
       const vals = Object.values(
         C.variantValues(first(before.parts[0]?.on ?? '')) ?? {},
       ).flat();
+      // (A size word that stands for the part's own size, "large stay
+      // pill", never one that describes a look said after it, "large bold
+      // text".)
+      const sizeWord =
+        /\b(small|medium|large|sm|md|lg)\b(?!\s+(?:bold\w*|text|fonts?|type|corners?|shadows?|borders?|padding|gaps?|spacing|headings?|titles?|labels?))/.exec(
+          c.text,
+        )?.[1];
       if (
-        /\b(?:small|medium|large|sm|md|lg)\b/.test(c.text) ||
-        vals.some(v => new RegExp(`\\b${v}\\b`).test(c.text))
+        (sizeWord &&
+          vals.some(v =>
+            [
+              sizeWord,
+              {small: 'sm', medium: 'md', large: 'lg'}[sizeWord],
+            ].includes(String(v)),
+          )) ||
+        vals.some(
+          v =>
+            !/^(?:sm|md|lg|small|medium|large)$/.test(String(v)) &&
+            new RegExp(`\\b${v}\\b`).test(c.text),
+        )
       )
         return 'inherit';
     }
@@ -6961,6 +6984,59 @@ export function draftAnswer(ctx, env, question) {
       !before.parts.every(p => /^(?:page|body|app-shell)$/.test(p.on))
     )
       return 'inherit';
+    // ("badges 4px corners, 12px text and no border", "popovers 8px
+    // corners, 1px #DFE1E6 border, no shadow", "table header text
+    // uppercase, gray, 12px, bold": a list led by its part, said first,
+    // gives that part each look said with no subject of its own, however
+    // long the list; never "white cards, SF Pro font", where the part is
+    // a look's own word, nor the theme's font or spacing dial.)
+    {
+      const head = (() => {
+        for (let k = clauses.indexOf(c) - 1; k >= 0; k--) {
+          const x = clauses[k];
+          if (lex.parts.some(([re]) => re.test(x.text))) return x;
+          if (joinOf.get(x)?.sep === 'break' || joinOf.get(x)?.sep === 'none')
+            return null;
+        }
+        return null;
+      })();
+      if (
+        (j.sep === 'comma' || j.sep === 'and') &&
+        head &&
+        before.parts.length &&
+        !before.parts.every(p => /^(?:page|body|app-shell)$/.test(p.on)) &&
+        lex.parts.some(
+          ([re, x]) =>
+            before.parts.some(p => p.on === x.on) &&
+            re.exec(head.text.replace(/^\s*(?:the|my|our|all)\s+/, ''))
+              ?.index === 0,
+        ) &&
+        !own.includes('family') &&
+        // (A token list item said subject first, "text #111827", is the
+        // theme's, as below.)
+        !/^(?:text|muted text|secondary text|borders?|background|links?|accent)\s+(?:#|rgb|hsl|oklch|var\()/.test(
+          c.text.trim(),
+        ) &&
+        !(
+          own.includes('spacing') &&
+          !/\b(?:padding|gaps?|margins?|inset)\b|\bpadding-/.test(c.text)
+        ) &&
+        !c.text
+          .toLowerCase()
+          .split(/\s+/)
+          .some(
+            w =>
+              /^[a-z]{3,}$/.test(w) &&
+              !aspectsOf(w).length &&
+              !colorsIn(w).length &&
+              stateWord(w) == null &&
+              !/^(?:no|none|without|thin|thick|thicker|thinner|bold|bolder|light|lighter|dark|darker|subtle|soft|hard|large|small|big|medium|semibold|uppercase|lowercase|italic|solid|dashed|dotted|rounded|square|pill|flat|text|size)$/.test(
+                w,
+              ),
+          )
+      )
+        return 'inherit';
+    }
     // (The theme's spacing said as a dial, never a part's padding or gap.)
     if (
       own.some(a => THEME_ASPECTS.includes(a)) ||
@@ -6983,45 +7059,6 @@ export function draftAnswer(ctx, env, question) {
         ? 'inherit'
         : 'theme';
     if (j.list === 'with' || j.sep === 'and') return 'inherit';
-    // ("popovers 8px corners, 1px #DFE1E6 border, no shadow", "table
-    // header text uppercase, gray, 12px, bold": a list led by the part,
-    // said first, gives it each look said with no subject of its own;
-    // never "white cards, SF Pro font", where the part is a look's word.)
-    const head = (() => {
-      for (let k = clauses.indexOf(c) - 1; k >= 0; k--) {
-        const x = clauses[k];
-        if (lex.parts.some(([re]) => re.test(x.text))) return x;
-        if (joinOf.get(x)?.sep === 'break' || joinOf.get(x)?.sep === 'none')
-          return null;
-      }
-      return null;
-    })();
-    if (
-      j.sep === 'comma' &&
-      head &&
-      before.parts.length &&
-      !before.parts.every(p => /^(?:page|body|app-shell)$/.test(p.on)) &&
-      lex.parts.some(
-        ([re, x]) =>
-          before.parts.some(p => p.on === x.on) &&
-          re.exec(head.text.replace(/^\s*(?:the|my|our|all)\s+/, ''))?.index ===
-            0,
-      ) &&
-      !c.text
-        .toLowerCase()
-        .split(/\s+/)
-        .some(
-          w =>
-            /^[a-z]{3,}$/.test(w) &&
-            !aspectsOf(w).length &&
-            !colorsIn(w).length &&
-            stateWord(w) == null &&
-            !/^(?:no|none|without|thin|thick|thicker|thinner|bold|bolder|light|lighter|dark|darker|subtle|soft|hard|large|small|big|medium|semibold|uppercase|lowercase|italic|solid|dashed|dotted|rounded|square|pill|flat)$/.test(
-              w,
-            ),
-        )
-    )
-      return 'inherit';
     return 'theme';
   };
   // "a high contrast compact theme", "a dark theme with more contrast": the
@@ -12205,6 +12242,33 @@ export function draftAnswer(ctx, env, question) {
     )
       c.parts = [{...c.parts[0], when: prevC.parts[0].when}];
   }
+  // ("side nav #08090a, items 13px text": a word naming a piece of the
+  // part a list leads with, its items, its track, is that piece.)
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    if (c.parts.length || c.except) continue;
+    let k = i - 1;
+    while (
+      k > 0 &&
+      !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
+    )
+      k--;
+    if (['break'].includes(String(joinOf.get(c)?.sep))) continue;
+    const head = clauses[k];
+    const holder = head?.parts[0]?.on;
+    if (!holder || head === c) continue;
+    const segs = holder.split('-');
+    const piece = c.text
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter(w => w.length >= 3 && !head.text.toLowerCase().includes(w))
+      .flatMap(w =>
+        segs
+          .map((_, n) => `${segs.slice(0, n + 1).join('-')}-${singular(w)}`)
+          .filter(x => x !== holder && C.MAP[x]),
+      )[0];
+    if (piece) c.parts = [{on: piece}];
+  }
   // ("menus semi-transparent", "a translucent sidebar": see-through said
   // of a part is its fill, never the whole part faded, text and all.)
   for (const c of clauses)
@@ -12225,6 +12289,23 @@ export function draftAnswer(ctx, env, question) {
       c.aspects = ['background'];
       c.text = c.text.replace(/\bopacity\s+(\d*\.?\d+)/, 'background alpha $1');
     }
+  // ("checkboxes 16px": a bare length said of a part that sets its own
+  // width and height, and reads no size token, is its size.)
+  for (const c of clauses)
+    if (
+      c.parts.length === 1 &&
+      !c.aspects.length &&
+      c.lengths.length === 1 &&
+      !c.colors.length &&
+      !c.dir &&
+      ['width', 'height'].every(k =>
+        Object.hasOwn(
+          C.MAP[FAMILIES[c.parts[0].on]?.[0] ?? c.parts[0].on]?.at ?? {},
+          k,
+        ),
+      )
+    )
+      c.aspects = ['size'];
   // ("checkboxes 16px with 3px corners": a part with a bare length, its
   // look said only in its with-item, is its size, never the with-item's
   // look twice.)
@@ -18801,9 +18882,30 @@ export function draftAnswer(ctx, env, question) {
             text: `${one(on)} draws no shadow of its own at rest, so there is no shadow to make ${/\blighter\b/.test(c.text) ? 'lighter' : 'softer'}; a shadow it shows comes from Core (an elevated card's elevation is a shared shadow), so "softer shadows" changes the shared shadows, for every part that uses them`,
             options: [],
           };
+        // (A part that draws no shadow at rest, asked for more ("the cards
+        // look flat"): one step from none, the first shared shadow, as a
+        // part's shadow steps from what Core paints.)
+        const fromNone =
+          way === 'more' &&
+          on &&
+          C.MAP[one(on)] &&
+          !f.state &&
+          !c.colors.length &&
+          !c.lengths.length &&
+          !/\b(?:small|tiny|little|slight|large|big|huge|lift\w*|strong\w*|heav\w*|dramatic)\b/.test(
+            c.text,
+          ) &&
+          !partValue(on, 'box-shadow') &&
+          !C.partReads(one(on), 'shadow')?.some(
+            r =>
+              r.props.includes('box-shadow') &&
+              r.when.includes('') &&
+              /^--shadow-/.test(r.token),
+          );
         // (A shared shadow typed by name is the one asked for.)
         const shared =
           /\bvar\(\s*--shadow-[a-z0-9-]+\s*\)/.exec(c.text)?.[0] ??
+          (fromNone ? 'var(--shadow-low)' : null) ??
           // (Its size word is the rung: "a small shadow" low, "a large
           // shadow" high.)
           `var(${soft || /\b(?:small|tiny|little|slight)\s+shadows?\b/.test(c.text) ? '--shadow-low' : strong || /\blift/.test(c.text) || /\b(?:large|big|huge)\s+shadows?\b/.test(c.text) ? '--shadow-high' : '--shadow-med'})`;
@@ -21230,6 +21332,26 @@ export function draftAnswer(ctx, env, question) {
         // A heading's size is its type size.
         if (on === 'heading' && !c.lengths.length)
           return answerFor(c, p, 'fontsize');
+        // ("checkboxes 16px": a part that sets its own width and height,
+        // and reads no size token, a square of that size.)
+        {
+          const at = C.MAP[one(on)]?.at ?? {};
+          const len = c.lengths[0];
+          if (
+            len &&
+            c.lengths.length === 1 &&
+            !tallIn(c.text) &&
+            !/\b(?:wide|width|tall|height)\b/.test(c.text) &&
+            Object.hasOwn(at, 'width') &&
+            Object.hasOwn(at, 'height') &&
+            !(C.partReads(one(on), 'size') ?? []).length
+          )
+            return {
+              text: `${on}'s size: width and height ${len}, as it sets them itself`,
+              options: [[set('width', len, f), set('height', len, f)]],
+              sequence: true,
+            };
+        }
         const tall =
           tallIn(c.text) ??
           (/\b(taller|shorter|height|bigger|larger|tap targets?|touch targets?)\b/.test(

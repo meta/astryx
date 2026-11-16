@@ -4351,7 +4351,7 @@ export function describe(s) {
  * The parts a setting styles: the group when `--on` names one, the whole
  * group of an always-alike member unless `--only`, else the one part.
  * @param {Ctx} ctx
- * @param {Pick<Setting, 'on' | 'only' | 'thing'>} s
+ * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null}} s
  * @returns {string[]}
  */
 export function partsOf(ctx, s) {
@@ -4369,8 +4369,26 @@ export function partsOf(ctx, s) {
         : members;
   if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
+  // (Set on one member under a condition of its own, "--on selector
+  // --when variant:secondary": only the members that have that value
+  // take it; the others have no such variant to show it in.)
+  const takesWhen = (/** @type {string} */ m) => {
+    if (m === s.on || !s.when) return true;
+    return String(s.when)
+      .split(',')
+      .every(term => {
+        const [axis, value] = term.split(':');
+        const vals = /** @type {any} */ (ctx).C?.variantValues?.(m)?.[axis];
+        return Array.isArray(vals) && vals.map(String).includes(value);
+      });
+  };
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
-    return spread(FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m)));
+    return spread(
+      FAMILIES[fam]
+        .filter(has)
+        .filter(m => drawnAlike(ctx, s, m))
+        .filter(takesWhen),
+    );
   return [s.on];
 }
 

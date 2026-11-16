@@ -885,8 +885,10 @@ export function questionOnly(q) {
       t,
     ) ||
     /^(?:why not|what about|how about|what if)\b/.test(t) ||
-    // ("why are my headings not bold": a complaint is an ask.)
-    /^why\b.*\b(?:not|n'?t)\b/.test(t)
+    // ("why are my headings not bold", "why is everything so round": a
+    // complaint is an ask.)
+    /^why\b.*\b(?:not|n'?t)\b/.test(t) ||
+    /^why (?:is|are)\b.*\bso [a-z]+\b/.test(t)
   )
     return false;
   // A verb that asks for a change anywhere after the question's first
@@ -1619,7 +1621,10 @@ function toolAnswer(t, env, targets) {
     // A question about a part's value now is answered with that value.
     (asks && !valueAsked(q)) ||
     /^which parts (are|does|do)\b/.test(q) ||
-    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+    (/^why (is|are|does|do)\b/.test(q) &&
+      !/\bnot\b|n'?t\b/.test(q) &&
+      // ("why is everything so round": a complaint, an ask.)
+      !/^why (?:is|are)\b.*\bso [a-z]+\b/.test(q))
   ) {
     // The part or setting the question names gets its own lookup.
     const named = q

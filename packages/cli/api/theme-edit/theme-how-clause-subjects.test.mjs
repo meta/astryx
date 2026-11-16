@@ -251,6 +251,76 @@ const ROWS = [
     'bold colors are no weight',
     {q: 'bold warm colors', never: /--text-body-weight/},
   ],
+  [
+    'the others after a comma',
+    {
+      q: 'selected tab text white, the others gray',
+      has: [
+        "color '#ffffff' --on tab --state selected",
+        "color '#9e9e9e' --on tab",
+      ],
+    },
+  ],
+  [
+    'a bare size of a part that sizes itself',
+    {
+      q: 'checkboxes 16px',
+      has: [
+        'width 16px --on checkbox-indicator --only',
+        'height 16px --on checkbox-indicator --only',
+      ],
+    },
+  ],
+  [
+    'a why-so complaint asks for a step the other way',
+    {q: 'why is everything so round', has: ['corners less']},
+  ],
+  [
+    'a comparative of angular is a step, never square',
+    {q: 'Ecken eckiger', has: ['corners less']},
+  ],
+  [
+    'a part that paints no shadow steps from none',
+    {
+      q: 'ugh the cards look so flat, fix it',
+      has: ["box-shadow 'var(--shadow-low)' --on card"],
+    },
+  ],
+  [
+    'a long list led by its part keeps every item on it',
+    {
+      q: 'badges 4px corners, 12px text and no border',
+      has: ['font-size 12px --on badge'],
+      never: /^text-size/,
+    },
+  ],
+  [
+    'a long list with a with-item keeps the size on its part',
+    {
+      q: 'tooltips #0f0f0f with white text, 4px corners and 12px text',
+      has: ['font-size 12px --on tooltip'],
+      never: /^text-size/,
+    },
+  ],
+  [
+    'a piece of the leading part in a comma list',
+    {
+      q: 'side nav #08090a, items 13px text, selected item #1c1d1f with #f7f8f8 text',
+      has: ['font-size 13px --on side-nav-item'],
+      never: /^text-size/,
+    },
+  ],
+  [
+    'a size word before a look is no part size',
+    {
+      q: 'big touch targets, large bold text, thick borders',
+      never: /weight 700 --on inputs|--border-width 2px --on inputs/,
+    },
+  ],
+  [
+    'a product label is the whole theme',
+    {q: 'spreadsheet tool: 12px text, square corners', has: ['corners square']},
+  ],
 ];
 
 describe('each clause writes on what it names', () => {
