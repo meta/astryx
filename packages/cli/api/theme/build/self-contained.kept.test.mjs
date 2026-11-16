@@ -21,6 +21,7 @@ import {
   vi,
 } from 'vitest';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 const {TEMP_ROOT} = await vi.hoisted(async () => {
@@ -42,18 +43,21 @@ vi.mock('../../../foundation/fs/paths.mjs', async importOriginal => ({
 /** Each time a compile asks for Babel. */
 const babelAsked = vi.hoisted(() => ({count: 0}));
 
-/** Whether Babel's files read as a reinstall while this process runs left them. */
-const reinstalled = vi.hoisted(() => ({now: false}));
+/** Whether Babel's files read as a reinstall while this process runs left them, and when. */
+const reinstalled = vi.hoisted(() => ({now: false, at: 0}));
 
 vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
   const real = /** @type {any} */ (await importOriginal());
   return {
     ...real,
+    // A reinstall rewrites Babel's files: their times are after this process
+    // started.
     fileStamp: (/** @type {string} */ file) => {
       const stamp = real.fileStamp(file);
-      return reinstalled.now && file.includes(`${path.sep}@babel${path.sep}`)
-        ? `${stamp}:reinstalled`
-        : stamp;
+      if (!reinstalled.now || !file.includes(`${path.sep}@babel${path.sep}`))
+        return stamp;
+      const [size, , , ino] = stamp.split(':');
+      return `${size}:${reinstalled.at}:${reinstalled.at}:${ino}`;
     },
   };
 });
@@ -335,6 +339,8 @@ describe('the JavaScript a theme build compiles', () => {
     build();
     // Babel is loaded; a reinstall writes new files under it.
     reinstalled.now = true;
+    // Just after this process started: settled, and newer than the process.
+    reinstalled.at = performance.timeOrigin + 1;
     fs.writeFileSync(
       path.join(THEME, 'helper.ts'),
       HELPER.replace('icon ', 'glyph '),
@@ -345,6 +351,19 @@ describe('the JavaScript a theme build compiles', () => {
     expect(after.asked).toBe(2);
     // Neither is kept under the new files' stamps, so the next build in this
     // process compiles them again.
+    expect(build().asked).toBe(2);
+  }, 60_000);
+
+  it('keeps nothing from a first compile by a Babel loaded another way before a reinstall', async () => {
+    // Babel loaded by another part of the build, before any compile.
+    createRequire(import.meta.url)('@babel/core');
+    reinstalled.now = true;
+    // Just after this process started: settled, and newer than the process.
+    reinstalled.at = performance.timeOrigin + 1;
+    await sleep(SETTLE_WAIT_MS);
+    const first = build();
+    expect(first.asked).toBe(2);
+    expect(keptCompiles()).toHaveLength(0);
     expect(build().asked).toBe(2);
   }, 60_000);
 });

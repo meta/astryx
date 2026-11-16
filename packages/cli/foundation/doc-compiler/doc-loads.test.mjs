@@ -92,10 +92,6 @@ const RUNNERS = {
       'withEmptyStylesheets ×6',
     ],
   },
-  'api/theme/build/self-contained.mjs': {
-    runs: "nothing; reads which modules Babel's compile of a theme's local module loaded, from require.cache, to keep the compiled JavaScript only while each of their files is unchanged",
-    sites: ['require.cache'],
-  },
   'api/theme/build/core-interception.mjs': {
     runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
     sites: ['module', 'require(<computed>)'],
@@ -467,6 +463,10 @@ const RUNNERS = {
   'foundation/fs/import-url.mjs': {
     runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
+  },
+  'foundation/fs/loaded-files.mjs': {
+    runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
+    sites: ['createRequire'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',

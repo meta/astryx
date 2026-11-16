@@ -23,7 +23,10 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {persistedSummary} from '../../../foundation/fs/gather-cache.mjs';
-import {fileStamp} from '../../../foundation/fs/read-record.mjs';
+import {
+  loadedFileStamps,
+  loadedFiles,
+} from '../../../foundation/fs/loaded-files.mjs';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
@@ -324,35 +327,6 @@ function rewriteImports(rewrite) {
 }
 
 /**
- * Each file of Babel's code this process has run, with its stamp when the
- * process first found it loaded: the code a compile runs is the code loaded
- * then, whatever a reinstall writes later.
- * @type {Map<string, string>}
- */
-const compilerStamps = new Map();
-
-/**
- * Every file of the code that compiled a module: the modules of
- * `@babel/core` and of the plugins, and each module they required in turn,
- * wherever it is installed.
- * @param {string[]} roots the files the compile started from
- * @returns {string[]}
- */
-function compilerFiles(roots) {
-  const require = createRequire(import.meta.url);
-  /** @type {Set<string>} */
-  const found = new Set();
-  /** @param {NodeJS.Module | undefined} module */
-  const visit = module => {
-    if (!module || found.has(module.filename)) return;
-    found.add(module.filename);
-    for (const child of module.children) visit(child);
-  };
-  for (const root of roots) visit(require.cache[root]);
-  return [...found];
-}
-
-/**
  * One TypeScript or JSX module as JavaScript, its local imports naming the
  * files `rewrite` gives. The JavaScript is kept between runs beside the kept
  * gathers (fs/gather-cache.mjs persistedSummary): it is read back while the
@@ -393,15 +367,12 @@ function compileModule(files, file, source, rewrite) {
         require.resolve('@babel/core'),
         ...options.plugins.map(([plugin]) => String(plugin)),
       ];
-      /** @type {[string, string][]} */
-      const stamps = compilerFiles(roots).map(each => {
-        if (!compilerStamps.has(each))
-          compilerStamps.set(each, fileStamp(each));
-        return [each, /** @type {string} */ (compilerStamps.get(each))];
-      });
-      // Kept only while the files are still those this process loaded: after
+      // Kept only while Babel's files are those this process loaded: after
       // a reinstall, the JavaScript is the old Babel's.
-      current = stamps.every(([each, stamp]) => fileStamp(each) === stamp);
+      const {stamps, unchangedSinceStart} = loadedFileStamps(
+        loadedFiles(roots),
+      );
+      current = unchangedSinceStart;
       return {value: code, stamps};
     },
     {keep: code => current && code !== ''},
