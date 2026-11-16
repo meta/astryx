@@ -148,7 +148,7 @@ The component implements design requirements without copying their rationale.
 ## Family and system relationships
 
 - `spec:AST-085` owns the disabled-control rules; TabBar applies FR1, FR2 and FR5 to its tabs and their More rows.
-- `spec:AST-107` DEC-1 gives products values and props, never gesture machinery; `useTabBar` follows it (FR9). Its FR7 has Core and Lab build on the public layer, so `TabBar` renders through `useTabBar` (FR10), as `component:ContextMenu` renders through `useContextMenu`.
+- `spec:AST-107` DEC-1 gives products values and props, never gesture machinery; `useTabBar` follows it (FR9). Its FR7 has Core and Lab build on the public layer, so `TabBar` renders through `useTabBar` (FR10).
 - `spec:AST-085` leaves the arrow keys inside a composite to its own record: "Which items arrow keys visit inside a composite widget (listbox, menu, grid, tablist, roving group). The composite's own record decides that." FR6 decides it for TabBar, as Core's TabList does.
 
 ## Verification map
