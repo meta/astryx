@@ -6,8 +6,10 @@
  * identity code.
  * @input Stable npm package names owned by Astryx.
  * @output CORE_PACKAGE_NAME and CLI_PACKAGE_NAME.
- * @position foundation/identity — read by ./providers.mjs, which brands them,
- *   and by the bases, which name Core by its package.
+ * @position foundation/identity — the one definition of these names: read by
+ *   ./providers.mjs, which brands them, by the bases, which name Core by its
+ *   package, and by the release facts (foundation/release/project.mjs), which
+ *   pass them on.
  */
 
 /** Core's package name. */
