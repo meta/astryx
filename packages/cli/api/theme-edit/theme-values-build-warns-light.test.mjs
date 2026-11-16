@@ -78,28 +78,25 @@ const warned = p => JSON.stringify(p.env.data?.warnings ?? []);
 
 describe('a [light, dark] pair', () => {
   it('of sizes, or with a half that reads no token, is warned', () => {
-    for (const [fields, why] of [
+    for (const [fields, reasons] of [
       [
-        "tokens: {'--radius-element': ['4px', '12px']}",
-        'tokens.--radius-element (line 4): --radius-element gives a [light, dark] pair of sizes (4px)',
-      ],
-      [
-        "tokens: {'--spacing-2': ['4px', '8px']}",
-        'light-dark() takes colors only',
-      ],
-      [
-        "tokens: {'--color-accent': ['var(--nope)', '#000']}",
-        '--color-accent gives a light half that reads var(--nope), which no token sets',
+        "tokens: {'--radius-element': ['4px', '12px'], '--spacing-2': ['4px', '8px'], '--color-accent': ['var(--nope)', '#000']}",
+        [
+          'tokens.--radius-element (line 4): --radius-element gives a [light, dark] pair of sizes (4px)',
+          'tokens.--spacing-2 (line 4): --spacing-2 gives a [light, dark] pair of sizes (4px)',
+          'light-dark() takes colors only',
+          '--color-accent gives a light half that reads var(--nope), which no token sets',
+        ],
       ],
       [
         "tokens: {'--color-accent': ['#fff', 'var(--nope)']}",
-        '--color-accent gives a dark half that reads var(--nope)',
+        ['--color-accent gives a dark half that reads var(--nope)'],
       ],
     ]) {
       plain(fields);
       const p = json(['theme', 'build', 'plain/p.ts']);
       expect(p.status, fields).toBe(0);
-      expect(warned(p), fields).toContain(why);
+      for (const why of reasons) expect(warned(p), fields).toContain(why);
     }
     plain("tokens: {'--color-accent': ['#fff', 'var(--color-text-primary)']}");
     expect(json(['theme', 'build', 'plain/p.ts']).env.data.warnings).toEqual(
