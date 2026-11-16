@@ -223,10 +223,8 @@ const styles = stylex.create({
     // Footer buttons should use size="md" to match 32px send button height
     minHeight: '32px',
   },
-  // On a narrow composer the caller's actions wrap onto more lines inside the
-  // footer instead of pushing the send action past the composer's edge: the
-  // group may shrink below its content, and its items move to a new line
-  // rather than truncating.
+  // Caller actions wrap inside the footer, so the send action stays in the
+  // composer. An action wider than the footer still truncates.
   footerLeft: {
     display: 'flex',
     flexWrap: 'wrap',
