@@ -650,6 +650,21 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'star rating widget')).toEqual(['stars']);
   });
 
+  it('counts twice the words that name a definition the set maps the icon for', () => {
+    const set = setOf(
+      [
+        {id: 'bin-copy'},
+        {id: 'paper-stack-sheets-pile'},
+        {id: 'house'},
+        {id: 'star'},
+        {id: 'bell'},
+      ],
+      {copy: 'paper-stack-sheets-pile'},
+    );
+    // Both carry `copy` once; the set maps the copy definition to the pile.
+    expect(answer(set, 'copy page button')[0]).toBe('paper-stack-sheets-pile');
+  });
+
   it('leaves every answered query as it was: word matches come only when nothing else answers', () => {
     const set = setOf([
       {id: 'arrow-up-to-line'},

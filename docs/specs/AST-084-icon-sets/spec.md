@@ -211,8 +211,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   definition it draws. Word matches rank by the summed weight of the words
   they carry, where a word weighs the natural log of (the number of searched
   icons + 1) over (the number that carry it + 1), so a word no icon carries
-  counts for nothing; then by set order, then by fewer id parts the query
-  does not name, then by `id`. An icon also answers to
+  counts for nothing, and the words that spell out the whole name of a
+  definition the set's `map` names the icon for count twice; then by set
+  order, then by fewer id parts the query does not name, then by `id`. An
+  icon also answers to
   the name and words of every definition it draws. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on

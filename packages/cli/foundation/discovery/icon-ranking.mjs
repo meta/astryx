@@ -34,9 +34,11 @@
  * a part of a word of a definition the set maps it for. A word weighs more
  * the fewer searched icons carry it, so the word that names the glyph
  * outweighs a common one, and a word no icon carries counts for nothing.
- * Word matches rank by the weight of the words they carry; equal weights
- * keep set order, then the icon whose id holds fewer words the query does
- * not ask for, then id order.
+ * A word counts twice when, alone or with other query words, it spells out
+ * the whole name of a definition the set maps the icon for: the map is the
+ * set's own statement of what the icon means. Word matches rank by the
+ * weight of the words they carry; equal weights keep set order, then the
+ * icon whose id holds fewer words the query does not ask for, then id order.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -353,6 +355,15 @@ export function scoreIcon(query, icon, leading = 'meaning', definitions = []) {
 }
 
 /**
+ * A definition name read as lower-case words (`externalLink` is
+ * `external link`).
+ * @param {string} name
+ */
+function spokenName(name) {
+  return name.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').toLowerCase();
+}
+
+/**
  * The icon with the words it matches by: its own words, then the name (read
  * as words) and words of every definition the set's `map` names it for, so
  * `bin` finds the icon mapped to `delete` without the data file repeating
@@ -368,10 +379,7 @@ export function withDefinitionWords(icon, definitions, lookup) {
   const words = [...icon.words];
   for (const name of definitions) {
     const doc = lookup(name);
-    const humanized = name
-      .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
-      .toLowerCase();
-    for (const word of [humanized, ...(doc?.words ?? [])]) {
+    for (const word of [spokenName(name), ...(doc?.words ?? [])]) {
       const lower = word.toLowerCase();
       if (!words.includes(lower)) words.push(lower);
     }
@@ -407,7 +415,9 @@ const WORD_MATCH_SCORE = 20;
  * Icons that carry one or more words of a query of several words, best
  * first. A word weighs the log of how many searched icons there are over how
  * many carry it, so a rare word counts more than a common one. An icon's
- * weight is the sum of the weights of the words it carries.
+ * weight is the sum of the weights of the words it carries, with the words
+ * that name a definition the set maps it for counted twice
+ * ({@link mappedNameWords}).
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} term lower-case words, filler words left out
  * @returns {IconMatchEntry[]}
@@ -416,7 +426,7 @@ function rankWords(sets, term) {
   const astryx = astryxDefinitionsByName();
   const words = [...new Set(term.split(' '))];
   let total = 0;
-  /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], setIndex: number}>} */
+  /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], named: string[], setIndex: number}>} */
   const hits = [];
   sets.forEach((set, setIndex) => {
     const byIcon = definitionsByIcon(set.data);
@@ -437,7 +447,8 @@ function rankWords(sets, term) {
         terms.some(each => each === word || sameWord(each, word)),
       );
       if (carried.length > 0) {
-        hits.push({set, icon, definitions, carried, setIndex});
+        const named = mappedNameWords(definitions, words);
+        hits.push({set, icon, definitions, carried, named, setIndex});
       }
     }
   });
@@ -453,7 +464,10 @@ function rankWords(sets, term) {
     Math.log((total + 1) / ((carriers.get(word) ?? 0) + 1));
   const ranked = hits.map(hit => ({
     hit,
-    value: hit.carried.reduce((sum, word) => sum + weight(word), 0),
+    value: [...hit.carried, ...hit.named].reduce(
+      (sum, word) => sum + weight(word),
+      0,
+    ),
     unasked: hit.icon.id.split('-').length - hit.carried.length,
   }));
   ranked.sort(
@@ -472,6 +486,28 @@ function rankWords(sets, term) {
     reason: `words "${hit.carried.join('", "')}"`,
     score: WORD_MATCH_SCORE,
   }));
+}
+
+/**
+ * The query words that spell out the whole name of a definition the set maps
+ * the icon for (`external link` for `externalLink`). The map is the set's
+ * own statement of what the icon means, so these words count twice.
+ * @param {string[]} definitions the names the set maps the icon for
+ * @param {string[]} words the query's words
+ * @returns {string[]}
+ */
+function mappedNameWords(definitions, words) {
+  /** @type {Set<string>} */
+  const named = new Set();
+  for (const name of definitions) {
+    const asked = spokenName(name)
+      .split(' ')
+      .map(part => words.find(word => word === part || sameWord(word, part)));
+    if (asked.every(Boolean)) {
+      for (const word of asked) named.add(/** @type {string} */ (word));
+    }
+  }
+  return [...named];
 }
 
 /**
