@@ -68,6 +68,10 @@ import {
   sameColor,
   shade,
 } from '../theme/palette/generate/mapping.mjs';
+import {
+  isLookFamily,
+  lookSeeds,
+} from '../theme/palette/generate/derive-look.mjs';
 /**
  * How the page-wide tokens a theme's own source sets are read: given by
  * _settings (which imports this module) when it loads.
@@ -318,6 +322,7 @@ export function tempFor(file) {
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
+ * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
 
@@ -482,6 +487,41 @@ function dialFamilies(data, own = {}) {
  */
 export function seedsInEffect(cwd, slug, data) {
   return dialFamilies(data, ownSourceTokenValues(cwd, slug));
+}
+
+/**
+ * Whether a token is one the look derives: a category color (Badge, Token,
+ * Card tint) or a chart color.
+ * @param {string} token
+ */
+export const isLookToken = token =>
+  /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+)$/.test(
+    token,
+  );
+
+/**
+ * A change's token lines with the look's own (category and chart colors)
+ * said in one line each, as counts: they move together with every look
+ * change, and one line per value would bury the rest.
+ * @param {unknown[]} lines - `token (mode): before -> after` lines.
+ */
+export function lookCollapsed(lines) {
+  const tokenOf = (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0];
+  const look = lines.filter(c => isLookToken(tokenOf(c))).map(String);
+  const badges = look.filter(c => !tokenOf(c).startsWith('--color-data-'));
+  const chart = look.length - badges.length;
+  return {
+    lines: [
+      ...lines.filter(c => !isLookToken(tokenOf(c))).map(String),
+      ...(badges.length
+        ? [
+            `category colors (badges, tokens and card tints): ${badges.length} values moved with the look`,
+          ]
+        : []),
+      ...(chart ? [`chart colors: ${chart} values moved with the look`] : []),
+    ],
+    look,
+  };
 }
 
 /** Notes for damaged color configs kept aside during one sync. @type {string[]} */
@@ -923,6 +963,15 @@ function planPalette(cwd, slug, data, base) {
       if (f.id !== 'neutral') fills[f.id] = fillAt(stop);
       families.push(family);
     }
+  // The hues the editor grew for the look (lookSeeds) go, and are grown
+  // again below while the theme has a color; any other hue the config
+  // holds is the author's, and stays as written.
+  const derived = fams.length
+    ? lookSeeds(fams.find(f => f.id === 'accent')?.seed)
+    : null;
+  const grown = isLookFamily;
+  for (let i = families.length - 1; i >= 0; i--)
+    if (grown(families[i])) families.splice(i, 1);
   if (!families.length) return null;
   // The editor's colors stand in the order of their settings, wherever they
   // sit among a config's own families, so a step back writes the same file.
@@ -935,6 +984,12 @@ function planPalette(cwd, slug, data, base) {
   if (inOrder.length === slots.length)
     slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
+  // The category and chart hues grow with the look, after the theme's own
+  // colors; a hue the author's config already holds stays theirs.
+  if (derived && fams.length)
+    for (const [id, seed] of Object.entries(derived))
+      if (!families.some(f => f?.id === id))
+        families.push({id, name: id[0].toUpperCase() + id.slice(1), seed});
   // A color change on a palette made with the first recipe says what the
   // newer one does, and how to choose it.
   /** @param {any} c */
@@ -1837,6 +1892,53 @@ export function paletteFailedKeys(pal) {
 }
 
 /**
+ * What the look did to the category colors (Badge, Token, Card tints) and
+ * the chart colors: one line with the accent's notes, and a refused mapping
+ * with every dial's.
+ * @param {PaletteMapping} pal
+ * @param {string} dial
+ */
+export function categoryNotes(pal, dial) {
+  const c = pal.categories;
+  if (!c) return [];
+  /** @type {string[]} */
+  const out = [];
+  const derived = [
+    c.badges === 'derived'
+      ? 'category colors (badges, tokens and card tints)'
+      : '',
+    c.chart === 'derived' ? 'chart colors' : '',
+  ].filter(Boolean);
+  if (dial === 'accent' && derived.length)
+    out.push(
+      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay pale enough for your text, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
+    );
+  /** The first pairs drawn alike, and how many more. @param {boolean} chart */
+  const pairs = chart => {
+    const all = c.merged
+      .filter(x => x.startsWith('chart ') === chart)
+      .map(x => x.replace(/^chart /, ''));
+    return [
+      ...all.slice(0, 3),
+      ...(all.length > 3 ? [`${all.length - 3} more pairs`] : []),
+    ];
+  };
+  if (c.badges === 'merged')
+    out.push(
+      `category colors (badges, tokens and card tints) keep the base theme's: your look would draw ${pairs(false).join(', ')} alike, so the hues would not tell things apart; a stronger accent or a higher vibrancy keeps them apart`,
+    );
+  if (c.badges === 'unreadable' || c.chart === 'unreadable')
+    out.push(
+      `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
+    );
+  if (c.chart === 'merged')
+    out.push(
+      `chart colors keep Core's: your look would draw ${pairs(true).join(', ')} alike; a stronger accent or a higher vibrancy keeps them apart`,
+    );
+  return out;
+}
+
+/**
  * What one color dial did, for the result notes: what its main token uses
  * in each mode, every token contrast moved, and last the generated files.
  * What the config writer kept or replaced of a hand edit comes from the
@@ -1893,6 +1995,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
+  notes.push(...categoryNotes(pal, dial));
   notes.push(
     `the generated colors are in ${f.palette}, made from ${f.config} (receipt: ${f.receipt}); the theme imports only the shades it uses, from ${f.refs}`,
   );

@@ -80,7 +80,13 @@ describe('color dials through the palette generator', () => {
   it('writes a palette config in the generator shape, then the palette and receipt', async () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const config = JSON.parse(read('palette.config.json'));
-    expect(config).toEqual({
+    // The category and chart hues the editor grows for the look follow the
+    // theme's own colors (theme-category-colors-follow-the-look.test.mjs).
+    const grown = config.families.slice(1);
+    expect(grown.map((/** @type {any} */ f) => Object.keys(f))).toEqual(
+      grown.map(() => ['id', 'name', 'seed']),
+    );
+    expect({...config, families: config.families.slice(0, 1)}).toEqual({
       // A new palette is made with the newest recipe.
       recipe: 'astryx-oklch-v3',
       modeStrategy: 'light-and-dark',
@@ -124,7 +130,8 @@ describe('color dials through the palette generator', () => {
     const used = [
       ...source.matchAll(/palette\.accent\.(light|dark)\[(\d+)\]/g),
     ].map(m => `${m[1]}:${m[2]}`);
-    for (const m of refs.matchAll(/(light|dark): \{([^}]*)\}/g))
+    const accentRefs = /accent: \{([\s\S]*?)\n {2}\}/.exec(refs)?.[1] ?? '';
+    for (const m of accentRefs.matchAll(/(light|dark): \{([^}]*)\}/g))
       for (const [, stop, color] of m[2].matchAll(/(\d+): '(#[0-9a-f]{6})'/g)) {
         expect(used).toContain(`${m[1]}:${stop}`);
         expect(
@@ -229,13 +236,18 @@ describe('color dials through the palette generator', () => {
     await themeEditSet('p', 'accent', '#0d9488', {cwd});
     const next = JSON.parse(read('palette.config.json'));
     expect(next.stops).toEqual(config.stops);
-    expect(next.families.map((/** @type {any} */ f) => f.id)).toEqual([
-      'accent',
-      'brand-pink',
-    ]);
+    expect(
+      next.families
+        .map((/** @type {any} */ f) => f.id)
+        .filter(
+          (/** @type {string} */ id) => id === 'accent' || id === 'brand-pink',
+        ),
+    ).toEqual(['accent', 'brand-pink']);
     expect(next.families[0].seed).toBe('#0d9488');
     expect(read('tokens/p.palette.ts')).toContain('"brand-pink"');
-    next.families.pop();
+    next.families = next.families.filter(
+      (/** @type {any} */ f) => f.id !== 'brand-pink',
+    );
     delete next.stops;
     fs.writeFileSync(file('palette.config.json'), JSON.stringify(next));
   });

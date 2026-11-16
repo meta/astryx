@@ -19,6 +19,7 @@ import {
   perceptualDelta,
 } from './generator';
 import type {TonalPaletteCandidate, TonalPaletteGenerationInput} from './types';
+import {deriveLookColors, lookSeeds, type DerivedState} from './derive-look';
 
 export type PaletteMode = 'light' | 'dark';
 type ColorTriple = [number, number, number];
@@ -104,6 +105,8 @@ export interface PaletteDial {
 /** A family of a palette config: the generator's family input, and any key of the author's. */
 export interface ConfigFamily {
   id?: unknown;
+  /** The family's name, as a look's own family carries it. */
+  name?: unknown;
   seed?: unknown;
   anchors?: {mode: string; stop: number; [key: string]: unknown}[];
   [key: string]: unknown;
@@ -155,6 +158,13 @@ export interface PaletteMapping {
   unread: Record<string, string>;
   /** Lifted secondary text per background token of LIFT_PARTS, per mode; null without one. */
   lift: Record<string, Partial<Record<PaletteMode, StopRef>>> | null;
+  /** Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike. */
+  categories: {
+    badges: DerivedState;
+    chart: DerivedState;
+    merged: string[];
+    unreadable: string[];
+  };
 }
 
 /** The color settings. Each one is a palette family of the same id. */
@@ -730,6 +740,7 @@ export function paletteTools(
     at,
     atInside,
     ref,
+    colorIn,
     exactOf,
     settingOf,
     rawOf,
@@ -943,6 +954,18 @@ export function planPaletteRequest(
   }
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
+  }
+  // The category and chart hues grow with the look, after the theme's own
+  // colors.
+  const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
+  for (const [id, seed] of Object.entries(derived)) {
+    if (!config.families.some(f => f?.id === id)) {
+      config.families.push({
+        id,
+        name: id[0].toUpperCase() + id.slice(1),
+        seed,
+      });
+    }
   }
   return {config, fills};
 }
@@ -1581,12 +1604,62 @@ export function mapPalette(
     }
   }
 
+  const categories = mapCategories();
+  /**
+   * The category colors (Badge, Token and Card tints) and the chart colors
+   * the palette derives (deriveLookColors), written as its shades. A token
+   * the theme sets by hand keeps its value; a set the palette cannot
+   * draw readable and apart keeps the base theme's.
+   */
+  function mapCategories(): PaletteMapping['categories'] {
+    /** The theme's color for a token in a mode. */
+    const themeColor = (k: string, m: PaletteMode): string | null => {
+      const v =
+        exactOf(k, m) ??
+        tokens[k]?.[m]?.color ??
+        t.colorIn(String(base?.[m]?.[k] ?? ''), m);
+      return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
+    };
+    const derived = deriveLookColors({
+      palette: candidate.palette as unknown as Record<
+        string,
+        Record<PaletteMode, Record<string | number, string>>
+      >,
+      stops,
+      modes,
+      text: m =>
+        // Card text, secondary text and links all sit on a card tint.
+        [
+          '--color-text-primary',
+          '--color-text-secondary',
+          '--color-text-accent',
+        ]
+          .map(k => themeColor(k, m))
+          .filter((c): c is string => Boolean(c)),
+      grounds: m => surfaces(m, 'neutral').map(([, c]) => c),
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return {
+      badges: derived.badges,
+      chart: derived.chart,
+      merged: derived.merged,
+      unreadable: derived.unreadable.map(
+        u =>
+          `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
+      ),
+    };
+  }
+
   return {
     tokens,
     contrast: checks.filter(c => c.note !== ''),
     exact,
     unread,
     lift,
+    categories,
   };
 }
 
