@@ -207,6 +207,9 @@ export async function startRun({cliRoot, argv, declinedProjectCli}) {
         // The run started again passes an interrupt on to the CLI it hands
         // the run to, after the grace.
         interruptAtOnce: true,
+        // The runtime's loader makes Node warn once per process; the CLI the
+        // run is handed to warns, as under Yarn, and this run stays quiet.
+        nodeArgs: ['--disable-warning=ExperimentalWarning'],
         failure: error =>
           `This CLI could not start with the project's Plug'n'Play runtime (${runtime.file}): ${error.message}.`,
       });
@@ -508,15 +511,24 @@ async function answerInPackageSet(hostEntry, root, {argv, declinedProjectCli}) {
  * @param {boolean} [options.interruptAtOnce] pass an interrupt on at once, not
  *   after the grace: `bin` is this copy started again, which passes it on to
  *   the CLI it hands the run to after the grace itself
+ * @param {string[]} [options.nodeArgs] Node options for `bin`'s process alone,
+ *   which the processes it starts do not inherit
  * @returns {Promise<never>}
  */
 function handOff(
   bin,
   argv,
-  {json, failure, notify = () => {}, env, interruptAtOnce = false},
+  {
+    json,
+    failure,
+    notify = () => {},
+    env,
+    interruptAtOnce = false,
+    nodeArgs = [],
+  },
 ) {
   return new Promise(() => {
-    const child = spawn(process.execPath, [bin, ...argv], {
+    const child = spawn(process.execPath, [...nodeArgs, bin, ...argv], {
       stdio: 'inherit',
       windowsHide: false,
       ...(env ? {env} : {}),

@@ -1055,6 +1055,9 @@ describe.skipIf(!POSIX)(
       });
       fs.writeFileSync(path.join(app, 'yarn.lock'), '');
       writePnpRuntime(app, packages);
+      // The ES module loader Yarn writes beside the runtime for a module
+      // workspace: Node warns once in each process it is preloaded into.
+      fs.writeFileSync(path.join(app, '.pnp.loader.mjs'), '');
       const src = path.join(app, 'src');
       fs.mkdirSync(src);
 
@@ -1062,6 +1065,23 @@ describe.skipIf(!POSIX)(
       expect(version.status).toBe(0);
       expect(version.stdout).toBe('9.0.0');
       expect(version.lines).toEqual([handedTo('9.0.0')('9.0.1')]);
+      // All of standard error: the hand-off line, and Node's loader warning
+      // once, from the project's CLI, as when Yarn starts it.
+      const warning = /^\(node:\d+\) ExperimentalWarning: /u;
+      const rest = version.stderr
+        .split(/\r?\n/u)
+        .filter(
+          line =>
+            line !== '' &&
+            !line.startsWith('astryx: ') &&
+            !warning.test(line) &&
+            !line.startsWith('--import ') &&
+            !line.startsWith('(Use `node --trace-warnings'),
+        );
+      expect(rest).toEqual([]);
+      expect(
+        version.stderr.split(/\r?\n/u).filter(line => warning.test(line)),
+      ).toHaveLength(1);
 
       // The project's CLI prints the command Yarn runs it with.
       const docs = run(global.bin, ['docs', 'getting-started'], {cwd: app, pc});
