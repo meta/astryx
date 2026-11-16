@@ -25,6 +25,12 @@
   "packages/core/src/Thumbnail/Thumbnail.tsx": [":active", ":active"],
   "packages/core/src/TopNav/TopNavItem.tsx": [":active"],
   "packages/core/src/gestures/GestureHost.ts": ["import:gestures/PressTracker"],
+  "packages/core/src/gestures/index.ts": [
+    "import:gestures/PressTracker",
+    "import:gestures/PressTracker",
+    "import:gestures/usePressTracker",
+    "import:gestures/usePressTracker"
+  ],
   "packages/lab/src/CircleCheckIndicator/CircleCheckIndicator.tsx": [":active"],
   "packages/lab/src/TabBar/useTabBarLens.ts": ["data-tab-bar-pressed"],
   "packages/lab/src/TransferList/TransferList.tsx": [":active"]

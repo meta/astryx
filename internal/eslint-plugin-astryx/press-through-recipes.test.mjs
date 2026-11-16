@@ -208,6 +208,12 @@ tester.run('press-through-recipes', rule, {
         {message: /`useGroupPressTracking` or `useActionGroupTracking`/},
       ],
     },
+    // (a) An index file resolves from its own folder.
+    {
+      code: "export {createPressTracker} from './PressTracker';",
+      filename: '/repo/packages/core/src/gestures/index.ts',
+      errors: [{messageId: 'innerImport'}],
+    },
     // (a) One more import than the baseline allows.
     {
       code: "import {createPressTracker} from '../gestures/PressTracker';\nimport {usePressTracker} from '../gestures/usePressTracker';",

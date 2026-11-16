@@ -165,12 +165,22 @@ function coreModuleOf(filename) {
     .replace(/\/index$/, '');
 }
 
-/** The Core module a relative specifier names from a Core file, or null. */
-function resolveRelative(fileModule, specifier) {
-  if (fileModule == null || !specifier.startsWith('.')) return null;
-  const joined = path.posix.normalize(
-    path.posix.join(path.posix.dirname(fileModule), specifier),
-  );
+/**
+ * The folder a Core file is in, under `packages/core/src`, or null outside
+ * Core's source. An `index` file resolves from its own folder.
+ */
+function coreFolderOf(filename) {
+  const normalized = filename.split(path.sep).join('/');
+  const marker = '/packages/core/src/';
+  const at = normalized.lastIndexOf(marker);
+  if (at === -1) return null;
+  return path.posix.dirname(normalized.slice(at + marker.length));
+}
+
+/** The Core module a relative specifier names from a Core folder, or null. */
+function resolveRelative(fileFolder, specifier) {
+  if (fileFolder == null || !specifier.startsWith('.')) return null;
+  const joined = path.posix.normalize(path.posix.join(fileFolder, specifier));
   if (joined.startsWith('..')) return null;
   return joined.replace(SOURCE_EXTENSION, '').replace(/\/index$/, '');
 }
@@ -221,6 +231,7 @@ export default {
   create(context) {
     const filename = context.filename ?? context.getFilename();
     const fileModule = coreModuleOf(filename);
+    const fileFolder = coreFolderOf(filename);
     if (fileModule != null && ALL_MODULES.has(fileModule)) return {};
     const isAllowed = baselineAllowance(context);
     const sourceCode = context.sourceCode ?? context.getSourceCode();
@@ -241,7 +252,7 @@ export default {
         importedNames != null &&
         importedNames.length > 0 &&
         importedNames.every(name => CONSTANT_NAME.test(name));
-      const relative = resolveRelative(fileModule, specifier);
+      const relative = resolveRelative(fileFolder, specifier);
       const modules = new Set();
       if (relative != null && INNER_MODULES.has(relative)) {
         modules.add(relative);
