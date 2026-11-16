@@ -479,6 +479,7 @@ function DefaultMegaMenu({
     contentProps,
     menuRef,
     setTriggerEl,
+    close,
   } = useMenuHover<HTMLDivElement>({
     show: popover.show,
     hide: popover.hide,
@@ -536,6 +537,14 @@ function DefaultMegaMenu({
           role="group"
           aria-label={label}
           {...contentProps}
+          // Picking a link or button in the panel ends the visit, as a pick in
+          // TopNavMenu does: the panel closes and focus goes back to the
+          // trigger.
+          onClick={event => {
+            if ((event.target as Element).closest('a[href], button')) {
+              close();
+            }
+          }}
           {...stylex.props(styles.panelContainer)}>
           <div {...stylex.props(styles.panelContent)}>
             {/* Menu items section */}
