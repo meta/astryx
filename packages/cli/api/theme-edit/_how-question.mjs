@@ -50,6 +50,7 @@ import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
   DIAL_RADII,
+  borderParts,
   cornerParts,
   focusStateOf,
   paddedParts,
@@ -9379,13 +9380,17 @@ export function draftAnswer(ctx, env, question) {
         p.on = 'tab';
   // A border or corners on a part that draws no edge of its own, whose
   // edges are parts of its own inside it (a date-time input's date and time
-  // boxes): those parts.
+  // boxes): those parts (for a border, only pieces that draw one).
   for (const c of clauses)
     if (c.aspects.some(a => a === 'border' || a === 'corners'))
       c.parts = c.parts.flatMap(p => {
         if (FAMILIES[p.on]) return [p];
         const own = C.MAP[p.on]?.own ?? {};
-        const inner = cornerParts(ctx, p.on).filter(t => t !== p.on);
+        const inner = (
+          c.aspects.includes('corners')
+            ? cornerParts(ctx, p.on)
+            : borderParts(ctx, p.on)
+        ).filter(t => t !== p.on);
         return inner.length && !Object.keys(own).some(k => /^border/.test(k))
           ? inner.map(on => ({...p, on}))
           : [p];
