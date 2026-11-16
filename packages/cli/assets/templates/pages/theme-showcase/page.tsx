@@ -1130,14 +1130,7 @@ function ActionsCell() {
             }),
         },
         {type: 'divider'},
-        {
-          label: 'Delete',
-          onClick: () =>
-            showToast({
-              body: 'Demo: delete would happen here',
-              uniqueID: 'row-delete',
-            }),
-        },
+        {label: 'Delete'},
       ]}
     />
   );
