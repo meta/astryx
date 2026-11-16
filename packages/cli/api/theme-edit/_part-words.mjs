@@ -80,7 +80,12 @@ export const OVERRIDES = [
     /\b(danger|destructive|delete) (buttons?|ones?|variant)\b/,
     {on: 'button', when: 'variant:destructive'},
   ],
-  [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
+  // (Never the operating system, "Windows 11 accent …": a window named
+  // with a version is a product.)
+  [
+    /\b(panels?|windows?(?!\s+(?:\d|xp\b|vista\b))|boxes|tiles?|containers?)\b/,
+    {on: 'containers'},
+  ],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
   // A sheet is Core's bottom sheet (never a style sheet).
   [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],

@@ -6363,8 +6363,37 @@ export function compileTheme(ctx, data, base) {
                 : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
-        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x)))
-          Object.assign(block({...s, mode: undefined}, t), SURFACES[s.value]);
+        for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x))) {
+          const look = SURFACES[s.value];
+          // A frame that paints nothing (the banner's): its line and shadow
+          // go on the part inside it that paints the rounded fill, so they
+          // follow its corners; a square ring around them otherwise.
+          const paintsNone =
+            !ctx.C.MAP[t]?.at?.['background-color'] &&
+            !ctx.C.MAP[t]?.at?.['border-radius'];
+          const fill = paintsNone
+            ? (ctx.C.MAP[t]?.contains ?? []).find(
+                k =>
+                  ctx.C.MAP[k]?.at?.['background-color'] &&
+                  ctx.C.MAP[k]?.at?.['border-radius'],
+              )
+            : undefined;
+          if (!fill) {
+            Object.assign(block({...s, mode: undefined}, t), look);
+            continue;
+          }
+          const edge = Object.fromEntries(
+            Object.entries(look).filter(([k]) => /^(border|boxShadow)/.test(k)),
+          );
+          const rest = Object.fromEntries(
+            Object.entries(look).filter(
+              ([k]) => !/^(border|boxShadow)/.test(k),
+            ),
+          );
+          Object.assign(block({...s, mode: undefined}, fill), edge);
+          if (Object.keys(rest).length)
+            Object.assign(block({...s, mode: undefined}, t), rest);
+        }
       } else if (s.thing === 'buttons') {
         const primary = block(
           {...s, mode: undefined, when: 'variant:primary'},
