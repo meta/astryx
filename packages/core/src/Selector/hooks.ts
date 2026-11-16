@@ -30,6 +30,7 @@ import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
+import {isIosWebKit} from '../utils/touchQueries';
 
 // The selected row renders one optical pixel below the closed trigger label at
 // the same mathematical center, so compensate before viewport clamping.
@@ -383,20 +384,58 @@ function hasModifier(e: React.KeyboardEvent): boolean {
  * rows and where the list renders. The caller announces each new result count
  * through useAnnounce (spec:AST-075 DEC-2), with the words the field shows.
  */
-export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
-  selectableItems,
-  value,
-  isDisabled = false,
-  isOpen,
-  hasSearch = false,
-  onOpen,
-  onClose,
-  onSelect,
-  onClear,
-  onSearchSeed,
-  listboxId,
-}: UseComboboxOptions<T>): UseComboboxResult<T> {
+export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
+  options: UseComboboxOptions<T>,
+): UseComboboxResult<T> {
+  return useComboboxWithKeyHighlight(options);
+}
+
+/**
+ * Whether Core's comboboxes also announce the active option in the polite
+ * live region. iOS VoiceOver ignores `aria-activedescendant`, so on iOS the
+ * announcement is how it hears each keyboard move. Elsewhere screen readers
+ * follow `aria-activedescendant`, and an announcement would say each move
+ * twice. This is the one place that decides where it applies. Remove the
+ * gate, and the announcement, once iOS VoiceOver follows
+ * `aria-activedescendant`.
+ */
+export function announcesActiveOption(): boolean {
+  return isIosWebKit();
+}
+
+/**
+ * `useCombobox` for Core's own comboboxes: `onKeyboardHighlight` runs after
+ * each move of the highlight by a key, with the new index, so the caller can
+ * announce the active option. A pointer's move does not call it.
+ */
+export function useComboboxWithKeyHighlight<
+  T extends ComboboxOption = SelectorOptionData,
+>(
+  {
+    selectableItems,
+    value,
+    isDisabled = false,
+    isOpen,
+    hasSearch = false,
+    onOpen,
+    onClose,
+    onSelect,
+    onClear,
+    onSearchSeed,
+    listboxId,
+  }: UseComboboxOptions<T>,
+  onKeyboardHighlight?: (index: number) => void,
+): UseComboboxResult<T> {
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const highlightByKey = useCallback(
+    (index: number) => {
+      setHighlightedIndex(index);
+      if (index >= 0) {
+        onKeyboardHighlight?.(index);
+      }
+    },
+    [onKeyboardHighlight],
+  );
 
   const getItemId = useCallback(
     (index: number) => `${listboxId}-item-${index}`,
@@ -486,7 +525,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -494,7 +533,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
               currentEnabledPos + 1,
               enabledIndices.length - 1,
             );
-            setHighlightedIndex(enabledIndices[nextPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[nextPos] ?? highlightedIndex);
           }
           break;
 
@@ -502,12 +541,12 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(true));
+              highlightByKey(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
             const prevPos = Math.max(currentEnabledPos - 1, 0);
-            setHighlightedIndex(enabledIndices[prevPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[prevPos] ?? highlightedIndex);
           }
           break;
 
@@ -528,7 +567,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           }
           break;
@@ -549,14 +588,14 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         case 'Home':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'End':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -566,14 +605,14 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
         case 'PageUp':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'PageDown':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -609,6 +648,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       }
     },
     [
+      highlightByKey,
       isDisabled,
       isOpen,
       onOpen,
@@ -665,7 +705,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           onOpen() !== false
         ) {
           e.preventDefault();
-          setHighlightedIndex(enabledIndices[0] ?? -1);
+          highlightByKey(enabledIndices[0] ?? -1);
         }
         return;
       }
@@ -689,7 +729,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
               : position < 0
                 ? count - 1
                 : (position - 1 + count) % count;
-          setHighlightedIndex(enabledIndices[next]);
+          highlightByKey(enabledIndices[next]);
           break;
         }
         case 'Enter': {
@@ -714,6 +754,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       }
     },
     [
+      highlightByKey,
       isDisabled,
       getEnabledIndices,
       isOpen,

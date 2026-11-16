@@ -25,7 +25,8 @@ export const IOS_SUPPORTS_QUERY = '(-webkit-touch-callout: none)';
 /**
  * Whether `view`'s engine is iOS WebKit, by IOS_SUPPORTS_QUERY. Only for an
  * engine workaround a record names (`spec:AST-013` FR6): the selection
- * lock's inline style, and the gesture host's presented hit testing. False
+ * lock's inline style, the gesture host's presented hit testing, and the
+ * comboboxes' active-option announcement for VoiceOver. False
  * where `CSS.supports` is missing (jsdom has `CSS.escape` only).
  */
 export function isIosWebKit(

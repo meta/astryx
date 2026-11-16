@@ -27,7 +27,10 @@ import {
 import {Dialog} from '../Dialog';
 import {Layout, LayoutHeader, LayoutContent, LayoutFooter} from '../Layout';
 import type {SearchSource, SearchableItem} from '../Typeahead';
-import {useCombobox} from '../Selector';
+import {
+  announcesActiveOption,
+  useComboboxWithKeyHighlight,
+} from '../Selector/hooks';
 import type {SelectorOptionData} from '../Selector';
 import {CommandPaletteContext} from './CommandPaletteContext';
 import {BusyStartSettleContext} from './busyStartSettle';
@@ -399,18 +402,46 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   // We treat the palette as always "open" from the combobox's perspective
   // (since the dialog itself handles open/close), and use onClose as a no-op
   // for the combobox — the palette's own close is handled by handleClose.
-  const combobox = useCombobox({
-    selectableItems,
-    value,
-    isOpen: true, // Always "open" from combobox POV — the dialog handles visibility
-    onOpen: () => {}, // Dialog handles open
-    onClose: () => {}, // We handle close via handleClose
-    onSelect: (itemValue: string) => {
-      selectItem(itemValue);
-      handleClose();
+  // Each move by a key names the active command in the polite live region:
+  // iOS VoiceOver does not follow aria-activedescendant. A new move replaces a
+  // name not yet spoken.
+  const announceActiveOption = useAnnounce({hasReplace: true});
+  const onKeyboardHighlight = useCallback(
+    (index: number) => {
+      const item = selectableItems[index];
+      if (item == null || !announcesActiveOption()) {
+        return;
+      }
+      announceActiveOption(
+        t(
+          item.value === value
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label ?? item.value,
+            position: index + 1,
+            total: selectableItems.length,
+          },
+        ),
+      );
     },
-    listboxId: listId,
-  });
+    [announceActiveOption, selectableItems, value, t],
+  );
+  const combobox = useComboboxWithKeyHighlight(
+    {
+      selectableItems,
+      value,
+      isOpen: true, // Always "open" from combobox POV — the dialog handles visibility
+      onOpen: () => {}, // Dialog handles open
+      onClose: () => {}, // We handle close via handleClose
+      onSelect: (itemValue: string) => {
+        selectItem(itemValue);
+        handleClose();
+      },
+      listboxId: listId,
+    },
+    onKeyboardHighlight,
+  );
 
   // Run a search for the given query and commit results.
   // Called directly when the user types — no effect needed.

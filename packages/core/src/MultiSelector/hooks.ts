@@ -29,6 +29,8 @@ interface UseMultiComboboxOptions {
   onOpen: () => unknown;
   onClose: () => void;
   onToggle: (itemValue: string) => void;
+  /** Runs after each move of the highlight by a key, with the new index. */
+  onKeyboardHighlight?: (index: number) => void;
   /**
    * Clear all selected values. When provided, pressing Delete or Backspace on
    * the closed trigger clears the selection — a keyboard equivalent of the
@@ -90,6 +92,7 @@ export function useMultiCombobox({
   onOpen,
   onClose,
   onToggle,
+  onKeyboardHighlight,
   onClear,
   hasValue = false,
   listboxId,
@@ -105,6 +108,15 @@ export function useMultiCombobox({
     setHighlightedIndexState(index);
     setHighlightedCell('option');
   }, []);
+  const highlightByKey = useCallback(
+    (index: number) => {
+      setHighlightedIndex(index);
+      if (index >= 0) {
+        onKeyboardHighlight?.(index);
+      }
+    },
+    [onKeyboardHighlight, setHighlightedIndex],
+  );
 
   // A match on the closed control opens the list on that option.
   const typeahead = useTypeahead({
@@ -113,7 +125,7 @@ export function useMultiCombobox({
     getCurrentIndex: () => (isOpen ? highlightedIndex : -1),
     onMatch: index => {
       if (isOpen || onOpen() !== false) {
-        setHighlightedIndex(index);
+        highlightByKey(index);
       }
     },
   });
@@ -251,7 +263,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -259,7 +271,7 @@ export function useMultiCombobox({
               currentEnabledPos + 1,
               enabledIndices.length - 1,
             );
-            setHighlightedIndex(enabledIndices[nextPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[nextPos] ?? highlightedIndex);
           }
           break;
 
@@ -267,12 +279,12 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(findOpeningIndex(true));
+              highlightByKey(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
             const prevPos = Math.max(currentEnabledPos - 1, 0);
-            setHighlightedIndex(enabledIndices[prevPos] ?? highlightedIndex);
+            highlightByKey(enabledIndices[prevPos] ?? highlightedIndex);
           }
           break;
 
@@ -297,7 +309,7 @@ export function useMultiCombobox({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(findOpeningIndex(false));
+              highlightByKey(findOpeningIndex(false));
             }
           }
           break;
@@ -318,14 +330,14 @@ export function useMultiCombobox({
         case 'Home':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'End':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -335,14 +347,14 @@ export function useMultiCombobox({
         case 'PageUp':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[0]);
+            highlightByKey(enabledIndices[0]);
           }
           break;
 
         case 'PageDown':
           e.preventDefault();
           if (isOpen && enabledIndices.length > 0) {
-            setHighlightedIndex(enabledIndices[enabledIndices.length - 1]);
+            highlightByKey(enabledIndices[enabledIndices.length - 1]);
           }
           break;
 
@@ -370,7 +382,7 @@ export function useMultiCombobox({
       isGrid,
       rowHasAction,
       onActivateAction,
-      setHighlightedIndex,
+      highlightByKey,
       onToggle,
       getEnabledIndices,
       findOpeningIndex,

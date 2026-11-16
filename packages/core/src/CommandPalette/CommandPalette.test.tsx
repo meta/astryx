@@ -7,7 +7,7 @@
  * @position Testing; validates CommandPalette.tsx implementation
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Component, useState, type ReactNode} from 'react';
@@ -1324,5 +1324,43 @@ describe('CommandPalette focus region (Dialog DEC-2)', () => {
       />,
     );
     expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
+  });
+});
+
+// iOS VoiceOver ignores aria-activedescendant, so each keyboard move also
+// names the active command in the polite live region (spec:AST-020 FR1).
+describe('CommandPalette active option announcement', () => {
+  // The announcement applies where VoiceOver ignores aria-activedescendant:
+  // iOS WebKit, which answers its touch-callout support query.
+  beforeEach(() => {
+    vi.stubGlobal('CSS', {
+      ...globalThis.CSS,
+      supports: (query: string) => query === '(-webkit-touch-callout: none)',
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('names the command and its position on each arrow move', async () => {
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Settings')).toBeInTheDocument(),
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-astryx-live-region="polite"]')
+          ?.textContent,
+      ).toContain('Settings, 2 of 2'),
+    );
   });
 });

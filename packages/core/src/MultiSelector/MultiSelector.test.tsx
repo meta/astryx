@@ -5465,3 +5465,43 @@ describe('MultiSelector caller aria-labelledby', () => {
     expect(opener).toHaveAttribute('aria-labelledby', 'row-title');
   });
 });
+
+// iOS VoiceOver ignores aria-activedescendant, so each keyboard move also
+// names the active option in the polite live region (spec:AST-020 FR1).
+describe('MultiSelector active option announcement', () => {
+  // The announcement applies where VoiceOver ignores aria-activedescendant:
+  // iOS WebKit, which answers its touch-callout support query.
+  beforeEach(() => {
+    vi.stubGlobal('CSS', {
+      ...globalThis.CSS,
+      supports: (query: string) => query === '(-webkit-touch-callout: none)',
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('names the option, its selected state and position on each arrow move in the search field', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={['Apple', 'Banana', 'Orange']}
+        value={['Banana']}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /^Fruit/}));
+    const field = screen.getByRole('combobox', {hidden: true});
+    // Selected options list first.
+    fireEvent.keyDown(field, {key: 'ArrowDown'});
+    await waitFor(() =>
+      expect(politeRegion()?.textContent).toContain('Banana, selected, 1 of 3'),
+    );
+    fireEvent.keyDown(field, {key: 'ArrowDown'});
+    await waitFor(() =>
+      expect(politeRegion()?.textContent).toContain('Apple, 2 of 3'),
+    );
+  });
+});

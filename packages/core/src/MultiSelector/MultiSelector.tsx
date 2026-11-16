@@ -109,6 +109,7 @@ import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {announcesActiveOption} from '../Selector/hooks';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
@@ -1855,6 +1856,35 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   // Multi-select combobox behavior — index-based, matching useCombobox pattern.
   // sortedItems is the single source of truth for item order.
+  // Each move by a key names the active option in the polite live region:
+  // iOS VoiceOver does not follow aria-activedescendant. A new move replaces a
+  // name not yet spoken.
+  const announceActiveOption = useAnnounce({hasReplace: true});
+  const onKeyboardHighlight = useCallback(
+    (index: number) => {
+      const item = sortedItems[index];
+      if (item == null || !announcesActiveOption()) {
+        return;
+      }
+      const isSelected =
+        item.value === SELECT_ALL_VALUE
+          ? allEnabledSelected
+          : !isCreateValue(item.value) && optimisticValue.includes(item.value);
+      announceActiveOption(
+        t(
+          isSelected
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label,
+            position: index + 1,
+            total: sortedItems.length,
+          },
+        ),
+      );
+    },
+    [announceActiveOption, sortedItems, allEnabledSelected, optimisticValue, t],
+  );
   const getActionCellIdForActivate = useCallback(
     (index: number) => `${listboxId}-item-${index}-action`,
     [listboxId],
@@ -1877,6 +1907,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onOpen: useCallback(() => surface.show(), [surface]),
     onClose: surface.hide,
     onToggle: handleNavigableToggle,
+    onKeyboardHighlight,
     onClear: hasClear ? clearValues : undefined,
     hasValue,
     listboxId,
