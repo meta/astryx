@@ -140,7 +140,8 @@ describe('new reads its base and settings as typed', () => {
         '8px',
       ]);
       expect(names(r)[0]).toMatch(/ new t2 .*--corners pill$/);
-      expect(names(r)[1]).toMatch(/ set t2 padding 8px$/);
+      // A CSS property is written on a part: the ask that names them.
+      expect(names(r)[1]).toMatch(/ how '8px padding'$/);
     },
     T,
   );

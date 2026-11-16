@@ -5600,10 +5600,32 @@ async function changeOnce(
           (x.when ?? null) === (meant.when ?? null) &&
           stateKeyOf(x.state) === stateKeyOf(meant.state) &&
           (x.mode ?? null) === (meant.mode ?? null);
-        const ordered = [
-          ...matches.filter(sameScope),
-          ...matches.filter(x => !sameScope(x)),
-        ];
+        /**
+         * How near a saved setting is to the scope typed, read as `m`: its
+         * whole scope (the most), else how many of the flags typed it
+         * shares (`--on card` with a card setting in a state leads ahead
+         * of a whole-theme one).
+         * @param {any} x
+         * @param {Record<string, string | undefined>} m
+         */
+        const nearness = (x, m) => {
+          const same = (/** @type {string} */ k) =>
+            k === 'state'
+              ? stateKeyOf(x.state) === stateKeyOf(m.state)
+              : (x[k] ?? null) === (m[k] ?? null);
+          const keys = /** @type {const} */ (['on', 'when', 'state', 'mode']);
+          if (keys.every(same)) return 10;
+          return keys.filter(
+            k => /** @type {any} */ (flags)[k] != null && same(k),
+          ).length;
+        };
+        /** Stable, nearest first. @param {any[]} list @param {(x: any) => number} by */
+        const nearestFirst = (list, by) =>
+          list
+            .map((x, i) => ({x, i, n: by(x)}))
+            .sort((a, b) => b.n - a.n || a.i - b.i)
+            .map(e => e.x);
+        const ordered = nearestFirst(matches, x => nearness(x, meant));
         const scoped = flags.on || flags.when || flags.state || flags.mode;
         // A word that is a value the theme holds (`undo t red`) names the
         // setting that holds it: its undo, never a step back that takes back
@@ -5633,19 +5655,9 @@ async function changeOnce(
             : data.settings.filter(x => valueIs(x.value, typed));
         // The one in the scope typed (read as set reads it for that
         // setting) leads.
-        const inScope = (/** @type {any} */ x) => {
-          const m = scopeAsRead(x.thing, String(x.value));
-          return (
-            (x.on ?? null) === (m.on ?? null) &&
-            (x.when ?? null) === (m.when ?? null) &&
-            stateKeyOf(x.state) === stateKeyOf(m.state) &&
-            (x.mode ?? null) === (m.mode ?? null)
-          );
-        };
-        const byValue = [
-          ...holding.filter(inScope),
-          ...holding.filter(x => !inScope(x)),
-        ];
+        const byValue = nearestFirst(holding, x =>
+          nearness(x, scopeAsRead(x.thing, String(x.value))),
+        );
         if (byValue.length)
           throw new AstryxError(
             `"${thing}" is no setting; ${slug} holds it as the value of ${byValue.map(x => describe(x)).join(', ')}. Nothing was changed.`,

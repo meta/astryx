@@ -148,12 +148,13 @@ describe("new's settings after the name", () => {
     );
 
   it(
-    'new t2 padding 8px makes t2 and offers the set after it',
+    'new t2 padding 8px makes t2 and points at the parts padding takes',
     async () => {
       const r = await cli([...ED, 'new', 't2', 'padding', '8px']);
       expect(r.error).toBeDefined();
       expect(names(r)[0]).toMatch(/ new t2$/);
-      expect(names(r)[1]).toMatch(/ set t2 padding 8px$/);
+      // A CSS property is written on a part: the ask that names them.
+      expect(names(r)[1]).toMatch(/ how '8px padding'$/);
     },
     T,
   );

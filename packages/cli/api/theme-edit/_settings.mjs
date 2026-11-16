@@ -566,6 +566,19 @@ export function namesSetting(word) {
 }
 
 /**
+ * Whether a word names a CSS property, which `set` writes only on a part
+ * (`--on`): a theme a `new` makes takes no value for it, so its line comes
+ * after the theme is made, with a part named.
+ * @param {string} word
+ */
+export function needsPart(word) {
+  const w = String(word).trim().toLowerCase();
+  return (
+    !Object.hasOwn(DIALS, w) && !w.startsWith('--') && cssProperties().has(w)
+  );
+}
+
+/**
  * Whether text typed where a theme goes names settings, in any form set
  * reads them: a setting's name (`corners`, `--color-accent`), with its value
  * (`corners pill`, `corners:pill`, `corners=pill`, `accent: red`), a list of

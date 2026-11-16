@@ -116,3 +116,102 @@ describe('the name typed as an option', () => {
     T,
   );
 });
+
+describe('a built-in theme typed with another word', () => {
+  for (const args of [
+    ['t2', 'theme', 'neutral'],
+    ['t2', 'neutral', 'stone'],
+    ['t2', 'theme:', 'neutral'],
+  ])
+    it(
+      `new ${args.join(' ')} offers the base, never a --neutral value`,
+      async () => {
+        const r = await cli([...ED, 'new', ...args]);
+        expect(r.error).toBeDefined();
+        const line = names(r).find((/** @type {string} */ n) =>
+          / new /.test(n),
+        );
+        expect(line).toMatch(/ new t2 --like neutral$/);
+      },
+      T,
+    );
+});
+
+describe('a CSS property typed after the name', () => {
+  for (const [thing, value] of [
+    ['padding', '8px'],
+    ['color', 'red'],
+    ['gap', '4px'],
+  ])
+    it(
+      `new t2 ${thing} ${value} offers a line that works, never a set without --on`,
+      async () => {
+        const r = await cli([...ED, 'new', 't2', thing, value]);
+        expect(r.error).toBeDefined();
+        expect(names(r)[0]).toMatch(/ new t2$/);
+        expect(
+          names(r).some((/** @type {string} */ n) =>
+            new RegExp(` set t2 ${thing} `).test(n),
+          ),
+        ).toBe(false);
+        const next = names(r)[1];
+        expect(next).toMatch(new RegExp(` how '${value} ${thing}'$`));
+        const followed = await cli([
+          .../** @type {string[]} */ (
+            next.slice(next.indexOf('experimental ')).split(' ')
+          ).slice(0, 4),
+          `${value} ${thing}`,
+        ]);
+        expect(followed.error).toBeUndefined();
+      },
+      T,
+    );
+
+  for (const word of [
+    '\'"base": "neutral"\'',
+    "'padding: 8px'",
+    '\'{"padding":"8px"}\'',
+  ])
+    it(
+      `new t2 ${word} never glues it into the name`,
+      async () => {
+        const typed = word.slice(1, -1);
+        const r = await cli([...ED, 'new', 't2', typed]);
+        expect(r.error).toBeDefined();
+        expect(names(r)[0]).toMatch(/ new t2( --like neutral)?$/);
+        expect(names(r)[0]).not.toMatch(/t2-/);
+      },
+      T,
+    );
+});
+
+describe('a base or setting typed with its own quotes', () => {
+  for (const [word, want] of [
+    ["'base neutral'", /--like neutral\b/],
+    ['"accent red"', /--accent red\b/],
+  ])
+    it(
+      `new t2 ${word} reads it, never a name of its words`,
+      async () => {
+        const r = await cli([...ED, 'new', 't2', word]);
+        expect(r.error).toBeDefined();
+        const line = names(r).find((/** @type {string} */ n) =>
+          / new /.test(n),
+        );
+        expect(line).toMatch(/ new t2 /);
+        expect(line).toMatch(want);
+        expect(line).not.toMatch(/t2-/);
+      },
+      T,
+    );
+
+  it(
+    'new t2 "accent" red reads the quoted dial',
+    async () => {
+      const r = await cli([...ED, 'new', 't2', '"accent"', 'red']);
+      expect(r.error).toBeDefined();
+      expect(names(r)[0]).toMatch(/ new t2 --accent red$/);
+    },
+    T,
+  );
+});

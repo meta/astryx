@@ -81,6 +81,7 @@ import {
   showSections,
   describe,
   namesSetting,
+  needsPart,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -1932,13 +1933,29 @@ export function registerExperimentalTheme(group, program) {
                     c => `-${c.toLowerCase()}`,
                   );
                 /**
+                 * A key, a value or a word without the quotes around it
+                 * (`"accent"`, `'base neutral'`); a text that holds a quote
+                 * of its own (`"like": "neutral"`) keeps them, since its
+                 * ends are two quotes, not one pair.
+                 * @param {string} x
+                 */
+                const unquote = x => {
+                  const t = String(x).trim();
+                  const m = /^(["'])([\s\S]*)\1$/.exec(t);
+                  return m && !m[2].includes(m[1]) ? m[2] : t;
+                };
+                /**
                  * The settings one typed word holds, each `[dial, value]`: a
                  * JSON object, `key=value` or `key: value` pairs, or `dial
                  * value` items, apart at `;` or `,`; null when it holds none.
                  * @param {string} w
                  * @returns {Array<[string, string]> | null}
                  */
-                const pairsIn = w => {
+                const pairsIn = rawWord => {
+                  // A word with its own quotes around it (`'base neutral'`,
+                  // `"accent"`) is that word, as the shell would have given
+                  // it: the quotes are no part of a name.
+                  const w = unquote(rawWord);
                   /** @type {unknown} */
                   let json;
                   try {
@@ -1951,15 +1968,15 @@ export function registerExperimentalTheme(group, program) {
                       ? Object.entries(json)
                       : [];
                   if (entries.length)
-                    return entries.every(([k]) => dialOf(k))
+                    return entries.every(
+                      ([k]) => dialOf(k) || namesSetting(unquote(k)),
+                    )
                       ? entries.map(([k, v]) => [k, String(v)])
                       : null;
                   // `key=value`, `key: value`, keys and values in quotes or
                   // not (`"like": "neutral"`), in either order (`red=accent`,
                   // `stone=like`), as set reads a pair swapped; `like` is
                   // never a value (`neutral=like` is the base neutral).
-                  const unquote = (/** @type {string} */ x) =>
-                    x.trim().replace(/^(["'])(.*)\1$/, '$2');
                   const byColon = w
                     .split(/\s*;\s*/)
                     .map(x =>
@@ -1975,20 +1992,25 @@ export function registerExperimentalTheme(group, program) {
                     const [k, v] = [unquote(m[1]), unquote(m[3])];
                     if (dialOf(v) === 'like' && !dialOf(k)?.startsWith('like'))
                       read.push([v, k]);
-                    else if (dialOf(k)) read.push([k, v]);
+                    else if (dialOf(k) || namesSetting(k)) read.push([k, v]);
                     else if (dialOf(v) && !/\s/.test(v)) read.push([v, k]);
                     else return null;
                   }
                   if (read.length) return read;
-                  // `'accent red'`, `'accent red, corners pill'`.
+                  // `'accent red'`, `'accent red, corners pill'`, `'base
+                  // neutral'`.
                   if (!/\s/.test(w.trim())) return null;
                   const items = w
                     .split(/\s*[;,]\s*/)
                     .map(x => x.trim().split(/\s+/))
                     .filter(x => x[0]);
                   return items.length &&
-                    items.every(x => x.length > 1 && dialOf(x[0]))
-                    ? items.map(x => [x[0], x.slice(1).join(' ')])
+                    items.every(
+                      x =>
+                        x.length > 1 &&
+                        (dialOf(x[0]) || namesSetting(unquote(x[0]))),
+                    )
+                    ? items.map(x => [unquote(x[0]), x.slice(1).join(' ')])
                     : null;
                 };
                 /** @type {string[]} */
@@ -2011,7 +2033,8 @@ export function registerExperimentalTheme(group, program) {
                     continue;
                   }
                   pasted = -1;
-                  kept.push(w);
+                  // A word quoted on its own (`"accent"`) keeps no quotes.
+                  kept.push(unquote(w));
                 }
                 // `accent red`: a dial word, and its value up to the next
                 // setting; `red accent`: a value, then the dial it is for (as
@@ -2032,16 +2055,25 @@ export function registerExperimentalTheme(group, program) {
                     i += 1;
                     continue;
                   }
+                  const builtIn = (/** @type {string} */ w) =>
+                    builtInThemes().includes(String(w).toLowerCase());
+                  // A built-in theme's name is the base, whatever word is
+                  // beside it (`theme neutral`, `neutral stone`): the base
+                  // reader below takes it, never a dial of the same name.
+                  if (builtIn(kept[i])) {
+                    rest.push(kept[i]);
+                    continue;
+                  }
                   if (dialOf(kept[i])) {
                     const value = [];
                     let j = i + 1;
-                    while (j < kept.length && !isSetting(kept[j]))
+                    while (
+                      j < kept.length &&
+                      !isSetting(kept[j]) &&
+                      !builtIn(kept[j])
+                    )
                       value.push(kept[j++]);
                     if (value.length) pairs.push([kept[i], value.join(' ')]);
-                    // (A built-in theme's name, `neutral`, is the base the
-                    // reader below takes, not a bare dial.)
-                    else if (builtInThemes().includes(kept[i].toLowerCase()))
-                      rest.push(kept[i]);
                     else bare.push(kept[i]);
                     i = j - 1;
                     continue;
@@ -2050,6 +2082,7 @@ export function registerExperimentalTheme(group, program) {
                     !isSetting(kept[i]) &&
                     kept[i + 1] != null &&
                     dialOf(kept[i + 1]) &&
+                    !builtIn(kept[i + 1]) &&
                     (kept[i + 2] == null || isSetting(kept[i + 2]))
                   ) {
                     pairs.push([kept[i + 1], kept[i]]);
@@ -2059,6 +2092,13 @@ export function registerExperimentalTheme(group, program) {
                   rest.push(kept[i]);
                 }
                 for (const [k, v] of pairs) {
+                  // A setting new has no option for (`padding: 8px`) is a
+                  // set after the theme is made, as the space form is.
+                  if (!dialOf(k)) {
+                    later.push([unquote(k), v]);
+                    intoValues.push(`${unquote(k)} ${v}`);
+                    continue;
+                  }
                   const key = /** @type {string} */ (dialOf(k));
                   if (given[key] == null) given[key] = v;
                   intoValues.push(`${dialName(k)} ${v}`);
@@ -2069,7 +2109,12 @@ export function registerExperimentalTheme(group, program) {
                 const named = [];
                 for (let i = 0; i < rest.length; i++) {
                   const thing = rest[i].replace(/[:=]+$/, '');
-                  if (namesSetting(thing) && rest[i + 1] != null) {
+                  // (A built-in theme's name is the base, read below.)
+                  if (
+                    namesSetting(thing) &&
+                    !builtInThemes().includes(thing.toLowerCase()) &&
+                    rest[i + 1] != null
+                  ) {
                     const value = [];
                     let j = i + 1;
                     while (j < rest.length && !isSetting(rest[j]))
@@ -2100,14 +2145,20 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
-              // (`base stone` is the base as `like stone` is.)
+              // (`base stone` and `theme stone` are the base as `like
+              // stone` is; a second base typed is no word of the name.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
                   !(
                     baseAt >= 0 &&
-                    /^(like|base)$/i.test(w) &&
+                    /^(like|base|theme)[:=]?$/i.test(w) &&
                     i === baseAt - 1
+                  ) &&
+                  !(
+                    baseAt >= 0 &&
+                    i > baseAt &&
+                    builtInThemes().includes(w.toLowerCase())
                   ),
               );
               const fixed = nameWords
@@ -2150,10 +2201,19 @@ export function registerExperimentalTheme(group, program) {
                   : `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
                 [
                   ...lines,
-                  ...later.map(([thing, value]) => ({
-                    name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
-                    reason: `then this: new takes no ${thing}; set gives it`,
-                  })),
+                  // A CSS property is written on a part: the ask that
+                  // names the parts, never a set line set itself refuses.
+                  ...later.map(([thing, value]) =>
+                    needsPart(thing)
+                      ? {
+                          name: `${HOW} ${quoteCommandArgument(`${value} ${thing}`)}`,
+                          reason: `then this: new takes no ${thing}, and set writes it on a part (--on)`,
+                        }
+                      : {
+                          name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                          reason: `then this: new takes no ${thing}; set gives it`,
+                        },
+                  ),
                 ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
