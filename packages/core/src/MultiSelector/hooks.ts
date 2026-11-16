@@ -5,9 +5,10 @@
 /**
  * @file hooks.ts
  * @input Uses React hooks, the shared useTypeahead hook, MultiSelectorOptionData type
- * @output Exports useMultiCombobox hook
- * @position Public hook, exported from the MultiSelector entry point; used by
- *   MultiSelector.tsx
+ * @output Exports useMultiCombobox hook, and the internal
+ *   useMultiComboboxWithKeyHighlight that MultiSelector.tsx uses
+ * @position Public hook, exported from the MultiSelector entry point; the
+ *   internal variant is not exported there
  *
  * SYNC: When modified, update:
  * - /packages/core/src/MultiSelector/index.ts

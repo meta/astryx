@@ -11,7 +11,10 @@
  *   public, exported from the Selector entry point. CommandPalette also uses
  *   useCombobox, and so do products with a combobox over their own text field
  *   (spec:AST-075). useSelectedItemOverlayMargin is Selector's own.
- * @position Selector hooks; used by Selector.tsx and CommandPalette
+ *   announcesActiveOption, useActiveOptionAnnouncement and
+ *   useComboboxWithKeyHighlight are internal.
+ * @position Selector hooks; used by Selector.tsx and CommandPalette;
+ *   MultiSelector.tsx uses useActiveOptionAnnouncement
  *
  * SYNC: When useCombobox's options or return change, update:
  * - /packages/core/src/Selector/useCombobox.doc.mjs
