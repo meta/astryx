@@ -46,6 +46,11 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--ref', 'HEAD'])).toThrow(/Usage/);
   });
 
+  it('prints the usage line for a flag without its value', () => {
+    expect(() => parseArgs(['--ref', 'HEAD', '--pages'])).toThrow(/Usage/);
+    expect(() => parseArgs(['--pages', '--ref', 'HEAD'])).toThrow(/Usage/);
+  });
+
   it('reads the flags', () => {
     const args = parseArgs([
       '--pr',
@@ -62,7 +67,6 @@ describe('parseArgs', () => {
       defer: ['a/b.js'],
       chunks: true,
     });
-    expect(args.depsRepo).toBe(args.repo);
   });
 });
 
@@ -157,5 +161,21 @@ describe('bundleAll on a fixture package', () => {
     expect(report).toContain('`Widget/surface` base → head');
     expect(report).not.toContain('Widget/missing');
     expect(report).toContain('| webpack 5 |');
+  });
+
+  it('keeps every row the same width when no listed module appears', () => {
+    const data = {base: {widget: results}, head: {widget: results}};
+    const report = markdown(
+      'fixture',
+      {base: 'a'.repeat(40), head: 'b'.repeat(40)},
+      [['widget', ['Widget']]],
+      data,
+      ['Widget/missing.js'],
+      false,
+    );
+    const rows = report.split('\n').filter(line => line.startsWith('|'));
+    const widths = new Set(rows.map(line => line.split('|').length));
+    expect(rows.length).toBe(6);
+    expect([...widths]).toEqual([6]);
   });
 });

@@ -10,19 +10,19 @@
  *   whether each deferred module stays out of the first-load set, as Markdown
  *   or JSON
  * @position Run by people and review agents with `pnpm size:matrix`; not a CI
- *   job. Builds Core at each ref with that ref's i18n generation and
- *   `build:esm`, as `pnpm size:pages` does; `pnpm size:pages` stays the esbuild
+ *   job. Builds Core at each ref with `pnpm size:pages`' own `buildCore`, so
+ *   both commands measure the same build; `pnpm size:pages` stays the esbuild
  *   per-page delta for INV10
  */
 
-import {execFileSync, spawnSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {parseReferencePages} from './measure-reference-pages.mjs';
+import {buildCore, parseReferencePages} from './measure-reference-pages.mjs';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const req = createRequire(import.meta.url);
@@ -58,58 +58,74 @@ export const DEFER = [
 ];
 
 const USAGE =
-  'Usage: pnpm size:matrix (--pr <number> | --ref <head> [--base <base>]) --pages <page,…> [--defer <module,…>] [--chunks] [--json] [--out <file>] [--head-patch <diff>] [--repo <dir>] [--deps-repo <dir>] [--remote <name>] [--work-dir <dir>] [--keep]';
+  'Usage: pnpm size:matrix (--pr <number> | --ref <head|.> [--base <base>]) --pages <page,…> [--defer <module,…>] [--chunks] [--json] [--out <file>] [--remote <name>] [--work-dir <dir>] [--keep]';
+
+const VALUE_FLAGS = new Set([
+  '--pr',
+  '--ref',
+  '--base',
+  '--pages',
+  '--defer',
+  '--remote',
+  '--work-dir',
+  '--out',
+]);
 
 export function parseArgs(argv) {
   const a = {
     pages: [],
     defer: DEFER,
-    repo: REPO,
     remote: 'origin',
     workDir: os.tmpdir(),
     json: false,
     keep: false,
   };
   for (let i = 0; i < argv.length; i++) {
-    const f = argv[i];
-    if (f === '--pr') a.pr = argv[++i];
-    else if (f === '--ref') a.ref = argv[++i];
-    else if (f === '--base') a.base = argv[++i];
-    else if (f === '--pages') a.pages = argv[++i].split(',').filter(Boolean);
-    else if (f === '--defer') a.defer = argv[++i].split(',').filter(Boolean);
-    else if (f === '--deps-repo') a.depsRepo = path.resolve(argv[++i]);
-    else if (f === '--repo') a.repo = path.resolve(argv[++i]);
-    else if (f === '--remote') a.remote = argv[++i];
-    else if (f === '--work-dir') a.workDir = path.resolve(argv[++i]);
-    else if (f === '--out') a.out = path.resolve(argv[++i]);
-    else if (f === '--json') a.json = true;
-    else if (f === '--chunks') a.chunks = true;
-    else if (f === '--keep') a.keep = true;
-    else if (f === '--head-patch') a.headPatch = path.resolve(argv[++i]);
-    else throw new Error(`Unknown argument ${f}`);
+    const flag = argv[i];
+    let value;
+    if (VALUE_FLAGS.has(flag)) {
+      value = argv[++i];
+      if (value == null || value.startsWith('--')) throw new Error(USAGE);
+    }
+    if (flag === '--pr') a.pr = value;
+    else if (flag === '--ref') a.ref = value;
+    else if (flag === '--base') a.base = value;
+    else if (flag === '--pages') a.pages = value.split(',').filter(Boolean);
+    else if (flag === '--defer') a.defer = value.split(',').filter(Boolean);
+    else if (flag === '--remote') a.remote = value;
+    else if (flag === '--work-dir') a.workDir = path.resolve(value);
+    else if (flag === '--out') a.out = path.resolve(value);
+    else if (flag === '--json') a.json = true;
+    else if (flag === '--chunks') a.chunks = true;
+    else if (flag === '--keep') a.keep = true;
+    else throw new Error(`Unknown argument: ${flag}\n${USAGE}`);
   }
   if ((!a.pr && !a.ref) || a.pages.length === 0) throw new Error(USAGE);
-  a.depsRepo ??= a.repo;
   return a;
 }
 
-const git = (repo, ...args) =>
-  execFileSync('git', ['-C', repo, ...args], {
+const git = (...args) =>
+  execFileSync('git', ['-C', REPO, ...args], {
     encoding: 'utf8',
     maxBuffer: 1 << 30,
   }).trim();
 
 /**
- * The head and base commits. With `--pr`, the base is the merge base with the
- * pull request's base branch, which `gh` reads; without `gh` it is main.
+ * The head and base to build. `--ref .` is the working tree. With `--pr`, the
+ * base is the merge base with the pull request's base branch, which `gh`
+ * reads; without `gh` it is main.
  */
 function resolveRefs(a) {
-  let head = a.ref,
-    base = a.base,
-    label;
+  if (a.ref === '.') {
+    const base = a.base ?? git('merge-base', 'HEAD', `${a.remote}/main`);
+    return {head: '.', base: git('rev-parse', base), label: 'the working tree'};
+  }
+  let head = a.ref;
+  let base = a.base;
+  let label = a.ref;
   if (a.pr) {
-    git(a.repo, 'fetch', '-q', a.remote, `pull/${a.pr}/head`);
-    head = git(a.repo, 'rev-parse', 'FETCH_HEAD');
+    git('fetch', '-q', a.remote, `pull/${a.pr}/head`);
+    head = git('rev-parse', 'FETCH_HEAD');
     label = `#${a.pr}`;
     if (!base) {
       let baseRef = 'main';
@@ -118,89 +134,45 @@ function resolveRefs(a) {
           execFileSync(
             'gh',
             ['pr', 'view', a.pr, '--json', 'baseRefName', '-q', '.baseRefName'],
-            {cwd: a.repo, encoding: 'utf8'},
+            {
+              cwd: REPO,
+              encoding: 'utf8',
+            },
           ).trim() || 'main';
-      } catch {}
-      git(a.repo, 'fetch', '-q', a.remote, baseRef);
-      base = git(
-        a.repo,
-        'merge-base',
-        head,
-        git(a.repo, 'rev-parse', 'FETCH_HEAD'),
-      );
+      } catch {
+        // Without `gh`, the base branch is main.
+      }
+      git('fetch', '-q', a.remote, baseRef);
+      base = git('merge-base', head, git('rev-parse', 'FETCH_HEAD'));
       label += ` (base branch ${baseRef})`;
     }
   }
-  if (!base) base = git(a.repo, 'merge-base', head, `${a.remote}/main`);
-  return {
-    head: git(a.repo, 'rev-parse', head),
-    base: git(a.repo, 'rev-parse', base),
-    label:
-      (label ?? a.ref) +
-      (a.headPatch ? ` + patch ${path.basename(a.headPatch)}` : ''),
-  };
-}
-
-function run(cmd, args, opts) {
-  const r = spawnSync(cmd, args, {
-    encoding: 'utf8',
-    maxBuffer: 1 << 28,
-    ...opts,
-  });
-  if (r.status !== 0)
-    throw new Error(
-      `${cmd} ${args.join(' ')} failed:\n${(r.stderr || r.stdout || '').slice(-2000)}`,
-    );
-  return r.stdout;
+  base ??= git('merge-base', head, `${a.remote}/main`);
+  return {head: git('rev-parse', head), base: git('rev-parse', base), label};
 }
 
 /**
- * Core at `ref`, built with that ref's own i18n generation and `build:esm`
- * script, so the output is what that ref publishes. Returns the package folder.
+ * Core at `ref` as an installed package folder, built by `size:pages`'
+ * `buildCore`. The folder is named `@astryxdesign/core` so that source maps
+ * name Core's modules the way an app's build names them.
  */
-function buildCore(a, ref, dir, patch) {
-  fs.mkdirSync(dir, {recursive: true});
-  const tar = execFileSync(
-    'git',
-    [
-      '-C',
-      a.repo,
-      'archive',
-      '--format=tar',
-      ref,
-      '--',
-      'packages/core',
-      'scripts',
-      'package.json',
-    ],
-    {maxBuffer: 2 ** 31},
+function buildCorePackage(ref, sideDir) {
+  const packageDir = path.join(sideDir, '@astryxdesign', 'core');
+  const distDir = buildCore(ref, packageDir);
+  fs.copyFileSync(
+    path.join(distDir, 'package.json'),
+    path.join(packageDir, 'package.json'),
   );
-  execFileSync('tar', ['-x', '-C', dir], {input: tar});
-  if (patch) run('patch', ['-p1', '-s', '-i', patch], {cwd: dir});
+  // The built modules import Core's own dependencies (intl-messageformat).
   fs.symlinkSync(
-    path.join(a.depsRepo, 'node_modules'),
-    path.join(dir, 'node_modules'),
+    path.join(REPO, 'packages/core/node_modules'),
+    path.join(packageDir, 'node_modules'),
   );
-  const core = path.join(dir, 'packages/core');
-  fs.symlinkSync(
-    path.join(a.depsRepo, 'packages/core/node_modules'),
-    path.join(core, 'node_modules'),
-  );
-  if (fs.existsSync(path.join(dir, 'scripts/generate-i18n-runtime.mjs')))
-    run('node', ['scripts/generate-i18n-runtime.mjs'], {cwd: dir});
-  if (fs.existsSync(path.join(core, 'scripts/build-pseudo-locale.mjs')))
-    run('node', ['scripts/build-pseudo-locale.mjs'], {cwd: core});
-  const script = JSON.parse(
-    fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
-  ).scripts['build:esm'];
-  const binPath = [
-    path.join(core, 'node_modules/.bin'),
-    path.join(dir, 'node_modules/.bin'),
-    process.env.PATH,
-  ].join(':');
-  run('sh', ['-c', script], {cwd: core, env: {...process.env, PATH: binPath}});
-  return core;
+  return packageDir;
 }
+
+const GENERATED_I18N =
+  'packages/core/src/i18n/generated-locales/en.generated.ts';
 
 /** A page name, or `name=Comp[@Subpath]+Comp2`, as `[name, components]`. */
 export function pageSpec(name) {
@@ -458,12 +430,14 @@ export async function bundleAll(fixture, entry, outRoot, defer) {
   return results;
 }
 
+const tableRow = cells => `| ${cells.join(' | ')} |`;
+
 export function markdown(label, refs, pages, data, defer, chunks) {
   const kb = b => (b / 1024).toFixed(1);
   const lines = [
     `### First-load matrix: ${label}`,
     '',
-    `Base \`${refs.base.slice(0, 11)}\` → head \`${refs.head.slice(0, 11)}\`. First-load JS gzip (KB = 1,024 B), React, React DOM and StyleX external; chunks = first-load requests.`,
+    `Base \`${refs.base.slice(0, 11)}\` → head \`${refs.head === '.' ? 'working tree' : refs.head.slice(0, 11)}\`. First-load JS gzip (KB = 1,024 B), React, React DOM and StyleX external; chunks = first-load requests.`,
     '',
   ];
   for (const [page, comps] of pages) {
@@ -475,14 +449,26 @@ export function markdown(label, refs, pages, data, defer, chunks) {
     lines.push(
       `**${page}** (${comps.join(', ')})`,
       '',
-      `| Bundler | Base gzip / chunks | Head gzip / chunks | Δ gzip (B) | ${relevant.map(m => `\`${m.replace(/\.js$/, '')}\` base → head`).join(' | ')} |`,
-      `| --- | ---: | ---: | ---: |${relevant.map(() => ' --- |').join('')}`,
+      tableRow([
+        'Bundler',
+        'Base gzip / chunks',
+        'Head gzip / chunks',
+        'Δ gzip (B)',
+        ...relevant.map(m => `\`${m.replace(/\.js$/, '')}\` base → head`),
+      ]),
+      tableRow(['---', '---:', '---:', '---:', ...relevant.map(() => '---')]),
     );
     for (const bundler of Object.keys(data.head[page])) {
       const b = data.base[page][bundler],
         h = data.head[page][bundler];
       lines.push(
-        `| ${bundler} | ${kb(b.gzip)} / ${b.chunks} | ${kb(h.gzip)} / ${h.chunks} | ${(h.gzip - b.gzip >= 0 ? '+' : '') + (h.gzip - b.gzip)} | ${relevant.map(m => `${b.deferred[m]} → **${h.deferred[m]}**`).join(' | ')} |`,
+        tableRow([
+          bundler,
+          `${kb(b.gzip)} / ${b.chunks}`,
+          `${kb(h.gzip)} / ${h.chunks}`,
+          (h.gzip - b.gzip >= 0 ? '+' : '') + (h.gzip - b.gzip),
+          ...relevant.map(m => `${b.deferred[m]} → **${h.deferred[m]}**`),
+        ]),
       );
     }
     lines.push('');
@@ -510,13 +496,9 @@ export function markdown(label, refs, pages, data, defer, chunks) {
 
 async function main(argv) {
   const a = parseArgs(argv);
-  if (
-    !fs.existsSync(
-      path.join(a.depsRepo, 'packages/core/node_modules/.bin/babel'),
-    )
-  )
+  if (!fs.existsSync(path.join(REPO, GENERATED_I18N)))
     throw new Error(
-      `--deps-repo ${a.depsRepo} has no installed Core build tools: pass an Astryx checkout where \`pnpm install\` has run.`,
+      "Core's generated i18n modules are missing. Run `pnpm -F @astryxdesign/core build:i18n` first: both size commands copy them from the working tree into each ref they build.",
     );
   const refs = resolveRefs(a);
   const pages = a.pages.map(pageSpec);
@@ -524,12 +506,7 @@ async function main(argv) {
   try {
     const data = {};
     for (const side of ['base', 'head']) {
-      const corePkg = buildCore(
-        a,
-        refs[side],
-        path.join(work, side, 'src'),
-        side === 'head' ? a.headPatch : undefined,
-      );
+      const corePkg = buildCorePackage(refs[side], path.join(work, side));
       const fixture = path.join(work, side, 'app');
       const entries = writeFixture(fixture, corePkg, pages);
       data[side] = {};
