@@ -12,7 +12,12 @@ import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
 import {isAppShell, keywordUnits, phrasesIn, terms} from './words.mjs';
-import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {
+  blendOrder,
+  blendSummary,
+  namedOutright,
+  weighStart,
+} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -64,18 +69,23 @@ export const asTemplate = (t, to = null) => ({
  * null for a whole page.
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {boolean} inPage whether the start is the page the idea names
- * @param {string | null} [variant] the variant page a part is placed on
+ * @param {{variant?: string | null, base?: string | null}} [away] for a part
+ *   that starts from the app shell although it names a page family: the
+ *   variant page the idea names, else the family's base page, which does not
+ *   lead
  * @returns {string | null}
  */
-function placement(kind, inPage, variant = null) {
+function placement(kind, inPage, away = {}) {
   if (kind === 'edit')
     return 'the idea changes a page you already have, so keep it and add blocks to it; a new page starts from the app shell.';
   if (kind === 'part')
     return inPage
       ? 'the idea is a part of a page, so it starts from the page it names.'
-      : variant
-        ? `the idea is a part of \`${variant}\`, a variant page; a part starts from a family's base page only when that page leads, so it starts from the app shell.`
-        : 'the idea is a part of a page and names no page, so it starts from the app shell.';
+      : away.variant
+        ? `the idea is a part of \`${away.variant}\`, a variant page; a part starts from a family's base page only when that page leads, so it starts from the app shell.`
+        : away.base
+          ? `the idea is a part of a page in \`${away.base}\`'s family; a part starts there only when \`${away.base}\` leads, so it starts from the app shell.`
+          : 'the idea is a part of a page and names no page, so it starts from the app shell.';
   return null;
 }
 
@@ -261,14 +271,20 @@ export function chooseStart(
       const nearest =
         (ranked[0]?.name === shell.name && ranked[0].hits > 0) ||
         (weighed === null && !!proposed && proposed.family !== 'Shell');
-      // A part placed on a family whose variant leads (DEC-13) names that page,
-      // so the reason says why build did not start there.
+      // A part placed on a family whose variant leads (DEC-13): the reason
+      // names the variant when the idea names it by its own name, else the
+      // family's base page, and says why build did not start there.
       const lead = ranked[0];
+      const onVariant =
+        kind === 'part' && lead?.familyNamed && !lead.base && !isAppShell(lead);
       const variant =
-        kind === 'part' && lead?.familyNamed && !lead.base && !isAppShell(lead)
+        onVariant && namedOutright([lead.name], idea, catalog)[0]
           ? lead.name
           : null;
-      const place = placement(kind, false, variant);
+      const base = onVariant
+        ? (ranked.find(r => r.base && r.family === lead.family)?.name ?? null)
+        : null;
+      const place = placement(kind, false, {variant, base});
       return {
         ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',

@@ -433,6 +433,16 @@ describe('build kit — every page starts from a template', () => {
     );
   });
 
+  it("names a family's base page, not a variant the idea never names, when a part starts from the app shell", async () => {
+    const r = await build('a filter bar for the table', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.basis).toBe('fallback');
+    expect(r.data.start?.reason).not.toContain('part of `table-filter`');
+    expect(r.data.start?.reason).toContain(
+      "a part of a page in `table`'s family; a part starts there only when `table` leads",
+    );
+  });
+
   it('starts a part from the page it is placed in, else from the app shell', async () => {
     const placed = await build('an empty state for a settings page', {
       cwd: REPO,
