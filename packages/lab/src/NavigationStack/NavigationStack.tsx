@@ -763,6 +763,37 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
   return isRtlElement(element) ? 'rtl' : 'ltr';
 }
 
+/** When a transition's animations start, as the animator's call options. */
+type TransitionClock = {at?: number; start?: 'next-frame'};
+
+/**
+ * The clock of a transition. A finger's release keeps the time of its
+ * release, so the spring continues from the frame the finger left. A
+ * transition from rest leaves the start to the animator: it starts when the
+ * browser commits it, so a heavy commit or a later listener's block delays
+ * the motion instead of skipping into it. Started in an input event's own
+ * task (a tap on a row, a key), it starts at the first frame after that
+ * task, however long the task runs.
+ */
+function transitionClock(
+  releasedAt: number | undefined,
+  view: Window | null | undefined,
+): TransitionClock {
+  if (releasedAt != null) {
+    return {at: releasedAt};
+  }
+  return isInInputTask(view) ? {start: 'next-frame'} : {};
+}
+
+/** The page is dispatching an input event (a pointer, a key, a touch) now. */
+function isInInputTask(view: Window | null | undefined): boolean {
+  if (view == null) {
+    return false;
+  }
+  const event: unknown = Reflect.get(view, 'event');
+  return event instanceof view.UIEvent;
+}
+
 /**
  * A push/pop navigator: UINavigationController's transitions, back button
  * and back swipes, on the compositor.
@@ -963,9 +994,9 @@ export function NavigationStack<T>({
   // ---------------------------------------------------------------------------
 
   const runningRef = useRef<{id: number; done: boolean} | null>(null);
-  // The clock the last transition's screens run on (their start time), so
-  // the back chevron keeps time with them.
-  const startedRef = useRef(0);
+  // The clock the last transition's screens run on (their start), so the
+  // back chevron keeps time with them.
+  const startedRef = useRef<TransitionClock>({});
   // A pop's focus return, waiting for the commit that drops the leaving
   // screen (until then every screen is `inert` and cannot take focus).
   const pendingFocusRef = useRef<{popped: string; revealed: string} | null>(
@@ -1101,6 +1132,8 @@ export function NavigationStack<T>({
   /**
    * Springs the layers to progress `to`. `dp` is the progress velocity to
    * start from (omit it to keep the velocity the layers have on screen).
+   * `releasedAt` is a finger's release time; without it the springs start on
+   * the animator's clock (transitionClock).
    */
   const animateProgress = useCallback(
     (
@@ -1111,14 +1144,17 @@ export function NavigationStack<T>({
       dp: number | undefined,
       release: boolean,
       underBar: 'rest' | 'ride',
-      startAt?: number,
+      releasedAt?: number,
     ): Promise<boolean> => {
       const width = cardsRef.current?.clientWidth ?? 0;
       const direction = writingDirection(containerRef.current);
       const values = layersAt(to, width, direction);
       const velocity =
         dp == null ? null : layerVelocities(dp, width, direction);
-      const at = startAt ?? performance.now();
+      const clock = transitionClock(
+        releasedAt,
+        containerRef.current?.ownerDocument.defaultView,
+      );
       const topLayers = layersOf(top);
       const underLayers = layersOf(under);
       const handles = [];
@@ -1131,13 +1167,13 @@ export function NavigationStack<T>({
             {x: values.topX},
             {spring, velocity: velocity ? {x: velocity.topX} : undefined},
             {
-              at,
+              ...clock,
               touchRelease: release,
               crossfadeAs: to === 0 ? 'entrance' : 'exit',
             },
           ),
         );
-        startedRef.current = at;
+        startedRef.current = clock;
       }
       // The bars move with their cards (each screen's bar is part of it in
       // UIKit): the incoming one covers the outgoing title.
@@ -1146,7 +1182,7 @@ export function NavigationStack<T>({
           topLayers.bar.animate(
             {x: values.topX},
             {spring, velocity: velocity ? {x: velocity.topX} : undefined},
-            {at, touchRelease: release},
+            {...clock, touchRelease: release},
           ),
         );
       }
@@ -1155,7 +1191,7 @@ export function NavigationStack<T>({
           underLayers.bar.animate(
             {x: values.underX},
             {spring, velocity: velocity ? {x: velocity.underX} : undefined},
-            {at, touchRelease: release},
+            {...clock, touchRelease: release},
           ),
         );
       }
@@ -1165,7 +1201,7 @@ export function NavigationStack<T>({
             {x: values.underX},
             {spring, velocity: velocity ? {x: velocity.underX} : undefined},
             {
-              at,
+              ...clock,
               touchRelease: release,
               crossfadeAs: to === 1 ? 'entrance' : 'exit',
             },
@@ -1205,7 +1241,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: clipVelocity == null ? undefined : {x: clipVelocity},
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
             underLayers.barClipContent.animate(
               {x: -clipTo},
@@ -1213,7 +1249,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: clipVelocity == null ? undefined : {x: -clipVelocity},
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
           );
         }
@@ -1239,7 +1275,7 @@ export function NavigationStack<T>({
                 spring,
                 velocity: velocity ? {opacity: velocity.dim} : undefined,
               },
-              {at, touchRelease: release},
+              {...clock, touchRelease: release},
             ),
           );
         }
@@ -1294,7 +1330,7 @@ export function NavigationStack<T>({
             velocity: t => (t < delayS ? 0 : fade.velocity(t - delayS)),
           },
         },
-        {at: startedRef.current, touchRelease: release},
+        {...startedRef.current, touchRelease: release},
       );
     },
     [view.models, backControl.animator, backChevron.animator],
@@ -1449,7 +1485,6 @@ export function NavigationStack<T>({
         wasRunning ? undefined : programmaticVelocity('pop'),
         false,
         'ride',
-        at,
       );
       fadeBack('pop', under);
     }
