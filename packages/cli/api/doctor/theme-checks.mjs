@@ -1174,6 +1174,30 @@ export function withProviderWiring(appChecks, wiring) {
 }
 
 /**
+ * The theme input the private-variable check reads. A bundled theme is a copy
+ * of its package's source. When the project installs that package, the check
+ * reads the package's own copy: the app uses that package, and the copy's
+ * imports, such as the theme's icon library, resolve from the package in every
+ * install layout. Yarn Plug'n'Play refuses the CLI's copy an import of a
+ * package the CLI does not depend on.
+ * @param {DiscoveredTheme} theme the discovered theme
+ * @param {string} owner the package that the app's theme record names
+ * @param {string} projectDir
+ * @returns {string}
+ */
+function privateInputFile(theme, owner, projectDir) {
+  const own = path.join(theme.sourceDir, theme.entry);
+  if (theme.source !== 'bundled') return own;
+  const packageDir = findDoctorInstalledPackage(projectDir, owner);
+  const installed = packageDir
+    ? path.join(packageDir, 'src', theme.entry)
+    : null;
+  // The path as found, not its real path: Yarn gives a package with peer
+  // dependencies a path of its own, and resolves its imports only from there.
+  return installed && realDoctorFile(installed) ? installed : own;
+}
+
+/**
  * Run all ten app-theme checks.
  * @param {string} cwd
  * @returns {Promise<DoctorCheck[]>}
@@ -1673,7 +1697,7 @@ export async function checkAppThemes(cwd) {
     if (!availableTheme) continue;
     try {
       const errors = await validateThemePrivateInputs(
-        path.join(availableTheme.sourceDir, availableTheme.entry),
+        privateInputFile(availableTheme, theme.owner, state.projectDir),
         {cwd: state.projectDir},
       );
       if (errors.length > 0) {
