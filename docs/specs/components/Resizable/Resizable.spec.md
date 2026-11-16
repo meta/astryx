@@ -208,7 +208,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   ArrowRight and ArrowDown move the divider toward the end of its axis and
   ArrowLeft and ArrowUp toward the start, the inline arrows following the
   reading direction under RTL, with Shift for a larger step, so the pane grows
-  or shrinks by the side of the Handle it sits on; with snap points set, an
+  or shrinks by the side of the Handle it sits on; an arrow with Alt, Control
+  or Meta held does nothing and is not consumed; with snap points set, an
   arrow moves to the adjacent snap point, a point beyond `minSize` or `maxSize`
   counting as that bound (Shift, two); Home moves to the minimum size and End to
   the maximum; Enter collapses a collapsible pane and restores it, and the arrow

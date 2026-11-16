@@ -168,6 +168,22 @@ describe('ResizeHandle', () => {
     );
   });
 
+  it.each([
+    {altKey: true},
+    {ctrlKey: true},
+    {metaKey: true},
+    {metaKey: true, shiftKey: true},
+  ])('leaves an arrow with %o to the page', modifiers => {
+    render(<Harness />);
+    const separator = getSeparator();
+    act(() => separator.focus());
+    for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown']) {
+      const isNotConsumed = fireEvent.keyDown(separator, {key, ...modifiers});
+      expect(isNotConsumed).toBe(true);
+    }
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+  });
+
   it('jumps to the minimum on Home', () => {
     render(<Harness />);
     const separator = getSeparator();

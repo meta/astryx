@@ -76,6 +76,9 @@ export interface ResizeGesturePointerEvent {
 export interface ResizeGestureKeyEvent {
   readonly key: string;
   readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
   preventDefault(): void;
 }
 
@@ -316,6 +319,11 @@ export function createResizeGesture(
         case 'ArrowDown':
         case 'ArrowLeft':
         case 'ArrowUp': {
+          // Alt, Control and Meta arrows belong to the platform (word and
+          // line movement) and to app shortcuts, so they pass through.
+          if (event.altKey || event.ctrlKey || event.metaKey) {
+            break;
+          }
           event.preventDefault();
           if (state.isCollapsed) {
             // A collapsed pane answers only the grow arrow. It opens one step
