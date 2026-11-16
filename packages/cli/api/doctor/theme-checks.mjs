@@ -39,6 +39,7 @@ import {
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
+  dependencyInstallFor,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
@@ -115,6 +116,13 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       candidate.slug === slug && themeRecordOwner(candidate) === owner,
   );
   if (!isLocalThemeOwner(owner)) {
+    // A theme package the project lists but has not installed, as in a fresh
+    // clone, comes from installing the project's dependencies, at the version
+    // it lists; its theme is added already.
+    const install = findDoctorInstalledPackage(projectDir, owner)
+      ? null
+      : dependencyInstallFor(projectDir, owner);
+    if (install) return install;
     const selector = theme?.package ?? owner;
     return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
   }
@@ -1405,34 +1413,40 @@ export async function checkAppThemes(cwd) {
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'fail',
-      message: resolutionProblems
-        .map(problem =>
-          // A theme another command generates is not rebuilt with `theme
-          // build`: its fix names that command, so its message does not.
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
-          ).includes(' theme build ')
-            ? problem.message
-            : problem.message
-                .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
-                .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
-        )
-        .join(' '),
-      fix: resolutionProblems
-        .map(problem =>
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
+      // Themes that one step fixes, such as installing the project's
+      // dependencies, say it once.
+      message: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            // A theme another command generates is not rebuilt with `theme
+            // build`: its fix names that command, so its message does not.
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ).includes(' theme build ')
+              ? problem.message
+              : problem.message
+                  .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
+                  .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
           ),
-        )
-        .join(' '),
+        ),
+      ].join(' '),
+      fix: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ),
+          ),
+        ),
+      ].join('; '),
     });
   } else if (unshippedImports.length > 0) {
     checks.push({

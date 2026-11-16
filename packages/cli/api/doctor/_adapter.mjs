@@ -13,6 +13,7 @@ import {
   alignCliAndCore,
   cliInstallAdvice,
   installFolder,
+  listedPackageInstall,
   projectAddCommand,
   globalBehind,
   globalUpgradeCommand,
@@ -719,6 +720,18 @@ export function addCliCommandFor(cwd, version) {
  */
 export function installCommandFor(cwd) {
   return projectAddCommand(cwd);
+}
+
+/**
+ * The command that installs the project's dependencies, when the project
+ * `cwd` belongs to lists `name`, so a `name` that is not installed comes from
+ * installing them; null otherwise (see `listedPackageInstall`).
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function dependencyInstallFor(cwd, name) {
+  return listedPackageInstall(cwd, name);
 }
 
 /**
