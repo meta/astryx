@@ -22,6 +22,7 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
 import {useHotkeys} from '@astryxdesign/core/hooks';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   PlayIcon,
   MagnifyingGlassIcon,
@@ -180,6 +181,7 @@ const COMMANDS = [
 ];
 
 export default function ShellNav() {
+  const showToast = useToast();
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const searchSource = useMemo(() => createStaticSource(COMMANDS), []);
 
@@ -243,8 +245,25 @@ export default function ShellNav() {
                   tooltip="Run"
                   variant="ghost"
                   icon={<Icon icon={PlayIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the project would run here',
+                      uniqueID: 'run',
+                    })
+                  }
                 />
-                <Button label="Share" variant="secondary" />
+                <Button
+                  label="Share"
+                  variant="secondary"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: sharing would start here',
+                      uniqueID: 'share',
+                    })
+                  }
+                />
               </>
             }
           />
