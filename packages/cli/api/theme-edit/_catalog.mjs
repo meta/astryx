@@ -609,8 +609,10 @@ export default function Page() {
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
           x.opened ? h('div', {className: 'cs-open'}, part(x.markup)) : part(x.markup)))))))));
+    // On the overlays section's own page the states come first, so its
+    // picture shows them in its first screen.
     if (stated.length)
-      body.push(h('section', {key: 'states', className: 'cs-group cs-states'},
+      body[SECTION === 'overlays' ? 'unshift' : 'push'](h('section', {key: 'states', className: 'cs-group cs-states'},
         h('h2', {className: 'cs-group-name'}, 'states'),
         h('div', {className: 'cs-states-grid'},
           h('div', {className: 'cs-states-row cs-states-head'}, h('div', null), STATES.map(([label]) => h('div', {key: label, className: 'cs-label'}, label))),
@@ -661,7 +663,9 @@ export const SHEET_CSS = [
   '.cs-strip-row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}',
   '.cs-strip-item{max-width:300px;position:relative}',
   '.cs-strip [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
-  '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
+  // An overlay shown in place is no wider than its cell (a popover that
+  // holds a form), so nothing it holds is cut at the cell's edge.
+  '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}',
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
   // The overlays section's own page (sheet-overlays.png): five to a row,

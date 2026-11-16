@@ -1214,7 +1214,9 @@ export function lookAtPictures(files) {
         ]
       : []),
     ...(open
-      ? [`${open} (every menu, tooltip, popover and list, drawn open)`]
+      ? [
+          `${open} (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)`,
+        ]
       : []),
   ].join(' and ')}${dark ? '; the -dark pictures show the dark mode' : ''}`;
 }

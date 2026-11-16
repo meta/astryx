@@ -43,7 +43,7 @@ vi.mock('./_preview.mjs', async importOriginal => {
 
 const T = 240_000;
 const LOOK =
-  'open themes/t/preview.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays.png (every menu, tooltip, popover and list, drawn open); the -dark pictures show the dark mode';
+  'open themes/t/preview.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open); the -dark pictures show the dark mode';
 
 /** @type {string} */
 let cwd;
@@ -67,7 +67,7 @@ describe('the pictures to open', () => {
     ],
     [
       ['themes/t/preview-dark.png', 'themes/t/sheet-overlays-dark.png'],
-      'open themes/t/preview-dark.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays-dark.png (every menu, tooltip, popover and list, drawn open)',
+      'open themes/t/preview-dark.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays-dark.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)',
     ],
     [['themes/t/sheet.png'], null],
   ])('%j → %j', (files, want) => {

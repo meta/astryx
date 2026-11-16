@@ -138,7 +138,7 @@ describe('the open states picture', () => {
         cwd,
       );
       expect(r.stdout).toContain(
-        'sheet-overlays.png (every menu, tooltip, popover and list, open)',
+        'sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open)',
       );
       expect(r.stdout).toContain('open preview.png and sheet-overlays.png');
     },
