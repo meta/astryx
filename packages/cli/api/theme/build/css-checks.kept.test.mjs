@@ -23,6 +23,7 @@ import {
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 
 const {TEMP_ROOT} = await vi.hoisted(async () => {
   const nodeFs = await import('node:fs');
