@@ -29,23 +29,76 @@ const sliceFiles = fs
   .filter(file => /^swizzle-proof\.\d+\.test\.mjs$/.test(file));
 
 describe('the swizzle proof in CI', () => {
-  it('runs one leg per slice file, each running its own file', () => {
+  /** The slice files leg `leg` runs, read from its command line. */
+  function filesOfLeg(leg) {
+    const step = ci.jobs['swizzle-proof'].steps.find(
+      each => each.name === "Run this leg's slices of the swizzle proof",
+    );
+    const command = step.run
+      .split('\n')
+      .find(line => line.trim().startsWith('pnpm test:node'));
+    // The shell's arithmetic, with the matrix value in LEG.
+    return [
+      ...command.matchAll(/swizzle-proof\.\$\(\(([^)]*)\)\)\.test\.mjs/g),
+    ].map(
+      ([, expression]) =>
+        `swizzle-proof.${Function('LEG', `return ${expression}`)(leg)}.test.mjs`,
+    );
+  }
+
+  it('runs every slice file in exactly one leg, two slices to a leg', () => {
     const job = ci.jobs['swizzle-proof'];
-    expect(job.strategy.matrix.slice).toEqual(sliceFiles.map((_, i) => i + 1));
+    const legs = job.strategy.matrix.leg;
+    expect(legs).toEqual(
+      Array.from({length: sliceFiles.length / 2}, (_, i) => i + 1),
+    );
     expect(job.strategy['fail-fast']).toBe(false);
     const step = job.steps.find(
-      step => step.name === 'Run this slice of the swizzle proof',
+      each => each.name === "Run this leg's slices of the swizzle proof",
     );
-    expect(step.run).toContain(
-      `pnpm test:node "\${WATCHDOG[@]}" ${SLICES}/swizzle-proof.\${{ matrix.slice }}.test.mjs`,
+    expect(step.env.LEG).toBe('${{ matrix.leg }}');
+    const run = legs.flatMap(filesOfLeg);
+    expect(legs.map(leg => filesOfLeg(leg).length)).toEqual(legs.map(() => 2));
+    expect([...run].sort()).toEqual([...sliceFiles].sort());
+    expect(new Set(run).size).toBe(sliceFiles.length);
+    expect(job.name).toBe(
+      'swizzle-proof (${{ matrix.leg }}/${{ strategy.job-total }})',
     );
-    // Its own job runs the slice: never the setting that leaves it out.
+    // Its own job runs the slices: never the setting that leaves them out.
     expect(step.env?.VITEST_SWIZZLE_PROOF_OWN_JOB).toBeUndefined();
+  });
+
+  it('holds a pair of slices inside the leg limit at their largest recorded time', () => {
+    const {seconds} = JSON.parse(
+      fs.readFileSync(
+        path.join(ROOT, 'scripts/vitest-node-durations.json'),
+        'utf8',
+      ),
+    );
+    // Two slices run side by side in a leg; setup takes about two minutes.
+    const setupS = 120;
+    const limitS = 14 * 60;
+    for (const leg of ci.jobs['swizzle-proof'].strategy.matrix.leg) {
+      const slowest = Math.max(
+        ...filesOfLeg(leg).map(file => seconds[`${SLICES}/${file}`] ?? 0),
+      );
+      expect(slowest + setupS).toBeLessThan(limitS);
+    }
+  });
+
+  it("tells admission the legs' full width", () => {
+    const plan = Object.values(ci.jobs)
+      .flatMap(job => job.steps ?? [])
+      .find(each => each.name === 'Plan the Node legs');
+    const widths = JSON.parse(/--other-widths '([^']*)'/.exec(plan.run)[1]);
+    expect(widths['swizzle-proof'].full).toBe(
+      ci.jobs['swizzle-proof'].strategy.matrix.leg.length,
+    );
   });
 
   it('runs each slice under the shard watchdog, as the Node legs do, and checks its recorded time', () => {
     const slice = ci.jobs['swizzle-proof'].steps.find(
-      step => step.name === 'Run this slice of the swizzle proof',
+      step => step.name === "Run this leg's slices of the swizzle proof",
     );
     const node = ci.jobs['test-node'].steps.find(
       step => step.name === 'Run this shard of the Node tests',
@@ -66,7 +119,7 @@ describe('the swizzle proof in CI', () => {
       node.env.VITEST_SHARD_TIMES_FILE,
     );
     const drift = ci.jobs['swizzle-proof'].steps.find(
-      step => step.name === 'Check the recorded time of this slice',
+      step => step.name === "Check the recorded time of this leg's slices",
     );
     expect(drift.run).toBe(
       'node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1',

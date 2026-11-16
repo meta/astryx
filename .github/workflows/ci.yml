@@ -67,7 +67,7 @@ permissions: {}
 # (.github/actions/test-scope: the PR's file list against the base's trusted
 # classifier) and skips its work, reporting success, when nothing in its scope
 # changed; anything undecidable runs everything. The one scope job,
-# swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
+# swizzle-proof-scope, reads the swizzle proof's own scope, so its four legs
 # start only when the change proves a target.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
@@ -205,7 +205,7 @@ jobs:
         working-directory: .ci-admission
         run: |
           node scripts/vitest-node-legs.mjs plan --github-output \
-            --other-widths '{"swizzle-proof": {"tight": 2, "full": 8}}'
+            --other-widths '{"swizzle-proof": {"tight": 2, "full": 4}}'
 
       # Another run's admission reads from this step's name how many jobs this
       # run adds at full width (count.mjs).
@@ -1517,8 +1517,11 @@ jobs:
           fi
           exit "$rc"
 
-  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
-  # each, beside the Node legs rather than inside them. When a change reaches
+  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, two slices
+  # each, beside the Node legs rather than inside them. Each leg pays about
+  # two minutes of checkout, setup and core build, more than most slices take
+  # in the affected scope, so two slices share a leg; a slice's largest
+  # recorded time (about 340 s) keeps a pair well inside the leg's limit. When a change reaches
   # every copy, its slices take about 2,300 s of test time, more than the Node
   # legs hold under their limit with the rest of the suite. This job reads the
   # proof's scope first, with Node alone and nothing installed; the legs start
@@ -1567,17 +1570,17 @@ jobs:
           fi
 
   swizzle-proof:
-    name: swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    name: swizzle-proof (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [admission, heavy-ci, swizzle-proof-scope]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # All eight legs at once when admission found room for them, else two
+      # All four legs at once when admission found room for them, else two
       # at a time, as the Node legs (admission's `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
-      # One leg per swizzle-proof.<n>.test.mjs file.
+      # Leg n runs swizzle-proof.<2n-1>.test.mjs and swizzle-proof.<2n>.test.mjs.
       matrix:
-        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+        leg: [1, 2, 3, 4]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1597,20 +1600,21 @@ jobs:
       # before the job's 15-minute limit, as in test-node, so a slow slice
       # fails and names its file instead of being cancelled. It also writes
       # the slice's seconds for the recorded-time check below.
-      - name: Run this slice of the swizzle proof
+      - name: Run this leg's slices of the swizzle proof
         id: slice
         env:
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+          LEG: ${{ matrix.leg }}
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
           export VITEST_SHARD_WATCHDOG_SECONDS
           WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
-          pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
+          pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.$((2 * LEG - 1)).test.mjs packages/cli/test/swizzle-proof/swizzle-proof.$((2 * LEG)).test.mjs
 
       # As in test-node: a slice file this change touches that now runs far
       # past its recorded time gets a notice naming both times.
-      - name: Check the recorded time of this slice
+      - name: Check the recorded time of this leg's slices
         if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
