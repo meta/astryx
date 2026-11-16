@@ -86,6 +86,35 @@ describe('the Node leg plan', () => {
     expect(idle('t10.test.mjs')).toBe(PER_FILE_SECONDS);
   });
 
+  it("plans Main's unit run with the swizzle proof's slices, which run in its Node legs", () => {
+    const mainFiles = nodeLegFiles(ROOT, {swizzleProofOwnJob: false});
+    const slices = mainFiles.filter(file =>
+      /swizzle-proof\.\d+\.test\.mjs$/.test(file),
+    );
+    expect(slices.length).toBeGreaterThan(0);
+    // A pull request's legs leave them out; Main's add exactly them.
+    expect(files.filter(file => slices.includes(file))).toEqual([]);
+    expect(mainFiles.length).toBe(files.length + slices.length);
+    const mainPlan = planNodeLegs(mainFiles, seconds);
+    expect(mainPlan.legs).toBeGreaterThanOrEqual(plan.legs);
+    expect(mainPlan.legs).toBeLessThanOrEqual(MAX_NODE_LEGS);
+    // The command Main runs plans the same files, and never fails: a plan
+    // past its budget warns and runs the most legs.
+    const out = spawnSync(
+      process.execPath,
+      ['scripts/vitest-node-legs.mjs', 'plan', '--main'],
+      {cwd: ROOT, encoding: 'utf8'},
+    );
+    expect(out.status, out.stderr).toBe(0);
+    expect(out.stdout).toContain(`${mainFiles.length} Node test files`);
+    expect(out.stdout).toContain(`: ${mainPlan.legs} legs,`);
+    expect(out.stdout).not.toContain('::error');
+    if (!mainPlan.fits) {
+      expect(mainPlan.legs).toBe(MAX_NODE_LEGS);
+      expect(out.stdout).toContain('::warning title=Node legs over budget::');
+    }
+  });
+
   it('fails loudly, never overfills, when the suite does not fit at the most legs', () => {
     const budget = Math.floor(LEG_BUDGET_SECONDS);
     const many = Object.fromEntries(

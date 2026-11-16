@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file How many Node legs a pull-request CI run needs, from the recorded
- *   Node test times.
+ * @file How many Node legs a CI run needs, from the recorded Node test
+ *   times.
  * @input The repository's tracked files (`git ls-files`) and recorded seconds
  *   per Node test file (scripts/vitest-node-durations.json).
  * @output The leg count and whether every leg fits its budget; with `plan
@@ -10,7 +10,9 @@
  *   `reason`, `leg-widths`, `widen`).
  * @position ci.yml's `room` job runs it before admission, so one number sets
  *   test-node's matrix, the legs' full width and admission's peak at full
- *   width. Each leg's Vitest sequencer (scripts/vitest-shard-sequencer.mjs)
+ *   width. The Main workflow's `main-commit` runs it with `--main` for the
+ *   unit run's test-node matrix, whose legs also run the swizzle proof's
+ *   slices. Each leg's Vitest sequencer (scripts/vitest-shard-sequencer.mjs)
  *   splits the files with the same cost function (`nodeFileCost`), so the
  *   legs it plans are the legs that run. Node built-ins and repository
  *   modules only: `room` has no installed dependencies.
@@ -123,8 +125,14 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** The Node legs' test files: CI runs the swizzle proof's slices elsewhere. */
-export function nodeLegFiles(root = ROOT) {
+/**
+ * The Node legs' test files. A pull request runs the swizzle proof's slices in
+ * a job of their own; Main's unit run runs them in its Node legs
+ * (`swizzleProofOwnJob: false`).
+ * @param {string} [root]
+ * @param {{swizzleProofOwnJob?: boolean}} [options]
+ */
+export function nodeLegFiles(root = ROOT, {swizzleProofOwnJob = true} = {}) {
   const tracked = execFileSync('git', ['ls-files', '-z'], {
     cwd: root,
     encoding: 'utf8',
@@ -132,7 +140,7 @@ export function nodeLegFiles(root = ROOT) {
   })
     .split('\0')
     .filter(Boolean);
-  return nodeTestFiles(tracked, {swizzleProofOwnJob: true});
+  return nodeTestFiles(tracked, {swizzleProofOwnJob});
 }
 
 /**
@@ -169,11 +177,12 @@ if (
   const at = argv.indexOf('--other-widths');
   if (argv[0] !== 'plan' || (at !== -1 && argv[at + 1] == null)) {
     console.error(
-      "usage: node scripts/vitest-node-legs.mjs plan [--other-widths '<json>'] [--github-output]",
+      "usage: node scripts/vitest-node-legs.mjs plan [--main] [--other-widths '<json>'] [--github-output]",
     );
     process.exit(2);
   }
-  const files = nodeLegFiles();
+  const main = argv.includes('--main');
+  const files = nodeLegFiles(ROOT, {swizzleProofOwnJob: !main});
   const seconds = readDurations();
   const plan = planNodeLegs(files, seconds);
   const outputs = stepOutputs(plan, at === -1 ? {} : JSON.parse(argv[at + 1]));
@@ -189,7 +198,12 @@ if (
         .join(''),
     );
   else console.log(JSON.stringify(outputs));
-  if (!plan.fits) {
+  // A pull request's legs stop on a plan past its budget, with the reason.
+  // Main's unit run never stops: it runs the most legs and warns, and each
+  // leg's watchdog names the files still running near its limit.
+  if (!plan.fits && main) {
+    console.log(`::warning title=Node legs over budget::${plan.reason}`);
+  } else if (!plan.fits) {
     console.log(`::error title=Node legs over budget::${plan.reason}`);
     process.exit(1);
   }

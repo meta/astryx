@@ -53,6 +53,7 @@ jobs:
       contents: read
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
+      node-shards: ${{ steps.node-legs.outputs.shards }}
     steps:
       - name: Resolve the commit under test
         id: resolve
@@ -102,12 +103,29 @@ jobs:
       # A `main` full check waits for room under CI's ceiling before its legs
       # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.
       # `peak` is the most jobs this run holds at once (ci-admission.test.mjs).
+      # scripts/lib brings the scripts/ files beside it too: the Node leg
+      # planner, the modules it imports and the recorded Node times;
+      # .github/scripts/lib holds the glob matcher it shares.
       - name: Check out the admission action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/ci-admission
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
+            scripts/lib
           path: .ci-admission
           persist-credentials: false
+
+      # The Node legs the unit run needs, planned from the recorded times as a
+      # pull request's are (spec:AST-030 FR22), with the swizzle proof's
+      # slices, which run in Main's Node legs. A plan that cannot run leaves
+      # test-node at its widest, eight legs.
+      - name: Plan the Node legs
+        id: node-legs
+        if: github.event_name != 'push'
+        continue-on-error: true
+        working-directory: .ci-admission
+        run: node scripts/vitest-node-legs.mjs plan --main --github-output
 
       - name: Wait for room under the CI ceiling
         uses: ./.ci-admission/.github/actions/ci-admission
@@ -115,8 +133,9 @@ jobs:
         timeout-minutes: 125
         with:
           # A push runs only the fast checks (main-commit, sync-exports,
-          # typecheck, test); a dispatched unit run holds every leg.
-          peak: ${{ github.event_name == 'push' && 4 || 14 }}
+          # typecheck, test); a dispatched unit run holds every leg: six UI
+          # legs and at most eight Node legs beside the other lanes.
+          peak: ${{ github.event_name == 'push' && 4 || 16 }}
           main: true
           # It waits for room, up to its own job's limit, looking about every
           # four minutes, and never yields to a pull-request run.
@@ -194,8 +213,9 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
+      # The legs main-commit planned from the recorded times; at most eight.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: ${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
