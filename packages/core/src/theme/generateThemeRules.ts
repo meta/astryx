@@ -1918,59 +1918,89 @@ function schemeDependence(
 }
 
 const ROOT_ALIAS_PREFIX = '--_theme-root-';
-const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/g;
+const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/gi;
+// The start of a `var()` call up to the referenced name: any case, spaces and
+// comments.
+const VAR_CALL_HEAD = /^var\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/i;
+
+/**
+ * The call `var(<name>, <fallback>)` written as `var(--_theme-root-<name>,
+ * <fallback>)`, or `null` when the call does not start with the name.
+ */
+function rootAliasCall(reference: string, call: string): string | null {
+  const head = VAR_CALL_HEAD.exec(call)?.[0] ?? '';
+  if (!call.startsWith(reference, head.length)) {
+    return null;
+  }
+  return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(head.length + reference.length)}`;
+}
+
+/**
+ * The value with each reference to a token the surface does not hold pointed
+ * at the token's root alias, with the same fallback. References in a fallback
+ * are pointed the same way.
+ */
+function withRootAliasesFor(value: string, held: ReadonlySet<string>): string {
+  return substituteVarReferences(value, (reference, call) => {
+    if (held.has(reference) || reference.startsWith(ROOT_ALIAS_PREFIX)) {
+      return null;
+    }
+    const aliased = rootAliasCall(reference, call);
+    return aliased === null ? null : withRootAliasesFor(aliased, held);
+  });
+}
+
+/**
+ * A block's re-declarations, with every reference to a token the surface does
+ * not hold with a value of its own pointed at the token's root alias. The root
+ * resolves the alias, so the surface reads the value every other descendant of
+ * the root reads, not a value set between the root and the surface. The
+ * surface holds its own tokens and each re-declaration that is not `inherit`.
+ * `carried` are re-declarations that apply under the block but that it does
+ * not restate; the block restates each one that refers to a token it does not
+ * hold.
+ */
+function withRootAliases(
+  entries: [string, string][],
+  carried: ReadonlyArray<[string, string]>,
+  ownNames: ReadonlySet<string>,
+): [string, string][] {
+  const restatedNames = new Set(entries.map(([name]) => name));
+  const held = new Set(ownNames);
+  for (const [name, value] of carried) {
+    if (!restatedNames.has(name) && value !== 'inherit') {
+      held.add(name);
+    }
+  }
+  for (const [name, value] of entries) {
+    if (value === 'inherit') {
+      held.delete(name);
+    } else {
+      held.add(name);
+    }
+  }
+  const aliased = entries.map(([name, value]): [string, string] => [
+    name,
+    value === 'inherit' ? value : withRootAliasesFor(value, held),
+  ]);
+  for (const [name, value] of carried) {
+    if (restatedNames.has(name) || value === 'inherit') {
+      continue;
+    }
+    const restated = withRootAliasesFor(value, held);
+    if (restated !== value) {
+      aliased.push([name, restated]);
+    }
+  }
+  return aliased;
+}
 
 /**
  * The theme root's declarations of the private aliases that the media-surface
  * blocks refer to. Each alias resolves on the theme root, where the token it
- * names takes its value from an ancestor, so a surface reads the value every
- * other descendant of the root reads.
+ * names takes its value from the root or an ancestor, so a surface reads the
+ * value every other descendant of the root reads.
  */
-/**
- * The call `var(<name>, <fallback>)` rewritten to the root alias of `<name>`,
- * with the same fallback, or `null` when the name is not found in the call.
- */
-function rootAliasCall(reference: string, call: string): string | null {
-  const at = call.indexOf(reference);
-  if (at === -1) {
-    return null;
-  }
-  return `${call.slice(0, at)}${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(at + reference.length)}`;
-}
-
-/**
- * Points each reference to a theme token that the surface does not declare at
- * the root alias of that token. Such a token keeps the value the root
- * resolves, so a re-declared value that refers to it reads that value instead
- * of a value set between the root and the surface.
- */
-function withRootAliasesForUndeclared(
-  value: string,
-  surfaceNames: ReadonlySet<string>,
-  declaredValues: Record<string, string>,
-): string {
-  return substituteVarReferences(value, (reference, call) =>
-    surfaceNames.has(reference) ||
-    reference.startsWith(ROOT_ALIAS_PREFIX) ||
-    typeof declaredValues[reference] !== 'string'
-      ? null
-      : rootAliasCall(reference, call),
-  );
-}
-
-/** The entries with their references to undeclared theme tokens aliased. */
-function aliasUndeclaredReferences(
-  entries: [string, string][],
-  ownNames: ReadonlySet<string>,
-  declaredValues: Record<string, string>,
-): [string, string][] {
-  const surfaceNames = new Set([...ownNames, ...entries.map(([name]) => name)]);
-  return entries.map(([name, value]) => [
-    name,
-    withRootAliasesForUndeclared(value, surfaceNames, declaredValues),
-  ]);
-}
-
 function rootAliasEntries(blocks: ReadonlyArray<string>): [string, string][] {
   const aliases = new Set(
     blocks.flatMap(block =>
@@ -1993,11 +2023,9 @@ function rootAliasEntries(blocks: ReadonlyArray<string>): [string, string][] {
  * re-declared. A reference to a theme token that does not depend on the
  * scheme is replaced with the theme's value too: the surface does not
  * re-declare that token, so after lowering the reference would resolve on the
- * surface and take a value set between the root and the surface. For the same
- * reason, a reference to a token the theme does not declare refers to the
- * root's private alias of it, which the theme root resolves. A reference to a
- * token that depends on the scheme stays as it is, and so does a reference in
- * a cycle.
+ * surface and take a value set between the root and the surface. Any other
+ * reference stays as it is; `withRootAliases` then points it at the root alias
+ * when the surface does not hold the token.
  */
 function withRootValuesForSurfaceTokens(
   value: string,
@@ -2007,28 +2035,14 @@ function withRootValuesForSurfaceTokens(
 ): string | null {
   let isUnknown = false;
   const dependsOnScheme = schemeDependence(declaredValues);
-  const result = substituteVarReferences(value, (reference, call) => {
+  const result = substituteVarReferences(value, reference => {
     if (resolving.has(reference) || reference.startsWith(ROOT_ALIAS_PREFIX)) {
       return null;
     }
     const declared = declaredValues[reference];
     if (!surfaceNames.has(reference)) {
-      if (typeof declared !== 'string') {
-        // The alias reference keeps the call's fallback: where the token is
-        // unset, the alias is invalid and the surface takes that fallback, as
-        // the root does. References in the fallback resolve the same way.
-        const aliased = rootAliasCall(reference, call);
-        if (aliased === null) {
-          return null;
-        }
-        return withRootValuesForSurfaceTokens(
-          aliased,
-          surfaceNames,
-          declaredValues,
-          new Set([...resolving, reference]),
-        );
-      }
-      return dependsOnScheme(reference) ||
+      return typeof declared !== 'string' ||
+        dependsOnScheme(reference) ||
         analyzeDeclarationValue(declared).important
         ? null
         : withRootValuesForSurfaceTokens(
@@ -2101,7 +2115,7 @@ function withoutDeclarationCycles(
  */
 type RuleSurfaceReplays = Map<
   'dark' | 'light',
-  {restated: Map<string, string>; excluded: Set<string>; declared: Set<string>}
+  {restated: Map<string, string>; excluded: Set<string>}
 >;
 
 /**
@@ -2120,10 +2134,12 @@ function overlappingRuleBlocks(
     rootValues: Record<string, string>;
     ruleRootValues: ReadonlyArray<Record<string, string>>;
     ruleSurfaceReplays: ReadonlyArray<RuleSurfaceReplays>;
+    surfaceReplays: ReadonlyMap<'dark' | 'light', [string, string][]>;
     sink: DiagnosticSink;
   },
 ): string[] {
-  const {rootValues, ruleRootValues, ruleSurfaceReplays, sink} = context;
+  const {rootValues, ruleRootValues, ruleSurfaceReplays, surfaceReplays, sink} =
+    context;
   const later = ruleSurfaceReplays[laterIndex];
   const blocks: string[] = [];
   for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++) {
@@ -2144,6 +2160,18 @@ function overlappingRuleBlocks(
         ...laterReplays.excluded,
         ...earlierReplays.excluded,
       ]);
+      // The surface's re-declarations where both queries match, later wins.
+      const shownUnderBoth = new Map([
+        ...(surfaceReplays.get(surface) ?? []),
+        ...earlierReplays.restated,
+        ...laterReplays.restated,
+      ]);
+      const held = new Set([
+        ...excluded,
+        ...[...shownUnderBoth]
+          .filter(([, value]) => value !== 'inherit')
+          .map(([name]) => name),
+      ]);
       const inherited: [string, string][] = [];
       for (const name of new Set([
         ...laterReplays.restated.keys(),
@@ -2162,18 +2190,26 @@ function overlappingRuleBlocks(
         const resolved =
           resolvedValue === null
             ? null
-            : withRootAliasesForUndeclared(
-                resolvedValue,
-                new Set([...laterReplays.declared, ...earlierReplays.declared]),
-                declared,
-              );
+            : withRootAliasesFor(resolvedValue, held);
         if (resolved !== shown) {
           inherited.push([name, 'inherit']);
         }
       }
-      if (inherited.length > 0) {
+      // A value that refers to a token the surface now inherits is restated
+      // with that token's root alias.
+      const overlapEntries =
+        inherited.length > 0
+          ? withRootAliases(
+              inherited,
+              [...shownUnderBoth].filter(
+                ([name]) => !inherited.some(([n]) => n === name),
+              ),
+              excluded,
+            )
+          : [];
+      if (overlapEntries.length > 0) {
         const declarations = joinDeclarations(
-          inherited,
+          overlapEntries,
           `adaptations[${laterIndex}].on${surface}.tokens.`,
           sink,
         );
@@ -2249,7 +2285,7 @@ export function generateOnMediaCSS(
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
     ];
-    const replayedEntries = aliasUndeclaredReferences(
+    const replayedEntries = withRootAliases(
       withoutDeclarationCycles(
         surfaceValues(
           schemeDependentEntries(rootValues, Object.keys(rootValues), ownNames),
@@ -2258,8 +2294,8 @@ export function generateOnMediaCSS(
         ),
         ownEntries,
       ),
+      [],
       ownNames,
-      rootValues,
     );
     surfaceReplays.set(surface, replayedEntries);
     const tokenEntries = [...replayedEntries, ...ownEntries];
@@ -2371,25 +2407,17 @@ export function generateOnMediaCSS(
       const baseReplays = (surfaceReplays.get(surface) ?? []).filter(
         ([name]) => !restatedNames.has(name),
       );
-      const declaredNames = new Set([
-        ...excluded,
-        ...baseReplays.map(([name]) => name),
-      ]);
-      const schemeEntries = aliasUndeclaredReferences(
+      const schemeEntries = withRootAliases(
         withoutDeclarationCycles(ruleReplays, [
           ...baseReplays,
           ...ownSurfaceEntries,
         ]),
-        declaredNames,
-        ruleDeclared,
+        baseReplays,
+        excluded,
       );
       surfaceReplaysOfRule.set(surface, {
         restated: new Map(schemeEntries),
         excluded,
-        declared: new Set([
-          ...declaredNames,
-          ...schemeEntries.map(([name]) => name),
-        ]),
       });
       if (schemeEntries.length > 0) {
         const declarations = joinDeclarations(
@@ -2419,6 +2447,7 @@ export function generateOnMediaCSS(
         rootValues,
         ruleRootValues,
         ruleSurfaceReplays,
+        surfaceReplays,
         sink,
       }),
     );

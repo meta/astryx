@@ -173,11 +173,13 @@ Platform-specific details stay inside that compiler.
   In a re-declared value, a reference to a token the surface declares itself
   takes the theme's value of that token, and so does a reference to a theme
   token that does not depend on the scheme, so CSS that keeps `light-dark()`
-  resolves as before. A reference to a token the theme does not declare refers
-  to the theme root's private alias of it (`--_theme-root-<name>`), with the
-  reference's fallback, which the root resolves, so the surface reads the
-  value every other descendant reads. So does a reference to a theme token the
-  surface does not re-declare. When the theme does not declare a token the
+  resolves as before. Any other reference in a re-declared value, to a token
+  the surface does not hold with a value of its own (its own tokens, or a
+  re-declaration other than `inherit`), refers to the theme root's private
+  alias of it (`--_theme-root-<name>`), with the reference's fallback, which
+  the root resolves, so the surface reads the value every other descendant
+  reads. Under a query where the surface inherits a token, a value that refers
+  to it is restated with the alias. When the theme does not declare a token the
   surface declares itself, the surface does not re-declare a token that refers
   to it.
   A token that depends on the color scheme only through tokens the theme does
