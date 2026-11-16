@@ -761,16 +761,16 @@ export default function DashboardPortfolioTemplate() {
 
             {/* Trending stocks table */}
             <Card>
-              <VStack gap={4}>
+              <VStack paddingBlockEnd={4}>
                 <Heading level={3}>Trending Stocks</Heading>
-                <Table<StockRow>
-                  data={trendingStocks}
-                  columns={trendingColumns}
-                  idKey="id"
-                  hasHover
-                  dividers="rows"
-                />
               </VStack>
+              <Table<StockRow>
+                data={trendingStocks}
+                columns={trendingColumns}
+                idKey="id"
+                hasHover
+                dividers="rows"
+              />
             </Card>
           </VStack>
         </LayoutContent>

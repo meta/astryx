@@ -1120,24 +1120,24 @@ export default function ProjectStatusPage() {
               </Grid>
 
               <Card padding={6}>
-                <VStack gap={4}>
+                <VStack paddingBlockEnd={4}>
                   <CardHeading
                     title="Workstreams"
                     meta={`${workstreams.length} of ${WORKSTREAMS.length}`}
                   />
-                  {workstreams.length === 0 ? (
-                    <PhaseEmptyState noun="workstreams" />
-                  ) : (
-                    <Table<Workstream>
-                      data={workstreams}
-                      columns={WORKSTREAM_COLUMNS}
-                      idKey="id"
-                      density="balanced"
-                      dividers="rows"
-                      hasHover
-                    />
-                  )}
                 </VStack>
+                {workstreams.length === 0 ? (
+                  <PhaseEmptyState noun="workstreams" />
+                ) : (
+                  <Table<Workstream>
+                    data={workstreams}
+                    columns={WORKSTREAM_COLUMNS}
+                    idKey="id"
+                    density="balanced"
+                    dividers="rows"
+                    hasHover
+                  />
+                )}
               </Card>
             </VStack>
           </Section>

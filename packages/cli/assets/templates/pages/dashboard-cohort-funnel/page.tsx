@@ -892,27 +892,29 @@ export default function FunnelCohortAnalyticsPage() {
                 hint="Signup week × weeks since signup"
               />
               <Card padding={6}>
-                <VStack gap={8}>
-                  <Table<CohortRow>
-                    data={cohortRows}
-                    columns={cohortColumns}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                  />
-                  <HStack gap={4} vAlign="center" wrap="wrap">
-                    <Text type="supporting" color="secondary">
-                      Retention:
-                    </Text>
-                    <HStack gap={2} vAlign="center">
-                      <Token size="sm" color="red" label="< 32%" />
-                      <Token size="sm" color="orange" label="32–40%" />
-                      <Token size="sm" color="yellow" label="40–50%" />
-                      <Token size="sm" color="teal" label="50–70%" />
-                      <Token size="sm" color="green" label="≥ 70%" />
-                    </HStack>
+                <Table<CohortRow>
+                  data={cohortRows}
+                  columns={cohortColumns}
+                  idKey="id"
+                  density="balanced"
+                  dividers="rows"
+                />
+                <HStack
+                  gap={4}
+                  vAlign="center"
+                  wrap="wrap"
+                  paddingBlockStart={8}>
+                  <Text type="supporting" color="secondary">
+                    Retention:
+                  </Text>
+                  <HStack gap={2} vAlign="center">
+                    <Token size="sm" color="red" label="< 32%" />
+                    <Token size="sm" color="orange" label="32–40%" />
+                    <Token size="sm" color="yellow" label="40–50%" />
+                    <Token size="sm" color="teal" label="50–70%" />
+                    <Token size="sm" color="green" label="≥ 70%" />
                   </HStack>
-                </VStack>
+                </HStack>
               </Card>
             </VStack>
           </VStack>
