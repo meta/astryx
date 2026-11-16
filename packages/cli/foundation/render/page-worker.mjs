@@ -36,7 +36,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Module, {createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {format} from 'node:util';
+import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
@@ -1124,23 +1124,38 @@ function fail(code, message, detail) {
 }
 
 /**
- * Where a compile error points. Babel puts the compiled file's path before
- * its message, and a location or a code frame after it: `> 3 |   gap,` marks
- * the line, and the carets under it mark the token.
+ * A compile error's text without colour codes (Babel colours its code frame
+ * where a terminal or CI asks for colour), and the absolute path Babel puts
+ * before the message, when it names one.
+ * @param {any} err
+ * @returns {{text: string, named?: string}}
+ */
+function compileText(err) {
+  const text = stripVTControlCharacters(String(err?.message ?? err));
+  const lead = /^(.*?): /.exec(text)?.[1];
+  return lead && path.isAbsolute(lead) ? {text: text.slice(lead.length + 2), named: lead} : {text};
+}
+
+/**
+ * Where a compile error points: the file, as a path from the project, and the
+ * line its location or code frame marks (`> 3 |   gap,`), with the token the
+ * carets under that line mark.
  * @param {any} err
  * @returns {{file?: string, line?: number, column?: number, token?: string, source?: string}}
  */
 function compileSite(err) {
-  const raw = String(err?.message ?? '');
-  const named = /^(\/[^:\n]*): /.exec(raw)?.[1];
+  const {text, named} = compileText(err);
   const fromRoot = named ? path.relative(root, named) : '';
   const file = named
-    ? (fromRoot.startsWith('..') ? path.basename(named) : fromRoot).split(path.sep).join('/')
+    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
     : undefined;
-  const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(raw);
+  const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
   const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
   const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
-  const token = frame ? frame[2].slice(frame[3].length, frame[3].length + frame[4].length) : undefined;
+  // An aliased import (`gap as space`) is read by its local name.
+  const token = frame
+    ? frame[2].slice(frame[3].length, frame[3].length + frame[4].length).split(/\s+as\s+/).pop()
+    : undefined;
   return {
     ...(file ? {file} : {}),
     ...(line ? {line} : {}),
@@ -1174,9 +1189,9 @@ function importedFrom(file, line) {
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
-  if (err?.renderCode) return fail(err.renderCode, String(err.message).replace(/^\/[^:\n]*: /, ''));
+  if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
-  const message = String(err?.message ?? err).replace(/^\/[^:\n]*: /, '');
+  const message = compileText(err).text;
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',

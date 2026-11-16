@@ -2064,6 +2064,33 @@ describe('render(): refusals', () => {
     );
   }, 30_000);
 
+  it('reads the error the same with colour forced on, and names an aliased import by its local name', async () => {
+    const previous = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = '1';
+    try {
+      put(
+        'sx/AliasRow.tsx',
+        "import * as stylex from '@stylexjs/stylex';\nimport {gap as space} from './tokens';\nconst styles = stylex.create({row: {display: 'flex', gap: space}});\nexport function AliasRow() {\n  return <div {...stylex.props(styles.row)} />;\n}\n",
+      );
+      put('sx/alias.tsx', "import {AliasRow} from './AliasRow';\nexport default function Page() { return <AliasRow />; }\n");
+      /** @type {any} */
+      let error;
+      try {
+        await render('sx/alias.tsx', {cwd: dir});
+      } catch (e) {
+        error = e;
+      }
+      expect(error?.code).toBe('ERR_RENDER_COMPILE');
+      expect(error.message).toMatch(
+        /^The page does not compile \((?:sx\/)?AliasRow\.tsx, line 2\): StyleX could not read `space` from \.\/tokens at build time\./,
+      );
+      expect(error.message).not.toContain('\u001b[');
+    } finally {
+      if (previous === undefined) delete process.env.FORCE_COLOR;
+      else process.env.FORCE_COLOR = previous;
+    }
+  }, 30_000);
+
   it('says which .stylex file StyleX could not find', async () => {
     put(
       'sx/missing.tsx',
