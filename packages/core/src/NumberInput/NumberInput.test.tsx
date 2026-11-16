@@ -2156,6 +2156,29 @@ describe('NumberInput stepping', () => {
     expect(onChange).toHaveBeenLastCalledWith(8);
   });
 
+  it('steps an emptied draft from empty, not from the committed value', () => {
+    const onChange = vi.fn();
+    const {rerender} = render(
+      <NumberInput label="Amount" value={5} onChange={onChange} min={2} />,
+    );
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(2);
+
+    rerender(
+      <NumberInput label="Amount" value={5} onChange={onChange} max={8} />,
+    );
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(8);
+
+    rerender(<NumberInput label="Amount" value={5} onChange={onChange} />);
+    fireEvent.change(input, {target: {value: ''}});
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
   it('keeps generated values integral when isIntegerOnly is set', () => {
     const onChange = vi.fn();
     render(
