@@ -102,6 +102,7 @@ describe("a part's rows and a product's words", () => {
     // (A compound that describes the product before a colon names
     // nothing: the look after it is the whole theme's.)
     ['radio station app: rounder corners', [], null],
+    ['button factory app: rounder corners', [], null],
     ['card game app: rounded corners', [], null],
   ])('%s', async (ask, parts, compound) => {
     // (The bundled theme the cases above made; skipped with them.)
