@@ -505,6 +505,7 @@
     "packages/cli/api/theme-edit/_palette.test.mjs": 0.1,
     "packages/cli/api/theme-edit/_png.test.mjs": 0,
     "packages/cli/api/theme-edit/compile-refusal-mode.test.mjs": 15.4,
+    "packages/cli/api/theme-edit/theme-I-media-width.test.mjs": 13.1,
     "packages/cli/api/theme-edit/theme-I-open-parts.test.mjs": 1.0,
     "packages/cli/api/theme-edit/theme-I-preview-hash-depth.test.mjs": 1.0,
     "packages/cli/api/theme-edit/theme-I-starter-styles.test.mjs": 13.2,
