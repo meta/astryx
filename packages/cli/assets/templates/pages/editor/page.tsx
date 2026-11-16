@@ -814,7 +814,7 @@ export default function EditorPage() {
     <LayoutPanel
       hasDivider={!isMobile}
       padding={0}
-      style={{width: isMobile ? '100%' : 320, flexShrink: 0}}>
+      width={isMobile ? '100%' : 320}>
       <VStack gap={4}>
         {/* Panel Header */}
         <Section variant="transparent" padding={4}>
