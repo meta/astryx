@@ -7,7 +7,7 @@
  * @output Real-browser evidence that a button group tracks a held pointer
  *   across its buttons (`family:action-groups` FR1–FR5). A slide runs the
  *   button lifted on, and a lift outside runs nothing. A finger's target
- *   reaches 44 px through the group's hit layer, and a mouse's does not.
+ *   reaches 44 px through each button's touch band, and a mouse's does not.
  *   Under a mouse, only the highlighted button looks pressed. The keyboard is
  *   unchanged.
  * @position Beside ButtonGroupTracking.test.tsx (the unit evidence)
@@ -146,7 +146,7 @@ test("under a finger a small button's target reaches 44 px: the point just below
 }) => {
   const {cut, log} = await open(page);
   const below = await justBelow(cut);
-  // The hit layer's insets are measured in the frame after the group shows.
+  // Each button's band is CSS, there from the group's first frame.
   await expect.poll(async () => groupAt(page, below)).toBe('Edit actions');
   const driver = await touchDriver(page);
   await driver.play(tap(below));
@@ -167,7 +167,7 @@ test('under a finger a group wider than its buttons takes only presses their tar
   expect(first.width).toBeGreaterThan(0);
   expect(last.height).toBeGreaterThan(0);
   expect(root.x + root.width - (last.x + last.width)).toBeGreaterThan(60);
-  // The hit layer is up: just below Cut is the group's.
+  // Cut's band is up: the point just below Cut is in the group.
   await expect
     .poll(async () => groupAt(page, await justBelow(cut)))
     .toBe('Edit actions');
@@ -230,7 +230,7 @@ test("under a finger the end buttons' targets reach past the group, and a hidden
     const box = link.getBoundingClientRect();
     return {x: box.left + 20, y: box.top + 10};
   });
-  // The hit area re-measures in the frames after the group resizes.
+  // The bands are CSS: they follow the group's new size in its next frame.
   await frames(page, 6);
   const link = await page.getByRole('link', {name: 'Above'}).boundingBox();
   expect(link?.width ?? 0).toBeGreaterThan(0);
@@ -326,7 +326,7 @@ async function stackingOf(group: Locator) {
   });
 }
 
-test("under a finger the pixels on a button's own edges are the button's: the group's hit layer lies below its buttons", async ({
+test("under a finger the pixels on a button's own edges are the button's: each band lies below its button's content", async ({
   page,
 }) => {
   await openStory(page, storybook(), STORY);
@@ -356,7 +356,7 @@ test("under a finger the pixels on a button's own edges are the button's: the gr
   );
 });
 
-test("under a finger an enabled group's root is positioned: a positioned child places against the group, and a child's z-index still beats a lower sibling's", async ({
+test("under a finger an enabled group's root keeps its stacking, as with a mouse: each button draws its own touch band", async ({
   page,
 }) => {
   for (const story of [
@@ -370,10 +370,10 @@ test("under a finger an enabled group's root is positioned: a positioned child p
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(true);
     expect(await stackingOf(group)).toEqual({
-      position: 'relative',
+      position: 'static',
       isolation: 'auto',
       siblingOverChild: true,
-      childPlacesAgainstGroup: true,
+      childPlacesAgainstGroup: false,
       childAboveSibling: true,
     });
   }

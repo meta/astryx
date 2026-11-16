@@ -74,8 +74,9 @@ registerEnglishFallback(english);
 
 /**
  * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * 44 px target is an invisible coarse-only touch band, not a bigger handle. A
+ * tap on the band over or nearer a neighbour's box goes to that neighbour
+ * (utils/touchHitArea.ts).
  */
 const HANDLE_SIZE = 28;
 /** The three lines' height: the handle's share of its row's height. */
@@ -299,8 +300,9 @@ export function ListReorderHandle({
     () => false,
   );
   const isEnabled = controller != null && !isDisabled;
-  // A finger's target: the shared touch hit area grows the handle's hit
-  // layer where the primary pointer is coarse.
+  // A finger's target: the handle's band grows it toward 44 px where the
+  // primary pointer is coarse, and the press check gives a tap on the band
+  // to a target whose box is under or nearer the finger.
   const hitAreaRef = useTouchHitArea(true);
   const handleRef = useMergedRefs(ref, hitAreaRef);
   // A handle that stops taking gestures mid-drag sends a drag of its row

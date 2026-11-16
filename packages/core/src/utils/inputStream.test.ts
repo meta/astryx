@@ -327,6 +327,34 @@ describe('inputStream', () => {
     stop();
   });
 
+  it('records nothing from a click: WebKit\'s click after a finger\'s tap says "mouse", and a click after the lift adds no press', () => {
+    const view = document.defaultView as Window;
+    const stops = (['pointerdown', 'pointerup', 'click'] as const).map(type =>
+      subscribeInput(view, type, () => {}),
+    );
+    const send = (type: string, pointerType: string) =>
+      document.body.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          pointerType,
+          pointerId: 41,
+          clientX: 90,
+          clientY: 70,
+        }),
+      );
+    const mouseBefore = getLastMousePoint(view);
+    send('pointerdown', 'touch');
+    send('pointerup', 'touch');
+    send('click', 'mouse');
+    expect(getLastPointerType(view)).toBe('touch');
+    expect(getLastMousePoint(view)).toEqual(mouseBefore);
+    send('click', 'touch');
+    expect([...getDownPresses(view)]).toEqual([]);
+    for (const stop of stops) {
+      stop();
+    }
+  });
+
   it('keeps the press feedback controller free of the gesture system', () => {
     const utils = path.resolve(__dirname);
     const seen = new Set<string>();

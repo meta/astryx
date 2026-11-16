@@ -4,57 +4,32 @@
 
 /**
  * @file touchHitArea.ts
- * @input Whether an element takes taps, how it grows, the shared touch hit
- *   area (utils/hitArea.ts) and the Web Animations around the element
- * @output `useTouchHitArea`, a callback ref that keeps an element's hit insets
- *   live for its invisible layer (`touchHitAreaStyles.layer`)
- * @position Core-internal hook for the coarse-only 44 px target. List rows,
- *   InfoTip, CheckboxInput, RadioListItem, SegmentedControl segments and the
- *   press-tracking groups use it, and so can any control whose target outgrows
- *   its box under a finger.
- *
- * SYNC: When modified, update internal/touchHitArea.stylex.ts and
- * touchHitArea.test.tsx.
+ * @input Whether an element takes taps, the window's input stream and the
+ *   geometry of utils/hitArea.ts
+ * @output `useTouchHitArea`: at a tap's click, it gives a tap on the band to
+ *   a target whose box is under or nearer the finger; `targetUnderFinger`,
+ *   that choice, for a group that takes its members' presses
+ * @position Core-internal hook for the coarse-only 44 px target, whose band
+ *   is CSS (internal/touchHitArea.stylex.ts). It reads layout only at a click
+ *   and keeps no module state, so copies of Core share nothing here.
+ *   SYNC: internal/touchHitArea.stylex.ts and touchHitArea.test.tsx.
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {
-  MIN_TOUCH_TARGET,
-  NO_HIT_INSETS,
-  settlingAnimations,
-  watchHitArea,
-  whenSettled,
-  writeHitInsets,
-  type HitInsets,
-  type HitRect,
-} from './hitArea';
+import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
+import {subscribeInput} from './inputStream';
+import {isElement} from './nodeType';
+import {isCoarsePointer} from './coarsePointer';
+import {isGrownHitInput} from '../privateAttributes/grownHitInput.stylex';
+import {closestFieldFrame} from '../privateAttributes/fieldFrame.stylex';
 
-/** How an owner's element grows, for an owner with its own rule. */
+/** How a host's band relates to its content. */
 export interface TouchHitAreaOptions {
   /**
-   * How far the element grows on each side before any neighbour stops it,
-   * read as `watchHitArea`'s `growth`. It also gets the element. A group
-   * passes `groupGrowth` of its members.
-   * @default toward 44 px on each axis, centered
-   */
-  readonly growth?: (
-    target: HitRect,
-    toLayout: (rect: HitRect) => HitRect,
-    element: HTMLElement,
-  ) => HitInsets;
-  /**
-   * Whether a finger's press on the element re-measures it against every
-   * interactive element on the page. An owner that reads its own targets
-   * when a press begins turns it off.
-   * @default true
-   */
-  readonly checkAtPress?: boolean;
-  /**
-   * Whether a finger's press that lands on a descendant is the element's,
-   * however near a neighbour is, read as `watchHitArea`'s
-   * `ownsDescendantTouches`. An owner that draws the band on a descendant,
-   * and whose content never paints past its box, turns it off, so a band
-   * press nearer a neighbour is not the element's.
+   * Whether a press that lands on a descendant is the element's, whatever lies
+   * under the finger: on for a host that draws the band on itself, such as a
+   * list row with a swipe panel; off for a host whose band is on a descendant,
+   * such as Button's content wrapper or Switch's grown input.
    * @default true
    */
   readonly ownsDescendantTouches?: boolean;
@@ -62,138 +37,188 @@ export interface TouchHitAreaOptions {
 
 const NO_OPTIONS: TouchHitAreaOptions = {};
 
-/**
- * Watches `element` and takes its insets only at rest. Returns the stop.
- *
- * Under a coarse primary pointer, the shared utility measures how far the
- * element's hit target may grow without reaching a neighbor's half of the
- * gap. This writes those insets on the element, where its layer reads them.
- * Under a fine pointer the shared utility starts no observer.
- *
- * Elements move by transform: a list row in an update's slide, a swipe, or
- * neighbors that slide past. The shared measurement reads them as they stand
- * in one frame. So a measurement that arrives while the parent has a finite
- * animation running or held is dropped. When those animations end, the
- * element is watched again. The insets are then taken at rest, and no frame
- * of a compositor-only motion lays out or paints for them.
- */
-function watchAtRest(
-  element: HTMLElement,
-  minSize: number,
-  {growth, checkAtPress, ownsDescendantTouches = true}: TouchHitAreaOptions,
-): () => void {
-  let stopWatch = (): void => {};
-  let isStopped = false;
-  let isWaiting = false;
-  let hasWritten = false;
-  // A stopped watch clears the insets it wrote. A fresh watch skips a
-  // measurement equal to its start, zero, so old insets would otherwise stay.
-  // A watch that wrote nothing, as under a mouse, writes nothing.
-  const stop = (): void => {
-    stopWatch();
-    if (hasWritten) {
-      hasWritten = false;
-      writeHitInsets(element, NO_HIT_INSETS);
-    }
-  };
-  const watch = (): void => {
-    stopWatch = watchHitArea(
-      element,
-      insets => {
-        // The finite animations in the element's parent, the element
-        // included: a row's own motion and its neighbors'.
-        const moving = settlingAnimations(element.parentElement ?? element);
-        if (moving.length === 0) {
-          hasWritten = true;
-          writeHitInsets(element, insets);
-          return;
-        }
-        if (isWaiting) {
-          return;
-        }
-        isWaiting = true;
-        whenSettled(moving, () => {
-          isWaiting = false;
-          if (!isStopped) {
-            stop();
-            watch();
-          }
-        });
-      },
-      // By default the layer is the host's own `::after`, so a touch on the
-      // host's content is the host's, even where that content paints past
-      // its box.
-      {
-        minSize,
-        ownsDescendantTouches,
-        growth:
-          growth == null
-            ? undefined
-            : (target, toLayout) => growth(target, toLayout, element),
-        checkAtPress,
-      },
-    );
-  };
-  watch();
-  return () => {
-    isStopped = true;
-    stop();
-  };
-}
+/** For a host whose band is on a descendant. */
+export const BAND_ON_DESCENDANT: TouchHitAreaOptions = {
+  ownsDescendantTouches: false,
+};
 
-/** The watch on an element, and how many attached refs hold it. */
-interface HeldWatch {
-  readonly stop: () => void;
-  holders: number;
-}
-
-const heldWatches = new WeakMap<HTMLElement, HeldWatch>();
-
-/**
- * Holds the element's watch, and starts it on the first hold. Returns the
- * release. A ref that changes, such as a merge with a caller's inline ref,
- * detaches and attaches again in one commit. So the last release waits a
- * microtask, and an attach in between keeps the watch and its insets.
- */
-function holdWatch(
-  element: HTMLElement,
-  options: TouchHitAreaOptions,
-): () => void {
-  let held = heldWatches.get(element);
-  if (held == null) {
-    held = {
-      stop: watchAtRest(element, MIN_TOUCH_TARGET, options),
-      holders: 0,
-    };
-    heldWatches.set(element, held);
+/** Whether `candidate` is the host, part of it, or its own label. */
+function isOwn(host: Element, candidate: Element): boolean {
+  if (candidate.contains(host) || host.contains(candidate)) {
+    return true;
   }
-  held.holders += 1;
-  const entry = held;
-  let isReleased = false;
-  return () => {
-    if (isReleased) {
+  const control = (candidate as HTMLLabelElement).control;
+  return control != null && host.contains(control);
+}
+
+/**
+ * The element whose box a target shows. A marked grown hit input, such as
+ * Switch's, paints nothing and covers its parent: the person sees the parent.
+ */
+function shownBy(target: Element): Element {
+  return (isGrownHitInput(target) ? target.parentElement : null) ?? target;
+}
+
+// An entry that renders as a field. A checkbox, radio, file or submit input
+// is not one.
+const ENTRY = `:is(textarea, select, [contenteditable="true"], input:not([type]), ${'text search email url tel password number date time datetime-local month week color'
+  .split(' ')
+  .map(type => `input[type="${type}"]`)
+  .join()})`;
+
+/**
+ * The element that takes a tap on a marked field box: its entry nearest the
+ * finger. A box with no entry, such as a description or a drop zone, takes
+ * the tap itself, and its own click forwards it.
+ */
+function entryOf(frame: Element, x: number, y: number): Element {
+  let entry = frame;
+  let nearest = Infinity;
+  for (const candidate of frame.querySelectorAll(ENTRY)) {
+    const distance = distanceTo(candidate.getBoundingClientRect(), x, y);
+    if (distance < nearest) {
+      entry = candidate;
+      nearest = distance;
+    }
+  }
+  return entry;
+}
+
+/**
+ * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible
+ * box under the finger, else the nearest box in empty space. It reads boxes
+ * only when the finger is outside the host's, up to the host's own container
+ * (what paints below, such as the page under a layer, is not beside it), in
+ * one layout flush. A group that takes its members' presses asks it first.
+ */
+export function targetUnderFinger(
+  host: Element,
+  x: number,
+  y: number,
+): HTMLElement | null {
+  let nearestDistance = distanceTo(host.getBoundingClientRect(), x, y);
+  if (nearestDistance === 0) {
+    return null;
+  }
+  let nearest: HTMLElement | null = null;
+  for (const element of host.ownerDocument.elementsFromPoint?.(x, y) ?? []) {
+    if (host.contains(element)) {
+      continue;
+    }
+    if (element.contains(host)) {
+      break;
+    }
+    // The browser also lists an element whose band, not its box, is under
+    // the finger. A field's marked frame is its entry's visible box.
+    const control = element.closest(INTERACTIVE_SELECTOR);
+    const frame = control == null ? closestFieldFrame(element) : null;
+    const target = control ?? (frame && entryOf(frame, x, y));
+    if (target == null || isOwn(host, target) || frame?.contains(host)) {
+      continue;
+    }
+    const shown = frame ?? shownBy(target);
+    const distance = distanceTo(shown.getBoundingClientRect(), x, y);
+    if (distance === 0) {
+      return target as HTMLElement;
+    }
+    if (distance < nearestDistance) {
+      nearest = target as HTMLElement;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+// A select and the inputs whose native tap opens a picker.
+const PICKER =
+  /^(select-one|select-multiple|date|datetime-local|month|week|time|color)$/;
+
+/**
+ * Gives a tap to `target` as a native tap does, inside the same click, so the
+ * user gesture holds. `click()` runs a button's, link's, label's, checkbox's
+ * or submit's activation. A focusable target also takes the focus, so a text
+ * field raises the keyboard and the band's control keeps none, and a picker
+ * opens.
+ */
+function activate(target: HTMLElement): void {
+  if (target.tabIndex >= 0 || target.isContentEditable) {
+    target.focus({preventScroll: true});
+  }
+  target.click();
+  if (PICKER.test((target as HTMLInputElement).type ?? '')) {
+    try {
+      (target as HTMLInputElement).showPicker();
+    } catch {
+      // The browser refuses the picker; the focus has already moved.
+    }
+  }
+}
+
+/**
+ * Checks each tap on `host` until the returned function runs: a finger's, a
+ * pen's or a mouse's, while the band exists. The press reads nothing, so a
+ * scroll it starts never waits. At the click,
+ * `targetUnderFinger` may send the tap on; a keyboard or assistive-technology
+ * click (detail 0) goes through.
+ */
+function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
+  const view = host.ownerDocument.defaultView;
+  if (view == null) {
+    return () => {};
+  }
+  let endPress: (() => void) | null = null;
+  const stopPresses = subscribeInput(view, 'pointerdown', press => {
+    const {target, clientX, clientY} = press;
+    // The band, and so the check, exists while the primary pointer is coarse,
+    // for a finger, a pen and a mouse alike.
+    if (
+      !isCoarsePointer(view) ||
+      !isElement(target) ||
+      !host.contains(target) ||
+      (ownsDescendantTouches && target !== host)
+    ) {
       return;
     }
-    isReleased = true;
-    entry.holders -= 1;
-    queueMicrotask(() => {
-      if (entry.holders === 0 && heldWatches.get(element) === entry) {
-        heldWatches.delete(element);
-        entry.stop();
+    const onClick = (click: MouseEvent): void => {
+      end();
+      if (
+        click.detail === 0 ||
+        !isElement(click.target) ||
+        !host.contains(click.target)
+      ) {
+        return;
       }
-    });
+      const target = targetUnderFinger(host, clientX, clientY);
+      if (target != null) {
+        click.preventDefault();
+        click.stopPropagation();
+        activate(target);
+      }
+    };
+    const stopClick = subscribeInput(view, 'click', onClick, {cancels: true});
+    // Any later press ends this one. This press has already reached the
+    // window's listeners, so only a later press does.
+    const stopNextPress = subscribeInput(view, 'pointerdown', () => end());
+    const end = (): void => {
+      stopClick();
+      stopNextPress();
+      if (endPress === end) {
+        endPress = null;
+      }
+    };
+    endPress = end;
+  });
+  return () => {
+    stopPresses();
+    endPress?.();
   };
 }
 
 /**
- * A callback ref that keeps its element's hit insets live while `enabled`:
- * the element takes taps, so it is interactive and not disabled or read-only.
- * Merge it into the element's ref, and pair it with `touchHitAreaStyles.layer`
- * on the same element, or on a descendant with `ownsDescendantTouches` off.
- * The watch lasts while the element is attached, so a replaced element starts
- * its own. A re-render that hands the same element a
- * new merged ref keeps its watch. `options` set how the element grows. Keep
- * them stable, as a module constant. An element's first holder sets them.
+ * A callback ref for an element that takes taps (`enabled`) and draws a touch
+ * band (`touchHitAreaStyles.layer`, or `band` on a descendant with
+ * `BAND_ON_DESCENDANT`), whose taps the press check routes. Keep `options`
+ * stable, as a module constant.
  *
  * @example
  * ```
@@ -205,15 +230,14 @@ export function useTouchHitArea(
   enabled: boolean,
   options: TouchHitAreaOptions = NO_OPTIONS,
 ): RefCallback<HTMLElement> {
-  // Syncs with an external system: the shared touch hit area
-  // (utils/hitArea.ts) measures the element against its neighbors and writes
-  // its insets on it. The ref's cleanup stops the watch.
+  // Syncs with an external system: the window's input stream, which hears a
+  // press on the element. The ref's cleanup stops listening.
   return useCallback(
     (element: HTMLElement | null) => {
       if (!enabled || element == null) {
         return undefined;
       }
-      return holdWatch(element, options);
+      return checkTaps(element, options.ownsDescendantTouches ?? true);
     },
     [enabled, options],
   );

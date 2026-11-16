@@ -1533,7 +1533,7 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     };
   };
 
-  it('a switch under a coarse pointer attaches no touch or click listener, and a disabled one arms no press listener', () => {
+  it('a switch under a coarse pointer attaches no touch, click or press listener on the page or its elements', () => {
     const baseline = listenersWhileRendering('none');
     const enabled = listenersWhileRendering(false);
     const disabled = listenersWhileRendering(true);
@@ -1547,10 +1547,11 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
       expect(counts.contextMenu).toBe(baseline.contextMenu);
       expect(counts.click).toBe(0);
     }
-    // The gesture host arms a press listener for an enabled switch only.
-    expect(enabled.pointer).toBeGreaterThan(disabled.pointer);
-    // Busy stays attached, so the change that made it busy keeps its motion.
-    expect(busy.pointer).toBeGreaterThan(disabled.pointer);
+    // Under a coarse pointer the gesture host and the hit area hear presses
+    // through the window's shared input stream: no state adds a press
+    // listener on the page or the switch's elements.
+    expect(enabled.pointer).toBe(disabled.pointer);
+    expect(busy.pointer).toBe(disabled.pointer);
   });
 
   it('under a fine pointer an enabled switch arms one passive pointerdown listener on its own element and adds no page listener until a press; a disabled one arms none (spec:AST-094 FR24, FR43)', () => {
@@ -1637,7 +1638,7 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     });
   });
 
-  it('runs no hit-area observer or window listener under a fine pointer, or while disabled under a coarse one', () => {
+  it('runs no hit-area observer or resize listener under any pointer', () => {
     const observersWhileRendering = (
       isCoarse: boolean,
       isDisabled: boolean,
@@ -1683,8 +1684,11 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
       observers: 0,
       resize: 0,
     });
-    // Enabled under a coarse pointer it measures.
-    expect(observersWhileRendering(true, false).observers).toBe(1);
+    // Enabled under a coarse pointer it measures nothing ahead of a press.
+    expect(observersWhileRendering(true, false)).toEqual({
+      observers: 0,
+      resize: 0,
+    });
   });
 });
 
@@ -1694,30 +1698,20 @@ describe('hit area under a coarse pointer (Switch FR10)', () => {
     vi.restoreAllMocks();
   });
 
-  it('grows toward 44 × 44 px and stops halfway to a link beside it, so a tap nearer the link is the link’s', () => {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === '(pointer: coarse)',
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }));
-    let reveal: ((entries: IntersectionObserverEntry[]) => void) | null = null;
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
-          reveal = callback;
-        }
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
+  it('toggles for a tap on its grown input, and not for one that lies on a link beside it', () => {
+    // The press check runs while the primary pointer is coarse.
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }) as unknown as MediaQueryList,
     );
-    const frames: (() => void)[] = [];
-    vi.stubGlobal('requestAnimationFrame', (run: () => void) =>
-      frames.push(run),
-    );
-    vi.stubGlobal('cancelAnimationFrame', () => {});
+    const onChange = vi.fn();
     const {container} = render(
       <div>
         <Switch
@@ -1725,7 +1719,7 @@ describe('hit area under a coarse pointer (Switch FR10)', () => {
           isLabelHidden
           size="sm"
           value={false}
-          onChange={() => {}}
+          onChange={onChange}
         />
         <a href="#details">Details</a>
       </div>,
@@ -1733,49 +1727,34 @@ describe('hit area under a coarse pointer (Switch FR10)', () => {
     const input = screen.getByRole('switch');
     const surface = input.parentElement as HTMLElement;
     const link = container.querySelector('a') as HTMLElement;
-    const box = (left: number, top: number, width: number, height: number) =>
-      ({
-        left,
-        top,
-        right: left + width,
-        bottom: top + height,
-        width,
-        height,
-        x: left,
-        y: top,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    // A 32 × 20 (small) switch with the link 8 px to its right.
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
-      function (this: HTMLElement) {
-        if (this === surface) {
-          return box(100, 100, 32, 20);
-        }
-        if (this === link) {
-          return box(140, 100, 60, 20);
-        }
-        return box(0, 0, 0, 0);
-      },
-    );
-    expect(surface.style.getPropertyValue('--astryx-hit-inset-right')).toBe('');
-    reveal!([
-      {
-        target: surface,
-        isIntersecting: true,
-      } as unknown as IntersectionObserverEntry,
-    ]);
-    frames.splice(0).forEach(run => run());
-    // Up and down 12 px (20 → 44); left 6 px (32 → 44); right stops at
-    // 4 px, half the 8 px gap.
-    expect(surface.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
-      '12px',
-    );
-    expect(surface.style.getPropertyValue('--astryx-hit-inset-left')).toBe(
-      '6px',
-    );
-    expect(surface.style.getPropertyValue('--astryx-hit-inset-right')).toBe(
-      '4px',
-    );
+    // A 32 × 20 (small) switch with the link 4 px to its right.
+    surface.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 100, y: 100, width: 32, height: 20});
+    link.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 136, y: 100, width: 60, height: 20});
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: () => [input, link, container.firstElementChild, document.body],
+    });
+    const tap = (x: number): boolean => {
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: x, clientY: 110});
+      input.dispatchEvent(press);
+      const click = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      input.dispatchEvent(click);
+      return click.defaultPrevented;
+    };
+    // 6 px right of the track: on the grown input, 2 px inside the link.
+    expect(tap(138)).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    // On the track itself.
+    expect(tap(110)).toBe(false);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    delete (document as {elementsFromPoint?: unknown}).elementsFromPoint;
   });
 });
 

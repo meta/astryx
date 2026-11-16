@@ -136,6 +136,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TextInput/TextInput.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 /**
@@ -494,6 +495,7 @@ export function TextInput({
       }}
       onClick={handleWrapperClick}
       onMouseUp={handleWrapperMouseUp}
+      {...fieldFrameProps}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('text-input', {

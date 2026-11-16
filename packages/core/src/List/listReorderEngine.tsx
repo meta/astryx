@@ -2453,7 +2453,7 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
 const hintStyles = stylex.create({
   // A glyph or Done: the hint's text, with nothing of a button's own, the
   // same size under every pointer. A finger's 44 px target is the shared
-  // touch hit layer, which stops short of a neighbouring target.
+  // touch band, and a box under the finger wins over it.
   button: {
     position: 'relative',
     display: 'inline-flex',
@@ -2493,8 +2493,8 @@ function HintButton({
   isText?: boolean;
   children: ReactNode;
 }) {
-  // A finger's target: the shared touch hit area grows the button's hit
-  // layer where the primary pointer is coarse.
+  // A finger's target: the button's touch band, with the hint's room between
+  // buttons.
   const hitAreaRef = useTouchHitArea(true);
   return (
     <button
@@ -2509,6 +2509,7 @@ function HintButton({
         hintStyles.button,
         isText && hintStyles.done,
         touchHitAreaStyles.layer,
+        touchHitAreaStyles.member,
       ])}>
       {children}
     </button>
@@ -2571,7 +2572,12 @@ function ListReorderModeHint({
           hintRef.current = element;
           controller.setHintElement(element);
         }}
-        {...stylex.props(anchoredHintStyles.keys)}>
+        {...stylex.props(
+          anchoredHintStyles.keys,
+          // Half the keys' gap is each button's touch room toward the next.
+          // SYNC: hooks/anchoredHint.tsx keys gap.
+          touchHitAreaStyles.inlineGroupSpacing1,
+        )}>
         <HintButton
           label={t('@astryx.list.reorderMoveUp')}
           onPress={() => controller.step(target, -1)}>

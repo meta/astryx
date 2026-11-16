@@ -75,6 +75,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The stable outer Result row and its `typeahead-option` target, which carries
   the row's size and its `highlighted` and `selected` states (FR13).
 - The Result group heading, which has no Typeahead target.
+- Marking its frame for the touch press check. Typeahead writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

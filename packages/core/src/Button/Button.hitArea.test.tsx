@@ -2,54 +2,40 @@
 
 /**
  * @file Button.hitArea.test.tsx
- * @input Button, ButtonGroup, and the shared hit area (mocked)
- * @output Unit coverage that a standalone Button takes the shared touch band
- *   on its content wrapper, which leaves a caller's ::after alone. A grouped
- *   Button takes none: a ButtonGroup's, or one whose tracking group draws its
- *   band. A disabled or busy-only Button takes none either.
+ * @input Button, ButtonGroup, and the touch band's StyleX classes
+ * @output Unit coverage that a Button that takes taps draws the touch band on
+ *   its content wrapper, which leaves a caller's ::after alone, and sets the
+ *   band's room on itself. A grouped Button takes the group's room between
+ *   members. A disabled or busy-only Button takes no band.
  * @position Button's FR42 touch-target evidence beside Button.test.tsx
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {describe, it, expect, vi} from 'vitest';
-import {act, render, screen} from '@testing-library/react';
-import type * as HitAreaModule from '../utils/hitArea';
-import type {HitInsets} from '../utils/hitArea';
+import {describe, it, expect} from 'vitest';
+import {render, screen} from '@testing-library/react';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
-import {PressGroupBandContext} from '../hooks/pressGroupContext';
+import {HitAreaGroupContext} from '../hooks/pressGroupContext';
 import {Button} from './Button';
 
-// On a coarse pointer, the shared hit area measures neighbours in a real
-// layout. Here it reports what it was asked to watch, and each test answers
-// for it.
-const hitAreaWatches = vi.hoisted(
-  () => [] as {element: Element; onInsets: (insets: HitInsets) => void}[],
-);
-vi.mock('../utils/hitArea', async importOriginal => ({
-  ...(await importOriginal<typeof HitAreaModule>()),
-  watchHitArea: (element: Element, onInsets: (insets: HitInsets) => void) => {
-    const watch = {element, onInsets};
-    hitAreaWatches.push(watch);
-    return () => {
-      hitAreaWatches.splice(hitAreaWatches.indexOf(watch), 1);
-    };
-  },
-}));
-
-const bandClasses = (stylex.props(touchHitAreaStyles.layer).className ?? '')
-  .split(/\s+/)
-  .filter(Boolean);
-
-function isWatched(element: Element): boolean {
-  return hitAreaWatches.some(entry => entry.element === element);
+function classesOf(className: string | undefined): string[] {
+  return (className ?? '').split(/\s+/).filter(Boolean);
 }
+
+const bandClasses = classesOf(stylex.props(touchHitAreaStyles.band).className);
+const memberClasses = classesOf(
+  stylex.props(touchHitAreaStyles.member).className,
+);
 
 /** The element inside the button that carries the band, if any. */
 function bandElementOf(button: Element): Element | undefined {
   return [...button.querySelectorAll('*')].find(element =>
     bandClasses.every(bandClass => element.classList.contains(bandClass)),
   );
+}
+
+function isMember(button: Element): boolean {
+  return memberClasses.every(name => button.classList.contains(name));
 }
 
 const callerStyles = stylex.create({
@@ -64,25 +50,19 @@ const callerStyles = stylex.create({
 });
 
 describe('Button touch target (AST-094 FR42)', () => {
-  it('grows a standalone button toward 44 px as far as the shared hit area allows', () => {
+  it('draws the touch band on a standalone button’s content wrapper', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});
     expect(bandClasses.length).toBeGreaterThan(0);
-    const band = bandElementOf(button);
-    expect(band).toBeDefined();
+    expect(bandElementOf(button)).toBeDefined();
+    expect(isMember(button)).toBe(false);
     expect(button).toHaveAccessibleName('Save');
-    const watch = hitAreaWatches.find(entry => entry.element === button);
-    expect(watch).toBeDefined();
-    act(() => watch?.onInsets({top: 6, right: 0, bottom: 6, left: 0}));
-    expect(button.style.getPropertyValue('--astryx-hit-inset-top')).toBe('6px');
   });
 
   it("leaves a caller's ::after decoration on the button itself, and the band on its content wrapper", () => {
     render(<Button label="Inbox" xstyle={callerStyles.dot} />);
     const button = screen.getByRole('button', {name: 'Inbox'});
-    const callerClasses = (stylex.props(callerStyles.dot).className ?? '')
-      .split(/\s+/)
-      .filter(Boolean);
+    const callerClasses = classesOf(stylex.props(callerStyles.dot).className);
     expect(callerClasses.length).toBeGreaterThan(0);
     for (const callerClass of callerClasses) {
       expect(button).toHaveClass(callerClass);
@@ -96,7 +76,9 @@ describe('Button touch target (AST-094 FR42)', () => {
 
   it('gives a link button the same band', () => {
     render(<Button label="Docs" href="/docs" />);
-    expect(isWatched(screen.getByRole('link', {name: 'Docs'}))).toBe(true);
+    expect(
+      bandElementOf(screen.getByRole('link', {name: 'Docs'})),
+    ).toBeDefined();
   });
 
   it('gives a disabled or busy-only button no band, since it takes no tap', () => {
@@ -106,41 +88,37 @@ describe('Button touch target (AST-094 FR42)', () => {
         <Button label="Sending" isLoading />
       </>,
     );
-    const disabled = screen.getByRole('button', {name: 'Delete'});
-    const busy = screen.getByRole('button', {name: 'Sending'});
-    expect(isWatched(disabled)).toBe(false);
-    expect(isWatched(busy)).toBe(false);
-    expect(bandElementOf(disabled)).toBeUndefined();
-    expect(bandElementOf(busy)).toBeUndefined();
+    expect(
+      bandElementOf(screen.getByRole('button', {name: 'Delete'})),
+    ).toBeUndefined();
+    expect(
+      bandElementOf(screen.getByRole('button', {name: 'Sending'})),
+    ).toBeUndefined();
   });
 
   it('keeps the band on a busy button that can still be interrupted', () => {
     render(<Button label="Stop upload" isLoading isInterruptible />);
-    expect(isWatched(screen.getByRole('button', {name: 'Stop upload'}))).toBe(
-      true,
-    );
+    expect(
+      bandElementOf(screen.getByRole('button', {name: 'Stop upload'})),
+    ).toBeDefined();
   });
 
-  it('leaves a grouped button to the group: it draws no band of its own', () => {
+  it('gives a grouped button its own band with the group’s room between members', () => {
     render(
-      <ButtonGroup label="Actions">
-        <Button label="Cut" />
-        <Button label="Copy" />
-      </ButtonGroup>,
+      <>
+        <ButtonGroup label="Actions">
+          <Button label="Cut" />
+          <Button label="Copy" />
+        </ButtonGroup>
+        <HitAreaGroupContext value>
+          <Button label="Bold" />
+        </HitAreaGroupContext>
+      </>,
     );
-    const cut = screen.getByRole('button', {name: 'Cut'});
-    expect(isWatched(cut)).toBe(false);
-    expect(bandElementOf(cut)).toBeUndefined();
-  });
-
-  it('leaves a button to a tracking group that draws its band: it draws none of its own', () => {
-    render(
-      <PressGroupBandContext value>
-        <Button label="Bold" />
-      </PressGroupBandContext>,
-    );
-    const bold = screen.getByRole('button', {name: 'Bold'});
-    expect(isWatched(bold)).toBe(false);
-    expect(bandElementOf(bold)).toBeUndefined();
+    for (const name of ['Cut', 'Bold']) {
+      const button = screen.getByRole('button', {name});
+      expect(bandElementOf(button)).toBeDefined();
+      expect(isMember(button)).toBe(true);
+    }
   });
 });

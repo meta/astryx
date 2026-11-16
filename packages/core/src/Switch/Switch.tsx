@@ -69,8 +69,8 @@ import {
 } from '../utils/interactionOverlay.stylex';
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
 import {useSwitchTouch, type SwitchTouchParts} from './useSwitchTouch';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {BAND_ON_DESCENDANT, useTouchHitArea} from '../utils/touchHitArea';
+import {grownHitInputProps} from '../privateAttributes/grownHitInput.stylex';
 
 /**
  * The track box of each size, px (width × height), for the touch
@@ -102,12 +102,6 @@ const PRESS_FADING = '[data-astryx-press="fading"]';
 const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];
 const PRESS_RELEASE_DURATION_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
 const PRESS_RELEASE_EASE = easeVars['--ease-exit'];
-
-// The measured hit insets (utils/hitArea), 0 until measured.
-const HIT_TOP = 'var(--astryx-hit-inset-top, 0px)';
-const HIT_RIGHT = 'var(--astryx-hit-inset-right, 0px)';
-const HIT_BOTTOM = 'var(--astryx-hit-inset-bottom, 0px)';
-const HIT_LEFT = 'var(--astryx-hit-inset-left, 0px)';
 
 const wrapperSizeStyles = stylex.create({
   sm: {
@@ -298,23 +292,16 @@ const styles = stylex.create({
     zIndex: 1,
   },
   // The invisible input covers the track. Under a coarse pointer it is the
-  // hit area a finger needs. It grows toward 44 × 44 px by the insets
-  // utils/hitArea measures, each side stopping at half the gap to a
-  // neighbouring target. Its center moves with any uneven side, and nothing
-  // visible grows. The insets are 0 until measured. Physical left and
-  // translate, as centerInline: the insets are physical sides.
+  // hit area a finger needs: at least 44 × 44 px, centered on the track, and
+  // nothing visible grows. In a row's end slot it grows no taller
+  // (touchHitAreaStyles.rowEnd). Where it lies over another target's visible
+  // box, that target takes the tap (utils/touchHitArea.ts).
   inputCoarse: {
-    width: {
-      default: '100%',
-      '@media (pointer: coarse)': `calc(100% + ${HIT_LEFT} + ${HIT_RIGHT})`,
-    },
+    width: {default: '100%', '@media (pointer: coarse)': 'max(100%, 44px)'},
     height: {
       default: '100%',
-      '@media (pointer: coarse)': `calc(100% + ${HIT_TOP} + ${HIT_BOTTOM})`,
-    },
-    transform: {
-      default: 'translate(-50%, -50%)',
-      '@media (pointer: coarse)': `translate(calc(-50% + (${HIT_RIGHT} - ${HIT_LEFT}) / 2), calc(-50% + (${HIT_BOTTOM} - ${HIT_TOP}) / 2))`,
+      '@media (pointer: coarse)':
+        'max(100%, min(44px, 100% + 2 * var(--_hit-row-block, 22px)))',
     },
   },
   inputDisabled: {
@@ -968,17 +955,7 @@ export function Switch({
         isDisabled && !on && styles.trackDisabledOff,
       ),
     );
-  // Syncs the hit area's insets with the layout around the switch, through
-  // utils/hitArea's observers. Under a coarse pointer they grow toward 44 px,
-  // stopping at half the gap to each neighbouring target. A disabled switch
-  // watches nothing.
-  useIsomorphicLayoutEffect(() => {
-    const surface = surfaceRef.current;
-    if (surface == null || isDisabled) {
-      return;
-    }
-    return watchHitArea(surface, insets => writeHitInsets(surface, insets));
-  }, [isDisabled]);
+  const hitAreaRef = useTouchHitArea(!isDisabled, BAND_ON_DESCENDANT);
   useSwitchTouch(touchParts, {
     isOn,
     isInteractive: !isDisabled && !isBusy,
@@ -989,7 +966,7 @@ export function Switch({
 
   const switchElement = (
     <div
-      ref={surfaceRef}
+      ref={useMergedRefs(surfaceRef, hitAreaRef)}
       {...stylex.props(
         styles.switchWrapper,
         wrapperSizeStyles[size],
@@ -1000,6 +977,7 @@ export function Switch({
         id={id}
         type="checkbox"
         role="switch"
+        {...grownHitInputProps}
         // Withhold the name while disabled: the input stays focusable (not
         // natively disabled), and a disabled control must not submit.
         name={isDisabled ? undefined : htmlName}

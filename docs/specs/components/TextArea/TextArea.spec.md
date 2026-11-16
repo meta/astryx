@@ -97,6 +97,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   the text padding that keeps text clear of them.
 - Disabled, disabled-reason, and read-only behavior.
 - The touch-keyboard attributes of the native textarea (FR13).
+- Marking its frame for the touch press check. TextArea writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

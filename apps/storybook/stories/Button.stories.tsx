@@ -4,14 +4,22 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {DateInput} from '@astryxdesign/core/DateInput';
+import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Heading} from '@astryxdesign/core/Heading';
 import {HStack} from '@astryxdesign/core/HStack';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
+import {Link} from '@astryxdesign/core/Link';
 import {StackItem} from '@astryxdesign/core/Stack';
+import {Switch} from '@astryxdesign/core/Switch';
+import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
 import {VStack} from '@astryxdesign/core/VStack';
 import {Cog6ToothIcon, TrashIcon} from '@heroicons/react/24/outline';
 
@@ -557,6 +565,244 @@ export const TouchTargets: Story = {
           Undo {taps.undo}, Redo {taps.redo}
         </output>
         <TextInput label="Search" value={query} onChange={setQuery} hasClear />
+      </VStack>
+    );
+  },
+};
+
+export const TouchReach: Story = {
+  name: 'Touch reach',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; two loose 24 px buttons 4 px apart each keep every tap on their own box, since a visible box under the finger wins over a band, and a tap in their gap goes to the nearer box; a button 4 px after a small Switch keeps a tap 1 px before its edge, since the grown input of the Switch is not its visible box; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
+      },
+    },
+  },
+  render: () => {
+    const [taps, setTaps] = useState({
+      lone: 0,
+      link: 0,
+      cut: 0,
+      copy: 0,
+      next: 0,
+      pin: 0,
+      mark: 0,
+      go: 0,
+      clear: 0,
+      apply: 0,
+      check: 0,
+    });
+    const [email, setEmail] = useState('');
+    const [day, setDay] = useState<ISODateString | undefined>(undefined);
+    const [query, setQuery] = useState('');
+    const [agree, setAgree] = useState(false);
+    const [sync, setSync] = useState(false);
+    const count = (key: keyof typeof taps) => () =>
+      setTaps(current => ({...current, [key]: current[key] + 1}));
+    const [formats, setFormats] = useState<string[]>([]);
+    return (
+      <VStack gap={6} hAlign="start">
+        <div style={{padding: 40}}>
+          <Button
+            label="Lone"
+            data-testid="lone"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('lone')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4}}>
+          <Button
+            label="Cut"
+            data-testid="cut"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('cut')}
+          />
+          <Button
+            label="Copy"
+            data-testid="copy"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('copy')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <Switch
+            label="Sync"
+            isLabelHidden
+            size="sm"
+            value={sync}
+            onChange={setSync}
+          />
+          <Button
+            label="Next"
+            data-testid="next"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('next')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 24, alignItems: 'center'}}>
+          <div style={{position: 'relative', width: 24, height: 24}}>
+            <Button
+              label="Pin"
+              data-testid="pin"
+              isIconOnly
+              variant="secondary"
+              icon={<Icon icon={Cog6ToothIcon} />}
+              style={{
+                position: 'absolute',
+                left: 20,
+                top: 0,
+                width: 24,
+                height: 24,
+                minWidth: 24,
+                padding: 0,
+              }}
+              onClick={count('pin')}
+            />
+          </div>
+          <Button
+            label="Mark"
+            data-testid="mark"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            // Mark paints over Pin, so its band lies over Pin's overhang.
+            style={{width: 24, height: 24, minWidth: 24, padding: 0, zIndex: 1}}
+            onClick={count('mark')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <TextInput
+            label="Search"
+            isLabelHidden
+            value={query}
+            onChange={setQuery}
+            data-testid="search"
+          />
+          <Button
+            label="Go"
+            data-testid="go"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('go')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'flex-end'}}>
+          <TextInput
+            label="Email"
+            value={email}
+            onChange={setEmail}
+            status={{type: 'error', message: 'Enter an email'}}
+          />
+          <Button
+            label="Check"
+            data-testid="check"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('check')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <DateInput
+            label="Pick"
+            isLabelHidden
+            presentation="native"
+            value={day}
+            onChange={setDay}
+          />
+          <Button
+            label="Apply"
+            data-testid="apply"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('apply')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <CheckboxInput
+            label="Agree"
+            isLabelHidden
+            value={agree}
+            onChange={setAgree}
+          />
+          <Button
+            label="Clear"
+            data-testid="clear"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('clear')}
+          />
+        </div>
+        <ToggleButtonGroup
+          type="multiple"
+          label="Format"
+          value={formats}
+          onChange={setFormats}>
+          <ToggleButton
+            label="Bold"
+            value="bold"
+            size="sm"
+            isIconOnly
+            icon={<Icon icon={Cog6ToothIcon} />}
+            data-testid="bold"
+          />
+          <ToggleButton
+            label="Italic"
+            value="italic"
+            size="sm"
+            isIconOnly
+            icon={<Icon icon={TrashIcon} />}
+            data-testid="italic"
+          />
+        </ToggleButtonGroup>
+        <Text>
+          See the{' '}
+          <Link
+            href="#pricing"
+            onClick={event => {
+              event.preventDefault();
+              count('link')();
+            }}>
+            pricing
+          </Link>
+          <InfoTip content="Billed monthly per seat." label="Pricing help" />{' '}
+          for teams.
+        </Text>
+        <output aria-label="Reach taps">
+          Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
+        </output>
+        <output aria-label="Field taps">
+          Go {taps.go}, Clear {taps.clear}, Agree {agree ? 'on' : 'off'}, Apply{' '}
+          {taps.apply}, Pick {day ?? 'none'}
+        </output>
+        <output aria-label="Status taps">Check {taps.check}</output>
+        <output aria-label="Overhang taps">
+          Pin {taps.pin}, Mark {taps.mark}
+        </output>
+        <output aria-label="Sync taps">
+          Next {taps.next}, Sync {sync ? 'on' : 'off'}
+        </output>
       </VStack>
     );
   },

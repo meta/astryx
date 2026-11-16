@@ -59,6 +59,8 @@ import {motionRole} from '../../motion/roles';
 import {getGestureHost} from '../../gestures/GestureHost';
 import {pointerQuery} from '../../gestures/__tests__/pointerQuery';
 import {touchMotion} from '../ListReorderTouch';
+import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '../../internal/touchHitArea.stylex';
 
 function moveKey<T extends Key>(
   items: ReadonlyArray<T>,
@@ -166,6 +168,13 @@ const handleOf = (label: string) =>
  * A button of reorder mode's hint. jsdom never opens a popover, so the hint
  * layer stays `display: none` there: the query includes hidden elements.
  */
+/** Whether `element` carries the touch band (internal/touchHitArea.stylex.ts). */
+const hasTouchBand = (element: Element) =>
+  (stylex.props(touchHitAreaStyles.band).className ?? '')
+    .split(' ')
+    .filter(name => name !== '' && !name.startsWith('touchHitArea__'))
+    .every(name => element.classList.contains(name));
+
 const hintButton = (name: string) =>
   screen.queryByRole('button', {name, hidden: true});
 
@@ -339,24 +348,7 @@ describe('List reorderable', () => {
     }
   });
 
-  it("gives a finger's target as an invisible hit layer, not a bigger handle: the hit area writes its insets where the primary pointer is coarse", async () => {
-    stubPrimaryPointer(true);
-    render(<ReorderableRows initial={['A', 'B']} />);
-    const handle = handleOf('A');
-    await waitFor(() =>
-      expect(handle.style.getPropertyValue('--astryx-hit-inset-top')).toMatch(
-        /px$/,
-      ),
-    );
-    for (const side of ['right', 'bottom', 'left']) {
-      expect(
-        handle.style.getPropertyValue(`--astryx-hit-inset-${side}`),
-        side,
-      ).toMatch(/px$/);
-    }
-  });
-
-  it("starts the hit area's observers only where the primary pointer is coarse (spec:AST-094 FR24)", () => {
+  it("gives a finger's target as an invisible touch band, not a bigger handle, and observes nothing for it under any pointer (spec:AST-094 FR24)", () => {
     const observed: Element[] = [];
     class Recording {
       observe(target: Element) {
@@ -370,21 +362,12 @@ describe('List reorderable', () => {
     }
     vi.stubGlobal('IntersectionObserver', Recording);
     vi.stubGlobal('ResizeObserver', Recording);
-    const resizes = vi.spyOn(window, 'addEventListener');
     try {
-      stubPrimaryPointer(false);
-      const fine = render(<ReorderableRows initial={['A', 'B']} />);
-      expect(observed).not.toContain(handleOf('A'));
-      expect(resizes.mock.calls.filter(([type]) => type === 'resize')).toEqual(
-        [],
-      );
-      fine.unmount();
-      // The positive control: under a finger it watches the handle.
       stubPrimaryPointer(true);
       render(<ReorderableRows initial={['A', 'B']} />);
-      expect(observed).toContain(handleOf('A'));
+      expect(hasTouchBand(handleOf('A'))).toBe(true);
+      expect(observed).toEqual([]);
     } finally {
-      resizes.mockRestore();
       vi.unstubAllGlobals();
     }
   });
@@ -1080,7 +1063,7 @@ describe('List reorderable', () => {
     expect(hintButton('Move down')).toBeNull();
   });
 
-  it("gives the hint's buttons a finger's target as an invisible hit layer: the hit area writes their insets where the primary pointer is coarse", async () => {
+  it("gives the hint's buttons a finger's target as an invisible touch band", async () => {
     stubPrimaryPointer(true);
     const user = userEvent.setup();
     render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
@@ -1088,55 +1071,7 @@ describe('List reorderable', () => {
     await user.keyboard(' ');
     for (const name of ['Move up', 'Move down', 'Done']) {
       const button = hintButton(name) as HTMLElement;
-      await waitFor(() =>
-        expect(
-          button.style.getPropertyValue('--astryx-hit-inset-top'),
-          name,
-        ).toMatch(/px$/),
-      );
-    }
-  });
-
-  it("starts the hint buttons' hit area only where the primary pointer is coarse (spec:AST-094 FR24)", async () => {
-    const observed: Element[] = [];
-    class Recording {
-      observe(target: Element) {
-        observed.push(target);
-      }
-      unobserve() {}
-      disconnect() {}
-      takeRecords() {
-        return [];
-      }
-    }
-    vi.stubGlobal('IntersectionObserver', Recording);
-    vi.stubGlobal('ResizeObserver', Recording);
-    try {
-      const user = userEvent.setup();
-      const hintButtons = () =>
-        ['Move up', 'Move down', 'Done'].map(
-          name => hintButton(name) as HTMLElement,
-        );
-      stubPrimaryPointer(false);
-      const fine = render(
-        <ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />,
-      );
-      handleOf('Sent').focus();
-      await user.keyboard(' ');
-      for (const button of hintButtons()) {
-        expect(observed).not.toContain(button);
-      }
-      fine.unmount();
-      // The positive control: under a finger it watches them.
-      stubPrimaryPointer(true);
-      render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
-      handleOf('Sent').focus();
-      await user.keyboard(' ');
-      for (const button of hintButtons()) {
-        await waitFor(() => expect(observed).toContain(button));
-      }
-    } finally {
-      vi.unstubAllGlobals();
+      expect(hasTouchBand(button), name).toBe(true);
     }
   });
 

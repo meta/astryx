@@ -45,9 +45,7 @@ export const travellingStyles = stylex.create({
   // their own. The surface is an inset shadow across the padding box, under
   // the press and the row's content, so the divider and the press stay
   // visible. A selected row keeps its own fill. It takes no pseudo-element,
-  // since under a finger the row's `::after` is its hit layer. Its z-index, 2,
-  // is above a swipeable row's raise under a finger (1), so it rides above
-  // the swipeable rows it crosses.
+  // since under a finger the row's `::after` is its touch band.
   row: {
     zIndex: {
       default: null,
@@ -67,22 +65,6 @@ export const travellingStyles = stylex.create({
       '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
       ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"]))':
         'initial',
-    },
-  },
-  // A swipeable row is a stacking context at rest, since Item translates its
-  // swipe root. So its band's own z-index orders only inside it. Under a
-  // finger the row itself rises above the rows after it, whose boxes its band
-  // reaches into. The list isolates, so the row stays below a sticky header.
-  // StyleX keeps one zIndex per element, so this style also carries the
-  // travelling raise. Compose it after `row`.
-  raisedSwipeRow: {
-    zIndex: {
-      default: null,
-      '[data-astryx-travelling]': 2,
-      '@media (pointer: coarse)': {
-        default: 1,
-        '[data-astryx-travelling]': 2,
-      },
     },
   },
 });

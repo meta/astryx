@@ -79,6 +79,7 @@ import {
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
@@ -953,6 +954,7 @@ export function Item({
         <span
           {...stylex.props(
             styles.endContent,
+            touchHitAreaStyles.rowEnd,
             align === 'first-line' && styles.firstLineSlot,
             isDisabled && styles.disabledContent,
           )}>

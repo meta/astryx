@@ -157,6 +157,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   confirmed Clear all, the draft with Save and the guard that asks before a
   changed draft is discarded (FR26, FR27, DEC-4), and which Tokenizer props
   the sheet honors.
+- Marking its frame, its sheet field and its unfocused-layer field for the touch press check. Tokenizer writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

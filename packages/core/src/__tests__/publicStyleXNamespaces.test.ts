@@ -75,8 +75,8 @@ type XstyleNamespaces = {
  * The style namespaces that go through `stylex.props`, not `xstyle`. A style
  * that sets only custom properties shares no property with the `xstyle` type,
  * `displayStyles` sets `overflowWrap` to a `var()`, which StyleX's
- * `overflowWrap` type does not list, and `touchHitAreaStyles` styles only a
- * pseudo-element.
+ * `overflowWrap` type does not list, and `touchHitAreaStyles` sets custom
+ * properties, isolation and a pseudo-element.
  */
 type PropsOnlyNamespaces = {
   containerPaddingBlockEndVarStyles: typeof padding.containerPaddingBlockEndVarStyles;

@@ -140,6 +140,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 // The month math needs a date before today is known (server render,
 // hydration). The sheet's content, which shows the month, waits for today.
@@ -1328,6 +1329,7 @@ export function TouchDateField({
 
   const inputWrapper = (
     <div
+      {...fieldFrameProps}
       ref={el => {
         // Anchor + hover/focus listeners for the disabled-message tooltip.
         // Gated internally by isEnabled, so attaching unconditionally is safe.

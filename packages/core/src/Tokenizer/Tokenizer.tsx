@@ -139,6 +139,7 @@ export type {
   InputStatus as TokenizerStatus,
   InputStatusType as TokenizerStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 // =============================================================================
 // Types
@@ -1932,6 +1933,7 @@ export function Tokenizer<T extends SearchableItem>({
 
   const wrapperContent = (
     <div
+      {...fieldFrameProps}
       ref={wrapperCallbackRef}
       role="group"
       aria-label={label}
@@ -2223,6 +2225,7 @@ export function Tokenizer<T extends SearchableItem>({
     tokenizerContent = (
       <>
         <div
+          {...fieldFrameProps}
           ref={sheetFieldCallbackRef}
           onClick={handleSheetFieldClick}
           onFocus={handleSheetFieldFocus}
@@ -2405,6 +2408,7 @@ export function Tokenizer<T extends SearchableItem>({
     tokenizerContent = (
       <>
         <div
+          {...fieldFrameProps}
           ref={placeholderRef}
           onClick={handleWrapperClick}
           {...mergeProps(

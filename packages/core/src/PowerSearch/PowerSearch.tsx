@@ -120,6 +120,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -1529,6 +1530,7 @@ export function PowerSearch({
           className={className}
           style={style}>
           <div
+            {...fieldFrameProps}
             ref={disabledMessageTooltip.ref}
             onClick={handleTriggerWrapperClick}
             onFocus={handleTriggerFocusWithin}

@@ -106,11 +106,6 @@ const styles = stylex.create({
   vertical: {
     flexDirection: 'column',
   },
-  // While the group tracks presses, its hit layer is the root's `::before`,
-  // below its buttons, so the root is the layer's containing block.
-  tracking: {
-    position: 'relative',
-  },
 });
 
 // Resting elevation for the whole group — the connected buttons share one
@@ -226,21 +221,23 @@ export function ButtonGroup({
   const {isTouch} = useTouchPresentation();
   const tracksPress = !isDisabled && isTouch;
   const groupRef = useRef<HTMLDivElement>(null);
-  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  useGroupPressTracking(groupRef, tracksPress);
 
   return (
     <ButtonGroupContext value={contextValue}>
       <SizeProvider value={size}>
         <div
-          ref={useMergedRefs(ref, listRef, groupRef, hitAreaRef)}
+          ref={useMergedRefs(ref, listRef, groupRef)}
           {...props}
           {...mergeProps(
             themeProps('button-group', {size, orientation, elevation}),
             stylex.props(
               styles.group,
-              tracksPress && styles.tracking,
-              tracksPress && touchHitAreaStyles.layerBelowChildren,
               orientation === 'vertical' && styles.vertical,
+              // The buttons touch: no room between their touch bands.
+              orientation === 'vertical'
+                ? touchHitAreaStyles.blockGroup0
+                : touchHitAreaStyles.inlineGroup0,
               elevationStyles[elevation],
               xstyle,
             ),

@@ -413,62 +413,6 @@
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
     },
-    "packages/core/src/utils/hitArea.ts:frame": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:interactive": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:interactiveDocument": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:isCoarse": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:observedSizes": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:pending": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:pointer": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:pressDocument": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:resize": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:scopeTimers": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:stopInteractiveWatch": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:view": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:visibility": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/utils/hitArea.ts:watched": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/utils/layoutViewport.ts:thicknesses": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
@@ -552,10 +496,6 @@
     "packages/core/src/utils/timeFormat.ts:symbolsByLocale": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/utils/touchHitArea.ts:heldWatches": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/utils/windowExtent.ts:stopObserving": {
       "status": "allowed",

@@ -141,16 +141,6 @@ test('the close control is a labelled button whose touch target grows under a co
     () => matchMedia('(pointer: coarse)').matches,
   );
   test.skip(!isCoarse, 'the hit area grows only under a coarse pointer');
-  // The hit area writes its insets after its first measurement.
-  await expect
-    .poll(() =>
-      close.evaluate(button =>
-        (button as HTMLElement).style.getPropertyValue(
-          '--astryx-hit-inset-top',
-        ),
-      ),
-    )
-    .not.toBe('');
   // A point 21 px from the button's center on the block axis lies inside a
   // 44 px target. It hits the close button, not the callout around it.
   const hitsClose = await close.evaluate(button => {
