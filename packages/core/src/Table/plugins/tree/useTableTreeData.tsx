@@ -41,15 +41,6 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
-  clearTreeLevel,
-  setTreeLevel,
-  treeLevelOf,
-} from '../../../privateAttributes/treeLevel.stylex';
-import {
-  treeExpanderIn,
-  treeExpanderProps,
-} from '../../../privateAttributes/treeExpander.stylex';
-import {
   colorVars,
   focusVars,
   radiusVars,
@@ -166,6 +157,10 @@ interface TreeStore<T extends Record<string, unknown>> {
   subscribe: (listener: () => void) => () => void;
   notify: () => void;
   getConfig: () => UseTableTreeDataConfig<T>;
+  /** The depth of each rendered row, so an expander can find its children. */
+  rowLevels: WeakMap<Element, number>;
+  /** Each rendered expander button, by row id. */
+  expanders: Map<string, HTMLButtonElement>;
 }
 
 function createTreeStore<T extends Record<string, unknown>>(
@@ -186,6 +181,8 @@ function createTreeStore<T extends Record<string, unknown>>(
     getConfig() {
       return configRef.current;
     },
+    rowLevels: new WeakMap(),
+    expanders: new Map(),
   };
 }
 
@@ -248,35 +245,43 @@ function useRowSnapshot<T extends Record<string, unknown>>(
 // treegrid would promise navigation that isn't there. Rows therefore carry
 // no aria-level or aria-expanded. Each parent row's expander button carries
 // aria-expanded and, while expanded, aria-controls naming its child rows.
-// Indentation stays visual. A private mark records each row's depth so the
-// expander can find its children among the rendered rows.
+// Indentation stays visual.
 
-/** A DOM id for a row, from the table's id prefix and the row's own id. */
+/**
+ * A DOM id for a row, from the table's id prefix and the row's own id. Every
+ * character outside [A-Za-z0-9-], `_` included, becomes `_<hex code>_`, so
+ * distinct row ids always give distinct DOM ids.
+ */
 function rowDomId(prefix: string, id: string): string {
-  return `${prefix}-${id.replace(/[^\w-]/g, ch => `_${ch.charCodeAt(0)}`)}`;
+  const encoded = id.replace(
+    /[^A-Za-z0-9-]/gu,
+    ch => `_${ch.codePointAt(0)?.toString(16)}_`,
+  );
+  return `${prefix}-${encoded}`;
 }
 
-function applyRowTreeAria(
+function applyRowTreeAria<T extends Record<string, unknown>>(
   el: HTMLTableRowElement,
   meta: TableTreeRowMeta | undefined,
   idPrefix: string,
+  store: TreeStore<T>,
 ): void {
   // Rows rendered by an earlier version may still carry aria-level.
   el.removeAttribute('aria-level');
   const ownsId = el.id === '' || el.id.startsWith(`${idPrefix}-`);
   if (!meta) {
-    clearTreeLevel(el);
+    store.rowLevels.delete(el);
     if (ownsId) {
       el.removeAttribute('id');
     }
     return;
   }
-  setTreeLevel(el, meta.level);
+  store.rowLevels.set(el, meta.level);
   if (ownsId) {
     el.id = rowDomId(idPrefix, meta.id);
   }
-  const expander = treeExpanderIn(el);
-  if (expander == null) {
+  const expander = store.expanders.get(meta.id);
+  if (expander == null || !el.contains(expander)) {
     return;
   }
   const childIds: string[] = [];
@@ -286,7 +291,7 @@ function applyRowTreeAria(
       row != null;
       row = row.nextElementSibling
     ) {
-      const level = treeLevelOf(row);
+      const level = store.rowLevels.get(row);
       if (level == null || level <= meta.level) {
         break;
       }
@@ -412,10 +417,12 @@ function TreeExpander({
   isExpanded,
   onToggle,
   rowLabel,
+  buttonRef,
 }: {
   isExpanded: boolean;
   onToggle: () => void;
   rowLabel?: string;
+  buttonRef: React.RefCallback<HTMLButtonElement>;
 }) {
   const t = useComponentTranslator();
   const isCompact = use(TableContext)?.density === 'compact';
@@ -441,7 +448,7 @@ function TreeExpander({
       }}
       aria-label={ariaLabel}
       aria-expanded={isExpanded}
-      {...treeExpanderProps}>
+      ref={buttonRef}>
       <Icon
         icon="chevronRight"
         size="xsm"
@@ -567,6 +574,17 @@ function TreeCellContentInner<T extends Record<string, unknown>>({
           isExpanded={meta.isExpanded}
           onToggle={() => store.getConfig().onToggleItem(item)}
           rowLabel={config.getRowLabel?.(item)}
+          buttonRef={button => {
+            if (!button) {
+              return;
+            }
+            store.expanders.set(meta.id, button);
+            return () => {
+              if (store.expanders.get(meta.id) === button) {
+                store.expanders.delete(meta.id);
+              }
+            };
+          }}
         />
       ) : (
         <span {...stylex.props(treeStyles.leafSpacer)} />
@@ -765,6 +783,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               el,
               cfg.hasExpandableRows ? cfg.getRowMeta(item) : undefined,
               rowIdPrefix,
+              store,
             );
           };
           apply();

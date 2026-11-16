@@ -499,6 +499,31 @@ describe('useTableTreeData — row ARIA', () => {
     ).not.toHaveAttribute('aria-controls');
   });
 
+  it('gives rows with similar ids distinct DOM ids', () => {
+    const data: FileRow[] = [
+      {
+        id: 'root',
+        name: 'root',
+        size: 0,
+        children: [
+          {id: 'src/a', name: 'slash', size: 1},
+          {id: 'src_47a', name: 'underscore', size: 2},
+        ],
+      },
+    ];
+    render(<TreeTable data={data} defaultExpandedIds={['root']} />);
+
+    const expander = within(getRowByText('root')).getByRole('button', {
+      name: 'Collapse row',
+    });
+    const ids = (expander.getAttribute('aria-controls') ?? '').split(' ');
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.map(id => document.getElementById(id))).toEqual([
+      getRowByText('slash'),
+      getRowByText('underscore'),
+    ]);
+  });
+
   it('expands and collapses from the keyboard', async () => {
     const user = userEvent.setup();
     render(<TreeTable />);
