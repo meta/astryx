@@ -1660,6 +1660,15 @@ export default function Home() {
 `;
 
 /**
+ * The starter's home page once its theme preview is removed: the same page
+ * with no link to the preview.
+ */
+const STARTER_HOME_BARE = STARTER_HOME.replace(
+  "import {Link} from '@astryxdesign/core/Link';\n",
+  '',
+).replace(/\n\s*<Link href="\/theme-preview">[^<]*<\/Link>/, '');
+
+/**
  * The files a new starter app (Next.js app router, Core and the neutral
  * theme) writes into `where`, with `extra` files beside them, checked before
  * anything is written: the folder is new or empty, it is not inside the
@@ -6298,6 +6307,10 @@ async function removePreview(page, options, box) {
       Number(path.basename(a.file) === PREVIEW_DATA) -
       Number(path.basename(b.file) === PREVIEW_DATA),
   );
+  // Where the app serves the preview, and its routes folder, read while the
+  // preview is there.
+  const url = previewPath(cwd, at);
+  const routes = routesOf(cwd, at);
   /** @type {string[]} */
   const removed = [];
   for (const [i, p] of plan.entries())
@@ -6346,6 +6359,31 @@ async function removePreview(page, options, box) {
   } catch {
     // Not empty: something there is not the preview's.
   }
+  /** @type {string[]} */
+  const rewritten = [];
+  // The app's home page linked to the preview (a starter's does): a home
+  // page as the starter wrote it loses the link; any other is named.
+  if (url != null && routes && !fs.existsSync(at.dir))
+    for (const name of ['page.tsx', 'page.jsx', 'page.js']) {
+      const home = path.join(routes, name);
+      let text;
+      try {
+        text = readRegularFile(home, 'utf8');
+      } catch {
+        continue;
+      }
+      if (text === STARTER_HOME) {
+        writeWhole(home, STARTER_HOME_BARE);
+        rewritten.push(shown(cwd, home));
+        notes.push(
+          `${shown(cwd, home)} no longer links to ${url}: the starter's home page linked to the preview this removed`,
+        );
+      } else if (text.includes(`"${url}"`) || text.includes(`'${url}'`))
+        notes.push(
+          `${shown(cwd, home)} still links to ${url}, which no longer exists: take that link out`,
+        );
+      break;
+    }
   const worn = data.theme;
   if (worn)
     await themeLocked(options, worn, () =>
@@ -6353,6 +6391,6 @@ async function removePreview(page, options, box) {
     );
   return {
     type: 'themeEdit.previewRemove',
-    data: {folder, removed, kept, missing, rewritten: [], notes, pages: []},
+    data: {folder, removed, kept, missing, rewritten, notes, pages: []},
   };
 }
