@@ -31,7 +31,7 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {ButtonLabelTooltip, useLabelTooltip} from './ButtonLabelTooltip';
+import {CutTextTooltip, useCutTextTooltip} from '../internal/cutTextTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -924,7 +924,7 @@ export function Button({
   // a caller's own tooltip replaces it.
   const buttonRef = useRef<HTMLElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
-  const labelTooltip = useLabelTooltip(
+  const labelTooltip = useCutTextTooltip(
     labelRef,
     !isIconOnly && tooltip == null,
   );
@@ -1211,7 +1211,7 @@ export function Button({
       {tooltip ? (
         tooltipHook.renderTooltip(tooltip)
       ) : (
-        <ButtonLabelTooltip anchorRef={buttonRef} labelTooltip={labelTooltip} />
+        <CutTextTooltip anchorRef={buttonRef} state={labelTooltip} />
       )}
     </>
   );
