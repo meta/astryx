@@ -801,7 +801,9 @@ const INPUT_EVENT_TYPES: ReadonlySet<string> = new Set([
  * The page is dispatching an input event (a pointer, a key, a touch) now.
  * The fallback for a push the app starts outside the stack's own handlers.
  */
-function isDispatchingInput(view: Window | null | undefined): boolean {
+function isDispatchingInput(
+  view: (Window & typeof globalThis) | null | undefined,
+): boolean {
   if (view == null) {
     return false;
   }
