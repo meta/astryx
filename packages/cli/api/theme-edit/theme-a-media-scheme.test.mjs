@@ -37,10 +37,13 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
+// (Show's open problems come from the theme, not from the sheet it
+// writes: one small section of the sheet is drawn, not all of it.)
 /** @param {string} slug */
 const open = async slug =>
   /** @type {Array<{problem: string, fix: string | null}>} */ (
-    /** @type {any} */ (await themeEditShow(slug, {cwd})).data.openProblems
+    /** @type {any} */ (await themeEditShow(slug, {cwd, section: 'actions'}))
+      .data.openProblems
   );
 /** @param {string} fix */
 async function follow(fix) {
@@ -65,9 +68,10 @@ describe('a part on a media surface', () => {
   it(
     'is not reached by a light-only color, so that makes no problem there',
     async () => {
-      await themeEditNew('n', {cwd, like: 'neutral'});
+      // (The next case's theme: its whole-theme color comes after.)
+      await themeEditNew('g', {cwd, like: 'neutral'});
       const r = /** @type {any} */ (
-        await themeEditSet('n', 'color', '#1e40af', {
+        await themeEditSet('g', 'color', '#1e40af', {
           cwd,
           on: 'button',
           when: 'variant:secondary',
@@ -86,7 +90,6 @@ describe('a part on a media surface', () => {
   it(
     'is listed once, with a fix in its scheme that ends the problems',
     async () => {
-      await themeEditNew('g', {cwd, like: 'neutral'});
       await themeEditSet('g', 'color', '#333333', {
         cwd,
         on: 'button',
@@ -113,11 +116,17 @@ describe('a part on a media surface', () => {
         cwd,
       });
       let left = await open('o');
+      /** @type {string[]} */
+      const followed = [];
       for (let i = 0; i < 6 && left.some(p => p.fix); i++) {
-        await follow(/** @type {string} */ (left.find(p => p.fix)?.fix));
+        const fix = /** @type {string} */ (left.find(p => p.fix)?.fix);
+        followed.push(fix);
+        await follow(fix);
         left = await open('o');
       }
       expect(left).toEqual([]);
+      // The overlay is offered back.
+      expect(followed.join('\n')).toMatch(/--color-overlay/);
     },
     T,
   );

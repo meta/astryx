@@ -4,9 +4,9 @@
  * @file The lines show offers for text on Core's media surfaces end the
  * problems they name: a button drawn with its default props is the variant
  * Core draws (its fix reaches that variant only); a caption on a lightbox's
- * own bar takes the lightbox's on-color, which set accepts; a light overlay
- * gets the overlay back; and a link at a page's name is left alone and
- * named, not refused.
+ * own bar takes the lightbox's on-color, which set accepts; and a link at a
+ * page's name is left alone and named, not refused. (A light overlay given
+ * the overlay back is the media-scheme test's, on the real neutral theme.)
  */
 
 import * as fs from 'node:fs';
@@ -91,20 +91,6 @@ describe('lines for text on a media surface', () => {
       expect(first?.fix).not.toMatch(/--color-text-/);
       const {left} = await settle('c');
       expect(left).toEqual([]);
-    },
-    T,
-  );
-
-  it(
-    'a light overlay is offered the overlay back, and ends at none',
-    async () => {
-      await themeEditNew('o', {cwd, like: 'neutral'});
-      await themeEditSet('o', '--color-overlay', 'rgba(255,255,255,0.9)', {
-        cwd,
-      });
-      const {left, followed} = await settle('o');
-      expect(left).toEqual([]);
-      expect(followed.join('\n')).toMatch(/--color-overlay/);
     },
     T,
   );

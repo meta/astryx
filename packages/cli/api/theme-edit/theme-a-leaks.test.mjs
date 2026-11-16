@@ -150,22 +150,22 @@ describe('a radius your own theme source sets on a part', () => {
   it(
     'is named when a radius setting there would not show',
     async () => {
-      await themeEditNew('r', {cwd, like: 'neutral'});
-      const src = path.join(cwd, 'themes/r/r.theme.ts');
+      // (On the toast case's theme: its source gains a radius of its own.)
+      const src = path.join(cwd, 'themes/b/b.theme.ts');
       fs.writeFileSync(
         src,
         fs
           .readFileSync(src, 'utf8')
           .replace(
-            /name: 'r',/,
-            "name: 'r',\n  components: {button: {base: {borderRadius: '2px'}}},",
+            /name: 'b',/,
+            "name: 'b',\n  components: {button: {base: {borderRadius: '2px'}}},",
           ),
       );
       const r = /** @type {any} */ (
-        await themeEditSet('r', 'border-radius', '12px', {cwd, on: 'button'})
+        await themeEditSet('b', 'border-radius', '12px', {cwd, on: 'button'})
       ).data;
       expect(r.notes.join('\n')).toMatch(
-        /r\.theme\.ts sets border-radius on button itself \(2px\)/,
+        /b\.theme\.ts sets border-radius on button itself \(2px\)/,
       );
     },
     T,
