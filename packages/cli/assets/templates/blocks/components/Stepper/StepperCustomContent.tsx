@@ -29,19 +29,23 @@ export default function StepperCustomContent() {
           indicator="number">
           {active === 0 && (
             <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
-              <div style={{display: 'flex', gap: 12}}>
-                <TextInput
-                  label="Project name"
-                  placeholder="My awesome project"
-                  value=""
-                  width="100%"
-                />
-                <TextInput
-                  label="Repository URL"
-                  placeholder="https://github.com/..."
-                  value=""
-                  width="100%"
-                />
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: 12}}>
+                <div style={{flex: '1 1 220px', minWidth: 0}}>
+                  <TextInput
+                    label="Project name"
+                    placeholder="My awesome project"
+                    value=""
+                    width="100%"
+                  />
+                </div>
+                <div style={{flex: '1 1 220px', minWidth: 0}}>
+                  <TextInput
+                    label="Repository URL"
+                    placeholder="https://github.com/..."
+                    value=""
+                    width="100%"
+                  />
+                </div>
               </div>
               <div>
                 <Button
