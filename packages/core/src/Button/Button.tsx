@@ -31,6 +31,8 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {ButtonLabelTooltip, useLabelTooltip} from './ButtonLabelTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
   sizeVars,
@@ -917,6 +919,16 @@ export function Button({
     isEnabled: tooltip != null,
   });
 
+  // A label cut short by its row shows in full in a tooltip, as truncated
+  // Text does. It is measured on hover or keyboard focus, never at rest, and
+  // a caller's own tooltip replaces it.
+  const buttonRef = useRef<HTMLElement | null>(null);
+  const labelRef = useRef<HTMLSpanElement | null>(null);
+  const labelTooltip = useLabelTooltip(
+    labelRef,
+    !isIconOnly && tooltip == null,
+  );
+
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
     // a re-click while pending starts a fresh action that interrupts the prior.
@@ -1060,7 +1072,9 @@ export function Button({
           </span>
         )}
         {isIconOnly ? null : (
-          <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
+          <span ref={labelRef} {...stylex.props(styles.labelText)}>
+            {children ?? label}
+          </span>
         )}
         {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
@@ -1121,6 +1135,7 @@ export function Button({
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
     hitAreaRef,
+    buttonRef,
   );
 
   let element: ReactNode;
@@ -1146,6 +1161,11 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerEnter={composeEventHandlers(
+          props.onPointerEnter,
+          labelTooltip.onPointerEnter,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, labelTooltip.onFocus)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1171,6 +1191,11 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerEnter={composeEventHandlers(
+          props.onPointerEnter,
+          labelTooltip.onPointerEnter,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, labelTooltip.onFocus)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1178,16 +1203,18 @@ export function Button({
     );
   }
 
-  if (tooltip) {
-    return (
-      <>
-        {element}
-        {tooltipHook.renderTooltip(tooltip)}
-      </>
-    );
-  }
-
-  return element;
+  // One shape whether or not a tooltip shows, so a label that becomes cut
+  // short keeps the same button element (and its focus).
+  return (
+    <>
+      {element}
+      {tooltip ? (
+        tooltipHook.renderTooltip(tooltip)
+      ) : (
+        <ButtonLabelTooltip anchorRef={buttonRef} labelTooltip={labelTooltip} />
+      )}
+    </>
+  );
 }
 
 Button.displayName = 'Button';
