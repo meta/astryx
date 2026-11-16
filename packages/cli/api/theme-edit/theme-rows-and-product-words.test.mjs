@@ -102,6 +102,7 @@ describe("a part's rows and a product's words", () => {
     // (A compound that describes the product before a colon names
     // nothing: the look after it is the whole theme's.)
     ['radio station app: rounder corners', [], null],
+    ['button factory app: rounder corners', [], null],
     ['card game app: rounded corners', [], null],
     // (A part with one unknown word after it, and nothing more, keeps the
     // part: the word is no compound's noun.)
