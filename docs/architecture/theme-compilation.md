@@ -187,8 +187,8 @@ Platform-specific details stay inside that compiler.
   Where two adaptation queries match together and a surface's re-declared
   value differs from the value the root resolves under both, the surface
   inherits that token there. A token the surface re-declares does
-  not take a value set for it on an element between the theme root and the
-  surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
+  not take a value set for it on the theme root, or on an element between
+  the theme root and the surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
   values with the declaration scanner, so a comment or a string never counts as
   a reference.
 
