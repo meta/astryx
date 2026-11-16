@@ -462,12 +462,14 @@ export default function ReviewWorkspaceTemplate() {
                   <Heading level={1}>Reply quality review</Heading>
                 </StackItem>
                 {isNarrow && (
-                  <Button
-                    label={`${index + 1} of ${ITEMS.length}`}
-                    variant="secondary"
-                    icon={<Icon icon={QueueListIcon} />}
-                    onClick={() => setIsRailOpen(true)}
-                  />
+                  <StackItem size="static">
+                    <Button
+                      label={`${index + 1} of ${ITEMS.length}`}
+                      variant="secondary"
+                      icon={<Icon icon={QueueListIcon} />}
+                      onClick={() => setIsRailOpen(true)}
+                    />
+                  </StackItem>
                 )}
                 <MoreMenu
                   label="Batch actions"
