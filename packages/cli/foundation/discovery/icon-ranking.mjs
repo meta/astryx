@@ -64,6 +64,10 @@
  * an icon's most telling tags first). Remaining ties keep id order, so the
  * same installation always answers the same way.
  *
+ * Ranking reads every icon of every searched set in each pass. Each set's
+ * icons, with the words they match by, are worked out once per set object
+ * and kept for every later pass and query on that set.
+ *
  * @position foundation/discovery — read by api/icon and icon-set-checks
  */
 
@@ -141,22 +145,88 @@ const squash = value => value.toLowerCase().replace(/[\s_-]+/g, '');
  * @returns {IconMatch | null}
  */
 export function matchIcon(query, icon, definitions = []) {
-  const joined = squash(query);
-  const definition = definitions.find(name => name.toLowerCase() === joined);
-  if (definition) {
+  return matchReady(readyQuery(query), readyIcon(icon, definitions));
+}
+
+/**
+ * The forms of a query that {@link matchIcon} compares, worked out once for
+ * a ranking pass rather than once for each icon.
+ * @typedef {object} ReadyQuery
+ * @property {string} text the query, lower-case and trimmed
+ * @property {string} joined the query without spaces, hyphens or underscores
+ * @property {string} id the query with its spaces as hyphens
+ * @property {boolean} spaced whether the query holds a space
+ * @property {boolean} long whether the query holds three letters or more
+ * @property {string[]} tokens the query's words
+ */
+
+/**
+ * @param {string} query lower-case, trimmed
+ * @returns {ReadyQuery}
+ */
+function readyQuery(query) {
+  return {
+    text: query,
+    joined: squash(query),
+    id: query.replace(/\s+/g, '-'),
+    spaced: /\s/u.test(query),
+    long: query.replace(/\s+/gu, '').length >= 3,
+    tokens: query.split(/\s+/).filter(Boolean),
+  };
+}
+
+/**
+ * The forms of an icon that {@link matchIcon} compares, worked out once.
+ * @typedef {object} ReadyIcon
+ * @property {IconSetIcon} icon
+ * @property {string[]} definitions the definitions the set maps it to
+ * @property {string[]} lowerDefinitions those names in lower case
+ * @property {Set<string>} parts its id parts
+ * @property {string[]} tags its words that are neither its id nor an id part
+ * @property {boolean[]} spacedWords for each word, whether it holds a space
+ * @property {string[]} [texts] its id, then its words, made when first needed
+ * @property {string[]} [allParts] its id parts, then the parts of its words,
+ *   made when first needed
+ */
+
+/**
+ * @param {IconSetIcon} icon
+ * @param {string[]} definitions
+ * @returns {ReadyIcon}
+ */
+function readyIcon(icon, definitions) {
+  const parts = new Set(icon.id.split('-'));
+  return {
+    icon,
+    definitions,
+    lowerDefinitions: definitions.map(name => name.toLowerCase()),
+    parts,
+    tags: icon.words.filter(word => word !== icon.id && !parts.has(word)),
+    spacedWords: icon.words.map(word => /\s/u.test(word)),
+  };
+}
+
+/**
+ * {@link matchIcon} on a ready query and a ready icon.
+ * @param {ReadyQuery} q
+ * @param {ReadyIcon} ready
+ * @returns {IconMatch | null}
+ */
+function matchReady(q, ready) {
+  const {icon, parts, tags} = ready;
+  const query = q.text;
+  const at = ready.lowerDefinitions.indexOf(q.joined);
+  if (at >= 0) {
     return {
       tier: 'definition',
       name: false,
       meaning: false,
       rank: 0,
-      reason: `definition "${definition}"`,
+      reason: `definition "${ready.definitions[at]}"`,
     };
   }
-  const id = query.replace(/\s+/g, '-');
-  const parts = new Set(icon.id.split('-'));
-  const tags = icon.words.filter(word => word !== icon.id && !parts.has(word));
   const tagAt = tags.indexOf(query);
-  const wholeId = icon.id === id;
+  const wholeId = icon.id === q.id;
   const partWord = !wholeId && parts.has(query) && icon.words.includes(query);
   if (wholeId || partWord || tagAt >= 0) {
     return {
@@ -167,7 +237,14 @@ export function matchIcon(query, icon, definitions = []) {
       reason: wholeId ? `id "${icon.id}"` : `word "${query}"`,
     };
   }
-  const plural = icon.words.find(word => sameWord(word, query));
+  const plural = q.spaced
+    ? undefined
+    : icon.words.find(
+        (word, index) =>
+          !ready.spacedWords[index] &&
+          word !== query &&
+          pluralPair(word, query),
+      );
   if (plural) {
     const named = parts.has(plural);
     return {
@@ -195,10 +272,11 @@ export function matchIcon(query, icon, definitions = []) {
     };
   }
   // A letter or two inside a word (`x` in `box`) says nothing about it.
-  const contains =
-    query.replace(/\s+/gu, '').length >= 3
-      ? [icon.id, ...icon.words].find(text => text.includes(query))
-      : undefined;
+  const contains = q.long
+    ? (ready.texts ??= [icon.id, ...icon.words]).find(text =>
+        text.includes(query),
+      )
+    : undefined;
   if (contains) {
     return {
       tier: 'partial',
@@ -208,19 +286,20 @@ export function matchIcon(query, icon, definitions = []) {
       reason: `partial "${contains}"`,
     };
   }
-  const tokens = query.split(/\s+/).filter(Boolean);
-  if (tokens.length > 1) {
-    const all = [
+  if (q.tokens.length > 1) {
+    const allParts = (ready.allParts ??= [
       ...icon.id.split('-'),
-      ...icon.words.flatMap(w => w.split(/\s+/)),
-    ];
-    if (tokens.every(token => all.some(part => part.startsWith(token)))) {
+      ...icon.words.flatMap(word => word.split(/\s+/)),
+    ]);
+    if (
+      q.tokens.every(token => allParts.some(part => part.startsWith(token)))
+    ) {
       return {
         tier: 'partial',
         name: false,
         meaning: false,
         rank: 0,
-        reason: `partial "${tokens.join(' ')}"`,
+        reason: `partial "${q.tokens.join(' ')}"`,
       };
     }
   }
@@ -235,6 +314,15 @@ export function matchIcon(query, icon, definitions = []) {
  */
 function sameWord(a, b) {
   if (a === b || /\s/u.test(a) || /\s/u.test(b)) return false;
+  return pluralPair(a, b);
+}
+
+/**
+ * Whether one of two different words without spaces is the other's plural.
+ * @param {string} a
+ * @param {string} b
+ */
+function pluralPair(a, b) {
   const [short, long] = a.length < b.length ? [a, b] : [b, a];
   return short.length >= 2 && (long === `${short}s` || long === `${short}es`);
 }
@@ -447,26 +535,15 @@ const WORD_MATCH_SCORE = 20;
  * @returns {IconMatchEntry[]}
  */
 function rankWords(sets, term) {
-  const astryx = astryxDefinitionsByName();
   const words = [...new Set(term.split(' '))];
   let total = 0;
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], named: string[], setIndex: number}>} */
   const hits = [];
   sets.forEach((set, setIndex) => {
-    const byIcon = definitionsByIcon(set.data);
-    const own = new Map(
-      (set.definitions ?? []).map(each => [each.doc.name, each.doc]),
-    );
-    for (const icon of set.data.icons) {
+    for (const searchable of searchableIcons(set)) {
+      const {icon, definitions} = searchable;
       total++;
-      const definitions = byIcon.get(icon.id) ?? [];
-      const terms = iconTerms(
-        withDefinitionWords(
-          icon,
-          definitions,
-          name => astryx.get(name) ?? own.get(name),
-        ),
-      );
+      const terms = (searchable.terms ??= iconTerms(searchable.ready.icon));
       const carried = words.filter(word =>
         terms.some(each => each === word || sameWord(each, word)),
       );
@@ -554,31 +631,52 @@ function iconTerms(icon) {
 }
 
 /**
+ * Each icon of a set with the words it matches by and its ready forms
+ * ({@link readyIcon}), kept for each set object. A set is data that does not
+ * change once read, and every ranking pass reads every icon, so the work is
+ * done once per set rather than once per pass.
+ * @type {WeakMap<object, Array<{icon: IconSetIcon, definitions: string[], ready: ReadyIcon, terms?: string[]}>>}
+ */
+const SEARCHABLE = new WeakMap();
+
+/**
+ * @param {DiscoveredIconSet} set
+ * @returns {Array<{icon: IconSetIcon, definitions: string[], ready: ReadyIcon, terms?: string[]}>}
+ */
+function searchableIcons(set) {
+  const kept = SEARCHABLE.get(set);
+  if (kept) return kept;
+  const astryx = astryxDefinitionsByName();
+  const byIcon = definitionsByIcon(set.data);
+  const own = new Map(
+    (set.definitions ?? []).map(each => [each.doc.name, each.doc]),
+  );
+  const list = set.data.icons.map(icon => {
+    const definitions = byIcon.get(icon.id) ?? [];
+    const searchable = withDefinitionWords(
+      icon,
+      definitions,
+      name => astryx.get(name) ?? own.get(name),
+    );
+    return {icon, definitions, ready: readyIcon(searchable, definitions)};
+  });
+  SEARCHABLE.set(set, list);
+  return list;
+}
+
+/**
  * {@link rankIcons} for one normalized query.
  * @param {DiscoveredIconSet[]} sets
  * @param {string} term
  * @returns {IconMatchEntry[]}
  */
 function rankTerm(sets, term) {
-  const astryx = astryxDefinitionsByName();
+  const query = readyQuery(term);
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], match: IconMatch, setIndex: number}>} */
   const hits = [];
   sets.forEach((set, setIndex) => {
-    const byIcon = definitionsByIcon(set.data);
-    const own = new Map(
-      (set.definitions ?? []).map(each => [each.doc.name, each.doc]),
-    );
-    for (const icon of set.data.icons) {
-      const definitions = byIcon.get(icon.id) ?? [];
-      const match = matchIcon(
-        term,
-        withDefinitionWords(
-          icon,
-          definitions,
-          name => astryx.get(name) ?? own.get(name),
-        ),
-        definitions,
-      );
+    for (const {icon, definitions, ready} of searchableIcons(set)) {
+      const match = matchReady(query, ready);
       if (match) hits.push({set, icon, definitions, match, setIndex});
     }
   });
