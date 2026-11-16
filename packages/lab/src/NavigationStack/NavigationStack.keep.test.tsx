@@ -51,6 +51,22 @@ function Detail({entry}: {entry: string}) {
       <button type="button" onClick={() => nav.pop({transition: 'cut'})}>
         Cut pop {entry}
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          nav.pop();
+          nav.evict(entry);
+        }}>
+        Delete {entry}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          nav.pop({transition: 'cut'});
+          nav.evict(entry);
+        }}>
+        Cut delete {entry}
+      </button>
     </>
   );
 }
@@ -61,6 +77,15 @@ function OwnScroller() {
     <div ref={scroller.ref} data-testid="own-scroller">
       Inset {scroller.barInset}
     </div>
+  );
+}
+
+function LinkRow({entry}: {entry: string}) {
+  const link = useNavigationLink(entry);
+  return (
+    <button type="button" {...link}>
+      Open {entry}
+    </button>
   );
 }
 
@@ -100,6 +125,7 @@ function Root() {
       <button type="button" onClick={() => nav.push('Own')}>
         Open Own
       </button>
+      <LinkRow entry="D" />
     </>
   );
 }
@@ -230,6 +256,26 @@ describe('NavigationStack: retained screens', () => {
     expect(card('A')).toBeNull();
   });
 
+  it('unmounts a screen that evict() names in the same handler as its animated pop', async () => {
+    render(<Harness retainPopped={2} />);
+    await open('Open A', 'A');
+    fireEvent.click(screen.getByRole('button', {name: 'Delete A'}));
+    await waitFor(() =>
+      expect(card('Chats')?.hasAttribute('data-navigation-top')).toBe(true),
+    );
+    await waitFor(() => expect(card('A')).toBeNull());
+  });
+
+  it('unmounts a screen that evict() names in the same handler as its cut pop', async () => {
+    render(<Harness retainPopped={2} />);
+    await open('Open A', 'A');
+    fireEvent.click(screen.getByRole('button', {name: 'Cut delete A'}));
+    await waitFor(() =>
+      expect(card('Chats')?.hasAttribute('data-navigation-top')).toBe(true),
+    );
+    expect(card('A')).toBeNull();
+  });
+
   it('retains nothing by default', async () => {
     render(<Harness />);
     await open('Open A', 'A');
@@ -278,6 +324,29 @@ describe('NavigationStack: a prepared screen', () => {
     expect(mounts.B).toBe(2);
     await open('Open B', 'B');
     expect(mounts.B).toBe(2);
+  });
+});
+
+describe('NavigationStack: a press a scroll cancels', () => {
+  it('leaves nothing that drops the next row’s prepared screen', async () => {
+    render(<Harness />);
+    const rowB = screen.getByRole('button', {name: 'Open B'});
+    fireEvent.pointerDown(rowB);
+    await waitFor(() => expect(card('B')).not.toBeNull());
+    // A scroll takes the touch: the browser cancels the pointer.
+    fireEvent.pointerCancel(rowB);
+    expect(card('B')).toBeNull();
+    const rowD = screen.getByRole('button', {name: 'Open D'});
+    fireEvent.pointerDown(rowD);
+    await waitFor(() =>
+      expect(card('D')?.getAttribute('data-navigation-screen-state')).toBe(
+        'prepared',
+      ),
+    );
+    fireEvent.pointerUp(rowD);
+    expect(card('D')?.getAttribute('data-navigation-screen-state')).toBe(
+      'prepared',
+    );
   });
 });
 

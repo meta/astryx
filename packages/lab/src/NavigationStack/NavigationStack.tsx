@@ -49,6 +49,7 @@ import {
   type MotionEngine,
   type SpringDescription,
 } from '@astryxdesign/core/internal/touch';
+import {useCommittedRef} from '@astryxdesign/core/internal/committed-ref';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {useScrollableArea} from '@astryxdesign/core/hooks';
 import {focusOutlineStyles} from '@astryxdesign/core/utils';
@@ -944,20 +945,58 @@ interface Transition {
 
 /**
  * The retained screens after `popped` leave the path, most recent last,
- * trimmed to `limit`.
+ * trimmed to `limit`. An evicted screen is not retained.
  */
 function keepRetained(
   list: ScreenModel[],
   popped: ScreenModel[],
   limit: number,
+  evicted: readonly string[],
 ): ScreenModel[] {
   if (limit <= 0) {
     return [];
   }
   const keys = new Set(popped.map(model => model.key));
-  return [...list.filter(model => !keys.has(model.key)), ...popped].slice(
-    -limit,
-  );
+  return [
+    ...list.filter(model => !keys.has(model.key)),
+    ...popped.filter(model => !evicted.includes(model.key)),
+  ].slice(-limit);
+}
+
+interface ViewState {
+  keys: string;
+  models: ScreenModel[];
+  leaving: ScreenModel | null;
+  transition: Transition;
+  retained: ScreenModel[];
+  prepared: ScreenModel | null;
+  /**
+   * Screens the app evicted while they were on the path or leaving: their
+   * pop does not retain them.
+   */
+  evicted: string[];
+  /** Every mounted screen, in the order it first mounted. */
+  order: string[];
+}
+
+/**
+ * The view with its card order kept: a mounted screen keeps its place, and a
+ * new one goes last. A card that keeps its place in the DOM keeps its scroll.
+ */
+function withOrder(next: ViewState): ViewState {
+  const mounted = [
+    ...next.models,
+    ...(next.leaving == null ? [] : [next.leaving]),
+    ...next.retained,
+    ...(next.prepared == null ? [] : [next.prepared]),
+  ].map(model => model.key);
+  const order = next.order.filter(key => mounted.includes(key));
+  for (const key of mounted) {
+    if (!order.includes(key)) {
+      order.push(key);
+    }
+  }
+  return {...next, order};
 }
 
 /**
@@ -1125,23 +1164,18 @@ export function NavigationStack<T>({
     getKey == null
       ? 0
       : Math.max(0, Math.min(4, Math.floor(retainPopped) || 0));
-  const retainLimitRef = useRef(retainLimit);
+  const retainLimitRef = useCommittedRef(retainLimit);
   // Paths a cut change made: the derivation below reads them.
   const [cutPaths] = useState(() => new WeakSet<object>());
   const [keepFocusPaths] = useState(() => new WeakSet<object>());
-  const [view, setView] = useState<{
-    keys: string;
-    models: ScreenModel[];
-    leaving: ScreenModel | null;
-    transition: Transition;
-    retained: ScreenModel[];
-    prepared: ScreenModel | null;
-  }>(() => ({
+  const [view, setView] = useState<ViewState>(() => ({
     keys,
     models,
     leaving: null,
     retained: [],
     prepared: null,
+    evicted: [],
+    order: models.map(model => model.key),
     transition: {
       id: 0,
       kind: 'none',
@@ -1162,7 +1196,12 @@ export function NavigationStack<T>({
     let retained =
       view.leaving == null
         ? view.retained
-        : keepRetained(view.retained, [view.leaving], retainLimit);
+        : keepRetained(
+            view.retained,
+            [view.leaving],
+            retainLimit,
+            view.evicted,
+          );
     let prepared = view.prepared;
     if (models.length === before.length + 1 && isPrefix(before, models)) {
       transition = {
@@ -1189,6 +1228,7 @@ export function NavigationStack<T>({
         retained,
         cut ? popped : popped.slice(0, -1),
         retainLimit,
+        view.evicted,
       );
     } else {
       transition = {
@@ -1204,7 +1244,22 @@ export function NavigationStack<T>({
     if (prepared != null && onPath.has(prepared.key)) {
       prepared = null;
     }
-    setView({keys, models, leaving, transition, retained, prepared});
+    // An eviction holds until its screen has left the path and the pop.
+    const evicted = view.evicted.filter(
+      key => onPath.has(key) || leaving?.key === key,
+    );
+    setView(
+      withOrder({
+        keys,
+        models,
+        leaving,
+        transition,
+        retained,
+        prepared,
+        evicted,
+        order: view.order,
+      }),
+    );
   } else if (view.models !== models) {
     // Same screens, new elements (the app re-rendered): keep them current.
     setView({...view, models});
@@ -1677,20 +1732,20 @@ export function NavigationStack<T>({
       });
       backControl.animator.set({opacity: 1});
       backChevron.animator.set({opacity: 1});
-      if (
+      const keepsCallerFocus =
         transition.keepFocus === true &&
         focusIsIn(
           transition.kind === 'push' ? transition.top : transition.under,
-        )
-      ) {
-        // The caller keeps focus where it put it, in the new top screen.
-      } else if (transition.kind === 'push') {
-        focusAfter('push', transition.top);
-      } else if (transition.under != null) {
-        pendingFocusRef.current = {
-          popped: transition.top,
-          revealed: transition.under,
-        };
+        );
+      if (!keepsCallerFocus) {
+        if (transition.kind === 'push') {
+          focusAfter('push', transition.top);
+        } else if (transition.under != null) {
+          pendingFocusRef.current = {
+            popped: transition.top,
+            revealed: transition.under,
+          };
+        }
       }
       return;
     }
@@ -1767,7 +1822,7 @@ export function NavigationStack<T>({
       if (transition.kind === 'pop') {
         setView(current =>
           current.transition.id === id
-            ? {
+            ? withOrder({
                 ...current,
                 leaving: null,
                 retained:
@@ -1777,8 +1832,12 @@ export function NavigationStack<T>({
                         current.retained,
                         [current.leaving],
                         retainLimitRef.current,
+                        current.evicted,
                       ),
-              }
+                evicted: current.evicted.filter(key =>
+                  current.models.some(model => model.key === key),
+                ),
+              })
             : current,
         );
         if (under != null) {
@@ -1831,15 +1890,12 @@ export function NavigationStack<T>({
   // React discards.
   const pathRef = useRef(path);
   const onPathChangeRef = useRef(onPathChange);
-  const getKeyRef = useRef(getKey);
-  const renderScreenRef = useRef(renderScreen);
   useLayoutEffect(() => {
     pathRef.current = path;
     onPathChangeRef.current = onPathChange;
-    getKeyRef.current = getKey;
-    renderScreenRef.current = renderScreen;
-    retainLimitRef.current = retainLimit;
   });
+  const getKeyRef = useCommittedRef(getKey);
+  const renderScreenRef = useCommittedRef(renderScreen);
 
   // A change through the API: a cut marks its path for the derivation.
   const change = useCallback(
@@ -1856,12 +1912,15 @@ export function NavigationStack<T>({
   );
   // An entry's screen key, for retention and preparation (null without
   // `getKey`).
-  const keyOf = useCallback((entry: T): string | null => {
-    const read = getKeyRef.current;
-    return read == null
-      ? null
-      : `screen-${read(entry, pathRef.current.length)}`;
-  }, []);
+  const keyOf = useCallback(
+    (entry: T): string | null => {
+      const read = getKeyRef.current;
+      return read == null
+        ? null
+        : `screen-${read(entry, pathRef.current.length)}`;
+    },
+    [getKeyRef],
+  );
 
   const api = useMemo<NavigationStackApi<T>>(
     () => ({
@@ -1892,11 +1951,22 @@ export function NavigationStack<T>({
         if (key == null) {
           return;
         }
-        setView(current => ({
-          ...current,
-          retained: current.retained.filter(model => model.key !== key),
-          prepared: current.prepared?.key === key ? null : current.prepared,
-        }));
+        setView(current => {
+          // A screen still on the path or leaving is not retained when its
+          // pop lands.
+          const isLeaving =
+            current.models.some(model => model.key === key) ||
+            current.leaving?.key === key;
+          return withOrder({
+            ...current,
+            retained: current.retained.filter(model => model.key !== key),
+            prepared: current.prepared?.key === key ? null : current.prepared,
+            evicted:
+              isLeaving && !current.evicted.includes(key)
+                ? [...current.evicted, key]
+                : current.evicted,
+          });
+        });
       },
       prepare: entry => {
         const key = keyOf(entry);
@@ -1911,17 +1981,22 @@ export function NavigationStack<T>({
             current.retained.some(model => model.key === key) ||
             current.prepared?.key === key
               ? current
-              : {...current, prepared: {key, element, source: null}},
+              : withOrder({
+                  ...current,
+                  prepared: {key, element, source: null},
+                }),
           );
         });
       },
       drop: () => {
         setView(current =>
-          current.prepared == null ? current : {...current, prepared: null},
+          current.prepared == null
+            ? current
+            : withOrder({...current, prepared: null}),
         );
       },
     }),
-    [depth, change, keyOf],
+    [depth, change, keyOf, renderScreenRef],
   );
 
   // Record the source of a push on the screen it pushed.
@@ -2054,26 +2129,9 @@ export function NavigationStack<T>({
   // Render
   // ---------------------------------------------------------------------------
 
-  // Every mounted screen in the order it first mounted. A retained screen
-  // pushed again keeps its place in the DOM, and so its scroll; the stack
-  // layers the cards itself.
-  const cardOrderRef = useRef<string[]>([]);
-  const mountedKeys = [
-    ...rendered,
-    ...view.retained,
-    ...(view.prepared == null ? [] : [view.prepared]),
-  ].map(model => model.key);
-  const cardOrder = cardOrderRef.current.filter(key =>
-    mountedKeys.includes(key),
-  );
-  for (const key of mountedKeys) {
-    if (!cardOrder.includes(key)) {
-      cardOrder.push(key);
-    }
-  }
-  useLayoutEffect(() => {
-    cardOrderRef.current = cardOrder;
-  });
+  // A retained screen pushed again keeps its place in the DOM, and so its
+  // scroll; the stack layers the cards itself.
+  const cardOrder = view.order;
 
   const backLabelFor = (index: number) => {
     if (index === 0) {

@@ -14,7 +14,7 @@
  *   none of it
  */
 
-import {useCallback, type PointerEvent} from 'react';
+import {useCallback, useEffect, useRef, type PointerEvent} from 'react';
 import {useNavigationStack} from './NavigationStack';
 
 /** The props a control that pushes one entry spreads. */
@@ -40,8 +40,17 @@ function isNode(value: unknown): value is Node {
  */
 export function useNavigationLink<T>(entry: T): NavigationLinkProps {
   const stack = useNavigationStack<T>();
+  // The press in progress: its abort removes its window listener.
+  const pressRef = useRef<AbortController | null>(null);
+  const endPress = useCallback(() => {
+    pressRef.current?.abort();
+    pressRef.current = null;
+  }, []);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      endPress();
+      const press = new AbortController();
+      pressRef.current = press;
       stack.prepare(entry);
       const control = event.currentTarget;
       const view = control.ownerDocument.defaultView;
@@ -49,16 +58,24 @@ export function useNavigationLink<T>(entry: T): NavigationLinkProps {
       view?.addEventListener(
         'pointerup',
         up => {
+          endPress();
           if (!isNode(up.target) || !control.contains(up.target)) {
             stack.drop();
           }
         },
-        {once: true, capture: true},
+        {capture: true, signal: press.signal},
       );
     },
-    [entry, stack],
+    [endPress, entry, stack],
   );
-  const onPointerCancel = useCallback(() => stack.drop(), [stack]);
+  // A scroll that takes the touch cancels the pointer: no release follows.
+  const onPointerCancel = useCallback(() => {
+    endPress();
+    stack.drop();
+  }, [endPress, stack]);
+  // Removes a press's window listener at unmount (the window's listener, the
+  // system this syncs).
+  useEffect(() => endPress, [endPress]);
   const onClick = useCallback(() => stack.push(entry), [entry, stack]);
   return {onPointerDown, onPointerCancel, onClick};
 }
