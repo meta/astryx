@@ -394,8 +394,9 @@ works on is `spec:AST-040` FR9's.
     the component list (with each integration's component replacements),
     each integration's components with the doc parts the not-found matcher
     scores, integrations' theme records, what `theme build` checks a theme
-    against in Core's component docs, the lookup commands' not-found hint's
-    name summaries of folder trees, npm's list of the files an integration
+    against in Core's component docs, the JavaScript `theme build` compiles
+    from a theme's local TypeScript or JSX modules, the lookup commands'
+    not-found hint's name summaries of folder trees, npm's list of the files an integration
     package packs (for `integration check` and `doctor integration validate`
     in the package's own folder), the CLI's own docs tree, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only

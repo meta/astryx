@@ -61,6 +61,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       "what theme build checks a theme against in Core's component docs",
     );
     expect(plain).toContain(
+      "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
+    );
+    expect(plain).toContain(
       "npm's list of the files an integration package packs",
     );
     // The row names the other checks that can make the folder.

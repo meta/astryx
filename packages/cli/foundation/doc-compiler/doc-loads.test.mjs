@@ -92,6 +92,10 @@ const RUNNERS = {
       'withEmptyStylesheets ×6',
     ],
   },
+  'api/theme/build/self-contained.mjs': {
+    runs: "nothing; reads which modules Babel's compile of a theme's local module loaded, from require.cache, to keep the compiled JavaScript only while each of their files is unchanged",
+    sites: ['require.cache'],
+  },
   'api/theme/build/core-interception.mjs': {
     runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
     sites: ['module', 'require(<computed>)'],

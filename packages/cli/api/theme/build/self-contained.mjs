@@ -16,8 +16,12 @@
  *   file reader is `localModuleFiles` in ../_adapter.mjs
  */
 
+import {createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
+import {persistedSummary} from '../../../foundation/fs/gather-cache.mjs';
+import {fileStamp} from '../../../foundation/fs/read-record.mjs';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
@@ -261,20 +265,20 @@ export function selfContainedImports(entries, options) {
 }
 
 /**
- * One TypeScript or JSX module as JavaScript, its local imports naming
- * the files `rewrite` gives.
+ * The options Babel compiles one module with, but for the plugin that
+ * rewrites its imports. No Babel config file or `.babelrc` of the project is
+ * read, so the JavaScript depends only on these, the source, the rewrites and
+ * Babel's own code.
  * @param {LocalModuleFiles} files
  * @param {string} file
- * @param {string} source
- * @param {Map<string, string>} rewrite import as written, to the import it becomes
  */
-function compileModule(files, file, source, rewrite) {
+function compileOptions(files, file) {
   const jsx = /\.(?:tsx|jsx)$/i.test(file);
-  const result = babelCore().transformSync(source, {
+  return {
     filename: file,
     babelrc: false,
     configFile: false,
-    sourceType: 'module',
+    sourceType: /** @type {const} */ ('module'),
     compact: false,
     plugins: [
       ...(/\.[cm]?tsx?$/i.test(file)
@@ -286,27 +290,102 @@ function compileModule(files, file, source, rewrite) {
           ]
         : []),
       ...(jsx ? [[files.plugins.jsx, {runtime: 'automatic'}]] : []),
-      // The local imports name their compiled or plain file.
-      () => ({
-        visitor: {
-          /** @param {any} p */
-          StringLiteral(p) {
-            const to = rewrite.get(p.node.value);
-            if (!to) return;
-            const parent = p.parent;
-            const isSource =
-              ((parent.type === 'ImportDeclaration' ||
-                parent.type === 'ExportNamedDeclaration' ||
-                parent.type === 'ExportAllDeclaration') &&
-                parent.source === p.node) ||
-              parent.type === 'ImportExpression' ||
-              (parent.type === 'CallExpression' &&
-                parent.callee?.type === 'Import');
-            if (isSource) p.node.value = to;
-          },
-        },
-      }),
     ],
+  };
+}
+
+/**
+ * The Babel plugin that makes a module's local imports name their compiled
+ * or plain file.
+ * @param {Map<string, string>} rewrite import as written, to the import it becomes
+ */
+function rewriteImports(rewrite) {
+  return () => ({
+    visitor: {
+      /** @param {any} p */
+      StringLiteral(p) {
+        const to = rewrite.get(p.node.value);
+        if (!to) return;
+        const parent = p.parent;
+        const isSource =
+          ((parent.type === 'ImportDeclaration' ||
+            parent.type === 'ExportNamedDeclaration' ||
+            parent.type === 'ExportAllDeclaration') &&
+            parent.source === p.node) ||
+          parent.type === 'ImportExpression' ||
+          (parent.type === 'CallExpression' &&
+            parent.callee?.type === 'Import');
+        if (isSource) p.node.value = to;
+      },
+    },
   });
-  return result?.code ?? '';
+}
+
+/**
+ * Every file of the code that compiled a module: the modules of
+ * `@babel/core` and of the plugins, and each module they required in turn,
+ * wherever it is installed.
+ * @param {string[]} roots the files the compile started from
+ * @returns {string[]}
+ */
+function compilerFiles(roots) {
+  const require = createRequire(import.meta.url);
+  /** @type {Set<string>} */
+  const found = new Set();
+  /** @param {NodeJS.Module | undefined} module */
+  const visit = module => {
+    if (!module || found.has(module.filename)) return;
+    found.add(module.filename);
+    for (const child of module.children) visit(child);
+  };
+  for (const root of roots) visit(require.cache[root]);
+  return [...found];
+}
+
+/**
+ * One TypeScript or JSX module as JavaScript, its local imports naming the
+ * files `rewrite` gives. The JavaScript is kept between runs beside the kept
+ * gathers (fs/gather-cache.mjs persistedSummary): it is read back while the
+ * source, the options, the rewrites and every file of Babel's code that made
+ * it are as they were, so a build of an unchanged theme loads no Babel.
+ * @param {LocalModuleFiles} files
+ * @param {string} file
+ * @param {string} source
+ * @param {Map<string, string>} rewrite import as written, to the import it becomes
+ */
+function compileModule(files, file, source, rewrite) {
+  const options = compileOptions(files, file);
+  const key = createHash('sha256')
+    .update(
+      JSON.stringify({
+        source,
+        options,
+        rewrite: [...rewrite].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        rewriteImports: String(rewriteImports),
+        // What Babel reads for a config's `env` blocks; none is read here,
+        // so it stays only as an input Babel could consult.
+        envName: process.env.BABEL_ENV || process.env.NODE_ENV || 'development',
+      }),
+    )
+    .digest('hex');
+  return persistedSummary(
+    ['theme-module-javascript', key],
+    () => {
+      const result = babelCore().transformSync(source, {
+        ...options,
+        plugins: [...options.plugins, rewriteImports(rewrite)],
+      });
+      const code = result?.code ?? '';
+      const require = createRequire(import.meta.url);
+      const roots = [
+        require.resolve('@babel/core'),
+        ...options.plugins.map(([plugin]) => String(plugin)),
+      ];
+      return {
+        value: code,
+        stamps: compilerFiles(roots).map(each => [each, fileStamp(each)]),
+      };
+    },
+    {keep: code => code !== ''},
+  );
 }
