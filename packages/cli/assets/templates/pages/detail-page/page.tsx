@@ -170,7 +170,10 @@ function PageHeader({
   const showToast = useToast();
   const restock = () =>
     // Demo only: replace this toast with the call that performs the action.
-    showToast({body: 'Restock requested for order #1001', uniqueID: 'restock'});
+    showToast({
+      body: 'Demo: a restock would be requested for order #1001 here',
+      uniqueID: 'restock',
+    });
   return (
     <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
       <VStack gap={3}>
@@ -236,7 +239,17 @@ function PageHeader({
           {!isNarrow && (
             <HStack gap={2}>
               <Button label="Restock" variant="secondary" onClick={restock} />
-              <Button label="Edit" variant="secondary" />
+              <Button
+                label="Edit"
+                variant="secondary"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the order editor would open here',
+                    uniqueID: 'edit',
+                  })
+                }
+              />
             </HStack>
           )}
         </HStack>
@@ -253,7 +266,17 @@ function PageHeader({
             </StackItem>
             <StackItem size="fill">
               <VStack hAlign="stretch">
-                <Button label="Edit" variant="secondary" />
+                <Button
+                  label="Edit"
+                  variant="secondary"
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the order editor would open here',
+                      uniqueID: 'edit',
+                    })
+                  }
+                />
               </VStack>
             </StackItem>
           </HStack>
@@ -314,7 +337,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: `Fulfillment started for ${PRODUCTS.length} items`,
+                  body: `Demo: fulfillment would start for ${PRODUCTS.length} items here`,
                   uniqueID: 'fulfill',
                 })
               }
@@ -325,7 +348,7 @@ function ItemsCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Shipping label created for order #1001',
+                  body: 'Demo: a shipping label would be created for order #1001 here',
                   uniqueID: 'label',
                 })
               }
@@ -347,7 +370,13 @@ function ItemsCard() {
                   ))}
                 </VStack>
               }
-              onClick={() => {}}
+              onClick={() =>
+                // Demo only: replace this toast with the link to the product.
+                showToast({
+                  body: `Demo: ${product.name} would open here`,
+                  uniqueID: `product-${i}`,
+                })
+              }
               startContent={
                 <Thumbnail
                   src={product.image}
@@ -393,7 +422,7 @@ function InvoiceCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Refund started for order #1001',
+                  body: 'Demo: a refund would start for order #1001 here',
                   uniqueID: 'refund',
                 })
               }
@@ -404,7 +433,7 @@ function InvoiceCard() {
               onClick={() =>
                 // Demo only: replace this toast with the call that performs the action.
                 showToast({
-                  body: 'Invoice sent to janedoe@email.com',
+                  body: 'Demo: the invoice would be sent to janedoe@email.com here',
                   uniqueID: 'invoice',
                 })
               }
@@ -474,6 +503,7 @@ function InvoiceCard() {
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
 function TimelineSection() {
+  const showToast = useToast();
   return (
     <Section>
       <VStack gap={4}>
@@ -486,6 +516,13 @@ function TimelineSection() {
             variant="ghost"
             icon={<Icon icon={FunnelIcon} />}
             isIconOnly
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: timeline filters would open here',
+                uniqueID: 'timeline-filters',
+              })
+            }
           />
         </HStack>
 

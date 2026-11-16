@@ -374,6 +374,7 @@ function PageHeader({
   onToggleDetails: () => void;
   isNarrow: boolean;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <VStack gap={4}>
@@ -411,6 +412,13 @@ function PageHeader({
                   label={action.label}
                   variant="secondary"
                   icon={<Icon icon={action.icon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would happen here`,
+                      uniqueID: `header-${action.label}`,
+                    })
+                  }
                 />
               ))}
               <Button
@@ -581,7 +589,18 @@ function AttachmentsSection() {
       <VStack gap={4}>
         <SectionHeader
           title="Attachments"
-          action={<Button label="Add attachment" />}
+          action={
+            <Button
+              label="Add attachment"
+              onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: a file picker would open here',
+                  uniqueID: 'add-attachment',
+                })
+              }
+            />
+          }
         />
         <VStack gap={1}>
           {ATTACHMENTS.map(attachment => (
