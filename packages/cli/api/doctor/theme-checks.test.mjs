@@ -1744,6 +1744,63 @@ describe('app-theme doctor checks', () => {
     expect(result.fix).not.toContain('@fontsource/acme-sans');
   });
 
+  it("check 9 counts a family that another added theme's font stylesheet loads, as for a theme that extends it", async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {slug: 'sunset', fontFamily: 'Ocean Sans'},
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it("check 9 reports an imported font stylesheet it cannot parse, even when another theme's stylesheet loads the family", async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {
+        slug: 'sunset',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@font-face { font-family: "Ocean Sans"; src: url(\n',
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining(
+        'sunset: font stylesheet could not be parsed',
+      ),
+    });
+  });
+
+  it('check 9 still warns for a family that no font stylesheet the module imports loads, naming only that one', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {slug: 'sunset', fontFamily: '"Ocean Sans", "Sunset Serif"'},
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message:
+        'Added themes name font families but import no font stylesheet (sunset: Sunset Serif (font stylesheet is not imported)).',
+    });
+  });
+
   it('check 9 warns when an external import cannot prove the named family', async () => {
     const {dir} = await fixture([
       {

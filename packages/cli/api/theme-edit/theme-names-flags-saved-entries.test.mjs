@@ -249,7 +249,7 @@ describe('new with several bad dial flags', () => {
   );
 
   it(
-    '--base is read as --like, with the other flags kept',
+    '--base is the global base option; its refusal offers the --like line',
     async () => {
       const r = await cli([
         ...ED,
@@ -260,14 +260,33 @@ describe('new with several bad dial flags', () => {
         '--corners',
         'round',
       ]);
-      expect(r.error).toContain('--like');
+      expect(r.code).toBe('ERR_BASE_NOT_FOUND');
+      expect(r.error).toContain('--base none');
       expect(r.suggestions[0].name).toMatch(
         / editor new b9 --like none --corners round$/,
       );
       expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
-      expect(settings('b9')).toContainEqual(
-        expect.objectContaining({thing: 'corners', value: 'round'}),
+    },
+    T,
+  );
+
+  it(
+    '--base typed before the command still offers a --like line that runs',
+    async () => {
+      const r = await cli([
+        '--base',
+        'none',
+        ...ED,
+        'new',
+        'b10',
+        '--corners',
+        'round',
+      ]);
+      expect(r.code).toBe('ERR_BASE_NOT_FOUND');
+      expect(r.suggestions[0].name).toMatch(
+        / editor new --like none b10 --corners round$/,
       );
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
     },
     T,
   );
