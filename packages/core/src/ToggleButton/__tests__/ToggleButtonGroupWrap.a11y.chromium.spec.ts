@@ -91,3 +91,22 @@ for (const width of [320, 390]) {
     }
   });
 }
+
+test('a single member wider than the container shortens its label at 320px', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 320, height: 640});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-togglebutton--group-narrow-long-label&viewMode=story`,
+  );
+  const group = page.getByRole('group', {name: 'Report type'});
+  await expect(group).toBeVisible();
+  const facts = await group.evaluate(element => ({
+    right: element.getBoundingClientRect().right,
+    pageOverflow:
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  }));
+  expect(facts.right).toBeLessThanOrEqual(320);
+  expect(facts.pageOverflow).toBeLessThanOrEqual(0);
+});

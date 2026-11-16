@@ -291,6 +291,35 @@ export const GroupNarrow: Story = {
   },
 };
 
+/**
+ * A member whose label is wider than a phone: the group stays inside its
+ * container and that member shortens its label.
+ */
+export const GroupNarrowLongLabel: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: function Render() {
+    const [kind, setKind] = useState<string | null>('weekly');
+    return (
+      <ToggleButtonGroup
+        label="Report type"
+        value={kind}
+        onChange={setKind}
+        size="lg">
+        <ToggleButton
+          value="weekly"
+          label="Weekly revenue and retention summary for every region"
+          icon={<ListBulletIcon style={iconSize} />}
+        />
+        <ToggleButton
+          value="daily"
+          label="Daily"
+          icon={<StarIcon style={iconSize} />}
+        />
+      </ToggleButtonGroup>
+    );
+  },
+};
+
 /** Notification toggle — icon swap between bell and bell-slash. */
 export const NotificationToggle: Story = {
   render: function Render() {
