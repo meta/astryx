@@ -73,12 +73,20 @@ async function afterLoads(count: number) {
 describe('TableCellContextMenu menu load failure', () => {
   it('keeps the table, drops the held right-click and returns the browser menu when the menu fails to load', async () => {
     loader.failures = 1;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {container} = await renderTable('Alice');
     const cell = screen.getByText('Alice');
     // Held while the menu loads, so the browser's menu does not open.
     expect(fireEvent.contextMenu(cell)).toBe(false);
 
     await afterLoads(1);
+    // Development builds warn once, whichever path saw the failure first.
+    expect(
+      warn.mock.calls.filter(([message]) =>
+        String(message).includes('cell context menu failed to load'),
+      ),
+    ).toHaveLength(1);
+    warn.mockRestore();
 
     expect(container.textContent).toBe('Page headingAlicePlain cell');
     expect(screen.getByText('Alice')).toBe(cell);

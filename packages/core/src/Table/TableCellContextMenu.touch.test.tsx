@@ -199,6 +199,21 @@ describe('TableCellContextMenu early invocation', () => {
     expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
   });
 
+  it('does not open the menu for a press that strayed past the tolerance and came back before the menu loads', async () => {
+    const {trigger, loadMenu} = await renderColdCell('Stray');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    fireEvent.touchMove(trigger, {touches: [{clientX: 10, clientY: 60}]});
+    fireEvent.touchMove(trigger, {touches: [{clientX: 10, clientY: 12}]});
+    await wait(650);
+    fireEvent.touchEnd(trigger, {touches: []});
+
+    await loadMenu();
+    await wait(600);
+
+    // A loaded cell cancels this press at the stray move, so it opens nothing.
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  });
+
   it('drops a held touch once a press elsewhere comes before the menu loads', async () => {
     const {trigger, loadMenu} = await renderColdCell('Hold me');
     fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});

@@ -45,6 +45,7 @@ import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
 import {hasContextActions} from './tableContextActions';
+import {warnOnce} from '../utils/devWarning';
 
 interface TableContextMenuModule {
   TableContextMenuForTrigger: typeof TableContextMenuForTrigger;
@@ -62,9 +63,19 @@ const tableContextMenu = createModuleLoader<TableContextMenuModule>(
  */
 export const loadTableContextMenu = tableContextMenu.load;
 
-/** Starts the load for an early invocation. The lazy menu reports a failure. */
+/** Development builds warn once when the menu code fails to load. */
+function warnMenuUnavailable(error: unknown): void {
+  warnOnce(
+    'table-context-menu-load',
+    'Table',
+    'The cell context menu failed to load. Cells show the browser menu until a later invocation loads it.',
+    error,
+  );
+}
+
+/** Starts the load for an early invocation. */
 function preloadTableContextMenu(): void {
-  loadTableContextMenu().catch(() => {});
+  loadTableContextMenu().catch(warnMenuUnavailable);
 }
 
 type LazyMenuProps = ComponentProps<typeof TableContextMenuForTrigger> & {
@@ -86,7 +97,8 @@ function createLazyTableContextMenu() {
     try {
       const mod = await loadTableContextMenu();
       return {default: mod.TableContextMenuForTrigger};
-    } catch {
+    } catch (error) {
+      warnMenuUnavailable(error);
       LazyTableContextMenu = createLazyTableContextMenu();
       return {default: MenuUnavailable};
     }
@@ -145,7 +157,11 @@ type HeldTouch = {
   events: {phase: TouchPhase; event: ReactTouchEvent<HTMLElement>}[];
 };
 
-/** Adds a touch event to a held press. Only the last move is kept. */
+/**
+ * Adds a touch event to a held press. Every move is kept: a press that strays
+ * past the move tolerance and comes back must cancel the long press on
+ * replay, as it does on a loaded cell.
+ */
 function holdTouchEvent(
   held: HeldTouch | null,
   phase: TouchPhase,
@@ -161,11 +177,7 @@ function holdTouchEvent(
   if (last?.phase === 'end' || last?.phase === 'cancel') {
     return held;
   }
-  const events =
-    phase === 'move' && last?.phase === 'move'
-      ? held.events.slice(0, -1)
-      : held.events;
-  return {...held, events: [...events, {phase, event}]};
+  return {...held, events: [...held.events, {phase, event}]};
 }
 
 function replayTouch(
@@ -227,7 +239,7 @@ function CellTrigger({
   const retryMenu = () => {
     loadTableContextMenu().then(
       () => setMenuUnavailable(false),
-      () => {},
+      warnMenuUnavailable,
     );
   };
 
