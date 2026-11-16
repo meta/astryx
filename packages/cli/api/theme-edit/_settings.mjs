@@ -6976,10 +6976,32 @@ export function compileTheme(ctx, data, base) {
         }
         putTok(k, color, m);
       }
+    // The emphasized border (input and selector frames) is never fainter
+    // than the border: an opaque border stronger than it on the surface
+    // carries it; a fainter one leaves it as it is.
     const border = pinned('--color-border', m)
       ? written('--color-border', m)
       : null;
-    if (border && !pinned('--color-border-emphasized', m))
+    const emphasized =
+      written('--color-border-emphasized', m) ??
+      baseColor('--color-border-emphasized', m);
+    const ground =
+      written('--color-background-surface', m) ??
+      baseColor('--color-background-surface', m);
+    if (
+      border &&
+      !pinned('--color-border-emphasized', m) &&
+      (!emphasized ||
+        !ground ||
+        ratio(
+          /** @type {[number, number, number]} */ (parseColor(border)),
+          /** @type {[number, number, number]} */ (parseColor(ground)),
+        ) >
+          ratio(
+            /** @type {[number, number, number]} */ (parseColor(emphasized)),
+            /** @type {[number, number, number]} */ (parseColor(ground)),
+          ))
+    )
       putTok('--color-border-emphasized', border, m);
   }
   for (const [k, {light, dark}] of Object.entries(tok)) {
@@ -7157,6 +7179,19 @@ const SURFACE_FAMILY = [
   '--color-syntax-background',
   '--color-skeleton',
 ];
+
+/**
+ * The tokens that follow another one the theme sets exactly (where it
+ * does not set them itself): each with the token it follows.
+ */
+export const FOLLOWS = Object.freeze(
+  /** @type {Record<string, string>} */ ({
+    ...Object.fromEntries(
+      SURFACE_FAMILY.map(k => [k, '--color-background-surface']),
+    ),
+    '--color-border-emphasized': '--color-border',
+  }),
+);
 
 /**
  * A block's longhands that follow a shorthand covering them, where the base

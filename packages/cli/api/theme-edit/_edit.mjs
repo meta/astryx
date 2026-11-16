@@ -145,6 +145,7 @@ import {
   dialSettingsInText,
   skips,
   OPEN_SECTION,
+  FOLLOWS,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -6775,6 +6776,21 @@ async function changeOnce(
           ]
         : []),
     );
+  // A token another one follows (the surface's fills, the emphasized
+  // border) says what moved with it.
+  if (sub === 'set' && s.source === 'token' && !s.on && !s.when && !s.state) {
+    const followers = Object.keys(FOLLOWS).filter(
+      k =>
+        FOLLOWS[k] === s.thing &&
+        r.changed.some(
+          (/** @type {unknown} */ c) => String(c).split(/[\s:]/)[0] === k,
+        ),
+    );
+    if (followers.length)
+      notes.push(
+        `${followers.join(', ')} ${followers.length === 1 ? 'follows' : 'follow'} it (${s.thing === '--color-border' ? 'the frames of inputs and selectors, never fainter than the border' : "the fills made from the surface, at the base theme's step from it"}); an exact setting of ${followers.length === 1 ? 'it' : 'one'} keeps its own color`,
+      );
+  }
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.
     const modes = modesOf(data);
@@ -7235,7 +7251,20 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
-  const {colorProblems, ...colorPart} = colorsReport(pal, data, res, theme);
+  /** @type {Record<string, string>} */
+  let ownTokens = {};
+  try {
+    ownTokens = ownSourceTokenValues(cwd, theme);
+  } catch {
+    // A source that cannot be read sets nothing here.
+  }
+  const {colorProblems, ...colorPart} = colorsReport(
+    pal,
+    data,
+    res,
+    theme,
+    ownTokens,
+  );
   // A render that fails here (two copies of React, a component that
   // throws) is refused as the one above: what this show built goes back,
   // and the result says so.
@@ -8246,10 +8275,11 @@ function partValues(ctx, data, res, mode) {
  *   built theme's resolved values: where one differs from the generated
  *   shade with no exact setting, the theme's own source changed it
  * @param {string} [slug]
+ * @param {Record<string, string>} [own] the tokens the theme's own source sets
  * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[], colorProblems: string[]}}
  *   `colorProblems`: the color notes of pairings that fail their contrast
  */
-function colorsReport(pal, data, built, slug = '') {
+function colorsReport(pal, data, built, slug = '', own = {}) {
   if (!pal)
     return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /** What the user set for each token exactly, in each mode. */
@@ -8263,6 +8293,9 @@ function colorsReport(pal, data, built, slug = '') {
   /** Tokens the theme's own source sets to another value than generated. */
   const ownBy =
     /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
+  /** Tokens that follow another the theme sets exactly ({@link FOLLOWS}). */
+  const followBy =
+    /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
   for (const [k, v] of Object.entries(pal.tokens))
     for (const m of /** @type {const} */ (['light', 'dark'])) {
       const now = built?.[m]?.[k];
@@ -8271,7 +8304,9 @@ function colorsReport(pal, data, built, slug = '') {
         !exactBy[k]?.[m] &&
         now.trim().toLowerCase() !== String(v[m].color).trim().toLowerCase()
       )
-        (ownBy[k] ??= {})[m] = now;
+        (FOLLOWS[k] && exactBy[FOLLOWS[k]]?.[m] != null && !(k in own)
+          ? (followBy[k] ??= {})
+          : (ownBy[k] ??= {}))[m] = now;
     }
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
@@ -8310,14 +8345,16 @@ function colorsReport(pal, data, built, slug = '') {
             k,
             // Each mode says what it shows: the exact setting where one is
             // made for it, else the generated shade.
-            exactBy[k] || ownBy[k]
+            exactBy[k] || ownBy[k] || followBy[k]
               ? modes
                   .map(m =>
                     exactBy[k]?.[m] != null
                       ? `${m} ${exactBy[k][m]} (your exact setting wins over the generated ${shade(v[m])})`
                       : ownBy[k]?.[m] != null
                         ? `${m} ${ownBy[k][m]} (your change in ${slug}.theme.ts wins over the generated ${shade(v[m])})`
-                        : `${m} ${shade(v[m])}`,
+                        : followBy[k]?.[m] != null
+                          ? `${m} ${followBy[k][m]} (follows your ${FOLLOWS[k]}, over the generated ${shade(v[m])})`
+                          : `${m} ${shade(v[m])}`,
                   )
                   .join(', ')
               : shades(v),

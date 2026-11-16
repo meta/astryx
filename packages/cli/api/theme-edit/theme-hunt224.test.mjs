@@ -157,11 +157,12 @@ describe('the fills made from the surface', () => {
 });
 
 describe('the emphasized border', () => {
-  it('follows an opaque border', () => {
-    expect(valueOf('b', '--color-border-emphasized')).toEqual([
-      '#000000',
-      '#000000',
-    ]);
+  it('follows an opaque border where that is stronger', () => {
+    // Black is stronger than the emphasized border on the light surface,
+    // fainter on the dark one, where the emphasized border keeps its own.
+    const [light, dark] = valueOf('b', '--color-border-emphasized');
+    expect(light).toBe('#000000');
+    expect(dark).toBe(valueOf('base', '--color-border-emphasized')[1]);
   });
 
   it('keeps its own color beside a translucent border, or when pinned', () => {
