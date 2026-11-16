@@ -1,0 +1,9 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/*
+ * The theme's fonts from Google Fonts, for an app that prefers them to the
+ * files fonts.css loads from this package. The request holds the page until
+ * it answers, so a page offline waits on it: fonts.css never does.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');

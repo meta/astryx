@@ -59,6 +59,13 @@ copies synchronized.
 - **Heading & Body**: Outfit, base 14px, ratio 1.25.
 - **Code**: JetBrains Mono.
 
-Sarina and Outfit ship via Google Fonts. Add the appropriate
-`<link rel="stylesheet" href="...">` to your document `<head>` to avoid
-runtime font fetching.
+The theme's font stylesheet loads Sarina, Outfit and JetBrains Mono from font
+files shipped in this package (in `fonts/`, with their licenses), each with
+`font-display: swap`, so a page draws at once with its fallback fonts and never
+waits on a network:
+
+```css
+@import '@astryxdesign/theme-butter/fonts.css';
+```
+
+To load them from Google Fonts instead, import `@astryxdesign/theme-butter/fonts.google.css`; a page offline then waits on that request.

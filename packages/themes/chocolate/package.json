@@ -3,7 +3,7 @@
   "version": "0.7.17",
   "displayName": "Chocolate Theme",
   "private": false,
-  "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
+  "description": "Warm chocolate theme for Astryx \u2014 rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",
@@ -51,6 +51,10 @@
     "./fonts.css": {
       "types": "./fonts.css.d.ts",
       "default": "./fonts.css"
+    },
+    "./fonts.google.css": {
+      "types": "./fonts.google.css.d.ts",
+      "default": "./fonts.google.css"
     }
   },
   "files": [
@@ -58,6 +62,9 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
+    "fonts",
+    "fonts.google.css",
+    "fonts.google.css.d.ts",
     "theme.css.d.ts",
     "!**/*.test.*",
     "!**/*.spec.js",

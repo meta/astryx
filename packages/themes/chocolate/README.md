@@ -49,16 +49,12 @@ This theme uses custom typefaces:
 | Heading | Fraunces       |
 | Code    | JetBrains Mono |
 
-**These fonts must be loaded separately.** The theme references them by name but does not bundle the font files.
+**Load them with the theme's font stylesheet.** It loads each font from font files shipped in this package (in `fonts/`, with their licenses), each with `font-display: swap`, so a page draws at once with its fallback fonts and never waits on a network (an offline machine, a sandbox, CI):
 
-Add this to your HTML `<head>`:
-
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link
-  rel="stylesheet"
-  href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+```css
+@import '@astryxdesign/theme-chocolate/fonts.css';
 ```
 
-Without this, the theme falls back to system fonts.
+To load them from Google Fonts instead, import `@astryxdesign/theme-chocolate/fonts.google.css`; a page offline then waits on that request.
+
+Without it, the theme falls back to system fonts.
