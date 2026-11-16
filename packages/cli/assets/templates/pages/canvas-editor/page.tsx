@@ -842,7 +842,7 @@ const styles = stylex.create({
   tabRuleHidden: {visibility: 'hidden'},
   // Everything a tab needs beyond an Item: a width ceiling and a tighter
   // measure. Item brings the 28px box, the radius, the fill when selected,
-  // the inline padding, and the ellipsis on a string label.
+  // and the inline padding; the label's one-line Text brings the ellipsis.
   tab: {
     // Item spaces a list row, where 8px either side of the label is right
     // because the rows are stacked and the eye reads down a column. A tab is
@@ -1240,10 +1240,11 @@ function ItemAction({
  *
  * An open document is the same kind of thing as a layer: a name with a mark
  * in front of it and an action behind, which is why this is the same Item
- * the rail is built from rather than a tab. Item ellipsizes a string label
- * on its own, so the width ceiling below is the only thing left to say, and
- * it ignores a click that lands on a nested button — that is what stops the
- * close from also switching to the document it is closing.
+ * the rail is built from rather than a tab. Its one-line Text label
+ * ellipsizes the name on its own, so the width ceiling below is the only
+ * thing left to say, and it ignores a click that lands on a nested button —
+ * that is what stops the close from also switching to the document it is
+ * closing.
  *
  * Not TabList: a Tab marks the open one with an underline rather than a
  * fill, sizes itself to its label with no way to cap it from out here, and
