@@ -63,11 +63,6 @@ tester.run('press-through-recipes', rule, {
       code: "import {pressStyles} from '../privateAttributes/press.stylex';",
       filename: component,
     },
-    // (a) The stretched-control helper, from a control.
-    {
-      code: "import {setPressLayerBox} from '../utils/pressLayerBox';",
-      filename: '/repo/packages/core/src/Button/Button.tsx',
-    },
     // (a) Only constants from a recipe's inner module.
     {
       code: "import {PRESS_SLOP_PX} from '../utils/pressGesture';",
