@@ -245,9 +245,11 @@ function cloneData<T>(
     holding.add(value);
     try {
       if (Array.isArray(value)) {
-        return value.map((item, i) =>
-          cloneData(item, `${path}[${i}]`, holding),
-        ) as T;
+        const cloned: unknown[] = [];
+        for (const [i, item] of value.entries()) {
+          cloned.push(cloneData(item, `${path}[${i}]`, holding));
+        }
+        return cloned as T;
       }
       return Object.fromEntries(
         Object.entries(value).map(([key, nested]) => [
@@ -354,7 +356,7 @@ function normalizeCondition(
     throw new Error(`${path} must contain at least one condition.`);
   }
 
-  const condition = cloneData(defined) as ThemeAdaptationCondition;
+  const condition = cloneData(defined, path) as ThemeAdaptationCondition;
   if (condition.width !== undefined) {
     assertRecord(condition.width, `${path}.width`);
     assertAllowedKeys(condition.width, WIDTH_CONDITION_KEYS, `${path}.width`);
@@ -885,16 +887,12 @@ function assertNoReachableTokenCycles(
             effective,
             ruleContext,
             relevantNames,
-            // A value no matching rule sets is the theme's own root value.
+            // A value no matching rule sets is the theme's own root token (a
+            // root local token that holds itself is refused before this).
             name =>
               relevantNames.has(name)
                 ? ruleContext
-                : `defineTheme("${themeName}").${
-                    rootLocalTokens &&
-                    Object.prototype.hasOwnProperty.call(rootLocalTokens, name)
-                      ? 'localTokens'
-                      : 'tokens'
-                  }`,
+                : `defineTheme("${themeName}").tokens`,
           );
         }
       }

@@ -1223,12 +1223,23 @@ describe('theme-local adaptation values', () => {
           rules: [
             {
               when: {pointer: 'coarse'},
-              value: {tokens: ruleTokens as Record<string, string>},
+              value: {tokens: ruleTokens},
             },
           ],
         },
       }),
     ).toThrow(/rules\[0\]\.value\.tokens\.self holds an object it sits in/);
+    // A condition that holds itself is named by its rule's path too.
+    const width: Record<string, unknown> = {min: 'md'};
+    width.self = width;
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-when',
+        adaptations: {rules: [{when: {width}, value: {tokens: {}}}]},
+      }),
+    ).toThrow(
+      /defineTheme\("cycle-self-when"\)\.adaptations\.rules\[0\]\.when\.width\.self holds an object it sits in/,
+    );
   });
 
   it('rejects conditional local-token cycles', () => {
