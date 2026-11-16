@@ -4253,12 +4253,15 @@ export function partsOf(ctx, s) {
   if (!s.on) return [];
   if (s.thing === 'font') return [];
   const has = (/** @type {string} */ t) => ctx.project.target.has(t);
-  // A border set on a group lands where each member draws its edges (a date
-  // and time field's two boxes, never the row around them).
+  // A border or a fill set on a group lands where each member draws its
+  // edges or paints its box (a date and time field's two boxes, never the
+  // row around them, which paints nothing).
   const spread = (/** @type {string[]} */ members) =>
     /^border(?!.*radius)(-|$)/.test(s.thing)
       ? [...new Set(members.flatMap(t => borderParts(ctx, t)))]
-      : members;
+      : /^background(-color)?$/.test(s.thing)
+        ? [...new Set(members.flatMap(t => fillParts(ctx, t)))]
+        : members;
   if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
@@ -4310,6 +4313,25 @@ export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
   const inner = cornerParts(ctx, part).filter(t => t !== part);
+  return inner.length ? inner : [part];
+}
+
+/**
+ * The parts that paint a part's box (a text input itself; a date and time
+ * field's two boxes, where the row around them paints none).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function fillParts(ctx, part) {
+  const own = ctx.C.MAP[part]?.own ?? {};
+  if (own['background-color'] || own.background) return [part];
+  const inner = cornerParts(ctx, part).filter(
+    t =>
+      t !== part &&
+      (ctx.C.MAP[t]?.own?.['background-color'] ||
+        ctx.C.MAP[t]?.own?.background),
+  );
   return inner.length ? inner : [part];
 }
 
@@ -11633,13 +11655,20 @@ export function innerTextTokens(C, part, deep = false) {
     for (const inner of rec?.contains ?? []) {
       const r = C.MAP[inner];
       add(r?.inside);
-      // A part's own color counts where it reads the token always, not
-      // only in a variant or a state.
+      // A part's own color counts where it reads the token always, or for
+      // a look of its own (a heading or a text's color role, `color=primary`
+      // beside its level), never only in a state.
       for (const [tok, conds] of Object.entries(r?.own?.color?.tokens ?? {}))
         if (
           TEXT_ROLES.includes(tok) &&
           /** @type {string[]} */ (conds).some(
-            w => !w.trim() || w.trim() === 'always',
+            w =>
+              !w.trim() ||
+              w.trim() === 'always' ||
+              (!/\s/.test(w.trim()) &&
+                !/(?:^|,)(?:disabled|selected|checked|readonly|aria-[\w-]+|status)=/.test(
+                  w,
+                )),
           )
         )
           out.add(tok);
