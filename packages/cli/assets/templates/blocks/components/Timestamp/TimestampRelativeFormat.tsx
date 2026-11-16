@@ -2,12 +2,25 @@
 
 'use client';
 
+import {useSyncExternalStore} from 'react';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
+// The server markup and the render that hydrates it share one fixed instant,
+// so they match; the browser's clock takes over right after hydration.
+const HYDRATION_NOW = Date.UTC(2026, 0, 1) / 1000;
+const subscribeToNothing = () => () => {};
+let clientNow: number | undefined;
+const getClientNow = () => (clientNow ??= Date.now() / 1000);
+const getHydrationNow = () => HYDRATION_NOW;
+
 export default function TimestampRelativeFormat() {
-  const now = Date.now() / 1000;
+  const now = useSyncExternalStore(
+    subscribeToNothing,
+    getClientNow,
+    getHydrationNow,
+  );
   return (
     <Stack direction="vertical" gap={3}>
       <Text type="supporting" color="secondary">
