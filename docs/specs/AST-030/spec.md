@@ -306,10 +306,10 @@ they are separately named.
   that reads repository sources through the file system, directly or through a
   module it imports; a computed `import()`, a child process, or a library that
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
-  sources. In the Node project, with a usable test-inputs record, a
-  file-reading test runs only when the change reaches an input the record
-  names for it (DEC-30); and every test that loads a changed workspace package from its build,
-  by the package's name or a path into its `dist/`. When a pull request runs
+  sources; and every test that loads a changed workspace package from its build,
+  by the package's name or a path into its `dist/`. In the Node project, with
+  a usable test-inputs record, a file-reading test runs only when the change
+  reaches an input the record names for it (DEC-30). When a pull request runs
   them at their opted-in scope (FR12: only with their `ci:run-visual` or
   `ci:run-rtl` label), the visual and RTL owners audit one affected set of
   component folders: the changed components
@@ -1461,8 +1461,9 @@ reads or probes for, each folder it lists, each path it writes, and the same
 for the steps of the test setup. It keeps that record as an artifact. A test
 that reads a setup step's output depends on what the step read. A test that
 reads a package's build output depends on the whole package. A pull request's
-Node legs run a file-reading test only when a changed path sits in a folder it
-read or listed, or inside a package whose build it read.
+Node legs run a file-reading test only when a changed path sits in a folder
+whose files it read or probed for, anywhere under a folder it listed, or
+inside a package whose build it read.
 
 These rules keep it safe:
 
@@ -1474,8 +1475,10 @@ These rules keep it safe:
 - The record must be of a commit the merge base contains, among the base's
   latest hundred. The paths changed between that commit and the base count as
   changed too. A test file the record does not name runs.
-- A test that starts a program that is not Node, a shell command or a worker
-  thread runs, since the record cannot see what those read. So does a test
+- A test that starts a program that is not Node, a shell command, or a Node
+  child or worker thread that does not load the recorder (one given an
+  environment without it, or a worker of a process the recorder was not
+  preloaded into) runs, since the record cannot see what those read. So does a test
   that reads what a setup step made, when that step did one of those, unless
   what it read is a package's build output: a build tool reads only the
   package it builds.

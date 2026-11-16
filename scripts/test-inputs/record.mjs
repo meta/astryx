@@ -39,6 +39,11 @@ if (OUT && !globalThis.__astryxTestInputs) {
   const {realpathSync} = fs;
   const owner = () => process.env.ASTRYX_TEST_INPUTS_FOR;
   const preload = `--import=${SELF}`;
+  // A worker thread loads the recorder only from the preload this process
+  // started with; a process that imported it at run time passes none on.
+  const preloaded =
+    (process.env.NODE_OPTIONS ?? '').includes(preload) ||
+    process.execArgv.includes(preload);
 
   // The path as the disk resolves it, so a fixture's link into the checkout
   // records the checkout's file. Its folder resolves while the path is used
@@ -255,12 +260,15 @@ if (OUT && !globalThis.__astryxTestInputs) {
       return original.call(this, command, ...rest);
     };
   }
-  // A worker thread loads this preload too and records under the same owner,
-  // unless it is given an environment without it.
+  // A worker thread of a preloaded process loads the recorder too and records
+  // under the same owner, unless it is given an environment without it.
   const {Worker, SHARE_ENV} = workerThreads;
   workerThreads.Worker = class extends Worker {
     constructor(file, options = {}) {
-      if (owner() && options.env !== SHARE_ENV && !recorded(options.env)) {
+      if (
+        owner() &&
+        (!preloaded || (options.env !== SHARE_ENV && !recorded(options.env)))
+      ) {
         unseen.add('starts a worker thread without its recorder');
       }
       super(file, options);

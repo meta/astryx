@@ -464,9 +464,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (inputsFlag !== -1) {
       const sinceFlag = process.argv.indexOf('--since-record');
       if (sinceFlag === -1) throw new Error('--inputs needs --since-record');
-      const record = expandRecord(
-        JSON.parse(read(process.argv[inputsFlag + 1])),
-      );
+      // A record this checkout cannot read (another format version) narrows
+      // nothing; every leg reads the same record, so all legs agree.
+      let record = null;
+      try {
+        record = expandRecord(JSON.parse(read(process.argv[inputsFlag + 1])));
+      } catch (error) {
+        console.error(`Every file-reading test runs: ${error.message}.`);
+      }
       const changed = [
         ...new Set([
           ...changedFiles,
@@ -476,6 +481,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         ]),
       ];
       narrow = guards => {
+        if (record == null) return guards;
         const {run, skipped, reason} = selectByInputs(guards, record, changed);
         console.error(
           reason

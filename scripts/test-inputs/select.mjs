@@ -52,7 +52,7 @@ export const folderOf = file => {
 /**
  * Why a test runs, or null when no changed path is one of its inputs.
  * @param {string} test
- * @param {{folders: string[], trees: string[], unseen: string[]} | undefined} entry
+ * @param {{folders: string[], listed: string[], trees: string[], unseen: string[]} | undefined} entry
  * @param {string[]} changed
  */
 export function whyTestRuns(test, entry, changed) {
@@ -63,6 +63,10 @@ export function whyTestRuns(test, entry, changed) {
   const folders = new Set(entry.folders);
   for (const file of changed) {
     if (folders.has(folderOf(file))) return `it reads beside ${file}`;
+    const listed = entry.listed.find(
+      dir => dir === '.' || file.startsWith(`${dir}/`),
+    );
+    if (listed != null) return `it lists ${listed}, which holds ${file}`;
     const tree = entry.trees.find(root => file.startsWith(root));
     if (tree != null) return `it reads what is built from ${tree}`;
   }
@@ -73,7 +77,7 @@ export function whyTestRuns(test, entry, changed) {
  * Splits `tests` into those a change reaches through their recorded inputs
  * and those it cannot reach.
  * @param {string[]} tests
- * @param {{tests: Record<string, {folders: string[], trees: string[], unseen: string[]}>}} record
+ * @param {{tests: Record<string, {folders: string[], listed: string[], trees: string[], unseen: string[]}>}} record
  * @param {string[]} changed
  */
 export function selectByInputs(tests, record, changed) {

@@ -54,14 +54,14 @@ export default async function setup(project) {
   // process's exit: a run stopped with Ctrl-C calls no teardown.
   const endRun = registerTestRun();
   process.once('exit', endRun);
-  // A recording run records what each part of this setup reads and writes:
-  // a test that reads what a part wrote depends on what that part read
-  // (scripts/test-inputs).
-  if (process.env.ASTRYX_TEST_INPUTS_DIR) {
-    await import('./scripts/test-inputs/record.mjs');
-  }
-  const recordStep = name => globalThis.__astryxTestInputs?.switchTo(name);
   try {
+    const recordStep = name => globalThis.__astryxTestInputs?.switchTo(name);
+    // A recording run records what each part of this setup reads and writes:
+    // a test that reads what a part wrote depends on what that part read
+    // (scripts/test-inputs).
+    if (process.env.ASTRYX_TEST_INPUTS_DIR) {
+      await import('./scripts/test-inputs/record.mjs');
+    }
     recordStep('step:core-build');
     // A stale Core is rebuilt only here, before the workers. A suite that
     // rebuilt it mid-run would delete dist under suites still reading it. The

@@ -86,6 +86,47 @@ describe('the recorder', () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
+  it('records a worker thread of a preloaded process, and marks one it cannot see', () => {
+    const work = tempDir('inputs-work-');
+    fs.writeFileSync(path.join(work, 'a.txt'), 'a');
+    fs.writeFileSync(
+      path.join(work, 'worker.mjs'),
+      `import fs from 'node:fs'; fs.readFileSync(${JSON.stringify(path.join(work, 'a.txt'))});`,
+    );
+    const starter = `
+      import {Worker} from 'node:worker_threads';
+      const worker = new Worker(${JSON.stringify(path.join(work, 'worker.mjs'))});
+      await new Promise(resolve => worker.on('exit', resolve));
+    `;
+    const run = (preloaded, script) => {
+      const out = tempDir('inputs-out-');
+      const file = path.join(work, `start-${preloaded}.mjs`);
+      fs.writeFileSync(file, script);
+      execFileSync(process.execPath, [file], {
+        env: {
+          ...process.env,
+          NODE_OPTIONS: preloaded ? `--import=${RECORD}` : '',
+          ASTRYX_TEST_INPUTS_DIR: out,
+          ASTRYX_TEST_INPUTS_FOR: 'some.test.mjs',
+        },
+      });
+      return [...readLines(out)];
+    };
+    const seen = run(true, starter);
+    expect(seen.flatMap(line => line.unseen)).toEqual([]);
+    expect(seen.flatMap(line => line.reads)).toContain(
+      path.join(work, 'a.txt'),
+    );
+    // A process that imports the recorder as it runs passes no preload on.
+    const unseen = run(
+      false,
+      `await import(${JSON.stringify(RECORD)});\n${starter}`,
+    );
+    expect(unseen.flatMap(line => line.unseen)).toEqual([
+      'starts a worker thread without its recorder',
+    ]);
+  });
+
   it('records nothing without an owner', () => {
     const out = tempDir('inputs-out-');
     execFileSync(
@@ -175,9 +216,9 @@ describe('the merged record', () => {
       folders: [
         'packages',
         'packages/cli/api/theme-edit',
-        'packages/core/src',
         'packages/core/src/Button',
       ],
+      listed: ['packages/core/src'],
       trees: ['packages/core/'],
       unseen: [],
     });
@@ -188,6 +229,7 @@ describe('the merged record', () => {
     // A test file that touched nothing still has its entry.
     expect(tests['scripts/nothing.test.mjs']).toEqual({
       folders: [],
+      listed: [],
       trees: [],
       unseen: [],
     });
@@ -211,15 +253,21 @@ describe('the merged record', () => {
 
   it('keeps each distinct folder set once and spells it out again on reading', () => {
     const leg = {
-      'a.test.mjs': {folders: ['x'], trees: [], unseen: []},
-      'b.test.mjs': {folders: ['x'], trees: ['packages/core/'], unseen: []},
+      'a.test.mjs': {folders: ['x'], listed: [], trees: [], unseen: []},
+      'b.test.mjs': {
+        folders: ['x'],
+        listed: [],
+        trees: ['packages/core/'],
+        unseen: [],
+      },
     };
     const record = mergeLegs([leg], 'abc');
-    expect(record.sets).toEqual([['x']]);
+    expect(record.sets).toEqual([['x'], []]);
     expect(
       expandRecord(JSON.parse(JSON.stringify(record))).tests['b.test.mjs'],
     ).toEqual({
       folders: ['x'],
+      listed: [],
       trees: ['packages/core/'],
       unseen: [],
     });
@@ -232,16 +280,25 @@ describe('selection by recorded inputs', () => {
     tests: {
       'packages/cli/api/theme-edit/theme-values.test.mjs': {
         folders: ['packages/cli/api/theme-edit', 'packages/core/src/Button'],
+        listed: [],
         trees: ['packages/core/'],
         unseen: [],
       },
       'packages/cli/api/docs/docs.test.mjs': {
         folders: ['packages/cli/assets/templates/blocks'],
+        listed: [],
+        trees: [],
+        unseen: [],
+      },
+      'packages/cli/test/icon-set-doc-pointers.test.mjs': {
+        folders: [],
+        listed: ['packages/cli/api/icon'],
         trees: [],
         unseen: [],
       },
       'scripts/check-knowledge.test.mjs': {
         folders: [],
+        listed: [],
         trees: [],
         unseen: ['runs git'],
       },
@@ -258,8 +315,23 @@ describe('selection by recorded inputs', () => {
     ]);
     expect(skipped).toEqual([
       'packages/cli/api/theme-edit/theme-values.test.mjs',
+      'packages/cli/test/icon-set-doc-pointers.test.mjs',
     ]);
     expect(run).toContain('packages/cli/api/docs/docs.test.mjs');
+  });
+
+  it('runs a test that lists a folder when the change adds a file anywhere under it', () => {
+    const lister = 'packages/cli/test/icon-set-doc-pointers.test.mjs';
+    expect(
+      whyTestRuns(lister, record.tests[lister], [
+        'packages/cli/api/icon/newdir/e.mjs',
+      ]),
+    ).toMatch(/lists packages\/cli\/api\/icon/);
+    expect(
+      whyTestRuns(lister, record.tests[lister], [
+        'packages/cli/api/iconography/e.mjs',
+      ]),
+    ).toBeNull();
   });
 
   it('runs a test whose package build the change reaches', () => {

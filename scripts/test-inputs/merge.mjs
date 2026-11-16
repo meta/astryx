@@ -6,7 +6,9 @@
  *   more Node legs (one folder per leg), the checkout they ran in and its
  *   commit.
  * @output The record: for each test file, the repository folders whose files
- *   it read or probed for, or that it listed (`folders`), the package trees whose build it
+ *   it read or probed for (`folders`), the folders it listed (`listed`: a
+ *   change anywhere under one can change what it sees), the package trees
+ *   whose build it
  *   read (`trees`), and what it did that the record cannot see (`unseen`).
  * @position Main's full unit run merges its legs' lines with it and keeps the
  *   record as an artifact; a pull request selects its file-reading tests by it
@@ -19,7 +21,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {folderOf} from './select.mjs';
 
-export const RECORD_VERSION = 1;
+export const RECORD_VERSION = 2;
 
 /** Each owner's lines, joined. */
 function byOwner(lines) {
@@ -119,6 +121,7 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
     if (memo.has(owner)) return memo.get(owner);
     visiting.add(owner);
     const folders = new Set();
+    const listedFolders = new Set();
     const trees = new Set();
     const unseen = new Set(entry.unseen);
     const add = (target, listed) => {
@@ -142,6 +145,7 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
       if (step != null) {
         const from = inputsOf(step[0], step[1], visiting);
         for (const value of from.folders) folders.add(value);
+        for (const value of from.listed) listedFolders.add(value);
         for (const value of from.trees) trees.add(value);
         if (pkg != null) {
           if (from.unseen.length > 0) trees.add(`${pkg}/`);
@@ -158,7 +162,8 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
       // Outside the checkout: a fixture the test made from what it read, or
       // the system.
       if (rel == null) return;
-      folders.add(listed ? rel : folderOf(rel));
+      if (listed) listedFolders.add(rel);
+      else folders.add(folderOf(rel));
     };
     // A probe of a missing path: creating it changes what the test sees.
     for (const target of entry.probes) {
@@ -172,6 +177,7 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
     visiting.delete(owner);
     const result = {
       folders: [...folders].sort(),
+      listed: [...listedFolders].sort(),
       trees: [...trees].sort(),
       unseen: [...unseen].sort(),
     };
@@ -218,6 +224,7 @@ export function mergeLegs(legs, commit) {
     for (const [test, inputs] of Object.entries(leg)) {
       tests[test] = {
         folders: idOf(inputs.folders),
+        listed: idOf(inputs.listed),
         trees: inputs.trees,
         unseen: inputs.unseen,
       };
@@ -235,7 +242,11 @@ export function expandRecord(record) {
   }
   const tests = {};
   for (const [test, entry] of Object.entries(record.tests)) {
-    tests[test] = {...entry, folders: record.sets[entry.folders]};
+    tests[test] = {
+      ...entry,
+      folders: record.sets[entry.folders],
+      listed: record.sets[entry.listed],
+    };
   }
   return {commit: record.commit, tests};
 }
