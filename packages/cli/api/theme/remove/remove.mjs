@@ -9,7 +9,7 @@ import {withAppProvider} from '../_app-provider.mjs';
  * Remove one added theme and regenerate the app module, or remove the module
  * file when it was the only added theme.
  * @param {string} slug
- * @param {{cwd?: string}} [options]
+ * @param {{cwd?: string, renderModule?: import('../_adapter.mjs').ThemeModuleRenderer}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}
  */
 export function themeRemove(slug, options = {}) {

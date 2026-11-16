@@ -7,7 +7,7 @@ import {useThemeInApp} from '../_adapter.mjs';
 /**
  * Set one added theme as the default and regenerate the app module.
  * @param {string} slug
- * @param {{cwd?: string}} [options]
+ * @param {{cwd?: string, renderModule?: import('../_adapter.mjs').ThemeModuleRenderer}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}
  */
 export function themeUse(slug, options = {}) {

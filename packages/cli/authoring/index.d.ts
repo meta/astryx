@@ -41,9 +41,24 @@ export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,m
 export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
 export type {
   AstryxIntegration,
+  BaseAdapterEntry,
   BaseCapability,
   BaseDeclaration,
   BaseStep,
+  OutFile,
+  Step,
+  StepContext,
+  StepFailure,
+  StepResult,
+  ThemesAdapter,
+  ThemesAppModuleInput,
+  ThemesAppModuleOutput,
+  ThemesAppModuleTheme,
+  ThemesCompileInput,
+  ThemesCompileOutput,
+  ThemesTarget,
+  ThemesTargetsInput,
+  ThemesTargetsOutput,
 } from './integration/type.js'; // astryx.integration.{ts,mjs}
 export type {
   GapReportHandler,

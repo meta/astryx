@@ -388,10 +388,11 @@ export function readThemeState(cwd = process.cwd()) {
  * @property {string} owner
  * @property {string} exportName
  * @property {string} module
- * @property {string} stylesheet
+ * @property {string | null} stylesheet null on a base whose themes have no
+ *   stylesheet
  * @property {string} [fontStylesheet]
  * @property {string} moduleFile
- * @property {string} stylesheetFile
+ * @property {string | null} stylesheetFile
  * @property {string} [fontStylesheetFile]
  * @property {'bundled'|'package'|'local'} source
  * @property {'light'|'dark'} [mode] the one color mode its built module
@@ -402,6 +403,18 @@ export function readThemeState(cwd = process.cwd()) {
  * The fields of a resolved theme that the generated module writes.
  * @typedef {Pick<ResolvedAppTheme, 'slug' | 'owner' | 'exportName' | 'module' | 'stylesheet' | 'fontStylesheet' | 'mode'>} RenderedAppTheme
  */
+
+/**
+ * The generated module's header: the marker and the record theme commands
+ * read back.
+ * @param {Record<string, string>} owners slug to owner
+ * @param {string} defaultSlug
+ * @returns {string}
+ */
+export function themeModuleHeader(owners, defaultSlug) {
+  const record = JSON.stringify({themes: owners, defaultThemeSlug: defaultSlug});
+  return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */`;
+}
 
 /**
  * Render one generated module from final resolved state.
@@ -447,7 +460,9 @@ export function renderThemeModule(
     const local = `_astryxTheme${index}`;
     imports.push(
       `import {${theme.exportName} as ${local}} from ${JSON.stringify(theme.module)};`,
-      `import ${JSON.stringify(theme.stylesheet)};`,
+      ...(theme.stylesheet == null
+        ? []
+        : [`import ${JSON.stringify(theme.stylesheet)};`]),
     );
     if (theme.fontStylesheet) {
       imports.push(`import ${JSON.stringify(theme.fontStylesheet)};`);
@@ -455,11 +470,7 @@ export function renderThemeModule(
     entries.push(`  ${JSON.stringify(theme.slug)}: ${local},`);
     owners[theme.slug] = theme.owner;
   });
-  const record = JSON.stringify({
-    themes: owners,
-    defaultThemeSlug: defaultSlug,
-  });
-  return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */\n\n${imports.join(
+  return `${themeModuleHeader(owners, defaultSlug)}\n\n${imports.join(
     '\n',
   )}\n\nexport const themes = {\n${entries.join('\n')}\n}${
     typescript ? ' as const' : ''
@@ -594,8 +605,16 @@ export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
     theme.source === 'local'
       ? {
           ...theme,
-          module: localImportSpecifier(module.file, theme.moduleFile),
-          stylesheet: localImportSpecifier(module.file, theme.stylesheetFile),
+          // A TypeScript module is imported without its extension, as
+          // TypeScript resolves it.
+          module: localImportSpecifier(module.file, theme.moduleFile).replace(
+            /\.tsx?$/u,
+            '',
+          ),
+          stylesheet:
+            theme.stylesheetFile == null
+              ? null
+              : localImportSpecifier(module.file, theme.stylesheetFile),
           ...(theme.fontStylesheetFile
             ? {
                 fontStylesheet: localImportSpecifier(

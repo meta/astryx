@@ -444,16 +444,19 @@ function themeImportPairEvidence(root, generatedModule, themes) {
           : specifier === theme.module,
       );
       if (!importsModule) continue;
+      // A theme with no stylesheet has nothing to pair.
+      const stylesheetFile = theme.stylesheetFile;
+      if (stylesheetFile == null) continue;
       const importsStylesheet = [...specifiers].some(specifier =>
         theme.source === 'local'
-          ? specifierTargets(specifier, file, theme.stylesheetFile)
+          ? specifierTargets(specifier, file, stylesheetFile)
           : specifier === theme.stylesheet,
       );
       if (!importsStylesheet) {
         unpaired.push({
           slug: theme.slug,
           file: relative(root, file),
-          stylesheet: theme.stylesheet || relative(root, theme.stylesheetFile),
+          stylesheet: theme.stylesheet || relative(root, stylesheetFile),
         });
       }
     }
@@ -664,7 +667,8 @@ function importsTheme(specifier, file, theme) {
   if (theme.source === 'local') {
     return (
       specifierTargets(specifier, file, theme.moduleFile) ||
-      specifierTargets(specifier, file, theme.stylesheetFile)
+      (theme.stylesheetFile != null &&
+        specifierTargets(specifier, file, theme.stylesheetFile))
     );
   }
   return specifier === theme.module || specifier === theme.stylesheet;
@@ -892,8 +896,10 @@ export async function themeImportWiring(cwd) {
         !wired.has(keyOf(theme)) &&
         (theme.source === 'local'
           ? source.includes(path.basename(theme.moduleFile)) ||
-            source.includes(path.basename(theme.stylesheetFile))
-          : source.includes(theme.module) || source.includes(theme.stylesheet)),
+            (theme.stylesheetFile != null &&
+              source.includes(path.basename(theme.stylesheetFile)))
+          : source.includes(theme.module) ||
+            (theme.stylesheet != null && source.includes(theme.stylesheet))),
     );
     if (candidates.length > 0) {
       let specifiers;
@@ -964,6 +970,8 @@ export async function themeImportWiring(cwd) {
     /** The files a theme's own stylesheet is or imports. @param {ResolvedAppTheme} theme */
     const ownFiles = theme => {
       const sheet = theme.stylesheetFile;
+      // A theme with no stylesheet owns no stylesheet file.
+      if (sheet == null) return [];
       const real = realDoctorFile(sheet) ?? sheet;
       const css = readTextFileIfExists(sheet) ?? '';
       return [
@@ -2131,6 +2139,7 @@ export async function checkAppThemes(cwd) {
   const globalBySelector = new Map();
   const globalProblems = [];
   for (const theme of resolved) {
+    if (theme.stylesheetFile == null) continue;
     try {
       for (const [selector, declarations] of globalRules(
         readTextFile(theme.stylesheetFile),
