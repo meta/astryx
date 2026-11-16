@@ -225,12 +225,18 @@ const POSTAL_CODE_RULES: Record<
 // Plain inline styles over Astryx token CSS variables, so the template compiles
 // in a project with no StyleX pipeline.
 
+// The min width lets the summary wrap below the form on a narrow first
+// paint, before script measures the host (the summary's maxWidth keeps it
+// inside the page there).
+const formColumn: CSSProperties = {minWidth: 'min(100%, 480px)'};
+
 // The summary column holds its width while the form column takes the rest, and
 // pins itself as the form scrolls past — the sticky offset is the page inset,
 // so a stuck card sits where an unstuck one would. The narrow summary needs no
 // order override because it is rendered before the form in the DOM.
 const summaryColumn: CSSProperties = {
   width: 360,
+  maxWidth: '100%',
   flexShrink: 0,
   position: 'sticky',
   top: 'var(--spacing-6)',
@@ -685,6 +691,7 @@ export default function CheckoutWizardPage() {
 
             <Stack
               direction={isNarrow ? 'vertical' : 'horizontal'}
+              wrap="wrap"
               gap={6}
               vAlign="start">
               {/* When stacked, summary comes first in DOM as well as visual and
@@ -693,7 +700,7 @@ export default function CheckoutWizardPage() {
 
               {/* The form column owns the sequence end to end: progress at the
                   top, the step in the middle, the way out at the bottom. */}
-              <StackItem size="fill">
+              <StackItem size="fill" style={formColumn}>
                 <VStack gap={6}>
                   {isComplete ? (
                     <VStack gap={4}>
