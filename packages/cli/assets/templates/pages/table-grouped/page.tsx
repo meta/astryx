@@ -588,9 +588,12 @@ function getGroupLabel(groupBy: GroupByField, key: string): string {
 function getColumns({
   onEdit,
   onDuplicate,
+  onDemo,
 }: {
   onEdit: (task: TaskRow) => void;
   onDuplicate: (task: TaskRow) => void;
+  /** Says what a menu action would do, for actions this demo does not perform. */
+  onDemo: (task: TaskRow, action: string) => void;
 }): TableColumn<TaskRow>[] {
   return [
     {
@@ -695,12 +698,12 @@ function getColumns({
             {
               label: 'Assign to...',
               icon: UserIcon,
-              onClick: () => {},
+              onClick: () => onDemo(task, 'assigning'),
             },
             {
               label: 'Add label',
               icon: TagIcon,
-              onClick: () => {},
+              onClick: () => onDemo(task, 'labeling'),
             },
             {
               label: 'Duplicate',
@@ -717,13 +720,13 @@ function getColumns({
                   xstyle={rtlStyles.mirror}
                 />
               ),
-              onClick: () => {},
+              onClick: () => onDemo(task, 'moving'),
             },
             {type: 'divider' as const},
             {
               label: 'Delete issue',
               icon: TrashIcon,
-              onClick: () => {},
+              onClick: () => onDemo(task, 'deleting'),
             },
           ]}
         />
@@ -923,8 +926,14 @@ export default function DataTableTemplate() {
         onDuplicate: task =>
           // Demo only: replace this toast with the call that performs the action.
           showToast({
-            body: `${task.taskId} duplicated`,
+            body: `Demo: ${task.taskId} would be duplicated here`,
             uniqueID: `duplicate-${task.taskId}`,
+          }),
+        onDemo: (task, action) =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: `Demo: ${action} ${task.taskId} would happen here`,
+            uniqueID: `${action}-${task.taskId}`,
           }),
       }),
     [showToast],
