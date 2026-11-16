@@ -76,12 +76,11 @@ describe('chaos43', () => {
     '%s: the owner is the place, never painted',
     async (q, test) => {
       needsBases(test);
-      const r = await answer(q);
-      // (The menu's own divider when the census records its line; until
-      // then nothing, said: never the menu, never every divider.)
-      for (const c of r.all)
-        expect(c, q).toMatch(/--on dropdown-menu-divider\b/);
-      if (!r.all.length) expect(r.text, q).toMatch(/cannot be kept apart/);
+      // (The menu's own divider, which the census records drawing the
+      // line: never the menu, never every divider.)
+      expect((await answer(q)).all, q).toEqual([
+        "--color-border '#dc2626' --on dropdown-menu-divider",
+      ]);
     },
     T,
   );

@@ -64,21 +64,23 @@ const needsBases = test => {
 const T = 300_000;
 
 describe('an element in a place', () => {
-  it.each([
-    ['make the menu separators twice as thick', 'dropdown-menu-divider'],
-    ["make the dialog's buttons rounder", null],
-  ])(
-    '%s: never every such part',
-    async (q, own, test) => {
+  it(
+    "the menu's own divider, which Core draws on its own, is answered",
+    async test => {
       needsBases(test);
-      const r = await answer(q);
-      if (r.all.length && own)
-        for (const c of r.all)
-          expect(c, q).toMatch(new RegExp(`--on ${own}\\b`));
-      else {
-        expect(r.all, q).toEqual([]);
-        expect(r.text, q).toMatch(/cannot be kept apart/);
-      }
+      expect(
+        (await answer('make the menu separators twice as thick')).all,
+      ).toEqual(['--border-width 2px --on dropdown-menu-divider']);
+    },
+    T,
+  );
+  it(
+    'a plain part in a place it cannot be kept to writes nothing, said',
+    async test => {
+      needsBases(test);
+      const r = await answer("make the dialog's buttons rounder");
+      expect(r.all).toEqual([]);
+      expect(r.text).toMatch(/cannot be kept apart/);
     },
     T,
   );
