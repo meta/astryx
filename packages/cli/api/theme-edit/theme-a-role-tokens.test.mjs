@@ -10,7 +10,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {themeEditNew, themeEditShow} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
@@ -26,6 +26,9 @@ import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 const T = 400_000;
 /** @type {string} */
 let cwd;
+// (Show's open problems and missed list come from the theme, not from the
+// sheet it writes: one small section of the sheet is drawn, not all of it.)
+const looked = () => ({cwd, section: 'actions'});
 /** @type {string} */
 let unbuilt = '';
 beforeAll(async () => {
@@ -48,7 +51,7 @@ async function follow(line) {
 /** @param {string} slug */
 const roleMisses = async slug =>
   /** @type {Array<{part: string, why: string, line: string}>} */ (
-    /** @type {any} */ (await themeEditShow(slug, {cwd})).data.missed ?? []
+    /** @type {any} */ (await themeEditShow(slug, looked())).data.missed ?? []
   ).filter(x => /base theme points|palette written out/.test(x.why));
 
 describe('a role color the base takes away from a part', () => {
@@ -56,8 +59,11 @@ describe('a role color the base takes away from a part', () => {
     'lists nothing on an untouched base',
     async () => {
       if (unbuilt) return;
-      await themeEditNew('s0', {cwd, like: 'stone'});
-      await themeEditSet('s0', 'corners', 'round', {cwd});
+      await themeEditNew('s0', {
+        cwd,
+        like: 'stone',
+        settings: {corners: 'round'},
+      });
       expect(await roleMisses('s0')).toEqual([]);
     },
     T,
@@ -67,9 +73,11 @@ describe('a role color the base takes away from a part', () => {
     "lists stone's info banner and accent progress fill, and their lines end them",
     async () => {
       if (unbuilt) return;
-      await themeEditNew('s', {cwd, like: 'stone'});
-      await themeEditSet('s', 'info', '#6b21a8', {cwd});
-      await themeEditSet('s', 'accent', '#c2410c', {cwd});
+      await themeEditNew('s', {
+        cwd,
+        like: 'stone',
+        settings: {info: '#6b21a8', accent: '#c2410c'},
+      });
       const before = await roleMisses('s');
       const banner = before.find(x => x.part === 'banner');
       expect(banner?.why).toMatch(
@@ -91,8 +99,11 @@ describe('a role color the base takes away from a part', () => {
     "lists gothic's info banner",
     async () => {
       if (unbuilt) return;
-      await themeEditNew('g', {cwd, like: 'gothic'});
-      await themeEditSet('g', 'info', '#ff00e6', {cwd});
+      await themeEditNew('g', {
+        cwd,
+        like: 'gothic',
+        settings: {info: '#ff00e6'},
+      });
       const banner = (await roleMisses('g')).find(x => x.part === 'banner');
       expect(banner?.line).toMatch(
         /--color-info-muted '#[0-9a-fA-F]{6,8}' --on banner --when status:info/,

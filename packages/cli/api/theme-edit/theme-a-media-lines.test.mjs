@@ -27,6 +27,9 @@ import {
 const T = 600_000;
 /** @type {string} */
 let cwd;
+// (Show's open problems and missed list come from the theme, not from the
+// sheet it writes: one small section of the sheet is drawn, not all of it.)
+const looked = () => ({cwd, section: 'actions'});
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-a-media-lines-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
@@ -38,7 +41,7 @@ afterAll(() => {
 /** @param {string} slug */
 const open = async slug =>
   /** @type {Array<{problem: string, fix: string | null}>} */ (
-    /** @type {any} */ (await themeEditShow(slug, {cwd})).data.openProblems
+    /** @type {any} */ (await themeEditShow(slug, looked())).data.openProblems
   );
 /** @param {string} fix */
 async function follow(fix) {
@@ -109,14 +112,14 @@ describe('lines for text on a media surface', () => {
   it(
     'a text token on the lightbox is refused with a line that reaches it',
     async () => {
-      await themeEditNew('r', {cwd, like: 'neutral'});
+      // (A refusal changes nothing: the caption case's theme serves.)
       const r = await runCli(
         [
           'experimental',
           'theme',
           'editor',
           'set',
-          'r',
+          'c',
           '--color-text-primary',
           '#000000',
           '--on',

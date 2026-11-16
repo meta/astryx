@@ -26,6 +26,9 @@ import {
 const T = 400_000;
 /** @type {string} */
 let cwd;
+// (Show's open problems and missed list come from the theme, not from the
+// sheet it writes: one small section of the sheet is drawn, not all of it.)
+const looked = () => ({cwd, section: 'actions'});
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-a-blind45-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
@@ -76,13 +79,16 @@ describe("the inverted surface on the theme's own surfaces", () => {
   it(
     "stays off the list where the theme's own dark looks like the base's",
     async () => {
-      await themeEditNew('c', {cwd, like: 'neutral'});
-      await themeEditSet('c', 'neutral', '#78716c', {cwd});
+      await themeEditNew('c', {
+        cwd,
+        like: 'neutral',
+        settings: {neutral: '#78716c'},
+      });
       await themeEditSet('c', '--color-background-surface', '#fffaf1', {
         cwd,
         mode: 'light',
       });
-      const show = /** @type {any} */ (await themeEditShow('c', {cwd})).data;
+      const show = /** @type {any} */ (await themeEditShow('c', looked())).data;
       const tooltip = (show.missed ?? []).find(
         (/** @type {any} */ x) =>
           x.part === 'tooltip' && /surfaces changed/.test(x.why),
@@ -104,7 +110,7 @@ describe('text in the top bar', () => {
         cwd,
         on: 'app-shell-header',
       });
-      const first = /** @type {any} */ (await themeEditShow('h', {cwd})).data
+      const first = /** @type {any} */ (await themeEditShow('h', looked())).data
         .openProblems;
       const inBar = first.filter((/** @type {any} */ p) =>
         /in the app-shell-header/.test(p.problem),
@@ -119,7 +125,7 @@ describe('text in the top bar', () => {
         cwd,
         on: 'app-shell-header',
       });
-      const after = /** @type {any} */ (await themeEditShow('h', {cwd})).data
+      const after = /** @type {any} */ (await themeEditShow('h', looked())).data
         .openProblems;
       expect(
         after.filter((/** @type {any} */ p) =>
@@ -156,8 +162,9 @@ describe('borders', () => {
   it(
     'secondary text below 4.5:1 is fixed with the nearest gray that reads, not black',
     async () => {
-      await themeEditNew('s', {cwd, like: 'neutral'});
-      const r = await themeEditSet('s', '--color-text-secondary', '#9a9a9a', {
+      // (On the borders case's theme: a text color, judged on its own
+      // problems.)
+      const r = await themeEditSet('b', '--color-text-secondary', '#9a9a9a', {
         cwd,
         mode: 'light',
       });
@@ -179,7 +186,7 @@ describe('pills and corners', () => {
       const small = /** @type {any} */ (
         await themeEditSet('p', 'corners', 'small', {cwd})
       ).data;
-      const show = /** @type {any} */ (await themeEditShow('p', {cwd})).data;
+      const show = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (show.missed ?? []).filter((/** @type {any} */ x) =>
           /full pill/.test(x.why),
@@ -187,7 +194,7 @@ describe('pills and corners', () => {
       ).toEqual([]);
       expect(small.missed ?? 0).toBeLessThan(16);
       await themeEditSet('p', 'corners', 'square', {cwd});
-      const sq = /** @type {any} */ (await themeEditShow('p', {cwd})).data;
+      const sq = /** @type {any} */ (await themeEditShow('p', looked())).data;
       expect(
         (sq.missed ?? []).some((/** @type {any} */ x) =>
           /full pill/.test(x.why),

@@ -28,6 +28,9 @@ import {
 const T = 400_000;
 /** @type {string} */
 let cwd;
+// (Show's open problems and missed list come from the theme, not from the
+// sheet it writes: one small section of the sheet is drawn, not all of it.)
+const looked = () => ({cwd, section: 'actions'});
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-a-leaks-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
@@ -36,16 +39,21 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
-/** @param {string} line */
+/**
+ * Follow a line; the problems the theme has after it, as text.
+ * @param {string} line
+ * @returns {Promise<string[]>}
+ */
 async function follow(line) {
   const args = splitCommand(line.slice(line.indexOf('experimental ')));
-  const r = await runCli(/** @type {string[]} */ (args), {cwd});
+  const r = await runCli([.../** @type {string[]} */ (args), '--json'], {cwd});
   expect(r.status, `${line}\n${r.stderr}`).toBe(0);
+  return JSON.parse(r.stdout).data.problems ?? [];
 }
 /** @param {string} slug */
 const open = async slug =>
   /** @type {Array<{problem: string, fix: string | null}>} */ (
-    /** @type {any} */ (await themeEditShow(slug, {cwd})).data.openProblems
+    /** @type {any} */ (await themeEditShow(slug, looked())).data.openProblems
   );
 
 describe("a button color on the toast's close button", () => {
@@ -112,9 +120,11 @@ describe('text on a fill its part draws only in a state', () => {
   it(
     'gets a line for that state, which set takes and which ends it',
     async () => {
-      await themeEditNew('h', {cwd, like: 'neutral'});
-      await themeEditSet('h', 'accent', '#1f4d3a', {cwd});
-      await themeEditSet('h', 'neutral', '#b8a283', {cwd});
+      await themeEditNew('h', {
+        cwd,
+        like: 'neutral',
+        settings: {accent: '#1f4d3a', neutral: '#b8a283'},
+      });
       await themeEditSet('h', '--color-text-secondary', '#b8a486', {
         cwd,
         mode: 'dark',
@@ -122,11 +132,15 @@ describe('text on a fill its part draws only in a state', () => {
       let left = await open('h');
       for (const p of left.filter(x => /text in item/.test(x.problem)))
         expect(p.fix ?? '').not.toMatch(/--when selected/);
-      for (let i = 0; i < 6 && left.some(p => p.fix); i++) {
-        await follow(/** @type {string} */ (left.find(p => p.fix)?.fix));
-        left = await open('h');
+      const item = (/** @type {string} */ x) => /text in item/.test(x);
+      let items = left.map(p => p.problem).filter(item);
+      for (let i = 0; i < 6 && items.length && left.some(p => p.fix); i++) {
+        items = (
+          await follow(/** @type {string} */ (left.find(p => p.fix)?.fix))
+        ).filter(item);
+        if (items.length) left = await open('h');
       }
-      expect(left.filter(p => /text in item/.test(p.problem))).toEqual([]);
+      expect(items).toEqual([]);
     },
     T,
   );

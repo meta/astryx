@@ -26,6 +26,9 @@ import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 const T = 400_000;
 /** @type {string} */
 let cwd;
+// (Show's open problems and missed list come from the theme, not from the
+// sheet it writes: one small section of the sheet is drawn, not all of it.)
+const looked = () => ({cwd, section: 'actions'});
 /** @type {string} */
 let unbuilt = '';
 beforeAll(async () => {
@@ -37,17 +40,28 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
-/** @param {string} line */
+/**
+ * Follow a line (each command of it); the problems the theme has after it,
+ * as text.
+ * @param {string} line
+ * @returns {Promise<string[]>}
+ */
 async function follow(line) {
+  /** @type {string[]} */
+  let problems = [];
   for (const one of line.split(' && ')) {
     const args = splitCommand(one.slice(one.indexOf('experimental ')));
-    const r = await runCli(/** @type {string[]} */ (args), {cwd});
+    const r = await runCli([.../** @type {string[]} */ (args), '--json'], {
+      cwd,
+    });
     expect(r.status, `${one}\n${r.stderr}`).toBe(0);
+    problems = JSON.parse(r.stdout).data.problems ?? [];
   }
+  return problems;
 }
 /** @param {string} slug */
 const shown = async slug =>
-  /** @type {any} */ (await themeEditShow(slug, {cwd})).data;
+  /** @type {any} */ (await themeEditShow(slug, looked())).data;
 
 describe('a text color for a state', () => {
   it(
@@ -65,21 +79,16 @@ describe('a text color for a state', () => {
         /text in top-nav-item \(selected\)/.test(x.problem),
       );
       expect(p?.fix).toMatch(/--on top-nav-item --state selected/);
-      await follow(p.fix);
-      let open = (await shown('s')).openProblems;
-      for (let i = 0; i < 3; i++) {
-        const next = open.find((/** @type {any} */ x) =>
-          /top-nav-item \(selected\)/.test(x.problem),
+      const named = (/** @type {string} */ x) =>
+        /top-nav-item \(selected\)/.test(x);
+      let left = (await follow(p.fix)).filter(named);
+      for (let i = 0; i < 3 && left.length; i++) {
+        const next = (await shown('s')).openProblems.find(
+          (/** @type {any} */ x) => named(x.problem),
         );
-        if (!next) break;
-        await follow(next.fix);
-        open = (await shown('s')).openProblems;
+        left = (await follow(next.fix)).filter(named);
       }
-      expect(
-        open.filter((/** @type {any} */ x) =>
-          /top-nav-item \(selected\)/.test(x.problem),
-        ),
-      ).toEqual([]);
+      expect(left).toEqual([]);
     },
     T,
   );
@@ -90,8 +99,11 @@ describe("the base theme's own accent, written as a color", () => {
     'is listed once the accent moves, and its lines end it',
     async () => {
       if (unbuilt) return;
-      await themeEditNew('b', {cwd, like: 'butter'});
-      await themeEditSet('b', 'accent', '#ff4fa3', {cwd});
+      await themeEditNew('b', {
+        cwd,
+        like: 'butter',
+        settings: {accent: '#ff4fa3'},
+      });
       const own = (/** @type {any} */ d) =>
         (d.missed ?? []).filter((/** @type {any} */ x) =>
           /base theme's own accent/.test(x.why),
@@ -111,8 +123,11 @@ describe('a status fill the status color does not reach', () => {
   it(
     'is listed once that status color is set, and its line ends it',
     async () => {
-      await themeEditNew('e', {cwd, like: 'neutral'});
-      await themeEditSet('e', 'danger', '#7a2530', {cwd});
+      await themeEditNew('e', {
+        cwd,
+        like: 'neutral',
+        settings: {danger: '#7a2530'},
+      });
       const miss = (/** @type {any} */ d) =>
         (d.missed ?? []).find(
           (/** @type {any} */ x) =>
