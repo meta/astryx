@@ -40,6 +40,7 @@ import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useToast} from '@astryxdesign/core/Toast';
 
 import {
   DocumentTextIcon,
@@ -175,6 +176,7 @@ The refresh path is covered end to end:
 // Header actions: version menu, copy, share. Pass `onClose` for the desktop
 // close button. A fragment so each control is a direct child of the toolbar.
 function ArtifactActions({onClose}: {onClose?: () => void}) {
+  const showToast = useToast();
   return (
     <>
       <DropdownMenu
@@ -183,7 +185,26 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
           variant: 'ghost',
           size: 'sm',
         }}
-        items={[{label: 'v2 (current)'}, {label: 'v1'}]}
+        items={[
+          {
+            label: 'v2 (current)',
+            onClick: () =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: version 2 is already shown',
+                uniqueID: 'v2',
+              }),
+          },
+          {
+            label: 'v1',
+            onClick: () =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: version 1 would open here',
+                uniqueID: 'v1',
+              }),
+          },
+        ]}
       />
       <Button
         label="Copy"
@@ -191,6 +212,13 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
         size="sm"
         icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
         isIconOnly
+        onClick={() =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({
+            body: 'Demo: the document would be copied here',
+            uniqueID: 'copy',
+          })
+        }
       />
       <Button
         label="Share"
@@ -198,6 +226,10 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
         size="sm"
         icon={<Icon icon={ShareIcon} size="sm" />}
         isIconOnly
+        onClick={() =>
+          // Demo only: replace this toast with the call that performs the action.
+          showToast({body: 'Demo: sharing would start here', uniqueID: 'share'})
+        }
       />
       {onClose != null && (
         <Button
@@ -215,6 +247,7 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
 
 // Mobile variant: the actions collapse into an overflow menu.
 function MobileArtifactActions() {
+  const showToast = useToast();
   return (
     <MoreMenu
       label="Document actions"
@@ -224,13 +257,47 @@ function MobileArtifactActions() {
           type: 'section',
           title: 'Version',
           items: [
-            {label: 'v2 (current)', onClick: () => {}},
-            {label: 'v1', onClick: () => {}},
+            {
+              label: 'v2 (current)',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: version 2 is already shown',
+                  uniqueID: 'v2',
+                }),
+            },
+            {
+              label: 'v1',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: 'Demo: version 1 would open here',
+                  uniqueID: 'v1',
+                }),
+            },
           ],
         },
         {type: 'divider'},
-        {label: 'Copy', icon: ClipboardDocumentIcon},
-        {label: 'Share', icon: ShareIcon},
+        {
+          label: 'Copy',
+          icon: ClipboardDocumentIcon,
+          onClick: () =>
+            // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: 'Demo: the document would be copied here',
+              uniqueID: 'copy',
+            }),
+        },
+        {
+          label: 'Share',
+          icon: ShareIcon,
+          onClick: () =>
+            // Demo only: replace this toast with the call that performs the action.
+            showToast({
+              body: 'Demo: sharing would start here',
+              uniqueID: 'share',
+            }),
+        },
       ]}
     />
   );
@@ -283,6 +350,7 @@ function ArtifactCard({onOpen}: {onOpen: () => void}) {
 // Main component
 
 export default function AIChatConversationTemplate() {
+  const showToast = useToast();
   const [composerMode, setComposerMode] = useState('ask');
   // Mobile shows the artifact as a full-screen dialog; desktop as a side panel.
   const [isArtifactDialogOpen, setIsArtifactDialogOpen] = useState(false);
@@ -324,7 +392,13 @@ export default function AIChatConversationTemplate() {
                   style={chatLayout}
                   composer={
                     <ChatComposer
-                      onSubmit={() => {}}
+                      onSubmit={() =>
+                        // Demo only: replace this toast with the call that sends the message.
+                        showToast({
+                          body: 'Demo: your message would send here',
+                          uniqueID: 'send',
+                        })
+                      }
                       placeholder={
                         composerMode === 'ask'
                           ? 'Ask anything...'
@@ -339,6 +413,13 @@ export default function AIChatConversationTemplate() {
                             size="sm"
                             icon={<Icon icon={AtSymbolIcon} size="sm" />}
                             isIconOnly
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that performs the action.
+                              showToast({
+                                body: 'Demo: a list of people to mention would open here',
+                                uniqueID: 'mention',
+                              })
+                            }
                           />
                           <Button
                             label="Attach"
@@ -346,6 +427,13 @@ export default function AIChatConversationTemplate() {
                             size="sm"
                             icon={<Icon icon={PaperClipIcon} size="sm" />}
                             isIconOnly
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that performs the action.
+                              showToast({
+                                body: 'Demo: a file picker would open here',
+                                uniqueID: 'attach',
+                              })
+                            }
                           />
                         </>
                       }
