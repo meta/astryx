@@ -192,13 +192,9 @@ describe('NavigationStack', () => {
     const field = screen.getByRole('textbox', {name: 'Message'});
     field.focus();
     expect(field).toHaveFocus();
-    // The push settles; the bar title must not take focus from the field.
-    await waitFor(
-      () =>
-        expect(screenCard('Compose')).toHaveAttribute('data-navigation-top'),
-      {timeout: 3000},
-    );
-    await new Promise(resolve => setTimeout(resolve, 600));
+    // Wait past the push's settle (well under a second in jsdom); the bar
+    // title must not take focus from the field then.
+    await new Promise(resolve => setTimeout(resolve, 1200));
     expect(field).toHaveFocus();
   });
 

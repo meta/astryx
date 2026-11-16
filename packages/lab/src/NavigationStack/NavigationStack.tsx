@@ -813,7 +813,8 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
  * pointer.
  *
  * Accessibility: covered screens are `inert`. A push moves focus to the new
- * screen's title; a pop returns it to the control that pushed the screen.
+ * screen's title, unless focus is already in that screen; a pop returns it
+ * to the control that pushed the screen.
  * The back button is a real button named by the screen it returns to.
  */
 export function NavigationStack<T>({
@@ -1341,9 +1342,10 @@ export function NavigationStack<T>({
       // the transition settled (a tap on its field mid-push) stays there.
       const target = revealed ?? key;
       const active = container.ownerDocument.activeElement;
-      const topCard = [
-        ...container.querySelectorAll<HTMLElement>('[data-navigation-screen]'),
-      ].find(card => card.getAttribute('data-navigation-screen') === target);
+      // This stack's own cards only: a stack nested in a screen has cards too.
+      const topCard = [...(cardsRef.current?.children ?? [])].find(
+        card => card.getAttribute('data-navigation-screen') === target,
+      );
       if (topCard != null && active != null && topCard.contains(active)) {
         return;
       }
