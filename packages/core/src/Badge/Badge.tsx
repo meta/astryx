@@ -49,10 +49,9 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     whiteSpace: 'nowrap',
     // A badge is as wide as its label. A grid cell and the cross axis of a
-    // stack stretch a child whose width is `auto`, so a lone badge became a
-    // bar across the cell or the stack. `fit-content` keeps the label's width
-    // there, and a flex row still shrinks it, because its flex basis follows
-    // this width and the minimum below lets it go under.
+    // stack stretch a child whose width is `auto`. In a flex row the badge
+    // still shrinks: its flex basis follows this width, and the minimum below
+    // lets it go under.
     width: 'fit-content',
     // A badge is one line by construction — one line tall, `nowrap` — so a
     // label wider than the space available has to go somewhere. Without these

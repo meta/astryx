@@ -32,15 +32,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | A read-only, one-line label with a required `label`, an optional leading `icon`, and a theme-extensible `variant` (default `neutral`).                                                                  |
-| Behavior                | The badge never wraps and is as wide as its label; a label wider than the available space is cut with an ellipsis inside the badge, and a string or number label is also carried in the root's `title`. |
-| End-user impact         | Readers see a compact status or category label that stays inside its container; assistive technology reads the full label text.                                                                         |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                                                            |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                                                                 |
-| Review checks           | Reject a badge that wraps or escapes its container, a `title` derived from a rich label, a badge that adds its own role, tab stop, or live region, or a variant that is not reflected on `badge`.       |
-| Governing rules         | `architecture:public-component-api/INV5,INV6,INV8`; `architecture:component-theming-surface/INV2,INV6,INV14`.                                                                                           |
+| Area                    | Contract                                                                                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | A read-only, one-line label with a required `label`, an optional leading `icon`, and a theme-extensible `variant` (default `neutral`).                                                                                   |
+| Behavior                | The badge never wraps and is as wide as its label; a label wider than the available space is cut with an ellipsis inside the badge, and a string or number label is also carried in the root's `title`.                  |
+| End-user impact         | Readers see a compact status or category label that stays inside its container; assistive technology reads the full label text.                                                                                          |
+| Builder impact          | None; the record describes shipped behavior.                                                                                                                                                                             |
+| Compatibility/readiness | No API or default change. FR3 is a visible, non-breaking layout correction: a lone badge in a grid cell or on a stack's cross axis keeps its label's width. One implementation gap is listed under Current-state impact. |
+| Review checks           | Reject a badge that wraps or escapes its container, a `title` derived from a rich label, a badge that adds its own role, tab stop, or live region, or a variant that is not reflected on `badge`.                        |
+| Governing rules         | `architecture:public-component-api/INV5,INV6,INV8`; `architecture:component-theming-surface/INV2,INV6,INV14`.                                                                                                            |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,7 +55,10 @@ built-in tones that a theme can extend.
 - Released default preserved: `yes`
 - Compatibility class: no public prop or default change. The DOM and styling
   output change: a plain-text label with no right-to-left letter gets
-  `dir="ltr"`, and the label isolates its text (`unicode-bidi: isolate`)
+  `dir="ltr"`, and the label isolates its text (`unicode-bidi: isolate`). FR3
+  is a visible, non-breaking layout correction: a lone badge in a grid cell or
+  on a stack's cross axis keeps its content width instead of stretching to the
+  cell or the stack
 - Controlled/uncontrolled behavior: not applicable; Badge holds no state
 - Migration decision: none
 
