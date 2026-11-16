@@ -49,6 +49,17 @@ import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 
+/** The popup the combobox names in `aria-controls`. */
+function popupOf(combobox: HTMLElement): HTMLElement {
+  const popup = document.getElementById(
+    combobox.getAttribute('aria-controls') ?? '',
+  );
+  if (popup == null) {
+    throw new Error('aria-controls names no element in the document');
+  }
+  return popup;
+}
+
 /**
  * Enters a search query as one change. Typing it key by key can land several
  * keystrokes in one frame, whose result announcements are then joined into
@@ -1321,14 +1332,14 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
       expect(screen.queryAllByRole('option', h)).toHaveLength(0);
-      // Scope to the listbox: the polite live region also announces "No results
+      // Scope to the popup: the polite live region also announces "No results
       // found", so an unscoped query matches both the visible empty state and
       // the a11y announcement.
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No results found')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
     });
 
-    it('empty-state message is not exposed as a listbox child', async () => {
+    it('with no matching options, the popup is not a listbox and the input still controls it', async () => {
       const user = userEvent.setup();
       render(
         <Selector
@@ -1342,12 +1353,19 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      // role="listbox" only permits option/group children — the visual
-      // empty-state message must be presentational (it is announced through
-      // the result-count live region instead).
-      const listbox = screen.getByRole('listbox', h);
-      const empty = within(listbox).getByText('No results found');
-      expect(empty).toHaveAttribute('role', 'presentation');
+      // An empty listbox is invalid (AST-020 1.3.1, 4.1.2): with no options the
+      // popup drops the listbox role, and the message sits in it beside the
+      // input.
+      const combobox = screen.getByRole('combobox', h);
+      expect(screen.queryByRole('listbox', h)).toBeNull();
+      expect(combobox).toHaveAttribute('aria-expanded', 'true');
+      const popup = popupOf(combobox);
+      expect(popup).not.toHaveAttribute('aria-label');
+      expect(within(popup).getByText('No results found')).toBeInTheDocument();
+
+      // Matching options bring the listbox back.
+      await user.clear(combobox);
+      expect(screen.getByRole('listbox', h)).toBe(popupOf(combobox));
     });
 
     it('renders emptySearchText in place of the default message', async () => {
@@ -1365,12 +1383,12 @@ describe('Selector', () => {
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
       await user.type(screen.getByRole('combobox', h), 'xyz');
 
-      const listbox = screen.getByRole('listbox', h);
+      const popup = popupOf(screen.getByRole('combobox', h));
       expect(
-        within(listbox).getByText('Nothing like that here'),
+        within(popup).getByText('Nothing like that here'),
       ).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('No results found'),
+        within(popup).queryByText('No results found'),
       ).not.toBeInTheDocument();
     });
 
@@ -1387,10 +1405,10 @@ describe('Selector', () => {
       );
       await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
 
-      const listbox = screen.getByRole('listbox', h);
-      expect(within(listbox).getByText('No options')).toBeInTheDocument();
+      const popup = popupOf(screen.getByRole('combobox', h));
+      expect(within(popup).getByText('No options')).toBeInTheDocument();
       expect(
-        within(listbox).queryByText('Nothing like that here'),
+        within(popup).queryByText('Nothing like that here'),
       ).not.toBeInTheDocument();
     });
 
@@ -1691,7 +1709,7 @@ describe('Selector', () => {
       // Without hasSearch the trigger itself is the combobox.
       await user.click(screen.getByRole('combobox', {name: 'Fruit'}));
 
-      const listbox = screen.getByRole('listbox', h);
+      const listbox = popupOf(screen.getByRole('combobox', {name: 'Fruit'}));
       expect(
         within(listbox).getByText('Add a fruit first'),
       ).toBeInTheDocument();
@@ -2014,7 +2032,7 @@ describe('Selector', () => {
         expect(
           screen.queryByRole('group', {name: 'Citrus', ...h}),
         ).not.toBeInTheDocument();
-        const listbox = screen.getByRole('listbox', h);
+        const listbox = popupOf(screen.getByRole('combobox', h));
         expect(
           within(listbox).getByText('No results found'),
         ).toBeInTheDocument();

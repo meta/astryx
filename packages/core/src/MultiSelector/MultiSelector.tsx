@@ -1659,8 +1659,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const hasCreateRow = createQuery != null;
   const leadingCount = (hasCreateRow ? 1 : 0) + (hasSelectAll ? 1 : 0);
   const realItemCount = sortedItems.length - leadingCount;
-  const isPanelEmpty =
-    surface.isOpen && !isLoading && realItemCount === 0 && !hasCreateRow;
+  const isListEmpty = !isLoading && realItemCount === 0 && !hasCreateRow;
+  const isPanelEmpty = surface.isOpen && isListEmpty;
   // Through the search's announcer: the empty panel is how the search ended,
   // so it and the count replace each other while not yet exposed
   // (`spec:AST-086` FR13).
@@ -2309,10 +2309,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       cursor++;
     }
 
-    // Empty state — no real items to show. role="presentation" keeps the
-    // message out of the listbox's accessibility tree (role="listbox" only
-    // permits option/group children); the no-results outcome is announced
-    // via the result-count live region instead.
+    // Empty state — no real items to show. With no options, the popup is not
+    // a listbox (an empty listbox is invalid), so the message sits in a plain
+    // popup next to the input. The live region also announces it.
     // While isLoading the options have not arrived yet, so asserting either
     // message would be a claim the component cannot make; the trigger's
     // spinner covers it.
@@ -2322,7 +2321,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         <div
           key="empty"
           ref={emptyStateRef}
-          role="presentation"
           {...mergeProps(
             themeProps('multi-selector-empty-state'),
             stylex.props(styles.emptyState),
@@ -2446,6 +2444,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const listboxLabelProps = hasExternalTrigger
     ? {'aria-label': label}
     : {'aria-labelledby': triggerId};
+  // With no options, the popup is not a listbox, so it takes none of a
+  // listbox's attributes.
+  const listboxRoleProps = isListEmpty
+    ? {}
+    : {
+        role: isGrid ? ('grid' as const) : ('listbox' as const),
+        'aria-multiselectable': true as const,
+      };
   // In a bottom sheet, or hung off a caller's anchor that may not take focus,
   // the listbox itself owns the keyboard.
   const listboxOwnsKeyboard =
@@ -2459,9 +2465,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         <div
           ref={listboxRef}
           id={listboxId}
-          role={isGrid ? 'grid' : 'listbox'}
-          aria-multiselectable="true"
-          {...listboxLabelProps}
+          {...listboxRoleProps}
+          {...(isListEmpty ? {} : listboxLabelProps)}
           {...stylex.props(styles.listbox)}>
           {renderOptions()}
         </div>
@@ -2472,16 +2477,17 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       <div
         ref={listboxRef}
         id={listboxId}
-        role={isGrid ? 'grid' : 'listbox'}
-        aria-multiselectable="true"
+        {...listboxRoleProps}
         // The bottom sheet is rendered in a modal layer, so Chromium cannot
         // reliably compute this listbox's name from the trigger outside that
         // layer. Name only this no-search sheet directly from the component's
         // existing label; searchable sheets and popovers retain their current
         // trigger relationship.
-        {...(surface.activePresentation === 'bottom-sheet'
-          ? {'aria-label': label}
-          : listboxLabelProps)}
+        {...(isListEmpty
+          ? {}
+          : surface.activePresentation === 'bottom-sheet'
+            ? {'aria-label': label}
+            : listboxLabelProps)}
         aria-activedescendant={activeDescendantId}
         tabIndex={listboxOwnsKeyboard ? 0 : undefined}
         onKeyDown={listboxOwnsKeyboard ? onKeyDown : undefined}

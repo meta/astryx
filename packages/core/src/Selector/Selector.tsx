@@ -1526,8 +1526,8 @@ export function Selector<T extends SelectorOptionType>(
   // case the old keystroke-time announcement could not: a fetch that lands
   // with nothing matching an active query left the message on screen and the
   // region silent.
-  const isPanelEmpty =
-    surface.isOpen && !isLoading && filteredItems.length === 0;
+  const isListEmpty = !isLoading && filteredItems.length === 0;
+  const isPanelEmpty = surface.isOpen && isListEmpty;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
   const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
@@ -1993,15 +1993,13 @@ export function Selector<T extends SelectorOptionType>(
     // isLoading the options have not arrived yet, so asserting either would be
     // a claim the component cannot make; the trigger's spinner covers it.
     if (filteredItems.length === 0 && !isLoading) {
-      // role="presentation" keeps the message out of the listbox's
-      // accessibility tree (role="listbox" only permits option/group
-      // children); the no-results outcome is announced via the
-      // result-count live region instead.
+      // With no options, the popup is not a listbox (an empty listbox is
+      // invalid), so the message sits in a plain popup next to the input. The
+      // live region also announces it.
       return [
         <div
           key="empty"
           ref={emptyStateRef}
-          role="presentation"
           {...mergeProps(
             themeProps('selector-empty-state'),
             stylex.props(styles.emptyState),
@@ -2168,8 +2166,8 @@ export function Selector<T extends SelectorOptionType>(
       <div
         ref={attachListbox}
         id={listboxId}
-        role="listbox"
-        aria-label={label}
+        role={isListEmpty ? undefined : 'listbox'}
+        aria-label={isListEmpty ? undefined : label}
         {...listboxPress.menuProps}
         {...stylex.props(
           styles.dropdown,
@@ -2187,12 +2185,12 @@ export function Selector<T extends SelectorOptionType>(
     <div
       ref={attachListbox}
       id={listboxId}
-      role="listbox"
+      role={isListEmpty ? undefined : 'listbox'}
       {...listboxPress.menuProps}
       // The trigger shows the value, so it cannot name the list.
       // A modal sheet removes an outside label from the accessibility tree.
       // The label element also holds the required marker and the tooltip.
-      aria-label={label}
+      aria-label={isListEmpty ? undefined : label}
       aria-activedescendant={
         surface.isOpen && highlightedIndex >= 0
           ? getItemId(highlightedIndex)
