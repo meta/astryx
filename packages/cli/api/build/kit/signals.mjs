@@ -28,7 +28,7 @@ import {
   requireBuildCoreDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
-import {ideaKind} from './kind.mjs';
+import {ideaKind, nameTerms} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
 import {pickFit} from './weights.mjs';
 import {readNames} from './words.mjs';
@@ -288,6 +288,7 @@ export async function kitSignals(query, options = {}) {
   const kind = wantsPages ? ideaKind(query, catalog, components) : 'page';
   /** @param {import('../_adapter.mjs').PageTemplate} t */
   const placeOf = t => pageDestination(t.name, cwd);
+  const pieceWords = new Set(components.map(c => nameTerms(c).at(-1) ?? ''));
   const chosen = wantsPages
     ? chooseStart(
         ranked,
@@ -298,6 +299,7 @@ export async function kitSignals(query, options = {}) {
         query,
         placeOf,
         namedUnready,
+        pieceWords,
       )
     : null;
   // Name the ranker's next two templates beside the start: the reader judges

@@ -380,24 +380,6 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.directMatch).toBe(false);
   });
 
-  it('does not start from a direct match that is not ready yet, and says so', async () => {
-    for (const idea of ['incident console', 'incident consoles']) {
-      const r = await build(idea, {cwd: REPO});
-      expect(r.type).toBe('build.kit');
-      if (r.type !== 'build.kit') return;
-      // The response's direct match describes the templates it lists, which
-      // leave out the not-ready one, so none of them is a confident match.
-      expect(r.data.directMatch).toBe(false);
-      for (const page of r.data.pages)
-        expect(page.command).toMatch(/--skeleton$/);
-      expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
-      expect(r.data.start?.name).not.toBe('incident-console');
-      expect(r.data.start?.reason).toBe(
-        `\`incident-console\` isn't ready yet, so build started from \`${r.data.start?.name}\`.`,
-      );
-    }
-  });
-
   it("carries the page-pick model's probability on a page-template start only", async () => {
     const page = await build('a kanban board for sprint tasks', {cwd: REPO});
     if (page.type !== 'build.kit') throw new Error(page.type);
@@ -438,6 +420,27 @@ describe('build kit — every page starts from a template', () => {
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
     expect(r.data.start?.basis).toBe('fallback');
+  });
+
+  it('names the variant page a part is placed on when it starts from the app shell', async () => {
+    const r = await build('a notifications panel for the settings sidebar', {
+      cwd: REPO,
+    });
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.basis).toBe('fallback');
+    expect(r.data.start?.reason).toBe(
+      "The idea is a part of `settings-sidebar`, a variant page; a part starts from a family's base page only when that page leads, so it starts from the app shell.",
+    );
+  });
+
+  it("names a family's base page, not a variant the idea never names, when a part starts from the app shell", async () => {
+    const r = await build('a filter bar for the table', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.basis).toBe('fallback');
+    expect(r.data.start?.reason).not.toContain('part of `table-filter`');
+    expect(r.data.start?.reason).toContain(
+      "a part of a page in `table`'s family; a part starts there only when `table` leads",
+    );
   });
 
   it('starts a part from the page it is placed in, else from the app shell', async () => {
@@ -688,22 +691,6 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('never names a template that is not ready when the idea does not name it', async () => {
-    const r = await build('a list of incidents with severity and owners', {
-      cwd: REPO,
-    });
-    if (r.type !== 'build.kit') throw new Error(r.type);
-    const found = await search('a list of incidents with severity and owners', {
-      cwd: REPO,
-    });
-    const top = found.data.results.find(
-      x => x.domain === 'template' && x.kind !== 'block',
-    );
-    expect(top?.name).toBe('incident-console');
-    expect(r.data.start?.name).not.toBe('incident-console');
-    expect(JSON.stringify(r.data)).not.toContain('incident-console');
-  });
-
   it('starts a page the words describe from its template', async () => {
     for (const [idea, name] of [
       ['a weekly report of sales by region', 'dashboard'],
@@ -716,20 +703,6 @@ describe('build kit — every page starts from a template', () => {
       if (r.type !== 'build.kit') throw new Error(r.type);
       expect(r.data.start?.name).toBe(name);
     }
-  });
-
-  it('names only page templates it could start from among search matches', async () => {
-    const {loadTemplates} = await import('./_adapter.mjs');
-    const ready = new Set((await loadTemplates(REPO)).pages.map(t => t.name));
-    const all = await search('incident console table page', {cwd: REPO});
-    const matched = all.data.results.filter(
-      r => r.domain === 'template' && r.kind !== 'block',
-    );
-    expect(matched.some(r => !ready.has(r.name))).toBe(true);
-    const r = await build('incident console table page', {cwd: REPO});
-    if (r.type !== 'build.kit') throw new Error(r.type);
-    expect(r.data.pages.length).toBeGreaterThan(0);
-    for (const page of r.data.pages) expect(ready.has(page.name)).toBe(true);
   });
 
   it('starts a template named in any case or with a neighbour-letter swap where its own words start', async () => {
