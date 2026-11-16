@@ -1760,7 +1760,7 @@ describe('app-theme doctor checks', () => {
     });
   });
 
-  it('check 9 still warns for a family that no font stylesheet the module imports loads', async () => {
+  it("check 9 reports an imported font stylesheet it cannot parse, even when another theme's stylesheet loads the family", async () => {
     const {dir} = await fixture([
       {
         slug: 'ocean',
@@ -1768,7 +1768,30 @@ describe('app-theme doctor checks', () => {
         fontCss:
           '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
       },
-      {slug: 'sunset', fontFamily: 'Sunset Serif'},
+      {
+        slug: 'sunset',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@font-face { font-family: "Ocean Sans"; src: url(\n',
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining(
+        'sunset: font stylesheet could not be parsed',
+      ),
+    });
+  });
+
+  it('check 9 still warns for a family that no font stylesheet the module imports loads, naming only that one', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
+      },
+      {slug: 'sunset', fontFamily: '"Ocean Sans", "Sunset Serif"'},
     ]);
 
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({

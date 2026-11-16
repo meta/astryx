@@ -1885,6 +1885,12 @@ export async function checkAppThemes(cwd) {
   // every added theme: a theme that extends another, such as a local fork of
   // neutral, names the families its parent's stylesheet loads.
   const moduleLoaded = new Set();
+  /**
+   * What each imported font stylesheet loads, by its theme; null for one that
+   * cannot be parsed, which the theme's own pass below reports.
+   * @type {Map<(typeof resolved)[number], ReturnType<typeof fontStylesheetEvidence> | null>}
+   */
+  const importedEvidence = new Map();
   for (const theme of resolved) {
     const {fontStylesheet} = importedEntry(theme);
     if (!theme.fontStylesheetFile || !fontStylesheet) continue;
@@ -1894,9 +1900,10 @@ export async function checkAppThemes(cwd) {
         readTextFile(theme.fontStylesheetFile),
         theme.fontStylesheetFile,
       );
+      importedEvidence.set(theme, evidence);
       for (const family of evidence.loaded) moduleLoaded.add(family);
     } catch {
-      // The theme's own pass below reports a stylesheet it cannot parse.
+      importedEvidence.set(theme, null);
     }
   }
   for (const theme of resolved) {
@@ -1909,7 +1916,16 @@ export async function checkAppThemes(cwd) {
     if (availableTheme) {
       files.push(path.join(availableTheme.sourceDir, availableTheme.entry));
     }
-    const names = [...namedThemeFonts(files)].filter(
+    const named = namedThemeFonts(files);
+    if (named.size === 0) continue;
+    if (importedEvidence.get(theme) === null) {
+      fontFailures.push({
+        theme,
+        message: 'font stylesheet could not be parsed',
+      });
+      continue;
+    }
+    const names = [...named].filter(
       name => !moduleLoaded.has(name.toLowerCase()),
     );
     if (names.length === 0) continue;
@@ -1929,27 +1945,18 @@ export async function checkAppThemes(cwd) {
       });
       continue;
     }
-    try {
-      const evidence = fontStylesheetEvidence(
-        readTextFile(theme.fontStylesheetFile),
-        theme.fontStylesheetFile,
-      );
-      const missing = names.filter(
-        name => !evidence.loaded.has(name.toLowerCase()),
-      );
-      if (missing.length === 0) continue;
-      if (evidence.external) {
-        externalFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
-      } else if (evidence.unread) {
-        unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
-      } else {
-        fontFailures.push({theme, message: missing.join(', '), missing});
-      }
-    } catch {
-      fontFailures.push({
-        theme,
-        message: 'font stylesheet could not be parsed',
-      });
+    const evidence = importedEvidence.get(theme);
+    if (!evidence) continue;
+    const missing = names.filter(
+      name => !evidence.loaded.has(name.toLowerCase()),
+    );
+    if (missing.length === 0) continue;
+    if (evidence.external) {
+      externalFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+    } else if (evidence.unread) {
+      unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+    } else {
+      fontFailures.push({theme, message: missing.join(', '), missing});
     }
   }
   const fontWarningMessages = [];
