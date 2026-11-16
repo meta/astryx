@@ -1142,6 +1142,12 @@ export function CodeBlock({
   // blocks on a page don't create duplicate same-named landmarks.
   const {getViewportProps, getContentProps} = useScrollableArea({
     axis: 'both',
+    // Nothing inside the code viewport sticks to an outer scroller, so the
+    // viewport stays a scroll container while its code fits. A long line, or
+    // code past `maxHeight`, then scrolls from the first paint: before script
+    // measures it, and in a page that never runs script, such as a rendered
+    // file. The Tab stop still follows measured overflow.
+    stickyContainment: 'always',
     keyboardAccess: {
       owner: 'viewport',
       role: 'group',

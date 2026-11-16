@@ -16,7 +16,10 @@
  *           the same values.
  */
 
-import {cssTree} from '../../../foundation/runtime/css-tree.mjs';
+import {
+  cssTree,
+  keptCssTreeAnswer,
+} from '../../../foundation/runtime/css-tree.mjs';
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isBlock = value =>
@@ -182,12 +185,14 @@ function tokenValueProblem(key, value, reads) {
  * not start with exactly two dashes (`-color-accent`, `---color-border`),
  * or an empty value.
  * @param {string} key @param {unknown} value
+ * @param {(name: string) => boolean} isProperty whether a name is a CSS
+ *   property's
  */
-function tokenNameProblem(key, value) {
+function tokenNameProblem(key, value, isProperty) {
   if (value === undefined) return null;
   // A CSS property set on the theme's root (Core sets color-scheme on a
   // surface) styles it; any other name is no declaration a browser reads.
-  if (!key.startsWith('--') && key in cssTree().lexer.properties) return null;
+  if (!key.startsWith('--') && isProperty(key)) return null;
   if (!key.startsWith('--'))
     return `${key} is no token name: the build writes it as a declaration on the theme's root, which no browser reads as a token; a token name starts with two dashes, such as --${key.replace(/^-+/, '')}`;
   if (key.startsWith('---'))
@@ -263,9 +268,38 @@ export function cycleProblem(name, values) {
  *   through them, but they are Core's, not the theme's, so none is named
  * @returns {WrittenValueProblem[]}
  */
-export function writtenValueProblems(
+export function writtenValueProblems(theme, options = {}) {
+  // A token name that is no custom property's is a CSS property's or no
+  // token's, and only css-tree tells them apart. The names the check asks
+  // about are found first, and css-tree's answer for them is kept between
+  // runs (keptCssTreeAnswer).
+  /** @type {Set<string>} */
+  const asked = new Set();
+  const first = valueProblems(theme, options, name => {
+    asked.add(name);
+    return false;
+  });
+  if (asked.size === 0) return first;
+  const properties = new Set(
+    keptCssTreeAnswer('css-property-names', [...asked].sort(), names =>
+      names.filter(name => name in cssTree().lexer.properties),
+    ),
+  );
+  return valueProblems(theme, options, name => properties.has(name));
+}
+
+/**
+ * {@link writtenValueProblems}, with whether a token name is a CSS
+ * property's from `isProperty`.
+ * @param {Record<string, any>} theme
+ * @param {NonNullable<Parameters<typeof writtenValueProblems>[1]>} options
+ * @param {(name: string) => boolean} isProperty
+ * @returns {WrittenValueProblem[]}
+ */
+function valueProblems(
   theme,
-  {reads, rootTokens, surfaceDefaults} = {},
+  {reads, rootTokens, surfaceDefaults},
+  isProperty,
 ) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
@@ -371,7 +405,7 @@ export function writtenValueProblems(
             continue;
           }
           const why =
-            tokenNameProblem(k, v) ??
+            tokenNameProblem(k, v, isProperty) ??
             tokenValueProblem(k, v, reads) ??
             cycleProblem(k, onElement);
           if (why) out.push({path: [...at, map, k], why});

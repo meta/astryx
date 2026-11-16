@@ -80,6 +80,16 @@ const LIFT = [
   -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
 ];
 
+/**
+ * The `start.fit` at and above which a page-template start is a clear choice.
+ * Below it, the pick model's start agrees with labeled build requests less
+ * than half the time; at and above it, more than half the time. A reader that
+ * acts on a start only when the choice is clear (theme preview adding a page,
+ * wording that calls a start a good fit) compares `start.fit` with this one
+ * value.
+ */
+export const CLEAR_FIT = 0.4;
+
 /** The decision replaces the shell with a page when p >= 0.30. */
 const LIFT_AT = 0.3;
 
