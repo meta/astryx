@@ -181,14 +181,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/Table/tableColumnAdmission.ts:heightSafe": {
-      "status": "open",
-      "group": "F1 Table capability and plugins"
-    },
-    "packages/core/src/Table/tableColumnAdmission.ts:logicalRenderers": {
-      "status": "open",
-      "group": "F1 Table capability and plugins"
-    },
     "packages/core/src/Table/tableRowContextUsage.ts:countIndependentPlugins": {
       "status": "open",
       "group": "F1 Table capability and plugins"
