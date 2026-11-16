@@ -176,7 +176,7 @@ describe.skipIf(!POSIX)(
           pc,
         });
         expect(declared.lines).toEqual([
-          'astryx: this project has no Astryx CLI installed; answered by CLI 9.0.0 while its Core is 9.0.1. To match, run: npm install',
+          'astryx: this project has no Astryx CLI installed; answered by CLI 9.0.0 while its Core is 9.0.1. To install the CLI this project declares, run: npm install',
         ]);
         const doctor = JSON.parse(
           (await runAsync(g.bin, ['doctor', '--json'], {cwd: declares, pc}))
@@ -190,6 +190,22 @@ describe.skipIf(!POSIX)(
           status: 'warn',
           fix: 'To install the CLI this project declares, run: npm install.',
         });
+
+        // A CLI named only as a peer dependency is not installed by every
+        // package manager, so the advice still adds it.
+        const peer = project(tempDir('peer'), {'@astryxdesign/core': '9.0.1'});
+        writeJson(path.join(peer, 'package.json'), {
+          name: 'peer',
+          private: true,
+          dependencies: {'@astryxdesign/core': '9.0.1'},
+          peerDependencies: {'@astryxdesign/cli': '9.0.1'},
+        });
+        installCore(peer, '9.0.1');
+        const peerRun = await runAsync(g.bin, ['--version'], {
+          cwd: peer,
+          pc,
+        });
+        expect(peerRun.lines).toEqual([noCliHint('9.0.0', '9.0.1')]);
       }),
     );
 
