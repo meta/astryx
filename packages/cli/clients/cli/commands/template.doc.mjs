@@ -36,7 +36,7 @@ export const doc = {
       param: 'options.targetPath',
       required: false,
       description:
-        'Where to scaffold the template, inside the project root: a relative path, or an absolute path inside the project, which is written as its relative path. A path outside the project is refused. A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; ' +
+        'Where to scaffold the template, inside the project root: a relative path, or an absolute path inside the project, which is written as its relative path. An absolute path in the system temp folder (such as /tmp/dashboard) takes a scratch copy, outside the project. Any other path outside the project is refused. A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; ' +
         "any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block. " +
         'Omit it to print the source.',
     },

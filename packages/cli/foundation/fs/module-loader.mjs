@@ -9,7 +9,11 @@
  * load-precedence order. Generated theme artifacts also use a dedicated jiti
  * path that resolves extensionless JSX/TSX registry imports. On Node 22.15 and
  * later, a theme module load, of a built artifact or of theme source, loads
- * the stylesheets its modules import as empty modules. These helpers
+ * the stylesheets its modules import (CSS, Sass, Less, Stylus, PostCSS) as
+ * empty modules, and the assets they
+ * import (an icon's .svg, a picture, a font) as modules whose default export
+ * is the file's URL, as a bundler gives it; while it loads, a timer it
+ * starts never holds the process open and an exit it calls refuses the load. These helpers
  * centralize that behavior so callers stay in lockstep. A module's stdout
  * writes go to stderr while it loads, so project code that prints cannot
  * corrupt a `--json` envelope.
@@ -20,14 +24,19 @@
  * to the authoring parser (which seals its own zod schema).
  */
 
+import {ASSET_FILE, STYLESHEET_FILE} from './stylesheet-file.mjs';
 import * as path from 'node:path';
-import {AsyncLocalStorage} from 'node:async_hooks';
+import {AsyncLocalStorage, createHook} from 'node:async_hooks';
 import nodeModule, {createRequire} from 'node:module';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
 import {jitiCacheOptions} from './jiti-cache.mjs';
+import {
+  recordThemeModulePromise,
+  tellThemeModuleCallbacks,
+} from './theme-module-rejections.mjs';
 
 export {findPresentFiles};
 
@@ -50,40 +59,52 @@ function getJiti() {
   return jitiInstance;
 }
 
-let loadsInFlight = 0;
-/** @type {typeof process.stdout.write | undefined} */
-let realStdoutWrite;
 /** Set in the async context of a module load, and only there. */
 const moduleLoad = new AsyncLocalStorage();
+let stdoutGates = 0;
+/** @type {typeof process.stdout.write | undefined} */
+let realStdoutWrite;
+
+/**
+ * Send the stdout writes made in a module load's async context to stderr
+ * until the matching {@link openStdout}. Writes from any other context pass
+ * through, so the CLI's own output stays on stdout even while an abandoned
+ * load is still in flight. The gate is installed for the first overlapping
+ * use and removed after the last.
+ */
+function gateStdout() {
+  if (stdoutGates++ > 0) return;
+  const write = process.stdout.write;
+  realStdoutWrite = write;
+  process.stdout.write = /** @type {any} */ (
+    function (/** @type {any} */ chunk, /** @type {any[]} */ ...rest) {
+      return moduleLoad.getStore()
+        ? process.stderr.write(chunk, ...rest)
+        : write.call(process.stdout, chunk, ...rest);
+    }
+  );
+}
+
+function openStdout() {
+  if (--stdoutGates > 0 || !realStdoutWrite) return;
+  process.stdout.write = realStdoutWrite;
+  realStdoutWrite = undefined;
+}
 
 /**
  * Run a module load with the stdout writes made in its async context sent to
- * stderr. Writes from any other context pass through, so the CLI's own output
- * stays on stdout even while an abandoned load is still in flight. The gate
- * is installed for the first overlapping load and removed after the last.
+ * stderr ({@link gateStdout}). A callback the module leaves to run later (a
+ * deferred log) is gated again while it runs, by the theme module guards.
  * @template T
  * @param {() => Promise<T>} load
  * @returns {Promise<T>}
  */
 async function withStdoutOnStderr(load) {
-  if (loadsInFlight++ === 0) {
-    const write = process.stdout.write;
-    realStdoutWrite = write;
-    process.stdout.write = /** @type {any} */ (
-      function (/** @type {any} */ chunk, /** @type {any[]} */ ...rest) {
-        return moduleLoad.getStore()
-          ? process.stderr.write(chunk, ...rest)
-          : write.call(process.stdout, chunk, ...rest);
-      }
-    );
-  }
+  gateStdout();
   try {
     return await moduleLoad.run(true, load);
   } finally {
-    if (--loadsInFlight === 0 && realStdoutWrite) {
-      process.stdout.write = realStdoutWrite;
-      realStdoutWrite = undefined;
-    }
+    openStdout();
   }
 }
 
@@ -122,7 +143,7 @@ const THEME_ARTIFACT_EXTENSIONS = [
  * @returns {specifier is string}
  */
 function isStylesheetSpecifier(specifier) {
-  return typeof specifier === 'string' && specifier.endsWith('.css');
+  return typeof specifier === 'string' && STYLESHEET_FILE.test(specifier);
 }
 
 /**
@@ -133,7 +154,7 @@ function isStylesheetSpecifier(specifier) {
  */
 function resolvesToStylesheet(specifier, from) {
   try {
-    return createRequire(from).resolve(specifier).endsWith('.css');
+    return STYLESHEET_FILE.test(createRequire(from).resolve(specifier));
   } catch {
     return false;
   }
@@ -145,6 +166,13 @@ function resolvesToStylesheet(specifier, from) {
  */
 const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
 /** Set in the async context of a theme module load, and only there. */
+/**
+ * Set in the async context of a theme module load: the stylesheets it
+ * imports that are not there yet, each loaded as an empty module.
+ * Only a caller that asks (`unbuilt`) has them loaded; for any other, a
+ * missing stylesheet fails like any missing import.
+ * @type {AsyncLocalStorage<{unbuilt: Set<string> | null}>}
+ */
 const themeModuleLoad = new AsyncLocalStorage();
 let themeModuleLoadsInFlight = 0;
 /** @type {{deregister: () => void} | null} */
@@ -152,21 +180,100 @@ let stylesheetHooks = null;
 
 /** @param {string} url */
 function isStylesheetUrl(url) {
-  return url.startsWith('file:') && new URL(url).pathname.endsWith('.css');
+  return url.startsWith('file:') && STYLESHEET_FILE.test(new URL(url).pathname);
+}
+
+/** @param {string} url */
+function isAssetUrl(url) {
+  return url.startsWith('file:') && ASSET_FILE.test(new URL(url).pathname);
 }
 
 /**
  * In a theme module load, a module that Node resolves to a `.css` file loads
- * as an empty module. Any other module loads unchanged.
+ * as an empty module, and one that resolves to an asset loads as a module
+ * whose default export is the file's URL (what a bundler gives the import).
+ * Any other module loads unchanged.
  * @param {string} url
  * @param {any} context
  * @param {(url: string, context: any) => any} next
  */
 function loadStylesheetAsEmptyModule(url, context, next) {
+  if (themeModuleLoad.getStore() && url.endsWith(UNBUILT_QUERY))
+    return {format: 'module', source: '', shortCircuit: true};
   if (themeModuleLoad.getStore() && isStylesheetUrl(url)) {
     return {format: 'module', source: '', shortCircuit: true};
   }
+  if (themeModuleLoad.getStore() && isAssetUrl(url)) {
+    return {
+      format: 'module',
+      source: `export default ${JSON.stringify(url)};`,
+      shortCircuit: true,
+    };
+  }
   return next(url, context);
+}
+
+/** Marks the URL of a stylesheet a theme module imports that is not there. */
+const UNBUILT_QUERY = '?astryx-unbuilt-stylesheet';
+
+/**
+ * In a theme module load, an import that Node cannot find is read once more:
+ * - an absolute path (jiti hands one on as written) that names a file loads
+ *   that file: Node reads `#`, `?` and `%` in a path as URL syntax, so a
+ *   project in a folder such as `C# work` would find nothing;
+ * - a stylesheet that names no file yet (the stylesheet the theme's own
+ *   build writes, imported by its source, with a query such as `?inline` or
+ *   without) loads as an empty module and is recorded, so the build can tell
+ *   it is its own output.
+ * Any other import fails as before.
+ * @param {string} specifier
+ * @param {any} context
+ * @param {(specifier: string, context: any) => any} next
+ */
+function resolveUnbuiltStylesheet(specifier, context, next) {
+  try {
+    return next(specifier, context);
+  } catch (error) {
+    const load = themeModuleLoad.getStore();
+    const code = /** @type {any} */ (error)?.code;
+    if (
+      !load ||
+      (code !== 'ERR_MODULE_NOT_FOUND' && code !== 'MODULE_NOT_FOUND')
+    )
+      throw error;
+    if (path.isAbsolute(specifier) && isFile(specifier))
+      return {url: pathToFileURL(specifier).href, shortCircuit: true};
+    // The file a stylesheet import names, its query (`?inline`) aside.
+    const query = specifier.lastIndexOf('?');
+    const bare =
+      query > specifier.lastIndexOf('/')
+        ? specifier.slice(0, query)
+        : specifier;
+    if (!load.unbuilt || !STYLESHEET_FILE.test(bare)) throw error;
+    const url = path.isAbsolute(bare)
+      ? pathToFileURL(bare)
+      : context?.parentURL
+        ? new URL(bare, context.parentURL)
+        : null;
+    if (!url) throw error;
+    const file = fileURLToPath(url);
+    if (isFile(file)) return {url: url.href, shortCircuit: true};
+    load.unbuilt.add(file);
+    return {
+      url: `${url.href}${UNBUILT_QUERY}`,
+      format: 'module',
+      shortCircuit: true,
+    };
+  }
+}
+
+/** @param {string} file */
+function isFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function removeStylesheetHooks() {
@@ -181,26 +288,365 @@ function removeStylesheetHooks() {
 
 /**
  * Run a theme module load with every stylesheet that the theme's modules
- * import, at any depth, loaded as an empty module. A theme module can import
+ * import, at any depth, loaded as an empty module, and every asset they
+ * import (an .svg, a picture, a font) as its URL. A theme module can import
  * a stylesheet so that the app's bundler emits it, and Node cannot load a
- * stylesheet. Node resolves each import from the module that writes it, so a
- * missing stylesheet fails like any missing import, and an import that ends
- * in `.css` but names a JavaScript file loads that file. Module loads outside
- * this call's async context do not change. The module hook is installed for
- * the first overlapping load and removed after the last. A Node without module
- * hooks (before 22.15) runs the load unchanged.
+ * stylesheet. Node resolves each import from the module that writes it, and
+ * an import that ends in `.css` but names a JavaScript file loads that file.
+ * With `options.unbuilt`, a stylesheet import that names no file yet loads
+ * as an empty module too, and its path is added there: the caller tells
+ * whether it is a file the build itself writes, and refuses any other.
+ * Without it, a missing stylesheet fails like any missing import. Module loads
+ * outside this call's async context do not change. The module hook is
+ * installed for the first overlapping load and removed after the last. A
+ * Node without module hooks (before 22.15) runs the load unchanged.
+ * @template T
+ * @param {() => Promise<T>} load
+ * @param {{unbuilt?: Set<string>}} [options]
+ * @returns {Promise<T>}
+ */
+export async function withEmptyStylesheets(load, options = {}) {
+  // A theme module is read for its export, in the CLI's own process: what it
+  // prints goes to stderr (never into a --json envelope), a timer it leaves
+  // running never keeps the command from exiting, and an exit it calls
+  // while loading is a refused load, never the command's own exit.
+  const guarded = () => withStdoutOnStderr(() => withThemeModuleGuards(load));
+  if (typeof registerHooks !== 'function') return await guarded();
+  stylesheetHooks ??= registerHooks({
+    resolve: resolveUnbuiltStylesheet,
+    load: loadStylesheetAsEmptyModule,
+  });
+  themeModuleLoadsInFlight++;
+  try {
+    return await themeModuleLoad.run(
+      {unbuilt: options.unbuilt ?? null},
+      guarded,
+    );
+  } finally {
+    if (--themeModuleLoadsInFlight === 0) removeStylesheetHooks();
+  }
+}
+
+/**
+ * Set in the async context of a guarded theme module load: whether the load
+ * is done, and the handles (timers, watchers, servers, message ports) the
+ * module opened while it loaded.
+ * @typedef {{done: boolean, handles: Array<{unref: () => void}>, listeners: Array<{event: string | symbol, listener: (...args: any[]) => void}>, fail: (error: unknown) => void}} GuardedLoad
+ * @type {AsyncLocalStorage<GuardedLoad>}
+ */
+const guardedLoad = new AsyncLocalStorage();
+let exitGuards = 0;
+/** @type {typeof process.exit | null} */
+let realExit = null;
+let guardsInstalled = false;
+/** Callbacks of a module load running now, each holding the stdout gate. */
+const deferredGates = new Set();
+/**
+ * Callbacks of a theme module running after its load, each holding the exit
+ * guard, with the exit code to put back when it returns.
+ * @type {Map<number, {exitCode: unknown, cwd: string}>}
+ */
+const deferredExits = new Map();
+
+/**
+ * Change back to `cwd` when a theme module's code changed the process's
+ * working folder: the command reads every path from its own.
+ * @param {string} cwd
+ */
+function restoreCwd(cwd) {
+  try {
+    if (process.cwd() !== cwd) process.chdir(cwd);
+  } catch {
+    // A folder that went away: nothing to change back to.
+  }
+}
+
+/**
+ * The built-in objects a theme module's code can patch for the whole process
+ * (`JSON.stringify = …`, `Object.prototype.x = …`): each is put back as it
+ * was when the load ends, so the command's own code runs on the real ones.
+ */
+const INTRINSICS = [
+  Object,
+  Object.prototype,
+  Array,
+  Array.prototype,
+  // Function.prototype
+  Object.getPrototypeOf(Object),
+  String,
+  String.prototype,
+  Number,
+  Number.prototype,
+  Boolean.prototype,
+  Symbol.prototype,
+  RegExp.prototype,
+  Date.prototype,
+  Error.prototype,
+  Map.prototype,
+  Set.prototype,
+  WeakMap.prototype,
+  Promise,
+  Promise.prototype,
+  JSON,
+  Math,
+  Reflect,
+];
+
+/** The own properties of each intrinsic, to put back after a load. */
+function snapshotIntrinsics() {
+  return INTRINSICS.map(target => ({
+    target,
+    properties: Object.getOwnPropertyDescriptors(target),
+  }));
+}
+
+/**
+ * Put each intrinsic back as the snapshot holds it: a property the load
+ * added is removed, one it changed or removed is restored.
+ * @param {ReturnType<typeof snapshotIntrinsics>} snapshot
+ */
+function restoreIntrinsics(snapshot) {
+  for (const {target, properties} of snapshot) {
+    for (const key of Reflect.ownKeys(target)) {
+      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+        try {
+          delete (/** @type {any} */ (target)[key]);
+        } catch {
+          // A property the module made non-configurable stays.
+        }
+      }
+    }
+    for (const key of Reflect.ownKeys(properties)) {
+      const was = /** @type {PropertyDescriptor} */ (
+        /** @type {any} */ (properties)[key]
+      );
+      const now = Object.getOwnPropertyDescriptor(target, key);
+      if (
+        now &&
+        now.value === was.value &&
+        now.get === was.get &&
+        now.set === was.set &&
+        now.writable === was.writable &&
+        now.enumerable === was.enumerable
+      )
+        continue;
+      try {
+        Object.defineProperty(target, key, was);
+      } catch {
+        // A property the module made non-configurable stays.
+      }
+    }
+  }
+}
+
+/**
+ * Hold `process.exit` for theme module code until the matching
+ * {@link releaseExit}: called while a module loads, it refuses the load
+ * ({@link ThemeModuleExitError}); called from a callback the module left
+ * after its load, it is ignored with a warning, so the command keeps its own
+ * verdict and exit code. Any other caller exits as usual. The wrapper is
+ * installed for the first overlapping hold and removed after the last.
+ */
+function holdExit() {
+  if (exitGuards++ > 0) return;
+  const exit = process.exit;
+  realExit = exit;
+  process.exit = /** @type {any} */ (
+    function (/** @type {any} */ code) {
+      const store = guardedLoad.getStore();
+      if (store && !store.done) throw new ThemeModuleExitError(code);
+      if (store) {
+        process.stderr.write(
+          `Warning: a theme module called process.exit(${code ?? ''}) after it loaded, from a callback it left running; the command goes on, and its own exit code stands.\n`,
+        );
+        return undefined;
+      }
+      return exit.call(process, code);
+    }
+  );
+}
+
+function releaseExit() {
+  if (--exitGuards > 0 || !realExit) return;
+  process.exit = realExit;
+  realExit = null;
+}
+
+/**
+ * A theme module that called `process.exit` while it loaded: the load is
+ * refused with it, and the command goes on to say so.
+ */
+export class ThemeModuleExitError extends Error {
+  /** @param {unknown} code */
+  constructor(code) {
+    super(
+      `the module called process.exit(${code ?? ''}) while it loaded; a theme file only exports its theme, so remove the exit (or move it into a script of its own)`,
+    );
+    this.name = 'ThemeModuleExitError';
+  }
+}
+
+/**
+ * A theme module whose top-level await never settled: nothing was left to
+ * run, so it could never finish loading.
+ */
+export class ThemeModuleUnsettledError extends Error {
+  constructor() {
+    super(
+      'its top-level await never settled (it waits for something that never comes), so the module never finished loading; a theme file only exports its theme, so remove the wait',
+    );
+    this.name = 'ThemeModuleUnsettledError';
+  }
+}
+
+/**
+ * Install, once, what a theme module's code meets in the CLI's process, in
+ * its async context only (anything else in the process runs as before):
+ * - each handle it opens (a timer from any module, a file watcher, a
+ *   server, a message port) is let go when its load is done, so it never
+ *   keeps the command from exiting; one the load waits on holds the process
+ *   while it loads;
+ * - each promise it creates is recorded, so a rejection it never handles is
+ *   told as a warning (theme-module-rejections.mjs), never the command's
+ *   crash;
+ * - a callback it left that runs after its load (a deferred log) prints to
+ *   stderr, as the load did.
+ */
+function installThemeModuleGuards() {
+  if (guardsInstalled) return;
+  guardsInstalled = true;
+  // An exception thrown from a module's callback after its load is told as
+  // a warning (theme-module-rejections.mjs), never the command's crash.
+  // One thrown while the module still loads (from a microtask it queued)
+  // refuses that load with it, as a throw from its top level does.
+  tellThemeModuleCallbacks(error => {
+    const load = guardedLoad.getStore();
+    if (!load) return null;
+    if (load.done) return 'after';
+    load.fail(error);
+    return 'during';
+  });
+  // A listener a theme module adds to `process` (`process.on('exit', …)`)
+  // is recorded while it loads and removed when the load ends; one it adds
+  // from a callback after its load is not added.
+  for (const method of /** @type {const} */ ([
+    'on',
+    'addListener',
+    'once',
+    'prependListener',
+    'prependOnceListener',
+  ])) {
+    const add = process[method];
+    process[method] = /** @type {any} */ (
+      function (
+        /** @type {string | symbol} */ event,
+        /** @type {(...args: any[]) => void} */ listener,
+      ) {
+        const load = guardedLoad.getStore();
+        if (load?.done) return process;
+        if (load) load.listeners.push({event, listener});
+        return add.call(process, event, listener);
+      }
+    );
+  }
+  createHook({
+    init(_asyncId, type, _triggerAsyncId, resource) {
+      const load = guardedLoad.getStore();
+      if (!load) return;
+      if (type === 'PROMISE') {
+        recordThemeModulePromise(/** @type {Promise<unknown>} */ (resource));
+        return;
+      }
+      const handle = /** @type {{unref?: () => void}} */ (resource);
+      if (typeof handle?.unref !== 'function') return;
+      const unref = handle.unref.bind(handle);
+      // A handle opened after the load is let go once it is set up.
+      if (load.done) queueMicrotask(unref);
+      else load.handles.push({unref});
+    },
+    before(asyncId) {
+      if (moduleLoad.getStore()) {
+        gateStdout();
+        deferredGates.add(asyncId);
+      }
+      // A theme module's callback after its load: its exit is ignored and
+      // the exit code it sets is put back when it returns.
+      if (guardedLoad.getStore()?.done) {
+        holdExit();
+        deferredExits.set(asyncId, {
+          exitCode: process.exitCode,
+          cwd: process.cwd(),
+        });
+      }
+    },
+    after(asyncId) {
+      if (deferredGates.delete(asyncId)) openStdout();
+      const before = deferredExits.get(asyncId);
+      if (before) {
+        process.exitCode = /** @type {any} */ (before.exitCode);
+        restoreCwd(before.cwd);
+        deferredExits.delete(asyncId);
+        releaseExit();
+      }
+    },
+  }).enable();
+}
+
+/**
+ * Run a theme module load with `process.exit` refusing the load (while it
+ * loads, in its async context only), a `process.exitCode` it sets put back
+ * (the command's exit code is its own), the module's handles let go once it
+ * is done ({@link installThemeModuleGuards}), and a load whose top-level
+ * await can never settle refused (nothing is left to run while it waits).
  * @template T
  * @param {() => Promise<T>} load
  * @returns {Promise<T>}
  */
-export async function withEmptyStylesheets(load) {
-  if (typeof registerHooks !== 'function') return await load();
-  stylesheetHooks ??= registerHooks({load: loadStylesheetAsEmptyModule});
-  themeModuleLoadsInFlight++;
+async function withThemeModuleGuards(load) {
+  installThemeModuleGuards();
+  holdExit();
+  /** @type {(error: unknown) => void} */
+  let fail = () => {};
+  /** @type {Promise<never>} */
+  const failed = new Promise((_resolve, reject) => {
+    fail = reject;
+  });
+  // Read only through the race below; a failure after it settled is moot.
+  failed.catch(() => {});
+  /** @type {GuardedLoad} */
+  const store = {done: false, handles: [], listeners: [], fail};
+  const exitCode = process.exitCode;
+  // What the module's code may change for the whole process, put back when
+  // the load ends: the working folder and the built-in objects.
+  const cwd = process.cwd();
+  const intrinsics = snapshotIntrinsics();
+  /** @type {() => void} */
+  let drained = () => {};
+  const unsettled = new Promise((_resolve, reject) => {
+    // Refused from a macrotask, so Node's loop stays alive and tells the
+    // next waiting load (a command that loads the theme again) the same way.
+    drained = () => setImmediate(() => reject(new ThemeModuleUnsettledError()));
+  });
+  // Node empties its loop with the load still waiting: refused, not exit 13.
+  process.once('beforeExit', drained);
   try {
-    return await themeModuleLoad.run(true, load);
+    return await Promise.race([
+      guardedLoad.run(store, load),
+      unsettled,
+      failed,
+    ]);
   } finally {
-    if (--themeModuleLoadsInFlight === 0) removeStylesheetHooks();
+    process.removeListener('beforeExit', drained);
+    process.exitCode = exitCode;
+    restoreCwd(cwd);
+    restoreIntrinsics(intrinsics);
+    store.done = true;
+    // A listener the module added to `process` would run in the CLI's own
+    // process after the load, outside every guard: it goes with the load.
+    for (const {event, listener} of store.listeners.splice(0))
+      process.removeListener(event, listener);
+    for (const handle of store.handles.splice(0)) handle.unref();
+    releaseExit();
   }
 }
 

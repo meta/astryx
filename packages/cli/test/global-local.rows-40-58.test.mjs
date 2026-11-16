@@ -35,7 +35,9 @@ import {
   handedTo,
   makeProject,
   notOfficial,
+  ownWorld,
   run,
+  runAsync,
   useGlobalLocalHooks,
 } from './global-local.shared.mjs';
 
@@ -404,113 +406,134 @@ describe.skipIf(!POSIX)(
       ).toBe(false);
     });
 
-    it('G48 offline, a project whose own CLI cannot start: the starting copy answers, with one warning and copy fallback', () => {
-      const pc = computer();
-      const g = globalCli('npm', '9.0.0', {root: pc.home});
-      const dir = makeProject({core: '9.0.3', brokenCli: '9.0.3'});
-      const r = run(g.bin, ['--version'], {cwd: dir, pc});
-      expect(r.status).toBe(0);
-      expect(r.stdout).toBe('9.0.0');
-      // After the line saying it tries to install the release, one warning.
-      expect(r.lines.filter(l => !l.includes('installing'))).toEqual([
-        expect.stringMatching(
-          /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+\); answering with CLI 9\.0\.0 instead$/u,
-        ),
-      ]);
-      const json = run(g.bin, ['docs', '--json'], {cwd: dir, pc});
-      expect(JSON.parse(json.stdout).meta.answeredBy).toMatchObject({
-        cli: '9.0.0',
-        copy: 'fallback',
-      });
-    });
-
-    // One row of the table, in three cases: each replays only the installs it
-    // needs, and a failed install waits out the CLI's own bounded retry.
-    describe('G49 offline, a release that failed to install is retried after 2 minutes, then after 10 once it fails again, by any copy sharing the cache; a success forgets it', () => {
-      /**
-       * G49's world: a global CLI and a project whose own CLI cannot start and
-       * whose Core release cannot be installed (the registry is unreachable),
-       * with the record of that release's failed installs. Each case below
-       * replays only the installs it needs: a failed one waits out the CLI's
-       * own bounded retry, a few seconds each.
-       */
-      const g49 = () => {
+    // G48 and G49's cases each wait out the CLI's bounded npm retry against
+    // the unreachable registry, so they run side by side, each in its own
+    // world.
+    it(
+      'G48 offline, a project whose own CLI cannot start: the starting copy answers, with one warning and copy fallback',
+      {concurrent: true},
+      ownWorld(async () => {
         const pc = computer();
         const g = globalCli('npm', '9.0.0', {root: pc.home});
         const dir = makeProject({core: '9.0.3', brokenCli: '9.0.3'});
-        const record = path.join(
-          pc.astryxCache,
-          'releases',
-          '.failed-9.0.3.json',
-        );
-        const read = () => JSON.parse(fs.readFileSync(record, 'utf8'));
-        return {
-          pc,
-          g,
-          dir,
-          record,
-          read,
-          /** Runs `astryx --version` with `bin`; the global copy by default. */
-          version: (bin = g.bin) => run(bin, ['--version'], {cwd: dir, pc}),
-          /** Move the last failure `minutes` into the past. @param {number} minutes */
-          age: (/** @type {number} */ minutes) => {
-            const old = read();
-            fs.writeFileSync(
-              record,
-              JSON.stringify({...old, at: old.at - minutes * 60_000}),
-            );
-          },
-        };
-      };
-      const installs = (/** @type {{lines: string[]}} */ r) =>
-        r.lines.filter(l => l.includes('installing')).length;
-
-      it('the first failure is recorded, and neither this copy nor another sharing the cache tries again within 2 minutes', () => {
-        const {pc, version, read} = g49();
-        expect(installs(version())).toBe(1);
-        expect(read().failures).toBe(1);
-        const other = globalCli('npm', '9.0.1', {
-          root: path.join(pc.home, 'other'),
+        const r = await runAsync(g.bin, ['--version'], {cwd: dir, pc});
+        expect(r.status).toBe(0);
+        expect(r.stdout).toBe('9.0.0');
+        // After the line saying it tries to install the release, one warning.
+        expect(r.lines.filter(l => !l.includes('installing'))).toEqual([
+          expect.stringMatching(
+            /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+\); answering with CLI 9\.0\.0 instead$/u,
+          ),
+        ]);
+        const json = await runAsync(g.bin, ['docs', '--json'], {cwd: dir, pc});
+        expect(JSON.parse(json.stdout).meta.answeredBy).toMatchObject({
+          cli: '9.0.0',
+          copy: 'fallback',
         });
-        for (const bin of [undefined, other.bin]) {
-          const again = version(bin);
-          expect(again.status).toBe(0);
-          expect(installs(again)).toBe(0);
-          expect(again.lines).toEqual([
-            expect.stringMatching(
-              /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
-            ),
-          ]);
-        }
-      });
+      }),
+    );
 
-      it('after 2 minutes it is tried again, and a second failure in a row waits 10', () => {
-        const {version, read, age} = g49();
-        expect(installs(version())).toBe(1);
-        age(3);
-        expect(installs(version())).toBe(1);
-        expect(read().failures).toBe(2);
-        age(3);
-        const waiting = version();
-        expect(installs(waiting)).toBe(0);
-        expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
-      });
+    // One row of the table, in three cases: each replays only the installs it
+    // needs, and a failed install waits out the CLI's own bounded retry.
+    describe(
+      'G49 offline, a release that failed to install is retried after 2 minutes, then after 10 once it fails again, by any copy sharing the cache; a success forgets it',
+      {concurrent: true},
+      () => {
+        /**
+         * G49's world: a global CLI and a project whose own CLI cannot start and
+         * whose Core release cannot be installed (the registry is unreachable),
+         * with the record of that release's failed installs. Each case below
+         * replays only the installs it needs: a failed one waits out the CLI's
+         * own bounded retry, a few seconds each.
+         */
+        const g49 = () => {
+          const pc = computer();
+          const g = globalCli('npm', '9.0.0', {root: pc.home});
+          const dir = makeProject({core: '9.0.3', brokenCli: '9.0.3'});
+          const record = path.join(
+            pc.astryxCache,
+            'releases',
+            '.failed-9.0.3.json',
+          );
+          const read = () => JSON.parse(fs.readFileSync(record, 'utf8'));
+          return {
+            pc,
+            g,
+            dir,
+            record,
+            read,
+            /** Runs `astryx --version` with `bin`; the global copy by default. */
+            version: (bin = g.bin) =>
+              runAsync(bin, ['--version'], {cwd: dir, pc}),
+            /** Move the last failure `minutes` into the past. @param {number} minutes */
+            age: (/** @type {number} */ minutes) => {
+              const old = read();
+              fs.writeFileSync(
+                record,
+                JSON.stringify({...old, at: old.at - minutes * 60_000}),
+              );
+            },
+          };
+        };
+        const installs = (/** @type {{lines: string[]}} */ r) =>
+          r.lines.filter(l => l.includes('installing')).length;
 
-      it('after 10 minutes two failures in a row are tried again, and a success forgets them', () => {
-        const {pc, record, version, read, age} = g49();
-        expect(installs(version())).toBe(1);
-        // A second failure in a row, recorded as the CLI records it.
-        fs.writeFileSync(record, JSON.stringify({...read(), failures: 2}));
-        // Past 10 minutes it installs again, for real, and fails a third time.
-        age(11);
-        expect(installs(version())).toBe(1);
-        expect(read().failures).toBe(3);
-        // A release installed by then answers, and forgets the failures.
-        seedPackedRelease(pc.astryxCache, '9.0.3');
-        expect(version().stdout).toBe('9.0.3');
-        expect(fs.existsSync(record)).toBe(false);
-      });
-    });
+        it(
+          'the first failure is recorded, and neither this copy nor another sharing the cache tries again within 2 minutes',
+          ownWorld(async () => {
+            const {pc, version, read} = g49();
+            expect(installs(await version())).toBe(1);
+            expect(read().failures).toBe(1);
+            const other = globalCli('npm', '9.0.1', {
+              root: path.join(pc.home, 'other'),
+            });
+            for (const bin of [undefined, other.bin]) {
+              const again = await version(bin);
+              expect(again.status).toBe(0);
+              expect(installs(again)).toBe(0);
+              expect(again.lines).toEqual([
+                expect.stringMatching(
+                  /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
+                ),
+              ]);
+            }
+          }),
+        );
+
+        it(
+          'after 2 minutes it is tried again, and a second failure in a row waits 10',
+          ownWorld(async () => {
+            const {version, read, age} = g49();
+            expect(installs(await version())).toBe(1);
+            age(3);
+            expect(installs(await version())).toBe(1);
+            expect(read().failures).toBe(2);
+            age(3);
+            const waiting = await version();
+            expect(installs(waiting)).toBe(0);
+            expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
+          }),
+        );
+
+        it(
+          'after 10 minutes two failures in a row are tried again, and a success forgets them',
+          ownWorld(async () => {
+            const {pc, record, version, read, age} = g49();
+            expect(installs(await version())).toBe(1);
+            // A second failure in a row, recorded as the CLI records it.
+            fs.writeFileSync(record, JSON.stringify({...read(), failures: 2}));
+            // Past 10 minutes it installs again, for real, and fails a third time.
+            age(11);
+            expect(installs(await version())).toBe(1);
+            expect(read().failures).toBe(3);
+            // A release installed by then answers, and forgets the failures.
+            seedPackedRelease(pc.astryxCache, '9.0.3');
+            expect((await version()).stdout).toBe('9.0.3');
+            expect(fs.existsSync(record)).toBe(false);
+          }),
+        );
+      },
+    );
 
     it('G50 a global copy in a Bun global folder moved with BUN_INSTALL: global only while BUN_INSTALL names it; an app under a folder named install/global is not', () => {
       const pc = computer();
@@ -604,9 +627,7 @@ describe.skipIf(!POSIX)(
       expect(
         fs.existsSync(path.join(pc.home, '.agents', 'skills', 'astryx')),
       ).toBe(false);
-      expect(
-        fs.existsSync(path.join(pc.home, '.config', 'astryx', 'state.json')),
-      ).toBe(false);
+      expect(fs.existsSync(path.join(pc.configDir, 'state.json'))).toBe(false);
     });
 
     it.skipIf(process.platform === 'win32')(

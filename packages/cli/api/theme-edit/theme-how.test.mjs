@@ -15,7 +15,7 @@ import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {parsePoints} from './_adapter.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, pillDrawnRadios} from './_check.mjs';
 import {context} from './_context.mjs';
 import {howTheme} from './_how-commands.mjs';
 import {compileTheme, keyOf} from './_settings.mjs';
@@ -41,10 +41,23 @@ vi.mock('./_preview.mjs', async importOriginal =>
 /** @type {string} */
 let cwd;
 
+/**
+ * The steps that keep the radio marks round when the pills go square, on a
+ * Core that draws a radio's circle with the pill token; none on a Core that
+ * draws it at 50%.
+ */
+let radioPins = '';
+
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
+  radioPins = pillDrawnRadios((await context(cwd)).C)
+    .map(
+      m =>
+        ` && set q --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
+    )
+    .join('');
 }, 120_000);
 
 afterAll(() => {
@@ -221,9 +234,10 @@ const QUESTIONS = [
     },
   ],
   [
+    // (Every focus ring: the inputs draw theirs in their box-shadow.)
     'change the focus ring color to orange',
     {
-      top: /^set q --focus-outline-color '#f97316'$/,
+      top: /^set q --focus-outline-color '#f97316' && set q box-shadow 'inset 0 0 0 2px #f97316' --on inputs --state focus-within/,
       adds: /--focus-outline-color=#f97316/,
     },
   ],
@@ -246,8 +260,8 @@ const QUESTIONS = [
   [
     'checkbox checked color pink',
     {
-      parts: ['checks'],
-      top: /--on checks --state checked$/,
+      parts: ['checkbox-indicator'],
+      top: /--on checkbox-indicator --state checked --only$/,
       adds: /checkbox-indicator\.checked\.backgroundColor=#db2777/,
     },
   ],
@@ -285,8 +299,9 @@ const QUESTIONS = [
   [
     'disabled buttons look too faded',
     {
-      top: /^set q opacity 0\.8 --on button --state disabled$/,
-      adds: /aria-disabled.*opacity=0\.8/,
+      // (Less faded from the 0.5 Core draws disabled: halfway to 1.)
+      top: /^set q opacity 0\.75 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.75/,
     },
   ],
   [
@@ -342,8 +357,10 @@ const QUESTIONS = [
   [
     'border color of inputs should be gray',
     {
-      top: /^set q border-color '#9ca3af' --on inputs$/,
-      adds: /text-input\.base\.borderColor=#9ca3af/,
+      // (Gray is the theme's own grays: neutral's shade nearest the
+      // usual gray.)
+      top: /^set q border-color '#9e9e9e' --on inputs$/,
+      adds: /text-input\.base\.borderColor=#9e9e9e/,
     },
   ],
   [
@@ -358,10 +375,12 @@ const QUESTIONS = [
     {top: /^set q border none --on button$/, adds: /button\.base\.border=none/},
   ],
   [
+    // (The dialog draws no border now: a width alone shows nothing, so the
+    // whole line.)
     '2px border on the dialog',
     {
-      top: /^set q border-width 2px --on dialog$/,
-      adds: /dialog\.base\.borderWidth=2px/,
+      top: /^set q border '2px solid var\(--color-border\)' --on dialog$/,
+      adds: /dialog\.base\.border=2px solid var\(--color-border\)/,
     },
   ],
   [
@@ -464,7 +483,13 @@ const QUESTIONS = [
   ],
   [
     'square corners everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
+      adds: /--radius-element=0px/,
+    },
   ],
   [
     'no rounded corners',
@@ -772,7 +797,9 @@ describe('how answers plain-words questions', () => {
       const top = changes[0];
       expect(top).toBeTruthy();
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1397,7 +1424,9 @@ describe('how answers pass-2 questions', () => {
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1693,9 +1722,19 @@ const QUESTIONS_3 = [
   ],
   [
     'Can you please make the tooltip darker? Thanks!',
-    // A color ask never answers with a filter, which dims the text too; the
-    // tooltip's fill is not read, so the answer asks for a color.
-    {top: null, text: /has not read the fill of tooltip/},
+    // A color ask never answers with a filter, which dims the text too: the
+    // tooltip's fill, read from it drawn open, is made darker.
+    {
+      top: /^set q background-color '#[0-9a-f]{6}' --on tooltip/,
+      text: /a darker background on tooltip/,
+    },
+  ],
+  [
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    'Can you please make the trigger menu darker? Thanks!',
+    // A part Core draws only once a press opens it has no fill read: the
+    // answer asks for a color.
+    {top: null, text: /has not read the fill of trigger-menu/},
   ],
   [
     'make inputs taller (44px)',
@@ -1788,7 +1827,9 @@ describe('how answers pass-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       // A step is given once.
       expect(new Set(commands).size).toBe(commands.length);
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
@@ -1910,8 +1951,11 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    // The avatar keeps the corner token it reads, so its own corners stay.
-    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
+    // The avatar keeps every corner token it reads (each shape it draws),
+    // so its own corners stay.
+    {
+      top: /^set q corners square && set q --radius-full 9999px --on avatar( && set q --radius-[a-z]+ \S+ --on avatar)*$/,
+    },
   ],
   [
     'the shadows are too strong',
@@ -2121,7 +2165,9 @@ describe('how answers final-pass questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2264,8 +2310,11 @@ const QUESTIONS_G = [
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
   ['carrd rounder', {top: /^set q corners more --on card$/}],
   [
+    // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
-    {top: /^set q --color-border '#e5e7eb' --on divider$/},
+    {
+      top: /^set q --color-border '#e5e7eb' --on divider && set q --color-border-emphasized '#e5e7eb' --on divider$/,
+    },
   ],
   // a CSS property named in the question is set as named
   [
@@ -2295,7 +2344,7 @@ const QUESTIONS_G = [
   ],
   [
     'checkbox accent-color #db2777',
-    {top: /^set q accent-color '#db2777' --on checks$/},
+    {top: /^set q accent-color '#db2777' --on checkbox-indicator --only$/},
   ],
   [
     'badges font-variant-numeric: tabular-nums',
@@ -2448,7 +2497,9 @@ describe('how answers final-2 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2716,7 +2767,7 @@ const QUESTIONS_H = [
   ],
   [
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checks has no unchecked state/},
+    {top: null, text: /checkbox-indicator has no unchecked state/},
   ],
   [
     'heading color red',
@@ -2745,7 +2796,9 @@ describe('how answers final-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2870,7 +2923,9 @@ const QUESTIONS_I = [
   // a layer's opacity
   [
     'shadow opacity 0.2 on cards',
-    {top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.2\)' --on card$/},
+    // The shadow's colors at that alpha, in every layer (a card that shows
+    // none takes the shared shadow a card shadow ask gives).
+    {top: /^set q box-shadow '[^']*(?:\/ 20%\)|, 0\.2\))[^']*' --on card$/},
   ],
   [
     'card background opacity 0.5',
@@ -2900,7 +2955,8 @@ const QUESTIONS_I = [
   ],
   [
     'faster hover transitions on buttons',
-    {top: /^set q transition-duration 100ms --on button --state hover$/},
+    // (From the time the button's transition takes now.)
+    {top: /^set q transition-duration [1-9]\d*ms --on button --state hover$/},
   ],
   ['spinner in the accent color', {top: null, text: /spinner reads no fill/}],
   [
@@ -2935,7 +2991,12 @@ const QUESTIONS_I = [
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
-  ['divider color red', {top: /^set q --color-border '#dc2626' --on divider$/}],
+  [
+    'divider color red',
+    {
+      top: /^set q --color-border '#dc2626' --on divider && set q --color-border-emphasized '#dc2626' --on divider$/,
+    },
+  ],
   ['make the divider 2px', {top: /^set q --border-width 2px --on divider$/}],
   // typography and complaints
   [
@@ -2981,7 +3042,9 @@ describe('how answers final-4 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3047,7 +3110,7 @@ describe('how answers final-4 questions', () => {
       [
         'shadow opacity 0.2 on cards',
         [
-          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), 0 1px 3px rgb\(0 0 0 \/ 0\.2\)/,
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), [^;}]*(?:\/ 20%\)|, 0\.2\))/,
         ],
       ],
       [
@@ -3096,7 +3159,13 @@ const QUESTIONS_J = [
   // numbers written as words
   [
     'zero radius everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
+      adds: /--radius-element=0px/,
+    },
   ],
   ['twelve pixel corners', {top: /^set q corners 12px$/}],
   [
@@ -3143,7 +3212,7 @@ const QUESTIONS_J = [
   [
     'after I check a checkbox it should be green',
     {
-      top: /^set q background-color '#16a34a' --on checks --state checked$/,
+      top: /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
     },
   ],
   ['once a tab is picked make it bold', {top: null}],
@@ -3207,7 +3276,9 @@ describe('how answers final-5 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3287,7 +3358,9 @@ describe('how answers final-6 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
     });
 });
 
@@ -3542,7 +3615,12 @@ const QUESTIONS_O = [
     /^set q border-radius 10px --on button$/,
   ],
   ['make buttons 2px sharper', /^set q border-radius 6px --on button$/],
-  ['make buttons 4px wider', null, /not a change by 4px/],
+  [
+    'make buttons 4px wider',
+    // Wider by a length: the inline padding, half on each side.
+    /^set q padding '\S+ \S+' --on button$/,
+    /inline padding up by 2px on each side/,
+  ],
   [
     'all corners like the buttons',
     /^set q --radius-inner 'var\(--radius-element\)' && set q --radius-container 'var\(--radius-element\)'/,
@@ -3620,7 +3698,8 @@ const QUESTIONS_P = [
     'shrink headings by 20%',
     /^set q --text-heading-1-size [\d.]+rem && .*--text-heading-6-size [\d.]+rem$/,
   ],
-  ['fade in tooltips', null, /no motion of its own/],
+  // A fade is an effect, not a speed: the tooltip fades in already.
+  ['fade in tooltips', null, /tooltip fades in already/],
   ['why are my buttons black', null, /how button says/],
   ['radius lg', /^set q corners 12px$/],
   ['setRadius(4)', /^set q corners 4px$/],
@@ -3638,7 +3717,7 @@ const QUESTIONS_P = [
   ['dropdown shadow', /--on dropdown-menu$/],
   [
     'checkboxes green',
-    /^set q background-color '#16a34a' --on checks --state checked$/,
+    /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
   ],
   ['is my theme valid', null, /show builds q/],
 ];
@@ -4203,13 +4282,20 @@ describe('how answers final-14 fixes', () => {
 
 describe('how lookups', () => {
   it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    // "checked rows" are the rows selected: how reads the selection word
+    // as the row's one selection state; set, given the state a row lacks,
+    // names the states how <part> lists.
     const {data} = await themeEditHow('checked rows in the table tinted blue', {
       cwd,
       theme: 'q',
     });
-    const said = /its states: ([^)]*)\)/.exec(
-      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
-    )?.[1];
+    expect(
+      (data.results ?? []).some((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / --on table-row --state selected\b/.test(c),
+        ),
+      ),
+    ).toBe(true);
     const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
     const r = await refusal(() =>
       themeEditSet('q', 'background', '#dbeafe', {
@@ -4218,8 +4304,7 @@ describe('how lookups', () => {
         state: 'checked',
       }),
     );
-    expect(said).toBe(part.states.join(', '));
-    expect(r.message).toContain(`States: ${said}.`);
+    expect(r.message).toContain(`States: ${part.states.join(', ')}.`);
   });
 
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
@@ -4242,11 +4327,14 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('tooltip', {cwd, theme: 'q'});
+    // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+    const {data} = await themeEditHow('trigger-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
-    expect(data.unrecorded.reason).toMatch(/what tooltip reads is unknown/);
+    expect(data.unrecorded.reason).toMatch(
+      /what trigger-menu reads is unknown/,
+    );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on tooltip",
+      "set q background-color '#f3f4f6' --on trigger-menu",
     );
   });
 

@@ -45,6 +45,7 @@ import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
 import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
+import {scopedList} from './fixture-scope.mjs';
 
 /** This CLI package's folder. */
 export const CLI_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -404,10 +405,10 @@ export function placeCli(dir, version, options = {}) {
   if (ready) {
     fs.mkdirSync(path.dirname(dir), {recursive: true});
     fs.renameSync(ready.dir, dir);
-    placed.push({dir, key, record: ready.record});
+    scopedList('placed', placed).push({dir, key, record: ready.record});
   } else {
     buildCopy(dir, version, options);
-    placed.push({dir, key, record: treeRecord(dir)});
+    scopedList('placed', placed).push({dir, key, record: treeRecord(dir)});
   }
   return {dir, bin: path.join(dir, 'clients', 'cli', 'bin', 'astryx.mjs')};
 }
@@ -420,7 +421,8 @@ export function placeCli(dir, version, options = {}) {
 const pool = new Map();
 
 /**
- * Copies placed since the last {@link recyclePlacedCopies}.
+ * Copies placed outside a fixture scope since the last
+ * {@link recyclePlacedCopies}. A scope keeps its own list.
  * @type {{dir: string, key: string, record: Map<string, string>}[]}
  */
 const placed = [];
@@ -435,12 +437,19 @@ let pooledCount = 0;
  * A copy whose entries changed stays where it is, for its folder's removal.
  * So does every copy when `keep` is false: a step that is still running may
  * still use one.
- * @param {{keep?: boolean}} [options]
+ * `copies` names a fixture scope's own list; by default, the copies placed
+ * outside any scope. `besideOthers` says the test ran beside others, so a
+ * change to a shared file may be theirs.
+ * @param {{keep?: boolean, copies?: typeof placed, besideOthers?: boolean}} [options]
  * @throws {Error} when a test wrote into a file every copy shares. The pool is
  * then emptied, and the changed files are unpacked again from the tarball.
  */
-export function recyclePlacedCopies({keep = true} = {}) {
-  const copies = placed.splice(0);
+export function recyclePlacedCopies({
+  keep = true,
+  copies: list = placed,
+  besideOthers = false,
+} = {}) {
+  const copies = list.splice(0);
   if (packed && packedRecord) {
     const changed = changedPaths(
       packedRecord,
@@ -462,7 +471,7 @@ export function recyclePlacedCopies({keep = true} = {}) {
       restorePaths(packed, packedTarball, changed);
       packedRecord = treeRecord(packed, {contents: true});
       throw new Error(
-        `A test changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
+        `${besideOthers ? 'This test, or a test that ran beside it,' : 'A test'} changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
       );
     }
   }

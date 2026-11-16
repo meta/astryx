@@ -145,6 +145,98 @@ async function roundTrip(home, id) {
 }
 
 /**
+ * The ids of every ready page template, as the registry lists them.
+ * @param {string} home a linked fixture project
+ * @returns {Promise<string[]>}
+ */
+export async function readyPageTemplates(home) {
+  const listed = /** @type {any} */ (
+    await template(undefined, {list: true, type: 'page', cwd: home})
+  );
+  return listed.data
+    .filter((/** @type {any} */ t) => t.isReady)
+    .map((/** @type {any} */ t) => t.id);
+}
+
+/**
+ * Scaffolds each template into `templates/<id>` and builds any theme package
+ * a template imports, plus the `themes` the caller names.
+ * @param {string} home a linked fixture project
+ * @param {string[]} ids
+ * @param {string[]} [themes] theme packages to build as well
+ */
+export async function scaffoldTemplates(home, ids, themes = []) {
+  /** @type {Set<string>} */
+  const imported = new Set(themes);
+  for (const id of ids) {
+    await template(id, {
+      targetPath: `templates/${id}`,
+      type: 'page',
+      cwd: home,
+    });
+    const source = fs.readFileSync(
+      path.join(home, 'templates', id, 'page.tsx'),
+      'utf8',
+    );
+    for (const m of source.matchAll(
+      /from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g,
+    ))
+      imported.add(m[1]);
+  }
+  // The node tests build Core only. A template that imports a theme's
+  // build needs that build.
+  for (const name of imported)
+    buildThemeOnce(
+      fs.realpathSync(path.join(home, '..', 'node_modules', name)),
+    );
+}
+
+/**
+ * Scaffolds each template (scaffoldTemplates) and renders each to
+ * `templates/<id>/page.html` under one fixed clock, four at a time. `after`
+ * runs once a template renders and returns a problem line or null.
+ * @param {string} home a linked fixture project
+ * @param {string[]} ids
+ * @param {(id: string) => Promise<string | null>} [after]
+ * @returns {Promise<string[]>} one line per template that failed
+ */
+export async function scaffoldAndRender(home, ids, after) {
+  await scaffoldTemplates(home, ids);
+  /** @type {string[]} */
+  const failed = [];
+  // Every page process the renders start reads one fixed clock, so a
+  // page that shows the time renders the same markup each time.
+  const nodeOptions = process.env.NODE_OPTIONS;
+  process.env.NODE_OPTIONS = [
+    nodeOptions,
+    `--import=${pathToFileURL(FIXED_CLOCK).href}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  try {
+    for (let i = 0; i < ids.length; i += 4) {
+      await Promise.all(
+        ids.slice(i, i + 4).map(async id => {
+          try {
+            await render(`templates/${id}/page.tsx`, {cwd: home});
+            const problem = after ? await after(id) : null;
+            if (problem) failed.push(problem);
+          } catch (e) {
+            failed.push(
+              `${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`,
+            );
+          }
+        }),
+      );
+    }
+  } finally {
+    if (nodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = nodeOptions;
+  }
+  return failed;
+}
+
+/**
  * The templates slice `slice` (1-based) of `count` renders: every `count`th
  * one, so the slices together hold each template exactly once.
  * @param {string[]} ids every ready page template, as the registry lists them
@@ -184,69 +276,13 @@ export function describeTemplateSlice(slice, count) {
     });
 
     it('scaffolds each one, renders it, gives it back exactly, reports a hand edit, and renders the same again', async () => {
-      const listed = /** @type {any} */ (
-        await template(undefined, {list: true, type: 'page', cwd: home})
-      );
-      /** @type {string[]} */
-      const ready = listed.data
-        .filter((/** @type {any} */ t) => t.isReady)
-        .map((/** @type {any} */ t) => t.id);
+      const ready = await readyPageTemplates(home);
       expect(ready.length).toBeGreaterThanOrEqual(count);
       const ids = templateSlice(ready, slice, count);
-      /** @type {Set<string>} */
-      const themes = new Set();
-      for (const id of ids) {
-        await template(id, {
-          targetPath: `templates/${id}`,
-          type: 'page',
-          cwd: home,
-        });
-        const source = fs.readFileSync(
-          path.join(home, 'templates', id, 'page.tsx'),
-          'utf8',
-        );
-        for (const m of source.matchAll(
-          /from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g,
-        ))
-          themes.add(m[1]);
-      }
-      // The node tests build Core only. A template that imports a theme's
-      // build needs that build.
-      for (const name of themes)
-        buildThemeOnce(
-          fs.realpathSync(path.join(home, '..', 'node_modules', name)),
-        );
-      /** @type {string[]} */
-      const failed = [];
-      // Every page process the renders start reads one fixed clock, so a
-      // page that shows the time renders the same markup each time.
-      const nodeOptions = process.env.NODE_OPTIONS;
-      process.env.NODE_OPTIONS = [
-        nodeOptions,
-        `--import=${pathToFileURL(FIXED_CLOCK).href}`,
-      ]
-        .filter(Boolean)
-        .join(' ');
-      try {
-        for (let i = 0; i < ids.length; i += 4) {
-          await Promise.all(
-            ids.slice(i, i + 4).map(async id => {
-              try {
-                await render(`templates/${id}/page.tsx`, {cwd: home});
-                const problem = await roundTrip(home, id);
-                if (problem) failed.push(`${id}: ${problem}`);
-              } catch (e) {
-                failed.push(
-                  `${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`,
-                );
-              }
-            }),
-          );
-        }
-      } finally {
-        if (nodeOptions === undefined) delete process.env.NODE_OPTIONS;
-        else process.env.NODE_OPTIONS = nodeOptions;
-      }
+      const failed = await scaffoldAndRender(home, ids, async id => {
+        const problem = await roundTrip(home, id);
+        return problem ? `${id}: ${problem}` : null;
+      });
       expect(failed).toEqual([]);
     }, 900_000);
   });
