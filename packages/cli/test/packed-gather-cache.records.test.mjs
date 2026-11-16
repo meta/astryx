@@ -78,7 +78,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     );
     // The CLI's build id stands for its own files' contents.
     expect(plain).toContain(
-      "the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported)",
+      "the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported)",
     );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');

@@ -143,6 +143,21 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
       }
+      // The same CLI installed in another folder, as a package manager's
+      // patch installs one, keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        const before = entries(tmp);
+        const kept = run(QUERIES[0], {tmp, cli: copy});
+        expect(kept).toEqual(run(QUERIES[0], {tmp: freshTmp(), cli: copy}));
+        const added = [...entries(tmp).keys()].filter(
+          name => !before.has(name),
+        );
+        expect(added.length).toBeGreaterThan(0);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
+      }
       fs.writeFileSync(
         path.join(packed, BUILD_ID),
         JSON.stringify({id: 'second'}) + '\n',

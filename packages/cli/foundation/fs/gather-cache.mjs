@@ -35,8 +35,8 @@
  *   names (foundation/runtime/css-tree.mjs keptCssTreeAnswer), and by
  *   `theme build` for the JavaScript it compiles from a theme's local
  *   modules (api/theme/build/self-contained.mjs), each kept while every
- *   path it
- *   stamped but the CLI's own files (which its build id covers) is
+ *   path it stamped but the CLI's own files (which its build id and the
+ *   folder it runs from, both in every entry's key, stand for) is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
@@ -586,6 +586,18 @@ function entryFile(dir, key, id) {
   return path.join(dir, `gather-${hash}.json`);
 }
 
+/** @type {string | undefined} */
+let cliFolderAnswer;
+
+/**
+ * The real path of the folder this CLI runs from, once per process: a copy
+ * installed in another folder (a patched one) keeps its own entries.
+ * @returns {string}
+ */
+function cliFolder() {
+  return (cliFolderAnswer ??= withoutRecording(() => realDir(CLI_ROOT)));
+}
+
 /**
  * Everything an entry is for, as text: stored in the entry and compared on
  * every read, so an entry copied under another entry's name is not used.
@@ -596,7 +608,8 @@ function entryFile(dir, key, id) {
 function entryKey(key, id) {
   return JSON.stringify([
     FORMAT,
-    id,
+    // The build and the folder it runs from stand for the CLI's own files.
+    [id, cliFolder()],
     process.version,
     process.platform,
     process.arch,
@@ -646,6 +659,12 @@ function staleReason(stamps, env) {
     }
   }
   for (const [file, state] of stamps) {
+    // The CLI's own files are the build id's and the CLI's folder's to stand
+    // for (both are in the entry's key), as for a summary (inCliBuild): they
+    // are kept for the code a derived value depends on, never checked one by
+    // one. A package in the node_modules folder inside the CLI's is not part
+    // of the build, and is checked as any other file.
+    if (inCliBuild(file)) continue;
     if (!stillInState(file, state)) {
       return 'a file or folder it read changed';
     }
