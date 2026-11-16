@@ -6,10 +6,11 @@
  * @input Two Core builds (a git ref, the working tree, or a built dist
  *   directory each) and the reference pages that
  *   docs/architecture/component-import-boundaries.md INV10 names
- * @output Each reference page's first-load JavaScript, minified and gzip, its
- *   static module graph (modules, module depth) and this build's chunks (count,
- *   depth), base against head, with the deltas. With `--unused-on`, a pass or fail line per named
- *   page against INV10's 0.3 KB limit. `--json` prints the same as JSON
+ * @output Each reference page's first-load JavaScript, minified and
+ *   gzip, its static module graph (modules, module depth) and this build's
+ *   chunks (count, depth), base against head, with the deltas. With
+ *   `--unused-on`, a pass or fail line per named page against INV10's 0.3 KB
+ *   limit. `--json` prints the same as JSON
  * @position Run by people and review agents with `pnpm size:pages`; not a CI
  *   job. Builds each page with the size report's esbuild options
  *   (.github/scripts/lib/component-size.js), as the import-boundaries check
@@ -30,6 +31,7 @@ const {
   eagerText,
   extractAtRef,
   gzipBytes,
+  importLevels,
   sizeBuildOptions,
 } = require('./.github/scripts/lib/component-size.js');
 
@@ -64,10 +66,6 @@ export function parseReferencePages(recordText) {
   return pages;
 }
 
-/**
- * Each page's sizes and delta, and with `unusedOn`, whether each named page
- * stays within the unused-feature limit.
- */
 const pick = ({min, gzip, modules, moduleDepth, chunks, depth}) => ({
   min,
   gzip,
@@ -77,6 +75,10 @@ const pick = ({min, gzip, modules, moduleDepth, chunks, depth}) => ({
   depth,
 });
 
+/**
+ * Each page's sizes and delta, and with `unusedOn`, whether each named page
+ * stays within the unused-feature limit.
+ */
 export function comparePages(base, head, {unusedOn = []} = {}) {
   const pages = Object.keys(head).map(page => ({
     page,
@@ -289,20 +291,10 @@ const ENTRY_SOURCE = '__astryx-reference-page__.mjs';
  * Packages the build leaves external are not part of the graph.
  */
 export function moduleGraphStats(inputs, entryInput) {
-  const level = new Map([[entryInput, 0]]);
-  const queue = [entryInput];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    for (const edge of inputs[current]?.imports ?? []) {
-      if (edge.kind !== 'import-statement' || edge.external) continue;
-      if (level.has(edge.path) || !(edge.path in inputs)) continue;
-      level.set(edge.path, level.get(current) + 1);
-      queue.push(edge.path);
-    }
-  }
+  const levels = importLevels(inputs, entryInput, ['import-statement']);
   return {
-    modules: level.size - 1,
-    moduleDepth: Math.max(...level.values()),
+    modules: levels.size - 1,
+    moduleDepth: Math.max(...levels.values()),
   };
 }
 
@@ -315,18 +307,8 @@ export function moduleGraphStats(inputs, entryInput) {
  * chunks differently, so these numbers describe this build only.
  */
 export function chunkGraphStats(outputs, entryOutput) {
-  const level = new Map([[entryOutput, 1]]);
-  const queue = [entryOutput];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    for (const edge of outputs[current]?.imports ?? []) {
-      if (edge.kind !== 'import-statement' || edge.external) continue;
-      if (level.has(edge.path) || !(edge.path in outputs)) continue;
-      level.set(edge.path, level.get(current) + 1);
-      queue.push(edge.path);
-    }
-  }
-  return {chunks: level.size, depth: Math.max(...level.values())};
+  const levels = importLevels(outputs, entryOutput, ['import-statement']);
+  return {chunks: levels.size, depth: Math.max(...levels.values()) + 1};
 }
 
 /** One page as a production app bundle: what it loads before first paint. */
