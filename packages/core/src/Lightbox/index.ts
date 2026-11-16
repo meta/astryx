@@ -8,7 +8,18 @@
  */
 
 export {Lightbox} from './Lightbox';
-export type {LightboxProps, LightboxMedia, LightboxMediaType} from './Lightbox';
+export type {
+  LightboxProps,
+  LightboxMedia,
+  LightboxMediaType,
+  LightboxCustomItem,
+  LightboxItem,
+  LightboxAction,
+} from './Lightbox';
+export {useLightboxGallery, useLightboxZoom} from './LightboxContext';
+export type {LightboxGallery, LightboxZoom} from './LightboxContext';
+export {LightboxFilmstrip} from './LightboxFilmstrip';
+export {LightboxZoomControl} from './LightboxZoomControl';
 
 export {useLightbox} from './useLightbox';
 export type {UseLightboxOptions, UseLightboxReturn} from './useLightbox';

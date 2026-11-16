@@ -43,6 +43,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {
   colorVars,
   focusVars,
+  fontWeightVars,
   radiusVars,
   spacingVars,
   typeScaleVars,
@@ -104,6 +105,10 @@ import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
 import {useTruncation} from '../Text/useTruncation';
 import {Link} from '../Link/Link';
+import {
+  LightboxFooterContext,
+  type LightboxFooterValue,
+} from './LightboxContext';
 
 registerEnglishFallback(english);
 /**
@@ -112,9 +117,37 @@ registerEnglishFallback(english);
 export type LightboxMediaType = 'image' | 'video';
 
 /**
+ * One action in the top bar: a button, or with `href` a link.
+ */
+export interface LightboxAction {
+  /** The action's accessible name and tooltip. */
+  label: string;
+  /** The action's icon. */
+  icon: ComponentProps<typeof Icon>['icon'];
+  /** A link's address. Without `download`, it opens in a new tab. */
+  href?: string;
+  /** With `href`: the link downloads, under this file name when it is one. */
+  download?: string | boolean;
+  /** Runs when the action is used; a link runs it too. */
+  onActivate?: () => void;
+}
+
+/** What any item may bring to the viewer's top bar and footer. */
+interface LightboxItemChrome {
+  /** The item's name, shown in the top bar; it names the dialog. */
+  title?: string;
+  /** A second line beside the title, such as where the item comes from. */
+  subtitle?: string;
+  /** A small image for the filmstrip's tile. */
+  thumbnail?: string;
+  /** At most three actions in the top bar. */
+  actions?: ReadonlyArray<LightboxAction>;
+}
+
+/**
  * Describes a single media item in a lightbox.
  */
-export interface LightboxMedia {
+export interface LightboxMedia extends LightboxItemChrome {
   /** Media source URL */
   src: string;
   /** Alt text for accessibility (used as aria-label for video) */
@@ -126,6 +159,28 @@ export interface LightboxMedia {
    * @default 'image'
    */
   type?: LightboxMediaType;
+}
+
+/**
+ * The caller's own content as a gallery item. It pages and closes by drag as
+ * a fitted photo does, and its content keeps its own drags and keys.
+ */
+export interface LightboxCustomItem extends LightboxItemChrome {
+  type: 'custom';
+  /** What the item shows in the media's place. */
+  content: ReactNode;
+  /** The item's accessible name, in place of `alt`. */
+  label: string;
+  /** Optional caption displayed below the content */
+  caption?: ReactNode;
+}
+
+/** An item of `media`: a photo, a video or the caller's content. */
+export type LightboxItem = LightboxMedia | LightboxCustomItem;
+
+/** The item's accessible name: its title, else its alt text or label. */
+function nameOf(item: LightboxItem): string {
+  return item.title || (item.type === 'custom' ? item.label : item.alt);
 }
 
 export interface LightboxProps extends BaseProps<HTMLDialogElement> {
@@ -144,7 +199,7 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
    * Media to display. Pass a single object for one item, or an array
    * for gallery mode with prev/next navigation.
    */
-  media: LightboxMedia | LightboxMedia[];
+  media: LightboxItem | LightboxItem[];
   /**
    * Current index in gallery mode (when `media` is an array).
    * When provided, puts the component in controlled mode.
@@ -176,6 +231,12 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
    * @default false
    */
   hasAutoPlay?: boolean;
+  /**
+   * The Footer: components at the viewer's foot, such as
+   * `LightboxFilmstrip` and `LightboxZoomControl`. The fitted media leaves
+   * room for it.
+   */
+  footer?: ReactNode;
 }
 
 // =============================================================================
@@ -184,6 +245,80 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
 
 /** Set on the stage while a mouse or a pen hovers over the fitted photo. */
 const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
+
+/** A custom item's own controls, whose drags and keys stay theirs. */
+const CONTENT_CONTROLS =
+  'input, textarea, select, button, a[href], [contenteditable=""], [contenteditable="true"], [role="slider"], video[controls], audio[controls]';
+
+/**
+ * Whether `element` scrolls along `axis` and can still scroll the way a drag
+ * of `travel` moves its content: a drag down scrolls toward the top.
+ */
+function canScrollToward(
+  element: Element,
+  axis: 'x' | 'y',
+  travel: number,
+): boolean {
+  const style = getComputedStyle(element);
+  const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+  if (overflow !== 'auto' && overflow !== 'scroll') {
+    return false;
+  }
+  const scroll = axis === 'x' ? element.scrollLeft : element.scrollTop;
+  const max =
+    axis === 'x'
+      ? element.scrollWidth - element.clientWidth
+      : element.scrollHeight - element.clientHeight;
+  if (max <= 0) {
+    return false;
+  }
+  return travel > 0 ? Math.abs(scroll) > 0.5 : Math.abs(scroll) < max - 0.5;
+}
+
+/**
+ * The nearest ancestor of `element` that matches `selector`, crossing shadow
+ * roots: a touch can start inside a field's own shadow tree.
+ */
+function closestComposed(element: Element, selector: string): Element | null {
+  let node: Element | null = element;
+  while (node != null) {
+    const found = node.closest(selector);
+    if (found != null) {
+      return found;
+    }
+    const root = node.getRootNode();
+    node = root instanceof ShadowRoot ? root.host : null;
+  }
+  return null;
+}
+
+/** The element's parent, crossing out of a shadow root to its host. */
+function composedParent(element: Element): Element | null {
+  if (element.parentElement != null) {
+    return element.parentElement;
+  }
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
+}
+
+/**
+ * A key that belongs to its target, not to the viewer's shortcuts: one with a
+ * modifier, one during IME composition, and one on a custom item's content, a
+ * field, a select, editable text, or a video or audio element.
+ */
+function isOwnKey(e: React.KeyboardEvent): boolean {
+  if (e.nativeEvent.isComposing || e.ctrlKey || e.altKey || e.metaKey) {
+    return true;
+  }
+  const target = e.target;
+  return (
+    target instanceof Element &&
+    closestComposed(
+      target,
+      '[data-lightbox-custom], input, textarea, select, [contenteditable=""], [contenteditable="true"], video, audio',
+    ) != null
+  );
+}
 
 // The caption's backing: the controls' backing colour, darker, so the caption
 // keeps 4.5:1 over any photo or backdrop behind it (WCAG 2.2 1.4.3).
@@ -510,6 +645,53 @@ const styles = stylex.create({
     insetInlineEnd: spacingVars['--spacing-3'],
     zIndex: 1,
   },
+  // The top bar runs from the start edge to Close.
+  topBar: {
+    position: 'absolute',
+    top: spacingVars['--spacing-3'],
+    insetInlineStart: spacingVars['--spacing-3'],
+    insetInlineEnd: `calc(${spacingVars['--spacing-3']} * 2 + 44px)`,
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-2'],
+    zIndex: 1,
+  },
+  titleBlock: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    pointerEvents: 'auto',
+    color: colorVars['--color-on-dark'],
+    textShadow: '0 1px 2px rgb(0 0 0 / 0.6)',
+  },
+  titleText: {
+    fontWeight: fontWeightVars['--font-weight-semibold'],
+  },
+  subtitleText: {
+    opacity: 0.75,
+  },
+  actionButton: {
+    position: 'relative',
+  },
+  footer: {
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-2'],
+    paddingBlockEnd: `calc(${spacingVars['--spacing-2']} + env(safe-area-inset-bottom, 0px))`,
+    zIndex: 2,
+  },
+  custom: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   navButton: {
     position: 'absolute',
     top: '50%',
@@ -533,6 +715,11 @@ const styles = stylex.create({
     top: spacingVars['--spacing-3'],
     insetInlineStart: spacingVars['--spacing-3'],
     zIndex: 1,
+    pointerEvents: 'auto',
+  },
+  // In the top bar the counter leads the title, laid out by the bar.
+  counterInTopBar: {
+    flexShrink: 0,
     pointerEvents: 'auto',
   },
   controlButton: {
@@ -699,6 +886,7 @@ export function Lightbox({
   onIndexChange,
   hasZoom = false,
   hasAutoPlay = false,
+  footer,
   xstyle,
   className,
   style,
@@ -769,7 +957,10 @@ export function Lightbox({
 
   // A new media item starts unzoomed. Adjusted during render, so the new item
   // never paints as zoomed; the stage resets the photo before it paints.
-  const currentSrc = currentItem?.src;
+  const currentSrc =
+    currentItem != null && currentItem.type !== 'custom'
+      ? currentItem.src
+      : undefined;
   const [viewedItem, setViewedItem] = useState({index, src: currentSrc});
   if (
     !Object.is(viewedItem.index, index) ||
@@ -805,10 +996,11 @@ export function Lightbox({
       return;
     }
     const item = mediaArray[index];
+    const name = item != null ? nameOf(item) : '';
     const position = {index: index + 1, total: mediaArray.length};
     announce(
-      item?.alt
-        ? t('@astryx.lightbox.mediaPosition', {alt: item.alt, ...position})
+      name
+        ? t('@astryx.lightbox.mediaPosition', {alt: name, ...position})
         : t('@astryx.lightbox.imagePosition', position),
     );
   }, [index, isOpen, announce, mediaArray, t]);
@@ -1414,7 +1606,8 @@ export function Lightbox({
     [handleClose, isClickOutsideMedia],
   );
 
-  const isZoomTarget = hasZoom && !isVideo;
+  const isCustom = currentType === 'custom';
+  const isZoomTarget = hasZoom && !isVideo && !isCustom;
 
   // The current page's caption band. The drag to close fades it with the
   // viewer's controls.
@@ -1509,6 +1702,12 @@ export function Lightbox({
       // pointer. Where it is fine, a drag leaves the photo in place. A video
       // keeps its own controls' drags.
       isEnabled: isOpen && !isVideo && isTouch,
+      shouldBegin: pan =>
+        !startsOnContentOwnDrag(
+          pan.trackedTouches[0],
+          'y',
+          pan.totalTranslation().y,
+        ),
       onDrag: travel => {
         const {backdrop, chrome} = dismissFades();
         fadedRef.current = backdrop == null ? chrome : [backdrop, ...chrome];
@@ -1631,6 +1830,36 @@ export function Lightbox({
       touch.startY >= box.bottom - VIDEO_CONTROLS_BAND
     );
   };
+  // A drag that starts on a custom item's own controls, or in its content that
+  // can still scroll the way the drag goes, stays the content's. Only a new
+  // drag from the scroller's edge pages or closes.
+  const startsOnContentOwnDrag = (
+    touch: GestureTouch | undefined,
+    axis: 'x' | 'y',
+    travel: number,
+  ) => {
+    const target = touch?.target;
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    const content = closestComposed(target, '[data-lightbox-custom]');
+    if (content == null) {
+      return false;
+    }
+    if (closestComposed(target, CONTENT_CONTROLS) != null) {
+      return true;
+    }
+    for (
+      let element: Element | null = target;
+      element != null && element !== content.parentElement;
+      element = composedParent(element)
+    ) {
+      if (canScrollToward(element, axis, travel)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   // Paging turns the page that holds focus inert, which drops focus inside
   // it, such as on its caption toggle or its photo. Such focus moves to the
@@ -1673,7 +1902,13 @@ export function Lightbox({
     panOptions: {
       allowedPointerTypes: ['touch', 'pen', 'mouse'],
       maximumNumberOfTouches: 1,
-      shouldBegin: pan => !startsOnVideoControls(pan.trackedTouches[0]),
+      shouldBegin: pan =>
+        !startsOnVideoControls(pan.trackedTouches[0]) &&
+        !startsOnContentOwnDrag(
+          pan.trackedTouches[0],
+          'x',
+          pan.totalTranslation().x,
+        ),
     },
     shouldBeginPan: direction => !stage.isZoomed() || stage.isAtEdge(direction),
     onIndexChange: (next, reason) => {
@@ -1778,6 +2013,11 @@ export function Lightbox({
   // its right.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // A key on a custom item's content, a field or a media element, or one
+      // with a modifier or in IME composition, stays its target's.
+      if (isOwnKey(e)) {
+        return;
+      }
       if (isZoomTarget) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault();
@@ -1830,6 +2070,32 @@ export function Lightbox({
     },
     [stage],
   );
+
+  // The Footer's zoom values: the active image's scale where a zoom settled,
+  // and its largest zoom once measured.
+  const [zoomScale, setZoomScale] = useState(1);
+  const [zoomMax, setZoomMax] = useState<number | null>(null);
+  const hasFooter = footer != null;
+  // Effect: syncs the Footer's zoom values with the stage's animator while a
+  // Footer shows them. It reads the scale only where a zoom has settled.
+  useEffect(() => {
+    if (!isOpen || !hasFooter) {
+      return;
+    }
+    let frame = 0;
+    const read = () => {
+      if (!zoom.isMoving()) {
+        const next = zoom.current().scale;
+        setZoomScale(previous =>
+          Math.abs(previous - next) > 0.001 ? next : previous,
+        );
+      }
+      setZoomMax(zoom.geometryRef.current?.maxScale ?? null);
+      frame = requestAnimationFrame(read);
+    };
+    frame = requestAnimationFrame(read);
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, hasFooter, zoom]);
 
   if (!currentItem) {
     return null;
@@ -1884,11 +2150,21 @@ export function Lightbox({
     );
   };
 
-  const renderMedia = (
-    {src, alt, type: kind = 'image'}: LightboxMedia,
-    isCurrent: boolean,
-  ) =>
-    kind === 'video' ? (
+  const renderMedia = (item: LightboxItem, isCurrent: boolean) => {
+    if (item.type === 'custom') {
+      // The caller's content, in the photo's place: the stage moves it for a
+      // drag to close, and its own controls keep their drags and keys.
+      return (
+        <div
+          ref={isCurrent ? stage.contentRef : undefined}
+          data-lightbox-custom=""
+          {...stylex.props(styles.custom)}>
+          {item.content}
+        </div>
+      );
+    }
+    const {src, alt, type: kind = 'image'} = item;
+    return kind === 'video' ? (
       <video
         src={src}
         aria-label={alt}
@@ -1907,6 +2183,46 @@ export function Lightbox({
         {...stylex.props(styles.image)}
       />
     );
+  };
+  const maxScale = zoomMax ?? Number.POSITIVE_INFINITY;
+  const footerValue: LightboxFooterValue = {
+    gallery: {
+      items: mediaArray,
+      index,
+      setIndex: next => {
+        if (next !== index) {
+          noteFocusBeforePaging();
+          setIndex(next);
+        }
+      },
+    },
+    zoom: {
+      scale: isZoomTarget ? zoomScale : 1,
+      canZoomIn: isZoomTarget && zoomScale < maxScale - 0.01,
+      canZoomOut: isZoomTarget && zoomScale > 1.01,
+      zoomIn: () => stage.zoomIn(),
+      zoomOut: () => stage.zoomOut(),
+      reset: () => stage.zoomOut(),
+    },
+  };
+  // An action with `href` is a link: it downloads, or opens in a new tab.
+  const activateAction = (action: LightboxAction) => {
+    if (action.href != null) {
+      const link = document.createElement('a');
+      link.href = action.href;
+      const {download} = action;
+      if (typeof download === 'string' || download === true) {
+        link.download = typeof download === 'string' ? download : '';
+      } else {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      }
+      link.click();
+    }
+    action.onActivate?.();
+  };
+  const actions = currentItem.actions?.slice(0, 3) ?? [];
+  const hasTopBar = isRenderable(currentItem.title) || actions.length > 0;
   // The current item and its neighbours; the pager shows one at rest.
   const pageIndexes = [index - 1, index, index + 1].filter(
     i => i >= 0 && i < mediaArray.length,
@@ -1935,7 +2251,10 @@ export function Lightbox({
         handleKeyDown(e);
         onKeyDownProp?.(e);
       }}
-      aria-label={currentItem.alt || t('@astryx.lightbox.mediaViewer')}
+      aria-label={
+        (currentItem != null && nameOf(currentItem)) ||
+        t('@astryx.lightbox.mediaViewer')
+      }
       aria-describedby={
         isRenderable(currentItem.caption) ? captionId : undefined
       }
@@ -1992,6 +2311,58 @@ export function Lightbox({
                     onClick: handleClose,
                     buttonRef: closeButtonRef,
                   })}
+
+                  {/* The top bar: the item's title and its actions */}
+                  {hasTopBar && (
+                    <div {...stylex.props(styles.topBar)}>
+                      {isGallery && (
+                        <Text
+                          as="div"
+                          type="body"
+                          color={hasZoom ? 'inherit' : undefined}
+                          xstyle={[
+                            styles.counterInTopBar,
+                            hasZoom && styles.counterBacking,
+                            hasZoom && styles.counterOnDark,
+                          ]}>
+                          {index + 1} / {mediaArray.length}
+                        </Text>
+                      )}
+                      <div {...stylex.props(styles.titleBlock)}>
+                        {isRenderable(currentItem.title) && (
+                          <Text
+                            as="div"
+                            type="body"
+                            color="inherit"
+                            maxLines={1}
+                            hasTruncateTooltip={false}
+                            xstyle={styles.titleText}>
+                            {currentItem.title}
+                          </Text>
+                        )}
+                        {isRenderable(currentItem.subtitle) && (
+                          <Text
+                            as="div"
+                            type="supporting"
+                            color="inherit"
+                            maxLines={1}
+                            hasTruncateTooltip={false}
+                            xstyle={styles.subtitleText}>
+                            {currentItem.subtitle}
+                          </Text>
+                        )}
+                      </div>
+                      {actions.map(action => (
+                        <span key={action.label}>
+                          {control(styles.actionButton, {
+                            icon: action.icon,
+                            label: action.label,
+                            onClick: () => activateAction(action),
+                          })}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Gallery nav: prev — stays mounted and is disabled at the start of
                 the range so pressing/arrowing to the boundary doesn't unmount the
@@ -2220,6 +2591,19 @@ export function Lightbox({
                   </div>
                 </div>
 
+                {/* The Footer: the caller's filmstrip or zoom control. It sits
+                under the media, so the fitted media leaves room for it, and it
+                fades with the controls. */}
+                {hasFooter && (
+                  <LightboxFooterContext value={footerValue}>
+                    <div
+                      data-lightbox-chrome=""
+                      {...stylex.props(styles.footer)}>
+                      {footer}
+                    </div>
+                  </LightboxFooterContext>
+                )}
+
                 <div
                   data-lightbox-chrome=""
                   {...stylex.props(styles.chromeLayer)}>
@@ -2234,8 +2618,8 @@ export function Lightbox({
                       isMirrored: true,
                     })}
 
-                  {/* Gallery counter */}
-                  {isGallery && mediaArray.length > 1 && (
+                  {/* Gallery counter, unless the top bar holds it */}
+                  {isGallery && mediaArray.length > 1 && !hasTopBar && (
                     <Text
                       as="div"
                       type="body"
