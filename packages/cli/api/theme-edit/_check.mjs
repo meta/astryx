@@ -5102,16 +5102,23 @@ function checkOne(
       );
     if (s.state && !statesHold(states, s.state)) {
       // A part drawn inside this one that has the state (a calendar's day
-      // is today; the calendar is not): that part's line, with the state.
+      // is today; the calendar is not; a pagination's page button is the
+      // current one): that part's line, with the state. Its own pieces
+      // first, then the parts the census finds drawn inside it.
       const state = String(s.state);
+      const holds = (/** @type {string} */ k) =>
+        statesHold(partStates(ctx, k), state);
       const inner = meant
         ? []
-        : [...ctx.project.target.keys()]
-            .filter(
-              k =>
-                k.startsWith(`${s.on}-`) &&
-                statesHold(partStates(ctx, k), state),
-            )
+        : [
+            ...new Set([
+              ...[...ctx.project.target.keys()].filter(k =>
+                k.startsWith(`${s.on}-`),
+              ),
+              ...(ctx.C.MAP[String(s.on)]?.contains ?? []),
+            ]),
+          ]
+            .filter(k => ctx.project.target.has(k) && holds(k))
             .slice(0, 3);
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
@@ -5182,7 +5189,10 @@ function checkOne(
     /^(hover|active|focus|focus-visible|focus-within)$/.test(String(s.state))
   ) {
     const all = partsOf(ctx, s);
-    const under = all.filter(t => ctx.C.MAP[t]?.underInput != null);
+    // (A part whose input sits in a part the theme names takes the state
+    // from that part, and the build writes it so; only one whose input no
+    // themed part holds is refused.)
+    const under = all.filter(t => ctx.C.MAP[t]?.underInput === '');
     if (under.length && under.length === all.length) {
       const holders = [
         ...new Set(under.map(t => ctx.C.MAP[t]?.underInput).filter(Boolean)),
