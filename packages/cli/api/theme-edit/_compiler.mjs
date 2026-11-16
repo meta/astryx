@@ -744,9 +744,12 @@ export function makeCompiler(project, parts) {
       // needs no 4.5:1 (and must stay dimmer than the live text beside it).
       if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
         continue;
+      // (Text on another part that sets text of its own takes that part's
+      // text; a part's own color set on it, `ownColor`, is its text there.)
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
+        !(/** @type {any} */ (p).ownColor) &&
         partReads(p.bg.target, 'text').length
       )
         continue;
