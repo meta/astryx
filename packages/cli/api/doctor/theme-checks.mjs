@@ -1140,7 +1140,7 @@ export function checkThemes(
       label,
       status: 'warn',
       message: 'No @astryxdesign/theme-* packages are installed.',
-      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral\`.`,
+      fix: `Install a theme, e.g. \`${packageInstallCommand(['@astryxdesign/theme-neutral'], cwd).installCommand ?? 'npm install @astryxdesign/theme-neutral'}\`, then add it to the app with \`${run} theme add neutral\`.`,
     };
   }
   const names = packages.join(', ');

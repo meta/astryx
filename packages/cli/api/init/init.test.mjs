@@ -252,7 +252,7 @@ describe('init() — logger', () => {
     expect(text).toContain('[ok] AI agent docs: AGENTS.md created (Astryx ');
     expect(text).toContain('  Next steps:');
     // The exact next-steps block the CLI prints comes from getNextSteps().
-    expect(text).toContain(getNextSteps('npx astryx')[2].slice(0, 20));
+    expect(text).toContain(getNextSteps('npx astryx', tmpDir)[2].slice(0, 20));
   });
 });
 

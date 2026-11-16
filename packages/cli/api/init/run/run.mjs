@@ -23,6 +23,7 @@ import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
+import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
@@ -41,6 +42,8 @@ import {logger} from '../../logger.mjs';
 const VALID_FEATURES = ['agents', 'theme', 'template'];
 const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 
+const THEME_PACKAGE = '@astryxdesign/theme-neutral';
+
 /**
  * Build the "Next steps" lines printed at the end of `astryx init`.
  *
@@ -49,9 +52,14 @@ const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
  * app imports that module once and passes its default to <Theme>.
  *
  * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
+ * @param {string} [cwd] the project folder; its package manager names the theme install command
  * @returns {string[]} ordered list of human-facing lines
  */
-export function getNextSteps(invocation) {
+export function getNextSteps(invocation, cwd = process.cwd()) {
+  const {installCommand, noCommandReason} = installCommandFor(
+    [THEME_PACKAGE],
+    cwd,
+  );
   return [
     '',
     '  Next steps:',
@@ -61,7 +69,7 @@ export function getNextSteps(invocation) {
     "       and import '@astryxdesign/core/astryx.css'",
     "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
-    '       npm install @astryxdesign/theme-neutral',
+    `       ${installCommand ?? noCommandReason}`,
     `       ${invocation} theme add neutral`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
@@ -399,6 +407,6 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     logger.log('');
     return {type: 'init.run', data};
   }
-  for (const line of getNextSteps(invocation)) logger.log(line);
+  for (const line of getNextSteps(invocation, cwd)) logger.log(line);
   return {type: 'init.run', data};
 }

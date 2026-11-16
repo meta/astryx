@@ -262,7 +262,10 @@ export function installCommandFor(packages, cwd) {
   }
   const resolved = resolveInstallVerb(cwd);
   const ranges = cliPackageRanges();
-  const specs = packages.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
+  // A `*` range pins nothing, so the bare name says the same in fewer bytes.
+  const specs = packages.map(p =>
+    ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p,
+  );
   if (resolved.verb !== null) {
     return {
       installCommand: `${resolved.verb} ${specs.join(' ')}`,
