@@ -359,7 +359,7 @@ describe('defineTheme', () => {
       extends: {
         name: 'registered-base',
         tokens: {'--color-accent': '#abcdef'},
-      } as unknown as DefinedTheme,
+      },
     });
     expect(getRegisteredTheme('registered-base')).toBe(real);
   });

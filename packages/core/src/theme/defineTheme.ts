@@ -855,7 +855,7 @@ function buildTheme<
   // values merge as built values, never as raw input.
   const given: unknown = input.extends;
   const base = isPlainThemeInput(given)
-    ? (buildTheme(given as DefineThemeInput) as DefinedTheme as Base)
+    ? (buildTheme(given) as DefinedTheme as Base)
     : input.extends;
   if ('extends' in input && !isDefinedTheme(base)) {
     throw new Error(
