@@ -1125,7 +1125,7 @@ export function TouchDateTimeField({
                 ))}
               </div>
               <MonthScroller
-                key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}`}
+                key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}:${anchoredDate}`}
                 handleRef={scrollerHandleRef}
                 monthModel={monthModel}
                 minMonthIndex={minMonthIndex}

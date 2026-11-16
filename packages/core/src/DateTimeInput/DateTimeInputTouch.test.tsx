@@ -350,6 +350,50 @@ describe('DateTimeInput touch surface', () => {
     ).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('repositions the date grid when the selected day changes after browsing away', () => {
+    withMonthLayout(() => {
+      const props = {
+        label: 'Meeting',
+        presentation: 'bottom-sheet' as const,
+        min: '2026-01-01T00:00' as ISODateTimeString,
+        max: '2026-12-31T23:59' as ISODateTimeString,
+        onChange: () => {},
+      };
+      const {rerender} = render(
+        <DateTimeInput
+          {...props}
+          value={'2026-06-14T09:30' as ISODateTimeString}
+        />,
+      );
+      openDateSheet();
+      const scroller = document.querySelector<HTMLElement>(
+        '[data-scroller="months"]',
+      )!;
+      scroller.scrollLeft = 7 * SCROLLPORT_WIDTH;
+      expect(scroller.scrollLeft).toBe(7 * SCROLLPORT_WIDTH);
+      fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+      rerender(
+        <DateTimeInput
+          {...props}
+          value={'2026-06-20T09:30' as ISODateTimeString}
+        />,
+      );
+      openDateSheet();
+      expect(
+        document.querySelector('[data-panel="date"] button[aria-expanded]'),
+      ).toHaveTextContent('June 2026');
+      expect(
+        document.querySelector<HTMLElement>('[data-scroller="months"]')
+          ?.scrollLeft,
+      ).toBe(5 * SCROLLPORT_WIDTH);
+      expect(
+        within(screen.getByRole('grid', {name: 'June 2026'}))
+          .getByRole('button', {name: /June 20, 2026/})
+          .closest('[role="gridcell"]'),
+      ).toHaveAttribute('aria-selected', 'true');
+    });
+  });
+
   it('opens on the month of a value set after mount while closed when min and max are set', () => {
     withMonthLayout(() => {
       const {rerender} = render(

@@ -1238,7 +1238,7 @@ export function TouchDateField({
             isWheelOpen && styles.panelBeneathHidden,
           )}>
           <MonthScroller
-            key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}`}
+            key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}:${anchoredValue}`}
             handleRef={scrollerHandleRef}
             monthModel={monthModel}
             minMonthIndex={minMonthIndex}
