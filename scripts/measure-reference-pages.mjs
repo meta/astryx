@@ -7,10 +7,10 @@
  *   directory each) and the reference pages that
  *   docs/architecture/component-import-boundaries.md INV10 names
  * @output Each reference page's first-load JavaScript, minified and
- *   gzip, its static module graph (modules, module depth) and this build's
- *   chunks (count, depth), base against head, with the deltas. With
- *   `--unused-on`, a pass or fail line per named page against INV10's 0.3 KB
- *   limit. `--json` prints the same as JSON
+ *   gzip, its static module graph (modules reached and kept, module depth)
+ *   and this build's chunks (count, depth), base against head, with the
+ *   deltas. With `--unused-on`, a pass or fail line per named page against
+ *   INV10's 0.3 KB limit. `--json` prints the same as JSON
  * @position Run by people and review agents with `pnpm size:pages`; not a CI
  *   job. Builds each page with the size report's esbuild options
  *   (.github/scripts/lib/component-size.js), as the import-boundaries check
@@ -66,10 +66,19 @@ export function parseReferencePages(recordText) {
   return pages;
 }
 
-const pick = ({min, gzip, modules, moduleDepth, chunks, depth}) => ({
+const pick = ({
   min,
   gzip,
   modules,
+  keptModules,
+  moduleDepth,
+  chunks,
+  depth,
+}) => ({
+  min,
+  gzip,
+  modules,
+  keptModules,
   moduleDepth,
   chunks,
   depth,
@@ -89,6 +98,7 @@ export function comparePages(base, head, {unusedOn = []} = {}) {
       min: head[page].min - base[page].min,
       gzip: head[page].gzip - base[page].gzip,
       modules: head[page].modules - base[page].modules,
+      keptModules: head[page].keptModules - base[page].keptModules,
       moduleDepth: head[page].moduleDepth - base[page].moduleDepth,
       chunks: head[page].chunks - base[page].chunks,
       depth: head[page].depth - base[page].depth,
@@ -113,6 +123,10 @@ function signed(bytes) {
   return `${bytes < 0 ? '−' : '+'}${Math.abs(bytes).toLocaleString('en-US')}`;
 }
 
+function graph({modules, keptModules, moduleDepth}) {
+  return `${modules} / ${keptModules} / ${moduleDepth}`;
+}
+
 function shape({chunks, depth}) {
   return `${chunks} / ${depth}`;
 }
@@ -135,13 +149,13 @@ export function formatComparison({pages, verdicts}, {base, head}) {
   ];
   lines.push(
     '',
-    'Static module graph (first-load modules / module depth):',
+    'Static module graph (modules reached / modules kept after tree shaking / module depth):',
     '',
     '| Page | Base | Head | Change |',
     '| --- | ---: | ---: | ---: |',
     ...pages.map(
       row =>
-        `| ${row.page} | ${row.base.modules} / ${row.base.moduleDepth} | ${row.head.modules} / ${row.head.moduleDepth} | ${signed(row.delta.modules)} / ${signed(row.delta.moduleDepth)} |`,
+        `| ${row.page} | ${graph(row.base)} | ${graph(row.head)} | ${signed(row.delta.modules)} / ${signed(row.delta.keptModules)} / ${signed(row.delta.moduleDepth)} |`,
     ),
     '',
     'Chunks in this build, for reference (first-load chunks / chunk depth; another bundler splits differently):',
@@ -306,6 +320,27 @@ export function moduleGraphStats(inputs, entryInput) {
  * counts the round trips a cold load waits for in turn. Another bundler splits
  * chunks differently, so these numbers describe this build only.
  */
+/**
+ * The modules this build keeps in the page's first-load chunks after tree
+ * shaking: every module with output bytes in a chunk the entry reaches
+ * through static imports, the synthetic entry not counted. A folder index
+ * that only re-exports is reached but keeps no bytes, so `modules` minus
+ * `keptModules` shows how much of the graph a barrel adds without cost.
+ */
+export function keptModuleCount(outputs, entryOutput, entryInput) {
+  const kept = new Set();
+  for (const chunk of importLevels(outputs, entryOutput, [
+    'import-statement',
+  ]).keys()) {
+    for (const [input, {bytesInOutput}] of Object.entries(
+      outputs[chunk].inputs ?? {},
+    )) {
+      if (bytesInOutput > 0 && input !== entryInput) kept.add(input);
+    }
+  }
+  return kept.size;
+}
+
 export function chunkGraphStats(outputs, entryOutput) {
   const levels = importLevels(outputs, entryOutput, ['import-statement']);
   return {chunks: levels.size, depth: Math.max(...levels.values()) + 1};
@@ -356,6 +391,7 @@ export async function measurePage(distDir, components) {
     min: Buffer.byteLength(text),
     gzip: gzipBytes(text),
     ...moduleGraphStats(result.metafile.inputs, entryPath),
+    keptModules: keptModuleCount(outputs, entryOutput, entryPath),
     ...chunkGraphStats(outputs, entryOutput),
   };
 }

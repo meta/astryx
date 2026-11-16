@@ -14,6 +14,7 @@ import {describe, expect, it} from 'vitest';
 import {
   UNUSED_FEATURE_LIMIT_BYTES,
   chunkGraphStats,
+  keptModuleCount,
   moduleGraphStats,
   comparePages,
   formatComparison,
@@ -73,7 +74,17 @@ const sizes = (
   depth = 1,
   modules = 10,
   moduleDepth = 3,
-) => ({components, min, gzip, modules, moduleDepth, chunks, depth});
+  keptModules = 8,
+) => ({
+  components,
+  min,
+  gzip,
+  modules,
+  keptModules,
+  moduleDepth,
+  chunks,
+  depth,
+});
 
 describe('moduleGraphStats', () => {
   // esbuild metafile inputs: each module's imports.
@@ -111,6 +122,31 @@ describe('moduleGraphStats', () => {
       modules: 0,
       moduleDepth: 0,
     });
+  });
+});
+
+describe('keptModuleCount', () => {
+  it('counts the modules with output bytes in the first-load chunks', () => {
+    const outputs = {
+      'entry.js': {
+        imports: [
+          {path: 'shared.js', kind: 'import-statement'},
+          {path: 'lazy.js', kind: 'dynamic-import'},
+        ],
+        inputs: {
+          entry: {bytesInOutput: 40},
+          'Chat/index.js': {bytesInOutput: 0},
+          'Chat/useChatComposerContext.js': {bytesInOutput: 600},
+        },
+      },
+      'shared.js': {
+        imports: [],
+        inputs: {'utils/context.js': {bytesInOutput: 23}},
+      },
+      'lazy.js': {imports: [], inputs: {'Chat/Chat.js': {bytesInOutput: 9000}}},
+    };
+    // The barrel keeps no bytes and the lazy chunk is not first load.
+    expect(keptModuleCount(outputs, 'entry.js', 'entry')).toBe(2);
   });
 });
 
@@ -175,6 +211,7 @@ describe('comparePages', () => {
           min: 1000,
           gzip: 400,
           modules: 10,
+          keptModules: 8,
           moduleDepth: 3,
           chunks: 1,
           depth: 1,
@@ -183,6 +220,7 @@ describe('comparePages', () => {
           min: 1000,
           gzip: 400,
           modules: 10,
+          keptModules: 8,
           moduleDepth: 3,
           chunks: 1,
           depth: 1,
@@ -191,6 +229,7 @@ describe('comparePages', () => {
           min: 0,
           gzip: 0,
           modules: 0,
+          keptModules: 0,
           moduleDepth: 0,
           chunks: 0,
           depth: 0,
@@ -203,6 +242,7 @@ describe('comparePages', () => {
           min: 5000,
           gzip: 2000,
           modules: 10,
+          keptModules: 8,
           moduleDepth: 3,
           chunks: 1,
           depth: 1,
@@ -211,6 +251,7 @@ describe('comparePages', () => {
           min: 5900,
           gzip: 2330,
           modules: 10,
+          keptModules: 8,
           moduleDepth: 3,
           chunks: 1,
           depth: 1,
@@ -219,6 +260,7 @@ describe('comparePages', () => {
           min: 900,
           gzip: 330,
           modules: 0,
+          keptModules: 0,
           moduleDepth: 0,
           chunks: 0,
           depth: 0,
@@ -251,15 +293,17 @@ describe('formatComparison', () => {
   it("prints each page's module graph and chunks, with their changes, below the sizes", () => {
     const report = formatComparison(
       comparePages(
-        {menu: sizes(1000, 400, ['DropdownMenu'], 9, 3, 180, 9)},
-        {menu: sizes(1100, 420, ['DropdownMenu'], 12, 5, 190, 11)},
+        {menu: sizes(1000, 400, ['DropdownMenu'], 9, 3, 180, 9, 150)},
+        {menu: sizes(1100, 420, ['DropdownMenu'], 12, 5, 190, 11, 152)},
       ),
       {base: 'main', head: 'the working tree'},
     );
     expect(report).toContain(
-      'Static module graph (first-load modules / module depth):',
+      'Static module graph (modules reached / modules kept after tree shaking / module depth):',
     );
-    expect(report).toContain('| menu | 180 / 9 | 190 / 11 | +10 / +2 |');
+    expect(report).toContain(
+      '| menu | 180 / 150 / 9 | 190 / 152 / 11 | +10 / +2 / +2 |',
+    );
     expect(report).toContain('| menu | 9 / 3 | 12 / 5 | +3 / +2 |');
     // The size table keeps its columns, so readers of it are unchanged.
     expect(report).toContain(
