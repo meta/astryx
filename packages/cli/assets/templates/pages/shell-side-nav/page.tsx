@@ -129,8 +129,9 @@ function ConversationItem({
   isSelected?: boolean;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  // The options button stays mounted and in the tab order; it shows on hover
-  // and keyboard focus, and stays shown while its menu is open.
+  // The options button stays mounted and in the tab order. It shows on hover,
+  // on focus anywhere in the row, and under a coarse pointer, and stays shown
+  // while its menu is open.
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
   const showToast = useToast();
   const confirm = useImperativeAlertDialog();
