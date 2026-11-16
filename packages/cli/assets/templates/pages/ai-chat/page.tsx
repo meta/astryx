@@ -41,6 +41,7 @@ import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useClipboard} from '@astryxdesign/core/hooks';
 
 import {
   DocumentTextIcon,
@@ -177,6 +178,13 @@ The refresh path is covered end to end:
 // close button. A fragment so each control is a direct child of the toolbar.
 function ArtifactActions({onClose}: {onClose?: () => void}) {
   const showToast = useToast();
+  const {copy} = useClipboard({announce: 'Copied'});
+  const copyDocument = () =>
+    void copy(ARTIFACT_CONTENT).then(isCopied => {
+      if (isCopied) {
+        showToast({body: 'Copied', uniqueID: 'copy'});
+      }
+    });
   return (
     <>
       <DropdownMenu
@@ -212,13 +220,7 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
         size="sm"
         icon={<Icon icon={ClipboardDocumentIcon} size="sm" />}
         isIconOnly
-        onClick={() =>
-          // Demo only: replace this toast with the call that performs the action.
-          showToast({
-            body: 'Demo: the document would be copied here',
-            uniqueID: 'copy',
-          })
-        }
+        onClick={copyDocument}
       />
       <Button
         label="Share"
@@ -248,6 +250,13 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
 // Mobile variant: the actions collapse into an overflow menu.
 function MobileArtifactActions() {
   const showToast = useToast();
+  const {copy} = useClipboard({announce: 'Copied'});
+  const copyDocument = () =>
+    void copy(ARTIFACT_CONTENT).then(isCopied => {
+      if (isCopied) {
+        showToast({body: 'Copied', uniqueID: 'copy'});
+      }
+    });
   return (
     <MoreMenu
       label="Document actions"
@@ -281,12 +290,7 @@ function MobileArtifactActions() {
         {
           label: 'Copy',
           icon: ClipboardDocumentIcon,
-          onClick: () =>
-            // Demo only: replace this toast with the call that performs the action.
-            showToast({
-              body: 'Demo: the document would be copied here',
-              uniqueID: 'copy',
-            }),
+          onClick: copyDocument,
         },
         {
           label: 'Share',
