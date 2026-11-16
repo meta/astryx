@@ -21,6 +21,7 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import type {StatusDotVariant} from '@astryxdesign/core/StatusDot';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack, VStack, HStack} from '@astryxdesign/core/Stack';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   SparklesIcon,
@@ -127,13 +128,10 @@ function ConversationItem({
   statusLabel: string;
   isSelected?: boolean;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  // Keyboard focus inside the row shows the options button too, so Tab can
-  // reach it, and it stays mounted while its menu or confirmation holds focus
-  // so focus can return to it.
-  const [hasFocusWithin, setHasFocusWithin] = useState(false);
-  const showMenu = isHovered || isMenuOpen || hasFocusWithin;
+  // The options button stays mounted and in the tab order; it shows on hover
+  // and keyboard focus, and stays shown while its menu is open.
+  const {getContainerProps, getContentRevealProps} = useContainerReveal();
   const showToast = useToast();
   const confirm = useImperativeAlertDialog();
   // Demo only: replace these toasts with the calls that act on the conversation.
@@ -145,21 +143,14 @@ function ConversationItem({
 
   return (
     <Stack
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onFocus={() => setHasFocusWithin(true)}
-      onBlur={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setHasFocusWithin(false);
-        }
-      }}>
+      {...getContainerProps({forceState: isMenuOpen ? 'active' : undefined})}>
       <SideNavItem
         label={label}
         href="#"
         isSelected={isSelected}
         endContent={<StatusDot variant={status} label={statusLabel} />}
         actions={
-          showMenu ? (
+          <span {...getContentRevealProps()}>
             <MoreMenu
               size="sm"
               label="Conversation options"
@@ -183,7 +174,7 @@ function ConversationItem({
                 },
               ]}
             />
-          ) : null
+          </span>
         }
       />
       {confirm.element}
