@@ -213,8 +213,19 @@ const SHORT = wordTable(
   }),
 );
 
+/**
+ * Words that describe text, which may sit between a weight word and the
+ * text it describes ("thin elegant headings"): never a part, a thing or a
+ * value of their own.
+ */
+const TEXT_WORDS =
+  'elegant|graceful|delicate|refined|classy|modern|clean|simple|fine|light(?:er)?|wide|narrow|serif|sans|display|body';
+
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  // A reader (a book reader, a feed reader) is no header.
+  'reader',
+  'readers',
   'selection',
   'placeholder',
   'cursor',
@@ -2355,9 +2366,12 @@ function aspectsOf(text) {
     /\b\d+(\.\d+)?(px|rem|em|pt) (regular|normal|medium)\b|\b(body|text|headings?) (regular|normal)$/.test(
       c,
     ) ||
-    /\bthin(ner)? (body |button |heading |label )?(font|text|type|letters|headings?|labels?|copy)\b/.test(
-      c,
-    ) ||
+    // "thin headings", "thin elegant headings": a weight word before the
+    // text it describes, whatever words sit between (each one a word about
+    // the text, never a part or a thing of its own).
+    new RegExp(
+      String.raw`\bthin(?:ner)?\b(?:\s+(?:and|a|the|very|really|quite|more|${TEXT_WORDS}))*\s+(?:font|text|type|letters|lettering|headings?|titles?|labels?|copy)\b`,
+    ).test(c) ||
     (/\blight(er)?\b/.test(c) &&
       /\b(headings?|titles?|font|weight)\b/.test(c) &&
       !/\b(text|colou?r|mode|background|bg)\b/.test(c))
@@ -3701,6 +3715,19 @@ export function draftAnswer(ctx, env, question) {
   // (A mode said with a typo that keeps its letters, "drak mode", "ligth
   // theme", or in the editor's own label, "(drak)", "[dark only]", is that
   // mode, by the one mode reader.)
+  // A CSS custom property pasted from a stylesheet (`--brand-primary:
+  // #4f46e5`) that is none of this Core's tokens names what it sets by its
+  // last words, never the prefix a codebase repeats on every one of them:
+  // `--brand-bg` is a background. A token this Core has is left as it is.
+  {
+    const tokens = ctx.project.core.tokenDefaults ?? {};
+    question = String(question).replace(/--[a-z][\w-]*/gi, m => {
+      const name = m.toLowerCase();
+      if (Object.hasOwn(tokens, name)) return m;
+      const parts = name.slice(2).split('-');
+      return parts.length > 1 ? parts.slice(1).join(' ') : parts.join(' ');
+    });
+  }
   question = String(question)
     .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
       const mode = modeNear(w);
