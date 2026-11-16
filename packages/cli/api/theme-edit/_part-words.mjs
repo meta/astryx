@@ -151,6 +151,8 @@ export const OVERRIDES = [
     {on: 'kbd'},
   ],
   [/\b(badges?|chips?|tags?|lozenges?)\b/, {on: 'badge'}],
+  // (An action, "a toast's action", is the button it holds.)
+  [/\bactions?(?: buttons?)?\b(?!\s+(?:bar|sheet|menu|list))/, {on: 'button'}],
   [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],

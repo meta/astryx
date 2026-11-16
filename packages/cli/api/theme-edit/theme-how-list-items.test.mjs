@@ -78,7 +78,7 @@ describe('a subject how does not know', () => {
       ]) {
         const r = await answer(q);
         expect(r.all, q).toEqual([]);
-        expect(r.text, q).toMatch(/no part is called "flurbles"/);
+        expect(r.text, q).toMatch(/no part is called "flurble"/);
       }
       // (A brand as the label is the theme's look after it.)
       expect((await answer('Airbnb: accent #ff385c')).first).toContain(
