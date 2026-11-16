@@ -458,10 +458,32 @@ export function makeCompiler(project, parts) {
           : g === 'background'
             ? ['background-color', 'background', 'background-image']
             : null;
+      // A fill token on a part Core also draws with no fill of its own
+      // where it sits in another part (main content inside an app shell is
+      // transparent there, and the shell's own fill shows; the census sees
+      // that clear fill in no condition of the part's own): the token still
+      // reaches what inside reads it, but not that part's look there. Said,
+      // with the property that paints the part itself everywhere.
+      const clear = ['background-color', 'background'].some(
+        prop =>
+          (MAP[target]?.own?.[prop]?.values ?? []).includes('transparent') &&
+          !Object.values(MAP[target]?.at?.[prop] ?? {}).includes('transparent'),
+      );
+      if (
+        g === 'background' &&
+        clear &&
+        fed.some(f => f.part === target && (wanted ?? []).includes(f.prop))
+      )
+        return {
+          soft: true,
+          message: `${target} is also drawn with no fill of its own inside another part (main content in an app shell is transparent, and the shell's fill shows), so there ${token} colors only what inside ${target} reads it, not ${target} itself. To paint ${target} itself everywhere: ${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          run: [
+            `${P} set ${theme} background-color ${quoteCommandArgument(value)} --on ${target}${when ? ` --when ${when}` : ''}${also}`,
+          ],
+          also: [],
+        };
       // The part reads the token the user named: it is set as asked, and
       // the result names what it feeds.
-      void wanted;
-      void fed;
       return null;
     }
     // Only a token of the same kind takes the value: a weight never goes to
