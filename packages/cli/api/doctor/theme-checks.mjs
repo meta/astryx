@@ -1708,8 +1708,14 @@ export async function checkAppThemes(cwd) {
     );
   }
 
+  // The inputs load with Core, and doctor reads only the Core the project
+  // installed, never the one the answering copy carries.
+  const privateCoreMissing =
+    !incompleteResolution &&
+    resolved.length > 0 &&
+    !findDoctorCoreDir(state.projectDir);
   const privateProblems = [];
-  for (const theme of resolved) {
+  for (const theme of privateCoreMissing ? [] : resolved) {
     const availableTheme = available.find(
       candidate =>
         candidate.slug === theme.slug &&
@@ -1740,33 +1746,41 @@ export async function checkAppThemes(cwd) {
           message:
             'Could not inspect every theme input until built imports resolve.',
         }
-      : privateProblems.length > 0
+      : privateCoreMissing
         ? {
             id: 'theme-private-variables',
             label: 'Private theme variables',
-            status: 'fail',
-            message: `Added theme inputs set private --_* variables directly (${privateProblems
-              .map(problem => `${problem.theme.slug}: ${problem.message}`)
-              .join('; ')}).`,
-            fix: `Remove the direct private input keys, then ${privateProblems
-              .map(problem =>
-                refreshThemeCommand(
-                  state.projectDir,
-                  run,
-                  available,
-                  problem.theme.slug,
-                  problem.theme.owner,
-                ),
-              )
-              .join(' ')}`,
-          }
-        : {
-            id: 'theme-private-variables',
-            label: 'Private theme variables',
-            status: 'pass',
+            status: 'info',
             message:
-              'No added theme input sets a private --_* variable directly.',
-          },
+              "The project's Core isn't installed, so theme inputs were not checked for private variables. Install the project's dependencies, then run doctor again.",
+          }
+        : privateProblems.length > 0
+          ? {
+              id: 'theme-private-variables',
+              label: 'Private theme variables',
+              status: 'fail',
+              message: `Added theme inputs set private --_* variables directly (${privateProblems
+                .map(problem => `${problem.theme.slug}: ${problem.message}`)
+                .join('; ')}).`,
+              fix: `Remove the direct private input keys, then ${privateProblems
+                .map(problem =>
+                  refreshThemeCommand(
+                    state.projectDir,
+                    run,
+                    available,
+                    problem.theme.slug,
+                    problem.theme.owner,
+                  ),
+                )
+                .join(' ')}`,
+            }
+          : {
+              id: 'theme-private-variables',
+              label: 'Private theme variables',
+              status: 'pass',
+              message:
+                'No added theme input sets a private --_* variable directly.',
+            },
   );
 
   const coreDir = findDoctorCoreDir(state.projectDir);

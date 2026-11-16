@@ -3644,7 +3644,13 @@ export async function validateThemePrivateInputs(
   }
 
   // The CLI's own Core, unless a build in this process already chose one.
-  await loadCliCore();
+  // Only doctor calls this, and doctor never reads the Core a copy installed
+  // for the computer carries, which is often missing too: there the project's
+  // installed Core loads the input.
+  const cliCore = await loadCliCore();
+  if (carriesCore() || !cliCore.themeModule) {
+    await selectCore(cwd, {projectOnly: true});
+  }
   const interception = interceptCore(_coreThemeModule, _coreRootModule);
   let theme;
   try {
