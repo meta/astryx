@@ -15,13 +15,16 @@
 /**
  * The script run on a page before its picture: each animation that ends (an
  * overlay's fade-in) is run to its end, so the picture shows the part as it
- * looks once it has played; each that loops (a skeleton's shimmer, a pulsing
+ * looks once it has played, except a part drawn pressed, whose press
+ * animation (a flash that fades) is held at its start, the moment of the
+ * press; each that loops (a skeleton's shimmer, a pulsing
  * dot, a spinner) is held at the middle of its first round, a frame a person
  * sees as it plays, never its first frame, where a part can be faint or gone.
  */
 export const SETTLE_ANIMATIONS = `for (const a of document.getAnimations()) {
   const t = a.effect?.getComputedTiming();
   if (!t) continue;
+  if (typeof CSSAnimation === 'function' && a instanceof CSSAnimation && t.iterations !== Infinity && a.effect.target?.closest?.('[data-astryx-state~="active"]')) { a.pause(); a.currentTime = Number(a.effect.getTiming().delay) || 0; continue; }
   if (t.iterations !== Infinity) { a.finish(); continue; }
   a.pause();
   a.currentTime = (Number(a.effect.getTiming().delay) || 0) + (typeof t.duration === 'number' ? t.duration : 0) / 2;
