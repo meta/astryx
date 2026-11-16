@@ -1,11 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {
-  themeDataAttributeName,
-  themeDataAttributes,
-  themeProps,
-} from './themeProps';
+import {themeDataAttributes, themeProps} from './themeProps';
 
 describe('themeProps', () => {
   it('returns the stable target class for a component', () => {
@@ -64,10 +60,9 @@ describe('themeProps', () => {
     });
   });
 
-  it('caches computed data attribute names across repeated lookups', () => {
-    const first = themeDataAttributeName('visualPropName');
-    const second = themeDataAttributeName('visualPropName');
-    expect(first).toBe('data-visual-prop-name');
-    expect(second).toBe(first);
+  it('omits inherited properties', () => {
+    const proto = {variant: 'ghost'};
+    const inherited = Object.create(proto);
+    expect(themeDataAttributes(inherited)).toEqual({});
   });
 });

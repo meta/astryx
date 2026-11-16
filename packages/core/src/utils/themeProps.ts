@@ -64,6 +64,9 @@ export function themeDataAttributes(props?: ClassProps): ThemeDataAttributes {
 
   if (props) {
     for (const prop in props) {
+      if (!Object.hasOwn(props, prop)) {
+        continue;
+      }
       const value = props[prop];
       if (value != null) {
         attrs[themeDataAttributeName(prop)] = String(value);
