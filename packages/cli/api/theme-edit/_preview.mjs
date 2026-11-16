@@ -366,14 +366,9 @@ function componentItems(project, group) {
     // A deprecated part is not drawn: a theme styles the part that replaces
     // it. An overlay whose playground opens it over the page draws nothing
     // closed (a phone's navigation drawer, slid out of the window): where
-    // the open states draw it open (below), that is its only cell.
+    // the open states draw it open, that is its only cell, on every page.
     if (info?.deprecated) continue;
-    if (
-      (!group || group === 'overlays') &&
-      info?.overlay &&
-      OPEN_SCENES.some(s => s.name === name)
-    )
-      continue;
+    if (info?.overlay && OPEN_SCENES.some(s => s.name === name)) continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,

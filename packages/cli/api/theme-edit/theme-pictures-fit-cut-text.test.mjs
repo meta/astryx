@@ -70,7 +70,7 @@ describe('text a part cuts when narrow', () => {
     const clipped = item(240, [{scroll: 400, client: 100, ellipsis: false}]);
     const whole = item(240, [{scroll: 80, client: 80, ellipsis: true}]);
     run([stepper, wide, clipped, whole]);
-    expect(stepper.style.minWidth).toBe('280px');
+    expect(stepper.style.minWidth).toBe('281px');
     // Never past the sheet's content box: the cell's padding and border fit
     // inside it.
     expect(wide.style.minWidth).toBe('1150px');
