@@ -1343,6 +1343,49 @@ async function withThemeAppLock(cwd, fn) {
 }
 
 /**
+ * The ways forward from `theme add` of a slug no theme has: a near name (a
+ * typo) leads, as the command meant; then, unless a package was named, the
+ * doc on where a theme you wrote must live; then the other themes, nearest
+ * first.
+ * @param {string} slug
+ * @param {Array<any>} available
+ * @param {string} cwd
+ * @param {string | undefined} pkg
+ */
+function unknownThemeSuggestions(slug, available, cwd, pkg) {
+  const themes = themeCommandsFor('theme add', slug, available, cwd).map(
+    ({theme, name}) => ({
+      name,
+      reason:
+        theme.source === 'bundled'
+          ? 'bundled theme'
+          : theme.source === 'local'
+            ? 'local theme'
+            : `provided by ${theme.package}`,
+      distance: levenshteinDistance(
+        String(slug).toLowerCase(),
+        theme.slug.toLowerCase(),
+      ),
+    }),
+  );
+  const near = Math.min(3, Math.max(1, Math.floor(String(slug).length / 3)));
+  const lead = themes.filter(theme => theme.distance <= near);
+  const rest = themes.filter(theme => theme.distance > near);
+  const docs = pkg
+    ? []
+    : [
+        {
+          name: formatCliCommand(
+            'docs author-a-theme creating-a-custom-theme',
+            cwd,
+          ),
+          reason: `how a theme you wrote lives in ${LOCAL_THEME_ROOT}/ so theme add finds it`,
+        },
+      ];
+  return [...lead, ...docs, ...rest].map(({name, reason}) => ({name, reason}));
+}
+
+/**
  * Add one available built theme to the app record.
  * @param {string} slug
  * @param {{cwd?: string, package?: string}} [options]
@@ -1367,30 +1410,7 @@ async function addThemeToAppLocked(slug, cwd, options) {
     // how a built theme is used without it.
     throw new AstryxError(
       `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.${options.package ? '' : ` A theme you wrote is added by name from ${LOCAL_THEME_ROOT}/<slug>/, where a theme source sits beside a same-stem .doc.mjs descriptor; a theme you built elsewhere needs no add: import its built module and stylesheet in your app, as theme build prints with --detail full.`}`,
-      [
-        ...(options.package
-          ? []
-          : [
-              {
-                name: formatCliCommand(
-                  'docs author-a-theme creating-a-custom-theme',
-                  cwd,
-                ),
-                reason: `how a theme you wrote lives in ${LOCAL_THEME_ROOT}/ so theme add finds it`,
-              },
-            ]),
-        ...themeCommandsFor('theme add', slug, available, cwd).map(
-          ({theme, name}) => ({
-            name,
-            reason:
-              theme.source === 'bundled'
-                ? 'bundled theme'
-                : theme.source === 'local'
-                  ? 'local theme'
-                  : `provided by ${theme.package}`,
-          }),
-        ),
-      ],
+      unknownThemeSuggestions(slug, available, cwd, options.package),
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }

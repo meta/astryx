@@ -51,6 +51,23 @@ describe('theme add of a theme you wrote and built elsewhere', () => {
     );
   });
 
+  it('a near name leads, as the command meant, before the doc pointer', async () => {
+    /** @type {any} */
+    let err;
+    try {
+      await themeAdd('nuetral', {cwd: dir});
+    } catch (e) {
+      err = e;
+    }
+    expect(err?.code).toBe('ERR_UNKNOWN_THEME');
+    expect(err.suggestions[0].name).toMatch(
+      / theme add neutral( --package \S+)?$/,
+    );
+    expect(err.suggestions[1].name).toMatch(
+      / docs author-a-theme creating-a-custom-theme$/,
+    );
+  });
+
   it('with --package, names the package only', async () => {
     /** @type {any} */
     let err;
