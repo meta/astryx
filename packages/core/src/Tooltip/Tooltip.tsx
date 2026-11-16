@@ -22,6 +22,7 @@ import React, {
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import type {SizeValue} from '../utils/types';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useTooltip,
@@ -165,14 +166,11 @@ export interface TooltipProps {
   isDefaultOpen?: boolean;
 
   /**
-   * The widest the tooltip grows before its content wraps, padding included.
-   * A number is pixels; a number that is negative or not finite keeps the
-   * default. A string is a CSS `max-width` value, such as `'24rem'`, `'50vw'`
-   * or `'none'` (no cap); a string the browser rejects leaves the tooltip
-   * uncapped.
+   * Maximum width of the tooltip, padding included, before its content wraps.
+   * Numbers are treated as pixels, strings are used as-is.
    * @default 300
    */
-  maxWidth?: number | string;
+  maxWidth?: SizeValue;
 }
 
 /**

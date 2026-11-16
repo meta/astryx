@@ -25,6 +25,7 @@ import {
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
+import type {SizeValue} from '../utils/types';
 import {
   useLayerInternal,
   type ContextRenderProps,
@@ -58,7 +59,7 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 const dynamicStyles = stylex.create({
-  contentMaxWidth: (maxWidth: string) => ({maxWidth}),
+  contentMaxWidth: (maxWidth: SizeValue) => ({maxWidth}),
 });
 
 const styles = stylex.create({
@@ -172,14 +173,11 @@ export interface TooltipOptions {
   isDefaultOpen?: boolean;
 
   /**
-   * The widest the tooltip grows before its content wraps, padding included.
-   * A number is pixels; a number that is negative or not finite keeps the
-   * default. A string is a CSS `max-width` value, such as `'24rem'`, `'50vw'`
-   * or `'none'` (no cap); a string the browser rejects leaves the tooltip
-   * uncapped.
+   * Maximum width of the tooltip, padding included, before its content wraps.
+   * Numbers are treated as pixels, strings are used as-is.
    * @default 300
    */
-  maxWidth?: number | string;
+  maxWidth?: SizeValue;
 
   /**
    * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
@@ -964,14 +962,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       props?: Omit<ContextRenderProps, 'positioning'>,
     ): ReactNode => {
       const renderPlacement = props?.placement ?? placement;
-      // A number that is not a finite, non-negative pixel count keeps the
-      // default cap.
-      const maxWidthValue =
-        typeof maxWidth === 'number'
-          ? Number.isFinite(maxWidth) && maxWidth >= 0
-            ? `${maxWidth}px`
-            : null
-          : (maxWidth ?? null);
       const renderProps = {
         placement: renderPlacement,
         alignment: props?.alignment ?? alignment,
@@ -998,8 +988,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
           ref={contentRefs}
           {...stylex.props(
             styles.content,
-            maxWidthValue != null &&
-              dynamicStyles.contentMaxWidth(maxWidthValue),
+            maxWidth != null && dynamicStyles.contentMaxWidth(maxWidth),
           )}>
           {children}
         </div>,
