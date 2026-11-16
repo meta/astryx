@@ -90,6 +90,37 @@ export async function eachAtOnce(jobs, atOnce, run) {
   if (first) throw first.error;
 }
 
+/**
+ * The script run on a sheet before its picture: text a part cuts with an
+ * ellipsis when it is narrow (a stepper's step names, a section heading)
+ * gets the room it needs. Each sheet item holding such text grows by what
+ * the text lacks, up to the sheet's width, a few rounds while the layout
+ * settles. A part whose own width is fixed keeps it, and what it still cuts
+ * is the theme's to fix. A page with no sheet items is left as it is.
+ */
+export const FIT_CELLS = `(() => {
+  for (let round = 0; round < 4; round++) {
+    let grew = false;
+    for (const item of document.querySelectorAll('.cs-item')) {
+      let need = 0;
+      for (const el of item.querySelectorAll('*')) {
+        if (el.scrollWidth <= el.clientWidth + 1) continue;
+        if (getComputedStyle(el).textOverflow !== 'ellipsis') continue;
+        need = Math.max(need, el.scrollWidth - el.clientWidth);
+      }
+      if (!need) continue;
+      const width = item.getBoundingClientRect().width;
+      const most = item.closest('.cs-sheet')?.clientWidth ?? width;
+      const next = Math.min(Math.ceil(width + need), most);
+      if (next > width + 0.5) {
+        item.style.minWidth = next + 'px';
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
+})()`;
+
 export const PICTURE_WINDOW = Object.freeze({width: 1280, height: 900});
 
 /** The pointer of the window a picture is taken in. */

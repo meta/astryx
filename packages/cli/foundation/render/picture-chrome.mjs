@@ -24,6 +24,7 @@ import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
+  FIT_CELLS,
   PICTURE_PAGES_AT_ONCE,
   PICTURE_TAKEN,
   PICTURE_WINDOW,
@@ -198,6 +199,8 @@ async function picture({html, png, mode}, i) {
   // page loads: it is run to its end, and a looping one held at a frame a
   // person sees (SETTLE_ANIMATIONS), before the picture.
   await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
+  // Text a part cuts when narrow gets the room it needs (FIT_CELLS).
+  await send('Runtime.evaluate', {expression: FIT_CELLS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
   // A picture beyond the window makes the page see a resize; a part that
