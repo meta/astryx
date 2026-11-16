@@ -65,12 +65,8 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme-edit/_css.mjs': {
-    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: [
-      'require(@csstools/css-syntax-patches-for-csstree)',
-      'require(css-tree)',
-      'require(mdn-data/css/properties.json)',
-    ],
+    runs: "the current specifications' grammar patches for css-tree, resolved when the module loads and loaded on the first CSS name or value check, so other commands do not load them",
+    sites: ['require(<computed>)'],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
@@ -85,14 +81,15 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
+    runs: "theme source modules, and a built theme module that imports a module of its theme's folder, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it; a family build drops the modules it loaded from require.cache when it ends",
     sites: [
       '.evalModule() ×2',
-      '.import()',
-      'createJiti ×5',
+      '.import() ×2',
+      'createJiti ×7',
       'import(<computed>) ×2',
       'require(<computed>)',
-      'withEmptyStylesheets ×5',
+      'require.cache',
+      'withEmptyStylesheets ×6',
     ],
   },
   'api/theme/build/core-interception.mjs': {
@@ -110,6 +107,10 @@ const RUNNERS = {
   'assets/codemods/integration-discovery.mjs': {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
+  },
+  'assets/codemods/run-codemod.mjs': {
+    runs: "jscodeshift's Babel parser and its TypeScript parser options (CommonJS), on the first declaration file, to parse it as declarations",
+    sites: ['require(./parser/tsOptions.js)', 'require(@babel/parser)'],
   },
   'authoring/example/preview.mjs': {
     runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
@@ -361,10 +362,6 @@ const RUNNERS = {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
   },
-  'foundation/fonts/font-stylesheet.mjs': {
-    runs: 'postcss, the first time a font stylesheet is read, so commands that read none do not load it',
-    sites: ['require(postcss)'],
-  },
   'foundation/fs/gather-cache.mjs': {
     runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
     sites: ['module.registerHooks'],
@@ -433,14 +430,19 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: "the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process (React DOM's client first, with a small document in place, so it reads the features a browser has), then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from",
     sites: [
-      '.import() ×6',
+      '.import() ×11',
       'createJiti ×2',
+      'globalThis[<computed>]',
       'module',
       'module.register',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/layers.mjs': {
+    runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
+    sites: ['g[<computed>] ×4'],
   },
   'foundation/render/picture-chrome.mjs': {
     runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
@@ -463,7 +465,7 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module',
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
       '.import() ×3',
       'importUrl ×2',
@@ -488,9 +490,13 @@ const RUNNERS = {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
   },
+  'foundation/integrations/pack-state.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is written)",
+    sites: ['child_process.spawnSync'],
+  },
   'foundation/integrations/validate-contributions.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written); and @babel/parser, loaded on first use, to read a contribution's source",
-    sites: ['child_process.spawnSync', 'require(@babel/parser)'],
+    runs: "@babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
@@ -508,14 +514,27 @@ const RUNNERS = {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
   },
+  'foundation/runtime/css-tree.mjs': {
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    sites: [
+      'require(<computed>)',
+      'require(mdn-data/css/properties.json)',
+      'require(mdn-data/css/selectors.json)',
+    ],
+  },
   'foundation/runtime/lazy-dependencies.mjs': {
-    runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    runs: 'Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
     sites: [
       'require(@babel/core)',
       'require(@babel/parser)',
       'require(jscodeshift)',
+      'require(postcss)',
       'require(postcss-selector-parser)',
     ],
+  },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
   },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
@@ -531,6 +550,10 @@ const RUNNERS = {
   },
   'scripts/generate-component-list.mjs': {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-docs-routes.mjs': {
+    runs: "node, to build the CLI's own docs tree on a copy of exactly the files the package publishes and store its routes (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-search-catalog.mjs': {
@@ -572,6 +595,8 @@ const LOADER_MODULES = {
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'integrationDocDeclaration',
+    'integrationDocsCatalog',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',

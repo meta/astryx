@@ -55,7 +55,7 @@ export const doc = {
       flag: '--mode <mode>',
       param: 'options.mode',
       description:
-        'light or dark: only that color mode. Colors only; sizes, numbers, fonts and shadows are the same in both modes, and a light-only or dark-only theme takes no --mode',
+        'light or dark: only that color mode. Colors only; sizes, numbers, fonts and shadows are the same in both modes. A light-only or dark-only theme takes --mode for the other mode only, which applies where Core draws that mode (a toast, a lightbox); its own mode needs no --mode',
     },
     {
       flag: '--only',
@@ -67,7 +67,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
+        'Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds sheet.png, every component), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file. A change removes the pictures --png took of the look before it (the preview, the sheet and each section sheet, in each mode) and the result names them; a section sheet\'s page stays, marked as out of date',
     },
   ],
   examples: [

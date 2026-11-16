@@ -18,6 +18,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
+import {PICTURE_WINDOW} from './picture-window.mjs';
 
 const [chrome, html, png, mode] = process.argv.slice(2);
 
@@ -29,6 +31,8 @@ const browser = spawn(
     '--no-sandbox',
     '--hide-scrollbars',
     '--remote-debugging-pipe',
+    // The browser's own network off: a picture asks the network for nothing.
+    ...QUIET_BROWSER_ARGS,
     `--user-data-dir=${path.join(os.tmpdir(), 'profile')}`,
     'about:blank',
   ],
@@ -139,9 +143,13 @@ try {
     flatten: true,
   });
   await send('Page.enable', {}, sessionId);
+  // The page loads its own files only: a remote stylesheet, font or image
+  // fails at once instead of holding the load on a network.
+  await send('Network.enable', {}, sessionId);
+  await send('Network.setBlockedURLs', {urls: NETWORK_URL_PATTERNS}, sessionId);
   await send(
     'Emulation.setDeviceMetricsOverride',
-    {width: 1280, height: 900, deviceScaleFactor: 1, mobile: false},
+    {...PICTURE_WINDOW, deviceScaleFactor: 1, mobile: false},
     sessionId,
   );
   await send(
@@ -159,6 +167,18 @@ try {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
+  // An overlay drawn open plays its opening animation (a fade-in) as the
+  // page loads: each animation that ends is run to its end before the
+  // picture, so the picture shows the overlay as it looks open, as
+  // Playwright's animations: 'disabled' does. A looping one (a spinner)
+  // stays as it is.
+  await send(
+    'Runtime.evaluate',
+    {
+      expression: `for (const a of document.getAnimations()) { if (a.effect?.getComputedTiming().iterations !== Infinity) a.finish(); }`,
+    },
+    sessionId,
+  );
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
   const {data} = await send(
@@ -169,7 +189,7 @@ try {
       clip: {
         x: 0,
         y: 0,
-        width: 1280,
+        width: PICTURE_WINDOW.width,
         height: Math.max(1, Math.ceil(size.height)),
         scale: 1,
       },

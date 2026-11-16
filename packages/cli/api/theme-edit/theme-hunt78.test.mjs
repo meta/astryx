@@ -11,8 +11,7 @@
  */
 
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -22,6 +21,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -165,12 +173,13 @@ describe('except keeps every excepted part, variant and state', () => {
     T,
   );
   it(
-    'all text bigger keeps the button text size',
+    'all text bigger except buttons says the button size differs by screen',
     async () => {
+      // Phones keep their own base text sizes while the dial moves the
+      // others: one size on the button would change it on phones.
       const r = await answer('make all text bigger except buttons');
-      expect(r.commands.some(c => /font-size \S+ --on button/.test(c))).toBe(
-        true,
-      );
+      expect(r.commands.some(c => /--on button/.test(c))).toBe(false);
+      expect(r.text).toMatch(/differs by screen/);
     },
     T,
   );
@@ -218,9 +227,13 @@ describe('except keeps every excepted part, variant and state', () => {
     'shadows everywhere but cards keep the cards own shadow',
     async () => {
       const r = await answer('remove shadows from everything except cards');
-      expect(r.commands.some(c => /box-shadow .+ --on card/.test(c))).toBe(
-        true,
-      );
+      // (The card picks its shadow by its elevation: the shadow tokens are
+      // kept on it, so every elevation keeps its shadow.)
+      expect(
+        r.commands.some(c =>
+          /(?:box-shadow|--shadow-[a-z]+) .+ --on card/.test(c),
+        ),
+      ).toBe(true);
     },
     T,
   );
@@ -298,7 +311,10 @@ describe('scope words', () => {
       );
       expect(
         (await answer('make the dialog header title bold')).commands[0],
-      ).toBe('set q font-weight 700 --on dialog-header-title-block');
+        // The title sets its own weight: its tokens, on the title block.
+      ).toMatch(
+        /^set q --text-heading-\d-weight 700 --on dialog-header-title-block$/,
+      );
     },
     T,
   );
@@ -320,7 +336,9 @@ describe('scope words', () => {
       expect(
         (await answer('make inputs with errors have a red background'))
           .commands[0],
-      ).toMatch(/^set q background '#dc2626' --on inputs --when status:error$/);
+      ).toMatch(
+        /^set q background-color '#dc2626' --on inputs --when status:error$/,
+      );
     },
     T,
   );
@@ -393,11 +411,9 @@ describe('two variants and elided clauses', () => {
 describe('a theme name typed in another case keeps the question', () => {
   it(
     'suggests the same how with the right name',
-    () => {
-      const r = spawnSync(
-        process.execPath,
+    async () => {
+      const r = await runCli(
         [
-          path.resolve(import.meta.dirname, '../../clients/cli/bin/astryx.mjs'),
           'experimental',
           'theme',
           'editor',
@@ -406,7 +422,7 @@ describe('a theme name typed in another case keeps the question', () => {
           '--theme',
           'Q',
         ],
-        {cwd, encoding: 'utf8'},
+        cwd,
       );
       expect(r.stdout + r.stderr).toContain("how 'rounder cards' --theme q");
     },
@@ -448,11 +464,11 @@ describe('"like" and "as" compare only in comparison forms', () => {
       // A value for that part.
       [
         'use red as the button background',
-        "set q background '#dc2626' --on button",
+        "set q background-color '#dc2626' --on button",
       ],
       [
         'use navy as the card background',
-        "set q background '#1e3a8a' --on card",
+        "set q background-color '#1e3a8a' --on card",
       ],
       ['use 8px as the button radius', 'set q border-radius 8px --on button'],
       ['use 12px as the card padding', 'set q padding 12px --on card'],
@@ -469,7 +485,9 @@ describe('"like" and "as" compare only in comparison forms', () => {
     /** @type {Array<[string, string, string]>} */ ([
       // Comparisons: the subject changes, the other part never.
       ['cards as round as buttons', 'card', 'button'],
-      ['make cards as round as dialogs', 'card', 'dialog'],
+      // (Cards and dialogs read the same corner token, so "as round as
+      // dialogs" changes nothing; badges read their own.)
+      ['make badges as round as dialogs', 'badge', 'dialog'],
       ['dialogs the same padding as cards', 'dialog', 'card'],
       ['make badges rounded like buttons', 'badge', 'button'],
       ['make cards round like the dialogs are', 'card', 'dialog'],
@@ -493,9 +511,12 @@ describe('the answer that joins every clause is measured too', () => {
         'make form controls like inputs and checkboxes rounder',
         {cwd, theme: 'q'},
       );
-      expect(
-        (data.results ?? []).some(r => /^all of it, in order/.test(r.text)),
-      ).toBe(false);
+      // (Both clauses work now: checkboxes leave out the radio, which is
+      // fully round already. "All of it" holds both, never one.)
+      const all = (data.results ?? []).find(r =>
+        /^all of it, in order/.test(r.text),
+      );
+      expect(all?.commands.length ?? 0).not.toBe(1);
     },
     T,
   );
@@ -522,6 +543,36 @@ describe('the answer that joins every clause is measured too', () => {
       );
       expect(commands.some(c => c.includes('--on checks'))).toBe(false);
       expect(commands[0]).toBe('set q corners more --on inputs');
+      // A radio's circle alone is no corner the dial reaches.
+      await expect(
+        themeEditSet('q', 'corners', 'more', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        }),
+      ).rejects.toThrow(/a radio's circle \(border-radius 50%\), not a corner/);
+      // A square radio is asked of the radio by name: its own border-radius.
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditSet('q', 'corners', 'square', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(
+        err.suggestions.map((/** @type {{name: string}} */ x) => x.name),
+      ).toContainEqual(
+        expect.stringMatching(
+          / set q border-radius 0 --on radio-indicator --only$/,
+        ),
+      );
+      expect((await answer('make radios square')).commands).toEqual([
+        'set q border-radius 0 --on radio-indicator --only',
+      ]);
     },
     T,
   );

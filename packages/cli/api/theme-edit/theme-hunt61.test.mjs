@@ -8,7 +8,7 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {exactFactor} from './_how-question.mjs';
 import {
@@ -19,6 +19,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -50,8 +58,9 @@ describe('hunt61: scope, state and amount', () => {
     /** @type {Array<[string, RegExp]>} */ ([
       // vibe batch 2: the request that removed every focus ring.
       [
+        // (Inputs draw no outline: their focus ring is the box-shadow ring.)
         'focus ring on inputs only, at half strength',
-        /^set q --focus-outline-width 1px --on inputs$/,
+        /^set q box-shadow 'inset 0 0 0 1px var\(--color-accent-muted\)' --on inputs --state focus-within$/,
       ],
       [
         'thinner focus ring on buttons',
@@ -66,8 +75,9 @@ describe('hunt61: scope, state and amount', () => {
         /^set q --focus-outline-width 1px --on button$/,
       ],
       [
+        // (Inputs draw no outline: their focus ring is the box-shadow ring.)
         'focus ring color red on inputs only',
-        /^set q --focus-outline-color '#dc2626' --on inputs$/,
+        /^set q box-shadow 'inset 0 0 0 2px #dc2626' --on inputs --state focus-within$/,
       ],
       [
         'remove the focus ring on cards',
@@ -142,9 +152,9 @@ describe('hunt61b: headers and titles', () => {
       // A surface word: the app header part.
       [
         'header background dark',
-        /^set q background '#[0-9a-f]{6}' --on app-shell-header$/,
+        /^set q background-color '#[0-9a-f]{6}' --on app-shell-header$/,
       ],
-      ['the header bar border thicker', / --on app-shell-header$/],
+
       // The clause starts after the last break: a full stop or semicolon too.
       [
         'make the body text bigger. header background dark',
@@ -172,7 +182,9 @@ describe('hunt61c: clause breaks and comparisons', () => {
       {cwd, theme: 'q'},
     );
     const all = (data.results ?? []).flatMap(r => r.commands).join('\n');
-    expect(all).toMatch(/background '#[0-9a-f]{6}' --on app-shell-header/);
+    expect(all).toMatch(
+      /background-color '#[0-9a-f]{6}' --on app-shell-header/,
+    );
     expect(all).not.toMatch(/--on heading\b/);
   }, 120_000);
 

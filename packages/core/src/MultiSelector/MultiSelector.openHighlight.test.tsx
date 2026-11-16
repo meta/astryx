@@ -124,3 +124,22 @@ describe('MultiSelector: the option a closed list highlights when it opens', () 
     });
   });
 });
+
+describe('MultiSelector highlighted theme state', () => {
+  it('marks only the active option row highlighted', () => {
+    const trigger = renderMultiSelector(OPTIONS);
+    trigger.focus();
+    fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+
+    const id = trigger.getAttribute('aria-activedescendant');
+    const active = document.getElementById(id ?? '');
+    const marked = Array.from(
+      document.querySelectorAll('.astryx-multi-selector-option'),
+    ).filter(row => row.getAttribute('data-highlighted') === 'highlighted');
+    expect(marked).toHaveLength(1);
+    expect(active).not.toBeNull();
+    expect(marked[0] === active || marked[0].contains(active)).toBe(true);
+    expect(marked[0]).toHaveTextContent('Hard');
+  });
+});

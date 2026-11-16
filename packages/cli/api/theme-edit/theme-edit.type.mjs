@@ -49,7 +49,7 @@
  * @typedef {object} ThemeEditPreviewFields
  * @property {string | null} preview - The sample app page with the theme, one self-contained HTML file; null when the components could not be rendered.
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
- * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
+ * @property {string | null} pictureProblem - Why a picture was not taken (when some were, which were and which were not), and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
  * @property {string} [sheetStale] - Set when sheet.html (the sheet of every component, made by `show`) shows the theme as it was before this change: it says so at its top until `show` makes it again.
  * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
@@ -76,6 +76,15 @@
  */
 
 /**
+ * One problem a theme has, with the command that fixes it: the text token
+ * set where the text sits, or the border color, for the mode, to the black
+ * or white that reads there. `fix` is null when no one command does (a
+ * color the palette cannot make read: its note says what to change).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {{problem: string, fix: string | null}} ThemeEditProblem
+ */
+
+/**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeData
  * @property {string} theme
@@ -83,6 +92,7 @@
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
+ * @property {ThemeEditSetting[]} [alsoRemoved] - On `undo` of a setting listed more than once by hand: the other entries, removed with it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
@@ -92,7 +102,11 @@
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
  * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds.
+ * @property {Array<{note: string, run: string[]}>} leftOut - What a whole-theme change leaves out, each with the commands that reach it, one per part: the parts drawn as pills that square corners leave round; the surfaces a border width does not reach, and the dividers it moves. The text output prints it right under the status line.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
+ * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail. The text output leads with them, under the status line.
+ * @property {number} [missed] - How many misses the theme's own changes left (show lists each, with the line that reaches it); the text output counts them near its top.
+ * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -125,10 +139,13 @@
  * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
  * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
+ * @property {Array<{part: string, state?: string, why: string, line: string}>} data.missed - The parts the theme's own changes should have reached and did not, most flagged first, each with why and the line that reaches it (its steps joined with &&, the text on a fill changed with it): with the accent changed, a disabled variant drawn as the accent at reduced opacity, a selected look on the base's fill, a status fill whose color is not generated; with the page surfaces changed, an inverted surface that no longer stands out from the page; with the corners changed, a pill; with the border width changed, a borderless surface. A setting that covers the aspect takes a part off.
+ * @property {string[]} data.unreached - The parts with a fill of their own the theme leaves on its base's look, most visible first: no setting is on them, and their fill or text color is still the base's (empty for a theme with no settings).
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
+ * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it. The text output ends with them.
  * @property {string[]} data.notes
  * @property {string} data.preview
  * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
@@ -137,6 +154,7 @@
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
+ * @property {string} [data.look] - With `png`, when the run took them: the pictures to open, the sample page's and the open states' (every menu, tooltip, popover and list drawn open). The text output says it first and last.
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
  * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
  * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
@@ -172,7 +190,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[], newProblems: ThemeEditProblem[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back.
  */
 
 /**

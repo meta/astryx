@@ -178,9 +178,10 @@ describe('hunt69: how amounts', () => {
   }, 240_000);
 
   it('a corner amount with no radius to read says it is a step', async () => {
-    expect(await how('halve the corner radius on the popover', 's')).toMatch(
-      /one step, not an exact amount/,
-    );
+    expect(
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      await how('halve the corner radius on the trigger menu', 's'),
+    ).toMatch(/one step, not an exact amount/);
   }, 240_000);
 
   it('zero words remove the asked thing, on the asked state', async () => {

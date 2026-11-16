@@ -10,8 +10,14 @@
 
 import {createRequire} from 'node:module';
 import {wordTable} from './_tables.mjs';
+import {cssTree, mdnCssProperties} from '../../foundation/runtime/css-tree.mjs';
 
 const require = createRequire(import.meta.url);
+
+// Resolved when this module loads, before a command stats any file, as
+// css-tree is (foundation/runtime/css-tree.mjs).
+const SYNTAX_PATCHES =
+  require.resolve('@csstools/css-syntax-patches-for-csstree');
 
 /**
  * Properties browsers ship that MDN does not list yet (Chrome experiments).
@@ -35,18 +41,11 @@ const NOT_IN_MDN_YET = [
   'window-drag',
 ];
 
-/** @type {any} */
-let tree = null;
 /** css-tree, loaded once. */
-const csstree = () => (tree ??= require('css-tree'));
+const csstree = cssTree;
 
 /** The MDN property data css-tree reads, at the version css-tree pins. */
-const mdnProperties = () =>
-  /** @type {Record<string, {status?: string, initial?: string | string[]}>} */ (
-    createRequire(require.resolve('css-tree/package.json'))(
-      'mdn-data/css/properties.json',
-    )
-  );
+const mdnProperties = mdnCssProperties;
 
 /** @type {ReadonlySet<string> | null} */
 let names = null;
@@ -75,13 +74,26 @@ export function cssProperties() {
   return names;
 }
 
+/** @type {ReadonlySet<string> | null} */
+let vendorNames = null;
+/**
+ * The vendor-prefixed property names css-tree's data lists
+ * (`-webkit-line-clamp`, `-moz-appearance`).
+ * @returns {ReadonlySet<string>}
+ */
+export function vendorProperties() {
+  vendorNames ??= new Set(
+    Object.keys(csstree().lexer.properties).filter(k => /^-[a-z]+-/.test(k)),
+  );
+  return vendorNames;
+}
+
 /**
  * The current specifications' grammar, as patches to css-tree's: the
  * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
  * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
  */
-const syntaxPatches = () =>
-  require('@csstools/css-syntax-patches-for-csstree').next;
+const syntaxPatches = () => require(SYNTAX_PATCHES).next;
 
 /** @type {any} */
 let patched = null;
@@ -433,6 +445,20 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
+/**
+ * A value with each unit split off its number by a space joined to it
+ * (`50 %`, `200 ms`, `8 PX`), for every unit CSS reads (the table above, and
+ * `%`); two numbers (`12 16px`) and a word that is no unit stay apart.
+ * @param {string} value
+ */
+export function unitsJoined(value) {
+  return String(value).replace(
+    /(\d)\s+(%|[a-z]+)(?=$|[\s,/)])/gi,
+    (all, digit, unit) =>
+      unit === '%' || UNIT_TYPES[unit.toLowerCase()] ? `${digit}${unit}` : all,
+  );
+}
+
 /** A value of each type, to match where a math function stands. */
 const TYPE_SAMPLES = wordTable(
   /** @type {Record<string, string>} */ ({
@@ -991,27 +1017,28 @@ export function grammarText(syntax) {
 /** The math functions, by name, for a check of whether a value holds one. */
 export const MATH_FUNCTION = new RegExp(`\\b(${[...MATH].join('|')})\\(`, 'i');
 
-/** @type {Map<string, boolean>} */
-const percentCache = new Map();
+/** @type {Map<string, Set<string>>} */
+const typesCache = new Map();
 /**
- * Whether a property's grammar takes a percentage anywhere, through the
- * types it names (padding does; border-width and outline-offset do not).
+ * Every type a property's grammar names, through the types and properties
+ * it refers to (padding: length-percentage, length, percentage, …).
  * @param {string} prop
+ * @returns {Set<string>}
  */
-export function takesPercentage(prop) {
-  const known = percentCache.get(prop);
-  if (known != null) return known;
+function grammarTypes(prop) {
+  const known = typesCache.get(prop);
+  if (known) return known;
   const t = csstree();
+  /** @type {Set<string>} */
+  const found = new Set();
   const seen = new Set();
-  let found = false;
   /** @param {any} syntax */
   const walk = syntax => {
-    if (!syntax || found) return;
+    if (!syntax) return;
     t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
-      if (found) return;
       if (n.type === 'Type') {
-        if (/percentage/.test(n.name)) found = true;
-        else if (!seen.has(n.name)) {
+        found.add(n.name);
+        if (!seen.has(n.name)) {
           seen.add(n.name);
           walk(t.lexer.types[n.name]?.syntax);
         }
@@ -1022,8 +1049,35 @@ export function takesPercentage(prop) {
     });
   };
   walk(propertyGrammar(prop));
-  percentCache.set(prop, found);
+  typesCache.set(prop, found);
   return found;
+}
+
+/**
+ * Whether a property's grammar takes a percentage anywhere, through the
+ * types it names (padding does; border-width and outline-offset do not).
+ * @param {string} prop
+ */
+export function takesPercentage(prop) {
+  return [...grammarTypes(prop)].some(n => /percentage/.test(n));
+}
+
+/**
+ * Whether every number a property takes is whole: its grammar names
+ * `<integer>` and no other numeric type (z-index, order; never opacity or
+ * a length). A comma between such digits can only group thousands.
+ * @param {string} prop
+ */
+export function takesWholeNumbersOnly(prop) {
+  const types = grammarTypes(prop);
+  return (
+    types.has('integer') &&
+    ![...types].some(n =>
+      /^(number|length|percentage|length-percentage|dimension|angle|time|frequency|resolution|flex|ratio)$/.test(
+        n,
+      ),
+    )
+  );
 }
 
 /** The generic font families CSS names, which are never quoted. */

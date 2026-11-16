@@ -89,6 +89,7 @@ import {
   checkAppThemes,
   checkThemes,
   themeImportWiring,
+  withProviderWiring,
 } from './theme-checks.mjs';
 import {
   availableLine,
@@ -123,6 +124,7 @@ import {
   corePeerRange,
   isLocalThemeOwner,
   readThemeState,
+  builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -284,6 +286,18 @@ function projectRootOf(ctx) {
 }
 
 /* ── individual checks ────────────────────────────────────────────────── */
+
+/**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when they are not paths it can check: the path itself when there is
+ * one, else the project folder that holds them all.
+ * @param {string[]} paths
+ * @param {{cwd?: string}} [options]
+ * @returns {string | null}
+ */
+export function builtTarget(paths, {cwd = process.cwd()} = {}) {
+  return builtTargetOf(cwd, paths);
+}
 
 /**
  * Check 1 — running Node version meets the CLI's minimum.
@@ -1996,7 +2010,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+        "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     };
   }
   if (
@@ -2324,7 +2338,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, the docs not-found hint's name summaries, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB and removes its oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written in the last day, or read in the last day where the file system records reads.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2413,8 +2427,6 @@ export async function runChecks(options = {}) {
   let projectError = null;
   /** @type {DoctorContext['iconSets']} */
   let iconSets = null;
-  /** @type {DoctorContext['iconPlaceholders']} */
-  let iconPlaceholders = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
@@ -2512,9 +2524,6 @@ export async function runChecks(options = {}) {
       }
       try {
         iconSets = await project.iconSets();
-        if (iconSets.choice.configured) {
-          iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
-        }
       } catch {
         iconSets = null;
       }
@@ -2545,8 +2554,34 @@ export async function runChecks(options = {}) {
     configError,
     projectError,
     iconSets,
-    iconPlaceholders,
+    // Set after the docs checks, below.
+    iconPlaceholders: null,
   };
+
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read. They
+  // run first, though they print last: a kept check depends on every file
+  // its run read before it, and the placeholder-icon scan and the wiring
+  // scan below read the app's source, which the docs never read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  const docsChecks = [
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  ];
+  // Only a project that names an icon set scans its source for placeholders.
+  if (iconSets?.choice.configured) {
+    try {
+      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      // A scan that fails leaves the icon facts unknown.
+      ctx.iconSets = null;
+    }
+  }
 
   /** @type {DoctorCheck[]} */
   const checks = [];
@@ -2565,7 +2600,10 @@ export async function runChecks(options = {}) {
         () => themeImportWiring(cwd),
         THEME_WIRING_CODEC,
       );
-      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
+      checks.push(
+        checkThemes(cwd, appThemeChecks, wiring),
+        ...withProviderWiring(appThemeChecks, wiring),
+      );
       checks.push(await checkConfig(ctx));
     }
   }
@@ -2604,22 +2642,7 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  // The checks that read only files, each kept while every file it read is
-  // unchanged; the Core the project loads is part of what they read.
-  const where = {cwd, coreDir: coreDir ?? null};
-  checks.push(
-    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-tree', ...where}, () =>
-      checkDocsTree(ctx),
-    ),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
-      checkDocsProgressiveDisclosure(ctx),
-    ),
-  );
+  checks.push(...docsChecks);
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

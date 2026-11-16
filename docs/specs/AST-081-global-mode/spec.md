@@ -392,16 +392,26 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    integrations' theme records, the docs not-found hint's
-    name summaries of folder trees, and doctor's file-only docs checks and
-    theme-wiring scan, which doctor keeps only while the folder exists), a
+    each integration's components with the doc parts the not-found matcher
+    scores, integrations' theme records, what `theme build` checks a theme
+    against in Core's component docs, the lookup commands' not-found hint's
+    name summaries of folder trees, npm's list of the files an integration
+    package packs (for `integration check` and `doctor integration validate`
+    in the package's own folder), the locale and time zone a run's debug
+    record names (on Linux, kept by any command that delivers a debug
+    record), the CLI's own docs tree, and doctor's
+    file-only docs checks and theme-wiring scan, which doctor keeps only
+    while the folder exists), a
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
-    never `doctor`; that run keeps its gathers at once; used only while it is
+    never `doctor`; that run keeps its gathers at once; a lookup command's
+    not-found path may create the per-user catalogs folder to keep its name
+    index, and an integration package's `integration check` of itself may
+    create it to keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged; a
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
@@ -418,8 +428,9 @@ works on is `spec:AST-040` FR9's.
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
-    verifying a package, and for Node's compile cache of the CLI's own modules
-    in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
+    verifying a package, for a scratch copy of a template at a path the caller
+    names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
+    compile cache of the CLI's own modules in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
     written from that run, used only while it is a real folder the user owns
     and others cannot open, never where the system has no user ids, and off
     when `NODE_DISABLE_COMPILE_CACHE` is set;

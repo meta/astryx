@@ -8,7 +8,7 @@
  * labels in a one-mode theme, and an old keyword no browser applies.
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -18,6 +18,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;

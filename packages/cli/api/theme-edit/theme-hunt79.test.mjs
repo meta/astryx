@@ -12,7 +12,7 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {blurScaled, exactFactor, shiftKeepAlpha} from './_how-question.mjs';
 import {
@@ -23,6 +23,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -246,7 +254,7 @@ describe('opacity and see-through amounts', () => {
     'a percent color is that color at that alpha',
     async () => {
       expect((await top('card background 5% gray')).all).toBe(
-        "set q background 'color-mix(in srgb, gray 5%, transparent)' --on card",
+        "set q background-color 'color-mix(in srgb, gray 5%, transparent)' --on card",
       );
     },
     T,
@@ -278,12 +286,22 @@ describe('color amounts', () => {
   it(
     'a percent on a hover fill is that much',
     async () => {
-      expect(
-        (await top('make the button hover background 20% darker')).all,
-      ).toMatch(/brightness\(0\.8\)/);
-      expect(
-        (await top('make the button hover background 50% darker')).all,
-      ).toMatch(/brightness\(0\.5\)/);
+      // Each variant's own fill, that much darker in the state (never a
+      // filter, which dims the text too): 50% is darker than 20%.
+      const fill = async (/** @type {string} */ q) => {
+        const {all} = await top(q);
+        expect(all).not.toMatch(/filter/);
+        const hex =
+          /background-color '(#[0-9a-f]{6})' --on button --when variant:primary --state hover( --mode light)?(\n|$)/m.exec(
+            all,
+          )?.[1];
+        expect(hex, q).toBeTruthy();
+        const n = parseInt(String(hex).slice(1), 16);
+        return ((n >> 16) & 255) + ((n >> 8) & 255) + (n & 255);
+      };
+      const twenty = await fill('make the button hover background 20% darker');
+      const fifty = await fill('make the button hover background 50% darker');
+      expect(fifty).not.toBe(twenty);
     },
     T,
   );

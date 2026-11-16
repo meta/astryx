@@ -12,6 +12,10 @@
  */
 
 import {stem, STOPWORDS, SYNONYMS} from '../../search/search.mjs';
+import {
+  matchWholeName,
+  nameWords as foldWords,
+} from '../../../foundation/text/suggest-order.mjs';
 
 /**
  * Words search drops that name layout: "side navigation", "side by side".
@@ -42,6 +46,14 @@ const OVERLAY_FRAMES = new Set([
  * explicit `Shell -` category (architecture:template-authoring/INV7).
  */
 export const SHELL_FAMILY = 'Shell';
+
+/**
+ * Whether a ranked template can be the app shell: a template of the Shell
+ * family that is not kept off the gallery. A hidden template is no starter.
+ * @param {{family: string, hidden?: boolean} | null | undefined} page
+ */
+export const isAppShell = page =>
+  page?.family === SHELL_FAMILY && page.hidden !== true;
 
 /** A container phrase: "in a modal", "inside the side panel". */
 export const CONTAINER_PHRASE =
@@ -219,6 +231,145 @@ export function framesOf(query) {
   return held;
 }
 
+/**
+ * The parts of a page template that its name and descriptor words come from.
+ * @typedef {object} NamedTemplate
+ * @property {string} name
+ * @property {string} [displayName]
+ * @property {string} [category]
+ * @property {string[]} [keywords]
+ * @property {string} [description]
+ */
+
+/**
+ * An idea with every run of its words that names a page template written as
+ * that template's own words: "a KanbanBoard page", "a kanban-board page" and
+ * "a kanabn board page" read as the template id's words. Only a whole name
+ * counts (matchWholeName), a run never crosses punctuation, and the only slip
+ * read is a swap of two neighbouring letters in a word of six or more letters
+ * that the templates' own descriptors never use, so a real word ("pane",
+ * "seating") is never respelled into a name. A run already written as the
+ * name's words is left as it is.
+ * @param {string} idea
+ * @param {NamedTemplate[]} pages the project's page templates
+ * @returns {string}
+ */
+export function readNames(idea, pages) {
+  const text = String(idea ?? '');
+  const names = pages.map(p => p.name);
+  const known = descriptorWordsOf(pages);
+  const tokens = [...text.matchAll(/[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*/g)];
+  const longest = Math.max(1, ...names.map(n => n.split('-').length));
+  const plain = (/** @type {string} */ s) =>
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  let out = '';
+  let at = 0;
+  for (let i = 0; i < tokens.length;) {
+    let matched = 0;
+    let name = null;
+    for (let n = Math.min(longest, tokens.length - i); n >= 1 && !name; n--) {
+      const run = tokens.slice(i, i + n);
+      const gaps = run.slice(1).every((t, k) => {
+        const prev = run[k];
+        return /^\s+$/.test(text.slice(prev.index + prev[0].length, t.index));
+      });
+      if (!gaps) continue;
+      const typed = run.map(t => t[0]).join(' ');
+      const found = matchWholeName(typed, names);
+      if (!found) continue;
+      const nameWords = found.split('-');
+      const words = plain(typed);
+      const sameWords =
+        words.length === nameWords.length &&
+        foldWords(typed).join('') === foldWords(found).join('');
+      if (sameWords) continue;
+      const slipped = words.filter(w => !nameWords.includes(w));
+      const joined = words.length < nameWords.length;
+      if (!joined && slipped.some(w => known.has(stem(w)))) continue;
+      const typedFold = foldWords(typed).join('');
+      const nameFold = foldWords(found).join('');
+      if (
+        typedFold !== nameFold &&
+        (!swapsTwo(typedFold, nameFold) ||
+          slipped.some(w => w.length < SLIP_MIN_LENGTH))
+      ) {
+        continue;
+      }
+      name = found;
+      matched = n;
+    }
+    if (!name) {
+      i++;
+      continue;
+    }
+    const first = tokens[i];
+    const last = tokens[i + matched - 1];
+    out += text.slice(at, first.index) + name.split('-').join(' ');
+    at = /** @type {number} */ (last.index) + last[0].length;
+    i += matched;
+  }
+  return out + text.slice(at);
+}
+
+/**
+ * The fewest letters a slipped word has before it can be read as a name:
+ * shorter words are too often other real words one slip away.
+ */
+const SLIP_MIN_LENGTH = 6;
+
+/**
+ * Whether a typed name is a name with two neighbouring letters swapped. A
+ * name takes only this slip: a dropped, changed or added letter turns many
+ * everyday words ("seating", "retail", "galley") into a template name.
+ * @param {string} typed
+ * @param {string} name
+ * @returns {boolean}
+ */
+function swapsTwo(typed, name) {
+  if (typed.length !== name.length) return false;
+  const diff = [...typed].flatMap((c, i) => (c === name[i] ? [] : [i]));
+  return (
+    diff.length === 2 &&
+    diff[1] === diff[0] + 1 &&
+    typed[diff[0]] === name[diff[1]] &&
+    typed[diff[1]] === name[diff[0]]
+  );
+}
+
+/** @type {WeakMap<object, Set<string>>} */
+const descriptorWordCache = new WeakMap();
+
+/**
+ * Every stemmed word the page templates' own descriptors use: ids, display
+ * names, categories, keywords and descriptions.
+ * @param {NamedTemplate[]} pages
+ * @returns {Set<string>}
+ */
+function descriptorWordsOf(pages) {
+  let set = descriptorWordCache.get(pages);
+  if (!set) {
+    set = new Set();
+    for (const p of pages) {
+      const text = [
+        p.name,
+        p.displayName,
+        p.category,
+        ...(p.keywords ?? []),
+        p.description,
+      ].join(' ');
+      for (const w of String(text)
+        .toLowerCase()
+        .match(/[a-z0-9]+/g) ?? [])
+        set.add(stem(w));
+    }
+    descriptorWordCache.set(pages, set);
+  }
+  return set;
+}
+
 /** @param {string} text */
 export const normalized = text =>
   (
@@ -252,7 +403,7 @@ export const SYNONYMS_OF = (() => {
 /**
  * @typedef {import('../_adapter.mjs').PageTemplate} PageTemplate
  * @typedef {import('../_adapter.mjs').ComponentWords} ComponentWords
- * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>, typical: number}} RankedPage
+ * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>, typical: number, hidden: boolean}} RankedPage
  * @typedef {'page' | 'part' | 'edit'} IdeaKind
  */
 

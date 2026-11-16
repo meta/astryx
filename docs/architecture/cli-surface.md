@@ -42,6 +42,7 @@ verified_by:
     api/theme/integration-themes.test.mjs,
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
+    api/build/build.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -281,10 +282,16 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, integrations' theme records, the docs not-found
-  hint's name summaries, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands'
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
-  anything the CLI did not create.
+  anything the CLI did not create. A template that
+  `astryx template <name> <path>` writes may also go, as a scratch copy, to a
+  path the caller names in the system temp folder (`os.tmpdir()`, or `/tmp` on
+  a POSIX system; never a temp folder that is a disk's root or holds the home
+  folder), under the checks a write in the project has: no link carries it out
+  of that folder, and an existing file is replaced only with `--overwrite`
+  (DEC-15).
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
   command or its programmatic API) to a root, a change that makes the operation
@@ -550,6 +557,17 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `astryx search` meet it first.
   A link between docs names its target by doc identity and is resolved on
   every read; Doctor warns on one that names no doc.
+- **INV38 — A printed command runs as printed, and a value can take a
+  placeholder's place.** A command that the CLI prints runs as printed. A
+  command that it carries as a string in its JSON (such as `astryx build`'s
+  `start.command`) runs once the caller puts its own invocation in place of the
+  `astryx` prefix, or in front of a bare subcommand. In both, the one other
+  exception is an argument shown as a `<placeholder>`, which the CLI prints
+  only where it knows no value. When a release knows the value, it prints the
+  value in the placeholder's place, and that is a compatible `[fix]`
+  (`spec:AST-017` FR54): the field stays a string and the command does the same
+  work. A program that fills a placeholder by replacing its text depends on
+  text that no release keeps, so it is not a released victim.
 - **INV28 — Every result names the package each artifact comes from.** A
   `--json` result about one artifact (a component, doc, template, or hook)
   carries `package` in its envelope, directly after `type`. A result
@@ -978,6 +996,22 @@ or React cannot be read beside the package, is listed as not checked
 Rejected: every export of the package in scope without an import (an app
 that copies the example needs the import), and stand-in values for names
 an example leaves undefined (they hide what the preview shows).
+
+### DEC-15 — A scratch copy of a template may go to the system temp folder
+
+**Decider:** `josephfarina`, `2026-11-15`
+
+People and agents keep a copy of a template outside the project to read it in
+parts before they scaffold it. The system temp folder is the place made for
+such files, so `astryx template <name> <path>` writes a scratch copy to a path
+in it instead of refusing the path (INV10). The checks a write in the project
+has apply there too, so the copy cannot follow a link out of the temp folder
+or replace a file without `--overwrite`. A temp folder that is a disk's root or
+holds the home folder is not one, so a misset `TMPDIR` cannot open the whole
+disk or the home folder to scratch copies.
+
+Rejected: keeping scratch copies inside the project (they land in folders the
+app builds, typechecks and lints).
 
 ## Verification
 

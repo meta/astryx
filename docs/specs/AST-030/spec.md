@@ -399,7 +399,8 @@ they are separately named.
   visual, accessibility and RTL owners a maintainer opts a pull request into
   with their `ci:run-*` labels are unaffected by these per-author limits. Every
   run of the CI and Main workflows, of any event, waits for room before its jobs
-  start, except the CI workflow's Storybook build, which starts as soon as there
+  start, except two CI workflow jobs. A pull-request run's `superseded-runs`
+  sweep starts with the run (below). The Storybook build starts as soon as there
   is room for it while every job that uses it waits for room for the run: it
   starts once the other active runs' estimated jobs plus its own most fit under
   about ninety, and a pull-request run also waits, for that wait's first
@@ -411,7 +412,8 @@ they are separately named.
   jobs of room every four minutes, inside its longest wait. A pull-request run
   that finds no room waits like the others, on its slim runner, until its
   longest wait (12 minutes); waiting runs count only what they run: their
-  waiting job and a Storybook build that found room. A pull-request run still without room at its
+  waiting job, a Storybook build that found room, and the `superseded-runs`
+  sweep while it runs. A pull-request run still without room at its
   longest wait looks once more and starts only if no other pull-request run
   started at its longest wait in the last ten minutes and no run that waited
   longer still waits; otherwise it stops with "CI is full: re-run all jobs or
@@ -422,12 +424,16 @@ they are separately named.
   tool that grants CI capacity reads it through the same count admission uses
   (`.github/actions/ci-admission/count.mjs`), with no count of its own. The contributor class of FR29 is granted by the capacity tool before this admission; its runs are then admitted like any pull request run.
   A run for a head that is no longer its pull request's head passes no
-  required context. Once it is admitted, a pull-request run from this
-  repository cancels each unfinished CI run of its pull request for another
-  head; it never cancels a run for the current head, and a fork's run cancels
-  nothing. A run whose own head is superseded stops before it waits and
-  cancels itself. `build`, `test` and `docsite-test` read the head again as
-  they report, and fail with the reason when it is no longer the run's head.
+  required context. The newest run of a pull request wins, in the order its
+  runs were created; a re-run keeps its run's place. A run is superseded only
+  when the newest run of its pull request is for another head; a head read
+  alone never makes a run stop itself. As it starts, before it waits for room,
+  a pull-request run from this repository that is not superseded cancels each
+  unfinished CI run of its pull request that was created before it for
+  another head; it never cancels a newer run, and a fork's run cancels
+  nothing. A superseded run stops before it waits and cancels only itself.
+  `build`, `test` and `docsite-test` read the head again as they report, and
+  fail with the reason when it is no longer the run's head.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -521,17 +527,28 @@ they are separately named.
   inside the fifteen-minute job budget (DEC-17). Node legs, here and on a pull
   request, split the files by their recorded test time rather than by count, so
   the slowest files never share a leg and the slowest single file sets the
-  floor; a file with no recorded time counts as the median, and which files run
-  never depends on the times. A dispatch may name `sha`, a commit in `main`'s
-  history that has the size records the build lane keeps, and every lane checks
-  that commit out; without it the run validates `main`'s tip. A person's `sha` run
-  waits for no other validation and replaces nothing; like every Main run, it
-  waits for room under CI's ceiling (FR16). One full unit run of `main` runs at
-  a time and a newer one waits (FR21); a push's fast checks run beside it. Only
-  a release re-check, which the workflow token sends with `recheck` and `main`'s
-  tip as `sha`, cancels the running unit run, because the re-check validates
-  that commit in full itself. Pull-request legs keep their
-  shape.
+  floor. In the Node legs, a file with no recorded time counts as the ninetieth
+  percentile of the recorded times, and which files run never depends on the
+  times. No pull-request check fails on the record's coverage or on a
+  recorded time's drift. After each successful full unit run of `main`, and
+  every six hours as a backstop, a job compares the record with that run's measured times: when
+  fewer than nine in ten of the Node project's test files have a recorded time,
+  or a recorded file ran more than one and a half times its recorded time and
+  more than a minute over it once its leg's own slowdown is taken out, it
+  regenerates the record from that run's Node legs and opens one
+  durations-only pull request on a fixed branch, or updates the open one. It
+  never pushes to `main`. A dispatch may name `sha`, a commit in `main`'s history that has the
+  size records the build lane keeps, and every lane checks that commit out;
+  without it the run validates `main`'s tip. A person's `sha` run waits for no
+  other validation and replaces nothing; like every Main run, it waits for room
+  under CI's ceiling (FR16). One full unit run of `main` runs at a time and a
+  newer one waits (FR21); a push's fast checks run beside it. Only a release
+  re-check, which the workflow token sends with `recheck` and `main`'s tip as
+  `sha`, cancels the running unit run, because the re-check validates that
+  commit in full itself. Pull-request legs never grow to finish sooner: a pull
+  request runs as many Node legs as the recorded times need for every leg to
+  end inside its job budget, at most eight, at the widths admission picks
+  (FR16); a suite that needs more fails every Node leg with the reason.
 
 - **FR23 — A release-check finishes in minutes, and the release owner can
   re-check `main`'s tip at once.** A release-check runs its browser owners in
@@ -753,7 +770,8 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR20     | `ci-heavy-deferral.test.mjs` over ci.yml, lint.yml and pr-comment.yml                                                                                                                         | agent push; marked ready; opened; reopened; re-run; another author; release branch; merge-back; spec-only change; Lab-only change; a release-check and an opt-in label run, where the decision skips; a failed-jobs re-run of a deferred push                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a heavy job runs on a deferred push, a required context passes or skips on one, a ready, reopened or re-run pull request defers, a spec-only or Lab-only change defers, the report hides the deferral, or a job below the decision skips because it skipped                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs`                                                                          | push run; dispatched unit run; tip with the scheduler's or a person's release-check, or a person's maintenance capture; unit run cancelled, skipped or timed out; newer recheck or person's run of the tip; a person's validation of an older commit; cut commit with and without a passing unit run                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR21     | `ci-heavy-lanes.test.mjs` issue-closing cases                                                                                                                                                 | a newest unit run that succeeded with the bot's issue open; a person's issue with the same title; no open issue; a newest run that did not complete; a failed lookup; a named run whose event commit differs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | the bot's issue stays open after a success, a person's issue closes, a call runs with no open issue, the issue closes on an incomplete run, a failed lookup fails the dispatcher, or the comment names the event commit                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` over the recorded Node times                                            | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`                                                                                                                                                                                                                                                                                                                                                                                                      | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, or a split that depends on collection order fails                                                                                                                                                                                                                                                                |
+| FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` and `vitest-node-legs.test.mjs` over the recorded Node times            | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`; a pull request's Node plan over the recorded suite, a suite past its budget at eight legs and a file past one leg's budget                                                                                                                                                                                                                                                                          | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, a split that depends on collection order, or a Node plan past its budget that does not fail its legs fails                                                                                                                                                                                                       |
+| FR22     | `node-record-refresh.test.mjs` over the refresh of the recorded Node times after a Main run                                                                                                   | a record below and at nine in ten of the Node test files; a recorded file far past its entry in main's run, one within the rule, and a leg that ran slow throughout; a completed Main run that succeeded, failed, came from a push or from another repository; a refresh with its pull request open and with none; a changed test file with no recorded time or far past its entry on a pull request                                                                                                                                                                                                                                                                                                                                                                                             | a pull-request check that fails on the record's coverage or a recorded time's drift, a refresh below the bar or past the drift rule that opens no pull request, a refresh within both, or a second refresh pull request fails                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                                                                        | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                                                                       | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR24     | `ci-heavy-lanes.test.mjs` release-evidence cases and `release-check-receipt.test.mjs`                                                                                                         | a pre-cut run on a tip a monitoring check already covered; a monitoring check, a person's release-check, and the two release-evidence runs as cut evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a pre-cut run skipped because a monitoring check ran; a monitoring check counted as release evidence; or a person's release-check, the pre-cut run or a release re-check refused as cut evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -1068,8 +1086,9 @@ release train can then fix and re-check within minutes, and pull requests, which
 run far more often, carry the per-update cost. A full run starts every
 leg at once, with no `max-parallel` hold, on standard runners, and gets as many
 legs as shorten its slowest lane. Legs stop growing where one indivisible piece
-of work sets the floor, such as the longest test file. Pull requests keep their
-shape, which bounds the spend of each update.
+of work sets the floor, such as the longest test file. Pull requests never add
+legs to finish sooner, which bounds the spend of each update: their Node legs
+grow only as far as every leg needs to end inside its job budget (FR22).
 
 Rejected: larger runners for these lanes (measured no faster than the standard
 four-core runners); keeping four unit legs, whose slowest leg took about eight
@@ -1083,15 +1102,18 @@ minutes.
 GitHub offers no repository-wide limit on concurrent jobs: a `concurrency` group
 serializes runs and does not count jobs. So every run of the CI and Main
 workflows waits at its start until the other active runs' estimated jobs plus
-its own fit under ninety. Small workflows that are not admitted (linting, review
+its own fit under ninety; only the CI workflow's Storybook build and a
+pull-request run's `superseded-runs` sweep start before that (FR16). Small
+workflows that are not admitted (linting, review
 bookkeeping, report publishing) always count at least eighteen jobs, so the room
 they can take stays free. Over a day's runs they peaked at twenty jobs at once,
 and rose by at most fourteen within two minutes in ninety-nine looks of a
 hundred (seventeen at most), so a margin over the jobs they run at a look would
 not hold the ceiling, and eighteen covers all but the rarest rises without
 lengthening every run's wait. Each CI or Main run counts its live jobs: a
-pull-request run still waiting counts the jobs it runs, the job that waits and a
-Storybook build that found room, so waiting runs hold each other back by no more
+pull-request run still waiting counts the jobs it runs, the job that waits, a
+Storybook build that found room and the `superseded-runs` sweep while it runs,
+so waiting runs hold each other back by no more
 than they use, and a run admitted in the last forty-five seconds, before its
 jobs appear, counts at least its planned most. A run GitHub still lists as
 active but has not updated in two hours holds no runner and counts nothing. A
@@ -1138,11 +1160,14 @@ CI can still pass ninety in five bounded ways, the first three rare:
   jobs until its next look.
 - A run starts when the GitHub API cannot be read, a rate limit included. It is
   over by at most its own jobs.
-- A waiting run's own waiting job starts before it finds room; its Storybook
+- A waiting run's own waiting job starts before it finds room, and so does a
+  same-repository pull-request run's `superseded-runs` sweep; its Storybook
   build starts only once there is room for it. CI is over by at most one
   waiting job per waiting run, pull requests, merge-queue entries and `main`
   runs alike, with no limit on how many wait, for at most a wait (twelve
-  minutes for a pull request, two hours for `main`).
+  minutes for a pull request, two hours for `main`), and by at most one sweep
+  job per such pull-request run, for at most the sweep's five-minute job
+  limit (it usually ends within seconds).
 - Small workflows can run more jobs at once than the eighteen counted for them:
   they peaked at twenty in a day's runs, two over, while their jobs ran.
 

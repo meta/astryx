@@ -21,6 +21,13 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 import {matrixFor} from './ci-matrix.mjs';
 import {PR_CI_GATE, ungated} from './ci-pr-gate.mjs';
+import {
+  MAX_NODE_LEGS,
+  nodeLegFiles,
+  planNodeLegs,
+  readDurations,
+  stepOutputs,
+} from '../../scripts/vitest-node-legs.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '../..');
@@ -40,7 +47,12 @@ const preloaded = {
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
-const {WIDE_STEP, legWidth} = preloaded.count;
+const {WIDE_STEP, WIDEN_STEP, legWidth, widenOf} = preloaded.count;
+// Room's step that names the jobs its run adds at full width.
+const WIDEN_MARKER =
+  'Hold ${{ steps.node-legs.outputs.widen }} more jobs at full width';
+// The Node leg plan room makes, from the record and files at this commit.
+const nodePlan = planNodeLegs(nodeLegFiles(), readDurations());
 const CEILING = Number(/const CI_CEILING = (\d+);/.exec(counter)[1]);
 const needsOf = job => [job.needs ?? []].flat();
 const stepOf = job => job.steps.find(step => step.name === STEP);
@@ -105,9 +117,12 @@ describe('where runs wait', () => {
     // Every job but the Storybook build reaches admission, directly or through
     // the jobs it needs, never only through the build.
     // heavy-ci, the agent-push deferral decision (spec:AST-030 FR20), is one
-    // slim job beside admission that the build needs.
+    // slim job beside admission that the build needs. superseded-runs, one
+    // slim job, starts with the run so that a waiting run still cancels its
+    // older heads' runs (superseded-runs.test.mjs); `peak` counts it (below).
     const BESIDE = 'build-storybook';
     const DEFERRAL = 'heavy-ci';
+    const SWEEP = 'superseded-runs';
     expect(needsOf(ci.jobs[BESIDE])).toEqual(['room', DEFERRAL]);
     expect(needsOf(ci.jobs[DEFERRAL])).toEqual(['room']);
     const reaches = id =>
@@ -117,7 +132,9 @@ describe('where runs wait', () => {
           (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
+      if (
+        !['room', 'admission', 'ci-full', BESIDE, DEFERRAL, SWEEP].includes(id)
+      )
         expect(reaches(id), id).toBe(true);
     }
   });
@@ -317,12 +334,18 @@ describe('where runs wait', () => {
       }),
     ]);
     // Room's only other steps: its checkout, its head check and stop for a
-    // superseded head (superseded-runs.test.mjs), and its stop when it found
-    // no room (above).
+    // superseded head (superseded-runs.test.mjs), the Node leg plan, which
+    // never fails the job, and its name for other runs' count (below), and
+    // its stop when it found no room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
       expect.objectContaining({name: "Check the pull request's head"}),
       expect.objectContaining({name: 'Stop for a superseded head'}),
+      expect.objectContaining({
+        name: 'Plan the Node legs',
+        'continue-on-error': true,
+      }),
+      expect.objectContaining({name: WIDEN_MARKER}),
       expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
@@ -530,22 +553,45 @@ describe('peaks', () => {
     // `peak`, and `full` legs when it also fits with each matrix's extra legs
     // (`leg-widths`). Its `max-parallel` reads admission's choice, so the
     // legs it starts are the legs admission counted.
-    const value = stepOf(ci.jobs.admission).with['leg-widths'];
-    expect(stepOf(ci.jobs.room).with['leg-widths']).toBe(value);
+    // One Node leg count sets the widths both waits read: room's plan, which
+    // also sets test-node's matrix (vitest-node-legs.test.mjs).
+    const room = ci.jobs.room;
+    const planStep = room.steps.find(step => step.id === 'node-legs');
+    expect(stepOf(room).with['leg-widths']).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && '{}' || steps.node-legs.outputs.leg-widths }}",
+    );
+    expect(room.outputs['leg-widths']).toBe(
+      '${{ steps.node-legs.outputs.leg-widths }}',
+    );
     // A dispatch runs neither matrix, so it widens nothing.
-    const [, dispatch, pull] =
-      /^\$\{\{ github\.event_name == 'workflow_dispatch' && '(.*?)' \|\| '(.*)' \}\}$/.exec(
-        value,
-      );
-    expect(dispatch).toBe('{}');
-    const widths = JSON.parse(pull);
+    expect(stepOf(ci.jobs.admission).with['leg-widths']).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && '{}' || needs.room.outputs.leg-widths }}",
+    );
+    const other = JSON.parse(/--other-widths '([^']*)'/.exec(planStep.run)[1]);
+    const outputs = stepOutputs(nodePlan, other);
+    const widths = JSON.parse(outputs['leg-widths']);
     expect(Object.keys(widths).sort()).toEqual(['swizzle-proof', 'test-node']);
+    expect(widths['test-node'].full).toBe(nodePlan.legs);
+    expect(ci.jobs['test-node'].strategy.matrix.shard).toBe(
+      `\${{ fromJSON(needs.room.outputs.node-shards || '${JSON.stringify(Array.from({length: MAX_NODE_LEGS}, (_, i) => i + 1)).replaceAll(',', ', ')}') }}`,
+    );
+    expect(room.outputs['node-shards']).toBe(
+      '${{ steps.node-legs.outputs.shards }}',
+    );
+    expect(needsOf(ci.jobs['test-node'])).toContain('room');
+    // The legs each matrix starts at full width: test-node its plan's
+    // count, never more than its widest matrix.
+    const fullLegs = id =>
+      id === 'test-node' ? nodePlan.legs : legs(ci.jobs[id], 'pull_request');
+    expect(nodePlan.legs).toBeLessThanOrEqual(
+      legs(ci.jobs['test-node'], 'pull_request'),
+    );
     for (const [id, width] of Object.entries(widths)) {
       expect(ci.jobs[id].strategy['max-parallel'], id).toBe(
         `\${{ fromJSON(needs.admission.outputs.widths)['${id}'] }}`,
       );
       expect(needsOf(ci.jobs[id]), id).toContain('admission');
-      expect(legs(ci.jobs[id], 'pull_request'), id).toBe(width.full);
+      expect(fullLegs(id), id).toBe(width.full);
       expect(width.tight, id).toBeGreaterThanOrEqual(1);
       expect(width.tight, id).toBeLessThan(width.full);
     }
@@ -573,6 +619,9 @@ describe('peaks', () => {
         condition,
       );
     });
+    // The superseded-runs sweep needs no job: it starts before the waits and
+    // counts here with the first jobs.
+    expect(onPullRequest).toContain('superseded-runs');
     const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);
@@ -594,9 +643,20 @@ describe('peaks', () => {
     expect(peak + widen).toBeGreaterThanOrEqual(startedAt('full'));
     // Another run counts a just-admitted pull-request run at the width its
     // admission picked, read from the step it runs only at full width, and at
-    // full width while that is unknown.
+    // full width while that is unknown; at full width it adds the jobs room
+    // planned, read from the name of room's step.
     expect(estimateOf('ci.yml')).toContain(
-      `legWidth(jobs) === 'tight' ? ${peak} : ${peak + widen}),`,
+      `legWidth(jobs) === 'tight' ? ${peak} : ${peak} + widenOf(jobs)),`,
+    );
+    expect(Number(outputs.widen)).toBe(widen);
+    const named = WIDEN_MARKER.replace(
+      '${{ steps.node-legs.outputs.widen }}',
+      outputs.widen,
+    );
+    expect(WIDEN_STEP.test(named)).toBe(true);
+    expect(widenOf([{steps: [{name: named}]}])).toBe(widen);
+    expect(room.steps.find(step => step.name === WIDEN_MARKER).if).toBe(
+      "steps.node-legs.outputs.widen != ''",
     );
     const marker = ci.jobs.admission.steps.find(
       step => step.name === WIDE_STEP,
@@ -1958,8 +2018,18 @@ describe('ci admission', () => {
     it('counts another just-admitted run at the width its admission picked', async () => {
       // A run admitted 30 s ago with 2 jobs so far, and its full-width step
       // skipped (tight), run (full) or not reached yet (undecided).
-      const justAdmitted = marker => {
+      // Its room named the 9 jobs its legs add at full width.
+      const justAdmitted = (marker, widen = 9) => {
         const run = admittedRun(60, 2, {admittedMinutesAgo: 0.5});
+        run.jobs.push({
+          status: 'completed',
+          steps: [
+            {
+              name: `Hold ${widen} more jobs at full width`,
+              status: 'completed',
+            },
+          ],
+        });
         if (marker != null)
           run.jobs.push({
             status: 'completed',
@@ -1967,12 +2037,15 @@ describe('ci admission', () => {
           });
         return run;
       };
-      // 18 small + 21 + 51 = 90 fits; at 30, 99 does not.
-      const fitsBeside = async marker =>
-        (await admit({active: [justAdmitted(marker)], peak: 51})).looks === 1;
+      // 18 small + 21 + 51 = 90 fits; at 21 + 9, 99 does not.
+      const fitsBeside = async (marker, widen) =>
+        (await admit({active: [justAdmitted(marker, widen)], peak: 51}))
+          .looks === 1;
       expect(await fitsBeside('skipped')).toBe(true);
       expect(await fitsBeside('success')).toBe(false);
       expect(await fitsBeside(undefined)).toBe(false);
+      // Its full width counts the jobs its own room named: none, none more.
+      expect(await fitsBeside('success', 0)).toBe(true);
       expect(legWidth(justAdmitted('skipped').jobs)).toBe('tight');
       expect(legWidth(justAdmitted('success').jobs)).toBe('full');
       expect(legWidth(justAdmitted().jobs)).toBe(null);

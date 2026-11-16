@@ -16,6 +16,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -202,6 +203,7 @@ const HISTORY_ITEMS = [
 
 export default function ResizableWorkspacePage() {
   const [activeFile, setActiveFile] = useState('Counter.tsx');
+  const showToast = useToast();
   const [activeTermTab, setActiveTermTab] = useState('terminal');
   const [activePropertiesTab, setActivePropertiesTab] = useState('properties');
   const fileTree = useMemo(() => buildFileTree(setActiveFile), []);
@@ -430,6 +432,13 @@ export default function ResizableWorkspacePage() {
                                       label="Format Document"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: `${activeFile} formatted`,
+                                          uniqueID: 'format',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Go to Definition"

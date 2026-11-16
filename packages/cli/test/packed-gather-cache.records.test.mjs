@@ -32,6 +32,7 @@ import {
   entries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -50,8 +51,29 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
-    // hint's name summaries (kept-tree.mjs) included.
-    expect(plain).toContain("the docs not-found hint's name summaries");
+    // hint's name summaries (kept-tree.mjs), the CLI's own docs tree (the
+    // docs adapter) and theme build's facts from Core's docs included.
+    expect(plain).toContain(
+      "the lookup commands' not-found hint's name summaries",
+    );
+    expect(plain).toContain("the CLI's own docs tree");
+    expect(plain).toContain(
+      "what theme build checks a theme against in Core's component docs",
+    );
+    expect(plain).toContain(
+      "npm's list of the files an integration package packs",
+    );
+    expect(plain).toContain(
+      'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
+    );
+    // The row names the other checks that can make the folder.
+    expect(plain).toContain(
+      "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's `integration check` of itself, for npm's list.",
+    );
+    // The CLI's build id stands for its own files' contents.
+    expect(plain).toContain(
+      "the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported)",
+    );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');
     expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
@@ -141,7 +163,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,

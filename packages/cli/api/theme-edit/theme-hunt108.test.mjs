@@ -14,7 +14,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -25,6 +25,14 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -274,8 +282,29 @@ describe('asks it used to drop', () => {
     T,
   );
   it(
-    'a shadow typed for one mode goes into light-dark()',
+    'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
+      // A popover's shared shadow is read from it drawn open: the light
+      // half keeps its layers.
+      const pop = await answer(
+        'popover shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(pop.first.join('\n')).toMatch(
+        /light-dark\(rgba\(0, 0, 0, 0\.1\), transparent\).*0 4px 12px light-dark\(transparent, #00000080\)' --on popover$/,
+      );
+      // (What a trigger menu shows in the other mode is unknown here: Core
+      // draws it only once a press opens it, so a one-mode shadow that would
+      // blank it is refused with that reason.)
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      const menu = await answer(
+        'trigger-menu shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(menu.first).toEqual([]);
+      expect(menu.text).toMatch(
+        /what trigger-menu shows in light mode is unknown/,
+      );
+      // A card shows no shadow at rest (its selection ring is a state of
+      // its own): the light half is transparent too.
       expect(
         (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
       ).toEqual([
@@ -287,8 +316,9 @@ describe('asks it used to drop', () => {
   it(
     'a shadow on a part that shows none it can read is a change',
     async () => {
-      expect((await answer('popover shadow bigger')).first).toEqual([
-        "set q box-shadow 'var(--shadow-high)' --on popover",
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      expect((await answer('trigger-menu shadow bigger')).first).toEqual([
+        "set q box-shadow 'var(--shadow-high)' --on trigger-menu",
       ]);
     },
     T,

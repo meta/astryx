@@ -13,7 +13,7 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -28,6 +28,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -114,9 +122,11 @@ describe('the measured check sees every variant, state and mode', () => {
       const {first} = await answer(
         'make the button hover darker except primary buttons',
       );
-      expect(first).toContain(
-        'set q filter none --on button --when variant:primary --state hover',
-      );
+      // The primary variant's own hover step is dropped; the others stay.
+      expect(first.some(c => /--when variant:primary/.test(c))).toBe(false);
+      expect(
+        first.some(c => /--when variant:secondary --state hover/.test(c)),
+      ).toBe(true);
     },
     T,
   );
@@ -126,7 +136,7 @@ describe('the measured check sees every variant, state and mode', () => {
       const {first} = await answer('all buttons blue except the danger one');
       expect(
         first.some(c =>
-          /^set q background \S+ --on button --when variant:destructive$/.test(
+          /^set q background-color \S+ --on button --when variant:destructive$/.test(
             c,
           ),
         ),
@@ -307,7 +317,7 @@ describe('parts named once for two removals, the page, steps', () => {
         'no shadow and a red background on buttons',
         [
           'set q box-shadow none --on button',
-          "set q background '#dc2626' --on button",
+          "set q background-color '#dc2626' --on button",
         ],
       ],
       [
@@ -415,7 +425,9 @@ describe('see-through, shadows, blur and colors past another', () => {
       const {first} = await answer(
         'make the button background slightly lighter than #000000',
       );
-      expect(first[0]).toMatch(/^set q background '#[0-9a-f]{6}' --on button/);
+      expect(first[0]).toMatch(
+        /^set q background-color '#[0-9a-f]{6}' --on button/,
+      );
       expect(first[0]).not.toMatch(/#000000/);
     },
     T,
