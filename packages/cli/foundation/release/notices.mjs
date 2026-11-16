@@ -46,6 +46,7 @@ import {
   commandInFolder,
   detectPackageManager,
   getCliInvocation,
+  installDependenciesCommand,
 } from '../env/package-manager.mjs';
 import {findAstryxProject, findPackageRoot} from '../fs/paths.mjs';
 import {satisfiesRange, semverCompare} from '../env/semver.mjs';
@@ -63,7 +64,7 @@ import {
   isGlobalCopy,
   projectRootOf,
 } from './choose.mjs';
-import {installsCliPackage, readReleaseFacts} from './project.mjs';
+import {installsPackage, readReleaseFacts} from './project.mjs';
 import {samePath} from '../fs/path-compare.mjs';
 import {updateNoticesOff} from './update-notice-env.mjs';
 
@@ -392,17 +393,6 @@ const ADD = {
 };
 
 /**
- * The command that installs a project's dependencies, by package manager.
- * @type {Record<string, string>}
- */
-const INSTALL = {
-  npm: 'npm install',
-  pnpm: 'pnpm install',
-  yarn: 'yarn install',
-  bun: 'bun install',
-};
-
-/**
  * The command that adds a package to the project of a run in `cwd`, with the
  * project's package manager (spec AST-081 FR12). Null when `cwd` belongs to
  * no project `spec:AST-040` FR9 defines, and in a folder inside the project
@@ -515,9 +505,13 @@ export function cliInstallAdvice({cwd, core}) {
   }
   const facts = readReleaseFacts(cwd);
   const root = projectRootOf(facts) ?? cwd;
-  if (installsCliPackage(root)) {
-    const install = INSTALL[detectPackageManager(root)] ?? INSTALL.npm;
-    return {root, core, command: install, declared: true};
+  if (installsPackage(root, CLI_PACKAGE)) {
+    return {
+      root,
+      core,
+      command: installDependenciesCommand(root),
+      declared: true,
+    };
   }
   return {root, core, command: addCliCommand(root, core), declared: false};
 }

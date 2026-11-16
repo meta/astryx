@@ -105,6 +105,7 @@ import {
   THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
+  dependencyInstallFor,
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
@@ -327,6 +328,12 @@ export function checkNodeVersion(ctx) {
 export function checkCoreInstalled(ctx) {
   const found = Boolean(ctx.coreDir);
   const version = pkgVersion(ctx.coreDir);
+  // A project that lists Core but has not installed its dependencies, as a
+  // fresh clone, gets Core by installing them: adding Core would install
+  // another release and replace the version the project lists.
+  const install = found
+    ? null
+    : dependencyInstallFor(ctx.cwd, '@astryxdesign/core');
   return {
     id: 'core-installed',
     label: '@astryxdesign/core installed',
@@ -337,7 +344,9 @@ export function checkCoreInstalled(ctx) {
     ...(found
       ? {}
       : {
-          fix: 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+          fix: install
+            ? `Install the project's dependencies: \`${install}\`.`
+            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
   };
 }

@@ -328,6 +328,27 @@ export function getRunPrefix(targetDir) {
 /** The published CLI package name — used for one-off (uninstalled) invocations. */
 export const CLI_PACKAGE = '@astryxdesign/cli';
 
+/** The command that installs a project's dependencies, by package manager. */
+const INSTALL_DEPENDENCIES = /** @type {Record<string, string>} */ ({
+  npm: 'npm install',
+  pnpm: 'pnpm install',
+  yarn: 'yarn install',
+  bun: 'bun install',
+});
+
+/**
+ * The command that installs the dependencies of the project at `targetDir`,
+ * with its package manager; npm's when none is detected.
+ * @param {string} [targetDir=process.cwd()]
+ * @returns {string}
+ */
+export function installDependenciesCommand(targetDir = process.cwd()) {
+  return (
+    INSTALL_DEPENDENCIES[detectPackageManager(targetDir)] ??
+    INSTALL_DEPENDENCIES.npm
+  );
+}
+
 /** The CLI binary name — only resolves once the CLI is installed (or run via CLI_PACKAGE). */
 export const CLI_BIN = 'astryx';
 

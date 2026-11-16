@@ -981,6 +981,57 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it("check 1, in a fresh clone that lists the theme package, says to install the project's dependencies", async () => {
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'));
+    dirs.push(dir);
+    write(path.join(dir, 'tsconfig.json'), '{}\n');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'doctor-app',
+        private: true,
+        dependencies: {
+          '@astryxdesign/core': CLI_VERSION,
+          '@astryxdesign/theme-neutral': CLI_VERSION,
+        },
+      }),
+    );
+    write(path.join(dir, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    const packageDir = path.join(dir, 'node_modules/@astryxdesign/theme-neutral');
+    write(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-neutral',
+        version: CLI_VERSION,
+        type: 'module',
+        exports: {'./built': './dist/neutral.js', './theme.css': './dist/theme.css'},
+      }),
+    );
+    write(
+      path.join(packageDir, 'dist/neutral.js'),
+      "export const neutralTheme = {name: 'neutral', tokens: {}};\n",
+    );
+    write(
+      path.join(packageDir, 'dist/theme.css'),
+      '[data-astryx-theme="neutral"] { --color-text: black; }\n',
+    );
+    await themeAdd('neutral', {cwd: dir, import: true});
+    // The project's dependencies are not installed yet.
+    fs.rmSync(packageDir, {recursive: true});
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners).toMatchObject({
+      status: 'fail',
+      message:
+        'Theme package "@astryxdesign/theme-neutral" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+      fix: 'pnpm install',
+    });
+  });
+
   it('check 2 fails when the generated module is hand-edited', async () => {
     const {dir, moduleFile} = await fixture();
     fs.appendFileSync(moduleFile, '// hand edit\n');

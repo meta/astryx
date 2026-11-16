@@ -23,8 +23,12 @@ import {
   coreVersionOf,
   installPlaceOf,
   isGlobalCopy,
+  projectRootOf,
 } from '../../foundation/release/choose.mjs';
-import {readReleaseFacts} from '../../foundation/release/project.mjs';
+import {
+  projectListsPackage,
+  readReleaseFacts,
+} from '../../foundation/release/project.mjs';
 import {astryxCommandsOnSearchPath} from '../../foundation/env/search-path.mjs';
 import {
   readDeclaredDependencies,
@@ -57,7 +61,10 @@ import {
   persistedGather,
   recordedRun,
 } from '../../foundation/fs/gather-cache.mjs';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  installDependenciesCommand,
+} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -719,6 +726,25 @@ export function addCliCommandFor(cwd, version) {
  */
 export function installCommandFor(cwd) {
   return projectAddCommand(cwd);
+}
+
+/**
+ * The command that installs the project's dependencies, when the project
+ * `cwd` belongs to lists `name` among the packages its install gets, so a
+ * `name` that is not installed comes from installing them (see
+ * `projectListsPackage`); null otherwise, and in a folder inside the project
+ * whose package.json is not the project's, where an install would install
+ * that folder's own packages.
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function dependencyInstallFor(cwd, name) {
+  if (installFolder(cwd)?.moved !== false) return null;
+  if (!projectListsPackage(cwd, name)) return null;
+  return installDependenciesCommand(
+    projectRootOf(readReleaseFacts(cwd)) ?? cwd,
+  );
 }
 
 /**

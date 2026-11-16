@@ -189,18 +189,32 @@ function declaredRanges(pkg) {
 }
 
 /**
- * Does the package.json in `dir` list the CLI among the packages its install
+ * Does the package.json in `dir` list `name` among the packages its install
  * gets? A peer dependency does not count: some package managers never install
  * peers.
  * @param {string} dir
+ * @param {string} name
  * @returns {boolean}
  */
-export function installsCliPackage(dir) {
+export function installsPackage(dir, name) {
   const pkg = readJson(path.join(dir, 'package.json'));
   if (!pkg || typeof pkg !== 'object') return false;
-  return INSTALLED_FIELDS.some(
-    field => typeof pkg[field]?.[CLI_PACKAGE_NAME] === 'string',
-  );
+  return INSTALLED_FIELDS.some(field => typeof pkg[field]?.[name] === 'string');
+}
+
+/**
+ * Does the Astryx project that `startDir` is in (the package.json that
+ * declares an Astryx package, see {@link findDeclaringPackage}) list `name`
+ * among the packages its install gets? Then a `name` that is not installed
+ * comes from installing the project's dependencies, as in a fresh clone,
+ * and adding it again would replace the version the project lists.
+ * @param {string} startDir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function projectListsPackage(startDir, name) {
+  const declaring = findDeclaringPackage(startDir);
+  return declaring != null && installsPackage(declaring.dir, name);
 }
 
 /**

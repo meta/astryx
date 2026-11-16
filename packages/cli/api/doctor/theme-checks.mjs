@@ -39,6 +39,7 @@ import {
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
+  dependencyInstallFor,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
@@ -115,6 +116,13 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       candidate.slug === slug && themeRecordOwner(candidate) === owner,
   );
   if (!isLocalThemeOwner(owner)) {
+    // A theme package the project lists but has not installed, as in a fresh
+    // clone, comes from installing the project's dependencies, at the version
+    // it lists; its theme is added already.
+    const install = findDoctorInstalledPackage(projectDir, owner)
+      ? null
+      : dependencyInstallFor(projectDir, owner);
+    if (install) return install;
     const selector = theme?.package ?? owner;
     return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
   }
