@@ -36,7 +36,8 @@ replacement uses one aggregate output trio so consumers never assemble the famil
 
 - Implement the compiler, CLI, or generated artifacts in this specification pull
   request.
-- Add a new command, response field, error code, or per-member family entrypoint.
+- Add a new command, error code, or per-member family entrypoint, or any response
+  field other than the receipt's `base` (FR2).
 - Strengthen the existing theme build's filesystem failure, cleanup, or publication
   guarantees.
 - Add or change the portable/global token vocabulary, component APIs, or theme values.
@@ -52,9 +53,12 @@ replacement uses one aggregate output trio so consumers never assemble the famil
   standalone build does, and the module imports a package base for the
   registries the root inherits from it. That package is a requirement: when it is
   not installed, or does not export the base the root imports, the build fails
-  naming the package and the theme, and never builds the root without its base. A
-  root base that is a local file and supplies registries is refused, naming the
-  base to select. Duplicate names or
+  naming the package and the theme, and never builds the root without its base.
+  The base is the one the root's own `extends` names, traced to where that name
+  comes from: an import of a package is a package base; an import of a file of the
+  project, or a theme the root's own file defines, is a local base. A local root
+  base that supplies registries is refused, naming the base to select. Duplicate
+  names or
   identities, missing ancestors, and cycles MUST fail before family output is
   published, a missing ancestor named with the member whose base it is. Descendants at
   any depth are valid; a family is not limited to one root and its direct children.
@@ -73,8 +77,9 @@ replacement uses one aggregate output trio so consumers never assemble the famil
   existing semantics. It adds no error code. Its receipt adds one field, `base`
   (`{theme, package, export}`), only when the root extends a theme the family does
   not select; `package` names the installed package the base comes from, a
-  requirement of the outputs, or is null for a local file. Any other response
-  change follows `spec:AST-017`.
+  requirement of the outputs, or is null for a local base (FR1), and `export` is
+  the name the root imports it by, or null for a theme the root's own file
+  defines. Any other response change follows `spec:AST-017`.
 
 ### Observable family behavior
 

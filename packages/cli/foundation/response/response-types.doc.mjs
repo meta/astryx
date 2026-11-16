@@ -381,7 +381,7 @@ export const doc = {
     {
       value: 'theme.build',
       description:
-        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local file), export}: a requirement of the outputs.',
+        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
     },
     {
       value: 'theme.build.check',

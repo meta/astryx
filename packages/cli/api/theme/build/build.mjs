@@ -5470,7 +5470,11 @@ async function themeBuildInternal(
       Object.hasOwn(themeDef, 'extends') &&
       themeDef.extends === undefined
     ) {
-      const written = extractRegistryInfo(filePath, 'extends');
+      const base = themeBaseBinding(filePath, themeExportName);
+      const written =
+        base?.importPath !== undefined
+          ? {importPath: base.importPath, exportName: base.exportName}
+          : null;
       if (written)
         throw new AstryxError(
           `Theme "${themeDef.name}" extends ${written.exportName} from '${written.importPath}', which is undefined: '${written.importPath}' does not export ${written.exportName}, so the theme would build without its base. Import the base theme that package exports, or install the version that exports ${written.exportName}.`,
@@ -6033,6 +6037,7 @@ async function themeBuildInternal(
   if (handOff.prepareFamily) {
     return {
       filePath,
+      exportName: themeExportName,
       sourceRelative: sourceRelative.split(path.sep).join('/'),
       theme: displayTheme,
       sourceTheme: themeDef,
@@ -6824,16 +6829,20 @@ async function buildFamily(
   let familyBase = null;
   for (const member of members) {
     if (!member.unselectedBase) continue;
-    const written = extractRegistryInfo(member.filePath, 'extends');
+    // The root's own `extends`, and where its binding comes from: an import
+    // of a package is a package base; an import of a file of the project, or
+    // a theme the root's file defines itself, is a local base.
+    const binding = themeBaseBinding(member.filePath, member.exportName);
+    const fromPackage =
+      binding?.importPath !== undefined &&
+      !binding.importPath.startsWith('.') &&
+      !path.isAbsolute(binding.importPath)
+        ? binding
+        : null;
     familyBase = {
       theme: member.unselectedBase,
-      package:
-        written &&
-        !written.importPath.startsWith('.') &&
-        !path.isAbsolute(written.importPath)
-          ? packageOfSpecifier(written.importPath)
-          : null,
-      export: written?.exportName ?? null,
+      package: fromPackage ? packageOfSpecifier(fromPackage.importPath) : null,
+      export: binding?.importPath !== undefined ? binding.exportName : null,
     };
     const inherits = [
       themeIconEntries(member.sourceParent),
@@ -6841,21 +6850,16 @@ async function buildFamily(
       themeComponentIcons(member.sourceParent),
     ].some(value => value && Object.keys(value).length > 0);
     if (!inherits) continue;
-    const from = extractRegistryInfo(member.filePath, 'extends');
-    if (
-      !from ||
-      from.importPath.startsWith('.') ||
-      path.isAbsolute(from.importPath)
-    )
+    if (!fromPackage)
       throw new AstryxError(
-        `Theme "${member.theme.name}" extends "${member.unselectedBase}", which the family does not select and whose icons the family module can carry only from a package it imports. Select "${member.unselectedBase}" too, or build "${member.theme.name}" on its own.`,
+        `Theme "${member.theme.name}" extends "${member.unselectedBase}", ${binding?.local ? `a theme ${path.basename(member.filePath)} defines itself` : binding?.importPath !== undefined ? `a theme of ${binding.importPath}` : 'a theme'} the family does not select, and the family module can carry the icons it inherits only from a package it imports. Select "${member.unselectedBase}" too (in a theme file of its own), or build "${member.theme.name}" on its own.`,
         undefined,
         ERROR_CODES.ERR_THEME_INVALID,
       );
-    const binding = `${bindings.get(member.theme.name)}Base`;
+    const local = `${bindings.get(member.theme.name)}Base`;
     rootBases.set(member.theme.name, {
-      binding,
-      importLine: `import { ${from.exportName} as ${binding} } from ${JSON.stringify(from.importPath)};\n`,
+      binding: local,
+      importLine: `import { ${fromPackage.exportName} as ${local} } from ${JSON.stringify(fromPackage.importPath)};\n`,
     });
   }
   const js = members
@@ -7089,6 +7093,105 @@ Or load the same stylesheet natively:
       ...(familyBase ? {base: familyBase} : {}),
     },
   };
+}
+
+/**
+ * The binding a theme's own `extends` names, as its source writes it: the
+ * theme the module exports as `exportName` (through consts, a defineTheme()
+ * call or a plain object), its `extends` field, and where that name comes
+ * from. An import gives its specifier and the name it imports; a theme the
+ * file defines itself is `local`. Null when the source does not show it (no
+ * `extends`, a computed one, or an export the reader cannot place).
+ * @param {string} filePath
+ * @param {string | undefined} exportName
+ * @returns {{importPath: string, exportName: string, local?: undefined} | {local: string, importPath?: undefined, exportName?: undefined} | null}
+ */
+function themeBaseBinding(filePath, exportName) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(fs.readFileSync(filePath, 'utf8'), {
+      sourceType: 'unambiguous',
+      plugins: sourcePlugins(filePath),
+    });
+  } catch {
+    return null;
+  }
+  /** @type {Map<string, {source: string, imported: string}>} */
+  const imports = new Map();
+  /** @type {Map<string, any>} */
+  const consts = new Map();
+  /** @type {Map<string, any>} the node each export gives */
+  const exported = new Map();
+  /** @param {any} declaration */
+  const addDeclaration = declaration => {
+    if (declaration?.type !== 'VariableDeclaration') return;
+    for (const d of declaration.declarations)
+      if (d.id?.type === 'Identifier' && d.init) consts.set(d.id.name, d.init);
+  };
+  for (const node of ast.program.body) {
+    if (node.type === 'ImportDeclaration' && node.importKind !== 'type')
+      for (const spec of node.specifiers)
+        if (spec.type === 'ImportSpecifier')
+          imports.set(spec.local.name, {
+            source: node.source.value,
+            imported: spec.imported.name ?? spec.imported.value,
+          });
+        else if (spec.type === 'ImportDefaultSpecifier')
+          imports.set(spec.local.name, {
+            source: node.source.value,
+            imported: 'default',
+          });
+    addDeclaration(node);
+    if (node.type === 'ExportNamedDeclaration') {
+      addDeclaration(node.declaration);
+      if (node.declaration?.type === 'VariableDeclaration')
+        for (const d of node.declaration.declarations)
+          if (d.id?.type === 'Identifier') exported.set(d.id.name, d.id);
+      if (!node.source)
+        for (const spec of node.specifiers ?? [])
+          if (spec.type === 'ExportSpecifier')
+            exported.set(spec.exported.name ?? spec.exported.value, spec.local);
+    }
+    if (node.type === 'ExportDefaultDeclaration')
+      exported.set('default', node.declaration);
+  }
+  /** @param {any} node @returns {any} */
+  const unwrap = node => {
+    while (
+      node &&
+      /^(?:TSAsExpression|TSSatisfiesExpression|TSNonNullExpression|TSTypeAssertion|ParenthesizedExpression)$/.test(
+        node.type,
+      )
+    )
+      node = node.expression;
+    return node;
+  };
+  /** @param {any} node @param {number} depth @returns {any} the theme object literal */
+  const themeObject = (node, depth = 0) => {
+    node = unwrap(node);
+    if (!node || depth > 8) return null;
+    if (node.type === 'Identifier')
+      return consts.has(node.name)
+        ? themeObject(consts.get(node.name), depth + 1)
+        : null;
+    if (node.type === 'CallExpression')
+      return themeObject(node.arguments?.[0], depth + 1);
+    return node.type === 'ObjectExpression' ? node : null;
+  };
+  const object = themeObject(exported.get(exportName ?? 'default'));
+  const field = object?.properties.find(
+    (/** @type {any} */ p) =>
+      p.type === 'ObjectProperty' &&
+      !p.computed &&
+      (p.key.name ?? p.key.value) === 'extends',
+  );
+  const value = unwrap(field?.value);
+  if (value?.type !== 'Identifier') return null;
+  const imported = imports.get(value.name);
+  if (imported)
+    return {importPath: imported.source, exportName: imported.imported};
+  return consts.has(value.name) ? {local: value.name} : null;
 }
 
 /**

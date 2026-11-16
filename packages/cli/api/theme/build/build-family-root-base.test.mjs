@@ -240,6 +240,50 @@ describe('a family whose root extends a base the family does not select', () => 
     );
   });
 
+  it('a base the root file defines itself is a local base: its own extends, not the first in the file', async () => {
+    writeBasePackage();
+    write(
+      'fam/ocean.ts',
+      `${I}import {baseTheme} from '@fixture/base-theme';\nconst brand = defineTheme({extends: baseTheme, name: 'brand', tokens: {}});\nexport const ocean = defineTheme({extends: brand, name: 'ocean', tokens: {}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `${I}import {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', tokens: {}});\n`,
+    );
+    // The package base supplies icons, which a local base cannot carry.
+    const refused = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(refused.err?.code).toBe('ERR_THEME_INVALID');
+    expect(refused.err.message).toContain(
+      'Theme "ocean" extends "brand", a theme ocean.ts defines itself',
+    );
+    expect(fs.existsSync(path.join(dir, 'fam/k.css'))).toBe(false);
+    // The same layout over a base with no registries builds, its receipt
+    // naming the local base.
+    write(
+      'fam/ocean.ts',
+      `${I}const brand = defineTheme({name: 'brand', tokens: {'--color-accent': '#abcdef'}});\nexport const ocean = defineTheme({extends: brand, name: 'ocean', tokens: {}});\n`,
+    );
+    const built = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(built.err).toBeUndefined();
+    expect(built.result.data.base).toEqual({
+      theme: 'brand',
+      package: null,
+      export: null,
+    });
+  });
+
   it('a base package that is not installed fails naming the package and the theme, writing nothing', async () => {
     write(
       'fam/ocean.ts',
