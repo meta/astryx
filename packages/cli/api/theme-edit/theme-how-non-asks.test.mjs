@@ -61,6 +61,28 @@ const needsBases = test => {
 
 const T = 300_000;
 
+describe('a screen named by what it shows', () => {
+  // (No part to paint; its status colors by hue are the status colors.)
+  it(
+    'medical records table view: status colors by hue',
+    async test => {
+      needsBases(test);
+      const lines = await writes(
+        'medical records table view: clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical',
+      );
+      expect(lines.join(' ')).not.toMatch(/--on table/);
+      expect(lines).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/success '#15803d'/),
+          expect.stringMatching(/warning '#b45309'/),
+          expect.stringMatching(/danger '#b91c1c'/),
+        ]),
+      );
+    },
+    T,
+  );
+});
+
 describe('writes nothing', () => {
   it.each([
     "spacing is compact, isn't that so",
@@ -70,8 +92,6 @@ describe('writes nothing', () => {
     'had we gone with serif headings',
     'after the review, square the buttons',
     'accent red; also undo the corners',
-    // (A screen named by what it shows is no part to paint.)
-    'medical records table view: clear status colors: green #15803d stable, amber #b45309 pending, red #b91c1c critical',
   ])(
     '%s',
     async (q, test) => {
