@@ -503,6 +503,23 @@ describe('AlertDialog', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
+    it('keeps the loading look and blocks activation with both flags set', () => {
+      const onAction = vi.fn();
+      render(
+        <AlertDialog
+          {...defaultProps}
+          onAction={onAction}
+          isActionDisabled
+          isActionLoading
+        />,
+      );
+      const action = screen.getByRole('button', {name: /Delete/});
+      expect(action).toHaveAttribute('aria-busy', 'true');
+      fireEvent.keyDown(action, {key: ' '});
+      fireEvent.click(action);
+      expect(onAction).not.toHaveBeenCalled();
+    });
+
     it('enables the action once isActionDisabled clears', () => {
       const onAction = vi.fn();
       const {rerender} = render(
