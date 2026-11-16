@@ -184,6 +184,62 @@ describe('a family whose root extends a base the family does not select', () => 
     });
   });
 
+  it('a family whose root extends nothing, or only selected themes, has no base in its receipt', async () => {
+    write(
+      'fam/ocean.ts',
+      `${I}export const ocean = defineTheme({name: 'ocean', tokens: {'--color-bg': '#e0f0ff'}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `${I}import {ocean} from './ocean.ts';\nexport const calm = defineTheme({extends: ocean, name: 'ocean-calm', tokens: {}});\n`,
+    );
+    write(
+      'fam/ocean-still.ts',
+      `${I}import {calm} from './ocean-calm.ts';\nexport default defineTheme({extends: calm, name: 'ocean-still', tokens: {}});\n`,
+    );
+    const r = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts', 'fam/ocean-still.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(r.err).toBeUndefined();
+    expect(r.result.data.base).toBeUndefined();
+    expect(Object.hasOwn(r.result.data, 'base')).toBe(false);
+  });
+
+  it('a root extending a local-file base that supplies no registries names it with package null', async () => {
+    write(
+      'shared/base.ts',
+      `${I}export const sharedTheme = defineTheme({name: 'shared', tokens: {'--color-accent': '#654321'}});\n`,
+    );
+    write(
+      'fam/ocean.ts',
+      `${I}import {sharedTheme} from '../shared/base.ts';\nexport const ocean = defineTheme({extends: sharedTheme, name: 'ocean', tokens: {}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `${I}import {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', tokens: {}});\n`,
+    );
+    const r = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(r.err).toBeUndefined();
+    expect(r.result.data.base).toEqual({
+      theme: 'shared',
+      package: null,
+      export: 'sharedTheme',
+    });
+    expect(fs.readFileSync(path.join(dir, 'fam/k.css'), 'utf8')).toContain(
+      '#654321',
+    );
+  });
+
   it('a base package that is not installed fails naming the package and the theme, writing nothing', async () => {
     write(
       'fam/ocean.ts',
