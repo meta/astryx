@@ -24,6 +24,7 @@ import type {TableColumn} from '@astryxdesign/core/Table';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Link} from '@astryxdesign/core/Link';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useToast} from '@astryxdesign/core/Toast';
 
 // ============= ICONS =============
 
@@ -722,6 +723,7 @@ function TableCard<T extends {id: string}>({
 // ============= MAIN COMPONENT =============
 
 export default function DashboardTemplate() {
+  const showToast = useToast();
   return (
     <Layout
       height="fill"
@@ -737,6 +739,13 @@ export default function DashboardTemplate() {
                   variant="secondary"
                   size="md"
                   icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the active-users data would reload here',
+                      uniqueID: 'reload-active-users',
+                    })
+                  }
                 />
               </HStack>
               <ActiveUsersChart />
@@ -765,7 +774,18 @@ export default function DashboardTemplate() {
             {/* Demographics */}
             <HStack hAlign="between" vAlign="center">
               <Heading level={3}>Demographics</Heading>
-              <Button label="View more" variant="secondary" size="md" />
+              <Button
+                label="View more"
+                variant="secondary"
+                size="md"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the full demographics breakdown would open here',
+                    uniqueID: 'more-demographics',
+                  })
+                }
+              />
             </HStack>
             <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
               <StackedBarCard title="Region" data={regionData} />
@@ -777,7 +797,18 @@ export default function DashboardTemplate() {
             {/* Engagement */}
             <HStack hAlign="between" vAlign="center">
               <Heading level={3}>Engagement</Heading>
-              <Button label="View more" variant="secondary" size="md" />
+              <Button
+                label="View more"
+                variant="secondary"
+                size="md"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the full engagement report would open here',
+                    uniqueID: 'more-engagement',
+                  })
+                }
+              />
             </HStack>
             <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
               <TableCard

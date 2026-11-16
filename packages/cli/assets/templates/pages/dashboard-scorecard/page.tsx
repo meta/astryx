@@ -27,6 +27,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   AreaChart,
   Area,
@@ -750,6 +751,7 @@ const pageStyles = stylex.create({
 // ============= MAIN =============
 
 export default function ExecutiveReviewPage() {
+  const showToast = useToast();
   const [period, setPeriod] = useState<Period>('WoW');
   // The narrative rail needs ~400px of its own; below that the content column
   // would be too cramped for the 2-up trend grid, so the rail folds inline.
@@ -798,6 +800,13 @@ export default function ExecutiveReviewPage() {
                 label="Export"
                 variant="secondary"
                 icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: this review would export here',
+                    uniqueID: 'export-review',
+                  })
+                }
               />
             </HStack>
           </HStack>
