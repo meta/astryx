@@ -261,11 +261,11 @@ describe("doctor — the project's own CLI and Core on different releases", () =
       `This project's CLI ${cli} answers it, but its Core is 0.0.1`,
     );
     expect(older.fix).toBe(
-      `To align them, run: npm install @astryxdesign/core@${cli}, then npx astryx upgrade --from 0.0.1 --apply.`,
+      `To align them, run: npm install -E @astryxdesign/core@${cli}, then npx astryx upgrade --from 0.0.1 --apply.`,
     );
     const newer = at('99.0.0');
     expect(newer.fix).toBe(
-      'To align them, run: npm install @astryxdesign/cli@99.0.0.',
+      'To align them, run: npm install -E @astryxdesign/cli@99.0.0.',
     );
     expect(at(cli).status).toBe('pass');
   });
@@ -294,7 +294,7 @@ describe("doctor — the project's own CLI and Core on different releases", () =
     expect(c.message).toBe(
       `This project has no Astryx CLI installed; CLI ${cli}, the one you started, answered while its Core is 0.0.1.`,
     );
-    expect(c.fix).toBe('To match, run: npm install @astryxdesign/cli@0.0.1.');
+    expect(c.fix).toBe('To match, run: npm install -E @astryxdesign/cli@0.0.1.');
   });
 });
 

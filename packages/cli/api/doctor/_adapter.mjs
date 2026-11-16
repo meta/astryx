@@ -10,6 +10,7 @@ import {
   stateLockHolder,
 } from '../../foundation/release/global-state.mjs';
 import {
+  addVerbFor,
   alignCliAndCore,
   cliInstallAdvice,
   installFolder,
@@ -52,7 +53,7 @@ import {
   rendersElement,
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
-import {satisfiesRange} from '../../foundation/env/semver.mjs';
+import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
   persistedGather,
@@ -733,6 +734,19 @@ export function installCommandFor(cwd) {
  */
 export function dependencyInstallFor(cwd, name) {
   return listedPackageInstall(cwd, name);
+}
+
+/**
+ * The command that installs the Core a theme's peer range accepts, with the
+ * project's package manager; one version is saved exactly in a project that
+ * pins its Core (see `addVerbFor`), and a range is quoted for the shell.
+ * @param {string} projectDir
+ * @param {string} range
+ * @returns {string}
+ */
+export function coreAddCommand(projectDir, range) {
+  const spec = `@astryxdesign/core@${range}`;
+  return `${addVerbFor(projectDir, range)} ${isValidSemver(range) ? spec : `'${spec}'`}`;
 }
 
 /**

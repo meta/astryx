@@ -41,6 +41,7 @@ import {
   isPrivateVarRefusal,
   missingThemePackage,
   dependencyInstallFor,
+  coreAddCommand,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
@@ -1822,7 +1823,7 @@ export async function checkAppThemes(cwd) {
             fix: peerProblems
               .map(problem =>
                 problem.range
-                  ? `npm install '@astryxdesign/core@${problem.range}'; ${run} doctor`
+                  ? `${coreAddCommand(state.projectDir, problem.range)}; ${run} doctor`
                   : refreshThemeCommand(
                       state.projectDir,
                       run,
