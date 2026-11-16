@@ -63,7 +63,11 @@ describe('the palette recipe of an editor theme', () => {
     const now = config('old');
     expect(now.recipe).toBeUndefined();
     expect(now.families[0].seed).toBe('#0f766e');
-    expect(generatePaletteSet(now).recipe).toBe('astryx-oklch-v1');
+    // (Read as a config, as the editor reads it: one that names no recipe
+    // runs v1.)
+    expect(
+      generatePaletteSet(now, {recipeIfNone: 'astryx-oklch-v1'}).recipe,
+    ).toBe('astryx-oklch-v1');
     expect(data.notes.join('\n')).toMatch(
       /makes its colors with the astryx-oklch-v1 recipe it was made with.*"recipe": "astryx-oklch-v2" there/,
     );

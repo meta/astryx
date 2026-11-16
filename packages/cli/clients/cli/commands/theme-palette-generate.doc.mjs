@@ -8,7 +8,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Generate an OKLCH palette candidate for human review',
   description:
-    "Reads an explicit JSON request and runs the recipe the request names: astryx-oklch-v1 when it names none (a config written before v2 regenerates the same colors), or astryx-oklch-v2, whose pale stops follow the vibrancy and each seed's own chroma. " +
+    'Reads an explicit JSON palette config and runs the recipe it names. A config that names none keeps the recipe its last receipt records, else astryx-oklch-v1, so a config written before v2 regenerates the same colors; astryx-oklch-v2, whose pale stops follow the vibrancy and each seed\'s own chroma, runs when the config names it. To pin v1, record "recipe": "astryx-oklch-v1" in the palette config. The receipt records the recipe that ran. ' +
     'The command defaults to 21 stops (0 through 100) but accepts any non-empty ordered ' +
     'numeric stop list, including decimals. Stops apply to every family in the request. ' +
     'Authors may omit the repeated endpoints with a custom list; standalone exact black ' +

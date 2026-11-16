@@ -233,9 +233,11 @@
 /**
  * @typedef {object} TonalPaletteGenerationInput
  * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
- * run: astryx-oklch-v1 when none is named (a config written before v2
- * regenerates the same colors); astryx-oklch-v2 makes pale stops follow
- * the vibrancy and the seed's own chroma.
+ * run. astryx-oklch-v2 makes pale stops follow the vibrancy and the seed's
+ * own chroma. When none is named, a fresh request (generateTonalPalette)
+ * runs v2, and a palette config (`theme palette generate`) keeps the recipe
+ * its last receipt records, else v1, so a config written before v2
+ * regenerates the same colors. Name "astryx-oklch-v1" to pin v1.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).

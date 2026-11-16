@@ -62,6 +62,43 @@ describe('themePaletteGenerate', () => {
     });
   });
 
+  it('a config naming v2 runs it, writes it in the receipt, and keeps it when the config later names none', () => {
+    const cwd = fixture();
+    const file = path.join(cwd, 'palette.config.json');
+    const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(
+      file,
+      JSON.stringify({recipe: 'astryx-oklch-v2', ...config}),
+    );
+    const first = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'palette.ts'},
+      {cwd},
+    );
+    expect(first.data.recipe).toBe('astryx-oklch-v2');
+    const receipt = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'palette.receipt.json'), 'utf8'),
+    );
+    expect(receipt.recipe).toBe('astryx-oklch-v2');
+    expect(receipt.request.recipe).toBe('astryx-oklch-v2');
+    // The config loses its recipe: its last receipt says which it is.
+    fs.writeFileSync(file, JSON.stringify(config));
+    const again = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'palette.ts', overwrite: true},
+      {cwd},
+    );
+    expect(again.data.recipe).toBe('astryx-oklch-v2');
+    expect(again.data.candidate.palette).toEqual(first.data.candidate.palette);
+  });
+
+  it('a config that names no recipe and has no receipt keeps v1', () => {
+    const cwd = fixture();
+    const result = themePaletteGenerate('palette.config.json', {}, {cwd});
+    expect(result.data.recipe).toBe('astryx-oklch-v1');
+    expect(result.data.generationReceipt.recipe).toBe('astryx-oklch-v1');
+  });
+
   it('writes a candidate and detached reproducibility receipt together', () => {
     const cwd = fixture();
     const result = themePaletteGenerate(

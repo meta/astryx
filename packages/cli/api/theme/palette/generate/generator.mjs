@@ -26,13 +26,18 @@ import {
 
 /** @typedef {'astryx-oklch-v1' | 'astryx-oklch-v2'} PaletteRecipe */
 
-/** The recipe a request that names none runs: the first one. */
+/**
+ * The first recipe: what a palette config that names no recipe runs (a
+ * config written before v2 regenerates the same colors). A config pins it by
+ * naming it.
+ */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
 /**
  * The recipe whose pale stops follow the vibrancy and the seed's own
  * chroma: a stop whose gamut cannot hold the most vivid request gives every
  * request the same share of it, and coordination never raises a seed's
- * chroma. A request runs it by naming it.
+ * chroma. A fresh palette (a bare request that names no recipe) runs it; a
+ * config runs it by naming it.
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
 /** Every recipe the generator runs. */
@@ -798,8 +803,17 @@ function normalizeDarkChromaTaper(taper, stops, families) {
   };
 }
 
-/** @param {TonalPaletteGenerationInput} input @returns {NormalizedRequest} */
-export function normalizeGenerationRequest(input) {
+/**
+ * @typedef {object} GenerationOptions
+ * @property {PaletteRecipe} [recipeIfNone] The recipe a request that names
+ * none runs. A palette made fresh (a bare request) runs the newest,
+ * astryx-oklch-v2; one read from a palette config (a file the CLI or the
+ * editor regenerates) passes astryx-oklch-v1, so a config written before v2
+ * regenerates the same colors.
+ */
+
+/** @param {TonalPaletteGenerationInput} input @param {GenerationOptions} [options] @returns {NormalizedRequest} */
+export function normalizeGenerationRequest(input, options = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Palette generation config must be an object.');
   }
@@ -807,9 +821,11 @@ export function normalizeGenerationRequest(input) {
   if (!Array.isArray(families) || families.length === 0) {
     throw new Error('Palette generation requires at least one family.');
   }
-  // A request that names no recipe runs the first one, so a config written
-  // before v2 regenerates the same colors.
-  const recipe = /** @type {PaletteRecipe} */ (input.recipe ?? PALETTE_RECIPE);
+  // A request that names no recipe: a fresh one runs the newest recipe; one
+  // read from a config runs the recipe its reader says (the first one).
+  const recipe = /** @type {PaletteRecipe} */ (
+    input.recipe ?? options.recipeIfNone ?? PALETTE_RECIPE_V2
+  );
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
       `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
@@ -931,9 +947,9 @@ export function normalizeGenerationRequest(input) {
   return request;
 }
 
-/** @param {TonalPaletteGenerationInput} input @returns {PaletteGenerationResult} */
-export function generatePaletteSet(input) {
-  const request = normalizeGenerationRequest(input);
+/** @param {TonalPaletteGenerationInput} input @param {GenerationOptions} [options] @returns {PaletteGenerationResult} */
+export function generatePaletteSet(input, options = {}) {
+  const request = normalizeGenerationRequest(input, options);
   /** @type {GeneratedFamily[]} */
   const families = [];
   /** @type {{familyId: string, message: string}[]} */
@@ -971,10 +987,11 @@ export function generatePaletteSet(input) {
  * Generate candidate palette data without reading or writing files.
  *
  * @param {import('../../theme.type.mjs').TonalPaletteGenerationInput} input
+ * @param {GenerationOptions} [options]
  * @returns {import('../../theme.type.mjs').TonalPaletteCandidate}
  */
-export function generateTonalPalette(input) {
-  const result = generatePaletteSet(input);
+export function generateTonalPalette(input, options = {}) {
+  const result = generatePaletteSet(input, options);
   if (result.errors.length > 0) {
     throw new Error(
       result.errors

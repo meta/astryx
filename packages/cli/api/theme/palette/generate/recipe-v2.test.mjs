@@ -14,6 +14,7 @@ import {
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
   generatePaletteSet,
+  generateTonalPalette,
 } from './generator.mjs';
 import {hexToOklch} from './color.mjs';
 
@@ -33,13 +34,32 @@ const chromaAt = (result, stop) =>
   hexToOklch(result.families[0].light.colors[stop]).C;
 
 describe('palette recipes', () => {
-  it('a request that names no recipe runs v1, and regenerates what v1 made', () => {
+  it('a bare request that names no recipe is a fresh palette, and runs v2', () => {
     for (const seed of [DUSTY, VIVID])
       for (const vibrancy of [20, 50, 80]) {
         const none = ramp(seed, vibrancy);
-        const v1 = ramp(seed, vibrancy, PALETTE_RECIPE);
+        expect(none.recipe).toBe('astryx-oklch-v2');
+        expect(none.request.recipe).toBe('astryx-oklch-v2');
+        expect(none.families).toEqual(
+          ramp(seed, vibrancy, PALETTE_RECIPE_V2).families,
+        );
+        expect(generateTonalPalette({families: [{id: 'f', seed}]}).recipe).toBe(
+          'astryx-oklch-v2',
+        );
+      }
+  });
+
+  it('a request read from a config that names no recipe runs v1, and regenerates what v1 made', () => {
+    for (const seed of [DUSTY, VIVID])
+      for (const vibrancy of [20, 50, 80]) {
+        const none = generatePaletteSet(
+          {vibrancy, families: [{id: 'f', seed}]},
+          {recipeIfNone: PALETTE_RECIPE},
+        );
         expect(none.recipe).toBe('astryx-oklch-v1');
-        expect(none.families).toEqual(v1.families);
+        expect(none.families).toEqual(
+          ramp(seed, vibrancy, PALETTE_RECIPE).families,
+        );
       }
   });
 
@@ -51,9 +71,9 @@ describe('palette recipes', () => {
     const named = JSON.parse(fs.readFileSync(file, 'utf8'));
     expect(named.recipe).toBe('astryx-oklch-v1');
     const {recipe: _, ...none} = named;
-    expect(generatePaletteSet(none).families).toEqual(
-      generatePaletteSet(named).families,
-    );
+    expect(
+      generatePaletteSet(none, {recipeIfNone: PALETTE_RECIPE}).families,
+    ).toEqual(generatePaletteSet(named).families);
   });
 
   it('v2 runs only when named, with the same result shape', () => {

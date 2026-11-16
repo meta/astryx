@@ -20,8 +20,13 @@ const families = [
   {id: 'orange', name: 'Orange', seed: '#d57113'},
 ];
 
+// The v1 fixtures pin their recipe, as a palette config does: a bare
+// request is a fresh palette and runs the newest one.
 function candidateDigest(request) {
-  const candidate = generateTonalPalette(request);
+  const candidate = generateTonalPalette({
+    recipe: 'astryx-oklch-v1',
+    ...request,
+  });
   return createHash('sha256')
     .update(`${JSON.stringify(candidate, null, 2)}\n`)
     .digest('hex');
@@ -30,6 +35,7 @@ function candidateDigest(request) {
 describe('astryx-oklch-v1 palette generator', () => {
   it('returns directly usable candidate data without filesystem work', () => {
     const candidate = generateTonalPalette({
+      recipe: 'astryx-oklch-v1',
       families: [families[1]],
       stops: [40],
     });
@@ -429,7 +435,11 @@ describe('astryx-oklch-v1 palette generator', () => {
       const dark = darkChromaTaper =>
         generateTonalPalette({families: prototypeFamily, darkChromaTaper})
           .palette.constructor.dark;
-      const edge = dark({edgeMultiplier: 0.5, throughStop: 25, recoverAtStop: 60});
+      const edge = dark({
+        edgeMultiplier: 0.5,
+        throughStop: 25,
+        recoverAtStop: 60,
+      });
       const standard = dark(undefined);
       expect(edge[25]).toMatch(/^#[0-9a-f]{6}$/);
       expect(chroma(edge[25]) / chroma(standard[25])).toBeCloseTo(0.5, 1);
