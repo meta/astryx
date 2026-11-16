@@ -22277,6 +22277,58 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
+  // A panel's look written for every one (a card's) reaches the panels an
+  // app places in a layout too (cards in a carousel, a grid or a stack, as
+  // tiles): said once, with the place to ask for to keep them apart.
+  {
+    const panels = new Set(FAMILIES.containers ?? []);
+    const written = [
+      ...new Set(
+        result.flatMap(d =>
+          (d.options[0] ?? [])
+            .filter(
+              st =>
+                st.verb === 'set' &&
+                st.on &&
+                (panels.has(st.on) || st.on === 'containers'),
+            )
+            .map(st => /** @type {string} */ (st.on)),
+        ),
+      ),
+    ];
+    const part = written.includes('card')
+      ? 'card'
+      : written.find(x => x !== 'containers');
+    // (The layouts that hold it in the part data, which paint nothing of
+    // their own: a carousel, a grid, a stack, never the page's shell.)
+    const holders = part
+      ? Object.keys(C.MAP)
+          .filter(
+            k =>
+              !k.includes('-') &&
+              (C.MAP[k].contains ?? []).includes(part) &&
+              !C.MAP[k].at?.['background-color'] &&
+              !(C.MAP[k].contains ?? []).some(
+                (/** @type {string} */ x) =>
+                  x.startsWith(`${k}-`) && /^(?:layout|app-shell)/.test(x),
+              ) &&
+              !['layout', 'app-shell'].includes(k),
+          )
+          .sort()
+      : [];
+    if (part && holders.length)
+      result.push({
+        text: `${part}s placed in ${holders
+          .map(h => `a ${h}`)
+          .join(', ')
+          .replace(
+            /, ([^,]*)$/,
+            ' or $1',
+          )} take this too; to keep them apart, ask for the ${part}s in that place ("${part}s in ${holders[0]}s …"), which writes on the ${holders[0]} only`,
+        options: [],
+        lookup: `${HOW} ${holders[0]}`,
+      });
+  }
   // A lookup for a part a "match" ask already answered for adds nothing.
   for (let i = result.length - 1; i >= 0; i--) {
     const d = result[i];
