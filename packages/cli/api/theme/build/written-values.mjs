@@ -292,7 +292,7 @@ export function writtenValueProblems(theme, options = {}) {
  * {@link writtenValueProblems}, with whether a token name is a CSS
  * property's from `isProperty`.
  * @param {Record<string, any>} theme
- * @param {Parameters<typeof writtenValueProblems>[1]} options
+ * @param {NonNullable<Parameters<typeof writtenValueProblems>[1]>} options
  * @param {(name: string) => boolean} isProperty
  * @returns {WrittenValueProblem[]}
  */
