@@ -475,6 +475,14 @@ beforeAll(async () => {
     const a = declarations(cssBefore);
     const b = declarations(css);
     for (const line of data.changedTokens ?? []) {
+      // The category and chart colors that move with the look are counted
+      // in one line each, not listed.
+      if (
+        /^(?:category colors \(badges, tokens and card tints\)|chart colors): \d+ values moved with the look$/.test(
+          line,
+        )
+      )
+        continue;
       const m = /^(--[\w-]+)(?: \((?:light|dark)\))?: (.*) -> (.*)$/s.exec(
         line,
       );
