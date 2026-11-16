@@ -563,6 +563,21 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'go')).toEqual([]);
   });
 
+  it('reads a word written as an export name as the words it runs together', () => {
+    const set = setOf([
+      {id: 'search'},
+      {id: 'chevron-down'},
+      {id: 'x-mark'},
+      {id: 'house'},
+    ]);
+    expect(answer(set, 'SearchIcon')).toEqual(['search']);
+    expect(rankIcons([set], 'ChevronDownIcon')[0]).toMatchObject({
+      id: 'chevron-down',
+      score: 90,
+    });
+    expect(answer(set, 'XMarkIcon')).toEqual(['x-mark']);
+  });
+
   it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
     const set = setOf([
       {id: 'arrow-up-to-line'},

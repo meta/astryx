@@ -203,7 +203,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   first; only when nothing answers it with a whole word are the words that
   only phrase it (`go`, `the`, `icon`) left out of a query of several words,
   so `go home` asks for `home` and `arrow up to line` still names
-  `arrow-up-to-line`. When nothing answers a query of several words, as
+  `arrow-up-to-line`; at that step a word written as an export name counts
+  as its words (`SearchIcon` asks for `search`). When nothing answers a query of several words, as
   typed or without those words, every icon that carries one or more of its
   words is a word match: the word, or its plural or singular, is one of the
   icon's id parts, a part of one of its words, or a part of a word of a

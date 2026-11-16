@@ -22,7 +22,9 @@
  * A query is scored as typed first. Only when nothing answers it with a
  * whole word are the words that only phrase it (`go`, `the`, `icon`) left
  * out of a query of several words, so `go home` asks for `home` while
- * `arrow up to line` still names `arrow-up-to-line`.
+ * `arrow up to line` still names `arrow-up-to-line`. At that step a word
+ * written as an export name counts as its words, so `SearchIcon` asks for
+ * `search`.
  *
  * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
  * icon carries every word. When nothing answers a query of several words,
@@ -257,13 +259,28 @@ function typedQuery(query) {
 
 /**
  * The query without the words that only phrase it, when it has several
- * words and some word names something; else the query as typed.
+ * words and some word names something; else the query as typed. A word
+ * written as an export name counts as the words it runs together
+ * (`ChevronDownIcon` asks for `chevron down`).
  * @param {string} query
  */
 export function iconQuery(query) {
-  const words = typedQuery(query).split(' ').filter(Boolean);
+  const words = typedQuery(exportNameWords(query)).split(' ').filter(Boolean);
   const named = words.filter(word => !FILLER_WORDS.has(word));
   return (words.length > 1 && named.length > 0 ? named : words).join(' ');
+}
+
+/**
+ * The query with each export name split into its words: a capital letter
+ * after a lower-case letter or a digit starts a word, and so does the last
+ * capital of a run of capitals that a lower-case letter follows
+ * (`XMarkIcon` is `X Mark Icon`).
+ * @param {string} query
+ */
+function exportNameWords(query) {
+  return query
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/gu, '$1 $2');
 }
 
 /**
