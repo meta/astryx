@@ -225,10 +225,11 @@ const POSTAL_CODE_RULES: Record<
 // Plain inline styles over Astryx token CSS variables, so the template compiles
 // in a project with no StyleX pipeline.
 
-// The min width lets the summary wrap below the form on a narrow first
-// paint, before script measures the host (the summary's maxWidth keeps it
-// inside the page there).
-const formColumn: CSSProperties = {minWidth: 'min(100%, 480px)'};
+// A zero basis keeps the form beside the summary on wide hosts whatever the
+// step's content width; the min width lets the summary wrap below the form on
+// a narrow first paint, before script measures the host (the summary's
+// maxWidth keeps it inside the page there).
+const formColumn: CSSProperties = {flexBasis: 0, minWidth: 'min(100%, 480px)'};
 
 // The summary column holds its width while the form column takes the rest, and
 // pins itself as the form scrolls past — the sticky offset is the page inset,
@@ -700,7 +701,7 @@ export default function CheckoutWizardPage() {
 
               {/* The form column owns the sequence end to end: progress at the
                   top, the step in the middle, the way out at the bottom. */}
-              <StackItem size="fill" style={formColumn}>
+              <StackItem size="fill" style={isNarrow ? undefined : formColumn}>
                 <VStack gap={6}>
                   {isComplete ? (
                     <VStack gap={4}>
