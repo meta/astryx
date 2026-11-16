@@ -136,7 +136,7 @@ export const docs = {
           name: 'maxWidth',
           type: 'number | string',
           description:
-            "The widest the tooltip grows before its content wraps. A number is in pixels; a string is any CSS length, such as '24rem' or 'none'.",
+            "The widest the tooltip grows before its content wraps, padding included. A number is pixels (negative or non-finite keeps the default); a string is a CSS max-width value such as '24rem' or 'none' (no cap).",
           default: '300',
         },
         {

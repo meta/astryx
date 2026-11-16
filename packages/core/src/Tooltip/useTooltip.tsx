@@ -172,8 +172,11 @@ export interface TooltipOptions {
   isDefaultOpen?: boolean;
 
   /**
-   * The widest the tooltip grows before its content wraps. A number is in
-   * pixels; a string is any CSS length, such as `'24rem'` or `'none'`.
+   * The widest the tooltip grows before its content wraps, padding included.
+   * A number is pixels; a number that is negative or not finite keeps the
+   * default. A string is a CSS `max-width` value, such as `'24rem'`, `'50vw'`
+   * or `'none'` (no cap); a string the browser rejects leaves the tooltip
+   * uncapped.
    * @default 300
    */
   maxWidth?: number | string;
@@ -961,6 +964,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       props?: Omit<ContextRenderProps, 'positioning'>,
     ): ReactNode => {
       const renderPlacement = props?.placement ?? placement;
+      // A number that is not a finite, non-negative pixel count keeps the
+      // default cap.
+      const maxWidthValue =
+        typeof maxWidth === 'number'
+          ? Number.isFinite(maxWidth) && maxWidth >= 0
+            ? `${maxWidth}px`
+            : null
+          : (maxWidth ?? null);
       const renderProps = {
         placement: renderPlacement,
         alignment: props?.alignment ?? alignment,
@@ -987,10 +998,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
           ref={contentRefs}
           {...stylex.props(
             styles.content,
-            maxWidth != null &&
-              dynamicStyles.contentMaxWidth(
-                typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth,
-              ),
+            maxWidthValue != null &&
+              dynamicStyles.contentMaxWidth(maxWidthValue),
           )}>
           {children}
         </div>,

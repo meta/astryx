@@ -165,8 +165,11 @@ export interface TooltipProps {
   isDefaultOpen?: boolean;
 
   /**
-   * The widest the tooltip grows before its content wraps. A number is in
-   * pixels; a string is any CSS length, such as `'24rem'` or `'none'`.
+   * The widest the tooltip grows before its content wraps, padding included.
+   * A number is pixels; a number that is negative or not finite keeps the
+   * default. A string is a CSS `max-width` value, such as `'24rem'`, `'50vw'`
+   * or `'none'` (no cap); a string the browser rejects leaves the tooltip
+   * uncapped.
    * @default 300
    */
   maxWidth?: number | string;

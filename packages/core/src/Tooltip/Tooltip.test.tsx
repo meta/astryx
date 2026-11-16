@@ -130,6 +130,19 @@ describe('Tooltip', () => {
       </Tooltip>,
     );
     expect(content().getAttribute('style')).toContain('--x-maxWidth: none');
+    rerender(
+      <Tooltip content="Tooltip text" isDefaultOpen maxWidth="24rem">
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    expect(content().getAttribute('style')).toContain('--x-maxWidth: 24rem');
+    rerender(
+      <Tooltip content="Tooltip text" isDefaultOpen maxWidth={-5}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    expect(content().getAttribute('style') ?? '').not.toContain('--x-maxWidth');
+    expect(getComputedStyle(content()).maxWidth).toBe('300px');
   });
 
   it('calls onOpenChange(true) when shown via hover', async () => {
