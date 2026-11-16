@@ -19,8 +19,7 @@ export const doc = {
   // in the Shell family, so build may start a part or an edit from it. Build
   // must keep the default shell for parts and edits whose words this template
   // does not use (see "the default app shell with the messaging shell ready"
-  // in packages/cli/api/build/kit/start.test.mjs, which reads this doc), and
-  // build's page-pick model must be retrained to include this template.
+  // in packages/cli/api/build/kit/start.test.mjs, which reads this doc).
   isReady: false,
   category: 'Shell - Messaging',
   icons: {
