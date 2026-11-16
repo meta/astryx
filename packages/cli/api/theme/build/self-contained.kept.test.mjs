@@ -340,8 +340,9 @@ describe('the JavaScript a theme build compiles', () => {
     build();
     // Babel is loaded; a reinstall writes new files under it.
     reinstalled.now = true;
-    // Just after this process started: settled, and newer than the process.
-    reinstalled.at = performance.timeOrigin + 1;
+    // A second before this process started: settled, but within a coarse
+    // file system's time step of the start.
+    reinstalled.at = performance.timeOrigin - 1000;
     fs.writeFileSync(
       path.join(THEME, 'helper.ts'),
       HELPER.replace('icon ', 'glyph '),
@@ -359,8 +360,9 @@ describe('the JavaScript a theme build compiles', () => {
     // Babel loaded by another part of the build, before any compile.
     createRequire(import.meta.url)('@babel/core');
     reinstalled.now = true;
-    // Just after this process started: settled, and newer than the process.
-    reinstalled.at = performance.timeOrigin + 1;
+    // A second before this process started: settled, but within a coarse
+    // file system's time step of the start.
+    reinstalled.at = performance.timeOrigin - 1000;
     await sleep(SETTLE_WAIT_MS);
     const first = build();
     expect(first.asked).toBe(2);
