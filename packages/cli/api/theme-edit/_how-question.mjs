@@ -2118,6 +2118,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string | null} bad - a hex color written with the wrong number of digits
  * @property {string[]} lengths
  * @property {string | null} state
+ * @property {string} [scopeWhy] - why nothing is written when no token keeps the change in the container
+ * @property {boolean} [byState] - the element was picked by the state said ("the current page in pagination": its current button)
  * @property {string} [refused] - why nothing is written for the clause (an element its place has no part of its own for)
  * @property {boolean} [stateImplied] - the state was read from the part, never said ("checks red": checked)
  * @property {string | null} [alsoState] - a second state said with the first ("hovered selected tabs"): the part in both at once
@@ -6002,7 +6004,7 @@ export function draftAnswer(ctx, env, question) {
    * date in the calendar"). Null when the clause names no place, or none
    * of those.
    * @param {Clause} c
-   * @returns {{part: {on: string}, holder: string, state?: string | null, note?: string, refuse?: string} | null}
+   * @returns {{part: {on: string}, holder: string, state?: string | null, note?: string, refuse?: string, scopeOnly?: boolean} | null}
    */
   const elementOfPlace = c => {
     const text = c.text.replace(/\s+(?:on|when) \w+$/, '');
@@ -6033,12 +6035,12 @@ export function draftAnswer(ctx, env, question) {
       });
     // (The first place said first: "the item in menus in cards" is a
     // menu's item; the words for the element end at the next place.)
-    /** @param {string} t @returns {{on: string, word: string} | null} */
+    /** @param {string} t @returns {{on: string, word: string, role?: string} | null} */
     const partWord = t => {
       for (const [re, y] of lex.parts) {
         if (y.missing) continue;
         const m = re.exec(` ${t} `);
-        if (m) return {on: y.on, word: m[0].trim()};
+        if (m) return {on: y.on, word: m[0].trim(), role: y.role};
       }
       return null;
     };
@@ -6164,20 +6166,24 @@ export function draftAnswer(ctx, env, question) {
         found.push({k: ownPart, score: 5});
       // (What the whole theme draws with tokens, its icons, named in the
       // place: those tokens, on it.)
+      // (A text role, "the muted text", is the place's own text, never a
+      // token family of the whole theme.)
+      const wideRead = partWord(nameText);
+      const wideWord = wideRead && !wideRead.role ? wideRead.on : null;
       const themeWide =
-        ownPart &&
-        !FAMILIES[ownPart] &&
-        !TARGET.has(ownPart) &&
-        ownPart !== 'text' &&
-        ownPart !== 'page' &&
+        wideWord &&
+        !FAMILIES[wideWord] &&
+        !TARGET.has(wideWord) &&
+        wideWord !== 'text' &&
+        wideWord !== 'page' &&
         // (Only one the place holds parts of: a button's icons; an input's
         // focus ring is a look it draws.)
         members.some(h =>
           (C.MAP[h]?.contains ?? []).some((/** @type {string} */ k) =>
-            k.split('-').includes(String(ownPart).replace(/s$/, '')),
+            k.split('-').includes(String(wideWord).replace(/s$/, '')),
           ),
         )
-          ? ownPart
+          ? wideWord
           : null;
       found.sort((a, b) => b.score - a.score || b.k.length - a.k.length);
       // (A group the words name wins over a part found only by the last
@@ -6256,26 +6262,26 @@ export function draftAnswer(ctx, env, question) {
       if (by === 'of' && !c.state && !(found[0]?.score >= 10)) continue;
       // (A part drawn in many places, a plain button in a toast, is themed
       // everywhere: said so.)
+      // (Or named after the place's own word, "the menu item of the
+      // dropdown": dropdown-menu-item.)
+      const placeWord = holderWord.word
+        .toLowerCase()
+        .replace(/^(?:the|a|an|my)\s+/, '')
+        .replace(/(?:'s|s'|s)$/, '');
       const specific =
         FAMILIES[pick] != null ||
         pick === themeWide ||
         members.includes(pick) ||
-        members.some(h => pick?.startsWith(`${h}-`));
-      // (Parts said as parts, "buttons inside cards": every one, as the
-      // place reader below says; only an element said as one, "the close
-      // button of toasts", is refused.)
-      if (!specific && /s\s*$/i.test(nameText)) return null;
-      // (A plain part drawn everywhere, a toast's button: any write would
-      // reach every one, so nothing is written.)
+        members.some(h => pick?.startsWith(`${h}-`)) ||
+        String(pick).split('-').includes(placeWord);
+      // (A plain part drawn in the place, a toast's button, a card's
+      // heading: kept to the place only by a token set on it, else nothing
+      // is written.)
       return {
         part: {on: pick},
         holder,
         ...(state !== undefined ? {state} : {}),
-        ...(specific
-          ? {}
-          : {
-              refuse: `${holder} has no ${pick} of its own: the ${pick} it draws is the plain ${pick}, so a change there would reach every ${pick}, and nothing is written`,
-            }),
+        ...(specific ? {} : {scopeOnly: true}),
       };
     }
     return null;
@@ -6289,6 +6295,23 @@ export function draftAnswer(ctx, env, question) {
   // part, so it is never inside one) is that element, the part inside the
   // place that takes the state.
   for (const c of clauses) {
+    // "the card title": a title Core draws as a heading inside the part is
+    // that heading, kept to the part only by a token set on it.
+    {
+      const title = c.parts.find(
+        x =>
+          x.missing &&
+          /\btitle$/.test(String(x.missing)) &&
+          (C.MAP[x.on]?.contains ?? []).includes('heading'),
+      );
+      if (title && c.parts.length === 1) {
+        c.container = title.on;
+        c.parts = [{on: 'heading'}];
+        c.placeStrict = {holder: title.on, part: 'heading'};
+        c.scopeWhy = `Core has no ${title.missing} part of its own: its title is a heading inside it, and this change is the heading's own setting, which ${title.on} cannot hold (it would change every heading); nothing is written`;
+        continue;
+      }
+    }
     // "the menu separators": a part's own divider that draws no line of
     // its own is Core's divider inside that part, which the editor cannot
     // keep apart: every divider, said.
@@ -6326,6 +6349,8 @@ export function draftAnswer(ctx, env, question) {
         if (element.state !== undefined) c.state = element.state;
         if (element.note) placeNotes.push({c, text: element.note});
         if (element.refuse) c.refused = element.refuse;
+        if (element.scopeOnly)
+          c.placeStrict = {holder: element.holder, part: element.part.on};
         continue;
       }
     }
@@ -6525,12 +6550,30 @@ export function draftAnswer(ctx, env, question) {
         if (taking.length === 1) {
           c.parts = [{on: taking[0]}];
           c.container = holder;
+          // (The state picks the element: the one inside that takes it.)
+          c.byState = true;
         } else {
           c.parts = [inPlace[0]];
           continue;
         }
       } else c.container = holder;
     }
+    // (Kept to the place when the place draws the part: "buttons inside
+    // cards". A place that draws none of it is no place of it, "the menu
+    // item of the dropdown" read as a select.)
+    if (
+      c.container &&
+      !c.byState &&
+      c.parts.every(y =>
+        (FAMILIES[y.on] ?? [y.on]).some(m =>
+          (C.MAP[String(c.container)]?.contains ?? []).includes(m),
+        ),
+      )
+    )
+      c.placeStrict = {
+        holder: String(c.container),
+        part: c.parts.map(x => x.on).join(', '),
+      };
     placeNotes.push({
       c,
       text: `the editor themes ${c.parts.map(x => x.on).join(', ')} everywhere: it cannot keep ${inPlace.map(x => x.on).join(', ')} apart, so this applies to every ${c.parts.map(x => x.on).join(', ')} (${inPlace.map(x => x.on).join(', ')} is not changed)`,
@@ -12099,10 +12142,60 @@ export function draftAnswer(ctx, env, question) {
     const targets = c.parts.length ? c.parts : [null];
     for (const p of targets.slice(0, 3)) {
       for (const a of c.aspects.slice(0, 3)) {
-        const d = answerFor(c, p, a);
+        let d = answerFor(c, p, a);
+        // A part kept to its container ("buttons inside cards", "headings
+        // in cards"): only a token the part reads, set on the container
+        // (which the parts inside it read, and the container's own element
+        // does not), keeps it there; a part's own property would reach
+        // every one, so then nothing is written, and the answer says why.
+        // (The container's own element, a top nav's app name, is kept to
+        // it already.)
+        if (
+          d &&
+          c.container &&
+          c.placeStrict &&
+          p &&
+          d.options.length &&
+          p.on.startsWith(`${c.container}-`)
+        )
+          keptInPlace.add(c);
+        else if (d && c.container && c.placeStrict && p && d.options.length) {
+          const box = /** @type {string} */ (c.container);
+          const holds = new Set(C.MAP[box]?.contains ?? []);
+          const boxReads = new Set(
+            Object.values(C.MAP[box]?.own ?? {}).flatMap(
+              (/** @type {any} */ x) => Object.keys(x.tokens ?? {}),
+            ),
+          );
+          const scopable = (/** @type {Step} */ st) =>
+            st.verb === 'set' &&
+            /^--/.test(String(st.thing)) &&
+            !boxReads.has(String(st.thing)) &&
+            // (A token held under one of the part's variants cannot move to
+            // the container: its --when names the part's variant.)
+            (!st.when || st.on === box) &&
+            (!st.on ||
+              st.on === box ||
+              (FAMILIES[st.on] ?? [st.on]).some(m => holds.has(m)));
+          const kept = d.options.filter(o => o.length && o.every(scopable));
+          if (kept.length) {
+            const dropped = kept.length < d.options.length;
+            d.options = kept.map(o => o.map(st => ({...st, on: box})));
+            d.text += ` (on ${box} only: the token is set on ${box}, which the parts inside it read; elsewhere it is as it was${dropped ? `; a whole-theme or ${p.on} setting would reach every ${p.on}, so none is offered` : ''})`;
+          } else {
+            d = {
+              text:
+                c.scopeWhy ??
+                `the editor cannot keep ${box} apart: ${p.on} in ${box} cannot be kept apart from every other ${p.on}, as this answer changes ${p.on}'s own setting, which ${box} cannot hold; nothing is written`,
+              options: [],
+              lookup: `${HOW} ${p.on}`,
+            };
+          }
+          keptInPlace.add(c);
+        }
         // A token written with no part of its own, for a clause that names
         // where it goes: set on that part, so it holds there only.
-        if (d && c.container && d.options.length) {
+        else if (d && c.container && d.options.length) {
           const steps = d.options.flat();
           if (steps.every(st => /^--/.test(st.thing) && !st.on)) {
             for (const st of steps) st.on = c.container;

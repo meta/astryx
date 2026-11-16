@@ -114,7 +114,7 @@ describe('an element named in a part', () => {
         .filter((/** @type {string} */ c) => / editor set /.test(c)),
     ).toEqual([]);
     expect(JSON.stringify(close.data.results)).toMatch(
-      /toast has no button of its own/,
+      /cannot keep toast apart.*nothing is written/,
     );
     const today = await themeEditHow(
       'make the today date in the date picker bold',

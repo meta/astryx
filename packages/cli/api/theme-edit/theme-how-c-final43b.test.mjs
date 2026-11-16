@@ -83,9 +83,11 @@ describe('FINAL-43 R03 and chaos45', () => {
       expect((await answer("make the menu's hovered items red")).first).toEqual(
         ["background-color '#dc2626' --on dropdown-menu-item --state hover"],
       );
+      // (A button set on every toggle button would reach those outside a
+      // group too: nothing is written.)
       expect(
         (await answer("make the toggle group's buttons red")).first,
-      ).toEqual(["background-color '#dc2626' --on toggle-button"]);
+      ).toEqual([]);
       const both = await answer("make the cards' and buttons' borders red");
       expect(both.first.some(c => /--on card$/.test(c))).toBe(true);
       expect(both.first.some(c => /--on button$/.test(c))).toBe(true);
