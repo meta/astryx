@@ -6,9 +6,10 @@
  * @input Two Core builds (a git ref, the working tree, or a built dist
  *   directory each) and the reference pages that
  *   docs/architecture/component-import-boundaries.md INV10 names
- * @output Each reference page's first-load JavaScript, minified and gzip, base
- *   against head, with the delta. With `--unused-on`, a pass or fail line per
- *   named page against INV10's 0.3 KB limit. `--json` prints the same as JSON
+ * @output Each reference page's first-load JavaScript, minified and gzip, its
+ *   static module graph (modules, module depth) and this build's chunks (count,
+ *   depth), base against head, with the deltas. With `--unused-on`, a pass or fail line per named
+ *   page against INV10's 0.3 KB limit. `--json` prints the same as JSON
  * @position Run by people and review agents with `pnpm size:pages`; not a CI
  *   job. Builds each page with the size report's esbuild options
  *   (.github/scripts/lib/component-size.js), as the import-boundaries check
@@ -67,15 +68,28 @@ export function parseReferencePages(recordText) {
  * Each page's sizes and delta, and with `unusedOn`, whether each named page
  * stays within the unused-feature limit.
  */
+const pick = ({min, gzip, modules, moduleDepth, chunks, depth}) => ({
+  min,
+  gzip,
+  modules,
+  moduleDepth,
+  chunks,
+  depth,
+});
+
 export function comparePages(base, head, {unusedOn = []} = {}) {
   const pages = Object.keys(head).map(page => ({
     page,
     components: head[page].components,
-    base: {min: base[page].min, gzip: base[page].gzip},
-    head: {min: head[page].min, gzip: head[page].gzip},
+    base: pick(base[page]),
+    head: pick(head[page]),
     delta: {
       min: head[page].min - base[page].min,
       gzip: head[page].gzip - base[page].gzip,
+      modules: head[page].modules - base[page].modules,
+      moduleDepth: head[page].moduleDepth - base[page].moduleDepth,
+      chunks: head[page].chunks - base[page].chunks,
+      depth: head[page].depth - base[page].depth,
     },
   }));
   const verdicts = unusedOn.map(name => {
@@ -97,6 +111,10 @@ function signed(bytes) {
   return `${bytes < 0 ? '−' : '+'}${Math.abs(bytes).toLocaleString('en-US')}`;
 }
 
+function shape({chunks, depth}) {
+  return `${chunks} / ${depth}`;
+}
+
 function size({min, gzip}) {
   return `${min.toLocaleString('en-US')} / ${gzip.toLocaleString('en-US')}`;
 }
@@ -113,6 +131,26 @@ export function formatComparison({pages, verdicts}, {base, head}) {
         `| ${row.page} (${row.components.join(', ')}) | ${size(row.base)} | ${size(row.head)} | ${signed(row.delta.min)} / ${signed(row.delta.gzip)} |`,
     ),
   ];
+  lines.push(
+    '',
+    'Static module graph (first-load modules / module depth):',
+    '',
+    '| Page | Base | Head | Change |',
+    '| --- | ---: | ---: | ---: |',
+    ...pages.map(
+      row =>
+        `| ${row.page} | ${row.base.modules} / ${row.base.moduleDepth} | ${row.head.modules} / ${row.head.moduleDepth} | ${signed(row.delta.modules)} / ${signed(row.delta.moduleDepth)} |`,
+    ),
+    '',
+    'Chunks in this build, for reference (first-load chunks / chunk depth; another bundler splits differently):',
+    '',
+    '| Page | Base | Head | Change |',
+    '| --- | ---: | ---: | ---: |',
+    ...pages.map(
+      row =>
+        `| ${row.page} | ${shape(row.base)} | ${shape(row.head)} | ${signed(row.delta.chunks)} / ${signed(row.delta.depth)} |`,
+    ),
+  );
   if (verdicts.length > 0) lines.push('');
   for (const verdict of verdicts) {
     lines.push(
@@ -241,6 +279,56 @@ function componentModule(distDir, name) {
 
 const ENTRY_SOURCE = '__astryx-reference-page__.mjs';
 
+/**
+ * The page's static module graph, from the build's own input graph, so it does
+ * not depend on how a bundler splits chunks: `modules`, the modules the page
+ * entry reaches through static imports, and `moduleDepth`, the most edges on
+ * a shortest path from the entry to one of them (breadth-first levels). The
+ * synthetic entry is level 0 and is not counted. Side-effect imports and
+ * re-exports are static imports, so a folder index counts as a module.
+ * Packages the build leaves external are not part of the graph.
+ */
+export function moduleGraphStats(inputs, entryInput) {
+  const level = new Map([[entryInput, 0]]);
+  const queue = [entryInput];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    for (const edge of inputs[current]?.imports ?? []) {
+      if (edge.kind !== 'import-statement' || edge.external) continue;
+      if (level.has(edge.path) || !(edge.path in inputs)) continue;
+      level.set(edge.path, level.get(current) + 1);
+      queue.push(edge.path);
+    }
+  }
+  return {
+    modules: level.size - 1,
+    moduleDepth: Math.max(...level.values()),
+  };
+}
+
+/**
+ * This build's chunks before hydration: `chunks`, the first-load chunks the
+ * entry reaches through static imports, the entry chunk included, and
+ * `depth`, their breadth-first levels with the entry chunk at 1. A browser
+ * finds each chunk only after it loads the chunk that imports it, so `depth`
+ * counts the round trips a cold load waits for in turn. Another bundler splits
+ * chunks differently, so these numbers describe this build only.
+ */
+export function chunkGraphStats(outputs, entryOutput) {
+  const level = new Map([[entryOutput, 1]]);
+  const queue = [entryOutput];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    for (const edge of outputs[current]?.imports ?? []) {
+      if (edge.kind !== 'import-statement' || edge.external) continue;
+      if (level.has(edge.path) || !(edge.path in outputs)) continue;
+      level.set(edge.path, level.get(current) + 1);
+      queue.push(edge.path);
+    }
+  }
+  return {chunks: level.size, depth: Math.max(...level.values())};
+}
+
 /** One page as a production app bundle: what it loads before first paint. */
 export async function measurePage(distDir, components) {
   const esbuild = require('esbuild');
@@ -282,7 +370,12 @@ export async function measurePage(distDir, components) {
     ]),
   );
   const text = eagerText(outputs, textByPath, entryOutput);
-  return {min: Buffer.byteLength(text), gzip: gzipBytes(text)};
+  return {
+    min: Buffer.byteLength(text),
+    gzip: gzipBytes(text),
+    ...moduleGraphStats(result.metafile.inputs, entryPath),
+    ...chunkGraphStats(outputs, entryOutput),
+  };
 }
 
 async function measurePages(distDir, pages) {
