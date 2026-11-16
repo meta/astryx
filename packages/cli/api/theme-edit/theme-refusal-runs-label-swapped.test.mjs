@@ -362,9 +362,9 @@ describe('pasted lines', () => {
   );
 });
 
-describe('dropping --only', () => {
+describe('--only on a part styled on its own already', () => {
   it(
-    'keeps every other scope flag',
+    'is taken with every other scope flag',
     async () => {
       const r = await editor([
         'set',
@@ -379,9 +379,15 @@ describe('dropping --only', () => {
         'dark',
         '--only',
       ]);
-      expect(lines(r.env)[0]).toBe(
-        'set t background-color red --on card --when variant:muted --mode dark',
-      );
+      // --only on a part styled on its own already is taken, and every
+      // other scope flag with it.
+      expect(r.env.error).toBeUndefined();
+      expect(r.env.data.setting).toMatchObject({
+        on: 'card',
+        when: 'variant:muted',
+        mode: 'dark',
+      });
+      expect(r.env.data.setting.only).toBeUndefined();
     },
     T,
   );
