@@ -28,6 +28,7 @@ affects_consumer_docs:
 {
   "paths": [
     "packages/core/src/BottomSheet/**",
+    "packages/core/src/Dialog/**",
     "packages/core/src/TextInput/**",
     "packages/core/src/TextArea/**",
     "packages/core/src/NumberInput/**",
@@ -158,9 +159,10 @@ app to turn on.
   no such report, so FR8 does not apply there.
 - **FR7 — A frame reads the keyboard from the page that embeds it.** Inside an
   iframe the frame's visual viewport does not change when the keyboard opens.
-  When the page that embeds the frame runs Core, it sends the frame FR3's value,
-  and Core in the frame acts on the part of the keyboard that covers the
-  frame's box, as in a top-level document (DEC-8). Focus routes, the focus claim
+  When the page that embeds the frame runs Core, it sends the frame FR3's value
+  with the height of the keyboard that covers the frame's box. The frame
+  accepts it only from its parent window, and Core in the frame acts on it as
+  in a top-level document (DEC-8). Focus routes, the focus claim
   and FR9's reveal act inside the frame; the embedding page keeps its own. A
   frame that receives no value reads 0, and nothing changes there.
 - **FR8 — Browsers that report the keyboard ride it smoothly.** In a browser
@@ -352,9 +354,13 @@ app to turn on.
   `architecture:react-component-runtime` INV11's rule for code outside Core
   reads that value instead, so it agrees with Core's surfaces. Lab reads it
   through Core's internal keyboard entry.
-- FR3 gap: Core has no public keyboard entry. FR7 gap: a frame reads 0.
-  FR10 gap: a field focused after a tap's open brings up no keyboard in
-  Safari on iOS.
+- FR3 gap: Core has no public keyboard entry. FR4 gap: a one-finger drag that
+  starts on a riding container pans the page in Safari on iOS. FR7 gap: a frame
+  reads 0. FR10 gap: a field focused after a tap's open brings up no keyboard
+  in Safari on iOS.
+- A searchable Selector or MultiSelector touch sheet focuses its search field
+  as it opens (`component:Selector` AR2, `component:MultiSelector` FR8). Under
+  FR10, the keyboard then comes up over its options.
 - The consumer documentation gains the Android viewport setting (FR8).
 
 ### Implementation gaps
@@ -608,8 +614,8 @@ Rejected: a CSS custom property on the root (DEC-1); a public copy of the keyboa
 
 An editor or a conversation embedded in an iframe sees no keyboard, so a field
 in it can end under the keyboard. The page that embeds it measures the
-keyboard, so it sends the frame DEC-7's value, and Core in the frame acts on the
-part of the keyboard that covers the frame's box.
+keyboard, so it sends the frame DEC-7's value with the height of the keyboard
+that covers the frame's box. The frame accepts it only from its parent window.
 
 Rejected: a frame reading its embedding page's visual viewport, which a cross-origin frame cannot do.
 
@@ -621,7 +627,8 @@ Rejected: a frame reading its embedding page's visual viewport, which a cross-or
 A Lab component that hides while a keyboard is up, such as a tab bar, needs the
 keyboard's state. Lab cannot import Core's keyboard hook, and a listener of
 Lab's own would measure apart from Core (FR1). Core's internal keyboard entry
-gives Lab DEC-7's value, read-only. Lab moves nothing with the keyboard.
+gives Lab DEC-7's value, read-only. Lab rides nothing; a Lab surface commits
+the resting value once (FR8).
 
 Rejected: a keyboard listener of Lab's own.
 
