@@ -55,6 +55,7 @@ const styles = stylex.create({
   // Two-slot layout (no centerContent): flex row, space-between
   baseFlex: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -81,7 +82,6 @@ const styles = stylex.create({
   startSlot: {
     display: 'flex',
     alignItems: 'center',
-    minWidth: 0,
   },
   // The center basis is its minimum width, so the row wraps before its text
   // overlaps a side lane. Alone on a line narrower than its content, the lane
@@ -111,17 +111,22 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    minWidth: 0,
   },
-  // Take the leftover row width so shrinking content (such as OverflowList)
-  // measures its remaining space rather than flooring at min-content.
+  // Take leftover row width; drop the min-content floor only for OverflowList
+  // so fixed start controls wrap the row instead of colliding.
   startFill: {
-    flex: '1 1 0%',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '0%',
+    minWidth: {
+      default: null,
+      ':has(.astryx-overflow-list)': 0,
+    },
   },
   endKeep: {
     flexShrink: 0,
   },
-  // When only endContent, push to end
+  // Push end content to the trailing edge when alone on a line
   endOnly: {
     marginInlineStart: 'auto',
   },
@@ -473,7 +478,8 @@ export function Toolbar({
                     orientation === 'horizontal' &&
                       hasStartContent &&
                       styles.endKeep,
-                    !hasStartContent && styles.endOnly,
+                    (!hasStartContent || orientation === 'horizontal') &&
+                      styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>

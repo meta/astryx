@@ -14,6 +14,7 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
+import {OverflowList} from '../OverflowList/OverflowList';
 import {Button} from '../Button/Button';
 import {MoreMenu} from '../MoreMenu';
 import {
@@ -267,7 +268,7 @@ describe('Toolbar', () => {
       );
     });
 
-    it('lets the two-slot start lane shrink below min-content while keeping the end lane fixed', () => {
+    it('fills remaining width in two-slot start lane, wraps the row, and keeps floors for non-folding lanes', () => {
       render(
         <Toolbar
           label="Actions"
@@ -278,12 +279,49 @@ describe('Toolbar', () => {
       const startStyle = getComputedStyle(slotOf('start'));
       const endStyle = getComputedStyle(slotOf('end'));
 
-      expect(parseFloat(startStyle.minWidth)).toBe(0);
       expect(startStyle.flexGrow).toBe('1');
       expect(startStyle.flexShrink).toBe('1');
-      expect(parseFloat(endStyle.minWidth)).toBe(0);
+      expect(startStyle.flexBasis).toBe('0%');
+      expect(startStyle.minWidth).not.toBe('0');
+      expect(startStyle.minWidth).not.toBe('0px');
       expect(endStyle.flexShrink).toBe('0');
+      expect(endStyle.minWidth).not.toBe('0');
+      expect(endStyle.minWidth).not.toBe('0px');
+      expect(getComputedStyle(screen.getByRole('toolbar')).flexWrap).toBe(
+        'wrap',
+      );
       expect(clipsOverflow(slotOf('start'))).toBe(false);
+    });
+
+    it('keeps end-only lane above zero min-width so button labels do not truncate', () => {
+      render(<Toolbar label="Actions" endContent={<Button label="Save" />} />);
+      const endStyle = getComputedStyle(
+        screen.getByRole('button', {name: 'Save'}).parentElement!,
+      );
+      expect(endStyle.minWidth).not.toBe('0');
+      expect(endStyle.minWidth).not.toBe('0px');
+    });
+
+    it('supports OverflowList inside the two-slot start lane beside endContent', () => {
+      render(
+        <Toolbar
+          label="Actions"
+          startContent={
+            <OverflowList
+              behavior="observeParent"
+              overflowRenderer={() => <Button label="+1" />}>
+              <Button label="Save" />
+              <Button label="Edit" />
+            </OverflowList>
+          }
+          endContent={<Button label="Clear" />}
+        />,
+      );
+      const startLane = screen
+        .getByRole('button', {name: 'Save'})
+        .closest('.astryx-overflow-list')?.parentElement;
+      expect(startLane).toBeTruthy();
+      expect(startLane?.querySelector('.astryx-overflow-list')).not.toBeNull();
     });
 
     it('keeps vertical two-slot lanes at natural height without horizontal flex-basis collapse', () => {
@@ -296,8 +334,8 @@ describe('Toolbar', () => {
         />,
       );
       const startStyle = getComputedStyle(slotOf('start'));
-      expect(parseFloat(startStyle.minWidth)).toBe(0);
       expect(startStyle.flexGrow).not.toBe('1');
+      expect(startStyle.flexBasis).not.toBe('0%');
     });
   });
 
