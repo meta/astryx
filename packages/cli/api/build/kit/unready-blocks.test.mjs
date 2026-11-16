@@ -29,7 +29,8 @@ vi.mock('../../search/search.mjs', async importOriginal => {
         data: {
           ...res.data,
           results: [injected, ...res.data.results].slice(0, options.limit),
-          matchCount: res.data.matchCount,
+          // The injected template is one more match search counts.
+          matchCount: res.data.matchCount + 1,
         },
       };
     },
@@ -99,7 +100,9 @@ describe('a not-ready page template among search results', () => {
       injected = unready;
       const steered = await kitOf(idea);
       injected = null;
-      expect(steered).toEqual(plain);
+      // Everything but search's own total, which counts the template.
+      expect({...steered, matchCount: 0}).toEqual({...plain, matchCount: 0});
+      expect(steered.matchCount).toBe(plain.matchCount + 1);
     }
   });
 });
