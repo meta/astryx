@@ -1811,17 +1811,20 @@ function toPascalCase(name) {
     .join('');
 }
 
-/** @type {Promise<Record<string, Record<string, string[]>>> | null} */
-let _knownValuesIndexPromise = null;
+/**
+ * The known values index of each Core `src` folder.
+ * @type {Map<string | null, Promise<Record<string, Record<string, string[]>>>>}
+ */
+const _knownValuesIndexes = new Map();
 
 /**
  * Build one target-keyed index of built-in visual-prop values from every core
  * component doc. A rendered target often lives in a sibling doc (for example,
  * `astryx-heading` is documented by Text/Heading.doc.mjs), so directory-name
  * guessing is not a valid lookup strategy.
+ * @param {string | null} coreSrc
  */
-async function loadKnownValuesIndex() {
-  const coreSrc = coreSrcPath();
+async function loadKnownValuesIndex(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
   return (await coreThemeValues(coreSrc)).knownValues;
 }
@@ -1831,25 +1834,57 @@ async function loadKnownValuesIndex() {
  * @returns {Promise<Record<string, string[]>>}
  */
 async function getKnownValues(componentName) {
-  _knownValuesIndexPromise ??= loadKnownValuesIndex();
-  const index = await _knownValuesIndexPromise;
+  const coreSrc = coreSrcPath();
+  if (!_knownValuesIndexes.has(coreSrc))
+    _knownValuesIndexes.set(coreSrc, loadKnownValuesIndex(coreSrc));
+  const index = await _knownValuesIndexes.get(coreSrc);
   return index[componentName] ?? {};
 }
 
 /**
- * Resolve `@astryxdesign/core`'s package root relative to the CLI package. Core
- * and the CLI ship as siblings (`@astryxdesign/core`, `@astryxdesign/cli`), so
- * `../../../../core` from `api/theme/build/` reaches core whether installed from
- * npm or run inside the monorepo. Returns null if it can't be found.
+ * The package root of the Core whose component docs and types the build reads:
+ * the Core the build selected ({@link selectCore}), else the Core beside the
+ * CLI. A copy installed for the computer has no Core beside it, so it reads
+ * the project's Core once the build selects it, as the build itself does.
+ * Returns null if neither can be found.
+ * @returns {string | null}
  */
 function resolveCoreRoot() {
+  const selected = _coreThemeFile ? corePackageRoot(_coreThemeFile) : null;
+  if (selected) return selected;
+  // Core and the CLI ship as siblings, so `../../../../core` from
+  // `api/theme/build/` reaches Core whether installed from npm or run inside
+  // the monorepo.
   const cliDir = path.dirname(fileURLToPath(import.meta.url));
   const coreRoot = path.resolve(cliDir, '../../../../core');
   return fs.existsSync(coreRoot) ? coreRoot : null;
 }
 
 /**
- * The `src` folder of the Core beside the CLI ({@link resolveCoreRoot}), or
+ * The folder at or above `file` whose package.json names `@astryxdesign/core`,
+ * or null.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function corePackageRoot(file) {
+  let dir = path.dirname(file);
+  for (;;) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+      );
+      if (pkg?.name === '@astryxdesign/core') return dir;
+    } catch {
+      // No readable package.json here; keep walking up.
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * The `src` folder of the Core the build reads ({@link resolveCoreRoot}), or
  * null when there is none.
  * @returns {string | null}
  */
@@ -1876,12 +1911,12 @@ const _componentDeclCache = new Map();
  */
 function readComponentDeclarations(pascalName, options = {}) {
   const includeTypes = options.includeTypes === true;
-  const cacheKey = `${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
+  const coreRoot = resolveCoreRoot();
+  const cacheKey = `${coreRoot}\0${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
   if (_componentDeclCache.has(cacheKey)) {
     return _componentDeclCache.get(cacheKey) ?? '';
   }
   let contents = '';
-  const coreRoot = resolveCoreRoot();
   if (coreRoot) {
     const candidateSets = [
       [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
@@ -1926,9 +1961,11 @@ const _augmentationTargetCache = new Map();
  * @returns {Promise<Array<{moduleName: string, interfacePrefix: string}>>}
  */
 async function resolveAugmentationTargetCandidates(componentName) {
-  if (_augmentationTargetCache.has(componentName)) {
+  const coreSrc = coreSrcPath();
+  const cacheKey = `${coreSrc}\0${componentName}`;
+  if (_augmentationTargetCache.has(cacheKey)) {
     return /** @type {Array<{moduleName: string, interfacePrefix: string}>} */ (
-      _augmentationTargetCache.get(componentName)
+      _augmentationTargetCache.get(cacheKey)
     );
   }
 
@@ -1939,9 +1976,8 @@ async function resolveAugmentationTargetCandidates(componentName) {
     },
   ];
 
-  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) {
-    _augmentationTargetCache.set(componentName, fallback);
+    _augmentationTargetCache.set(cacheKey, fallback);
     return fallback;
   }
 
@@ -1981,7 +2017,7 @@ async function resolveAugmentationTargetCandidates(componentName) {
     addCandidate(candidate.moduleName, candidate.interfacePrefix);
   }
   const resolved = matches;
-  _augmentationTargetCache.set(componentName, resolved);
+  _augmentationTargetCache.set(cacheKey, resolved);
   return resolved;
 }
 
@@ -4341,7 +4377,7 @@ function generateBuiltModule(
       : serializeField('componentIcons', componentIconValues, true));
 
   return `${iconImport}${componentIconPrelude}${iconDeclaration}${iconNodesDeclaration}/**
- * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
+ * ${themeDef.name} theme — built by \`astryx theme build\`
  * Import the CSS file alongside this module:
  *
  *   import { ${themeBinding} } from './${artifactBaseName}';
@@ -4444,17 +4480,21 @@ async function loadKnownComponents() {
   return Object.keys(propsByKey).length > 0 ? {propsByKey} : null;
 }
 
-/** @type {{propsByKey: Record<string, string[]>} | null | undefined} */
-let knownComponentsCache;
+/**
+ * The known components of each Core `src` folder.
+ * @type {Map<string | null, {propsByKey: Record<string, string[]>} | null>}
+ */
+const knownComponentsCache = new Map();
 
 /**
  * @returns {Promise<{propsByKey: Record<string, string[]>} | null>}
  */
 async function getKnownComponents() {
-  if (knownComponentsCache === undefined) {
-    knownComponentsCache = await loadKnownComponents();
+  const coreSrc = coreSrcPath();
+  if (!knownComponentsCache.has(coreSrc)) {
+    knownComponentsCache.set(coreSrc, await loadKnownComponents());
   }
-  return knownComponentsCache;
+  return knownComponentsCache.get(coreSrc) ?? null;
 }
 
 /**
@@ -4865,7 +4905,12 @@ async function themeBuildInternal(
 
   // Core's facts first, before the build reads the theme: kept facts then do
   // not depend on it, and a build after an edit to the theme reads them back.
-  await keepCoreThemeFacts(coreSrcPath());
+  {
+    const installed = findInstalledPackage(cwd, '@astryxdesign/core');
+    await keepCoreThemeFacts(
+      installed ? path.join(installed, 'src') : coreSrcPath(),
+    );
+  }
 
   {
     const problem = buildInputProblem(file, options, cwd);
