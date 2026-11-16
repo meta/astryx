@@ -197,7 +197,11 @@ those contracts.
   shared internal hook in the keyboard module (`packages/core/src/keyboard/`)
   measures the on-screen keyboard, keeps the page from panning on focus, and
   dismisses the keyboard when a surface moves (`spec:AST-099`); it is not
-  exported. The keyboard height and each keyboard change's transition (start
+  exported. Apps read its value, read-only, from the public keyboard entry, and
+  Lab reads it from Core's internal keyboard entry (`spec:AST-099` FR3): the
+  height, whether a keyboard is up, and whether it has settled, with a
+  notification when it settles. The keyboard height
+  and each keyboard change's transition (start
   time, resting value, curve) reach styles only as the hook's value and live
   only in the hook: each consumer applies them through a StyleX functional style
   on its own element, and no CSS custom property on the document root or a
@@ -236,9 +240,10 @@ those contracts.
   the hook makes at most one layout read per keyboard change. A component
   outside Core does not ride; it commits the resting value once. Packages
   outside Core cannot import the hook; a component there that responds to the
-  keyboard keeps one listener that measures as `spec:AST-099` FR2 defines, keeps
-  focus from panning as FR4 does, blurs as FR5 does, applies the height through
-  a functional style on its own elements, and follows INV3 and INV5. The hook
+  keyboard reads the hook's value through its entry and keeps no listener of its
+  own that measures the keyboard. It keeps focus from panning as
+  `spec:AST-099` FR4 does, blurs as FR5 does, applies the height through a
+  functional style on its own elements, and follows INV3 and INV5. The hook
   follows INV3 and INV5.
 - **INV12 — Size changes inside a container have one module.** In
   `@astryxdesign/core`, one internal module produces the size-change glide

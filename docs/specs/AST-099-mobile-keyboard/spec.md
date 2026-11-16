@@ -95,9 +95,16 @@ app to turn on.
   visual viewport's scale, in CSS pixels. It is 0 when no keyboard is shown,
   including while the page is pinch-zoomed. A page pan or a visual-viewport
   offset is a pan to put back (FR4), never a smaller keyboard.
-- **FR3 — The keyboard height stays internal and keeps layout correct.** No
-  public CSS custom property, export, or prop exposes the keyboard height. Each
-  component applies it on its own element, such as a bottom offset, a padding,
+- **FR3 — Apps read one keyboard value, and layout stays correct.** Core gives
+  apps the keyboard as one read-only value from its public keyboard entry,
+  `@astryxdesign/core/keyboard` (DEC-7): the keyboard height (FR2), whether a
+  keyboard is up, and whether it has settled at that height, with a
+  notification when it settles. Lab components read the same value through
+  Core's internal keyboard entry (DEC-9). Core's surfaces read it at the same
+  moment (FR1). No CSS custom property on the document
+  root or a shared ancestor carries it, and no prop sets it. Each component,
+  and each app element that reads it, applies it on its own element, such as a
+  bottom offset, a padding,
   or a maximum height, so layout is correct with no animation running: the chat
   composer, a search field placed at the bottom, and tab bar search position
   from it, and a fully expanded sheet extends its own scroll range by it. FR9's
@@ -109,9 +116,10 @@ app to turn on.
   the same motion to the resting value with no per-frame layout work, and each
   commits the resting value once to layout, as an offset, a padding, or a
   spacer, so nothing is hidden or unscrollable. How the motion is shared is
-  `architecture:react-component-runtime` INV11; no public API or CSS custom
-  property exposes it. In Safari on iOS, which reports the keyboard only once
-  it is down, a fully expanded sheet
+  `architecture:react-component-runtime` INV11; no public value or CSS custom
+  property exposes the motion. An app element that reads the value commits the
+  resting value once. In Safari on iOS, which reports the keyboard's hide only
+  once it is down, a fully expanded sheet
   whose field loses focus to a control that brings up neither a keyboard nor a
   picker in the keyboard's place keeps its keyboard layout and moves its
   content to its resting scroll on the motion the keyboard's own hide plays
@@ -126,7 +134,13 @@ app to turn on.
   control into view with its own scroller. When the keyboard's Done button
   ends entry, focus moves to the surface so the next tap is handled the same
   way. A document scroll that still happens while the page is scroll-locked,
-  such as on returning to the app, is put back in the same frame.
+  such as on returning to the app, is put back in the same frame. While the
+  keyboard shows and a container rides it under FR9, a Core host or an app's
+  docked bar, a one-finger drag that starts on that container does not pan the
+  page: Core
+  holds the page for it (`spec:AST-094` FR19), unless a scroller inside the
+  container takes the drag or the page is pinch-zoomed (DEC-10). A browser's own
+  pan to a field in a riding container is put back in the same frame.
 - **FR5 — Moving a surface dismisses the keyboard.** When a surface that holds
   the focused control starts to move, such as a sheet dragged between heights,
   a drag to dismiss, or a close, the control is blurred so the keyboard
@@ -142,10 +156,13 @@ app to turn on.
   device that shows an on-screen keyboard; a browser that offers the report but
   shows no on-screen keyboard reads 0. A page that is not a secure context gets
   no such report, so FR8 does not apply there.
-- **FR7 — Top-level documents only.** Inside an iframe the frame's visual
-  viewport does not change when the keyboard opens, so the keyboard height is
-  0 there and nothing changes. Behavior and evidence for this record come
-  from a top-level document.
+- **FR7 — A frame reads the keyboard from the page that embeds it.** Inside an
+  iframe the frame's visual viewport does not change when the keyboard opens.
+  When the page that embeds the frame runs Core, it sends the frame FR3's value,
+  and Core in the frame acts on the part of the keyboard that covers the
+  frame's box, as in a top-level document (DEC-8). Focus routes, the focus claim
+  and FR9's reveal act inside the frame; the embedding page keeps its own. A
+  frame that receives no value reads 0, and nothing changes there.
 - **FR8 — Browsers that report the keyboard ride it smoothly.** In a browser
   that reports the on-screen keyboard's geometry itself, such as Chrome on
   Android, the keyboard height comes from FR2's visual-viewport
@@ -251,12 +268,22 @@ app to turn on.
   trigger, FileInput, Slider, and a Selector or ComplexSelector trigger. Lab
   fields follow INV11's rule for components outside Core.
 
+- **FR10 — A field focused after a tap still brings up the keyboard.** When a
+  tap opens a Core surface whose initial focus is a text-entry field that mounts
+  after the tap, such as a Dialog or a BottomSheet that focuses its field as it
+  opens, that focus brings up the keyboard in every browser. Safari on iOS
+  raises the keyboard only for a focus made inside the tap, so Core carries the
+  tap's focus to the field (DEC-11). A surface opened without a tap, or whose
+  initial focus is not a text-entry field, brings up no keyboard. The page does
+  not pan for that focus (FR4).
+
 ### Platform support
 
 - Supported feature/engine floor: the package's supported browsers
   (`spec:AST-013` FR3). FR2–FR5 apply to Safari on iOS, in the browser and as a
   home-screen app, and to Firefox for Android; FR8's ride applies wherever the
-  browser reports the keyboard itself, such as Chrome on Android.
+  browser reports the keyboard itself, such as Chrome on Android. FR7 applies to a frame whose embedding page
+  runs Core, and FR10 to every browser.
 - Unsupported behavior: with no on-screen keyboard, or no visual-viewport
   support, the keyboard height is 0 and nothing changes. During server render it
   renders nothing and reads no viewport.
@@ -320,7 +347,14 @@ app to turn on.
   `BottomSheet.doc.mjs` documents and moves with the keyboard, so no consumer
   loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
   each platform's behavior. Firefox for Android gets FR2–FR5.
-- No public API exposes the keyboard height, and FR3 keeps it that way.
+- FR3's public entry, `@astryxdesign/core/keyboard`, gives an app the keyboard
+  value. An app that measured the keyboard itself by
+  `architecture:react-component-runtime` INV11's rule for code outside Core
+  reads that value instead, so it agrees with Core's surfaces. Lab reads it
+  through Core's internal keyboard entry.
+- FR3 gap: Core has no public keyboard entry. FR7 gap: a frame reads 0.
+  FR10 gap: a field focused after a tap's open brings up no keyboard in
+  Safari on iOS.
 - The consumer documentation gains the Android viewport setting (FR8).
 
 ### Implementation gaps
@@ -405,6 +439,10 @@ that sets its own `translate`, to the app.
 | FR9      | TBD (Gap 1): a source boundary check over the covered fields                                                 | every covered field's props type and source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | A public prop, option, or context for the behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR9      | TBD (Gap 1–11): Safari on iOS in the iOS Simulator and Chrome on Android in the emulator, top-level document | TextInput in the page, ChatComposer in its dock, a Selector search row in its sheet, and a TextInput in a fixed Toolbar                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | The field ends under the keyboard, or the page lurches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR9      | TBD (Gap 11): a ride test per covered field, plus physical-device evidence under DEC-3                       | each covered field in a fixed bottom bar, a sheet, an app-owned bar whose layout box sits at the viewport's bottom edge; an app bar the app lifts to the keyboard's top on the same visual-viewport resize, with its listener running before and after Core's; an app bar the app lifts part of the way with its own transform; an app bar the app lifts behind a CSS transition or animation still running when Core measures; an app bar the app lifts from script with its own `translate`; a keyboard that changes height while focus stays in a docked bar; an app bar centred with its own `translate`; an app bar floating above the bottom edge; an app-owned fixed container that fills the viewport, with and without a scroller holding the field; a full-height side drawer with a scroller holding the field; a tall pane below a fixed header with no scroller and a field near its top; the same pane with a field near its bottom; keyboard show and hide; the field blurs; the field unmounts; reduced motion on | The docked container stays put, lags or jumps after the keyboard settles, a Core host or content field less than 10 CSS px above the keyboard, an app bar left under the keyboard or above its top edge once the keyboard settles, a move left on an app element after the keyboard hides once focus has left the field, or after the field unmounts, any other change on an app element, a bar the app lifts moved a second time, a bar the app is moving with CSS motion moved by Core, a bar with its own `translate` moved, a docked bar not updated when the keyboard changes height, a floating bar moved, the app's transform replaced, a bar with its own `translate` moved or its `translate` changed, the page is panned or translated, a fixed container that fills the viewport, or whose layout box is not at the bottom edge, moves, or a Core host that already rides is moved twice; a too-tall docked container moved when a scroller holds the field or when the field already clears the keyboard, moved more than the field needs to clear it, or a field near its bottom left under the keyboard; a field that a scroller holds inside a container FR9 leaves to the app, left under the keyboard. A container FR9 leaves to the app (floating above the bottom edge, with its own `translate`, or full-viewport) left under the keyboard, or a page pan from the browser's own reveal for a field with no scroller between it and that container, is not a failure |
+| FR3      | A public-surface check of both entries, consumer tests, and a browser test beside a Core surface             | keyboard shown, settled and hidden; a pan and a pinch zoom with the keyboard shown; a resume; an app element beside ChatLayout's dock                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The app element and a Core surface disagree in a frame, the settle notification fires before the keyboard settles, or the value reaches a CSS custom property on a shared ancestor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR4      | Safari on iOS in the Simulator and Chrome on Android in the emulator: a drag starting on a riding container  | a docked bar Core rides; a scroller inside the container; a pinch-zoomed page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | The page pans under the drag, or a scroller inside the container stops scrolling                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR7      | Browser tests of a same-origin and a cross-origin frame, with and without Core in the embedding page         | a field in the frame near its bottom; a frame partly under the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | A frame reads a value its embedding page did not send, or a field in the frame ends under the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR10     | Safari on iOS in the Simulator and on an iPhone: a tap that opens a Dialog or a sheet that focuses a field   | a field that mounts at once; a field that mounts after the open's motion; a surface opened from a key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The keyboard stays down, or comes up for a surface opened without a tap                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Decision log
 
@@ -543,6 +581,78 @@ reported partway through the keyboard's slide; the content rides down from
 that report.
 
 Rejected: a fast slide, which Chrome's pan still overtakes when the page stalls; the VirtualKeyboard overlay setting, which changes DEC-4's measurement source and the page's layout.
+
+### DEC-7 — Apps read one keyboard value
+
+**Reference:** `spec:AST-099/DEC-7`
+**Decider:** pending
+
+Some parts of an app cannot sit in a Core field or host, such as a floating
+button, a floating player, a full-viewport panel whose last line ends at the
+keyboard, or a bar that hides while a person types. To stay clear of the
+keyboard, each needs the keyboard's height or whether it is up. Without a
+public value, each app keeps its own measurement beside Core's, and the two can
+disagree after a pan, a pinch zoom or a resume, which DEC-1 exists to prevent.
+One read-only value keeps every surface on one height (FR1) and keeps the
+measurement in Core. The notification at rest serves work that waits for the
+keyboard to settle. No app sets the value, and no CSS custom property carries
+it, so DEC-1's reason against a shared variable stands. It is the deliberate
+public-API decision that DEC-1 leaves to a later need.
+
+Rejected: a CSS custom property on the root (DEC-1); a public copy of the keyboard module's hook and its focus claim; a public motion clock, which serves only browsers that report the keyboard (FR8).
+
+### DEC-8 — A frame reads the keyboard from the page that embeds it
+
+**Reference:** `spec:AST-099/DEC-8`
+**Decider:** pending
+
+An editor or a conversation embedded in an iframe sees no keyboard, so a field
+in it can end under the keyboard. The page that embeds it measures the
+keyboard, so it sends the frame DEC-7's value, and Core in the frame acts on the
+part of the keyboard that covers the frame's box.
+
+Rejected: a frame reading its embedding page's visual viewport, which a cross-origin frame cannot do.
+
+### DEC-9 — Lab reads the keyboard's state through Core's internal entry
+
+**Reference:** `spec:AST-099/DEC-9`
+**Decider:** pending
+
+A Lab component that hides while a keyboard is up, such as a tab bar, needs the
+keyboard's state. Lab cannot import Core's keyboard hook, and a listener of
+Lab's own would measure apart from Core (FR1). Core's internal keyboard entry
+gives Lab DEC-7's value, read-only. Lab moves nothing with the keyboard.
+
+Rejected: a keyboard listener of Lab's own.
+
+### DEC-10 — A drag on a riding container does not pan the page
+
+**Reference:** `spec:AST-099/DEC-10`
+**Decider:** pending
+
+FR4 keeps focus routes from panning the page. Safari lets a person's own drag
+pan the visual viewport under a container that rides the keyboard, and the
+container then leaves the keyboard's top. Core holds the page for a drag that
+starts on such a container, as a scroll lock under a modal presentation does
+(`spec:AST-094` FR19). A scroller inside the container still takes its own
+drags. The browser's own pan to a field in a riding container is put back, as
+for Core's composer.
+
+Rejected: moving the container with the pan, which leaves content under the keyboard.
+
+### DEC-11 — A field focused after a tap brings up the keyboard
+
+**Reference:** `spec:AST-099/DEC-11`
+**Decider:** pending
+
+Safari on iOS raises the keyboard only for a focus made inside a tap. A Core
+surface that focuses its field as it opens, after the tap, then shows a focused
+field with no keyboard. Core carries the tap's focus to the field, so the
+keyboard comes up as in other browsers. A surface opened without a tap brings up
+no keyboard, and a surface that defers its field's focus, such as a sheet that
+keeps its options in view, brings up none until the person taps the field.
+
+Rejected: requiring each app to focus the field inside its own tap handler.
 
 ## Open questions
 
