@@ -83,6 +83,7 @@ import {
   withoutCssEscapes,
   isSize,
   parseColor,
+  ratio,
   mixSide,
   splitTop,
 } from './_color.mjs';
@@ -133,6 +134,7 @@ import {
   partStates,
   savedStateRead,
   propertySpelling,
+  modesOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -1075,6 +1077,58 @@ const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
   background: '--color-background-body',
   'background-color': '--color-background-body',
 });
+
+/**
+ * The one mode a whole-theme color belongs to, or null: a theme showing
+ * both modes takes a page or text color that suits one of them (a dark
+ * page, light text) in that mode only, since the same value in both would
+ * leave the other unreadable. Measured against what the theme shows now,
+ * by the contrast the page and its text keep.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {any} data
+ * @param {string} token the whole-theme token the value would set
+ * @param {string} value
+ * @returns {'light' | 'dark' | null}
+ */
+function modeColorBelongs(ctx, data, token, value) {
+  if (!/^--color-(background-body|text-primary)$/.test(token)) return null;
+  if (modesOf(data).length < 2) return null;
+  const want = parseColor(String(value).trim());
+  if (!want) return null;
+  // The other side of the pair, as the theme shows it now: a page color is
+  // read against that mode's text, a text color against its page.
+  const other =
+    token === '--color-background-body'
+      ? '--color-text-primary'
+      : '--color-background-body';
+  const saved = (data.settings ?? []).filter(
+    (/** @type {any} */ x) => x.thing === other && !x.on,
+  );
+  const shown = (/** @type {'light' | 'dark'} */ m) => {
+    const own =
+      saved.find((/** @type {any} */ x) => x.mode === m) ??
+      saved.find((/** @type {any} */ x) => !x.mode);
+    const raw = String(
+      own?.value ?? ctx.project.core.tokenDefaults?.[other] ?? '',
+    );
+    // `light-dark(a, b)`, as the token defaults write a pair.
+    const inner = /^light-dark\(\s*([\s\S]*)\)$/i.exec(raw.trim())?.[1];
+    const sides = inner ? splitTop(inner, ',').map(x => x.trim()) : null;
+    return parseColor(
+      sides && sides.length === 2 ? sides[m === 'dark' ? 1 : 0] : raw,
+    );
+  };
+  /** @type {Array<['light' | 'dark', number]>} */
+  const kept = [];
+  for (const m of /** @type {const} */ (['light', 'dark'])) {
+    const against = shown(m);
+    if (!against) return null;
+    kept.push([m, ratio(want, against)]);
+  }
+  const [best, worst] = [...kept].sort((a, b) => b[1] - a[1]);
+  // One mode keeps text readable and the other does not: that mode.
+  return best[1] >= 4.5 && worst[1] < 3 ? best[0] : null;
+}
 
 /** A number or a size, which is never a font family. */
 const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
@@ -6948,9 +7002,17 @@ function checkOne(
                 : [];
             })(),
             ...(v && WHOLE_THEME_EQUIVALENT[prop]
-              ? [
-                  `${P} set ${slug} ${WHOLE_THEME_EQUIVALENT[prop]} ${quoteCommandArgument(v)}`,
-                ]
+              ? (() => {
+                  const token = WHOLE_THEME_EQUIVALENT[prop];
+                  // A page or text color the theme shows in one mode only
+                  // (a dark page in a theme with both modes) is offered for
+                  // that mode first: the same color in both would leave the
+                  // other unreadable, as `how` answers it.
+                  const mode = modeColorBelongs(ctx, data, token, v);
+                  const line = (/** @type {string} */ m) =>
+                    `${P} set ${slug} ${token} ${quoteCommandArgument(v)}${m ? ` --mode ${m}` : ''}`;
+                  return mode ? [line(mode), line('')] : [line('')];
+                })()
               : []),
             `${HOW} ${quoteCommandArgument(prop)}`,
           ],
@@ -7561,7 +7623,54 @@ function checkOne(
         ],
       },
     );
-  const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
+  // A word people write for a dial, read the way the dial's own words are:
+  // with `-color`/`-colour` after it (primary-color), in the plural
+  // (shadows), and the words for a mode or a flat surface, which name a
+  // dial with a value of their own.
+  const aliasesOf = (/** @type {string} */ w) => {
+    if (DIALS[w]) return [w];
+    const found = COLOR_DIAL_WORDS.get(w);
+    if (found) return found;
+    const bare = w.replace(/[-_ ]?colou?r$/, '');
+    if (bare !== w && (DIALS[bare] || COLOR_DIAL_WORDS.get(bare)))
+      return DIALS[bare] ? [bare] : (COLOR_DIAL_WORDS.get(bare) ?? []);
+    const singular = w.replace(/e?s$/, '');
+    if (singular !== w && (DIALS[singular] || COLOR_DIAL_WORDS.get(singular)))
+      return DIALS[singular]
+        ? [singular]
+        : (COLOR_DIAL_WORDS.get(singular) ?? []);
+    return [];
+  };
+  const aliases = aliasesOf(lower);
+  // A word that names a dial AND the value it asks for (`shadows none` is
+  // `surfaces flat`, `dark-mode true` is `mode dark-only`): that command.
+  const asDialValue = (() => {
+    const word = lower.replace(/[-_ ]?(?:colou?r|mode)$/, '') || lower;
+    const off = /^(none|off|no|0|false|flat)$/.test(
+      String(v).trim().toLowerCase(),
+    );
+    const on = /^(true|yes|on|1)$/.test(String(v).trim().toLowerCase());
+    if (/^(shadows?|elevation)$/.test(word) && off)
+      return {dial: 'surfaces', value: 'flat'};
+    if (/^(dark|darkmode)$/.test(word) && on)
+      return {dial: 'mode', value: 'dark-only'};
+    if (/^(light|lightmode)$/.test(word) && on)
+      return {dial: 'mode', value: 'light-only'};
+    return null;
+  })();
+  if (!hint && !aliases.length && asDialValue && DIALS[asDialValue.dial])
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. ${asDialValue.dial} ${asDialValue.value} does that.`,
+      {
+        didYouMean: [asDialValue.dial],
+        run: [
+          unset
+            ? `${P} undo ${slug} ${asDialValue.dial}`
+            : `${P} set ${slug} ${asDialValue.dial} ${asDialValue.value}`,
+        ],
+      },
+    );
   if (!hint && aliases.length)
     return refuse(
       E.ERR_THEME_UNKNOWN_THING,
