@@ -155,7 +155,7 @@ function ConversationItem({
                 {label: 'Pin', onClick: () => demoAction('pinned')},
                 {label: 'Rename', onClick: () => demoAction('renamed')},
                 {label: 'Archive', onClick: () => demoAction('archived')},
-                {label: 'Delete', onClick: () => {}},
+                {label: 'Delete', onClick: () => demoAction('deleted')},
               ]}
             />
           ) : (
