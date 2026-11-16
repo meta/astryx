@@ -12,8 +12,8 @@
  *   Table's default cells provide TextMeasureOnInterestContext and Text reads
  *   it
  *
- * A layer boundary resets it to false, because content in a layer is not
- * inside the clamped text box.
+ * A layer boundary resets both to false. Content in a layer is not inside
+ * the clamped text or the cell.
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';

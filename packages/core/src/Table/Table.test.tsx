@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTable} from './BaseTable';
 import {Table} from './Table';
@@ -32,13 +32,45 @@ import {
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
 import {Text} from '../Text/Text';
 
-// Counts imports of the Tooltip module; a fresh module registry imports it
-// again.
-const tooltipModuleLoads = vi.hoisted(() => ({count: 0}));
-vi.mock('../Tooltip/Tooltip', async importOriginal => {
-  tooltipModuleLoads.count += 1;
-  return importOriginal();
-});
+/**
+ * A fresh Table module graph whose Tooltip imports are counted, and frames
+ * held until `releaseFrames` runs them.
+ */
+async function freshTableWithCountedTooltip() {
+  // An earlier test's page-wide preload runs from its own module graph. Let
+  // it land first, so it cannot import through the counting mock below.
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  });
+  vi.resetModules();
+  const loads = {count: 0};
+  vi.doMock('../Tooltip/Tooltip', async importOriginal => {
+    loads.count += 1;
+    return importOriginal();
+  });
+  const held: FrameRequestCallback[] = [];
+  const frame = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation(callback => {
+      held.push(callback);
+      return held.length;
+    });
+  const {Table: FreshTable} = await import('./Table');
+  return {
+    FreshTable,
+    loads,
+    releaseFrames() {
+      frame.mockRestore();
+      for (const callback of held.splice(0)) {
+        callback(performance.now());
+      }
+    },
+    restore() {
+      frame.mockRestore();
+      vi.doUnmock('../Tooltip/Tooltip');
+    },
+  };
+}
 
 // =============================================================================
 // Test Data
@@ -1453,22 +1485,72 @@ describe('Table', () => {
   });
 
   it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {
-    // Let a page-wide preload an earlier test scheduled finish first.
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      render(
+        <fresh.FreshTable
+          data={users}
+          columns={columns}
+          textOverflow="truncate"
+        />,
+      );
+      // No load starts until the page's next frame runs.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(fresh.loads.count).toBe(0);
+      act(() => fresh.releaseFrames());
+      await waitFor(() => {
+        expect(fresh.loads.count).toBe(1);
+      });
+    } finally {
+      fresh.restore();
+    }
+  });
+
+  it('starts no Tooltip load sooner for a hover on a cut-off cell before the page paints', async () => {
+    const proto = window.HTMLElement.prototype;
+    const original = {
+      scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
+      offsetWidth: Object.getOwnPropertyDescriptor(proto, 'offsetWidth'),
+    };
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
     });
-    vi.resetModules();
-    const loads = tooltipModuleLoads;
-    loads.count = 0;
-    const {Table: FreshTable} = await import('./Table');
-    render(
-      <FreshTable data={users} columns={columns} textOverflow="truncate" />,
-    );
-    // The load waits for the next paint, so the commit starts none.
-    expect(loads.count).toBe(0);
-    await waitFor(() => {
-      expect(loads.count).toBe(1);
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
     });
+    const fresh = await freshTableWithCountedTooltip();
+    try {
+      render(
+        <fresh.FreshTable
+          data={users}
+          columns={columns}
+          textOverflow="truncate"
+        />,
+      );
+      const cellText = screen.getAllByRole('cell')[0].querySelector('span')!;
+      fireEvent.pointerEnter(cellText, {pointerType: 'mouse'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      // The hover measured the cell as cut off, but the load still waits.
+      expect(fresh.loads.count).toBe(0);
+      act(() => fresh.releaseFrames());
+      await waitFor(() => {
+        expect(fresh.loads.count).toBe(1);
+      });
+    } finally {
+      fresh.restore();
+      if (original.scrollWidth) {
+        Object.defineProperty(proto, 'scrollWidth', original.scrollWidth);
+      }
+      if (original.offsetWidth) {
+        Object.defineProperty(proto, 'offsetWidth', original.offsetWidth);
+      }
+    }
   });
 
   it('schedules one after-paint preload for the page, whatever the number of cells', async () => {

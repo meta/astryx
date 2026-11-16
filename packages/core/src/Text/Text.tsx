@@ -61,6 +61,7 @@ import {
   TextClampContext,
   TextMeasureOnInterestContext,
 } from './textClampContext';
+import {observeContent} from '../utils/sharedMutationObserver';
 
 export type {TextType, TextSize};
 
@@ -267,8 +268,8 @@ export function Text({
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
 
-  // Where many texts mount at once, such as a Table's default cells, the text
-  // measures on its first hover, tap or focus instead of when it mounts.
+  // A Table's default cells mount many texts at once. Text in them measures at
+  // each hover, tap or focus, not at mount.
   const measuresOnInterest =
     use(TextMeasureOnInterestContext) &&
     maxLines > 0 &&
@@ -285,22 +286,46 @@ export function Text({
   const textRef = useRef<HTMLElement>(null);
 
   // Text that measures on interest keeps the answer of its last hover, tap or
-  // focus, and measures again at each one.
+  // focus, and measures again at each one. After the first, a content change
+  // also measures it again, so an open tooltip follows the text.
   const [interestAnswer, setInterestAnswer] = useState(NO_INTEREST_ANSWER);
+  const contentMeasureRef = useRef<(() => void) | null>(null);
+  const unobserveContentRef = useRef<(() => void) | null>(null);
   const measureOnInterest = useCallback((): boolean => {
     const element = textRef.current;
     if (element == null) {
       return false;
     }
-    const isTruncated = measureTruncation(element, maxLines);
-    const fullText = element.textContent ?? '';
-    setInterestAnswer(current =>
-      current.isTruncated === isTruncated && current.fullText === fullText
-        ? current
-        : {isTruncated, fullText},
-    );
-    return isTruncated;
+    const measure = (): boolean => {
+      const isTruncated = measureTruncation(element, maxLines);
+      const fullText = element.textContent ?? '';
+      // The tooltip reads the text only while the text is truncated.
+      setInterestAnswer(current =>
+        !isTruncated
+          ? NO_INTEREST_ANSWER
+          : current.isTruncated && current.fullText === fullText
+            ? current
+            : {isTruncated, fullText},
+      );
+      return isTruncated;
+    };
+    contentMeasureRef.current = measure;
+    unobserveContentRef.current ??= observeContent(element, () => {
+      contentMeasureRef.current?.();
+    });
+    return measure();
   }, [maxLines]);
+  // Stops the content observation when the element goes.
+  const contentObservationRef = useCallback((element: HTMLElement | null) => {
+    if (element == null) {
+      return undefined;
+    }
+    return () => {
+      unobserveContentRef.current?.();
+      unobserveContentRef.current = null;
+      contentMeasureRef.current = null;
+    };
+  }, []);
   const answer = measuresOnInterest ? interestAnswer : truncation;
 
   // Tooltip for truncated text
@@ -315,7 +340,12 @@ export function Text({
   );
 
   // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
+  const mergedRef = useMergedRefs(
+    ref,
+    truncation.ref,
+    textRef,
+    contentObservationRef,
+  );
   const isInClampedText = use(TextClampContext);
   // A capsize block removes a multi-line clamp.
   const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);

@@ -593,6 +593,40 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       expect(text).not.toHaveAttribute('aria-describedby');
     });
 
+    it('measures again when the content changes after a hover, so an open tooltip follows the text', async () => {
+      const {showPopover, restore} = withOverflowAndPopover();
+      try {
+        function Changing({label}: {label: string}) {
+          return (
+            <TextMeasureOnInterestContext value={true}>
+              <Text type="body" maxLines={1}>
+                {label}
+              </Text>
+            </TextMeasureOnInterestContext>
+          );
+        }
+        const {rerender} = render(<Changing label={LABEL} />);
+        const text = screen.getByText(LABEL);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+        await waitFor(
+          () => {
+            expect(showPopover).toHaveBeenCalled();
+          },
+          {timeout: 3000},
+        );
+        const next = `${LABEL}, changed`;
+        rerender(<Changing label={next} />);
+        await waitFor(() => {
+          expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+            next,
+          );
+        });
+      } finally {
+        restore();
+      }
+    });
+
     it('measures again at each hover, so text that stops fitting shows its tooltip', async () => {
       render(
         <TextMeasureOnInterestContext value={true}>

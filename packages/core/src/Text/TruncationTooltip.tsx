@@ -42,16 +42,21 @@ const tooltipModule = createModuleLoader(
   async () => import('../Tooltip/Tooltip'),
 );
 
-// One after-paint preload per page, whatever the number of texts that ask:
-// it waits for the page's next paint (a frame, then a task), then loads the
-// module once.
+// The page's texts share one preload. It waits a frame and a task for the
+// paint, then loads the module once. A failed load lets the next text try
+// again, as the module loader does.
 let preload: Promise<{Tooltip: TooltipComponent}> | null = null;
 async function loadAfterNextPaint(): Promise<{Tooltip: TooltipComponent}> {
   preload ??= new Promise<void>(resolve => {
     requestAnimationFrame(() => {
       setTimeout(resolve, 0);
     });
-  }).then(async () => tooltipModule.load());
+  })
+    .then(async () => tooltipModule.load())
+    .catch((error: unknown) => {
+      preload = null;
+      throw error;
+    });
   return preload;
 }
 
@@ -89,9 +94,8 @@ export function useTruncationTooltipInterest(
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once. Text that measures on
-  // interest has measured nothing yet, so it joins the page's one after-paint
-  // preload: the page shows first, and the first hover usually finds the
-  // module loaded.
+  // interest has no answer yet. It joins the page's one after-paint preload,
+  // so the page shows first, and a hover never hurries the load.
   useEffect(() => {
     if ((!isEnabled && measure == null) || tooltip != null) {
       return;
@@ -102,7 +106,7 @@ export function useTruncationTooltipInterest(
         setTooltip(() => loaded.Tooltip);
       }
     };
-    (isEnabled ? tooltipModule.load() : loadAfterNextPaint()).then(
+    (measure == null ? tooltipModule.load() : loadAfterNextPaint()).then(
       show,
       () => {},
     );

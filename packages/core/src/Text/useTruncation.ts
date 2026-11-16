@@ -48,31 +48,6 @@ export interface UseTruncationReturn {
 }
 
 /**
- * Hook for detecting text overflow/truncation.
- *
- * Uses a shared ResizeObserver singleton (via observeResize) for size
- * changes and a shared MutationObserver singleton (via observeContent) for
- * content changes, so even hundreds of table cells create one observer of
- * each kind. Observing content matters because an element whose text changes
- * without resizing (a fixed-width status line) must still be re-measured for
- * the tooltip text and the truncated state to follow the current content.
- *
- * - Single-line: compares scrollWidth > offsetWidth
- * - Multi-line: uses Range.getBoundingClientRect() to measure actual content
- *   height, bypassing -webkit-line-clamp's clamped scrollHeight
- *
- * @example
- * ```
- * const truncation = useTruncation({ maxLines: 2 });
- *
- * <div ref={truncation.ref} style={{ WebkitLineClamp: 2 }}>
- *   {text}
- * </div>
- *
- * {truncation.isTruncated && <Tooltip>{truncation.fullText}</Tooltip>}
- * ```
- */
-/**
  * Whether an element's text overflows its line clamp. Single-line text
  * overflows horizontally. Multi-line text compares the content's real
  * height: with -webkit-line-clamp, browsers may report the clamped size as
@@ -98,6 +73,31 @@ export function measureTruncation(
   return contentHeight > element.offsetHeight;
 }
 
+/**
+ * Hook for detecting text overflow/truncation.
+ *
+ * Uses a shared ResizeObserver singleton (via observeResize) for size
+ * changes and a shared MutationObserver singleton (via observeContent) for
+ * content changes, so even hundreds of table cells create one observer of
+ * each kind. Observing content matters because an element whose text changes
+ * without resizing (a fixed-width status line) must still be re-measured for
+ * the tooltip text and the truncated state to follow the current content.
+ *
+ * - Single-line: compares scrollWidth > offsetWidth
+ * - Multi-line: uses Range.getBoundingClientRect() to measure actual content
+ *   height, bypassing -webkit-line-clamp's clamped scrollHeight
+ *
+ * @example
+ * ```
+ * const truncation = useTruncation({ maxLines: 2 });
+ *
+ * <div ref={truncation.ref} style={{ WebkitLineClamp: 2 }}>
+ *   {text}
+ * </div>
+ *
+ * {truncation.isTruncated && <Tooltip>{truncation.fullText}</Tooltip>}
+ * ```
+ */
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
