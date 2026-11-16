@@ -102,14 +102,16 @@ describe('a bound already passed the way asked writes nothing', () => {
   }, 120_000);
 
   it('still moves toward a bound not yet reached', async () => {
-    // (The bound holds every radius the dial writes: the container's and
-    // the page's, which the dial makes larger, are held at it.)
+    // (The bound holds every radius the dial writes: the container's, the
+    // page's and the chat surfaces', which the dial makes larger, are held
+    // at it.)
     expect(
       writes(await how('ne', 'make the corners rounder but at most 20px')),
     ).toEqual([
       'set ne corners 20px',
       'set ne --radius-container 20px',
       'set ne --radius-page 20px',
+      'set ne --radius-chat 20px',
     ]);
   }, 120_000);
 });
