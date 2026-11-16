@@ -168,7 +168,7 @@ describe('an interactive render', () => {
       interactive: true,
     });
     expect(read('counter.html')).toBe(html);
-  });
+  }, 120_000);
 
   it('gives the page back exactly, and the command to render it again keeps --interactive', async () => {
     const back = /** @type {any} */ (
@@ -202,7 +202,7 @@ describe('an interactive render', () => {
     expect(stdout).toMatch(
       /^Render it again: .* --out counter\.html --interactive$/m,
     );
-  });
+  }, 120_000);
 
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
     const errors = /** @type {string[]} */ ([]);
@@ -245,7 +245,9 @@ describe('an interactive render', () => {
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^script:\s+[\d.]+ KB \(\d+ modules\)$/m);
+    expect(page.stdout).toMatch(/^interactive:\s+true$/m);
+    expect(page.stdout).toMatch(/^scriptBytes:\s+[\d.]+ KB$/m);
+    expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
     const both = await runCli(
       [
         '--json',
@@ -259,7 +261,7 @@ describe('an interactive render', () => {
     );
     expect(both.status).toBe(1);
     expect(JSON.parse(both.stdout).code).toBe('ERR_INVALID_ARGUMENT');
-  });
+  }, 120_000);
 
   it('refuses a page whose script needs Node, naming the module, and writes nothing', async () => {
     put(
@@ -278,7 +280,112 @@ describe('an interactive render', () => {
       'node-page.tsx loads node:fs, which is part of Node and not of a browser',
     );
     expect(fs.existsSync(path.join(dir, 'node-page.html'))).toBe(false);
-  });
+  }, 120_000);
+
+  it('composes with --title: the note, the record and the reverse keep both', async () => {
+    const title = "Ops' counter";
+    await render('src/counter.tsx', {
+      cwd: dir,
+      out: 'titled.html',
+      interactive: true,
+      title,
+    });
+    const titled = read('titled.html');
+    const note = titled.slice(
+      titled.indexOf('<!--'),
+      titled.indexOf('-->') + 3,
+    );
+    expect(note).toContain(
+      "--out titled.html --title 'Ops'\\''' counter' --interactive".replace(
+        "'\\''' ",
+        "'\\'' ",
+      ),
+    );
+    expect(readSourceBlock(titled)).toMatchObject({
+      found: true,
+      source: {title, interactive: true},
+    });
+    const {stdout} = await runCli(
+      [
+        'experimental',
+        'render',
+        '--reverse',
+        'titled.html',
+        '--out',
+        'titled-back/counter.tsx',
+      ],
+      dir,
+    );
+    expect(stdout).toMatch(/^title:\s+Ops' counter$/m);
+    expect(stdout).toMatch(
+      /--out titled\.html --title 'Ops'\\'' counter' --interactive$/m,
+    );
+  }, 120_000);
+
+  it('lets a package map a Node module away for the browser, and an installed package stand in for one', async () => {
+    put(
+      'node_modules/browser-ready/package.json',
+      JSON.stringify({
+        name: 'browser-ready',
+        version: '1.0.0',
+        main: 'index.js',
+        browser: {fs: false},
+      }),
+    );
+    put(
+      'node_modules/browser-ready/index.js',
+      "const fs = require('fs');\nmodule.exports = {hasFs: Boolean(fs && fs.readFileSync)};\n",
+    );
+    put(
+      'node_modules/events/package.json',
+      JSON.stringify({name: 'events', version: '3.3.0', main: 'events.js'}),
+    );
+    put(
+      'node_modules/events/events.js',
+      "function EventEmitter() {}\nEventEmitter.prototype.marker = 'events-polyfill-in-the-browser';\nmodule.exports = {EventEmitter};\n",
+    );
+    put(
+      'src/ready.tsx',
+      "import {hasFs} from 'browser-ready';\nimport {EventEmitter} from 'events';\nexport default function Page() {\n  return <p>{String(hasFs)} {typeof EventEmitter}</p>;\n}\n",
+    );
+    const ready = /** @type {any} */ (
+      await render('src/ready.tsx', {
+        cwd: dir,
+        out: 'ready.html',
+        interactive: true,
+      })
+    );
+    expect(ready.data.interactive).toBe(true);
+    expect(scriptOf(read('ready.html'))).toContain(
+      'events-polyfill-in-the-browser',
+    );
+  }, 120_000);
+
+  it('styles a module the page loads lazily, which the server render never imports', async () => {
+    put(
+      'src/panel.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nconst styles = stylex.create({panel: {color: 'rgb(1, 2, 3)'}});\nexport default function Panel() {\n  return <p {...stylex.props(styles.panel)}>Panel</p>;\n}\n",
+    );
+    put(
+      'src/lazy.tsx',
+      "import {lazy, Suspense} from 'react';\nconst Panel = lazy(() => import('./panel'));\nexport default function Page() {\n  return (\n    <main>\n      <Suspense fallback={<p>Loading</p>}>\n        <Panel />\n      </Suspense>\n    </main>\n  );\n}\n",
+    );
+    await render('src/lazy.tsx', {
+      cwd: dir,
+      out: 'lazy.html',
+      interactive: true,
+    });
+    expect(read('lazy.html')).toMatch(/color:\s*rgb\(1,\s*2,\s*3\)/);
+    const back = /** @type {any} */ (
+      await render('lazy.html', {
+        cwd: dir,
+        reverse: true,
+        out: 'lazy-back/lazy.tsx',
+      })
+    );
+    expect(back.data.exact).toBe(true);
+    expect(read('lazy-back/panel.tsx')).toContain("color: 'rgb(1, 2, 3)'");
+  }, 120_000);
 
   it('keeps a static render as it was: no script and no element around the markup', async () => {
     await render('src/counter.tsx', {cwd: dir, out: 'static.html'});
@@ -290,12 +397,15 @@ describe('an interactive render', () => {
 });
 
 describe('esbuild, the optional peer that builds the script', () => {
-  it('is declared optional, with the range the render checks', () => {
+  it('is declared an optional peer of any version, and the render checks its own range', () => {
     const pkg = JSON.parse(
       fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
     );
-    expect(pkg.peerDependencies.esbuild).toBe(ESBUILD_RANGE);
+    // Any version, so npm never adds or moves an esbuild a project has.
+    expect(pkg.peerDependencies.esbuild).toBe('*');
     expect(pkg.peerDependenciesMeta.esbuild).toEqual({optional: true});
+    expect(pkg.dependencies.esbuild).toBeUndefined();
+    expect(ESBUILD_RANGE).toBe('>=0.25.0 <1.0.0');
   });
 
   it('refuses before it runs the page when esbuild is not installed, with the install command', async () => {

@@ -109,15 +109,6 @@ export async function bundleForBrowser({
         if (args.pluginData?.astryx || args.kind === 'entry-point')
           return undefined;
         const name = args.path.split('?')[0];
-        if (builtin(name)) {
-          return {
-            errors: [
-              {
-                text: `${describe(args.importer || entry)} loads ${name}, which is part of Node and not of a browser.`,
-              },
-            ],
-          };
-        }
         if (name.startsWith('.') || path.isAbsolute(name)) {
           // A package's own imports resolve as esbuild resolves them, which
           // keeps what its package.json says (`sideEffects`, `browser`), so
@@ -127,12 +118,28 @@ export async function bundleForBrowser({
           return file ? {path: file} : undefined;
         }
         const resolveDir = packageDir(name, args.resolveDir) ?? args.resolveDir;
+        // A package can map a Node module for the browser (`"browser": {"fs":
+        // false}`), and an installed package can stand in for one (`events`),
+        // so a Node module is refused only when nothing resolves it.
         const found = await build.resolve(name, {
           kind: args.kind,
           resolveDir,
+          importer: args.importer,
           pluginData: {astryx: true},
         });
-        return found.errors.length > 0 ? {errors: found.errors} : found;
+        // A module a package maps to `false` comes back with no namespace:
+        // esbuild's own resolution gives it as an empty module.
+        if (found.errors.length === 0) return found.namespace === '' ? undefined : found;
+        if (builtin(name)) {
+          return {
+            errors: [
+              {
+                text: `${describe(args.importer || entry)} loads ${name}, which is part of Node and not of a browser.`,
+              },
+            ],
+          };
+        }
+        return {errors: found.errors};
       });
       // Stylesheets are already in the page.
       build.onLoad({filter: /\.(css|scss|sass|less)$/i}, () => ({

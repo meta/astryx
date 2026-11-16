@@ -11,26 +11,22 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {satisfiesRange} from '../env/semver.mjs';
+import {findInstalledPackage} from '../fs/paths.mjs';
 import {installCommandFor} from '../discovery/template-needs.mjs';
 
 const CLI_PACKAGE_JSON = fileURLToPath(
   new URL('../../package.json', import.meta.url),
 );
 
-/** The esbuild versions the CLI declares as its optional peer. */
-export const ESBUILD_RANGE = (() => {
-  try {
-    return (
-      JSON.parse(fs.readFileSync(CLI_PACKAGE_JSON, 'utf8')).peerDependencies
-        ?.esbuild ?? '*'
-    );
-  } catch {
-    return '*';
-  }
-})();
+/**
+ * The esbuild versions an interactive render builds with. The CLI declares
+ * esbuild as an optional peer of any version, so npm never adds or moves a
+ * copy a project already has (a build tool's own, say); the render checks
+ * this range itself and names the install command for a copy outside it.
+ */
+export const ESBUILD_RANGE = '>=0.25.0 <1.0.0';
 
 /**
  * The esbuild an interactive render loads: the first copy found from each
@@ -44,28 +40,29 @@ export function findEsbuild(dirs) {
   /** @type {string | null} */
   let older = null;
   for (const dir of dirs) {
-    let main;
+    const packageDir = findInstalledPackage(dir, 'esbuild');
+    if (!packageDir) continue;
+    /** @type {{version?: unknown, main?: unknown}} */
+    let pkg = {};
     try {
-      main = createRequire(path.join(dir, 'noop.js')).resolve('esbuild');
+      pkg = JSON.parse(
+        fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+      );
     } catch {
-      continue;
+      // A copy without a readable package.json is tried as it is.
     }
-    let version = '';
-    try {
-      version = JSON.parse(
-        fs.readFileSync(
-          path.join(path.dirname(main), '..', 'package.json'),
-          'utf8',
-        ),
-      ).version;
-    } catch {
-      // A copy without a readable version is tried as it is.
-    }
+    const version = typeof pkg.version === 'string' ? pkg.version : '';
     if (version && !satisfiesRange(version, ESBUILD_RANGE)) {
       older ??= version;
       continue;
     }
-    return {main, version};
+    return {
+      main: path.join(
+        packageDir,
+        typeof pkg.main === 'string' ? pkg.main : 'lib/main.js',
+      ),
+      version,
+    };
   }
   return older ? {older} : null;
 }

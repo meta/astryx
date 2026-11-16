@@ -147,7 +147,7 @@
   },
   "peerDependencies": {
     "@astryxdesign/core": "*",
-    "esbuild": ">=0.25.0 <1.0.0"
+    "esbuild": "*"
   },
   "peerDependenciesMeta": {
     "@astryxdesign/core": {

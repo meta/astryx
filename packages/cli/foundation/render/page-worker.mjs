@@ -1344,11 +1344,49 @@ try {
   for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
     if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
   }
+  // The page's script is built first: it compiles every module the page
+  // can load, a lazily imported one included, and their styles join the
+  // stylesheet below.
+  /** @type {{code: string, modules: number} | null} */
+  let script = null;
+  if (workerData.interactive) {
+    reach("building the page's script");
+    try {
+      const loaded = await import(pathToFileURL(workerData.esbuild).href);
+      script = await bundleForBrowser({
+        esbuild: loaded.default ?? loaded,
+        entry,
+        source: browserSource,
+        isPageFile: file => isLocal(path.normalize(file)),
+        resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
+        packageDir: browserPackageDir,
+        builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
+        describe: describeFile,
+      });
+    } catch (e) {
+      if (e instanceof BundleError) {
+        fail('ERR_RENDER_INTERACTIVE', e.message, e.detail);
+      } else {
+        const message = e instanceof Error ? e.message : String(e);
+        fail('ERR_RENDER_INTERACTIVE', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
+      }
+      throw null;
+    }
+  }
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
     reach('compiling styles');
-    css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+    // A module compiled for the server and again for the browser gives its
+    // rules twice; each rule is written once.
+    const seen = new Set();
+    const rules = stylexRules.filter(rule => {
+      const key = JSON.stringify(rule);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    css = stylexPlugin.processStylexRules(rules, {useLayers: false});
   }
   // Node loads some local modules itself (jiti hands it a plain ES module,
   // such as a built theme), so they never pass the transform that records
@@ -1374,32 +1412,6 @@ try {
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
         localFiles.push(target);
       }
-    }
-  }
-  /** @type {{code: string, modules: number} | null} */
-  let script = null;
-  if (workerData.interactive) {
-    reach("building the page's script");
-    try {
-      const loaded = await import(pathToFileURL(workerData.esbuild).href);
-      script = await bundleForBrowser({
-        esbuild: loaded.default ?? loaded,
-        entry,
-        source: browserSource,
-        isPageFile: file => isLocal(path.normalize(file)),
-        resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
-        packageDir: browserPackageDir,
-        builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
-        describe: describeFile,
-      });
-    } catch (e) {
-      if (e instanceof BundleError) {
-        fail('ERR_RENDER_INTERACTIVE', e.message, e.detail);
-      } else {
-        const message = e instanceof Error ? e.message : String(e);
-        fail('ERR_RENDER_INTERACTIVE', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
-      }
-      throw null;
     }
   }
   parentPort?.postMessage({

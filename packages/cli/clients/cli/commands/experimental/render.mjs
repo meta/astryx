@@ -74,7 +74,9 @@ export function registerExperimentalRender(group, program) {
             images: d.images,
             files: d.files.join(', '),
             stylesheets: d.stylesheets.join(', ') || 'none',
-            ...(d.scriptBytes === undefined ? {} : {script: `${kb(d.scriptBytes)} (${d.scriptModules} modules)`}),
+            ...(d.interactive
+              ? {interactive: true, scriptBytes: kb(d.scriptBytes ?? 0), scriptModules: d.scriptModules ?? 0}
+              : {}),
           }),
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
