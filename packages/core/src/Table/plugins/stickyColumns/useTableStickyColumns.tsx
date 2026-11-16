@@ -193,9 +193,9 @@ function countPinnedRuns(
 type StickySide = {edge: 'start' | 'end'; offset: string};
 
 /**
- * Resolve how a single column should be pinned given the start/end configs and
- * the full column list. A key (mis)configured on both edges resolves to start.
- * Returns `null` for columns that should not be pinned.
+ * Resolves how one column is pinned from the precomputed offsets. A key on
+ * both edges resolves to start. Returns `null` for a column that is not
+ * pinned.
  */
 function resolveStickySide(
   offsets: PinnedOffsets,
@@ -217,8 +217,8 @@ interface PinnedOffsets {
 
 /**
  * Returns a reader of the pinned offsets for a column list. The offsets
- * depend only on the columns and the pinned keys, so each cell of a render
- * reads one result instead of resolving every column's width again.
+ * depend only on the columns and the pinned keys. Each cell of a render reads
+ * one result.
  */
 function createPinnedOffsetsReader(
   startKeys: string[],
@@ -702,7 +702,6 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
     refreshRef.current?.();
   });
 
-  // Every cell of a render reads one set of pinned offsets.
   const readOffsets = useMemo(
     () => createPinnedOffsetsReader(pinned.start, pinned.end),
     [pinned],
@@ -823,9 +822,9 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         };
       },
     }),
-    // `readOffsets` keeps its identity while the pinned keys keep their
-    // values, and `attachScrollShadow` is stable, so the plugin object is
-    // reused until the pinned keys change.
+    // `attachScrollShadow` is stable, and `readOffsets` changes only with the
+    // pinned keys. So the plugin object changes only when the pinned keys
+    // change.
     [attachScrollShadow, readOffsets],
   );
   registerPinnedColumnRuns(plugin, columns =>
