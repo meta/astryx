@@ -167,6 +167,15 @@ works on is `spec:AST-040` FR9's.
     lockfile records, else the newest published release that the Core range
     the project declares allows; a project that records no Core is matched by
     the CLI it locks or declares, in the same order.
+  - Every command the CLI prints that adds `@astryxdesign/*` packages at one
+    version, such as the hint above, `doctor`'s fixes, `discover`'s install
+    lines, and FR10's project notice, saves them as exactly that version when
+    the project's `package.json` pins its Core (or, with no Core, its CLI) to
+    one version, such as `0.7.16` or `=0.7.16`, as a starter's does (FR8): the
+    package manager's flag that saves a version exactly, `-E` or Bun's
+    `--exact`, follows its add command. A command that adds a range, or a
+    package outside `@astryxdesign/*`, carries no such flag, so the package
+    manager saves it as it saves any package.
   - When the project's own CLI is installed but cannot start, the matched
     release answers: the copy that started the run when it is that release,
     otherwise the release in the per-user cache, installed there through the

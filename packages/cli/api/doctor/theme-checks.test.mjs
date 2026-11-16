@@ -1559,11 +1559,22 @@ describe('app-theme doctor checks', () => {
     const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '^9.0.0'});
 
     const result = check(await checkAppThemes(dir), 'theme-core-peers');
+    // With the package manager of the project's folder.
     expect(result).toMatchObject({
       status: 'fail',
-      fix: expect.stringContaining('npm install'),
+      fix: expect.stringMatching(
+        /^(?:npm install|pnpm add) '@astryxdesign\/core@\^9\.0\.0'; /u,
+      ),
     });
     expect(result.message).toContain('^9.0.0');
+  });
+
+  it("check 7's fix saves the one Core version a theme accepts exactly, in a project that pins its Core", async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '9.0.0'});
+
+    expect(check(await checkAppThemes(dir), 'theme-core-peers').fix).toMatch(
+      /^(?:npm install|pnpm add) -E @astryxdesign\/core@9\.0\.0; .*doctor$/u,
+    );
   });
 
   it('check 7 passes a theme package whose Core range is empty, which accepts every Core', async () => {
