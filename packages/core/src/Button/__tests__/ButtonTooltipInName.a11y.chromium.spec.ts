@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Button|Banner|Field|Timestamp)/
+// @pr-a11y scope ^packages/core/src/(Button|Banner|Field|TextInput|Timestamp)/ ^apps/storybook/stories/(Banner|TextInput|Timestamp)
 
 /**
  * @file ButtonTooltipInName.a11y.chromium.spec.ts
@@ -87,10 +87,15 @@ test('Timestamp\'s copy button is named once: its "Copy" tooltip shows but adds 
   page,
 }) => {
   await mountStory(page, 'core-timestamp--per-entry-copyable');
+  await page
+    .locator('#storybook-root time')
+    .first()
+    .waitFor({state: 'attached'});
   // Focus opens the hover card; the next Tab reaches its copy button.
   await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
   const button = page.getByRole('button', {name: /^Copy /});
+  await button.waitFor({state: 'visible'});
+  await page.keyboard.press('Tab');
   await expect(button).toBeFocused();
   const cdp = await page.context().newCDPSession(page);
   const computed = await (
