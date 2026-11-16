@@ -2020,7 +2020,8 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa' --mode light$/},
+    // (Off-white is a warm off-white.)
+    {top: /^set q --color-background-body '#faf8f3' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [
