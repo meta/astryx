@@ -7,11 +7,13 @@
  * @input A finger on a phone: a tap on the text field opens the on-screen
  *   keyboard, and a tap on a row closes it. `?interactive-widget=` sets the
  *   viewport's keyboard mode (resizes-visual by default, resizes-content,
- *   overlays-content)
+ *   overlays-content). `?claim=1` focuses the field on the press without
+ *   letting the browser scroll to it
  * @output A bare page with Lab's TabBar at the bottom and a text field among
  *   long scrolling rows. A readout at the top of the visual viewport shows the
- *   display mode, the keyboard mode, both viewports, the bar's box, and how
- *   much of the bar the visual viewport shows, as they change
+ *   display mode, the keyboard mode, whether focus is claimed, both viewports,
+ *   the document's scroll, the visual viewport's pan and its largest value, the
+ *   bar's box, and how much of the bar the visual viewport shows, as they change
  * @position A raw page, with no sandbox chrome, for checking on a real phone
  *   where the bar sits while the keyboard is up
  */
@@ -75,6 +77,16 @@ const styles = stylex.create({
   follow: (offset: number) => ({
     transform: `translateY(${offset}px)`,
   }),
+  // A zero-size box at the layout viewport's top: its client top tells which
+  // viewport the browser measures client rects from.
+  frame: {
+    position: 'fixed',
+    insetBlockStart: 0,
+    insetInlineStart: 0,
+    width: 0,
+    height: 0,
+    pointerEvents: 'none',
+  },
   content: {
     // Clears the readout above and the bar below.
     paddingBlockStart: `calc(${spacingVars['--spacing-12']} * 2)`,
@@ -92,9 +104,13 @@ const KEYBOARD_MODES = [
 interface Reading {
   displayMode: string;
   keyboardMode: string;
+  scrollY: number;
   layoutHeight: number;
   visualHeight: number;
   visualTop: number;
+  panLargest: number;
+  panLimit: number;
+  frameOffset: number;
   barTop: number;
   barBottom: number;
   barShown: number;
@@ -106,17 +122,24 @@ function round(value: number): number {
 }
 
 /**
- * The bar's box is relative to the layout viewport. The visual viewport sits
- * `offsetTop` below the layout viewport's top, so the shown part of the bar is
- * the overlap of the two ranges.
+ * Chrome measures client rects from the layout viewport, and WebKit from the
+ * visual viewport. The frame box's client top is that difference: 0, or minus
+ * the pan. So the bar's box moves into layout coordinates first. The visual
+ * viewport sits `offsetTop` below the layout viewport's top, so the shown part
+ * of the bar is the overlap of the two ranges.
  */
-function read(bar: HTMLElement | null): Reading {
+function read(
+  bar: HTMLElement | null,
+  frame: HTMLElement | null,
+  panLargest: number,
+): Reading {
   const visual = window.visualViewport;
   const visualTop = visual?.offsetTop ?? 0;
   const visualHeight = visual?.height ?? window.innerHeight;
+  const frameOffset = frame?.getBoundingClientRect().top ?? 0;
   const box = bar?.getBoundingClientRect();
-  const barTop = box?.top ?? 0;
-  const barBottom = box?.bottom ?? 0;
+  const barTop = (box?.top ?? 0) - frameOffset;
+  const barBottom = (box?.bottom ?? 0) - frameOffset;
   const overlap = Math.max(
     0,
     Math.min(barBottom, visualTop + visualHeight) - Math.max(barTop, visualTop),
@@ -129,12 +152,20 @@ function read(bar: HTMLElement | null): Reading {
   );
   return {
     keyboardMode: mode?.[1] ?? 'resizes-visual (default)',
-    displayMode: window.matchMedia('(display-mode: standalone)').matches
-      ? 'standalone (Home Screen app)'
-      : 'browser',
+    // An iOS Home Screen app without a web manifest reports itself only
+    // through `navigator.standalone`.
+    displayMode:
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as Navigator & {standalone?: boolean}).standalone === true
+        ? 'standalone (Home Screen app)'
+        : 'browser',
     layoutHeight: round(window.innerHeight),
+    scrollY: round(window.scrollY),
     visualHeight: round(visualHeight),
     visualTop: round(visualTop),
+    panLargest: round(panLargest),
+    panLimit: round(window.innerHeight - visualHeight),
+    frameOffset: round(frameOffset),
     barTop: round(barTop),
     barBottom: round(barBottom),
     barShown: barHeight > 0 ? Math.round((overlap / barHeight) * 100) : 0,
@@ -147,6 +178,9 @@ function read(bar: HTMLElement | null): Reading {
 
 export default function TabBarKeyboardProbePage() {
   const barRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLElement | null>(null);
+  const [isClaim, setIsClaim] = useState(false);
+  const panLargestRef = useRef(0);
   const [reading, setReading] = useState<Reading | null>(null);
   const [tab, setTab] = useState('home');
   const [text, setText] = useState('');
@@ -175,7 +209,37 @@ export default function TabBarKeyboardProbePage() {
   }, []);
 
   useEffect(() => {
-    const update = () => setReading(read(barRef.current));
+    // An app can focus its field from the press itself, with `preventScroll`,
+    // so the browser does not pan to reveal it.
+    if (new URLSearchParams(window.location.search).get('claim') !== '1') {
+      return;
+    }
+    setIsClaim(true);
+    const field = document.querySelector('[data-testid="text-field"]');
+    const input = field?.matches('input')
+      ? field
+      : field?.querySelector('input');
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+    const claim = () => {
+      if (input.ownerDocument.activeElement !== input) {
+        input.focus({preventScroll: true});
+      }
+    };
+    input.addEventListener('pointerdown', claim, {capture: true});
+    return () =>
+      input.removeEventListener('pointerdown', claim, {capture: true});
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      panLargestRef.current = Math.max(
+        panLargestRef.current,
+        window.visualViewport?.offsetTop ?? 0,
+      );
+      setReading(read(barRef.current, frameRef.current, panLargestRef.current));
+    };
     update();
     const visual = window.visualViewport;
     visual?.addEventListener('resize', update);
@@ -207,6 +271,7 @@ export default function TabBarKeyboardProbePage() {
 
   return (
     <>
+      <VStack ref={frameRef} gap={0} aria-hidden xstyle={styles.frame} />
       <VStack
         gap={0}
         data-testid="readout"
@@ -217,15 +282,21 @@ export default function TabBarKeyboardProbePage() {
           <>
             <Text size="sm">display: {reading.displayMode}</Text>
             <Text size="sm">
-              keyboard mode (viewport meta): {reading.keyboardMode}
+              keyboard mode (viewport meta): {reading.keyboardMode} · focus
+              claim: {isClaim ? 'on' : 'off'}
             </Text>
             <Text size="sm">
               layout viewport h {reading.layoutHeight} · visual viewport h{' '}
-              {reading.visualHeight} top {reading.visualTop}
+              {reading.visualHeight} top {reading.visualTop} · scrollY{' '}
+              {reading.scrollY}
             </Text>
             <Text size="sm">
-              bar top {reading.barTop} bottom {reading.barBottom} · shown{' '}
-              {reading.barShown}%
+              pan {reading.visualTop}, largest {reading.panLargest} of{' '}
+              {reading.panLimit} · rect offset {reading.frameOffset}
+            </Text>
+            <Text size="sm">
+              bar top {reading.barTop} bottom {reading.barBottom} (layout) ·
+              shown {reading.barShown}%
             </Text>
             <Text size="sm">focus: {reading.focused}</Text>
           </>
