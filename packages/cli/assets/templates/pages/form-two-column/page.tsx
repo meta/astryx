@@ -18,8 +18,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Card} from '@astryxdesign/core/Card';
 import {Selector} from '@astryxdesign/core/Selector';
 
-const ILLUSTRATION_URL =
-  '/template-assets/light-working-vertical-2.png';
+const ILLUSTRATION_URL = '/template-assets/light-working-vertical-2.png';
 
 const INQUIRY_REASONS = [
   'New business',
