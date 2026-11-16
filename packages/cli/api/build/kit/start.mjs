@@ -148,7 +148,7 @@ function liftFromShell(ranked, kind, catalog, idea) {
  *   is scaffolded to, quoted for a shell; null when none is known
  * @param {string | null} [unready] a not-ready page template the idea names
  *   and search matched directly; the reason says it is not ready yet
- * @returns {Omit<BuildStart, 'alternatives'> | null}
+ * @returns {Omit<BuildStart, 'alternatives' | 'isReady'> | null}
  */
 export function chooseStart(
   ranked,

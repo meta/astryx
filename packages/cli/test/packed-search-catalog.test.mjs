@@ -215,6 +215,8 @@ const ASKS = [
   ['search', 'dashboard', '--type', 'doc'],
   ['search', 'neutral', '--type', 'theme', '--json'],
   ['search', 'table', '--type', 'component'],
+  ['search', 'incident console'],
+  ['search', 'incident console', '--json'],
   ['build', BUILD_IDEA],
   ['build', BUILD_IDEA, '--json'],
   ['build', 'a login page', '--detail', 'compact'],
@@ -232,6 +234,48 @@ describe('the stored search catalog', () => {
       expect(stored.status, `${ask.join(' ')}: ${stored.stderr}`).toBe(0);
       expect(stored, ask.join(' ')).toEqual(run(CLI_ROOT, ask));
     }
+  }, 300_000);
+
+  it('marks an unready template from the store as a live gather does, and drops the mark once it is ready', () => {
+    expect(storeAnswers()).toBe(true);
+    const text = ['search', 'incident console', '--type', 'template'];
+    const json = [...text, '--json'];
+    /**
+     * The incident console's own text record.
+     * @param {string} stdout
+     */
+    const consoleRecord = stdout =>
+      stdout
+        .split('\n\n')
+        .find(r => r.includes('name:        incident-console\n')) ?? '';
+    /** @param {string} stdout */
+    const consoleResult = stdout =>
+      JSON.parse(stdout).data.results.find(
+        (/** @type {any} */ r) => r.name === 'incident-console',
+      );
+    expect(consoleRecord(run(packed, text).stdout)).toContain(
+      'kind:        page (not ready)\n',
+    );
+    expect(consoleResult(run(packed, json).stdout).isReady).toBe(false);
+    const doc = path.join(
+      packed,
+      'assets',
+      'templates',
+      'pages',
+      'incident-console',
+      'template.doc.mjs',
+    );
+    withEdit(doc, 'isReady: false,', 'isReady: true, ', () => {
+      expect(storeAnswers()).toBe(false);
+      const textAnswer = run(packed, text);
+      expect(textAnswer.status, textAnswer.stderr).toBe(0);
+      expect(consoleRecord(textAnswer.stdout)).toContain('kind:        page\n');
+      expect(textAnswer).toEqual(runLive(text));
+      const jsonAnswer = run(packed, json);
+      expect(consoleResult(jsonAnswer.stdout).isReady).toBe(true);
+      expect(jsonAnswer).toEqual(runLive(json));
+    });
+    expect(storeAnswers()).toBe(true);
   }, 300_000);
 
   it("spells docs' commands for the project's package manager, as a live gather does", () => {

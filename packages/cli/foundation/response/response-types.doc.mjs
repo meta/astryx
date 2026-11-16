@@ -71,7 +71,7 @@ export const doc = {
     {
       value: 'component.detail.blocks',
       description:
-        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category}); each block names the package that owns it, and the envelope's package names the component's owner.",
+        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category, isReady}); each block names the package that owns it, and the envelope's package names the component's owner.",
     },
 
     // docs
@@ -293,7 +293,7 @@ export const doc = {
     {
       value: 'search',
       description:
-        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
+        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName, kind and isReady (templates; false when the template doc sets isReady: false). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
     },
 
     // build
@@ -305,7 +305,7 @@ export const doc = {
     {
       value: 'build.kit',
       description:
-        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ...} (the start and each alternative name the package that owns the template), pages (search's closest templates that build could start from), blocks and domain as SearchResultEntry[] (each naming its package), frame and foundation (Core component names), and hint {reason, commands} when thin.",
+        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ..., isReady} (the start and each alternative name the package that owns the template, and carry isReady), pages (search's closest templates that build could start from), blocks and domain as SearchResultEntry[] (each naming its package; each template with isReady), frame and foundation (Core component names), and hint {reason, commands} when thin.",
     },
 
     // swizzle
@@ -341,17 +341,17 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content).",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content), and isReady (false when the template's doc sets isReady: false).",
     },
     {
       value: 'template.skeleton',
       description:
-        "A layout skeleton (structural tags with spatial annotations) plus the template's description and the components it composes. The envelope's package names the npm package that owns the template.",
+        "A layout skeleton (structural tags with spatial annotations) plus the template's description, the components it composes, and isReady. The envelope's package names the npm package that owns the template.",
     },
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined), and isReady. The envelope's package names the npm package that owns the template.",
     },
 
     {

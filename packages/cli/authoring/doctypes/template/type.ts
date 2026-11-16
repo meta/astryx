@@ -57,7 +57,7 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  drop that template, and hide the package's doc topics. */
   replaces?: string;
   /** Whether this template is ready for use. Templates with
-   *  isReady: false show as "(WIP)" in the gallery and CLI. */
+   *  isReady: false show as "(not ready)" in the CLI; the gallery hides them. */
   isReady?: boolean;
 
   /** The icon definition each icon the source imports draws

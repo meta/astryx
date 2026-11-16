@@ -317,8 +317,8 @@ export async function kitSignals(query, options = {}) {
           loadWeights(),
         )
       : null;
-  /** @type {BuildStart | null} */
-  const start = chosen && {
+  /** @type {Omit<BuildStart, 'isReady'> | null} */
+  const picked = chosen && {
     ...chosen,
     ...(fit === null ? {} : {fit}),
     alternatives: pickStartAlternatives(
@@ -329,20 +329,25 @@ export async function kitSignals(query, options = {}) {
       query,
     ).flatMap(r => {
       const t = catalog.find(c => c.name === r.name);
-      return t ? [asTemplate(t, placeOf(t))] : [];
+      return t
+        ? [{...asTemplate(t, placeOf(t)), isReady: t.isReady !== false}]
+        : [];
     }),
   };
 
   // Analyze what the start template needs that the project lacks (external
   // packages, StyleX compiler). Only the start — alternatives are suggestions,
   // not commitments, so reporting their needs would be noise.
-  if (start) {
-    const startTemplate = catalog.find(t => t.name === start.name);
-    if (startTemplate) {
-      const notes = templateSetupNotes(startTemplate, cwd);
-      if (notes.length > 0) start.notes = notes;
-    }
+  const startTemplate = picked && catalog.find(t => t.name === picked.name);
+  if (picked && startTemplate) {
+    const notes = templateSetupNotes(startTemplate, cwd);
+    if (notes.length > 0) picked.notes = notes;
   }
+  /** @type {BuildStart | null} */
+  const start = picked && {
+    ...picked,
+    isReady: startTemplate?.isReady !== false,
+  };
 
   return {
     // The caller's own words, as search echoes a query; the names read as

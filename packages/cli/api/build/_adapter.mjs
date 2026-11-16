@@ -54,6 +54,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
+ * @property {boolean} [isReady] Whether its doc calls it ready; the kit lists only ready pages.
  */
 
 /**
@@ -89,6 +90,7 @@ export async function loadPageTemplates(cwd) {
  * @property {string} displayName Human-facing name.
  * @property {string} description What the block is.
  * @property {string} command `astryx template <id> --type block`, as search prints it.
+ * @property {boolean} isReady Whether its doc calls it ready, as search reports it.
  */
 
 /**
@@ -122,6 +124,7 @@ export async function loadTemplates(cwd) {
           category: t.category || '',
           keywords: t.keywords ?? [],
           hidden: t.hidden === true,
+          isReady: t.isReady !== false,
           filePath: t.filePath,
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
@@ -138,6 +141,7 @@ export async function loadTemplates(cwd) {
       displayName: t.name,
       description: t.description || '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
+      isReady: t.isReady !== false,
     }));
   return {pages, blocks, notReadyPages};
 }
