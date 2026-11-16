@@ -74,7 +74,10 @@ import {
   normalizeOption,
   getSelectableOptions,
 } from '../Selector/utils';
-import {useMultiComboboxWithKeyHighlight} from './hooks';
+import {
+  useMultiComboboxWithKeyHighlight,
+  useMultiSelectorActiveOptionAnnouncement,
+} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -109,7 +112,6 @@ import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
-import {useActiveOptionAnnouncement} from '../Selector/hooks';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
@@ -1863,7 +1865,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         : !isCreateValue(item.value) && optimisticValue.includes(item.value),
     [allEnabledSelected, optimisticValue],
   );
-  const onKeyboardHighlight = useActiveOptionAnnouncement(
+  const onKeyboardHighlight = useMultiSelectorActiveOptionAnnouncement(
     sortedItems,
     isOptionSelected,
   );

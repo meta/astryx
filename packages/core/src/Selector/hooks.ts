@@ -12,9 +12,8 @@
  *   useCombobox, and so do products with a combobox over their own text field
  *   (spec:AST-075). useSelectedItemOverlayMargin is Selector's own.
  *   announcesActiveOption, useActiveOptionAnnouncement and
- *   useComboboxWithKeyHighlight are internal.
- * @position Selector hooks; used by Selector.tsx and CommandPalette;
- *   MultiSelector.tsx uses useActiveOptionAnnouncement
+ *   useComboboxWithKeyHighlight are internal to Selector.
+ * @position Selector hooks; used by Selector.tsx and CommandPalette
  *
  * SYNC: When useCombobox's options or return change, update:
  * - /packages/core/src/Selector/useCombobox.doc.mjs
@@ -415,7 +414,7 @@ export function announcesActiveOption(): boolean {
 }
 
 /**
- * The keyboard-move callback for a Core combobox: it announces the active
+ * The keyboard-move callback for Selector: it announces the active
  * option politely, with its name, `selected` when it is, and its position,
  * where announcesActiveOption says so. A new move replaces a name not yet
  * spoken. `items` are the options in list order; `isSelected` tells whether

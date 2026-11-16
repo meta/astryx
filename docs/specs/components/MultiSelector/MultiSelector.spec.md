@@ -214,10 +214,10 @@ their own announcer.
   a `spec:AST-013` FR6 workaround, removed once iOS VoiceOver follows
   `aria-activedescendant` (`spec:AST-020` FR1, WCAG 2.2 4.1.2). Other screen
   readers follow `aria-activedescendant` alone, so a move is not announced twice.
-  MultiSelector reaches the announcement through Selector's shared hook
-  `useActiveOptionAnnouncement` (`packages/core/src/Selector/hooks.ts`, the
-  `component:Selector` AR6 announcer) and the internal
-  `useMultiComboboxWithKeyHighlight` (`MultiSelector/hooks.ts`).
+  The announcer is MultiSelector's own internal
+  `useMultiSelectorActiveOptionAnnouncement`, with the internal
+  `useMultiComboboxWithKeyHighlight`, both in
+  `packages/core/src/MultiSelector/hooks.ts`.
 
 ## Design relationships
 

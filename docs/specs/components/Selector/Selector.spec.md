@@ -246,10 +246,8 @@ These requirements describe shipped behavior on current `main`.
   a `spec:AST-013` FR6 workaround, removed once iOS VoiceOver follows
   `aria-activedescendant` (`spec:AST-020` FR1, WCAG 2.2 4.1.2). Other screen
   readers follow `aria-activedescendant` alone, so a move is not announced twice.
-  The announcer is `useActiveOptionAnnouncement` in
-  `packages/core/src/Selector/hooks.ts`, which Selector and MultiSelector
-  (`component:MultiSelector` AR1) share: one call per component, with the
-  options in list order and a selected test.
+  The announcer is Selector's own internal `useActiveOptionAnnouncement` in
+  `packages/core/src/Selector/hooks.ts`.
 
 ## Design relationships
 

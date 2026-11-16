@@ -6,9 +6,10 @@
  * @file hooks.ts
  * @input Uses React hooks, the shared useTypeahead hook, MultiSelectorOptionData type
  * @output Exports useMultiCombobox hook, and the internal
- *   useMultiComboboxWithKeyHighlight that MultiSelector.tsx uses
+ *   useMultiComboboxWithKeyHighlight and
+ *   useMultiSelectorActiveOptionAnnouncement that MultiSelector.tsx uses
  * @position Public hook, exported from the MultiSelector entry point; the
- *   internal variant is not exported there
+ *   internal hooks are not exported there
  *
  * SYNC: When modified, update:
  * - /packages/core/src/MultiSelector/index.ts
@@ -16,6 +17,13 @@
  */
 
 import {useCallback, useState} from 'react';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/hooks.generated';
+import {isIosWebKit} from '../utils/touchQueries';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
@@ -75,6 +83,48 @@ interface UseMultiComboboxResult {
     index: number,
     cell?: MultiComboboxCell,
   ) => void;
+}
+
+registerEnglishFallback(english);
+
+/**
+ * The keyboard-move callback for MultiSelector: on iOS WebKit it announces
+ * the active option politely, with its name, `selected` when it is, and its
+ * position. iOS VoiceOver ignores `aria-activedescendant`; elsewhere screen
+ * readers follow it, and an announcement would say each move twice. Remove
+ * the announcement once iOS VoiceOver follows `aria-activedescendant`. A new
+ * move replaces a name not yet spoken. `items` are the options in list
+ * order; `isSelected` tells whether one is selected.
+ */
+export function useMultiSelectorActiveOptionAnnouncement<
+  I extends {readonly value: string; readonly label?: string},
+>(
+  items: ReadonlyArray<I>,
+  isSelected: (item: I) => boolean,
+): (index: number) => void {
+  const t = useComponentTranslator();
+  const announce = useAnnounce({hasReplace: true});
+  return useCallback(
+    (index: number) => {
+      const item = items[index];
+      if (item == null || !isIosWebKit()) {
+        return;
+      }
+      announce(
+        t(
+          isSelected(item)
+            ? '@astryx.selector.activeOptionSelected'
+            : '@astryx.selector.activeOption',
+          {
+            label: item.label ?? item.value,
+            position: index + 1,
+            total: items.length,
+          },
+        ),
+      );
+    },
+    [announce, items, isSelected, t],
+  );
 }
 
 /**
