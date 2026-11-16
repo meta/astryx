@@ -27,6 +27,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Center} from '@astryxdesign/core/Center';
 import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   UserIcon,
   LockClosedIcon,
@@ -269,7 +270,12 @@ export default function SettingsSecurityTemplate() {
             startContent={<Icon icon={item.icon} />}
             endContent={
               isNarrow ? (
-                <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+                <Icon
+                  icon={ChevronRightIcon}
+                  size="sm"
+                  color="secondary"
+                  xstyle={rtlStyles.mirror}
+                />
               ) : undefined
             }
             isSelected={!isNarrow && activeNav === item.label}
@@ -335,7 +341,13 @@ export default function SettingsSecurityTemplate() {
                       variant="ghost"
                       size="sm"
                       isIconOnly
-                      icon={<Icon icon={ArrowLeftIcon} size="sm" />}
+                      icon={
+                        <Icon
+                          icon={ArrowLeftIcon}
+                          size="sm"
+                          xstyle={rtlStyles.mirror}
+                        />
+                      }
                       onClick={() => setMobileView('nav')}
                     />
                     <Heading level={2}>{SECTION_TITLES[activeNav]}</Heading>
