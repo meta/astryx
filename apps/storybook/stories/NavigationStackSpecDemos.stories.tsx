@@ -111,6 +111,9 @@ function Compose() {
 
 function CutStack() {
   const [path, setPath] = useState<string[]>([]);
+  const [pathTransition, setPathTransition] = useState<'default' | 'cut'>(
+    'default',
+  );
   return (
     <div style={{height: '100vh'}}>
       <NavigationStack
@@ -121,10 +124,32 @@ function CutStack() {
           </NavigationScreen>
         }
         path={path}
-        onPathChange={setPath}
+        pathTransition={pathTransition}
+        onPathChange={next => {
+          setPathTransition('default');
+          setPath(next);
+        }}
         getKey={entry => entry}
         renderScreen={entry => (
-          <NavigationScreen title={entry}>
+          <NavigationScreen
+            title={entry}
+            endContent={
+              entry === 'New chat' ? undefined : (
+                <Button
+                  label="Fork"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // A fork takes the chat's place: Back then opens the list.
+                    setPathTransition('cut');
+                    setPath(current => [
+                      ...current.slice(0, -1),
+                      `${entry} (fork)`,
+                    ]);
+                  }}
+                />
+              )
+            }>
             {entry === 'New chat' ? <Compose /> : <ScreenState />}
           </NavigationScreen>
         )}

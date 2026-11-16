@@ -168,6 +168,12 @@ export interface NavigationStackProps<T> {
    * @default 0
    */
   retainPopped?: number;
+  /**
+   * How a path change the app makes directly moves. `'cut'` lands it in the
+   * render that changes `path`, as a change's `transition: 'cut'` does.
+   * @default 'default'
+   */
+  pathTransition?: 'default' | 'cut';
   /** Accessible name of the navigator region. */
   label?: string;
   'data-testid'?: string;
@@ -434,6 +440,7 @@ const styles = stylex.create({
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
+  // A covered screen deeper than the one under the top skips its layout.
   cardHidden: {
     contentVisibility: 'hidden',
   },
@@ -460,7 +467,8 @@ const styles = stylex.create({
     flexDirection: 'column',
   },
   // A retained or prepared screen: no paint and no hit testing, whatever its
-  // place in the DOM.
+  // place in the DOM. It stays laid out, so it shows again with no style or
+  // layout work.
   cardAway: {
     visibility: 'hidden',
     pointerEvents: 'none',
@@ -688,7 +696,7 @@ function CardLayer({
       {...stylex.props(
         styles.card,
         dynamicStyles.layer(layer),
-        isHidden && styles.cardHidden,
+        isHidden && onPath && styles.cardHidden,
         !onPath && styles.cardAway,
       )}>
       {isContentScroll ? (
@@ -1088,6 +1096,7 @@ export function NavigationStack<T>({
   getKey,
   isInteractivePopEnabled = true,
   retainPopped = 0,
+  pathTransition = 'default',
   label,
   'data-testid': testId,
 }: NavigationStackProps<T>) {
@@ -1188,7 +1197,7 @@ export function NavigationStack<T>({
     const before = view.models;
     const isPrefix = (shorter: ScreenModel[], longer: ScreenModel[]) =>
       shorter.every((model, i) => longer[i]?.key === model.key);
-    const cut = cutPaths.has(path);
+    const cut = cutPaths.has(path) || pathTransition === 'cut';
     const keepFocus = keepFocusPaths.has(path);
     let transition: Transition;
     let leaving: ScreenModel | null = null;
@@ -1230,6 +1239,28 @@ export function NavigationStack<T>({
         retainLimit,
         view.evicted,
       );
+    } else if (
+      cut &&
+      models.length === before.length &&
+      models.length > 1 &&
+      isPrefix(models.slice(0, -1), before)
+    ) {
+      // A cut that changes the top entry pops the old screen, which retention
+      // may keep, and lands the new one at rest.
+      retained = keepRetained(
+        retained,
+        [before[before.length - 1]],
+        retainLimit,
+        view.evicted,
+      );
+      transition = {
+        id: view.transition.id + 1,
+        kind: 'push',
+        top: models[models.length - 1].key,
+        under: models[models.length - 2].key,
+        cut,
+        keepFocus,
+      };
     } else {
       transition = {
         id: view.transition.id + 1,

@@ -73,6 +73,16 @@ test('a retained screen after the screen on view in the DOM takes no tap, key or
   });
   expect(after).toBe(true);
 
+  // The retained screen stays laid out, so it shows again with no layout
+  // work, and it does not paint.
+  const kept = card(page, 'screen-Chat 1');
+  expect(
+    await kept.evaluate(element => {
+      const style = getComputedStyle(element);
+      return [style.contentVisibility, style.visibility];
+    }),
+  ).toEqual(['visible', 'hidden']);
+
   // A hit test over the root's probe names the root.
   const probe = card(page, 'root').locator('[data-hit-probe]');
   const box = await probe.boundingBox();

@@ -169,6 +169,44 @@ function Harness({
   );
 }
 
+function ForkHarness() {
+  const [path, setPath] = useState<string[]>([]);
+  const [pathTransition, setPathTransition] = useState<'default' | 'cut'>(
+    'default',
+  );
+  return (
+    <NavigationStack
+      label="Chats"
+      retainPopped={2}
+      pathTransition={pathTransition}
+      root={
+        <NavigationScreen title="Chats">
+          <Root />
+        </NavigationScreen>
+      }
+      path={path}
+      onPathChange={next => {
+        setPathTransition('default');
+        setPath(next);
+      }}
+      getKey={entry => entry}
+      renderScreen={entry => (
+        <NavigationScreen title={entry}>
+          <Detail entry={entry} />
+          <button
+            type="button"
+            onClick={() => {
+              setPathTransition('cut');
+              setPath(current => [...current.slice(0, -1), `${entry} fork`]);
+            }}>
+            Fork {entry}
+          </button>
+        </NavigationScreen>
+      )}
+    />
+  );
+}
+
 const card = (entry: string) =>
   document.querySelector<HTMLElement>(
     `[data-navigation-screen="${entry === 'Chats' ? 'root' : `screen-${entry}`}"]`,
@@ -324,6 +362,24 @@ describe('NavigationStack: a prepared screen', () => {
     expect(mounts.B).toBe(2);
     await open('Open B', 'B');
     expect(mounts.B).toBe(2);
+  });
+});
+
+describe('NavigationStack: a path change that replaces the top entry', () => {
+  it('cuts with pathTransition, and retains the screen it leaves', async () => {
+    render(<ForkHarness />);
+    await open('Open A', 'A');
+    fireEvent.click(screen.getByRole('button', {name: 'Fork A'}));
+    expect(card('A fork')?.hasAttribute('data-navigation-top')).toBe(true);
+    expect(card('A')?.getAttribute('data-navigation-screen-state')).toBe(
+      'hidden',
+    );
+    expect(card('A')?.hasAttribute('inert')).toBe(true);
+    // Back from the fork opens the list, not the chat it came from.
+    fireEvent.click(screen.getByRole('button', {name: 'Pop A fork'}));
+    await waitFor(() =>
+      expect(card('Chats')?.hasAttribute('data-navigation-top')).toBe(true),
+    );
   });
 });
 
