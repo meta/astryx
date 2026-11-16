@@ -6,8 +6,10 @@
  * editor's browser runner.
  * @input argv: the browser, the page (.html), the picture (.png), the color
  *   mode
- * @output the whole page, every pixel of its height, at the path given; on
- *   failure, the browser's reason on stderr and exit code 1
+ * @output the whole page, every pixel of its height, at the path given, and
+ *   on stdout the fonts it drew its text in (font-probe.mjs) and the text
+ *   it draws cut short (cut-short.mjs); on failure, the browser's reason
+ *   on stderr and exit code 1
  * @position run by `screenshot` in api/theme-edit/_preview.mjs through
  *   `runBrowser`, which gives it a temp folder of its own (the browser's
  *   profile goes there), its time bound and its stop
@@ -18,8 +20,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {PICTURE_WINDOW} from './picture-window.mjs';
+import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
 const [chrome, html, png, mode] = process.argv.slice(2);
 
@@ -197,6 +201,24 @@ try {
     sessionId,
   );
   fs.writeFileSync(png, Buffer.from(data, 'base64'));
+  // The fonts the picture drew its text in, for the editor's note.
+  const fonts = await probeFonts((method, params) =>
+    send(method, params, sessionId),
+  ).catch(() => null);
+  if (fonts)
+    process.stdout.write(`${FONT_PROBE_PREFIX}${JSON.stringify(fonts)}\n`);
+  // The text the picture draws cut short, measured on the page as the
+  // picture shows it. A measurement that does not run says nothing, and
+  // the picture stands.
+  const measured = await send(
+    'Runtime.evaluate',
+    {expression: `(${cutShortText})()`, returnByValue: true},
+    sessionId,
+  ).catch(() => null);
+  if (Array.isArray(measured?.result?.value) && !measured.exceptionDetails)
+    process.stdout.write(
+      `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}\n`,
+    );
   await send('Browser.close').catch(() => {});
 } catch (e) {
   process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);

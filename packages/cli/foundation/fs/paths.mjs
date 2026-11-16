@@ -30,6 +30,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
 
+/**
+ * Whether `target`, a path or a file URL, names one of the CLI's own files:
+ * one inside the CLI's folder, outside the node_modules folder inside it. In
+ * an installed CLI, its build id stands for exactly these files (AST-081 FR7).
+ * @param {string} target
+ * @param {string} root - the CLI's folder in the same form, ending in `sep`
+ * @param {string} sep - the separator of that form
+ * @returns {boolean}
+ */
+export function isCliBuildFile(target, root, sep) {
+  return (
+    target.startsWith(root) && !target.startsWith(`${root}node_modules${sep}`)
+  );
+}
+
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
 
@@ -301,7 +316,9 @@ export function homeFolder() {
  * @returns {boolean}
  */
 export function climbsOut(rel) {
-  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+  return (
+    rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`)
+  );
 }
 
 /**
@@ -691,14 +708,57 @@ function findNearbyCoreDir(startDir) {
  * @returns {string|null}
  */
 function findPnpPackage(startDir, name) {
-  if (!process.versions.pnp) return null;
+  const api = pnpApi(startDir);
+  if (!api) return null;
   try {
     const from = path.resolve(startDir);
-    const api = createRequire(path.join(from, 'noop.js'))('pnpapi');
     const dir = api.resolveToUnqualified(name, path.join(from, '/'));
     return dir && fs.existsSync(path.join(dir, 'package.json')) ? dir : null;
   } catch {
-    // The project does not declare it, or this is not a PnP process after all.
+    // The project does not declare it.
+    return null;
+  }
+}
+
+/**
+ * Does the workspace or package that holds `startDir` depend on `name`, by
+ * Yarn's Plug'n'Play runtime? Yarn then runs that package's commands from
+ * `startDir`, as a package runner runs a command it finds in
+ * `node_modules/.bin`. False outside a PnP process.
+ *
+ * @param {string} startDir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function pnpDependsOn(startDir, name) {
+  const api = pnpApi(startDir);
+  if (!api) return false;
+  try {
+    const from = path.join(path.resolve(startDir), '/');
+    const locator = api.findPackageLocator(from);
+    const info = locator ? api.getPackageInformation(locator) : null;
+    return Boolean(info?.packageDependencies?.get(name));
+  } catch {
+    // The runtime cannot place the folder.
+    return false;
+  }
+}
+
+/**
+ * The Plug'n'Play runtime's API, asked from `startDir`; null outside a PnP
+ * process.
+ *
+ * @param {string} startDir
+ * @returns {any}
+ */
+function pnpApi(startDir) {
+  if (!process.versions.pnp) return null;
+  try {
+    return createRequire(path.join(path.resolve(startDir), 'noop.js'))(
+      'pnpapi',
+    );
+  } catch {
+    // Not a PnP process after all.
     return null;
   }
 }

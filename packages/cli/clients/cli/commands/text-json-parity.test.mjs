@@ -585,6 +585,7 @@ const CASES = [
       'score — only shown with --verbose',
       'reason — only shown with --verbose',
       'kind — internal domain subtype, not shown in default text',
+      'isReady — an unready template\'s kind reads "(not ready)"',
     ],
   },
   {
@@ -599,7 +600,7 @@ const CASES = [
     skipFieldChecks: true,
     jsonFieldAllowlist: [
       'id — not shown in text records (#6265)',
-      'isReady — folded into name as "(WIP)" suffix (#6265)',
+      'isReady — folded into name as "(not ready)" suffix (#6265)',
     ],
   },
   {

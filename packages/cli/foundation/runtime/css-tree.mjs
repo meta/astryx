@@ -18,8 +18,9 @@
 
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {persistedSummary} from '../fs/gather-cache.mjs';
-import {loadedFileStamps, loadedFiles} from '../fs/loaded-files.mjs';
+import {loadedCodeStamps} from '../fs/loaded-files.mjs';
 
 const require = createRequire(import.meta.url);
 const CSS_TREE = require.resolve('css-tree');
@@ -75,9 +76,14 @@ export function keptCssTreeAnswer(kind, inputs, answer) {
     ],
     () => {
       const value = answer(inputs);
-      // Kept only while css-tree's files are those this process loaded:
-      // after a reinstall, the answer is the old css-tree's.
-      const {stamps, unchangedSinceStart} = loadedFileStamps(cssTreeFiles());
+      // Kept only while css-tree's files, and the package folders they
+      // were found in, are those this process loaded: after a reinstall,
+      // the answer is the old css-tree's.
+      const {stamps, unchangedSinceStart} = loadedCodeStamps(
+        fileURLToPath(import.meta.url),
+        [CSS_TREE],
+        loadedData().map(file => [CSS_TREE, file]),
+      );
       current = unchangedSinceStart;
       return {value, stamps};
     },
@@ -86,17 +92,12 @@ export function keptCssTreeAnswer(kind, inputs, answer) {
 }
 
 /**
- * Every file of css-tree's code that is loaded, and each MDN data file it
- * has read, for a kept answer worked out with them.
+ * Each MDN data file css-tree's checks have read, for a kept answer worked
+ * out with them.
  * @returns {string[]}
  */
-function cssTreeFiles() {
-  const data = [
-    'mdn-data/css/properties.json',
-    'mdn-data/css/selectors.json',
-  ].map(file => fromCssTree.resolve(file));
-  return [
-    ...loadedFiles([CSS_TREE]),
-    ...data.filter(file => fromCssTree.cache[file] !== undefined),
-  ];
+function loadedData() {
+  return ['mdn-data/css/properties.json', 'mdn-data/css/selectors.json']
+    .map(file => fromCssTree.resolve(file))
+    .filter(file => fromCssTree.cache[file] !== undefined);
 }

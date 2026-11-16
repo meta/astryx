@@ -25,7 +25,10 @@ import {
   availableComputerIntegrations,
 } from '../../foundation/config/project.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {projectAddCommand} from '../../foundation/release/notices.mjs';
+import {
+  addVerbFor,
+  projectAddCommand,
+} from '../../foundation/release/notices.mjs';
 import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {scanAllPackages, findComponentInPackages} from './_package-scanner.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
@@ -36,7 +39,6 @@ import {
   projectTree,
 } from '../docs/_adapter.mjs';
 import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
-import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
@@ -598,23 +600,21 @@ function newerFirst(a, b) {
  * @returns {(name: string, version?: string) => string}
  */
 export function addCommand(project, {official = []} = {}) {
-  const pm = detectPackageManager(project?.cwd ?? process.cwd());
-  const verb =
-    pm === 'pnpm'
-      ? 'pnpm add'
-      : pm === 'yarn'
-        ? 'yarn add'
-        : pm === 'bun'
-          ? 'bun add'
-          : 'npm install';
+  const cwd = project?.cwd ?? process.cwd();
   const byName = new Map(official.map(pkg => [pkg.package, pkg]));
+  // An Astryx package at one version is saved exactly in a project that pins
+  // its Core to one version (see addVerbFor): that pin is about Astryx's
+  // release. Any other package is saved as the package manager saves it.
+  /** @param {string} name @param {string | null} version */
+  const verb = (name, version) =>
+    addVerbFor(cwd, name.startsWith('@astryxdesign/') ? version : null);
   return (name, version) => {
-    if (version) return `${verb} ${name}@${version}`;
+    if (version) return `${verb(name, version)} ${name}@${version}`;
     const pin = byName.get(name)?.pin;
-    if (!pin) return `${verb} ${name}`;
+    if (!pin) return `${verb(name, null)} ${name}`;
     return isValidSemver(pin)
-      ? `${verb} ${name}@${pin}`
-      : `${verb} "${name}@${pin}"`;
+      ? `${verb(name, pin)} ${name}@${pin}`
+      : `${verb(name, null)} "${name}@${pin}"`;
   };
 }
 

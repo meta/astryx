@@ -105,6 +105,7 @@ import {
   THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
+  dependencyInstallFor,
   computerAgentTextState,
   installCommandFor,
   insideProjectElsewhere,
@@ -327,6 +328,12 @@ export function checkNodeVersion(ctx) {
 export function checkCoreInstalled(ctx) {
   const found = Boolean(ctx.coreDir);
   const version = pkgVersion(ctx.coreDir);
+  // A project that lists Core but has not installed its dependencies, as a
+  // fresh clone, gets Core by installing them: adding Core would install
+  // another release and replace the version the project lists.
+  const install = found
+    ? null
+    : dependencyInstallFor(ctx.cwd, '@astryxdesign/core');
   return {
     id: 'core-installed',
     label: '@astryxdesign/core installed',
@@ -337,7 +344,9 @@ export function checkCoreInstalled(ctx) {
     ...(found
       ? {}
       : {
-          fix: 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
+          fix: install
+            ? `Install the project's dependencies: \`${install}\`.`
+            : 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
   };
 }
@@ -393,8 +402,13 @@ export function checkVersionAlignment(ctx) {
     // is not the project's, or in no project, the fix says how to reach one.
     const add = addCliCommandFor(ctx.cwd, coreVersion);
     const matches = coreVersion === cliVersion;
+    const lead = add?.declared
+      ? 'To install the CLI this project declares'
+      : matches
+        ? 'To pin it for the team and CI'
+        : 'To match';
     const fix = add
-      ? `${matches ? 'To pin it for the team and CI' : 'To match'}, run: ${add.command}.`
+      ? `${lead}, run: ${add.command}.`
       : matches
         ? null
         : NO_PROJECT_FIX;
@@ -2338,7 +2352,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 

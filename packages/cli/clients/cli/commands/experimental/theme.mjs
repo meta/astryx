@@ -81,6 +81,7 @@ import {
   showSections,
   describe,
   namesSetting,
+  needsPart,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -361,7 +362,9 @@ async function run(program, call, render, answer) {
 const changeOptions = o => ({
   cwd: process.cwd(),
   on: o.on,
-  when: o.when,
+  // (--when given for several props, a ghost small button: all at once,
+  // joined as Core's own keys join them.)
+  when: flagValues('when').length > 1 ? flagValues('when').join('+') : o.when,
   state: o.state,
   mode: o.mode,
   only: o.only ?? false,
@@ -608,11 +611,12 @@ function changeBlocks(r) {
         ]
       : []),
     // The parts the theme's own changes still do not reach, counted near
-    // the top, so a head of the output keeps it; show lists each.
+    // the top, so a head of the output keeps it; show names the first ones
+    // with their lines, and show --json lists each.
     ...(missed
       ? [
           record({
-            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists the first with their lines; show --json lists each)`,
           }),
         ]
       : []),
@@ -756,7 +760,16 @@ function showBlocks(d) {
     openProblems.length
       ? [
           section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+            `openProblems: ${openProblems.length} the theme has now${(() => {
+              const fixable = openProblems.filter(
+                (/** @type {any} */ p) => p.fix,
+              ).length;
+              return fixable === openProblems.length
+                ? '; each fix line fixes one'
+                : fixable
+                  ? `; ${fixable} with a fix line that fixes it, the rest with none (no one line fixes those alone)`
+                  : '; none has a fix line (no one line fixes these alone)';
+            })()}`,
           ),
           ...problemList(openProblems),
         ]
@@ -863,8 +876,11 @@ function lookupBlocks(d) {
  */
 function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
+  // (--when takes one value per prop: those are joined, all at once.)
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
+    const props = all.map(w => String(w).split(':')[0].trim().toLowerCase());
+    if (flag === 'when' && new Set(props).size === all.length) continue;
     if (new Set(all).size > 1)
       return cliError(
         `--${flag} was given twice (${all.join(', ')}); give it once.`,
@@ -1435,6 +1451,22 @@ function previewExtraWords(sub, doc, head) {
  * @param {{png?: boolean, section?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // The theme typed as an option (`show --theme t`), as set and undo read
+  // it: the show on that theme, never its help alone.
+  const asOption = /^--?(?:theme|name)$/i.test(String(name));
+  if (asOption && rest.length) {
+    const theme = String(rest[0]);
+    return strayRefusal(
+      'show',
+      showDoc,
+      `${EDITOR} show`,
+      {
+        option: String(name),
+        note: "the theme is show's first word",
+      },
+      `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    );
+  }
   const stray = rest.map(String).find(w => w.startsWith('-'));
   if (stray == null) return null;
   // An option the one reader names never comes here (readOptions reads
@@ -1804,6 +1836,12 @@ export function registerExperimentalTheme(group, program) {
                 }
                 return false;
               };
+              /** Words typed straight after an option's value, past the name. @type {Set<string>} */
+              const afterValue = new Set();
+              /** An option's value before words that may be extra. @type {Record<string, string>} */
+              const extendedFrom = {};
+              /** The option the name was typed with (`--theme`), if any. @type {string | null} */
+              let nameOption = null;
               for (let i = from + 1; from >= 0 && i < argv.length; i++) {
                 const w = argv[i];
                 if (w === '--') {
@@ -1819,6 +1857,13 @@ export function registerExperimentalTheme(group, program) {
                 }
                 if (w.startsWith('-')) {
                   const flag = w.split('=')[0];
+                  // The name typed as an option (`--theme t2`, `--name t2`):
+                  // new takes it as its first word.
+                  if (/^--?(theme|name)$/i.test(flag)) {
+                    nameOption = flag;
+                    open = null;
+                    continue;
+                  }
                   if (valueFlags.has(flag) && !w.includes('=')) i += 1;
                   open = dialFlags.has(flag) ? camel(flag) : null;
                   continue;
@@ -1840,13 +1885,40 @@ export function registerExperimentalTheme(group, program) {
                   open = null;
                   continue;
                 }
-                // A dial word ends the open value: it starts its own setting
-                // (`--accent red corners pill`), read below.
-                if (
-                  open &&
-                  dialFlags.has(`--${w.toLowerCase().replace(/[:=]+$/, '')}`)
-                )
-                  open = null;
+                // After the name, a word is more of an open value only for a
+                // dial whose values are words (a font family, a headings
+                // style) or a value not finished yet (`rgb(1,`, `Inter,`); a
+                // setting's word starts its own setting (`--accent red
+                // corners pill`, `--corners pill padding 8px`), read below,
+                // and any other word is extra (`--accent red foo`).
+                if (open) {
+                  const bare = w.toLowerCase().replace(/[:=]+$/, '');
+                  const had = String(
+                    Array.isArray(given[open])
+                      ? given[open].at(-1)
+                      : given[open],
+                  );
+                  const unfinished =
+                    (had.match(/\(/g) ?? []).length >
+                      (had.match(/\)/g) ?? []).length || /,\s*$/.test(had);
+                  if (
+                    dialFlags.has(`--${bare}`) ||
+                    /^(like|base)$/.test(bare) ||
+                    namesSetting(bare)
+                  ) {
+                    open = null;
+                    afterValue.add(w);
+                  } else if (!(
+                    unfinished || ['font', 'headings'].includes(open)
+                  )) {
+                    // A word that may be more of the value (`dark blue`)
+                    // or extra (`red foo`): the line with it, and if that
+                    // line leaves the option out, the value before it.
+                    const key = /** @type {string} */ (open);
+                    if (!(key in extendedFrom)) extendedFrom[key] = had;
+                    afterValue.add(w);
+                  }
+                }
                 if (open) {
                   const had = given[open];
                   given[open] = Array.isArray(had)
@@ -1860,19 +1932,25 @@ export function registerExperimentalTheme(group, program) {
               /** Settings set gives after the theme is made. @type {Array<[string, string]>} */
               const later = [];
               // Settings typed after the name, in any form set reads (`accent
-              // red`, `corners=pill`, `corners: pill; accent: red`, a pasted
-              // JSON object): each is its option (`--accent red`), never
-              // part of the name. A dial's value runs to the next dial.
+              // red`, `red accent`, `corners=pill`, `like: neutral`, `corners:
+              // pill; accent: red`, `'accent red, corners pill'`, a pasted
+              // JSON object): each is its option (`--accent red`, `--like
+              // neutral`), never part of the name. A dial's value runs to the
+              // next setting.
               {
                 // A dial word as set reads it: with its colon or equals sign
                 // apart from the value (`accent:`), in other letters, or
-                // with a typo (`cornres`, the one typo limit).
+                // with a typo (`cornres`, the one typo limit); `like` and
+                // `base` are the base (--like).
                 const dialOf = (/** @type {string} */ w) => {
                   const word = String(w)
                     .trim()
                     .toLowerCase()
-                    .replace(/[:=]+$/, '');
+                    .replace(/[:=]+$/, '')
+                    // A key in quotes (`"like"`, `'accent'`) is that key.
+                    .replace(/^(["'])(.*)\1$/, '$2');
                   if (!/^[a-z][a-z-]*$/.test(word)) return null;
+                  if (word === 'like' || word === 'base') return 'like';
                   if (dialFlags.has(`--${word}`)) return camel(`--${word}`);
                   const near = [...dialFlags].filter(f =>
                     typoOf(word, f.slice(2)),
@@ -1885,13 +1963,30 @@ export function registerExperimentalTheme(group, program) {
                     /[A-Z]/g,
                     c => `-${c.toLowerCase()}`,
                   );
-                /** @type {string[]} */
-                const kept = [];
-                /** @type {Array<[string, string]>} */
-                const pairs = [];
-                /** The pasted pair a later word continues, or -1. */
-                let pasted = -1;
-                for (const w of words) {
+                /**
+                 * A key, a value or a word without the quotes around it
+                 * (`"accent"`, `'base neutral'`); a text that holds a quote
+                 * of its own (`"like": "neutral"`) keeps them, since its
+                 * ends are two quotes, not one pair.
+                 * @param {string} x
+                 */
+                const unquote = x => {
+                  const t = String(x).trim();
+                  const m = /^(["'])([\s\S]*)\1$/.exec(t);
+                  return m && !m[2].includes(m[1]) ? m[2] : t;
+                };
+                /**
+                 * The settings one typed word holds, each `[dial, value]`: a
+                 * JSON object, `key=value` or `key: value` pairs, or `dial
+                 * value` items, apart at `;` or `,`; null when it holds none.
+                 * @param {string} rawWord
+                 * @returns {Array<[string, string]> | null}
+                 */
+                const pairsIn = (/** @type {string} */ rawWord) => {
+                  // A word with its own quotes around it (`'base neutral'`,
+                  // `"accent"`) is that word, as the shell would have given
+                  // it: the quotes are no part of a name.
+                  const w = unquote(rawWord);
                   /** @type {unknown} */
                   let json;
                   try {
@@ -1903,77 +1998,168 @@ export function registerExperimentalTheme(group, program) {
                     json && typeof json === 'object' && !Array.isArray(json)
                       ? Object.entries(json)
                       : [];
-                  if (entries.length && entries.every(([k]) => dialOf(k))) {
-                    for (const [k, v] of entries) pairs.push([k, String(v)]);
-                    pasted = -1;
-                    continue;
-                  }
-                  // `corners=pill`, `corners: pill; accent: red`.
-                  const parts = w
-                    .split(/\s*;\s*/)
-                    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x.trim()))
-                    .filter(Boolean);
-                  if (
-                    parts.length &&
-                    parts.every(m =>
-                      dialOf(/** @type {RegExpExecArray} */ (m)[1]),
+                  if (entries.length)
+                    return entries.every(
+                      ([k]) => dialOf(k) || namesSetting(unquote(k)),
                     )
-                  ) {
-                    for (const m of parts)
-                      pairs.push([
-                        /** @type {RegExpExecArray} */ (m)[1],
-                        /** @type {RegExpExecArray} */ (m)[2],
-                      ]);
+                      ? entries.map(([k, v]) => [k, String(v)])
+                      : null;
+                  // `key=value`, `key: value`, keys and values in quotes or
+                  // not (`"like": "neutral"`), in either order (`red=accent`,
+                  // `stone=like`), as set reads a pair swapped; `like` is
+                  // never a value (`neutral=like` is the base neutral).
+                  const byColon = w
+                    .split(/\s*;\s*/)
+                    .map(x =>
+                      /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
+                        x.trim(),
+                      ),
+                    );
+                  /** @type {Array<[string, string]>} */
+                  const read = [];
+                  // (No pair at all: the `dial value` items below.)
+                  for (const m of byColon.some(Boolean) ? byColon : []) {
+                    if (!m) return null;
+                    const [k, v] = [unquote(m[1]), unquote(m[3])];
+                    if (dialOf(v) === 'like' && !dialOf(k)?.startsWith('like'))
+                      read.push([v, k]);
+                    else if (dialOf(k) || namesSetting(k)) read.push([k, v]);
+                    else if (dialOf(v) && !/\s/.test(v)) read.push([v, k]);
+                    else return null;
+                  }
+                  if (read.length) return read;
+                  // `'accent red'`, `'accent red, corners pill'`, `'base
+                  // neutral'`.
+                  if (!/\s/.test(w.trim())) return null;
+                  const items = w
+                    .split(/\s*[;,]\s*/)
+                    .map(x => x.trim().split(/\s+/))
+                    .filter(x => x[0]);
+                  return items.length &&
+                    items.every(
+                      x =>
+                        x.length > 1 &&
+                        (dialOf(x[0]) || namesSetting(unquote(x[0]))),
+                    )
+                    ? items.map(x => [unquote(x[0]), x.slice(1).join(' ')])
+                    : null;
+                };
+                /** @type {string[]} */
+                const kept = [];
+                /** @type {Array<[string, string]>} */
+                const pairs = [];
+                /** The pasted pair a later word continues, or -1. */
+                let pasted = -1;
+                for (const w of words) {
+                  const found = pairsIn(w);
+                  if (found) {
+                    pairs.push(...found);
                     // A value typed on across words (`font=Inter, Arial`)
-                    // runs to the next dial, as `font Inter, Arial` does.
-                    pasted = pairs.length - 1;
+                    // runs to the next setting, as `font Inter, Arial` does.
+                    pasted = /^\s*\{/.test(w) ? -1 : pairs.length - 1;
                     continue;
                   }
-                  if (pasted >= 0 && !dialOf(w)) {
+                  if (pasted >= 0 && !dialOf(w) && !namesSetting(w)) {
                     pairs[pasted][1] = `${pairs[pasted][1]} ${w}`;
                     continue;
                   }
                   pasted = -1;
-                  kept.push(w);
+                  // A word quoted on its own (`"accent"`) keeps no quotes.
+                  kept.push(unquote(w));
                 }
-                // `accent red`: a dial word, and its value up to the next dial.
+                // `accent red`: a dial word, and its value up to the next
+                // setting; `red accent`: a value, then the dial it is for (as
+                // set reads the two swapped); a dial word with no value is
+                // never a word of the name.
                 /** @type {string[]} */
                 const rest = [];
+                /** @type {string[]} */
+                const bare = [];
+                const isSetting = (/** @type {string} */ w) =>
+                  Boolean(dialOf(w)) ||
+                  namesSetting(String(w).replace(/[:=]+$/, ''));
                 for (let i = 0; i < kept.length; i++) {
-                  if (
-                    dialOf(kept[i]) &&
-                    kept[i + 1] != null &&
-                    !dialOf(kept[i + 1])
-                  ) {
+                  // The base takes the one word after it (`like neutral`,
+                  // whose base shares its name with a dial).
+                  if (dialOf(kept[i]) === 'like' && kept[i + 1] != null) {
+                    pairs.push([kept[i], kept[i + 1]]);
+                    i += 1;
+                    continue;
+                  }
+                  const builtIn = (/** @type {string} */ w) =>
+                    builtInThemes().includes(String(w).toLowerCase());
+                  // A built-in theme's name is the base, whatever word is
+                  // beside it (`theme neutral`, `neutral stone`): the base
+                  // reader below takes it, never a dial of the same name.
+                  if (builtIn(kept[i])) {
+                    rest.push(kept[i]);
+                    continue;
+                  }
+                  if (dialOf(kept[i])) {
                     const value = [];
                     let j = i + 1;
-                    while (j < kept.length && !dialOf(kept[j]))
+                    while (
+                      j < kept.length &&
+                      !isSetting(kept[j]) &&
+                      !builtIn(kept[j])
+                    )
                       value.push(kept[j++]);
-                    pairs.push([kept[i], value.join(' ')]);
+                    if (value.length) pairs.push([kept[i], value.join(' ')]);
+                    else bare.push(kept[i]);
                     i = j - 1;
+                    continue;
+                  }
+                  if (
+                    !isSetting(kept[i]) &&
+                    kept[i + 1] != null &&
+                    dialOf(kept[i + 1]) &&
+                    !builtIn(kept[i + 1]) &&
+                    (kept[i + 2] == null || isSetting(kept[i + 2]))
+                  ) {
+                    pairs.push([kept[i + 1], kept[i]]);
+                    i += 1;
                     continue;
                   }
                   rest.push(kept[i]);
                 }
                 for (const [k, v] of pairs) {
+                  // A setting new has no option for (`padding: 8px`) is a
+                  // set after the theme is made, as the space form is.
+                  if (!dialOf(k)) {
+                    later.push([unquote(k), v]);
+                    intoValues.push(`${unquote(k)} ${v}`);
+                    continue;
+                  }
                   const key = /** @type {string} */ (dialOf(k));
                   if (given[key] == null) given[key] = v;
                   intoValues.push(`${dialName(k)} ${v}`);
                 }
+                intoValues.push(...bare);
                 // A setting new takes no option for (`padding 8px`): set
                 // gives it after the theme is made, never a word of the name.
                 const named = [];
                 for (let i = 0; i < rest.length; i++) {
                   const thing = rest[i].replace(/[:=]+$/, '');
+                  // (A built-in theme's name is the base, read below.)
                   if (
                     namesSetting(thing) &&
-                    !/^(like|base)$/i.test(thing) &&
+                    !builtInThemes().includes(thing.toLowerCase()) &&
                     rest[i + 1] != null
                   ) {
-                    const value = rest.slice(i + 1);
+                    const value = [];
+                    let j = i + 1;
+                    while (j < rest.length && !isSetting(rest[j]))
+                      value.push(rest[j++]);
                     later.push([thing, value.join(' ')]);
                     intoValues.push(`${thing} ${value.join(' ')}`);
-                    break;
+                    i = j - 1;
+                    continue;
+                  }
+                  // A word typed after an option's value that no reading
+                  // takes is extra, never a word of the name.
+                  if (afterValue.has(rest[i])) {
+                    intoValues.push(rest[i]);
+                    continue;
                   }
                   named.push(rest[i]);
                 }
@@ -1990,14 +2176,20 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
-              // (`base stone` is the base as `like stone` is.)
+              // (`base stone` and `theme stone` are the base as `like
+              // stone` is; a second base typed is no word of the name.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
                   !(
                     baseAt >= 0 &&
-                    /^(like|base)$/i.test(w) &&
+                    /^(like|base|theme)[:=]?$/i.test(w) &&
                     i === baseAt - 1
+                  ) &&
+                  !(
+                    baseAt >= 0 &&
+                    i > baseAt &&
+                    builtInThemes().includes(w.toLowerCase())
                   ),
               );
               const fixed = nameWords
@@ -2006,23 +2198,53 @@ export function registerExperimentalTheme(group, program) {
                 .replace(/[^a-z0-9-]+/g, '-');
               // The line is checked as every new line is offered.
               const read = Object.keys(given).some(k => given[k] !== o[k]);
+              const linesFor = () =>
+                editorCheckedNewLines(
+                  `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                  fixed,
+                  {
+                    cwd: process.cwd(),
+                    like: given.like,
+                    png: given.png ?? false,
+                    settings: newSettingsGiven(given),
+                  },
+                );
+              let lines = await linesFor();
+              // A value a later word made one no reading takes (`--accent
+              // red foo`): the value before it, the word extra.
+              const lost = Object.keys(extendedFrom).filter(
+                k =>
+                  !lines.some(x =>
+                    x.name.includes(
+                      ` --${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)} `,
+                    ),
+                  ),
+              );
+              if (lost.length) {
+                for (const k of lost) given[k] = extendedFrom[k];
+                lines = await linesFor();
+              }
               throw new AstryxError(
-                `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
+                // (Only the name typed as an option, nothing extra: say that.)
+                nameOption &&
+                  !(nameWord ? [...intoValues, ...words] : extra).join('')
+                  ? `${nameOption} is no option of new: the theme name is new's first word. Nothing was changed.`
+                  : `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
                 [
-                  ...(await editorCheckedNewLines(
-                    `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
-                    fixed,
-                    {
-                      cwd: process.cwd(),
-                      like: given.like,
-                      png: given.png ?? false,
-                      settings: newSettingsGiven(given),
-                    },
-                  )),
-                  ...later.map(([thing, value]) => ({
-                    name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
-                    reason: `then this: new takes no ${thing}; set gives it`,
-                  })),
+                  ...lines,
+                  // A CSS property is written on a part: the ask that
+                  // names the parts, never a set line set itself refuses.
+                  ...later.map(([thing, value]) =>
+                    needsPart(thing)
+                      ? {
+                          name: `${HOW} ${quoteCommandArgument(`${value} ${thing}`)}`,
+                          reason: `then this: new takes no ${thing}, and set writes it on a part (--on)`,
+                        }
+                      : {
+                          name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                          reason: `then this: new takes no ${thing}; set gives it`,
+                        },
+                  ),
                 ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
@@ -2038,7 +2260,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...changeFields(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
-            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (every menu, tooltip, popover and list, open) and sheet.png (every component) from real components; open preview.png and sheet-overlays.png and check them against the request`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],
         ),
     }),

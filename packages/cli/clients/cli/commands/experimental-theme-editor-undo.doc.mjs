@@ -42,7 +42,7 @@ export const doc = {
       flag: '--when <prop:value>',
       param: 'options.when',
       description:
-        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); needs --on',
+        'Only that variant of the part, such as variant:primary or status:error (how <part> lists them); give it once per prop for several at once (--when variant:ghost --when size:sm, or variant:ghost+size:sm); needs --on',
     },
     {
       flag: '--state <state>',
@@ -66,7 +66,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds sheet.png, every component), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file. A change removes the pictures --png took of the look before it (the preview, the sheet and each section sheet, in each mode) and the result names them; a section sheet's page stays, marked as out of date",
+        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of, or of the buttons when it sets none, and show --section <family> --png takes any other family; sheet.html, every component, is not pictured), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file. A change removes the pictures --png took of the look before it (the preview, the sheet and each section sheet, in each mode) and the result names them; a section sheet's page stays, marked as out of date",
     },
   ],
   examples: [

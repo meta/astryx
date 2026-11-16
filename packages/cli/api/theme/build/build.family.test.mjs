@@ -409,7 +409,7 @@ describe('themeBuildFamily()', () => {
     // prettier-ignore
     fs.writeFileSync(path.join(dir, emptyParent), `import {defineTheme} from '@astryxdesign/core/theme';const invalid={name:'',tokens:{}};export default defineTheme({name:'empty-parent',extends:invalid});\n`);
     const sourceCollision = 'themes/Theme-family.js';
-    const sourceBytes = `export const baseTheme={name:'base',tokens:{},extends:undefined};\n`;
+    const sourceBytes = `import {defineTheme} from '@astryxdesign/core/theme';export const baseTheme=defineTheme({name:'base'});\n`;
     fs.writeFileSync(path.join(dir, sourceCollision), sourceBytes);
     const sourceChild = 'themes/source-child.mjs';
     // prettier-ignore
@@ -456,7 +456,7 @@ describe('themeBuildFamily()', () => {
       {files: [files[0], bypass], key: FAMILY_KEY, message: /is a plain object, so a family build cannot see which theme it extends/i},
       {files: [cycleA, cycleB], key: FAMILY_KEY, message: /cycle/i},
       {files: [graphRoot, graphChild], key: 'graph-family', message: /registry graph imports CSS/i},
-      {files: [emptyParent, unrelated], key: FAMILY_KEY, message: /invalid normalized parent/i},
+      {files: [emptyParent, unrelated], key: FAMILY_KEY, message: /`extends` must be a theme from defineTheme\(\)/},
       {files: [sourceCollision, sourceChild], key: 'theme-family', message: /collides with a selected source/i},
       {files, key: 'ocean', message: /collides.*standalone/i},
       {files, key: '../escaped', message: /family key/i},

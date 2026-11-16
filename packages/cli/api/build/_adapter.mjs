@@ -54,6 +54,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
+ * @property {boolean} [isReady] Whether its doc calls it ready; the kit lists only ready pages.
  */
 
 /**
@@ -89,23 +90,34 @@ export async function loadPageTemplates(cwd) {
  * @property {string} displayName Human-facing name.
  * @property {string} description What the block is.
  * @property {string} command `astryx template <id> --type block`, as search prints it.
+ * @property {boolean} isReady Whether its doc calls it ready, as search reports it.
  */
 
 /**
  * Every ready page template and every block the project can scaffold, from one
  * discovery: pages as {@link loadPageTemplates} returns them, blocks as
- * {@link BlockTemplate}. Discovery failures leave both empty.
+ * {@link BlockTemplate}, and the page templates that are not ready yet, by
+ * their name and descriptor words. Discovery failures leave all three empty.
  *
  * @param {string} cwd
- * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[]}>}
+ * @returns {Promise<{pages: PageTemplate[], blocks: BlockTemplate[], notReadyPages: import('./kit/words.mjs').NamedTemplate[]}>}
  */
 export async function loadTemplates(cwd) {
   let templates;
   try {
     templates = await discoverTemplates(cwd);
   } catch {
-    return {pages: [], blocks: []};
+    return {pages: [], blocks: [], notReadyPages: []};
   }
+  const notReadyPages = templates
+    .filter(t => t.type === 'page' && t.isReady === false)
+    .map(t => ({
+      name: t.dirName,
+      displayName: t.displayName || t.name,
+      category: t.category || '',
+      keywords: t.keywords ?? [],
+      description: t.description || '',
+    }));
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
     .map(t =>
@@ -118,6 +130,7 @@ export async function loadTemplates(cwd) {
           category: t.category || '',
           keywords: t.keywords ?? [],
           hidden: t.hidden === true,
+          isReady: t.isReady !== false,
           filePath: t.filePath,
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
@@ -134,8 +147,9 @@ export async function loadTemplates(cwd) {
       displayName: t.name,
       description: t.description || '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
+      isReady: t.isReady !== false,
     }));
-  return {pages, blocks};
+  return {pages, blocks, notReadyPages};
 }
 
 /**

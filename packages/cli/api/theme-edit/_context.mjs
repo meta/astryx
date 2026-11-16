@@ -144,7 +144,7 @@ export async function context(cwd) {
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
     uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
-      version: 0,
+      censusKey: '',
       coreKey: project.coreKey,
       map: {},
       pairs: [],
@@ -426,16 +426,99 @@ export function reactCopies(project) {
 const notChecked = cause =>
   cause ? {code: E.ERR_THEME_NOT_CHECKED, cause} : null;
 
+/** The sample page, as a note about its pictures names it. */
+export const SAMPLE_PAGE_NAME = 'the sample page';
+
 /**
- * Pictures of HTML files, on request.
+ * Text one page's pictures draw cut short in one part, as the browser
+ * measured it: the page and its picture, the part (null when the text sits
+ * in none), its texts, the one mode it was cut in when only one was, and
+ * whether every text is drawn whole once the part keeps its width
+ * (`flex-shrink: 0`, applied in the page and measured).
+ * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean}} CutShort
+ */
+
+/** The texts named, the first six and how many more. @param {string[]} texts */
+const someTexts = texts =>
+  `${texts
+    .slice(0, 6)
+    .map(t => JSON.stringify(t))
+    .join(', ')}${texts.length > 6 ? `, and ${texts.length - 6} more` : ''}`;
+
+/**
+ * The note for text a page's pictures draw cut short.
+ * @param {CutShort} c
+ */
+export function cutShortNote(c) {
+  const n = c.texts.length;
+  const what = c.part
+    ? `${c.part} label${n === 1 ? '' : 's'}`
+    : `text${n === 1 ? '' : 's'}`;
+  return `${c.page} (${c.file}) draws ${n} ${what} cut short${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text no longer fits ${c.part ? `the ${c.part}` : 'its box'}`;
+}
+
+/**
+ * The problem for text a page's pictures draw cut short, with the line that
+ * keeps it whole: the part keeps its width (`flex-shrink 0` on it), offered
+ * only when the browser measured every text whole with it; else no line,
+ * and that the line was measured and does not.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {CutShort} c
+ * @returns {{problem: string, fix: string | null}}
+ */
+export function cutShortProblem(ctx, slug, c) {
+  const label = c.part ? `${c.part} labels` : 'text';
+  const problem = `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
+  if (c.part && c.whole && ctx.project.target.has(c.part))
+    return {problem, fix: `${P} set ${slug} flex-shrink 0 --on ${c.part}`};
+  return {
+    problem: c.part
+      ? `${problem}; keeping the ${c.part}'s width (flex-shrink 0) was measured and does not draw them whole there, so no one line fixes it`
+      : problem,
+    fix: null,
+  };
+}
+
+/**
+ * Pictures of HTML files, on request. A shot with a `name` is a page laid
+ * out so its text fits in the base theme (the sample page): the text its
+ * pictures draw cut short, as the browser measured it, comes back in
+ * `cutShort`, one entry for each part on each page ({@link cutShortNote},
+ * {@link cutShortProblem}). The sheets (the open
+ * states among them) have no name: their cells are narrow, and the full
+ * sheet cuts long labels short in every theme.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string}>} shots
+ * @param {Array<{html: string, png: string, name?: string}>} shots
  * @param {Array<'light' | 'dark'>} modes
- * @returns {Promise<{files: string[], problem: string | null}>}
+ * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[]}>}
  */
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /**
+   * The text drawn cut short, by page, then by part: its texts, the modes
+   * it was drawn so in, whether keeping the part's width draws every one
+   * whole, and the page's picture.
+   * @type {Map<string, {file: string, parts: Map<string, {texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   */
+  const cut = new Map();
+  /** One entry for each part on each page, from what was measured. */
+  const cutShortNotes = () =>
+    [...cut].flatMap(([name, page]) =>
+      [...page.parts].map(
+        ([part, {texts, modes: drawnIn, whole}]) =>
+          /** @type {CutShort} */ ({
+            page: name,
+            file: page.file,
+            part: part || null,
+            texts: [...texts],
+            only:
+              modes.length > 1 && drawnIn.size === 1 ? [...drawnIn][0] : null,
+            whole,
+          }),
+      ),
+    );
   /** What a later browser's success says of an earlier one. @type {string[]} */
   const notes = [];
   /** One run for every picture: a browser that failed is not tried again. */
@@ -485,10 +568,11 @@ export async function pictures(project, shots, modes) {
     if (!slug) continue;
     const record = themeFiles(project.cwd, slug).pictures;
     const st = fs.lstatSync(record, {throwIfNoEntry: false});
-    if (st && !st.isFile() && !st.isSymbolicLink())
+    if (st && !st.isFile())
       return {
         files,
-        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move it, then run the command again`,
+        cutShort: [],
+        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
       };
   }
   /** Pictures skipped for a link at their name. @type {string[]} */
@@ -496,9 +580,10 @@ export async function pictures(project, shots, modes) {
   if (blocked.length)
     return {
       files,
+      cutShort: [],
       problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
     };
-  for (const {html, png} of shots) {
+  for (const {html, png, name} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
       if (isLink(out)) {
@@ -530,6 +615,7 @@ export async function pictures(project, shots, modes) {
       if (fs.existsSync(part) && !fs.lstatSync(part).isFile())
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
       // A folder it cannot write gets no picture: named before the browser
@@ -539,6 +625,7 @@ export async function pictures(project, shots, modes) {
       } catch (e) {
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
@@ -553,6 +640,7 @@ export async function pictures(project, shots, modes) {
           .map(f => path.relative(project.cwd, f).split(path.sep).join('/'));
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: files.length
             ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r.reason}`
             : `No picture was taken: ${r.reason}`,
@@ -564,6 +652,7 @@ export async function pictures(project, shots, modes) {
         fs.rmSync(part, {force: true});
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
         };
       }
@@ -584,7 +673,24 @@ export async function pictures(project, shots, modes) {
         }
         recordWritten(project.cwd, slug, [out]);
       }
-      if (r.note && !notes.includes(r.note)) notes.push(r.note);
+      for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
+      // What the browser measured on a page laid out to fit, kept by page
+      // and part; nothing when its script measured nothing.
+      if (name && r.cutShort?.length) {
+        const page = cut.get(name) ?? {file: r.file, parts: new Map()};
+        cut.set(name, page);
+        for (const {part, text, whole} of r.cutShort) {
+          const at = page.parts.get(part ?? '') ?? {
+            texts: new Set(),
+            modes: new Set(),
+            whole: true,
+          };
+          page.parts.set(part ?? '', at);
+          at.texts.add(text);
+          at.modes.add(m);
+          at.whole &&= whole;
+        }
+      }
     }
   }
   if (linked.length) {
@@ -610,6 +716,7 @@ export async function pictures(project, shots, modes) {
     // Pictures were taken; a note says why an earlier browser did not, and
     // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
+    cutShort: cutShortNotes(),
   };
 }
 
@@ -781,7 +888,12 @@ export function fontNotes(ctx, data) {
       // Apple systems reach their interface faces only by a generic.
       const {fallbacks} = fontOf(s.value);
       const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
-      const value = [generic, fallbacks.trim()].filter(Boolean).join(', ');
+      // The generic once: a stack that already holds it keeps one.
+      const value = [
+        ...new Set(
+          [generic, ...fallbacks.split(',')].map(f => f.trim()).filter(Boolean),
+        ),
+      ].join(', ');
       notes.push(
         `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
       );
@@ -1078,9 +1190,10 @@ export function styledChanges(before, after, base) {
 
 /**
  * The line that says which pictures to open after a run that took them:
- * the sample page's and the open states' (every menu, tooltip, popover and
- * list drawn open), of the mode shown first (light when the theme has
- * both). Null when this run took neither.
+ * each family of components' first ({@link familyPages}), then the sample
+ * page's and the open states' (every menu, tooltip, popover and list drawn
+ * open), of the mode shown first (light when the theme has both). Null when
+ * this run took none of them.
  * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
  * @returns {string | null}
  */
@@ -1091,18 +1204,27 @@ export function lookAtPictures(files) {
     files.find(f => path.basename(f) === `${name}-dark.png`);
   const preview = one('preview');
   const open = one(`sheet-${OPEN_SECTION}`);
-  if (!preview && !open) return null;
+  const families = FAMILY_SECTIONS.map(g => one(`sheet-${g}`)).filter(
+    f => f != null,
+  );
+  if (!preview && !open && !families.length) return null;
   const dark =
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
   return `open ${[
+    // A family's own picture reads whole; the full sheet does not.
+    ...(families.length
+      ? [`${families.join(', ')} (one family of components each)`]
+      : []),
     ...(preview
       ? [
           `${preview} (the sample page, a tooltip, a menu and a list drawn open below it)`,
         ]
       : []),
     ...(open
-      ? [`${open} (every menu, tooltip, popover and list, drawn open)`]
+      ? [
+          `${open} (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)`,
+        ]
       : []),
   ].join(' and ')}${dark ? '; the -dark pictures show the dark mode' : ''}`;
 }
@@ -1135,6 +1257,83 @@ export async function openStatesPage(ctx, slug, data) {
   await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
   stampSheet(html, slug, ctx.project.cwd);
   return {html, png};
+}
+
+/**
+ * The family `show --png` pictures when the theme's settings set no part of
+ * its own (a fresh theme, or only theme-wide settings): the buttons, an
+ * overview of the theme's controls beside the sample page.
+ */
+export const FAMILY_OVERVIEW = 'actions';
+
+/**
+ * The families of components with a picture of their own beside the full
+ * sheet, which is too tall to read whole: each section of the sheet but the
+ * overlays (the open states page shows them) and the pages (the sample page
+ * is preview.png).
+ */
+export const FAMILY_SECTIONS = Object.freeze(
+  SHOWCASE_GROUPS.filter(g => g !== OPEN_SECTION && g !== 'pages'),
+);
+
+/**
+ * One page for each family of components ({@link FAMILY_SECTIONS}), cut
+ * from the full sheet just made, so each shows its family as the sheet
+ * does, with no render of its own: the sheet's head and bar, then that
+ * family's section. Each is written where `show --section <family>` writes
+ * that family's sheet, and stamped with the build it shows. Something of
+ * yours at a family page's name is never written over: that page is left
+ * out and named.
+ * @param {string} sheet the full sheet, as written
+ * @param {string} slug
+ * @param {string} cwd
+ * @param {readonly string[]} [only] the families to make; every one by default
+ * @returns {{pages: Array<{html: string, png: string, family: string}>, problems: string[]}}
+ */
+export function familyPages(sheet, slug, cwd, only = FAMILY_SECTIONS) {
+  /** @type {Array<{html: string, png: string, family: string}>} */
+  const pages = [];
+  /** @type {string[]} */
+  const problems = [];
+  const text = fs.readFileSync(sheet, 'utf8').replace(SHEET_STAMP, '');
+  // Each section of the sheet starts with its own marker, in order, and
+  // holds no section of its own: one ends where the next starts, and the
+  // last at the last section close.
+  const starts = [
+    ...text.matchAll(
+      /<section\b[^>]*\sclass="[^"]*\bcs-family-([a-z-]+)\b[^"]*"[^>]*>/g,
+    ),
+  ].map(m => ({family: m[1], at: /** @type {number} */ (m.index)}));
+  const close = text.lastIndexOf('</section>');
+  if (!starts.length || close < 0) return {pages, problems};
+  const end = close + '</section>'.length;
+  const before = text.slice(0, starts[0].at);
+  const after = text.slice(end);
+  for (const [i, {family, at}] of starts.entries()) {
+    if (!FAMILY_SECTIONS.includes(family) || !only.includes(family)) continue;
+    const html = path.join(path.dirname(sheet), `sheet-${family}.html`);
+    const png = path.join(path.dirname(sheet), `sheet-${family}.png`);
+    const inWay = pageInTheWay(html);
+    if (inWay) {
+      problems.push(
+        `${inTheWayPhrase(shown(cwd, html), inWay, `the ${family} sheet`)}, so ${shown(cwd, png)} was not taken; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
+      );
+      continue;
+    }
+    const head = before
+      .replace('class="cs-page"', `class="cs-page cs-section-${family}"`)
+      .replace(
+        `<strong>${slug}: every component</strong>`,
+        `<strong>${slug}: every component (${family})</strong>`,
+      );
+    writeWhole(
+      html,
+      `${head}${text.slice(at, starts[i + 1]?.at ?? end)}${after}`,
+    );
+    stampSheet(html, slug, cwd);
+    pages.push({html, png, family});
+  }
+  return {pages, problems};
 }
 
 /**
@@ -1177,8 +1376,13 @@ export async function previewAfter(ctx, slug, data, png) {
             : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
     }
   const f = themeFiles(ctx.project.cwd, slug);
-  /** The pages photographed: the sample page, and with it the open states. */
-  const shotPages = [{html: f.preview, png: f.previewPng}];
+  /**
+   * The pages photographed: the sample page, and with it the open states.
+   * @type {Array<{html: string, png: string, name?: string}>}
+   */
+  const shotPages = [
+    {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
+  ];
   /** Why the open states were not taken, said with the pictures. @type {string | null} */
   let openProblem = null;
   // Made before the sections are judged, so it is current, never marked.
@@ -1206,10 +1410,13 @@ export async function previewAfter(ctx, slug, data, png) {
   const shots =
     png && preview
       ? await pictures(ctx.project, shotPages, modesOf(data))
-      : {files: [], problem: null};
+      : {files: [], problem: null, cutShort: []};
   return {
     preview,
     pictures: shots.files,
+    // Text the sample page's pictures draw cut short: a note and a problem
+    // of the change.
+    cutShort: shots.cutShort,
     pictureProblem:
       [openProblem, shots.problem].filter(Boolean).join('; ') || null,
     notChecked: notChecked(cause),

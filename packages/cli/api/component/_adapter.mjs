@@ -44,7 +44,11 @@ import {Project} from '../../foundation/config/project.mjs';
 import {loadComponentDoc as loadValidatedComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {integrationComponentViews} from '../../foundation/discovery/integration-component-views.mjs';
-import {searchComponents} from '../../foundation/text/string-utils.mjs';
+import {
+  EXACT_KEYWORD_SCORE,
+  EXACT_NAME_SCORE,
+  searchComponents,
+} from '../../foundation/text/string-utils.mjs';
 import {
   rankComponentSuggestions,
   synonymMatches,
@@ -63,6 +67,8 @@ import {
 
 /** How far below the first suggestion's score a later one may be. */
 const NEAR_FIRST = 10;
+/** How far a clear match scores above every other Core match. */
+const CLEAR_GAP = 20;
 
 /** @type {Record<string, {synonyms?: string[]}> | undefined} */
 let cards;
@@ -446,6 +452,25 @@ export function resolveCoreSourcePath(coreDir, dirName) {
 }
 
 /**
+ * The unknown-component error for a name that is clearly one component's
+ * keyword. That component is its first suggestion, and a hint for another
+ * command never goes ahead of it.
+ */
+class KeywordMatchError extends AstryxError {}
+
+/**
+ * The one Core match that scores above every other Core match by at least
+ * {@link CLEAR_GAP}, or undefined.
+ * @param {Array<{name: string, score: number}>} coreResults - sorted, best first
+ * @returns {{name: string, score: number} | undefined}
+ */
+function clearCoreMatch(coreResults) {
+  const [first, second] = coreResults;
+  if (!first) return undefined;
+  return first.score - (second?.score ?? 0) >= CLEAR_GAP ? first : undefined;
+}
+
+/**
  * Resolve a bare (unscoped) name to a `.doc.mjs`: core first, then back-compat
  * externals, then a conservative fuzzy search. Throws ERR_UNKNOWN_COMPONENT
  * for a genuinely unknown name, and ERR_AMBIGUOUS_COMPONENT when multiple
@@ -453,8 +478,11 @@ export function resolveCoreSourcePath(coreDir, dirName) {
  * (with candidate suggestions when close) or ERR_NO_DOC.
  *
  * The suggestions for an unknown name come from every component the bare
- * lookup reads: Core's and each loaded integration's. Only a Core component
- * resolves by a close match.
+ * lookup reads: Core's and each loaded integration's. Past the exact file
+ * name, only a Core component whose name is the typed name, ignoring case,
+ * resolves, and only when no other Core component comes close. A typed name
+ * that is a component's keyword never resolves: that component goes first in
+ * the suggestions.
  * @param {string} dirName - bare component name (no `XDS` prefix)
  * @param {{coreDir: string, cwd: string, name: string, loadedIntegrations?: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} ctx - `name` is the caller's original (prefixed) input, used in error text
  * @returns {Promise<ResolvedUnscopedDoc>}
@@ -503,20 +531,19 @@ export async function resolveUnscopedDoc(
     const coreResults = results.filter(r => coreNames.has(r.name));
 
     if (results.length > 0) {
-      const topScore = coreResults[0]?.score ?? 0;
-      const topTied = coreResults.filter(r => r.score === topScore);
-      const secondScore =
-        coreResults.length > topTied.length
-          ? coreResults[topTied.length].score
-          : 0;
-      const gap = topScore - secondScore;
+      const clear = clearCoreMatch(coreResults);
 
-      if (topScore >= 90 && topTied.length === 1 && gap >= 20) {
-        resolvedName = topTied[0].name;
+      if (clear?.score === EXACT_NAME_SCORE) {
+        resolvedName = clear.name;
         readmePath = findComponentReadme(coreDir, resolvedName);
         resolvedOwnerPackage = CORE_PACKAGE;
         resolvedSourcePath = findComponentSource(coreDir, resolvedName);
       } else {
+        // A keyword is a word to find a component by, not another name
+        // for it: a clear exact-keyword match never opens. It goes first
+        // in the suggestions instead.
+        const pinned =
+          clear?.score === EXACT_KEYWORD_SCORE ? clear.name : undefined;
         // How many to suggest: the near-top results, at most five and at
         // least two. Which ones, and in what order, is the suggestion
         // ranking's call.
@@ -525,11 +552,19 @@ export async function resolveUnscopedDoc(
           results.filter(r => r.score >= threshold).slice(0, 5).length,
           Math.min(2, results.length),
         );
-        const candidates = rankComponentSuggestions(
+        const ranked = rankComponentSuggestions(
           dirName,
           results,
           [...coreNames, ...integrationComponents.map(c => c.name)],
           synonymMatches(dirName, searchCards()),
+        );
+        const candidates = (
+          pinned
+            ? [
+                ...ranked.filter(c => c.name === pinned),
+                ...ranked.filter(c => c.name !== pinned),
+              ]
+            : ranked
         ).slice(0, count);
         // Past the first two suggestions, only the ones about as close as
         // the first (within NEAR_FIRST points), or a close spelling of the
@@ -542,7 +577,8 @@ export async function resolveUnscopedDoc(
             c.score >= candidates[0].score - NEAR_FIRST ||
             levenshteinDistance(c.name.toLowerCase(), typed) <= 2,
         );
-        throw new AstryxError(
+        const ErrorClass = pinned ? KeywordMatchError : AstryxError;
+        throw new ErrorClass(
           `No component named "${name}"`,
           nearFirst.map(c => ({name: c.name, reason: c.reason})),
           ERROR_CODES.ERR_UNKNOWN_COMPONENT,
@@ -931,7 +967,8 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
  * among its suggestions, in the place foundation/suggest/other-command.mjs
  * gives it: a hint at the folded tier or a worse one stays behind a
  * suggested component that declares the name as a keyword or synonym, and a
- * hook keyword hint behind one that declares the same keyword. Returns `error` unchanged otherwise,
+ * hook keyword hint behind one that declares the same keyword. A component
+ * whose keyword the name clearly is stays first. Returns `error` unchanged otherwise,
  * and when the check fails.
  * @param {unknown} error
  * @param {string} dirName
@@ -978,6 +1015,7 @@ export async function withOtherCommandHint(
       error.message,
       withOtherCommand(error.suggestions, hint, dirName, {
         from: 'component',
+        pinned: error instanceof KeywordMatchError ? 1 : 0,
         keywordsOf: suggestion => declared.get(suggestion.name) ?? [],
       }),
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,

@@ -49,6 +49,7 @@
  * @property {number} [fit] For a start that is a page template (not the app shell): the page-pick model's probability for the start among the ready page templates, 0 to 1. A high value means the pick model clearly prefers this template; a low one means several templates fit about as well. At or above 0.4 the choice is clear: below it, the pick model's start agrees with labeled requests less than half the time. Absent for a template the word tables do not list. Absent for an app-shell start and in a project without word weights.
  * @property {BuildAlternative[]} alternatives The next closest page templates (≤2), for when the start's layout is wrong: for a whole page in the page-pick model's order, else in the ranker's.
  * @property {string[]} [notes] Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Present only when the start template imports packages the project does not have or needs a StyleX compiler the project has not configured.
+ * @property {boolean} isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out). Build starts only from a ready template.
  */
 
 /**
@@ -60,6 +61,7 @@
  * @property {string} description What the page is: its layout and the ideas it serves.
  * @property {string} package The npm package that owns this template.
  * @property {string} command The scaffold command, in the same form as the start's.
+ * @property {boolean} isReady Whether the template is ready, as for the start.
  */
 
 /**

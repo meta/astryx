@@ -34,6 +34,11 @@ export function findClosestComponents(name, components, maxDistance = 3) {
   return matches;
 }
 
+/** The score of a component whose name is the typed name, ignoring case. */
+export const EXACT_NAME_SCORE = 100;
+/** The score of a component with a keyword that is the typed name. */
+export const EXACT_KEYWORD_SCORE = 90;
+
 /**
  * Unified component search that scores matches across multiple signals:
  * name similarity, keyword matches, and description/feature text search.
@@ -74,9 +79,8 @@ export async function searchComponents(
   others = [],
 ) {
   const {readDocView} = await import('../doc-compiler/read.mjs');
-  const {listDirEntries, oncePerListing, pathExists} = await import(
-    '../fs/listing-cache.mjs'
-  );
+  const {listDirEntries, oncePerListing, pathExists} =
+    await import('../fs/listing-cache.mjs');
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
@@ -116,7 +120,7 @@ export async function searchComponents(
 
     // Exact name
     if (compLower === term) {
-      addMatch(comp, 100, 'exact name');
+      addMatch(comp, EXACT_NAME_SCORE, 'exact name');
       continue;
     }
 
@@ -199,8 +203,10 @@ export async function searchComponents(
 
           // Exact keyword
           if (kwLower === term) {
-            addMatch(comp, 90, 'keyword "' + kw + '"');
-            if (!keywordAt.has(comp) || before < 90) keywordAt.set(comp, at);
+            addMatch(comp, EXACT_KEYWORD_SCORE, 'keyword "' + kw + '"');
+            if (!keywordAt.has(comp) || before < EXACT_KEYWORD_SCORE) {
+              keywordAt.set(comp, at);
+            }
             break;
           }
 
@@ -276,7 +282,11 @@ export async function searchComponents(
         if (!comp) continue;
         const span = j - i;
         const atEnd = j === words.length ? 1 : 0;
-        addMatch(comp, 10 + Math.min(span, 4) + atEnd, 'name part "' + run + '"');
+        addMatch(
+          comp,
+          10 + Math.min(span, 4) + atEnd,
+          'name part "' + run + '"',
+        );
       }
     }
     // Keep only the strongest name parts, so a weaker part never sits
@@ -347,7 +357,9 @@ function definedFields(fields) {
  * @returns {string}
  */
 export function firstSentence(text) {
-  const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const flat = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const ends = /[.!?](?=\s|$)/g;
   for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
     const before = flat.slice(0, m.index);

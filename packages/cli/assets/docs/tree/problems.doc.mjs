@@ -166,7 +166,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'text',
-          code: 'Error: No package.json found. Run this command inside an app project.\nError: No package.json found. Run this command inside an integration package.\nError: Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.\nError: Could not find installed @astryxdesign/core (or legacy @xds/core). This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.',
+          code: "Error: No package.json found. Run this command inside an app project.\nError: No package.json found. Run this command inside an integration package.\nError: Could not find @astryxdesign/core. This folder is outside a project; swizzle copies a component's source into an app project that installs @astryxdesign/core.\nError: Could not find installed @astryxdesign/core (or legacy @xds/core). This folder is outside a project; upgrade migrates the code of an app project that installs @astryxdesign/core.",
         },
         {
           type: 'prose',

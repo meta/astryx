@@ -793,8 +793,6 @@
     "/templates/payment-form/",
     "/templates/product-detail/",
     "/templates/product-gallery/",
-    "/templates/review-workspace/",
-    "/templates/run-console/",
     "/templates/settings-dialog/",
     "/templates/settings-sidebar/",
     "/templates/settings/",
@@ -859,7 +857,6 @@
     "/templates/useTreeFocusHookUsage/",
     "/templates/useTruncationHookUsage/",
     "/templates/useTypeaheadHookUsage/",
-    "/templates/welcome-portal/",
     "/templates/work-item-detail/",
     "/themes/",
     "/tools/"

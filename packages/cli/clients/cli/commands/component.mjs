@@ -29,6 +29,7 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -182,7 +183,13 @@ function componentDetailBlocks(
         out.push(
           section('Showcase'),
           record(
-            {...showcase, displayName: owned(showcase, showcase.displayName)},
+            {
+              ...showcase,
+              displayName: owned(
+                showcase,
+                markNotReady(showcase.displayName, showcase.isReady),
+              ),
+            },
             {fields: ['displayName', 'description']},
           ),
         );
@@ -191,7 +198,10 @@ function componentDetailBlocks(
         out.push(
           section('Examples'),
           records(
-            examples.map(block => ({...block, name: owned(block, block.name)})),
+            examples.map(block => ({
+              ...block,
+              name: owned(block, markNotReady(block.name, block.isReady)),
+            })),
             {fields: ['name', 'description']},
           ),
         );
@@ -201,7 +211,11 @@ function componentDetailBlocks(
           section(
             `Related: ${related.length} blocks that use ${result.data.component}`,
           ),
-          list(related.map(block => owned(block, block.name))),
+          list(
+            related.map(block =>
+              owned(block, markNotReady(block.name, block.isReady)),
+            ),
+          ),
         );
       }
       if (!showcase && examples.length === 0 && related.length === 0) {
