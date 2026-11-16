@@ -1,17 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/MobileNav/|packages/core/src/reset\.css|packages/core/src/SideNav/|apps/storybook/stories/MobileNav\.stories)
+// @pr-a11y scope ^(packages/core/src/MobileNav/|packages/core/src/SideNav/|apps/storybook/stories/MobileNav\.stories)
 
 /**
  * @file MobileNav.textColor.a11y.chromium.spec.ts
- * @input The built MobileNav story and a real Chromium, in light and dark
+ * @input The built MobileNav story under the gothic and neutral themes, light
+ *   and dark, in a real Chromium
  * @output Evidence that the open panel's selected row, whose text inherits,
- *   draws in the theme's --color-text-primary and not the browser's dialog
- *   CanvasText, at WCAG 2.2 AA text contrast (1.4.3, 4.5:1) on the panel
+ *   draws in the panel's --color-text-primary and not the browser's dialog
+ *   CanvasText, at WCAG 2.2 AA text contrast (SC 1.4.3, 4.5:1) on the panel
  * @position Real-engine proof for component:MobileNav FR15; jsdom has no
  *   browser default style for a dialog
  */
 
-import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -31,53 +32,68 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-/** The selected row's color, the panel's --color-text-primary, and its contrast on the panel. */
-async function selectedRowColors(page: Page) {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-mobilenav--default&viewMode=story`,
-  );
-  await page.getByRole('button', {name: 'Open Navigation'}).click();
-  const nav = page.getByRole('dialog');
-  await expect(nav).toBeVisible();
-  const row = nav.getByRole('link', {name: 'Dashboard'});
-  await expect(row).toBeVisible();
-  return row.evaluate(link => {
-    const dialog = link.closest('dialog') as HTMLElement;
-    const probe = document.createElement('span');
-    probe.style.color = 'var(--color-text-primary)';
-    dialog.appendChild(probe);
-    const token = getComputedStyle(probe).color;
-    probe.remove();
-    let panel: Element | null = link;
-    let background = 'rgba(0, 0, 0, 0)';
-    while (panel && /rgba\(.*, 0\)|transparent/.test(background)) {
-      background = getComputedStyle(panel).backgroundColor;
-      panel = panel.parentElement;
-    }
-    const channels = (c: string) =>
-      (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-    const luminance = (c: string) => {
-      const [r, g, b] = channels(c).map(v => {
-        const s = v / 255;
-        return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+for (const theme of ['gothic', 'neutral']) {
+  for (const colorMode of ['light', 'dark']) {
+    test(`${theme} ${colorMode}: the selected row reads the panel's text color`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({
+        colorScheme: colorMode === 'dark' ? 'dark' : 'light',
       });
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
-    const color = getComputedStyle(link).color;
-    const [hi, lo] = [luminance(color), luminance(background)].sort(
-      (a, b) => b - a,
-    );
-    return {color, token, ratio: (hi + 0.05) / (lo + 0.05)};
-  });
-}
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=core-mobilenav--default&viewMode=story&globals=colorMode:${colorMode};astryxTheme:${theme}`,
+      );
+      await page.getByRole('button', {name: 'Open Navigation'}).click();
+      const nav = page.getByRole('dialog');
+      await expect(nav).toBeVisible();
+      const row = nav.getByRole('link', {name: 'Dashboard'});
+      await expect(row).toBeVisible();
+      await page.waitForTimeout(600); // the slide-in
+      const {color, token, ratio} = await row.evaluate(el => {
+        const panel = el.closest('[tabindex="-1"]') ?? el;
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--color-text-primary)';
+        panel.appendChild(probe);
+        const tokenColor = getComputedStyle(probe).color;
+        probe.remove();
 
-for (const colorScheme of ['light', 'dark'] as const) {
-  test(`the selected row reads the theme's text color on the open panel (${colorScheme})`, async ({
-    page,
-  }) => {
-    await page.emulateMedia({colorScheme});
-    const {color, token, ratio} = await selectedRowColors(page);
-    expect(color).toBe(token);
-    expect(ratio).toBeGreaterThanOrEqual(AA_TEXT);
-  });
+        const channels = (c: string) => {
+          const n = (c.match(/[\d.]+/g) ?? []).map(Number);
+          return {r: n[0], g: n[1], b: n[2], a: n.length > 3 ? n[3] : 1};
+        };
+        const layers: {r: number; g: number; b: number; a: number}[] = [];
+        for (let node: Element | null = el; node; node = node.parentElement) {
+          const bg = channels(getComputedStyle(node).backgroundColor);
+          if (bg.a > 0) {
+            layers.push(bg);
+            if (bg.a >= 1) {
+              break;
+            }
+          }
+        }
+        let back = {r: 255, g: 255, b: 255};
+        for (const layer of layers.reverse()) {
+          back = {
+            r: layer.r * layer.a + back.r * (1 - layer.a),
+            g: layer.g * layer.a + back.g * (1 - layer.a),
+            b: layer.b * layer.a + back.b * (1 - layer.a),
+          };
+        }
+        const lum = ({r, g, b}: {r: number; g: number; b: number}) => {
+          const lin = (v: number) => {
+            const s = v / 255;
+            return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          };
+          return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+        };
+        const color = getComputedStyle(el).color;
+        const [hi, lo] = [lum(channels(color)), lum(back)].sort(
+          (x, y) => y - x,
+        );
+        return {color, token: tokenColor, ratio: (hi + 0.05) / (lo + 0.05)};
+      });
+      expect(color).toBe(token);
+      expect(ratio).toBeGreaterThanOrEqual(AA_TEXT);
+    });
+  }
 }
