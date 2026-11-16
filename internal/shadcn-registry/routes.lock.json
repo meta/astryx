@@ -5647,6 +5647,11 @@
       "aliases": []
     },
     {
+      "name": "template-review-workspace",
+      "path": "templates/review-workspace",
+      "aliases": []
+    },
+    {
       "name": "template-settings",
       "path": "templates/settings",
       "aliases": []

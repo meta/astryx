@@ -98,6 +98,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
   'product-gallery': () =>
     import('../../../../packages/cli/assets/templates/pages/product-gallery/page'),
+  'review-workspace': () =>
+    import('../../../../packages/cli/assets/templates/pages/review-workspace/page'),
   settings: () =>
     import('../../../../packages/cli/assets/templates/pages/settings/page'),
   'settings-dialog': () =>

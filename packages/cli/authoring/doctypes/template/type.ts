@@ -189,6 +189,7 @@ export type TemplateCategory =
   | 'Tools - IDE'
   | 'Tools - Incident Console'
   | 'Tools - Kanban Board'
+  | 'Tools - Review Workspace'
   | 'Tools - Notebook/Report Page'
   | 'Tools - Diff Compare Viewer'
   | 'Tools - Search Results Page'
