@@ -90,13 +90,43 @@ async function captured(run) {
   }
 }
 
-const NEUTRAL = `import {neutralTheme} from '@astryxdesign/theme-neutral';\n`;
+/**
+ * A theme package of the test's own, installed in the temp project as a
+ * pnpm install lays one out: its files in a store folder, linked into
+ * node_modules. A defineTheme() result with tokens, and a
+ * font stylesheet it exports. Self-contained: it needs only Core.
+ */
+const writeBasePackage = () => {
+  const store = '.store/base-theme';
+  write(
+    `${store}/package.json`,
+    JSON.stringify({
+      name: '@fixture/base-theme',
+      version: '1.0.0',
+      type: 'module',
+      exports: {'.': './index.mjs', './fonts.css': './fonts.css'},
+    }),
+  );
+  write(
+    `${store}/index.mjs`,
+    `import {defineTheme} from '@astryxdesign/core/theme';\nexport const baseTheme = defineTheme({name: 'base', tokens: {'--color-accent': '#123456', '--color-bg': '#fafafa'}});\n`,
+  );
+  write(
+    `${store}/fonts.css`,
+    "@import 'https://fonts.example/fraunces.css';\n",
+  );
+  const link = path.join(dir, 'node_modules/@fixture/base-theme');
+  fs.mkdirSync(path.dirname(link), {recursive: true});
+  fs.symlinkSync(path.join(dir, store), link, 'dir');
+};
+const BASE = `import {baseTheme} from '@fixture/base-theme';\n`;
 
 describe('F44-01: a plain base a theme extends', () => {
   it('is made with defineTheme first: its own base, pairs and typography are kept', async () => {
+    writeBasePackage();
     write(
       'p/p.ts',
-      `${NEUTRAL}const b = {name: 'b', extends: neutralTheme, tokens: {'--color-text-primary': ['#111', '#eee']}, typography: {body: {family: 'Lato'}}};\nexport default {name: 'p', extends: b, tokens: {}};\n`,
+      `${BASE}const b = {name: 'b', extends: baseTheme, tokens: {'--color-text-primary': ['#111', '#eee']}, typography: {body: {family: 'Lato'}}};\nexport default {name: 'p', extends: b, tokens: {}};\n`,
     );
     const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
     expect(r.err).toBeUndefined();
@@ -104,17 +134,21 @@ describe('F44-01: a plain base a theme extends', () => {
     expect(css).toContain('light-dark(#111, #eee)');
     expect(css).not.toContain('#111,#eee');
     expect(css).toContain('Lato');
-    expect(r.result.data.tokenCount).toBeGreaterThan(100);
+    // The base's own base: its accent.
+    expect(css).toContain('#123456');
   });
 
   it('a plain base with no tokens builds', async () => {
+    writeBasePackage();
     write(
       'p/q.ts',
-      `${NEUTRAL}const b = {name: 'b', extends: neutralTheme};\nexport default {name: 'q', extends: b};\n`,
+      `${BASE}const b = {name: 'b', extends: baseTheme};\nexport default {name: 'q', extends: b};\n`,
     );
     const r = await captured(() => themeBuild('p/q.ts', {}, {cwd: dir}));
     expect(r.err).toBeUndefined();
-    expect(r.result.data.tokenCount).toBeGreaterThan(100);
+    expect(fs.readFileSync(path.join(dir, 'p/q.css'), 'utf8')).toContain(
+      '#123456',
+    );
   });
 });
 
@@ -136,18 +170,16 @@ describe('F44-06: a misspelled field the source reader cannot place', () => {
 });
 
 describe('F44-10: a package stylesheet the theme source imports', () => {
-  it('is named by the specifier the source wrote', async () => {
-    write(
-      'p/p.ts',
-      `import '@astryxdesign/theme-neutral/fonts.css';\n${THEME}`,
-    );
+  it('is named by the specifier the source wrote, not the linked store file', async () => {
+    writeBasePackage();
+    write('p/p.ts', `import '@fixture/base-theme/fonts.css';\n${THEME}`);
     const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
     expect(r.err).toBeUndefined();
     const said = r.result.data.warnings.join('\n');
     expect(said).toContain(
-      "p/p.ts imports '@astryxdesign/theme-neutral/fonts.css', which the built outputs do not carry",
+      "p/p.ts imports '@fixture/base-theme/fonts.css', which the built outputs do not carry",
     );
-    expect(said).not.toContain('..');
+    expect(said).not.toContain('.store');
   });
 });
 
