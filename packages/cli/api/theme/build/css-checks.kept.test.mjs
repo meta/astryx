@@ -306,15 +306,20 @@ const keptNames = () =>
  * The written-value problems of `theme`, how many times the check asked for
  * css-tree, and what a check with no store gives.
  * @param {Record<string, any>} theme
+ * @param {Parameters<typeof import('./written-values.mjs').writtenValueProblems>[1]} [options]
  */
-const checkValues = theme => {
+const checkValues = (theme, options = {}) => {
   const before = cssTreeAsked.count;
-  const problems = writtenValues.writtenValueProblems(theme);
+  const problems = writtenValues.writtenValueProblems(theme, options);
   const asked = cssTreeAsked.count - before;
   const saved = process.env.XDG_CACHE_HOME;
   process.env.XDG_CACHE_HOME = path.join(TEMP_ROOT, 'no-store');
   try {
-    return {problems, asked, fresh: writtenValues.writtenValueProblems(theme)};
+    return {
+      problems,
+      asked,
+      fresh: writtenValues.writtenValueProblems(theme, options),
+    };
   } finally {
     process.env.XDG_CACHE_HOME = saved;
   }
@@ -347,6 +352,17 @@ describe("theme build's check of which token names are CSS properties'", () => {
 
   it('keeps nothing for tokens that are all custom properties, and loads no css-tree', () => {
     const result = checkValues({tokens: {'--color-accent': 'red'}});
+    expect(result.asked).toBe(0);
+    expect(result.problems).toEqual(result.fresh);
+    expect(keptNames()).toHaveLength(0);
+  });
+
+  it("keeps nothing for a surface that holds only Core's own tokens, and loads no css-tree", () => {
+    const onDark = {'color-scheme': 'dark', '--color-accent': 'white'};
+    const result = checkValues(
+      {tokens: {'--color-accent': 'red'}, onDark: {tokens: {...onDark}}},
+      {surfaceDefaults: {onDark}},
+    );
     expect(result.asked).toBe(0);
     expect(result.problems).toEqual(result.fresh);
     expect(keptNames()).toHaveLength(0);
