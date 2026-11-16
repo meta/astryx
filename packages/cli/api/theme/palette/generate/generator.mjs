@@ -211,7 +211,7 @@ function vibrancyMultiplier(vibrancy) {
 /**
  * A family's chroma drawn toward the shared one, so its families sit
  * together. As v2 shares a narrow stop's gamut it is never raised above the
- * seed's own, so a dusty seed stays dusty in its pale and dark stops.
+ * seed's own, so a dusty seed stays dusty in its pale stops.
  * @param {number} sourceChroma @param {PaletteRecipe} [recipe]
  */
 function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
@@ -226,6 +226,8 @@ function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
  * it shares it wholly.
  */
 const V2_SHARED_FROM = 1.3;
+/** v2 shares only stops lighter than this tone: the pale side of a ramp. */
+const V2_SHARED_ABOVE = 50;
 const V2_SHARED_FULL = 2;
 
 /** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
@@ -305,15 +307,21 @@ function generateCandidate(
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
   const maxChroma = maxOklchChroma(adjustedHue, lightness);
-  // v2: the narrower a stop's gamut is for the most vivid seed at the
-  // default vibrancy (a pale tint, a near-black), the more every request
-  // shares that gamut in proportion (the most vivid seed at vibrancy 100
-  // takes all of it), so such a stop follows the seed's chroma, never
-  // raised above the seed's own, and the vibrancy, instead of every request
-  // landing on the gamut's edge. A stop whose gamut holds the most vivid
-  // seed at the default vibrancy shares nothing and is drawn exactly as v1
-  // draws it, for every seed at every vibrancy.
-  if (recipe === PALETTE_RECIPE_V2 && coordinateWithOtherFamilies) {
+  // v2, on the pale side of a ramp (above its middle): the narrower a
+  // stop's gamut is for the most vivid seed at the default vibrancy (a pale
+  // tint), the more every request shares that gamut in proportion (the most
+  // vivid seed at vibrancy 100 takes all of it), so such a stop follows the
+  // seed's chroma, never raised above the seed's own, and the vibrancy,
+  // instead of every request landing on the gamut's edge. A stop whose
+  // gamut holds the most vivid seed at the default vibrancy shares nothing,
+  // and the dark side never shares (role text and dark fills keep their
+  // strength): those stops are drawn exactly as v1 draws them, for every
+  // seed at every vibrancy.
+  if (
+    recipe === PALETTE_RECIPE_V2 &&
+    coordinateWithOtherFamilies &&
+    adjustedTone > V2_SHARED_ABOVE
+  ) {
     const shape =
       hueBalanceFactor(adjustedHue) *
       highToneChromaFactor(adjustedHue, adjustedTone) *

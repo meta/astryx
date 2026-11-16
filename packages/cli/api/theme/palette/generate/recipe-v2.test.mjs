@@ -105,6 +105,54 @@ describe('palette recipes', () => {
     );
   });
 
+  it('v2 never shares the dark side: every stop up to the middle is v1, for the shipped seeds and vivid and dull ones', () => {
+    const shipped = fs
+      .readdirSync(path.resolve(import.meta.dirname, '../../../../../themes'))
+      .map(t =>
+        path.resolve(
+          import.meta.dirname,
+          '../../../../../themes',
+          t,
+          'palette.config.json',
+        ),
+      )
+      .filter(f => fs.existsSync(f))
+      .flatMap(f =>
+        /** @type {{families: Array<{seed: string}>}} */ (
+          JSON.parse(fs.readFileSync(f, 'utf8'))
+        ).families.map(x => x.seed),
+      );
+    expect(shipped.length).toBeGreaterThan(6);
+    for (const seed of [
+      ...shipped,
+      '#f59e0b',
+      '#ff0000',
+      '#00ff00',
+      '#2563eb',
+      '#5f7891',
+      '#8a7470',
+    ])
+      for (const vibrancy of [20, 50, 80]) {
+        const v1 = ramp(seed, vibrancy, PALETTE_RECIPE).families[0];
+        const v2 = ramp(seed, vibrancy, PALETTE_RECIPE_V2).families[0];
+        for (const mode of /** @type {const} */ (['light', 'dark']))
+          for (const stop of Object.keys(v1[mode].colors)
+            .map(Number)
+            .filter(x => x <= 50))
+            expect(
+              v2[mode].colors[stop],
+              `${seed} @${vibrancy} ${mode} ${stop}`,
+            ).toBe(v1[mode].colors[stop]);
+      }
+  });
+
+  it("an amber warning's text shade keeps v1's strength", () => {
+    const amber = (/** @type {string} */ recipe) =>
+      ramp('#f59e0b', 50, recipe).families[0].light.colors[35];
+    expect(amber(PALETTE_RECIPE_V2)).toBe(amber(PALETTE_RECIPE));
+    expect(hexToOklch(amber(PALETTE_RECIPE_V2)).C).toBeGreaterThan(0.09);
+  });
+
   it('refuses a recipe it does not know, naming the ones it does', () => {
     expect(() => ramp(VIVID, 50, 'astryx-oklch-v9')).toThrow(
       /Unknown palette recipe: astryx-oklch-v9 \(known: astryx-oklch-v1, astryx-oklch-v2\)/,

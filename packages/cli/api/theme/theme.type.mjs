@@ -234,7 +234,7 @@
  * @typedef {object} TonalPaletteGenerationInput
  * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
  * run: astryx-oklch-v1 when none is named, so a request or config made
- * before v2 keeps its colors; astryx-oklch-v2 makes pale and dark stops
+ * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
  * follow the vibrancy and the seed's own chroma. New palettes name v2 (the
  * theme editor records it); a config pins its recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
