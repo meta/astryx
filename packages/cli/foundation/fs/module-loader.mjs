@@ -738,12 +738,12 @@ async function withThemeModuleGuards(load) {
   holdExit();
   /** @type {(error: unknown) => void} */
   let fail = () => {};
-  /** @type {{error: unknown} | null} */
-  let failure = null;
+  /** The first refusal, held where the race below cannot lose it. */
+  const failure = /** @type {{error?: {value: unknown}}} */ ({});
   /** @type {Promise<never>} */
   const failed = new Promise((_resolve, reject) => {
     fail = error => {
-      failure ??= {error};
+      failure.error ??= {value: error};
       reject(error);
     };
   });
@@ -781,7 +781,7 @@ async function withThemeModuleGuards(load) {
     ]);
     // A load that settles in the same microtask checkpoint as a microtask it
     // queued wins the race before that microtask's exception refuses it.
-    if (failure) throw failure.error;
+    if (failure.error) throw failure.error.value;
     return loaded;
   } finally {
     process.removeListener('beforeExit', drained);
