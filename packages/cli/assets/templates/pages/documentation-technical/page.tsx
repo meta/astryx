@@ -122,7 +122,7 @@ export default function TechnicalDocumentationPage() {
                         onClick: () =>
                           // Demo only: replace this toast with the link that opens the prompt.
                           showToast({
-                            body: 'Demo: the prompt would open in v0 here',
+                            body: 'Demo: this would open the prompt in v0 here',
                             uniqueID: 'open-v0',
                           }),
                       },
@@ -131,7 +131,7 @@ export default function TechnicalDocumentationPage() {
                         onClick: () =>
                           // Demo only: replace this toast with the link that opens the prompt.
                           showToast({
-                            body: 'Demo: the prompt would open in Claude here',
+                            body: 'Demo: this would open the prompt in Claude here',
                             uniqueID: 'open-claude',
                           }),
                       },
@@ -140,7 +140,7 @@ export default function TechnicalDocumentationPage() {
                         onClick: () =>
                           // Demo only: replace this toast with the link that opens the prompt.
                           showToast({
-                            body: 'Demo: the prompt would open in ChatGPT here',
+                            body: 'Demo: this would open the prompt in ChatGPT here',
                             uniqueID: 'open-chatgpt',
                           }),
                       },
@@ -149,7 +149,7 @@ export default function TechnicalDocumentationPage() {
                         onClick: () =>
                           // Demo only: replace this toast with the link that opens the prompt.
                           showToast({
-                            body: 'Demo: the prompt would open in Cursor here',
+                            body: 'Demo: this would open the prompt in Cursor here',
                             uniqueID: 'open-cursor',
                           }),
                       },
