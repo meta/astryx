@@ -1995,6 +1995,15 @@ export function partLexicon(ctx) {
               ? held[0]
               : null;
       if (!real && keys.has(piece) && inside.includes(piece)) continue;
+      // (A part that paints its own fill, a card: "the card fill" is its
+      // background, never a piece.)
+      if (
+        piece === 'fill' &&
+        ['background-color', 'background'].some(
+          p => Object.keys(ctx.C.MAP[key]?.own?.[p]?.tokens ?? {}).length,
+        )
+      )
+        continue;
       // Several such parts inside (a date and a time segment): each is
       // named by its own name, so none is missing.
       if (!real && held.length > 1) continue;
@@ -6026,6 +6035,18 @@ export function draftAnswer(ctx, env, question) {
         by: m[1],
       });
     }
+    // "The text after the checkbox", "the words beside the radio": the
+    // label the place draws beside it.
+    const beside =
+      /^(.*?\b(?:text|words?|labels?|copy|writing))\s+(?:after|beside|next to|by)\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*?)(?=\s+(?:red|blue|green|darker|lighter|bold|bigger|smaller|gr[ae]y|white|black|#|more|less|to\b)|\s*$)/i.exec(
+        text,
+      );
+    if (beside)
+      places.unshift({
+        holderText: beside[2],
+        elementText: `${beside[1].replace(/\b(?:text|words?|copy|writing)$/i, 'label')}`,
+        by: 'beside',
+      });
     const poss = /\b([a-z][a-z -]*?)(?:'s|s'|’s|s’)\s+(.*)$/.exec(text);
     if (poss)
       places.unshift({
@@ -6128,14 +6149,33 @@ export function draftAnswer(ctx, env, question) {
           (reordered.startsWith(`${h}-`) ||
             (C.MAP[h]?.contains ?? []).includes(reordered))
         )
-          found.push({k: reordered, score: 50});
-        // Parts drawn inside it, by the last words of their names.
-        for (const k of C.MAP[h]?.contains ?? []) {
+          // (Below a part named after the place by its whole rest, "the
+          // table's header cells": table-header-cell over a phrase's cell.)
+          found.push({k: reordered, score: 35});
+        // Parts drawn inside it, by the last words of their names (never
+        // when the words name a part of their own, "the inputs in
+        // dialogs": the inputs, not a command palette's input).
+        const ownName = partIn(nameText);
+        for (const k of (ownName &&
+        FAMILIES[ownName] &&
+        !members.includes(ownName)
+          ? []
+          : C.MAP[h]?.contains) ?? []) {
           const w = k.split('-');
           for (let i = 0; i < w.length; i++)
             if (words(w.slice(i).join('-')).test(nameText))
               found.push({k, score: 10 + (w.length - i)});
         }
+      }
+      // (Beside a part, "the text after the checkbox": the label its own
+      // component draws next to it.)
+      // (Its label: a "-label" part named as the place is, its first word,
+      // "checkbox-label" beside "checkbox-indicator".)
+      if (by === 'beside') {
+        const stems = new Set(members.map(h => h.split('-')[0]));
+        for (const k of keys)
+          if (/-label$/.test(k) && stems.has(k.split('-')[0]))
+            found.push({k, score: 60 - k.split('-').length});
       }
       // A group of parts the place holds, named ("the buttons' icons").
       const group = Object.keys(FAMILIES).find(
@@ -6152,6 +6192,12 @@ export function draftAnswer(ctx, env, question) {
       // ("The card's muted text" is the cards' own text, as "the muted
       // text in cards" says it: text is never a part of its own there.)
       const ownPart0 = by === 'possessive' ? partIn(nameText) : null;
+      // ("The separators of menus": the menu's own divider, when it has
+      // one; never the plain part, which "of" may only compare with.)
+      const ofPart = by === 'of' ? partIn(nameText) : null;
+      for (const h of members)
+        if (ofPart && keys.includes(`${h}-${ofPart}`))
+          found.push({k: `${h}-${ofPart}`, score: 45});
       const ownPart = ownPart0 === 'body' ? 'text' : ownPart0;
       // (The place's own part of that kind: a dropdown menu's own divider.)
       for (const h of members)
@@ -6277,6 +6323,7 @@ export function draftAnswer(ctx, env, question) {
         .replace(/^(?:the|a|an|my)\s+/, '')
         .replace(/(?:'s|s'|s)$/, '');
       const specific =
+        by === 'beside' ||
         FAMILIES[pick] != null ||
         pick === themeWide ||
         members.includes(pick) ||
@@ -6312,6 +6359,39 @@ export function draftAnswer(ctx, env, question) {
           /\btitle$/.test(String(x.missing)) &&
           (C.MAP[x.on]?.contains ?? []).includes('heading'),
       );
+      // ("The card headings": a part said right before "heading(s)" that
+      // draws a heading inside it, its title.)
+      if (!title && c.parts.some(x => x.on === 'heading')) {
+        const lead = /\b([a-z][a-z -]*?)(?:'s)?\s+headings?\b/.exec(c.text);
+        const owner = lead
+          ? c.parts.find(
+              x =>
+                x.on !== 'heading' &&
+                (C.MAP[x.on]?.contains ?? []).includes('heading') &&
+                lex.parts.some(
+                  ([re, y]) =>
+                    y.on === x.on && re.test(` ${lead[1].split(' ').at(-1)} `),
+                ),
+            )
+          : undefined;
+        // (One with a title part of its own, a dialog's title block: that
+        // part.)
+        if (
+          owner &&
+          c.parts.length === 2 &&
+          ctx.project.target.has(`${owner.on}-header-title-block`)
+        ) {
+          c.parts = [{on: `${owner.on}-header-title-block`}];
+          continue;
+        }
+        if (owner && c.parts.length === 2) {
+          c.container = owner.on;
+          c.parts = [{on: 'heading'}];
+          c.placeStrict = {holder: owner.on, part: 'heading'};
+          c.scopeWhy = `Core has no ${owner.on} title part of its own: its title is a heading inside it, and this change is the heading's own setting, which ${owner.on} cannot hold (it would change every heading); nothing is written`;
+          continue;
+        }
+      }
       if (title && c.parts.length === 1) {
         c.container = title.on;
         c.parts = [{on: 'heading'}];
@@ -7662,6 +7742,9 @@ export function draftAnswer(ctx, env, question) {
           also && also !== st ? partState(ctx, one(p.on), `${st}+${also}`) : st;
       else if (byValue && !f.when) f.when = `${byValue}:${c.state}`;
       else f.noState = c.state;
+      // (A second state the part does not have is said, never dropped:
+      // "the selected and hovered menu items" on items with no selected.)
+      if (st && c.alsoState && !also) f.noState = c.alsoState;
     }
     return f;
   };
@@ -19513,7 +19596,8 @@ export function draftAnswer(ctx, env, question) {
     // how cannot name: said, never the whole theme or the part before.
     // (Only a noun after a determiner: "the zorp", "from the blorp".)
     const DET = String.raw`(?:the|my|our|all|every|each|its|their)\s+`;
-    const THING = String.raw`(?:padding|spacing|shadows?|borders?|corners?|radius|background|fill|text|font|colou?r|outline|gap|size|height|width)`;
+    // (A part's piece after it, "the card zorp title", holds the slot too.)
+    const THING = String.raw`(?:padding|spacing|shadows?|borders?|corners?|radius|background|fill|text|font|colou?r|outline|gap|size|height|width|titles?|headings?|headers?|footers?)`;
     // (Between a part and the thing changed, "the card zorp border": a
     // word there that is no part, state, variant, aspect, color or known
     // modifier is read nowhere, so the change is not guessed at.)

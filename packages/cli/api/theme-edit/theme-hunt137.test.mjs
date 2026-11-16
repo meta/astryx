@@ -400,9 +400,9 @@ describe('parts read as they are built', () => {
       expect((await answer('make the top nav heading white')).first).toEqual([
         "set n color '#ffffff' --on top-nav-heading",
       ]);
-      expect((await answer('make card headings white')).first[0]).toBe(
-        "set n color '#ffffff' --on heading",
-      );
+      // (A card's headings are its title: the heading's own color would
+      // change every heading, so nothing is written.)
+      expect((await answer('make card headings white')).first).toEqual([]);
       expect((await answer('what color is the header')).text).toMatch(
         /background-color/,
       );
