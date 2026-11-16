@@ -138,8 +138,9 @@ export function useTouchRuntime(): TouchRuntime | null {
 
 /**
  * A component's touch part: the touch code only that component uses, in a
- * module only that component imports. The loader loads it with the shared
- * runtime, so a page loads only the parts of the components it renders.
+ * module only that component imports. The component's module registers it
+ * as it loads, and the loader loads every registered part with the shared
+ * runtime. So a page loads only the parts of the components it imports.
  * `importPart` is the part module's `import()`.
  */
 export function createTouchPart<T>(

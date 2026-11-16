@@ -37,29 +37,36 @@ test.afterAll(async () => {
 });
 
 /**
- * Holds back the touch runtime's chunk until `release` runs. `requested`
+ * Holds back the touch runtime's chunks (the shared core and the components'
+ * touch parts) until `release` runs. `requested`
  * reports whether the page asked for it, so a renamed chunk cannot pass the
  * test by accident.
  */
 async function holdTouchRuntime(page: Page) {
-  const state: {held: Route | null; isReleased: boolean} = {
-    held: null,
+  const state: {held: Route[]; isRequested: boolean; isReleased: boolean} = {
+    held: [],
+    isRequested: false,
     isReleased: false,
   };
-  await page.route(/touchRuntimeModules[^/]*\.js(\?.*)?$/, async route => {
-    if (state.isReleased) {
-      await route.continue();
-      return;
-    }
-    state.held = route;
-  });
+  await page.route(
+    /(?:touchRuntimeModules|segmentedTouchPart|switchTouchPart)[^/]*\.js(\?.*)?$/,
+    async route => {
+      if (route.request().url().includes('touchRuntimeModules')) {
+        state.isRequested = true;
+      }
+      if (state.isReleased) {
+        await route.continue();
+        return;
+      }
+      state.held.push(route);
+    },
+  );
   return {
-    requested: () => state.held != null || state.isReleased,
+    requested: () => state.isRequested,
     release: async () => {
       state.isReleased = true;
-      const route = state.held;
-      state.held = null;
-      if (route != null) {
+      const routes = state.held.splice(0);
+      for (const route of routes) {
         await route.continue();
       }
     },
