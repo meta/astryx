@@ -4,7 +4,7 @@
  * @file A part's variants written as other styling libraries write them
  * (`variants: {variant: {secondary: {…}}}`): theme build warns once, at
  * the line, with the style keys that write them, and writes what it wrote
- * before.
+ * before; the editor refuses them with the same words.
  */
 
 import * as fs from 'node:fs';
@@ -85,6 +85,25 @@ describe('variants written as a map of values to blocks', () => {
       ]);
       const css = fs.readFileSync(path.join(cwd, 'plain/p.css'), 'utf8');
       expect(css).not.toContain('border-color: red');
+    },
+    T,
+  );
+
+  it(
+    'are refused by the editor with the same words, naming the style keys',
+    async () => {
+      await themeEditNew('vm', {cwd});
+      own(
+        'vm',
+        "components: {button: {variants: {variant: {secondary: {borderColor: 'red'}}}}}",
+      );
+      const r = compileOwn('vm');
+      expect(r.status).toBe(1);
+      expect(r.env.error).toContain(
+        'variant holds a block for each value, as other styling libraries write variants',
+      );
+      expect(r.env.error).toContain("'variant:secondary': {…}");
+      expect(r.env.error).not.toContain('only a pseudo key');
     },
     T,
   );
