@@ -182,16 +182,18 @@ const QUESTIONS = [
   [
     'make the page background white',
     {
-      top: /^set q --color-background-body '#ffffff'$/,
-      adds: /--color-background-body=#ffffff/,
+      // (A light page color on a theme that draws both modes is the light
+      // mode's; the dark page keeps its own.)
+      top: /^set q --color-background-body '#ffffff' --mode light$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background-color '#e5e7eb' --on card$/,
-      adds: /card\.base\.backgroundColor=#e5e7eb/,
+      top: /^set q background-color '#e5e7eb' --on card --mode light$/,
+      adds: /card\b.*@light.*#e5e7eb|card\b.*#e5e7eb.*light/,
     },
   ],
   [
@@ -1603,14 +1605,14 @@ const QUESTIONS_3 = [
   [
     'colors: bg=#fff text=#000 accent=#ff0080',
     {
-      top: /^set q --color-background-body '#fff' && set q --color-text-primary '#000' && set q accent '#ff0080'$/,
-      adds: /--color-background-body=#fff/,
+      top: /^set q --color-background-body '#fff' --mode light && set q --color-text-primary '#000' --mode light && set q accent '#ff0080'$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
     {
-      top: /^set q --color-background-body '#fafafa' && set q --color-text-primary '#171717' && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
+      top: /^set q --color-background-body '#fafafa' --mode light && set q --color-text-primary '#171717' --mode light && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
       adds: /--color-border=#e5e5e5/,
     },
   ],
@@ -2006,7 +2008,7 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa'$/},
+    {top: /^set q --color-background-body '#fafafa' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [
@@ -2332,7 +2334,7 @@ const QUESTIONS_G = [
   [
     'card background color-mix(in srgb, #2563eb 10%, white)',
     {
-      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card$/,
+      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card --mode light$/,
     },
   ],
   [
@@ -2399,7 +2401,7 @@ const QUESTIONS_G = [
   // gray stops and named grays
   [
     'page background gray-50',
-    {top: /^set q --color-background-body '#f[0-9a-f]{5}'$/},
+    {top: /^set q --color-background-body '#f[0-9a-f]{5}' --mode light$/},
   ],
   [
     'text zinc-900',
@@ -4224,7 +4226,10 @@ describe('how writes only for a clause that reads as an ask', () => {
  */
 const QUESTIONS_Y = [
   // A description of the look wanted writes.
-  ['the page is white', /^set q --color-background-body '#ffffff'$/],
+  [
+    'the page is white',
+    /^set q --color-background-body '#ffffff' --mode light$/,
+  ],
   ['show me the card shadow', null],
   ['give me the border width on inputs', null],
   ['give buttons 8px corners', /^set q border-radius 8px --on button$/],

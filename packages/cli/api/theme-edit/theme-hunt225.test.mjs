@@ -170,7 +170,7 @@ describe("a color word in the theme's own family", () => {
       "set ne background-color '#2563eb' --on badge",
     );
     expect(writes(await how('ne', 'make cards light grey'))[0]).toBe(
-      "set ne background-color '#e5e7eb' --on card",
+      "set ne background-color '#e5e7eb' --on card --mode light",
     );
   }, 120_000);
 });

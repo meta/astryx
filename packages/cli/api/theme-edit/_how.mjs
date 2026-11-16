@@ -715,8 +715,25 @@ async function answer(subject, options, cwd) {
       FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
     );
     const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+    // (Never ahead of a value the question gives the same thing: "tooltips
+    // #1f2328 with white text" is that fill and that text, not the
+    // missed list's.)
+    const asked = h.drafts.flatMap(d => d.options.flat());
+    const contradicts = (/** @type {any} */ st) =>
+      asked.some(
+        a =>
+          a.on === st.on &&
+          (a.state ?? '') === (st.state ?? '') &&
+          (a.thing === st.thing ||
+            (/^background(?:-color)?$/.test(a.thing) &&
+              /^background(?:-color)?$/.test(st.thing))) &&
+          String(a.value) !== String(st.value),
+      );
     const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
-      x => parts.includes(x.part) && x.steps.length,
+      x =>
+        parts.includes(x.part) &&
+        x.steps.length &&
+        !x.steps.some(st => contradicts({...st, on: st.on ?? x.part})),
     );
     h.drafts.unshift(
       .../** @type {any[]} */ (
