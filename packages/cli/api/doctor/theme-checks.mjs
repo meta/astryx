@@ -509,7 +509,7 @@ function namedThemeFonts(files) {
  * local `@import`s (a relative file, or a package's stylesheet such as
  * `@fontsource/inter/index.css`), and the families the `family` parameters
  * of a font service URL it imports name; `external` when it imports a URL
- * (http, https, `//`), which may load families doctor cannot read.
+ * (http, https, `//`) that names no families doctor can read.
  * @param {string} css
  * @param {string} [file] the stylesheet's path, to resolve local imports
  * @param {Set<string>} [seen]
@@ -524,11 +524,13 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
       if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
         // A family the request names counts as loaded, as an @font-face rule
-        // does: the stylesheet asks the service for it.
-        for (const family of fontServiceFamilies(spec ?? '')) {
-          loaded.add(family);
-        }
-        external = true;
+        // does: the stylesheet asks the service for it. A font service URL
+        // that names its families loads only those, so a family it does not
+        // name has no loader there; any other URL may load families doctor
+        // cannot read.
+        const named = fontServiceFamilies(spec ?? '');
+        for (const family of named) loaded.add(family);
+        if (named.size === 0) external = true;
         return;
       }
       const target = file ? doctorStylesheetImportFile(spec, file) : null;

@@ -599,6 +599,7 @@ function changeBlocks(r) {
   const {
     newProblems = [],
     leftOut = [],
+    fontNotLoaded = [],
     missed: _missed,
     missedParts: _missedParts,
     missedOn: _missedOn,
@@ -612,6 +613,18 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    ...(fontNotLoaded.length
+      ? [
+          list(
+            fontNotLoaded.map(
+              (/** @type {{family: string, run: string[]}} */ x) => [
+                `${x.family} is not installed, so the pictures and the app draw the next font in the stack until it is`,
+                ...x.run,
+              ],
+            ),
+          ),
+        ]
+      : []),
     ...(leftOut.length
       ? [
           list(

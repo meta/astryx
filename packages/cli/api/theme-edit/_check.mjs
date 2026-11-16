@@ -8036,13 +8036,16 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     .slice(0, 3);
   refuse(
     E.ERR_THEME_NO_EFFECT,
-    `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,
+    `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see. To round ${s.on} itself, give it a background or a border first, then set its corners.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,
     {
-      run: kids.length
-        ? kids.map(k =>
-            setLine(slug, 'corners', s.value || 'round', {...s, on: k}),
-          )
-        : [`${HOW} ${s.on}`],
+      // (How names the fill and border the part takes; the editor offers
+      // no value the person did not type.)
+      run: [
+        `${HOW} ${s.on}`,
+        ...kids.map(k =>
+          setLine(slug, 'corners', s.value || 'round', {...s, on: k}),
+        ),
+      ],
     },
   );
 }

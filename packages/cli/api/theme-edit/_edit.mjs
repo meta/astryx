@@ -244,6 +244,7 @@ import {
   cutShortProblem,
   openStatesPage,
   fontNotes,
+  fontsNotLoaded,
   themeImageNotes,
   styledChanges,
   previewAfter,
@@ -7249,6 +7250,18 @@ async function changeOnce(
       // What the whole-theme change leaves out, with the lines that reach
       // it; the text output prints it right under the status line.
       leftOut: leftOutParts(ctx, slug, data, sub, s),
+      // A font this set names that does not load until its package is
+      // installed: the text prints it under the status line too.
+      ...(() => {
+        const fonts =
+          sub === 'set' &&
+          (s.thing === 'font' ||
+            s.thing === 'font-family' ||
+            /^--font-family-/.test(s.thing))
+            ? fontsNotLoaded(ctx, {...data, settings: [s]})
+            : [];
+        return fonts.length ? {fontNotLoaded: fonts} : {};
+      })(),
       parts,
       group: group
         ? {

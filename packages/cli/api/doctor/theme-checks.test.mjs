@@ -1885,7 +1885,7 @@ describe('app-theme doctor checks', () => {
     }
   });
 
-  it('check 9 still warns for a family the font service URL does not name', async () => {
+  it('check 9 fails for a family the font service URL does not name, which nothing loads', async () => {
     const {dir} = await fixture([
       {
         slug: 'ocean',
@@ -1896,9 +1896,31 @@ describe('app-theme doctor checks', () => {
     ]);
 
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
-      status: 'warn',
-      message: 'External font imports prevent proof for ocean: Ocean Sans.',
+      status: 'fail',
+      message: 'Named font families have no proven loader (ocean: Ocean Sans).',
     });
+  });
+
+  it('check 9 names the package that loads an open font the font service URL does not name', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'JetBrains Mono',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+      },
+    ]);
+
+    const result = check(await checkAppThemes(dir), 'theme-fonts');
+    expect(result).toMatchObject({
+      status: 'fail',
+      message:
+        'Named font families have no proven loader (ocean: JetBrains Mono).',
+    });
+    expect(result.fix).toMatch(
+      /^Install the packages that load them \(.*@fontsource\/jetbrains-mono\)/,
+    );
+    expect(result.fix).not.toMatch(/font service/);
   });
 
   it('check 9 follows a local font import, a relative file or a package stylesheet, and proves its families', async () => {
