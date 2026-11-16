@@ -2101,7 +2101,7 @@ describe('R9 top layer', () => {
 // Requirement 10 — concurrent React
 // ---------------------------------------------------------------------------
 
-describe('concurrent React', () => {
+describe('R10 concurrent React', () => {
   it('StrictMode leaves exactly one entry per sheet and every dialog open', () => {
     render(
       <StrictMode>
@@ -2347,7 +2347,7 @@ describe('concurrent React', () => {
 // Requirement 11 — non-modal sheets stay out of the stack
 // ---------------------------------------------------------------------------
 
-describe('non-modal sheets', () => {
+describe('R11 non-modal sheets', () => {
   it('a hasScrim={false} sheet neither joins the stack nor recedes a modal sheet', () => {
     function App() {
       const [isNonModalOpen, setIsNonModalOpen] = useState(false);
@@ -2752,7 +2752,7 @@ describe('non-modal sheets', () => {
 // Requirement 13 — one registry per realm, per document
 // ---------------------------------------------------------------------------
 
-describe('registry state', () => {
+describe('R13 registry state', () => {
   it('keeps its state on globalThis under a shared symbol, with its shape', () => {
     const holder = globalThis as Record<symbol, unknown>;
     const shared = holder[BOTTOM_SHEET_STACK_STATE_FOR_TESTS.key] as {
@@ -3051,7 +3051,7 @@ describe('registry state', () => {
 // Requirement 12 — existing behaviour: the standalone and switcher contracts
 // ---------------------------------------------------------------------------
 
-describe('a switcher flow stacked with standalone sheets', () => {
+describe('R14 a switcher flow stacked with standalone sheets', () => {
   function Mixed() {
     const [isAOpen, setIsAOpen] = useState(false);
     const [step, setStep] = useState<string | null>(null);
@@ -3206,7 +3206,7 @@ describe('a switcher flow stacked with standalone sheets', () => {
   });
 });
 
-describe('existing behaviour', () => {
+describe('R12 existing behaviour', () => {
   it('a standalone sheet presented alone keeps its full contract after a stack has come and gone', () => {
     render(<Siblings initialA />);
     const a = getDialog('A');
