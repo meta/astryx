@@ -52,11 +52,14 @@
 #   starts at once, so its required contexts report their failure (FR17).
 # - A pull request labelled `release-critical` starts at once, even when CI
 #   is full and ahead of a waiting `main` check, and still runs every job
-#   (spec:AST-030 DEC-30).
+#   (spec:AST-030 DEC-30). CI starts on no label event and this reads the
+#   labels of the event that started the run, so a label takes effect on the
+#   next push, reopen or ready toggle.
 #   The label counts only when its newest application came from someone with
 #   write access, the rule the `ci:run-*` labels follow (run-labels.cjs); a
-#   lookup that fails does not count it. A job that uses this action checks
-#   out `.github/scripts/lib`, which brings those scripts.
+#   lookup that fails does not count it. A pull-request job that uses this
+#   action checks out `.github/scripts/lib`, which brings those scripts, and
+#   reads pull requests (`pull-requests: read`).
 # - A run can hold more matrix legs at once when CI has room for them
 #   (`leg-widths`). It waits for `peak`, which counts each such matrix at its
 #   tight width. When the look that starts it also has room for every matrix

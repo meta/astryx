@@ -158,7 +158,12 @@ describe('where runs wait', () => {
     // It cancels the run when its token can, and fails either way.
     expect(stop.run).toContain('gh run cancel "$GITHUB_RUN_ID"');
     expect(stop.run.trim().split('\n').at(-1)).toBe('exit 1');
-    expect(admission.permissions).toEqual({actions: 'read', contents: 'read'});
+    // It reads who applied a release-critical label.
+    expect(admission.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     expect(String(ci.jobs['build-storybook'].if)).toContain(
       "needs.room.outputs.full != 'true'",
     );
