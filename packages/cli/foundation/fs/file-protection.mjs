@@ -129,8 +129,18 @@ function splitAttributeLine(line) {
     if (escaped) {
       const octal = quoted ? /^[0-7]{1,3}/.exec(text.slice(index)) : null;
       if (octal) {
-        token += String.fromCodePoint(Number.parseInt(octal[0], 8));
-        index += octal[0].length - 1;
+        // Git's quoted-path octal escapes encode path bytes, not code points.
+        // `caf\303\251.js` is the UTF-8 spelling of `café.js`.
+        const bytes = [Number.parseInt(octal[0], 8)];
+        let cursor = index + octal[0].length;
+        while (text[cursor] === '\\') {
+          const next = /^[0-7]{1,3}/.exec(text.slice(cursor + 1));
+          if (!next) break;
+          bytes.push(Number.parseInt(next[0], 8));
+          cursor += next[0].length + 1;
+        }
+        token += Buffer.from(bytes).toString('utf8');
+        index = cursor - 1;
       } else if (quoted) {
         token += c === 'n' ? '\n' : c === 't' ? '\t' : c === 'r' ? '\r' : c;
       } else {

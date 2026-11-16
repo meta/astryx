@@ -9,7 +9,7 @@
 
 import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
-import postcss from 'postcss';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
@@ -18,6 +18,7 @@ import {
   corePeerRange,
   findDoctorCoreDir,
   doctorElementPropOrigins,
+  doctorRendersElement,
   doctorStylesheetImports,
   findDoctorInstalledPackage,
   realDoctorFile,
@@ -38,6 +39,7 @@ import {
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
+  dependencyInstallFor,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
@@ -114,6 +116,13 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       candidate.slug === slug && themeRecordOwner(candidate) === owner,
   );
   if (!isLocalThemeOwner(owner)) {
+    // A theme package the project lists but has not installed, as in a fresh
+    // clone, comes from installing the project's dependencies, at the version
+    // it lists; its theme is added already.
+    const install = findDoctorInstalledPackage(projectDir, owner)
+      ? null
+      : dependencyInstallFor(projectDir, owner);
+    if (install) return install;
     const selector = theme?.package ?? owner;
     return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
   }
@@ -465,7 +474,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
   let unread = false;
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkAtRules(atRule => {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
@@ -532,7 +541,7 @@ function scopedToTheme(rule, slug) {
 /** @param {string} css @param {string} slug */
 function globalRules(css, slug) {
   const rules = new Map();
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkRules(rule => {
     if (scopedToTheme(rule, slug)) return;
     /** @type {import('postcss').Node|undefined} */
@@ -656,10 +665,18 @@ function definedThemeBase(init) {
  * is reported as unconfirmed, never as missing. The scan reads app source only
  * (no dependencies, build output, links or type-only imports) within the
  * bounded source walk, and executes nothing.
+ *
+ * A package theme whose integration names the provider component that wires
+ * its themes (its manifest's `themeProvider`) is wired when the app renders
+ * that component (`wiredBy`): the theme whose stylesheet the app imports
+ * (its export, or a stylesheet of the package that is that theme's file),
+ * or the integration's only theme. A rendered provider with several themes
+ * and no stylesheet to tell them apart is unconfirmed, with the themes it
+ * may wire and the package's stylesheets the app imports.
  * @param {string} cwd
  * @returns {Promise<{
- *   wired: Array<{slug: string, owner: string, file: string}>,
- *   unconfirmed: Array<{file: string}>,
+ *   wired: Array<{slug: string, owner: string, file: string, wiredBy?: string}>,
+ *   unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[], stylesheets?: string[]}>,
  * }>}
  */
 export async function themeImportWiring(cwd) {
@@ -698,6 +715,17 @@ export async function themeImportWiring(cwd) {
   // package is installed (discovery also lists the CLI's bundled themes).
   /** @type {ResolvedAppTheme[]} */
   const themes = [];
+  /**
+   * The provider component each package theme's integration wires its themes
+   * with, by theme.
+   * @type {Map<ResolvedAppTheme, {export: string, from: string}>}
+   */
+  const providerOf = new Map();
+  /**
+   * The folder each such theme's descriptor is in, links resolved.
+   * @type {Map<ResolvedAppTheme, string>}
+   */
+  const folderOf = new Map();
   for (const theme of available) {
     let resolved;
     try {
@@ -711,9 +739,30 @@ export async function themeImportWiring(cwd) {
     }
     if (resolved.source === 'local' || installedDir(resolved.owner)) {
       themes.push(resolved);
+      if (theme.provider) {
+        providerOf.set(resolved, theme.provider);
+        folderOf.set(
+          resolved,
+          realDoctorFile(theme.sourceDir) ?? theme.sourceDir,
+        );
+      }
     }
   }
   if (themes.length === 0) return none;
+  /** The providers the themes name, once each, with the themes each wires. */
+  /** @type {Map<string, {provider: {export: string, from: string}, themes: ResolvedAppTheme[], file: string | null, stylesheets: Array<{spec: string, target: string | null}>}>} */
+  const providers = new Map();
+  for (const [theme, provider] of providerOf) {
+    const key = `${provider.export}\u0000${provider.from}`;
+    const entry = providers.get(key) ?? {
+      provider,
+      themes: [],
+      file: null,
+      stylesheets: [],
+    };
+    entry.themes.push(theme);
+    providers.set(key, entry);
+  }
   /**
    * The theme a `Theme` value's origin is, or null.
    * @param {{file: string, name: string} | null} origin
@@ -734,12 +783,14 @@ export async function themeImportWiring(cwd) {
     if (named.length === 1) return named[0];
     return owned.length === 1 ? owned[0] : null;
   };
-  /** @type {Map<string, {slug: string, owner: string, file: string}>} */
+  /** @type {Map<string, {slug: string, owner: string, file: string, wiredBy?: string}>} */
   const wired = new Map();
   const keyOf = (/** @type {ResolvedAppTheme} */ theme) =>
     `${theme.owner}\u0000${theme.slug}`;
   /** @type {Set<string>} */
   const unconfirmed = new Set();
+  /** @type {Array<{file: string, wiredBy: string, themes: string[], stylesheets: string[]}>} */
+  const unconfirmedProviders = [];
   for (const file of listProjectSourceFiles(projectDir, '', {
     stylesheets: true,
   })) {
@@ -753,6 +804,40 @@ export async function themeImportWiring(cwd) {
     // its base to extend it, never to render it: it wires nothing.
     if (generatedThemeFile(source)) continue;
     const shown = relative(projectDir, file);
+    for (const entry of providers.values()) {
+      if (
+        entry.file == null &&
+        path.extname(file) !== '.css' &&
+        source.includes(entry.provider.export) &&
+        source.includes(entry.provider.from) &&
+        doctorRendersElement(file, {
+          sources: new Set([entry.provider.from]),
+          name: entry.provider.export,
+        })
+      )
+        entry.file = shown;
+      // A stylesheet the app imports from the provider's package: the
+      // package's theme stylesheet, wherever the package keeps it.
+      for (const owner of new Set(entry.themes.map(theme => theme.owner))) {
+        // Only text that names the package and a stylesheet is parsed.
+        if (!source.includes(`${owner}/`) || !source.includes('.css')) continue;
+        let specifiers;
+        try {
+          specifiers =
+            path.extname(file) === '.css'
+              ? doctorStylesheetImports(source)
+              : moduleSpecifiers(source, {runtimeOnly: true});
+        } catch {
+          continue;
+        }
+        for (const spec of specifiers)
+          if (spec.startsWith(`${owner}/`) && /\.css$/u.test(spec))
+            entry.stylesheets.push({
+              spec,
+              target: doctorStylesheetImportFile(spec, file),
+            });
+      }
+    }
     const candidates = themes.filter(
       theme =>
         !wired.has(keyOf(theme)) &&
@@ -805,23 +890,112 @@ export async function themeImportWiring(cwd) {
       }
     }
   }
+  // A rendered provider wires its integration's theme: the one whose
+  // stylesheet the app imports (its export, or any stylesheet of the
+  // package that is that theme's file), or the only one it has. With
+  // several and no stylesheet to tell them apart, which one it wires is not
+  // known.
+  for (const {
+    provider,
+    themes: owned,
+    file,
+    stylesheets,
+  } of providers.values()) {
+    if (file == null) continue;
+    const wiredBy = `${provider.export} from ${provider.from}`;
+    const files = new Set(
+      stylesheets.flatMap(x =>
+        x.target ? [realDoctorFile(x.target) ?? x.target] : [],
+      ),
+    );
+    // A stylesheet of the package is a theme's when it is that theme's
+    // stylesheet export, a file inside that theme's own folder, or a file
+    // that stylesheet imports; it names a theme only when one theme claims
+    // it.
+    /** The files a theme's own stylesheet is or imports. @param {ResolvedAppTheme} theme */
+    const ownFiles = theme => {
+      const sheet = theme.stylesheetFile;
+      const real = realDoctorFile(sheet) ?? sheet;
+      const css = readTextFileIfExists(sheet) ?? '';
+      return [
+        real,
+        ...[...doctorStylesheetImports(css)].flatMap(spec => {
+          const target = doctorStylesheetImportFile(spec, sheet);
+          return target ? [realDoctorFile(target) ?? target] : [];
+        }),
+      ];
+    };
+    const claims = new Map(
+      owned.map(theme => {
+        const folder = folderOf.get(theme);
+        const own = new Set(ownFiles(theme));
+        return [
+          theme,
+          [...files].filter(
+            f =>
+              own.has(f) ||
+              (folder != null && f.startsWith(`${folder}${path.sep}`)),
+          ),
+        ];
+      }),
+    );
+    const claimedBy = (/** @type {string} */ f) =>
+      owned.filter(theme => claims.get(theme)?.includes(f));
+    const imported = owned.filter(
+      theme =>
+        wired.has(keyOf(theme)) ||
+        (claims.get(theme) ?? []).some(f => claimedBy(f).length === 1),
+    );
+    if (imported.length > 0) {
+      for (const theme of imported)
+        wired.set(keyOf(theme), {
+          slug: theme.slug,
+          owner: theme.owner,
+          file,
+          wiredBy,
+        });
+    } else if (owned.length === 1) {
+      wired.set(keyOf(owned[0]), {
+        slug: owned[0].slug,
+        owner: owned[0].owner,
+        file,
+        wiredBy,
+      });
+    } else {
+      unconfirmedProviders.push({
+        file,
+        wiredBy,
+        themes: owned.map(theme => theme.slug),
+        stylesheets: [...new Set(stylesheets.map(x => x.spec))],
+      });
+    }
+  }
   // In discovery order, so the report does not depend on the file walk.
   return {
     wired: themes.flatMap(theme => {
       const found = wired.get(keyOf(theme));
-      return found ? [found] : [];
+      return found ? [/** @type {any} */ (found)] : [];
     }),
-    unconfirmed: [...unconfirmed].sort().map(file => ({file})),
+    unconfirmed: [
+      ...[...unconfirmed].sort().map(file => ({file})),
+      ...unconfirmedProviders,
+    ],
   };
 }
 
 /**
  * The pass message's list of themes wired by import, each with the file that
  * imports it.
- * @param {Array<{slug: string, file: string}>} wired
+ * @param {Array<{slug: string, file: string, wiredBy?: string}>} wired
  */
 function wiredByImportList(wired) {
-  const shown = wired.slice(0, 5).map(({slug, file}) => `${slug} (${file})`);
+  const shown = wired
+    .slice(0, 5)
+    .map(({slug, file, wiredBy}) =>
+      wiredBy
+        ? `${slug} (wired by ${wiredBy} in ${file})`
+        : `${slug} (${file})`,
+    );
   const more = wired.length - shown.length;
   return more > 0 ? `${shown.join(', ')} and ${more} more` : shown.join(', ');
 }
@@ -836,7 +1010,7 @@ function wiredByImportList(wired) {
  * reports the overall result of the app-theme checks.
  * @param {string} cwd
  * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
- * @param {{wired: Array<{slug: string, file: string}>, unconfirmed: Array<{file: string}>}} [wiring] -
+ * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>, unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[], stylesheets?: string[]}>}} [wiring] -
  *   what {@link themeImportWiring} returned
  * @returns {DoctorCheck}
  */
@@ -903,6 +1077,32 @@ export function checkThemes(
 
   const run = getCliInvocation(cwd);
   const packages = listDoctorThemePackages(cwd);
+  // A rendered provider that wires one of several themes, none of them told
+  // apart by an imported stylesheet: a theme is wired, but which one is not
+  // known.
+  const providerUnknown = wiring.unconfirmed.filter(entry => entry.wiredBy);
+  const traceUnknown = wiring.unconfirmed.filter(entry => !entry.wiredBy);
+  if (
+    wiredByImport.length === 0 &&
+    providerUnknown.length > 0 &&
+    !appPackageNamesTheme(cwd)
+  ) {
+    // Which stylesheet of the package the app imports is named, never
+    // called missing: doctor only cannot match it to one theme.
+    const shown = providerUnknown
+      .map(entry =>
+        entry.stylesheets?.length
+          ? `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}, and the app imports ${entry.stylesheets.join(', ')} from that package; doctor could not tell which of those themes ${entry.stylesheets.length > 1 ? 'they are' : 'it is'}`
+          : `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}; doctor could not tell which, because the app imports none of their stylesheets`,
+      )
+      .join('; ');
+    return {
+      id: 'themes',
+      label,
+      status: 'info',
+      message: `${shown}.`,
+    };
+  }
   if (packages.length === 0 && wiredByImport.length > 0) {
     return {
       id: 'themes',
@@ -929,13 +1129,13 @@ export function checkThemes(
       message: `Theme package(s) installed (${names}); wired by import: ${wiredByImportList(wiredByImport)}.`,
     };
   }
-  if (!appPackageNamesTheme(cwd) && wiring.unconfirmed.length > 0) {
-    const files = wiring.unconfirmed.map(({file}) => file).join(', ');
+  if (!appPackageNamesTheme(cwd) && traceUnknown.length > 0) {
+    const files = traceUnknown.map(({file}) => file).join(', ');
     return {
       id: 'themes',
       label,
       status: 'info',
-      message: `Theme package(s) installed (${names}); ${files} pass${wiring.unconfirmed.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
+      message: `Theme package(s) installed (${names}); ${files} pass${traceUnknown.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
       fix: `If no theme is applied, add one with \`${run} theme add <slug>\`.`,
     };
   }
@@ -954,6 +1154,55 @@ export function checkThemes(
     status: 'pass',
     message: `Theme package(s) installed (${names}); wired via package.json astryx.theme.`,
   };
+}
+
+/**
+ * The app-theme checks with what the wiring scan found: an app with no
+ * generated theme module whose theme its integration's provider wires is
+ * themed, so the `theme-management` check says so and offers no `theme add`.
+ * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
+ * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>}} wiring -
+ *   what {@link themeImportWiring} returned
+ * @returns {DoctorCheck[]}
+ */
+export function withProviderWiring(appChecks, wiring) {
+  const byProvider = wiring.wired.filter(entry => entry.wiredBy);
+  if (byProvider.length === 0) return appChecks;
+  const shown = byProvider
+    .map(entry => `${entry.slug} is wired by ${entry.wiredBy} in ${entry.file}`)
+    .join('; ');
+  return appChecks.map(check => {
+    if (check.id !== 'theme-management') return check;
+    const {fix: _fix, ...rest} = check;
+    return {
+      ...rest,
+      message: `The CLI manages no themes: ${shown}, the provider its package wires its themes with.`,
+    };
+  });
+}
+
+/**
+ * The theme input the private-variable check reads. A bundled theme is a copy
+ * of its package's source. When the project installs that package, the check
+ * reads the package's own copy: the app uses that package, and the copy's
+ * imports, such as the theme's icon library, resolve from the package in every
+ * install layout. Yarn Plug'n'Play refuses the CLI's copy an import of a
+ * package the CLI does not depend on.
+ * @param {DiscoveredTheme} theme the discovered theme
+ * @param {string} owner the package that the app's theme record names
+ * @param {string} projectDir
+ * @returns {string}
+ */
+function privateInputFile(theme, owner, projectDir) {
+  const own = path.join(theme.sourceDir, theme.entry);
+  if (theme.source !== 'bundled') return own;
+  const packageDir = findDoctorInstalledPackage(projectDir, owner);
+  const installed = packageDir
+    ? path.join(packageDir, 'src', theme.entry)
+    : null;
+  // The path as found, not its real path: Yarn gives a package with peer
+  // dependencies a path of its own, and resolves its imports only from there.
+  return installed && realDoctorFile(installed) ? installed : own;
 }
 
 /**
@@ -1089,7 +1338,7 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but it or its stylesheet names a file the package does not ship, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);
@@ -1164,34 +1413,40 @@ export async function checkAppThemes(cwd) {
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'fail',
-      message: resolutionProblems
-        .map(problem =>
-          // A theme another command generates is not rebuilt with `theme
-          // build`: its fix names that command, so its message does not.
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
-          ).includes(' theme build ')
-            ? problem.message
-            : problem.message
-                .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
-                .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
-        )
-        .join(' '),
-      fix: resolutionProblems
-        .map(problem =>
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
+      // Themes that one step fixes, such as installing the project's
+      // dependencies, say it once.
+      message: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            // A theme another command generates is not rebuilt with `theme
+            // build`: its fix names that command, so its message does not.
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ).includes(' theme build ')
+              ? problem.message
+              : problem.message
+                  .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
+                  .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
           ),
-        )
-        .join(' '),
+        ),
+      ].join(' '),
+      fix: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ),
+          ),
+        ),
+      ].join('; '),
     });
   } else if (unshippedImports.length > 0) {
     checks.push({
@@ -1199,7 +1454,7 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'warn',
       message: unshippedImports.map(each => each.message).join(' '),
-      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships the named file, or ask its owner to publish one.`,
+      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships every file its built module imports, as JavaScript, or ask its owner to publish one.`,
     });
   } else {
     checks.push({
@@ -1456,7 +1711,7 @@ export async function checkAppThemes(cwd) {
     if (!availableTheme) continue;
     try {
       const errors = await validateThemePrivateInputs(
-        path.join(availableTheme.sourceDir, availableTheme.entry),
+        privateInputFile(availableTheme, theme.owner, state.projectDir),
         {cwd: state.projectDir},
       );
       if (errors.length > 0) {

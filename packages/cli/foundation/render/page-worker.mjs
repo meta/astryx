@@ -18,7 +18,15 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter}
+ * Overlays (a tooltip, a menu) render on the server as markers alone; with
+ * `openLayers`, the page is drawn again the same way (or the elements its
+ * `openLayerElements()` export gives, for a page that holds only their
+ * markup) and each overlay they show or open is added after the markup
+ * (layers.mjs). A part the page asks to be drawn open in its own place
+ * (through the global layers.mjs names) is drawn the same way and put where
+ * its marker is, with each overlay it opened after it.
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -38,11 +46,15 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
 /** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
 const {entry, root, scope} = workerData;
+
+// Before React loads: a read of the overlays waits for React's queued tasks.
+countQueuedImmediates();
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -431,6 +443,177 @@ async function drawCharts(markup, Page) {
     failed,
     alone,
   };
+}
+
+/**
+ * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
+ * as nothing when nothing opens), or `mounted`, as the browser shows the part
+ * once it runs, nothing opened.
+ * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean}>}
+ */
+const layers = [];
+/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted'} */ how = false) =>
+  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted'}) - 1);
+
+/**
+ * Run `fn` with a document in place, as a browser page has one, then put
+ * the globals back as they were (none, for a server render). The document
+ * carries the handler property a browser's document has for input events
+ * (`oninput`), which React reads to tell whether fields fire them.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withLoadDocument(fn) {
+  const g = /** @type {any} */ (globalThis);
+  const had = {window: Object.getOwnPropertyDescriptor(g, 'window'), document: Object.getOwnPropertyDescriptor(g, 'document')};
+  try {
+    const {parseHTML} = await import('linkedom');
+    const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+    if (!('oninput' in window.document)) /** @type {any} */ (window.document).oninput = null;
+    g.window = window;
+    g.document = window.document;
+    await fn();
+  } catch {
+    // No client to load (no react-dom): nothing is drawn with it either.
+  } finally {
+    if (had.window) Object.defineProperty(g, 'window', had.window);
+    else delete g.window;
+    if (had.document) Object.defineProperty(g, 'document', had.document);
+    else delete g.document;
+  }
+}
+
+/**
+ * Draw each part the page asked to be drawn open, in the layer document
+ * (layers.mjs), and put each where its marker is: the part as drawn, then
+ * each overlay it shows or a press opens (openLayerMarkup), in place after
+ * it. A part that fails to draw, or has none open, is its server render, or
+ * nothing when the page asked for it only open.
+ * @param {string} markup
+ * @param {any} server react-dom/server
+ * @returns {Promise<string>}
+ */
+async function drawLayers(markup, server) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    client = null;
+  }
+  const g = /** @type {any} */ (globalThis);
+  /** @type {string[]} */
+  const drawings = [];
+  for (const {element, ifOpen, mounted} of layers) {
+    /** @type {string | null} */
+    let out = null;
+    if (client) {
+      const host = g.document.createElement('div');
+      g.document.body.appendChild(host);
+      const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+      try {
+        flushSync(() => root.render(element));
+        if (mounted) {
+          await settled();
+          // A part that draws nothing in this window (a narrow screen's
+          // navigation, in a desktop's) is its server render.
+          out = host.innerHTML.replace(/<template><\/template>/g, '') || null;
+        } else {
+          // Its overlays shown open mount, and each popup a press opens opens.
+          await openLayerMarkup(host, flushSync);
+          const open = [...g.document.querySelectorAll('[data-astryx-layer-root]')].filter(
+            (/** @type {any} */ layer) => layer.__astryxPopoverOpen === true,
+          );
+          if (open.length) {
+            // The part as drawn, then each overlay open now, after it; never a
+            // closed one, nor the markers that place them.
+            const part = host.cloneNode(true);
+            for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+          }
+        }
+      } catch {
+        out = null;
+      }
+      try {
+        root.unmount();
+      } catch {
+        // A part that failed to draw unmounts as nothing.
+      }
+      host.remove();
+    }
+    if (out == null && ifOpen) out = '';
+    if (out == null)
+      try {
+        out = server.renderToStaticMarkup(element);
+      } catch {
+        out = '';
+      }
+    drawings.push(/** @type {string} */ (out));
+  }
+  return markup.replace(LAYER_PLACEHOLDER, (_, i) => drawings[Number(i)] ?? '');
+}
+
+/**
+ * The overlays the elements show open, and those their controls open, drawn
+ * in the layer document (layers.mjs), for after the page's markup in one
+ * element of their own; nothing when they cannot be drawn there. Each
+ * element draws on its own: one that throws leaves the others drawn.
+ * @param {unknown[]} elements
+ * @param {any} React
+ * @returns {Promise<string>}
+ */
+async function drawOpenLayers(elements, React) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    return '';
+  }
+  const g = /** @type {any} */ (globalThis);
+  class Alone extends React.Component {
+    state = {failed: false};
+    static getDerivedStateFromError() {
+      return {failed: true};
+    }
+    render() {
+      return this.state.failed ? null : this.props.children;
+    }
+  }
+  // Each part is drawn on its own, then taken down before the next: the
+  // listeners a drawn part puts on the document (a typeahead's or a menu's
+  // outside press) then hear only the presses on its own controls, never
+  // every other part's, as in a window that shows that part alone.
+  /** @type {string[]} */
+  const layers = [];
+  for (const element of elements) {
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+    try {
+      flushSync(() => root.render(createElement(Alone, null, element)));
+      // (A part that opens nothing on a press and holds a layer, a context
+      // menu's area, is right-clicked, as one drawn in its own place is.)
+      layers.push(...(await openLayerMarkup(host, flushSync)));
+    } catch {
+      // A part that cannot be drawn there adds no overlays.
+    }
+    try {
+      root.unmount();
+    } catch {
+      // Unmounting a part that failed to draw changes nothing.
+    }
+    host.remove();
+  }
+  return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 
 /**
@@ -1002,6 +1185,13 @@ function reach(name) {
 try {
   /** @type {any} */
   let mod;
+  // React DOM's client reads what the document supports as it loads (input
+  // events among them). A component that loads it with the page (a toast's
+  // root) would load it with no document, and the drawing could never type
+  // into a field: a typeahead's search would reach no change handler. It is
+  // loaded first, with a document that fires input events as a browser's
+  // does; the page then renders on the server with no document.
+  await withLoadDocument(() => jiti.import('react-dom/client'));
   try {
     reach('importing the page');
     mod = await jiti.import(entry);
@@ -1048,6 +1238,23 @@ try {
       const printed = logs.length;
       reach('drawing charts');
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+      logs.length = printed;
+    }
+    if (workerData.openLayers) {
+      const printed = logs.length;
+      reach('drawing open overlays');
+      markup += await drawOpenLayers(
+        typeof mod.openLayerElements === 'function' ? mod.openLayerElements() : [React.createElement(Page)],
+        React,
+      );
+      logs.length = printed;
+    }
+    if (layers.length > 0) {
+      // What the parts print as they open was printed by the server render
+      // of the page, or is about the drawing itself.
+      const printed = logs.length;
+      reach('drawing open overlays in place');
+      markup = await drawLayers(markup, server);
       logs.length = printed;
     }
   } catch (e) {

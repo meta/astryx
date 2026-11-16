@@ -981,6 +981,98 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  /**
+   * A fresh clone of an app that added the neutral and stone themes: its
+   * `node_modules` holds Core but neither theme package.
+   * @param {string[]} listed the theme packages the app's package.json lists
+   */
+  async function freshCloneWithThemes(listed) {
+    const dir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'),
+    );
+    dirs.push(dir);
+    write(path.join(dir, 'tsconfig.json'), '{}\n');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'doctor-app',
+        private: true,
+        dependencies: {
+          '@astryxdesign/core': CLI_VERSION,
+          ...Object.fromEntries(listed.map(name => [name, CLI_VERSION])),
+        },
+      }),
+    );
+    write(path.join(dir, 'pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    const packageDirs = [];
+    for (const slug of ['neutral', 'stone']) {
+      const packageDir = path.join(
+        dir,
+        `node_modules/@astryxdesign/theme-${slug}`,
+      );
+      packageDirs.push(packageDir);
+      write(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: `@astryxdesign/theme-${slug}`,
+          version: CLI_VERSION,
+          type: 'module',
+          exports: {
+            './built': `./dist/${slug}.js`,
+            './theme.css': './dist/theme.css',
+          },
+        }),
+      );
+      write(
+        path.join(packageDir, `dist/${slug}.js`),
+        `export const ${slug}Theme = {name: '${slug}', tokens: {}};\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/theme.css'),
+        `[data-astryx-theme="${slug}"] { --color-text: black; }\n`,
+      );
+      await themeAdd(slug, {cwd: dir, import: true});
+    }
+    // The project's dependencies are not installed yet.
+    for (const packageDir of packageDirs)
+      fs.rmSync(packageDir, {recursive: true});
+    return dir;
+  }
+
+  it("check 1, in a fresh clone that lists the theme packages, says to install the project's dependencies once", async () => {
+    const dir = await freshCloneWithThemes([
+      '@astryxdesign/theme-neutral',
+      '@astryxdesign/theme-stone',
+    ]);
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners).toMatchObject({
+      status: 'fail',
+      message: [
+        'Theme package "@astryxdesign/theme-neutral" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+        'Theme package "@astryxdesign/theme-stone" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+      ].join(' '),
+      fix: 'pnpm install',
+    });
+  });
+
+  it('check 1, in a fresh clone that lists only one of two theme packages, names each fix as its own command', async () => {
+    const dir = await freshCloneWithThemes(['@astryxdesign/theme-neutral']);
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    // The listed theme's install stays a command of its own, before the
+    // steps that add the other theme.
+    const steps = owners.fix.split('; ');
+    expect(steps[0]).toBe('pnpm install');
+    expect(steps.slice(1).join('; ')).toContain('@astryxdesign/theme-stone');
+    expect(steps.at(-1)).toMatch(/ theme add stone\b/);
+  });
+
   it('check 2 fails when the generated module is hand-edited', async () => {
     const {dir, moduleFile} = await fixture();
     fs.appendFileSync(moduleFile, '// hand edit\n');
@@ -1390,6 +1482,74 @@ describe('app-theme doctor checks', () => {
       "export const oceanTheme = {name: 'ocean', tokens: {}, components: {button: {base: {'--_button-radius': '2px'}}}};\n",
     );
 
+    const result = check(await checkAppThemes(dir), 'theme-private-variables');
+    expect(result).toMatchObject({status: 'fail'});
+    expect(result.message).toContain('--_button-radius');
+  });
+
+  it("check 6 reads a bundled theme's input from the package the project installs", async () => {
+    const dir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-bundled-input-'),
+    );
+    dirs.push(dir);
+    write(path.join(dir, 'tsconfig.json'), '{}\n');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'doctor-app',
+        private: true,
+        dependencies: {
+          '@astryxdesign/core': CLI_VERSION,
+          '@astryxdesign/theme-neutral': CLI_VERSION,
+        },
+      }),
+    );
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    const packageDir = path.join(
+      dir,
+      'node_modules/@astryxdesign/theme-neutral',
+    );
+    write(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/theme-neutral',
+        version: CLI_VERSION,
+        type: 'module',
+        exports: {
+          './built': './dist/neutral.js',
+          './theme.css': './dist/theme.css',
+          './fonts.css': './fonts.css',
+        },
+      }),
+    );
+    write(
+      path.join(packageDir, 'dist/neutral.js'),
+      "export const neutralTheme = {name: 'neutral', tokens: {}};\n",
+    );
+    write(
+      path.join(packageDir, 'dist/theme.css'),
+      '[data-astryx-theme="neutral"] { --color-text: black; }\n',
+    );
+    write(path.join(packageDir, 'fonts.css'), '');
+    await themeAdd('neutral', {cwd: dir, import: true});
+    write(
+      path.join(dir, 'src/index.tsx'),
+      "import {themes, defaultThemeSlug} from './astryx-themes';\nvoid themes[defaultThemeSlug];\n",
+    );
+
+    // A package that ships no source of its own: the CLI's copy is read.
+    expect(
+      check(await checkAppThemes(dir), 'theme-private-variables'),
+    ).toMatchObject({status: 'pass'});
+
+    // The package's own copy is the one the app uses.
+    write(
+      path.join(packageDir, 'src/neutralTheme.ts'),
+      "export const neutralTheme = {name: 'neutral', tokens: {}, components: {button: {base: {'--_button-radius': '2px'}}}};\n",
+    );
     const result = check(await checkAppThemes(dir), 'theme-private-variables');
     expect(result).toMatchObject({status: 'fail'});
     expect(result.message).toContain('--_button-radius');

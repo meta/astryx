@@ -94,6 +94,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     await import('../../foundation/response/json.mjs');
   const {handleCommanderError} = await import('./lib/json-shim.mjs');
   const {setOutcome} = await import('../../foundation/debug/index.mjs');
+  const {themeModuleRejection, themeModuleException} =
+    await import('../../foundation/fs/theme-module-rejections.mjs');
 
   /**
    * Top-level error boundary (contract guarantee #4): an uncaught throw must
@@ -137,8 +139,30 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     process.exit(1);
   }
 
-  process.on('unhandledRejection', handleFatal);
-  process.on('uncaughtException', handleFatal);
+  // A command that reads a theme several times meets its module's late
+  // failure each time: said once.
+  /** @type {Set<string>} */
+  const toldWarnings = new Set();
+  /** @param {string} warning */
+  const tellOnce = warning => {
+    if (toldWarnings.has(warning)) return;
+    toldWarnings.add(warning);
+    process.stderr.write(`${warning}\n`);
+  };
+  process.on('unhandledRejection', (reason, promise) => {
+    // A theme module read for its export may leave a promise rejecting:
+    // said, never the command's crash.
+    const told = themeModuleRejection(reason, promise);
+    if (told) tellOnce(told);
+    else handleFatal(reason);
+  });
+  process.on('uncaughtException', error => {
+    // A theme module's callback that throws after its load: said, never
+    // the command's crash.
+    const told = themeModuleException(error);
+    if (told === null) handleFatal(error);
+    else if (told) tellOnce(told);
+  });
 
   // Pick up the project's `debug` function before parsing, so parse errors
   // and `--help` — which short-circuit before any hook runs — are reported

@@ -141,11 +141,19 @@ describe('a damaged saved entry', () => {
   it(
     'offers its set line as a second step after the undo when it cannot replace the entry',
     async () => {
+      // A dial saved with a mode, which set never writes: set's line
+      // cannot replace that entry (a dial name in other letters, once used
+      // here, is now read as the dial).
       edit(d => {
-        d.settings.push({thing: 'CORNERS', value: 'pill', source: 'dial'});
+        d.settings.push({
+          thing: 'corners',
+          value: 'pill',
+          source: 'dial',
+          mode: 'dark',
+        });
       });
       const r = await cli([...ED, 'set', 't', '--spacing-4', '12px']);
-      expect(r.suggestions[0].name).toMatch(/ undo t CORNERS$/);
+      expect(r.suggestions[0].name).toMatch(/ undo t corners$/);
       expect(r.suggestions[1].name).toMatch(/ set t corners pill$/);
       expect(r.suggestions[1].reason).toMatch(/^then this/);
       expect((await follow(r.suggestions[0].name)).error).toBeUndefined();

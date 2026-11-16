@@ -17,7 +17,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -25,6 +25,14 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -71,6 +79,51 @@ const needsBases = test => {
 const T = 180_000;
 
 describe('lists and excepts', () => {
+  it(
+    'every ask said of a list goes with each item, up to an except',
+    async test => {
+      needsBases(test);
+      expect(
+        (await answer('make primary and ghost buttons blue and cards red'))
+          .first,
+      ).toEqual([
+        "set n background-color '#2563eb' --on button --when variant:primary",
+        "set n background-color '#2563eb' --on button --when variant:ghost",
+        "set n background-color '#dc2626' --on card",
+      ]);
+      const kept = await answer(
+        'make primary and ghost buttons blue except disabled ones',
+      );
+      for (const v of ['primary', 'ghost']) {
+        expect(kept.first).toContain(
+          `set n background-color '#2563eb' --on button --when variant:${v}`,
+        );
+        expect(
+          kept.first.some(x =>
+            x.includes(`--when variant:${v} --state disabled`),
+          ),
+        ).toBe(true);
+      }
+      const both = await answer(
+        'give primary and ghost buttons a border and a shadow',
+      );
+      for (const v of ['primary', 'ghost'])
+        for (const prop of ['border', 'box-shadow'])
+          expect(
+            both.first.some(
+              x => x.startsWith(`set n ${prop} `) && x.endsWith(`variant:${v}`),
+            ),
+          ).toBe(true);
+      const their = await answer(
+        'make primary and ghost buttons blue and their text white',
+      );
+      for (const v of ['primary', 'ghost'])
+        expect(their.first).toContain(
+          `set n color '#ffffff' --on button --when variant:${v}`,
+        );
+    },
+    T,
+  );
   it(
     'a list of variants or states names each one',
     async test => {
@@ -178,9 +231,12 @@ describe('one mode', () => {
       expect(card.first[0]).toMatch(
         /^set n box-shadow '.*light-dark\(transparent, .*' --on card$/,
       );
-      const pop = await answer('make popover shadows blue in light mode');
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      const pop = await answer('make trigger-menu shadows blue in light mode');
       expect(pop.first).toEqual([]);
-      expect(pop.text).toMatch(/what popover shows in dark mode is unknown/);
+      expect(pop.text).toMatch(
+        /what trigger-menu shows in dark mode is unknown/,
+      );
       const removal = await answer('remove card shadows in dark mode');
       expect(removal.first).toEqual([]);
       expect(removal.text).not.toMatch(/no color of its own/);
@@ -188,14 +244,15 @@ describe('one mode', () => {
     T,
   );
   it(
-    'a resting shadow on a part that rings itself is not offered',
+    'a resting shadow on a part that rings itself is offered, its rings kept by the build',
     async test => {
       needsBases(test);
       const r = await answer(
         'in dark mode, inputs should have shadow 0 2px 6px #00000066',
       );
-      expect(r.first).toEqual([]);
-      expect(r.text).toMatch(/rings in its box-shadow/);
+      expect(r.first).toEqual([
+        "set n box-shadow '0 2px 6px light-dark(transparent, #00000066)' --on inputs",
+      ]);
     },
     T,
   );

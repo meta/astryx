@@ -32,6 +32,7 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Section} from '@astryxdesign/core/Section';
 
 import {
@@ -293,6 +294,7 @@ function BoardCardBody({
   item: WorkItem;
   onMove: (id: string, to: ColumnId) => void;
 }) {
+  const showToast = useToast();
   const priority = PRIORITY_META[item.priority];
   const moveTargets = COLUMNS.filter(c => c.id !== item.column).map(c => ({
     label: `Move to ${c.title}`,
@@ -311,7 +313,15 @@ function BoardCardBody({
           size="sm"
           items={[
             {label: 'Open', onClick: () => {}},
-            {label: 'Assign to me', onClick: () => {}},
+            {
+              label: 'Assign to me',
+              onClick: () =>
+                // Demo only: replace this toast with the call that performs the action.
+                showToast({
+                  body: `${item.ref} assigned to you`,
+                  uniqueID: `assign-${item.id}`,
+                }),
+            },
             {type: 'divider'},
             ...moveTargets,
           ]}
@@ -676,7 +686,7 @@ export default function KanbanBoardTemplate() {
                 </>
               }
               endContent={
-                <HStack gap={2}>
+                <HStack gap={2} wrap="wrap">
                   <Selector
                     label="Sprint"
                     width={200}

@@ -691,14 +691,57 @@ function findNearbyCoreDir(startDir) {
  * @returns {string|null}
  */
 function findPnpPackage(startDir, name) {
-  if (!process.versions.pnp) return null;
+  const api = pnpApi(startDir);
+  if (!api) return null;
   try {
     const from = path.resolve(startDir);
-    const api = createRequire(path.join(from, 'noop.js'))('pnpapi');
     const dir = api.resolveToUnqualified(name, path.join(from, '/'));
     return dir && fs.existsSync(path.join(dir, 'package.json')) ? dir : null;
   } catch {
-    // The project does not declare it, or this is not a PnP process after all.
+    // The project does not declare it.
+    return null;
+  }
+}
+
+/**
+ * Does the workspace or package that holds `startDir` depend on `name`, by
+ * Yarn's Plug'n'Play runtime? Yarn then runs that package's commands from
+ * `startDir`, as a package runner runs a command it finds in
+ * `node_modules/.bin`. False outside a PnP process.
+ *
+ * @param {string} startDir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function pnpDependsOn(startDir, name) {
+  const api = pnpApi(startDir);
+  if (!api) return false;
+  try {
+    const from = path.join(path.resolve(startDir), '/');
+    const locator = api.findPackageLocator(from);
+    const info = locator ? api.getPackageInformation(locator) : null;
+    return Boolean(info?.packageDependencies?.get(name));
+  } catch {
+    // The runtime cannot place the folder.
+    return false;
+  }
+}
+
+/**
+ * The Plug'n'Play runtime's API, asked from `startDir`; null outside a PnP
+ * process.
+ *
+ * @param {string} startDir
+ * @returns {any}
+ */
+function pnpApi(startDir) {
+  if (!process.versions.pnp) return null;
+  try {
+    return createRequire(path.join(path.resolve(startDir), 'noop.js'))(
+      'pnpapi',
+    );
+  } catch {
+    // Not a PnP process after all.
     return null;
   }
 }

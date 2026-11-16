@@ -119,7 +119,7 @@ export default function SideGalleryTemplate() {
               </VStack>
 
               <HStack gap={3} vAlign="center">
-                <Button label="Explore" variant="primary" />
+                <Button label="Explore" variant="primary" href="#" />
               </HStack>
 
               <VStack gap={4}>

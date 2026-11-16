@@ -24,12 +24,14 @@ import {listDir} from '../fs/listing-cache.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
 import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
+import {rootNamespaceName} from '../discovery/name-roots.mjs';
 import {diagnostic, sortDiagnostics} from './diagnostics.mjs';
 import {readDocView} from './read.mjs';
 import {packageSource} from './source.mjs';
 import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {KIND_GROUPS, TOPIC_LEVELS, topicLevel} from './generated-levels.mjs';
 
 export {routeSegment};
 
@@ -41,36 +43,6 @@ const CLI_PROVIDER = '@astryxdesign/cli';
 
 /** One route segment: lowercase letters and digits joined by single hyphens. */
 export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * The generated level that `groupBy: 'kind'` makes for each kind: its route
- * segment, title, and summary.
- * @type {Readonly<Record<string, {segment: string, title: string, summary: string}>>}
- */
-export const KIND_GROUPS = Object.freeze({
-  command: {
-    segment: 'commands',
-    title: 'Commands',
-    summary: 'Every command and subcommand.',
-  },
-  function: {
-    segment: 'functions',
-    title: 'Functions',
-    summary: 'Every function: its signature, parameters, returns, and errors.',
-  },
-  schema: {
-    segment: 'schemas',
-    title: 'Schemas',
-    summary: 'Data shapes, field by field.',
-  },
-  enum: {
-    segment: 'enums',
-    title: 'Enums',
-    summary:
-      'Every fixed list of values, such as error codes and response types.',
-  },
-  generic: {segment: 'guides', title: 'Guides', summary: 'Every guide.'},
-});
 
 /**
  * @typedef {import('../../authoring/doctypes/namespace/type').NamespaceDoc} NamespaceDoc
@@ -104,6 +76,7 @@ export const KIND_GROUPS = Object.freeze({
  * @property {string} summary
  * @property {string | null} group the discovery group adoption reads, or null
  * @property {DocPlacement | undefined} placement
+ * @property {string[]} [keywords] the search keywords a guide declares
  * @property {any} [ref] what a reader needs to open the doc, carried as given
  */
 
@@ -127,38 +100,12 @@ export const KIND_GROUPS = Object.freeze({
  * @property {string | null} [category] the topic's sidebar group:
  *   `foundations` puts it in Foundations; anything else, in Guides
  * @property {string} source where the topic comes from, for diagnostics
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string[]} [aliases] every other name the topic answers to: the
  *   topics it replaced, directly or through a chain
  */
 
-/**
- * The generated levels that hold the flat topics, by category
- * (spec:AST-046 FR12). A topic keeps its own name as its route; its level is
- * only where it sits. Readers see these titles in a topic's path, so each is
- * a plain name for what the topics are.
- */
-export const TOPIC_LEVELS = Object.freeze({
-  guides: Object.freeze({
-    route: 'guides',
-    title: 'Guides',
-    summary:
-      'Guides that stand on their own: getting started, principles, theming, and working with AI. Each topic keeps its own name; open one by it.',
-  }),
-  foundations: Object.freeze({
-    route: 'foundations',
-    title: 'Foundations',
-    summary:
-      'Color, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on. Each topic keeps its own name; open one by it.',
-  }),
-});
-
-/**
- * The generated level a flat topic sits in.
- * @param {string | null | undefined} category
- * @returns {'guides' | 'foundations'}
- */
-export const topicLevel = category =>
-  category === 'foundations' ? 'foundations' : 'guides';
+export {KIND_GROUPS, TOPIC_LEVELS, topicLevel};
 
 /**
  * @typedef {object} TreeNode
@@ -172,7 +119,8 @@ export const topicLevel = category =>
  * @property {string} name
  * @property {string} title
  * @property {string} summary
- * @property {string[]} [keywords] an authored namespace's search keywords
+ * @property {string[]} [keywords] the search keywords an authored namespace,
+ *   a guide, or a flat topic declares; a typed doc's are on its `ref.selfDoc`
  * @property {string | null} parent the parent's route; null at the top
  * @property {string | null} slot the parent slot this node sits in
  * @property {number | null} order
@@ -620,6 +568,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
         name: doc.name,
         title: doc.title,
         summary: doc.summary,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         parent: home.parentRoute,
         slot: home.slot,
         order: home.order,
@@ -666,6 +615,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
           name: topic.name,
           title: topic.title,
           summary: topic.summary,
+          ...(Array.isArray(topic.keywords) ? {keywords: topic.keywords} : {}),
           parent: level.route,
           slot: 'topics',
           order: i,
@@ -832,10 +782,7 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
   /** @type {string[]} */
   const names = [];
   for (const file of treeDocFiles(dir)) {
-    const text = fs.readFileSync(file, 'utf8');
-    if (!/["']?type["']?\s*:\s*["']namespace["']/u.test(text)) continue;
-    if (/["']?placement["']?\s*:/u.test(text)) continue;
-    const name = /["']?name["']?\s*:\s*["']([\w-]+)["']/u.exec(text)?.[1];
+    const name = rootNamespaceName(fs.readFileSync(file, 'utf8'));
     if (name) names.push(name);
   }
   return names.sort(byText);
@@ -916,6 +863,7 @@ export async function loadTreeInputs({
         name: doc.name,
         title: doc.title,
         summary: doc.description,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         group: null,
         placement: doc.placement,
         ref: {topicFile: file},

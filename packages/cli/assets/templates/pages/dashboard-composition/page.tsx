@@ -18,6 +18,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Divider} from '@astryxdesign/core/Divider';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   AreaChart,
   Area,
@@ -656,6 +657,7 @@ function AssetRow({
 // ============= MAIN COMPONENT =============
 
 export default function DashboardPortfolioTemplate() {
+  const showToast = useToast();
   const [timeRange, setTimeRange] = useState('1 year');
 
   return (
@@ -736,7 +738,18 @@ export default function DashboardPortfolioTemplate() {
                   Past 24 hours
                 </Text>
               </VStack>
-              <Button label="View more" variant="secondary" size="lg" />
+              <Button
+                label="View more"
+                variant="secondary"
+                size="lg"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the full market overview would open here',
+                    uniqueID: 'more-market',
+                  })
+                }
+              />
             </HStack>
 
             {/* Market index cards */}

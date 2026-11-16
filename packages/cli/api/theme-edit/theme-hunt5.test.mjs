@@ -11,7 +11,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -33,6 +33,15 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -315,8 +324,11 @@ describe('chaos round 3', () => {
     // A leftover is one more than ten minutes old.
     const old = new Date(Date.now() - 11 * 60_000);
     fs.utimesSync(left, old, old);
-    await themeEditSet('t', 'corners', 'small', {cwd});
-    await themeEditUndo('t', {cwd});
+    // The render itself clears a stopped render's folder.
+    await withRealRenders(async () => {
+      await themeEditSet('t', 'corners', 'small', {cwd});
+      await themeEditUndo('t', {cwd});
+    });
     expect(fs.existsSync(left)).toBe(false);
   }, 240_000);
 

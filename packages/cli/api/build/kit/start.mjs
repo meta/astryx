@@ -31,16 +31,17 @@ const FALLBACK_STARTS = ['shell-top-nav', 'blank'];
 
 /**
  * A page template as the kit names it: the command that selects exactly that
- * template, scaffolding into `<path>`, a placeholder for the file or folder to
- * write it to.
+ * template and scaffolds it to `to`, or to the `<path>` placeholder when no
+ * path is known.
  * @param {PageTemplate} t
+ * @param {string | null} [to] the path, quoted for a shell
  */
-export const asTemplate = t => ({
+export const asTemplate = (t, to = null) => ({
   name: t.name,
   package: t.package,
   displayName: t.displayName,
   description: t.description,
-  command: `${t.command} <path>`,
+  command: `${t.command} ${to ?? '<path>'}`,
 });
 
 /**
@@ -73,6 +74,16 @@ function placement(kind, inPage) {
 const LIFT = [
   -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
 ];
+
+/**
+ * The `start.fit` at and above which a page-template start is a clear choice.
+ * Below it, the pick model's start agrees with labeled build requests less
+ * than half the time; at and above it, more than half the time. A reader that
+ * acts on a start only when the choice is clear (theme preview adding a page,
+ * wording that calls a start a good fit) compares `start.fit` with this one
+ * value.
+ */
+export const CLEAR_FIT = 0.4;
 
 /** The decision replaces the shell with a page when p >= 0.30. */
 const LIFT_AT = 0.3;
@@ -123,8 +134,9 @@ function liftFromShell(ranked, kind, catalog, idea) {
  *
  * `direct` means two independent signals agree: the start is also search's
  * direct match. The ranker sees only ready templates, so a template
- * still marked not ready is never the start; when search matched one directly
- * the reason names it, so the reader knows why the kit starts elsewhere.
+ * still marked not ready is never the start; when the idea names one that
+ * search matched directly, the reason says it is not ready yet and where build
+ * started instead. A not-ready template the idea does not name is never named.
  *
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
@@ -132,16 +144,30 @@ function liftFromShell(ranked, kind, catalog, idea) {
  * @param {boolean} directMatch
  * @param {PageTemplate[]} catalog
  * @param {string} idea
- * @returns {Omit<BuildStart, 'alternatives'> | null}
+ * @param {(t: PageTemplate) => string | null} [placeOf] the path a template
+ *   is scaffolded to, quoted for a shell; null when none is known
+ * @param {string | null} [unready] a not-ready page template the idea names
+ *   and search matched directly; the reason says it is not ready yet
+ * @returns {Omit<BuildStart, 'alternatives' | 'isReady'> | null}
  */
-export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
+export function chooseStart(
+  ranked,
+  kind,
+  pages,
+  directMatch,
+  catalog,
+  idea,
+  placeOf = () => null,
+  unready = null,
+) {
   const direct = directMatch ? pages[0].name : null;
-  const unready =
-    direct && !catalog.some(t => t.name === direct) ? direct : null;
   // The reason never denies a match the same response reports: a direct
   // match the ranker outweighed is named, and so are the loose page matches
   // search listed when the kit falls back to the shell.
   const loose = pages.map(p => `\`${p.name}\``).join(', ');
+  /** @param {string} startName */
+  const notReady = startName =>
+    `\`${unready}\` isn't ready yet, so build started from \`${startName}\`.`;
   /**
    * A part's or an edit's reason, naming a direct match that is not the start.
    * @param {string} place
@@ -169,7 +195,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     weighed === undefined
       ? proposed
       : weighed === null
-        ? isAppShell(proposed) || (proposed && direct && !unready)
+        ? isAppShell(proposed) || (proposed && direct)
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
@@ -186,10 +212,10 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     const place =
       lifted || !pick ? null : placement(kind, pick.base && pick.familyNamed);
     return {
-      ...asTemplate(closest),
+      ...asTemplate(closest, placeOf(closest)),
       basis: agrees ? 'direct' : 'closest',
       reason: unready
-        ? `\`${unready}\` matches but is not ready yet; this is the closest ready template.`
+        ? notReady(closest.name)
         : place
           ? placed(place, closest.name)
           : agrees
@@ -209,10 +235,10 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
         (weighed === null && !!proposed && proposed.family !== 'Shell');
       const place = placement(kind, false);
       return {
-        ...asTemplate(shell),
+        ...asTemplate(shell, placeOf(shell)),
         basis: 'fallback',
         reason: unready
-          ? `\`${unready}\` matches but is not ready yet, so start from the app shell.`
+          ? notReady(shell.name)
           : place
             ? placed(place, shell.name)
             : direct
