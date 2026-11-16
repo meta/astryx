@@ -1715,6 +1715,38 @@ describe('extension semantics and built metadata', () => {
     ).toBe(weightWithoutScale.tokens['--text-heading-1-weight']);
   });
 
+  it("takes a numeric typography weight, written as its text, through an extended base's rules", () => {
+    const base = defineTheme({
+      name: 'numeric-weight-base',
+      typography: {scale: {base: 14, ratio: 1.25}},
+      adaptations: {
+        rules: [
+          {
+            when: {width: {from: 'lg'}},
+            value: {typography: {scale: {base: 18}}},
+          },
+        ],
+      },
+    });
+    const child = defineTheme({
+      name: 'numeric-weight-child',
+      extends: base,
+      typography: {
+        scale: {base: 16, ratio: 1.2},
+        heading: {weight: 700, weights: {2: 800}},
+        body: {weight: 450},
+      },
+    });
+
+    expect(child.tokens['--text-heading-1-weight']).toBe('700');
+    expect(child.tokens['--text-heading-2-weight']).toBe('800');
+    expect(child.tokens['--text-body-weight']).toBe('450');
+    const ruleTokens = child.__adaptationRules?.[0].tokens;
+    expect(ruleTokens?.['--text-heading-1-weight']).toBe('700');
+    expect(ruleTokens?.['--text-heading-2-weight']).toBe('800');
+    expect(ruleTokens?.['--text-body-weight']).toBe('450');
+  });
+
   it('ignores a child fallback that has no family, matching root resolution', () => {
     const base = defineTheme({
       name: 'fallback-only-base',
