@@ -40,6 +40,7 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {Table, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   BarChart,
   Bar,
@@ -783,6 +784,7 @@ function SectionHeading({title, hint}: {title: string; hint?: string}) {
 // ============= MAIN =============
 
 export default function FunnelCohortAnalyticsPage() {
+  const showToast = useToast();
   const [segment, setSegment] = useState<Segment>('all');
   const [funnelWindow, setFunnelWindow] = useState<FunnelWindow>('30d');
 
@@ -833,6 +835,13 @@ export default function FunnelCohortAnalyticsPage() {
                 label="Export"
                 variant="secondary"
                 icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: this funnel and cohort report would export here',
+                    uniqueID: 'export-funnel',
+                  })
+                }
               />
             </HStack>
           </HStack>

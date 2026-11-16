@@ -49,6 +49,7 @@ import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   BarChart,
   Bar,
@@ -571,6 +572,7 @@ function ProgramHeader({
   phase: Phase;
   onPhaseChange: (phase: Phase) => void;
 }) {
+  const showToast = useToast();
   return (
     <LayoutHeader padding={6} hasDivider>
       <HStack
@@ -612,6 +614,13 @@ function ProgramHeader({
             label="Export status"
             variant="secondary"
             icon={<Icon icon={ArrowDownTrayIcon} size="sm" />}
+            onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: 'Demo: the program status would export here',
+                uniqueID: 'export-status',
+              })
+            }
           />
         </HStack>
       </HStack>
