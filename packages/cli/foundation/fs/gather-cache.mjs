@@ -1088,7 +1088,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * system can store times as coarsely as 2 s, so a change within one tick of
  * the last can leave a stamp as it was.
  */
-const SUMMARY_SETTLE_MS = 2000;
+export const SUMMARY_SETTLE_MS = 2000;
 
 /**
  * Whether every stamp in `stamps` was taken longer than

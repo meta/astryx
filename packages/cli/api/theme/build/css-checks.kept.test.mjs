@@ -58,7 +58,7 @@ vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
       if (!reinstalled.now || !file.includes(`${path.sep}css-tree${path.sep}`))
         return stamp;
       const [size, , , ino] = stamp.split(':');
-      const at = performance.timeOrigin + 1;
+      const at = performance.timeOrigin - 1000;
       return `${size}:${at}:${at}:${ino}`;
     },
   };

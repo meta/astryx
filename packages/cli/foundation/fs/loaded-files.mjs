@@ -7,14 +7,14 @@
  * @output `loadedFiles(roots)`, every file in the require graph from
  *   `roots`; `loadedFileStamps(files)`, their stamps and whether each last
  *   changed before this process started.
- * @position For a kept answer worked out by a library (Babel's compile of a
- *   theme's local module, css-tree's checks of a theme's keys): its stamps
- *   name every file of the library's code, wherever it is installed, so a
- *   reinstall that changes any of them works the answer out again.
+ * @position For a kept answer a library works out: its stamps name every
+ *   file of the library's code, wherever it is installed, so a reinstall
+ *   that changes any of them works the answer out again.
  */
 
 import {createRequire} from 'node:module';
 import {performance} from 'node:perf_hooks';
+import {SUMMARY_SETTLE_MS} from './gather-cache.mjs';
 import {fileStamp} from './read-record.mjs';
 
 /**
@@ -47,7 +47,10 @@ export function loadedFiles(roots) {
  * @returns {{stamps: [string, string][], unchangedSinceStart: boolean}}
  */
 export function loadedFileStamps(files) {
-  const started = performance.timeOrigin;
+  // A file system can keep times as coarsely as the settle time, so a file
+  // counts as unchanged since the process started only when its times are
+  // older than the start by that much.
+  const started = performance.timeOrigin - SUMMARY_SETTLE_MS;
   /** @type {[string, string][]} */
   const stamps = files.map(file => [file, fileStamp(file)]);
   const unchangedSinceStart = stamps.every(([, stamp]) => {

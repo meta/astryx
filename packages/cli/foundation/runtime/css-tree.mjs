@@ -6,7 +6,8 @@
  * @input Nothing; css-tree is resolved once, here.
  * @output `cssTree`, the css-tree module, and `mdnCssProperties` and
  *   `mdnCssSelectors`, the MDN property and selector data at the version
- *   css-tree pins.
+ *   css-tree pins; `keptCssTreeAnswer`, an answer worked out with them and
+ *   kept between runs.
  * @position The one loader of css-tree, for the theme editor's CSS
  *   knowledge and the theme build's style-key checks. The entry is resolved
  *   before any command stats a file: after a stat of a named pipe, Node's
@@ -69,6 +70,7 @@ export function keptCssTreeAnswer(kind, inputs, answer) {
     [
       'css-tree-answer',
       kind,
+      CSS_TREE,
       createHash('sha256').update(JSON.stringify(inputs)).digest('hex'),
     ],
     () => {
