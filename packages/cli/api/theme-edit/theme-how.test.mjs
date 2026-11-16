@@ -2431,7 +2431,7 @@ const QUESTIONS_G = [
     'Times New Roman for headings, lol',
     {top: /^set q font 'Times New Roman' --on heading$/},
   ],
-  // Code blocks are Core's code-block part (hunt68).
+  // Code blocks are Core's code-block part.
   [
     'code blocks should use Menlo',
     {top: /^set q font-family Menlo --on code-block$/},
@@ -2712,7 +2712,7 @@ const QUESTIONS_H = [
   ['halve the spacing', {top: /^set q spacing less$/}],
   [
     'cut the border radius in half on inputs',
-    // Half the radius inputs have now (hunt61), not a dial step.
+    // Half the radius inputs have now, not a dial step.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on inputs$/},
   ],
   [
@@ -3245,7 +3245,7 @@ const QUESTIONS_J = [
   ],
   [
     'buttons twice as round as inputs',
-    // Twice the inputs' radius, on buttons only (hunt68).
+    // Twice the inputs' radius, on buttons only.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on button$/},
   ],
   [
@@ -3621,7 +3621,7 @@ describe('how answers final-8 questions', () => {
 });
 
 /**
- * Chaos-10 R10-C and O11: an amount with a comparative is a change from
+ * Chaos-10 -C and O11: an amount with a comparative is a change from
  * the value now, and "all corners like the buttons" copies their radius.
  * @type {Array<[string, RegExp | null, RegExp?]>}
  */

@@ -1730,7 +1730,7 @@ describe('colors and type, final checks', () => {
   });
 });
 
-describe('chaos round 4', () => {
+describe('cases', () => {
   it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
     for (const v of ['serif !important', 'Foo /* x */']) {
       const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
@@ -2666,7 +2666,7 @@ describe('colors17', () => {
   });
 });
 
-describe('hunt22', () => {
+describe('cases', () => {
   it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
     await themeEditNew('h22', {cwd, mode: 'dark-only'});
     const fresh = await refusal(() =>
