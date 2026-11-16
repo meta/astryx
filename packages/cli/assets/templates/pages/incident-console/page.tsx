@@ -661,6 +661,7 @@ export default function IncidentConsolePage() {
             <LayoutPanel
               width={inspectorPanel.size}
               padding={0}
+              role="complementary"
               label="Incident details">
               {inspector ?? (
                 <EmptyState
