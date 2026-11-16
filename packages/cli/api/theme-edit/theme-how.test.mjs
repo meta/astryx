@@ -210,9 +210,10 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      // The title and items inside read the text tokens themselves.
-      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
-      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
+      // The title and items inside read the text tokens themselves; white
+      // reads on the header in dark mode only (it is light in light mode).
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header --mode dark/,
+      adds: /app-shell-header\.base\.@dark\.--color-text-primary=#ffffff/,
     },
   ],
   [
