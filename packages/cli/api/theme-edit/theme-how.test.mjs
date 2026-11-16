@@ -52,6 +52,16 @@ afterAll(() => {
 });
 
 /** A command without the CLI prefix: `set q corners more --on button`. @param {string} c */
+/**
+ * A page answer carries the frame and main panel lines after the page
+ * token: these questions read the page token itself.
+ * @param {string[]} cmds
+ */
+const pageToken = cmds =>
+  cmds.some(x => / --color-background-body /.test(x))
+    ? cmds.filter(c => !/ --on (?:app-shell|layout-content)(?: |$)/.test(c))
+    : cmds;
+
 const bare = c => c.replace(/^.*? experimental theme (editor )?/, '');
 
 /** The words of a command, as a shell splits them. @param {string} c */
@@ -905,7 +915,9 @@ describe('how answers plain-words questions', () => {
       }
       const top = changes[0];
       expect(top).toBeTruthy();
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -1532,7 +1544,9 @@ describe('how answers pass-2 questions', () => {
       // The change comes before any lookup.
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -1636,7 +1650,9 @@ describe('how answers pass-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -1946,7 +1962,9 @@ describe('how answers pass-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2022,7 +2040,9 @@ describe('how answers pass-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2287,7 +2307,9 @@ describe('how answers final-pass questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2390,7 +2412,9 @@ describe('how answers final-pass questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2620,7 +2644,9 @@ describe('how answers final-2 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2720,7 +2746,9 @@ describe('how answers final-2 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -2922,7 +2950,9 @@ describe('how answers final-3 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -2990,7 +3020,9 @@ describe('how answers final-3 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -3172,7 +3204,9 @@ describe('how answers final-4 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3256,7 +3290,9 @@ describe('how answers final-4 questions', () => {
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       const before = css();
       for (const c of commands) {
         const [, theme, thing, ...rest] = words(bare(c));
@@ -3403,7 +3439,9 @@ describe('how answers final-5 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3487,7 +3525,9 @@ describe('how answers final-6 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         typeof want.top === 'function' ? want.top() : want.top,
       );
@@ -3531,7 +3571,9 @@ describe('how answers final-6 lows', () => {
         ),
       );
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(
         /** @type {RegExp} */ (want),
       );
@@ -3659,7 +3701,9 @@ describe('how answers final-7 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3720,7 +3764,9 @@ describe('how answers final-8 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -3794,7 +3840,9 @@ describe('how answers amounts with comparatives, and corners copied from a part'
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3874,7 +3922,9 @@ describe('how answers final-9 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -3991,7 +4041,9 @@ describe('how answers final-10 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -4099,7 +4151,9 @@ describe('how answers final-11 questions', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 
@@ -4229,7 +4283,9 @@ describe('how writes only for a direct ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4345,7 +4401,9 @@ describe('how writes only for a clause that reads as an ask', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
@@ -4416,7 +4474,9 @@ describe('how answers final-14 fixes', () => {
         return;
       }
       const top = changes[0];
-      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const commands = pageToken(
+        top.sequence ? top.commands : [top.commands[0]],
+      );
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
