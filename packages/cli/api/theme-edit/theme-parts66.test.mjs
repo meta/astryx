@@ -169,7 +169,9 @@ describe('rings, borders and dots in one mode or for all', () => {
     expect(
       (await top('make the button border red in dark mode', 'b')).commands,
     ).toEqual([
-      "set b border '1px solid light-dark(transparent, #dc2626)' --on button",
+      // (A ring at its edge, which takes no room: a border would take its
+      // width in the other mode too.)
+      "set b box-shadow 'inset 0 0 0 1px light-dark(transparent, #dc2626)' --on button --when elevation:none",
     ]);
   }, 240_000);
 

@@ -46,7 +46,7 @@ const needBases = ctx => {
 };
 
 describe('text on a gradient', () => {
-  it('is measured at each color stop, the worst counting', async ctx => {
+  it('is measured where the text sits on a linear gradient, and at each stop of any other', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r', {cwd, like: 'neutral'});
     const r = await themeEditSet(
@@ -57,7 +57,16 @@ describe('text on a gradient', () => {
     );
     const problems = /** @type {string[]} */ (r.data.problems ?? []).join('\n');
     expect(problems).toMatch(
-      /text in top-nav-item .* on app-shell-header's #[0-9a-f]{6}, a stop of its gradient/,
+      /text in top-nav-item .* on app-shell-header's rgba\(\d+, \d+, \d+, 1\), its gradient where the text sits/,
+    );
+    const c = await themeEditSet(
+      'r',
+      'background',
+      'conic-gradient(#0a58e8, #3a93ff, #0a58e8)',
+      {cwd, on: 'app-shell-header'},
+    );
+    expect(/** @type {string[]} */ (c.data.problems ?? []).join('\n')).toMatch(
+      /a stop of its gradient/,
     );
     expect(problems).not.toMatch(/not checked/);
   }, 240_000);

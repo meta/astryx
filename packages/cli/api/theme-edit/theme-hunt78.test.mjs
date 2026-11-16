@@ -485,7 +485,9 @@ describe('"like" and "as" compare only in comparison forms', () => {
     /** @type {Array<[string, string, string]>} */ ([
       // Comparisons: the subject changes, the other part never.
       ['cards as round as buttons', 'card', 'button'],
-      ['make cards as round as dialogs', 'card', 'dialog'],
+      // (Cards and dialogs read the same corner token, so "as round as
+      // dialogs" changes nothing; badges read their own.)
+      ['make badges as round as dialogs', 'badge', 'dialog'],
       ['dialogs the same padding as cards', 'dialog', 'card'],
       ['make badges rounded like buttons', 'badge', 'button'],
       ['make cards round like the dialogs are', 'card', 'dialog'],

@@ -344,6 +344,58 @@ function textBox(el) {
 }
 
 /**
+ * Make this document's inline styles keep a custom property's name as it
+ * is written: CSS custom properties are case-sensitive, and React sets a
+ * StyleX dynamic style (`--x-aspectRatio`) with `style.setProperty`, which
+ * linkedom's style object hyphenates (`--x-aspect-ratio`) like a standard
+ * property, so no rule would read it. The style text itself keeps the name.
+ * @param {any} document
+ */
+function keepCustomPropertyNames(document) {
+  const proto = Object.getPrototypeOf(document.createElement('div').style);
+  if (!proto || proto.__keepsCustomNames) return;
+  const {setProperty, getPropertyValue, removeProperty} = proto;
+  /** The declarations of a style text but one name. @param {string} text @param {string} name */
+  const without = (text, name) =>
+    text
+      .split(';')
+      .filter(
+        rule => rule.trim() && rule.slice(0, rule.indexOf(':')).trim() !== name,
+      );
+  Object.defineProperties(proto, {
+    __keepsCustomNames: {value: true},
+    setProperty: {
+      value(/** @type {string} */ name, /** @type {unknown} */ value) {
+        if (!String(name).startsWith('--'))
+          return setProperty.call(this, name, value);
+        const rules = without(this.cssText, name);
+        if (value != null && value !== '') rules.push(`${name}:${value}`);
+        this.cssText = rules.join(';');
+      },
+    },
+    removeProperty: {
+      value(/** @type {string} */ name) {
+        if (!String(name).startsWith('--'))
+          return removeProperty.call(this, name);
+        const was = this.getPropertyValue(name);
+        this.cssText = without(this.cssText, name).join(';');
+        return was;
+      },
+    },
+    getPropertyValue: {
+      value(/** @type {string} */ name) {
+        if (!String(name).startsWith('--'))
+          return getPropertyValue.call(this, name);
+        const rule = String(this.cssText)
+          .split(';')
+          .find(r => r.slice(0, r.indexOf(':')).trim() === name);
+        return rule ? rule.slice(rule.indexOf(':') + 1).trim() : '';
+      },
+    },
+  });
+}
+
+/**
  * Give this thread the small document a chart draws in: no layout, no
  * motion, and no frames to wait for.
  * @returns {Promise<void>}
@@ -351,6 +403,7 @@ function textBox(el) {
 export async function chartDocument() {
   const {parseHTML} = await import('linkedom');
   const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+  keepCustomPropertyNames(window.document);
   const g = /** @type {any} */ (globalThis);
   const quiet = () => ({
     matches: true,

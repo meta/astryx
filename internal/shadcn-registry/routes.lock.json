@@ -5652,6 +5652,11 @@
       "aliases": []
     },
     {
+      "name": "template-run-console",
+      "path": "templates/run-console",
+      "aliases": []
+    },
+    {
       "name": "template-settings",
       "path": "templates/settings",
       "aliases": []

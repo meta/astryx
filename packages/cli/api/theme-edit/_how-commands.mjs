@@ -46,6 +46,9 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {string} [state]
  * @property {string} [mode]
  * @property {boolean} [only] the one member of a group, not the group
+ * @property {boolean} [keeps] writes a look back as it shows it now (a
+ *   status Core draws its own way): an except of that look never leaves
+ *   it out, as it is what keeps the look
  */
 
 /**
@@ -949,6 +952,113 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         inherited.dark === v.dark
       )
         continue;
+      // A look kept with no rule of its own under its condition is held to
+      // what the part drew under it before, in any of its looks (Core
+      // writes the condition beside the variant and size): measured as
+      // drawn, never as stored.
+      const condOf = k.split('|')[0].replace(':', '=');
+      const drawnUnder = (/** @type {string} */ x) =>
+        [...a.entries()].find(([k2]) => {
+          const [w2, st2, p2] = k2.split('|');
+          return (
+            !st2 &&
+            p2 === x &&
+            w2.replace(/:/g, '=').split(/[\s,]/).includes(condOf)
+          );
+        })?.[1];
+      if (!o && k.split('|')[0] !== 'base' && !k.split('|')[1]) {
+        const was = drawnUnder(prop0);
+        if (was && was.light === v.light && was.dark === v.dark) continue;
+        // (A type property the look never set draws what it inherits, the
+        // body's: a pin of the body's value keeps it as it drew.)
+        const BODY = /** @type {Record<string, string>} */ ({
+          'font-weight': '--text-body-weight',
+          'font-family': '--font-family-body',
+          'font-size': '--text-body-size',
+          'line-height': '--text-body-line-height',
+        });
+        const bodyTok = BODY[prop0];
+        if (!was && !a.get(`base||${prop0}`) && bodyTok) {
+          const inh = (/** @type {'light' | 'dark'} */ m) =>
+            resolveIn(`var(${bodyTok})`, tw[m], m);
+          const same = (/** @type {'light' | 'dark'} */ m) => {
+            const x = String(inh(m) ?? '').trim();
+            return x !== '' && !/^var\(/.test(x) && x === String(v[m]).trim();
+          };
+          if (same('light') && same('dark')) continue;
+        }
+      }
+      // A border color on a look that draws no border (no width there, as
+      // a date input's own box, whose field draws the line) shows nothing.
+      if (!o && /^border(?:-(?:top|right|bottom|left))?-color$/.test(prop0)) {
+        const when0 = k.split('|')[0];
+        const width =
+          b.get(`${when0}||border-width`) ?? b.get('base||border-width');
+        if (
+          !width ||
+          (lineStrength('border-width', width.light) === 0 &&
+            lineStrength('border-width', width.dark) === 0)
+        )
+          continue;
+      }
+      // A border shorthand written back on a kept look is held to the
+      // longhands it showed before: its width and color, in each mode.
+      if (!o && /^border(?:-(?:top|right|bottom|left))?$/.test(prop0)) {
+        const when0 = k.split('|')[0];
+        // (Read under that condition in any look of the part: Core writes
+        // it with the variant and size beside it.)
+        const underCond = drawnUnder;
+        const long = (/** @type {string} */ x) =>
+          a.get(`${when0}||${prop0}-${x}`) ??
+          a.get(`${when0}||border-${x}`) ??
+          underCond(`${prop0}-${x}`) ??
+          underCond(`border-${x}`) ??
+          a.get(`base||${prop0}-${x}`) ??
+          a.get(`base||border-${x}`);
+        const w0 = long('width');
+        const c0 = long('color');
+        const same = (/** @type {'light' | 'dark'} */ m) => {
+          const parts = splitTop(v[m], ' ').filter(Boolean);
+          const w = parts.find(x =>
+            /^-?\d*\.?\d+(?:px|rem|em)?$|^(?:thin|medium|thick)$/.test(x),
+          );
+          const c = parts
+            .filter(
+              x =>
+                x !== w &&
+                !/^(?:solid|dashed|dotted|double|none|hidden)$/.test(x),
+            )
+            .join(' ');
+          return (
+            w0 != null &&
+            c0 != null &&
+            lineStrength('border-width', w ?? '') ===
+              lineStrength('border-width', w0[m]) &&
+            c === c0[m]
+          );
+        };
+        // (The same width and the same color token, written as Core
+        // writes them, draw the same: the token takes the value its scope
+        // gives it under the condition.)
+        const rawParts = splitTop(String(v.raw ?? ''), ' ').filter(Boolean);
+        const widthOf = (/** @type {'light' | 'dark'} */ m) =>
+          splitTop(v[m], ' ').find(x =>
+            /^-?\d*\.?\d+(?:px|rem|em)?$|^(?:thin|medium|thick)$/.test(x),
+          ) ?? '';
+        const sameRaw =
+          w0 != null &&
+          c0?.raw != null &&
+          ['light', 'dark'].every(
+            m =>
+              lineStrength('border-width', widthOf(/** @type {any} */ (m))) ===
+              lineStrength(
+                'border-width',
+                w0[/** @type {'light' | 'dark'} */ (m)],
+              ),
+          ) &&
+          rawParts.includes(String(c0.raw).trim());
+        if (sameRaw || (same('light') && same('dark'))) continue;
+      }
       if (!o)
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
       if (

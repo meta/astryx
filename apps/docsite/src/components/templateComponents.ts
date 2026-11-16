@@ -100,6 +100,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/product-gallery/page'),
   'review-workspace': () =>
     import('../../../../packages/cli/assets/templates/pages/review-workspace/page'),
+  'run-console': () =>
+    import('../../../../packages/cli/assets/templates/pages/run-console/page'),
   settings: () =>
     import('../../../../packages/cli/assets/templates/pages/settings/page'),
   'settings-dialog': () =>
