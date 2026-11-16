@@ -4,7 +4,7 @@
  * @file The debug preload gate and integrations no config lists. An
  * installed dependency that ships an integration manifest loads whatever
  * astryx.config says, so a `debug` handler it exports receives every run,
- * parse errors and `--version` included, with or without a config. A config
+ * `--version` included, with or without a config. A config
  * that names neither `debug` nor `integrations` then prints no warning about
  * a missed handler. The real bin runs in a child process, since the gate
  * runs before the command parser.
@@ -67,10 +67,9 @@ const received = () =>
     : [];
 
 describe('the debug preload gate with an autolinked integration', () => {
-  it('records --version and a parse error with no config', () => {
+  it('records --version with no config', () => {
     expect(run(['--version']).status).toBe(0);
-    expect(run(['no-such-command']).status).not.toBe(0);
-    expect(received()).toHaveLength(2);
+    expect(received()).toEqual(['0']);
   });
 
   it('records every run and warns of nothing when the config names neither word', () => {

@@ -212,6 +212,74 @@ describe('astryx experimental icon with no icon set installed', () => {
   });
 });
 
+describe('astryx experimental icon when every installed set is withdrawn', () => {
+  /** @type {string} */
+  let withdrawnOnly;
+  beforeEach(() => {
+    withdrawnOnly = writeIconSetProject(path.join(tmp, 'withdrawn'), {
+      packages: [{data: '{nope'}],
+    });
+  });
+
+  it('answers no match and points at --list, never "no icon set is installed"', async () => {
+    const res = await runCli(['experimental', 'icon', 'close'], withdrawnOnly);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain('No icons match "close".');
+    expect(res.stdout).toContain('icon --list');
+    expect(res.stdout).not.toContain('No icon set is installed');
+    expect(res.stdout).not.toContain('Install a package');
+    const json = JSON.parse(
+      (await runCli(['experimental', 'icon', 'close', '--json'], withdrawnOnly))
+        .stdout,
+    );
+    expect(json.data).toEqual({query: 'close', matchCount: 0, matches: []});
+  });
+
+  it('--list names the withdrawal reason and no install step', async () => {
+    const res = await runCli(['experimental', 'icon', '--list'], withdrawnOnly);
+    expect(res.code).toBe(0);
+    expect(res.stdout).toContain('Withdrawn');
+    expect(res.stdout).toContain('@acme/glyphs/glyphs: ');
+    expect(res.stdout).not.toContain('[next]');
+    expect(res.stdout).not.toContain('Install a package');
+    const json = JSON.parse(
+      (
+        await runCli(
+          ['experimental', 'icon', '--list', '--json'],
+          withdrawnOnly,
+        )
+      ).stdout,
+    );
+    expect(json.data).not.toHaveProperty('next');
+    expect(json.data.withdrawn).toHaveLength(1);
+  });
+
+  it('use with another name points at --list; use with the withdrawn set says why', async () => {
+    const other = await runCli(
+      ['experimental', 'icon', 'use', 'other', '--json'],
+      withdrawnOnly,
+    );
+    expect(other.code).toBe(1);
+    expect(JSON.parse(other.stdout)).toMatchObject({
+      code: 'ERR_NOT_FOUND',
+      error: 'No installed icon set named "other"',
+      suggestions: [
+        {
+          name: 'astryx experimental icon --list',
+          reason: 'why each installed set is withdrawn',
+        },
+      ],
+    });
+    const named = await runCli(
+      ['experimental', 'icon', 'use', 'glyphs', '--json'],
+      withdrawnOnly,
+    );
+    expect(JSON.parse(named.stdout).error).toMatch(
+      /Icon set "glyphs" is installed but withdrawn: /u,
+    );
+  });
+});
+
 describe('astryx experimental icon in the look the project picks', () => {
   /** @type {string} */
   let solid;

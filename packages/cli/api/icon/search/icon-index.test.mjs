@@ -131,6 +131,33 @@ describe('rankIconIndex answers as icon() does where the index was made', () => 
     }
   });
 
+  it('with no set installed, and with only a withdrawn set', async () => {
+    for (const packages of [[], [{data: '{nope'}]]) {
+      const cwd = writeIconSetProject(tmp, {packages});
+      const index = JSON.parse(JSON.stringify(await exportIconIndex({cwd})));
+      for (const query of ['close', 'delete', 'chevron down', 'zebra']) {
+        expect(await rankIconIndex(query, index), query).toEqual(
+          await icon(query, {cwd}),
+        );
+      }
+      const answer = await rankIconIndex('close', index);
+      if (packages.length === 0) {
+        expect(answer.data).toMatchObject({
+          reason: 'No icon set is installed.',
+          definitions: [{name: 'close', builtIn: true}],
+        });
+      } else {
+        expect(answer.data).toEqual({
+          query: 'close',
+          matchCount: 0,
+          matches: [],
+        });
+      }
+      fs.rmSync(tmp, {recursive: true, force: true});
+      fs.mkdirSync(tmp);
+    }
+  });
+
   it('with `set` and `limit`, and with the errors icon() gives', async () => {
     const cwd = multiSetProject();
     for (const [query, options] of /** @type {Array<[string, object]>} */ ([

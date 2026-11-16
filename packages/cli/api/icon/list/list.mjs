@@ -48,7 +48,7 @@ export async function iconList({cwd}) {
         ? {
             next: `${sets.length} icon sets are installed and none is your main set: run \`${ICON_USE_ORDER_COMMAND}\`.`,
           }
-        : sets.length === 0
+        : sets.length === 0 && withdrawn.length === 0
           ? {next: NO_ICON_SET_NEXT}
           : {}),
       sets: sets.map(set => {

@@ -91,9 +91,9 @@ export function projectLooks(choice) {
 /**
  * Rank the icons of `sets` against a query: the one ranking behind both
  * `icon()` and `rankIconIndex()`. Each match's import draws the look `looks`
- * names for its set when its icon has that look. With no set to search, the
- * answer names the Astryx icon definitions that match, built-in ones first,
- * and how to get a set.
+ * names for its set when its icon has that look. With no set installed, not
+ * even a withdrawn one, the answer names the Astryx icon definitions that
+ * match, built-in ones first, and how to get a set.
  * @param {Parameters<typeof rankIcons>[0]} sets in tie order
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} query
@@ -107,7 +107,10 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
     searched = setsNamed(sets, set);
     if (searched.length === 0) throw unusableSet(sets, withdrawn, set);
   }
-  if (sets.length === 0) return noIconSet(query, limit);
+  // A withdrawn set is installed: `--list` says why it cannot be used.
+  if (sets.length === 0 && withdrawn.length === 0) {
+    return noIconSet(query, limit);
+  }
   const ranked = rankIcons(searched, query);
   // A word start (`start` for `star`) answers only when nothing matches a
   // whole word, and a partial match (`pin` inside `shopping`) only when

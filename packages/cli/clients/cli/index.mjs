@@ -16,8 +16,15 @@ import {Command, Help, Option} from 'commander';
 import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
+import {
+  formatCliCommand,
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
+import {
+  hasRecordedProject,
+  recordDeclaredCliCommands,
+} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
   mayHaveIntegrations,
@@ -26,7 +33,13 @@ import {
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
-import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
+import {
+  cliInstallAdvice,
+  installFolder,
+  projectRelease,
+  SETUP_REMINDER_KEY,
+  takeNotice,
+} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest, storedManifest} from './lib/manifest.mjs';
 import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
@@ -66,7 +79,9 @@ import {scanRootArgs} from './lib/root-args.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Read version from package.json so it stays in sync
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'),
+);
 
 // Start the debug recorder before anything can exit. Allocation only — no
 // filesystem, no environment probe, no config — and it must run ahead of the
@@ -97,7 +112,18 @@ export function handleVersionJsonPreflight(argv = process.argv.slice(2)) {
   // reports the same shape Commander's own `--version` path does.
   debug.recordCommandResult(debug.NO_RESULT_SET);
   debug.setOutcome('ok', {exitCode: 0});
-  console.log(JSON.stringify({apiVersion: API_VERSION, type: 'version', data: {version: pkg.version}, meta: {answeredBy: answeredBy()}}, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        apiVersion: API_VERSION,
+        type: 'version',
+        data: {version: pkg.version},
+        meta: {answeredBy: answeredBy()},
+      },
+      null,
+      2,
+    ),
+  );
   process.exit(0);
 }
 
@@ -185,9 +211,11 @@ export const JSON_SUPPORTED = new Set([
  * commands did neither: running a project's own code on `astryx --version`,
  * for a project that never asked for any of this, is not a cost the feature
  * gets to impose. So the file is read as text first and only loaded if it
- * mentions something that could produce a handler. A project with no config
- * pays one `existsSync` walk; a project with a config that mentions neither
- * pays one small `readFile`.
+ * mentions something that could produce a handler, or the project carries an
+ * integration that no config lists (below). A run that loads nothing pays
+ * one `existsSync` walk for the config, one small `readFile` when there is
+ * one, and the file checks for an integration manifest: one in the project
+ * root and one in each declared dependency that is installed.
  *
  * TWO words open the gate, because there are two places a handler can come
  * from. `debug` is the project's own. `integrations` is the other: an
@@ -202,14 +230,17 @@ export const JSON_SUPPORTED = new Set([
  * An integration no config lists loads too: the project itself, or an
  * installed dependency that ships a manifest (autolinked). Where the project
  * carries one, the gate opens with no config or whatever the config says,
- * from the same file checks that decide the load before each command. Otherwise a config with neither word, such as
- * one a CLI command creates, would report a missed handler that every
- * command records anyway.
+ * from the same file checks that decide the load before each command.
+ * Otherwise `--version` would miss its handler, and a config with neither
+ * word, such as one a CLI command creates, would report a missed handler
+ * that every project-loading command records anyway.
  *
- * Measured cost of that second word, on an integration whose manifest is
+ * Measured cost of an open gate, on an integration whose manifest is
  * TypeScript (the expensive case — jiti): ~50ms added to `astryx --version`,
  * and nothing at all to a command that was going to load the project anyway.
- * It is paid only by projects that declare integrations.
+ * It is paid only by projects that name `debug` or `integrations` in their
+ * config, or that carry an integration: the projects whose commands load it
+ * before each action already.
  *
  * The text test is deliberately loose — any occurrence, comments included —
  * because a false positive costs one config load the CLI used to do anyway,
@@ -262,9 +293,13 @@ async function loadProjectOnce() {
  * @returns {string | undefined}
  */
 function firstOperand(argv, program) {
-  return scanRootArgs(argv, program?.options ?? [{long: '--base', required: true}], {
-    unknown: 'skip',
-  }).operand;
+  return scanRootArgs(
+    argv,
+    program?.options ?? [{long: '--base', required: true}],
+    {
+      unknown: 'skip',
+    },
+  ).operand;
 }
 
 /**
@@ -283,9 +318,14 @@ function firstOperand(argv, program) {
  *   which of its options take a value
  * @returns {Promise<void>}
  */
-export async function loadProjectForHelp(argv = process.argv.slice(2), program) {
+export async function loadProjectForHelp(
+  argv = process.argv.slice(2),
+  program,
+) {
   const help =
-    argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help';
+    argv.includes('--help') ||
+    argv.includes('-h') ||
+    firstOperand(argv, program) === 'help';
   if (!help) return;
   try {
     const cwd = process.cwd();
@@ -311,9 +351,14 @@ export async function loadProjectForHelp(argv = process.argv.slice(2), program) 
  *   which of its options take a value
  * @returns {Promise<void>}
  */
-export async function refuseHelpWithoutBase(argv = process.argv.slice(2), program) {
+export async function refuseHelpWithoutBase(
+  argv = process.argv.slice(2),
+  program,
+) {
   const help =
-    argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help';
+    argv.includes('--help') ||
+    argv.includes('-h') ||
+    firstOperand(argv, program) === 'help';
   if (!help) return;
   const {runBase} = await import('../../foundation/bases/resolve.mjs');
   const resolution = runBase();
@@ -396,18 +441,46 @@ function captureInvocation(actionCommand, root) {
  */
 const commands = [
   {name: 'init', path: './commands/init.mjs', register: 'registerInit'},
-  {name: 'component', path: './commands/component.mjs', register: 'registerComponent'},
+  {
+    name: 'component',
+    path: './commands/component.mjs',
+    register: 'registerComponent',
+  },
   {name: 'docs', path: './commands/docs.mjs', register: 'registerDocs'},
   {name: 'blog', path: './commands/blog.mjs', register: 'registerBlog'},
-  {name: 'swizzle', path: './commands/swizzle.mjs', register: 'registerSwizzle'},
-  {name: 'gap-report', path: './commands/gap-report.mjs', register: 'registerGapReport'},
+  {
+    name: 'swizzle',
+    path: './commands/swizzle.mjs',
+    register: 'registerSwizzle',
+  },
+  {
+    name: 'gap-report',
+    path: './commands/gap-report.mjs',
+    register: 'registerGapReport',
+  },
   // agent-docs folded into init — functions still importable from agent-docs.mjs
-  {name: 'template', path: './commands/template.mjs', register: 'registerTemplate'},
-  {name: 'upgrade', path: './commands/upgrade.mjs', register: 'registerUpgrade'},
+  {
+    name: 'template',
+    path: './commands/template.mjs',
+    register: 'registerTemplate',
+  },
+  {
+    name: 'upgrade',
+    path: './commands/upgrade.mjs',
+    register: 'registerUpgrade',
+  },
   {name: 'theme', path: './commands/theme.mjs', register: 'registerTheme'},
-  {name: 'integration', path: './commands/integration.mjs', register: 'registerIntegration'},
+  {
+    name: 'integration',
+    path: './commands/integration.mjs',
+    register: 'registerIntegration',
+  },
   {name: 'hook', path: './commands/hook.mjs', register: 'registerHook'},
-  {name: 'discover', path: './commands/discover.mjs', register: 'registerDiscover'},
+  {
+    name: 'discover',
+    path: './commands/discover.mjs',
+    register: 'registerDiscover',
+  },
   {name: 'search', path: './commands/search.mjs', register: 'registerSearch'},
   {name: 'build', path: './commands/build.mjs', register: 'registerBuild'},
   {name: 'doctor', path: './commands/doctor.mjs', register: 'registerDoctor'},
@@ -420,8 +493,16 @@ const commands = [
   },
   // Registered after every other command: the manifest lists the commands in
   // registration order.
-  {name: 'manifest', path: './commands/manifest.mjs', register: 'registerManifest'},
-  {name: 'postinstall', path: './commands/postinstall.mjs', register: 'registerPostinstall'},
+  {
+    name: 'manifest',
+    path: './commands/manifest.mjs',
+    register: 'registerManifest',
+  },
+  {
+    name: 'postinstall',
+    path: './commands/postinstall.mjs',
+    register: 'registerPostinstall',
+  },
 ];
 
 /** The name each registry entry registers, in registration order. */
@@ -453,7 +534,8 @@ export function commandsForArgs(program, argv) {
   const arg = scan.operand;
   if (arg != null) {
     return commands.some(cmd => cmd.name === arg) &&
-      (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
+      (!READS_EVERY_COMMAND.has(arg) ||
+        (arg === 'manifest' && storedManifest() != null))
       ? new Set([arg])
       : null;
   }
@@ -497,7 +579,10 @@ export function resolveDeepHelp(program) {
  * so the published package prints its root help without loading every
  * command. A checkout has none and loads them.
  */
-export const COMMAND_LIST_FILE = path.join(__dirname, 'commands.generated.json');
+export const COMMAND_LIST_FILE = path.join(
+  __dirname,
+  'commands.generated.json',
+);
 
 /**
  * Whether a run only prints the root help: `--help`, `-h` or `help`, alone.
@@ -514,9 +599,8 @@ function printsRootHelp(argv) {
  * @returns {Promise<boolean>}
  */
 async function readsCore() {
-  const {runBase, requestedBase} = await import(
-    '../../foundation/bases/resolve.mjs'
-  );
+  const {runBase, requestedBase} =
+    await import('../../foundation/bases/resolve.mjs');
   const {CORE_BASE_NAME} = await import('../../foundation/bases/core.mjs');
   // A base is an integration, so where none can load, and no --base names
   // another, the run reads Core with no project load.
@@ -590,7 +674,9 @@ function inOwnSourceCheckout(cwd) {
     checkout = parent;
   }
   const rel = path.relative(checkout, path.resolve(cwd));
-  return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+  return (
+    rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel)
+  );
 }
 /** An integration package's manifest: the package is not an app to set up. */
 const INTEGRATION_MANIFEST_FILES = [
@@ -620,7 +706,7 @@ export async function createProgram({argv} = {}) {
   // plain, unwrapped, width-independent output. Set before subcommands are
   // registered so they inherit it via copyInheritedSettings.
   // Help lists only the commands and options the run's base serves.
-  program.configureHelp({wrap: (str) => str, ...baseHelpSettings()});
+  program.configureHelp({wrap: str => str, ...baseHelpSettings()});
 
   // Document the text-output contract in --help so agents know how to parse/grep
   // it (and when to reach for --json instead). Kept in sync with the formatter
@@ -628,7 +714,8 @@ export async function createProgram({argv} = {}) {
   program.addHelpText(
     'after',
     // A function, so the example names the invocation when help is printed.
-    () => '\n' +
+    () =>
+      '\n' +
       [
         section(
           'Output format',
@@ -638,15 +725,24 @@ export async function createProgram({argv} = {}) {
           [
             {
               block: 'Record',
-              shape: 'aligned "key: value" lines = one item; records separated by a blank line',
+              shape:
+                'aligned "key: value" lines = one item; records separated by a blank line',
             },
             {
               block: 'Section',
-              shape: 'a header line (no "key:"), optional one-line subtitle, then its records/list',
+              shape:
+                'a header line (no "key:"), optional one-line subtitle, then its records/list',
             },
-            {block: 'List', shape: '"- value" lines for a simple sequence of values'},
+            {
+              block: 'List',
+              shape: '"- value" lines for a simple sequence of values',
+            },
             {block: 'Text', shape: 'free-form prose / notes'},
-            {block: 'Code', shape: 'a verbatim block (source, skeleton, or doc), emitted exactly'},
+            {
+              block: 'Code',
+              shape:
+                'a verbatim block (source, skeleton, or doc), emitted exactly',
+            },
           ],
           {fields: ['block', 'shape']},
         ),
@@ -689,7 +785,10 @@ export async function createProgram({argv} = {}) {
       '--zh',
       'Simplified Chinese for component reads and for docs topics that have a translation (English otherwise)',
     )
-    .option('--dense', 'Token-efficient dense text for component <Name> and docs <topic> reads')
+    .option(
+      '--dense',
+      'Token-efficient dense text for component <Name> and docs <topic> reads',
+    )
     .addOption(
       new Option(
         '--lang <locale>',
@@ -725,8 +824,13 @@ export async function createProgram({argv} = {}) {
       // none of the registered subcommands matched.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
-        const {findEntry, unknownCommandAnswer} = await import('./lib/unknown-command.mjs');
-        const answer = await unknownCommandAnswer(program, process.argv.slice(2), {findEntry});
+        const {findEntry, unknownCommandAnswer} =
+          await import('./lib/unknown-command.mjs');
+        const answer = await unknownCommandAnswer(
+          program,
+          process.argv.slice(2),
+          {findEntry},
+        );
         const unknown = String(extras[0]);
         cliError(answer?.message ?? `unknown command '${unknown}'`, {
           suggestions: answer?.suggestions,
@@ -758,20 +862,26 @@ export async function createProgram({argv} = {}) {
           jsonSupported: JSON_SUPPORTED,
           version: pkg.version,
         });
-        console.log(JSON.stringify({
-          apiVersion: API_VERSION,
-          type: 'help',
-          data: {
-            name: manifest.name,
-            version: manifest.version,
-            // Original flat list of command names (string[]) — kept for compat.
-            commands: manifest.commands.map((c) => c.name),
-            jsonSupported: manifest.jsonSupported,
-            // Enriched, self-describing surface (the full manifest payload).
-            manifest,
-          },
-          meta: {answeredBy: answeredBy()},
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              apiVersion: API_VERSION,
+              type: 'help',
+              data: {
+                name: manifest.name,
+                version: manifest.version,
+                // Original flat list of command names (string[]) — kept for compat.
+                commands: manifest.commands.map(c => c.name),
+                jsonSupported: manifest.jsonSupported,
+                // Enriched, self-describing surface (the full manifest payload).
+                manifest,
+              },
+              meta: {answeredBy: answeredBy()},
+            },
+            null,
+            2,
+          ),
+        );
         debug.recordCommandResult(
           debug.resultSet({
             count: manifest.commands.length,
@@ -860,11 +970,17 @@ export async function createProgram({argv} = {}) {
       exitCode: 1,
       code: ERROR_CODES.ERR_INVALID_OPTION,
     });
-    console.log(JSON.stringify({
-      apiVersion: API_VERSION,
-      error: `JSON output is not supported for the '${fullName}' command`,
-      code: ERROR_CODES.ERR_INVALID_OPTION,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          apiVersion: API_VERSION,
+          error: `JSON output is not supported for the '${fullName}' command`,
+          code: ERROR_CODES.ERR_INVALID_OPTION,
+        },
+        null,
+        2,
+      ),
+    );
     process.exit(1);
   });
 
@@ -878,14 +994,20 @@ export async function createProgram({argv} = {}) {
     if (!program.opts().json) return;
     if (process.__xdsJsonHandled) return;
     const fullName = commandPath(actionCommand);
-    console.log(JSON.stringify({
-      apiVersion: API_VERSION,
-      error: `Internal: '${fullName}' completed without emitting a JSON envelope`,
-      // `code` always appears on an error envelope so consumers can branch on
-      // it unconditionally. This belt-and-suspenders path is an internal
-      // condition, so it uses the generic ERR_UNKNOWN.
-      code: ERROR_CODES.ERR_UNKNOWN,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          apiVersion: API_VERSION,
+          error: `Internal: '${fullName}' completed without emitting a JSON envelope`,
+          // `code` always appears on an error envelope so consumers can branch on
+          // it unconditionally. This belt-and-suspenders path is an internal
+          // condition, so it uses the generic ERR_UNKNOWN.
+          code: ERROR_CODES.ERR_UNKNOWN,
+        },
+        null,
+        2,
+      ),
+    );
     process.exit(1);
   });
 
@@ -960,7 +1082,8 @@ export async function createProgram({argv} = {}) {
       const reminder = setupReminder;
       setupReminder = null;
       if (reminder == null || process.exitCode || isCi(process.env)) return;
-      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
+      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`))
+        console.error(reminder.line);
     } catch {
       // Never let the nudge break a command.
     }
@@ -977,7 +1100,12 @@ export async function createProgram({argv} = {}) {
       // (spec AST-081 FR3).
       if (isOutsideProject(cwd)) return;
       // An integration package is not an app: `init` is not its next step.
-      if (INTEGRATION_MANIFEST_FILES.some(file => fs.existsSync(path.join(cwd, file)))) return;
+      if (
+        INTEGRATION_MANIFEST_FILES.some(file =>
+          fs.existsSync(path.join(cwd, file)),
+        )
+      )
+        return;
       if (inOwnSourceCheckout(cwd)) return; // developing Astryx itself, not an app
       if (isAstryxPromptInReach(cwd)) return; // already set up — stay quiet
       // Where init writes the docs, by init's own rule: the project root, which
@@ -1014,24 +1142,36 @@ export async function createProgram({argv} = {}) {
       if (target.moved) {
         remindSetup(
           target.dir,
-          setupNudge(getCliInvocation(target.dir, {release: projectRelease(target.dir)}), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
+          setupNudge(
+            getCliInvocation(target.dir, {release: projectRelease(target.dir)}),
+            {before: `cd ${quoteCommandArgument(target.dir)}`},
+          ).trimEnd(),
         );
         return;
       }
       const choice = runChoice(cwd);
-      if (choice.copy === 'starting' && choice.coreVersion && choice.coreVersion !== choice.version) {
+      if (
+        choice.copy === 'starting' &&
+        choice.coreVersion &&
+        choice.coreVersion !== choice.version
+      ) {
         // The daily hint's comparison and command: add the CLI at Core's
         // version, then run that CLI's init.
         const add = cliInstallAdvice({cwd, core: choice.coreVersion});
         if (add?.command) {
           remindSetup(
             add.root,
-            setupNudge(getCliInvocation(add.root, {installed: true}), {before: add.command}).trimEnd(),
+            setupNudge(getCliInvocation(add.root, {installed: true}), {
+              before: add.command,
+            }).trimEnd(),
           );
           return;
         }
       }
-      remindSetup(agentDocsTargetDir(cwd), setupNudge(getCliInvocation(cwd)).trimEnd());
+      remindSetup(
+        agentDocsTargetDir(cwd),
+        setupNudge(getCliInvocation(cwd)).trimEnd(),
+      );
     } catch {
       // Never let the nudge break a command.
     }
@@ -1052,7 +1192,10 @@ export async function createProgram({argv} = {}) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);
-      mod[cmd.register](program, {jsonSupported: JSON_SUPPORTED, version: pkg.version});
+      mod[cmd.register](program, {
+        jsonSupported: JSON_SUPPORTED,
+        version: pkg.version,
+      });
     } catch (e) {
       // Command fails to load but CLI still works
       const reason = /** @type {any} */ (e).message;

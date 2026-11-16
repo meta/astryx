@@ -52,7 +52,7 @@ export default {
         },
         {
           type: 'prose',
-          text: "An app records every command only when its `astryx.config` names `integrations` or `debug`, as listing your package does. Otherwise your handler runs only for commands loading the app's project, such as `component` and `docs`, never for `--version` or a mistyped command. In an app whose config names neither word, those commands also print a stderr warning.",
+          text: 'An app that installs your package, or lists it in its `astryx.config`, records every command with your handler, `--version` included, whatever else its config says.',
         },
         {
           type: 'prose',

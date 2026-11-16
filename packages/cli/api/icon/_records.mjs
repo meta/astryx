@@ -63,7 +63,8 @@ export function withdrawnReason(withdrawn, selector) {
  * no valid installed set (AST-084 FR17): withdrawn, with its reason, when it
  * names an installed set that was withdrawn; else not installed. Both are
  * `ERR_NOT_FOUND`, with the closest valid sets as suggestions. With no set
- * installed at all, it says so and how to get one.
+ * installed at all, it says so and how to get one; with only withdrawn sets,
+ * it points at `--list`, which says why each is withdrawn.
  * @param {Array<{name: string, package: string}>} sets the valid sets
  * @param {Array<{name: string, package: string, reason: string}>} withdrawn
  * @param {string} selector
@@ -72,11 +73,22 @@ export function withdrawnReason(withdrawn, selector) {
 export function unusableSet(sets, withdrawn, selector) {
   const reason = withdrawnReason(withdrawn, selector);
   if (reason == null && sets.length === 0) {
-    return new AstryxError(
-      `No icon set named "${selector}": no icon set is installed. ${NO_ICON_SET_NEXT}`,
-      [],
-      ERROR_CODES.ERR_NOT_FOUND,
-    );
+    return withdrawn.length === 0
+      ? new AstryxError(
+          `No icon set named "${selector}": no icon set is installed. ${NO_ICON_SET_NEXT}`,
+          [],
+          ERROR_CODES.ERR_NOT_FOUND,
+        )
+      : new AstryxError(
+          `No installed icon set named "${selector}"`,
+          [
+            {
+              name: 'astryx experimental icon --list',
+              reason: 'why each installed set is withdrawn',
+            },
+          ],
+          ERROR_CODES.ERR_NOT_FOUND,
+        );
   }
   return new AstryxError(
     reason ?? `No installed icon set named "${selector}"`,

@@ -396,10 +396,11 @@ export function registerExperimentalIcon(group, program) {
               ),
             ]
           : []),
-        // With no set, the finder has nothing to find: `next` says what to do.
-        ...(sets.length > 0
-          ? [text(`Find one: ${run} experimental icon <words>`)]
-          : []),
+        // With no set installed, the finder has nothing to find: `next` says
+        // what to do.
+        ...(next && sets.length === 0
+          ? []
+          : [text(`Find one: ${run} experimental icon <words>`)]),
       );
       return answered;
     },
