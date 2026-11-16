@@ -544,6 +544,17 @@ function flagValues(name) {
 }
 
 /**
+ * The other values an undo removed with the one named, for a setting listed
+ * more than once by hand (` and red, listed twice`), or nothing.
+ * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeData} d
+ */
+function alsoRemovedText(d) {
+  const also = d.alsoRemoved ?? [];
+  if (!also.length) return '';
+  return ` and ${also.map(x => JSON.stringify(x.value)).join(', ')} (it was listed ${also.length === 1 ? 'twice' : `${also.length + 1} times`})`;
+}
+
+/**
  * The receipt of a change: a status line, then the change data.
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} r
  */
@@ -566,7 +577,7 @@ function changeBlocks(r) {
   const done =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
@@ -575,6 +586,7 @@ function changeBlocks(r) {
     newProblems = [],
     leftOut = [],
     missed = 0,
+    missedParts = missed,
     ...rest
   } = /** @type {any} */ (d);
   const status = newProblems.length
@@ -600,7 +612,7 @@ function changeBlocks(r) {
     ...(missed
       ? [
           record({
-            missed: `${missed} part${missed > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
           }),
         ]
       : []),
@@ -700,7 +712,7 @@ function showBlocks(d) {
     ...(missed.length
       ? [
           section(
-            `missed (${missed.length} part${missed.length > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
+            `missed (${missed.length} miss${missed.length > 1 ? 'es' : ''} on ${new Set(missed.map(m => m.part)).size} part${new Set(missed.map(m => m.part)).size > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
           ),
           // Each part and why, then the line that reaches it.
           missed
@@ -713,19 +725,20 @@ function showBlocks(d) {
         ]
       : []),
     ...(() => {
-      // The rest, each said for what it is: a part whose fill or text
-      // color is still the base's (unreached), and a missed part beyond
-      // the six shown (a pill, a borderless surface, a state).
-      const shown = new Set(missed.slice(0, 6).map(m => m.part));
-      const still = (unreached ?? []).filter(p => !shown.has(p)).length;
-      const others = missed
-        .slice(6)
-        .filter(m => !(unreached ?? []).includes(m.part)).length;
+      // The rest, each said for what it is: the misses beyond the six shown
+      // (a border, a shadow, a pill, a state), and the parts with no miss
+      // whose fill or text color is still the base's (unreached).
+      const hidden = missed.slice(6);
+      const missedNames = new Set(missed.map(m => m.part));
+      const still = (unreached ?? []).filter(p => !missedNames.has(p)).length;
+      const hiddenParts = new Set(hidden.map(m => m.part)).size;
       const said = [
+        hidden.length
+          ? `${hidden.length} more miss${hidden.length > 1 ? 'es' : ''} (on ${hiddenParts} part${hiddenParts > 1 ? 's' : ''})`
+          : '',
         still
           ? `${still} more part${still > 1 ? 's' : ''} whose fill or text color is still the base's`
           : '',
-        others ? `${others} more missed part${others > 1 ? 's' : ''}` : '',
       ].filter(Boolean);
       return said.length
         ? [
@@ -1827,6 +1840,13 @@ export function registerExperimentalTheme(group, program) {
                   open = null;
                   continue;
                 }
+                // A dial word ends the open value: it starts its own setting
+                // (`--accent red corners pill`), read below.
+                if (
+                  open &&
+                  dialFlags.has(`--${w.toLowerCase().replace(/[:=]+$/, '')}`)
+                )
+                  open = null;
                 if (open) {
                   const had = given[open];
                   given[open] = Array.isArray(had)
@@ -1836,6 +1856,128 @@ export function registerExperimentalTheme(group, program) {
                   continue;
                 }
                 words.push(w);
+              }
+              /** Settings set gives after the theme is made. @type {Array<[string, string]>} */
+              const later = [];
+              // Settings typed after the name, in any form set reads (`accent
+              // red`, `corners=pill`, `corners: pill; accent: red`, a pasted
+              // JSON object): each is its option (`--accent red`), never
+              // part of the name. A dial's value runs to the next dial.
+              {
+                // A dial word as set reads it: with its colon or equals sign
+                // apart from the value (`accent:`), in other letters, or
+                // with a typo (`cornres`, the one typo limit).
+                const dialOf = (/** @type {string} */ w) => {
+                  const word = String(w)
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[:=]+$/, '');
+                  if (!/^[a-z][a-z-]*$/.test(word)) return null;
+                  if (dialFlags.has(`--${word}`)) return camel(`--${word}`);
+                  const near = [...dialFlags].filter(f =>
+                    typoOf(word, f.slice(2)),
+                  );
+                  return near.length === 1 ? camel(near[0]) : null;
+                };
+                /** The flag word a dial word reads as. @param {string} w */
+                const dialName = w =>
+                  String(dialOf(w)).replace(
+                    /[A-Z]/g,
+                    c => `-${c.toLowerCase()}`,
+                  );
+                /** @type {string[]} */
+                const kept = [];
+                /** @type {Array<[string, string]>} */
+                const pairs = [];
+                /** The pasted pair a later word continues, or -1. */
+                let pasted = -1;
+                for (const w of words) {
+                  /** @type {unknown} */
+                  let json;
+                  try {
+                    json = /^\s*\{/.test(w) ? JSON.parse(w) : undefined;
+                  } catch {
+                    json = undefined;
+                  }
+                  const entries =
+                    json && typeof json === 'object' && !Array.isArray(json)
+                      ? Object.entries(json)
+                      : [];
+                  if (entries.length && entries.every(([k]) => dialOf(k))) {
+                    for (const [k, v] of entries) pairs.push([k, String(v)]);
+                    pasted = -1;
+                    continue;
+                  }
+                  // `corners=pill`, `corners: pill; accent: red`.
+                  const parts = w
+                    .split(/\s*;\s*/)
+                    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x.trim()))
+                    .filter(Boolean);
+                  if (
+                    parts.length &&
+                    parts.every(m =>
+                      dialOf(/** @type {RegExpExecArray} */ (m)[1]),
+                    )
+                  ) {
+                    for (const m of parts)
+                      pairs.push([
+                        /** @type {RegExpExecArray} */ (m)[1],
+                        /** @type {RegExpExecArray} */ (m)[2],
+                      ]);
+                    // A value typed on across words (`font=Inter, Arial`)
+                    // runs to the next dial, as `font Inter, Arial` does.
+                    pasted = pairs.length - 1;
+                    continue;
+                  }
+                  if (pasted >= 0 && !dialOf(w)) {
+                    pairs[pasted][1] = `${pairs[pasted][1]} ${w}`;
+                    continue;
+                  }
+                  pasted = -1;
+                  kept.push(w);
+                }
+                // `accent red`: a dial word, and its value up to the next dial.
+                /** @type {string[]} */
+                const rest = [];
+                for (let i = 0; i < kept.length; i++) {
+                  if (
+                    dialOf(kept[i]) &&
+                    kept[i + 1] != null &&
+                    !dialOf(kept[i + 1])
+                  ) {
+                    const value = [];
+                    let j = i + 1;
+                    while (j < kept.length && !dialOf(kept[j]))
+                      value.push(kept[j++]);
+                    pairs.push([kept[i], value.join(' ')]);
+                    i = j - 1;
+                    continue;
+                  }
+                  rest.push(kept[i]);
+                }
+                for (const [k, v] of pairs) {
+                  const key = /** @type {string} */ (dialOf(k));
+                  if (given[key] == null) given[key] = v;
+                  intoValues.push(`${dialName(k)} ${v}`);
+                }
+                // A setting new takes no option for (`padding 8px`): set
+                // gives it after the theme is made, never a word of the name.
+                const named = [];
+                for (let i = 0; i < rest.length; i++) {
+                  const thing = rest[i].replace(/[:=]+$/, '');
+                  if (
+                    namesSetting(thing) &&
+                    !/^(like|base)$/i.test(thing) &&
+                    rest[i + 1] != null
+                  ) {
+                    const value = rest.slice(i + 1);
+                    later.push([thing, value.join(' ')]);
+                    intoValues.push(`${thing} ${value.join(' ')}`);
+                    break;
+                  }
+                  named.push(rest[i]);
+                }
+                words.splice(0, words.length, ...named);
               }
               // A built-in theme among the words (after a `like` word, or
               // typed as the name with the real name after it) is the base,
@@ -1848,10 +1990,15 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
+              // (`base stone` is the base as `like stone` is.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
-                  !(baseAt >= 0 && /^like$/i.test(w) && i === baseAt - 1),
+                  !(
+                    baseAt >= 0 &&
+                    /^(like|base)$/i.test(w) &&
+                    i === baseAt - 1
+                  ),
               );
               const fixed = nameWords
                 .join('-')
@@ -1861,16 +2008,22 @@ export function registerExperimentalTheme(group, program) {
               const read = Object.keys(given).some(k => given[k] !== o[k]);
               throw new AstryxError(
                 `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
-                await editorCheckedNewLines(
-                  `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
-                  fixed,
-                  {
-                    cwd: process.cwd(),
-                    like: given.like,
-                    png: given.png ?? false,
-                    settings: newSettingsGiven(given),
-                  },
-                ),
+                [
+                  ...(await editorCheckedNewLines(
+                    `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                    fixed,
+                    {
+                      cwd: process.cwd(),
+                      like: given.like,
+                      png: given.png ?? false,
+                      settings: newSettingsGiven(given),
+                    },
+                  )),
+                  ...later.map(([thing, value]) => ({
+                    name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                    reason: `then this: new takes no ${thing}; set gives it`,
+                  })),
+                ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
             }
@@ -1909,6 +2062,14 @@ export function registerExperimentalTheme(group, program) {
         // A pasted JSON object of settings goes to the editor whole, which
         // gives one set line per entry.
         if (!value.length && /^\s*\{/.test(thing)) value = [''];
+        // Several pasted lines in one argument, each a declaration or the
+        // editor's own printed or change line, go to the editor whole: its
+        // entry reader reads each line.
+        if (!value.length) {
+          const lines = thing.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length > 1 && lines.every(l => /[:=]|->|\u2192/.test(l)))
+            value = [''];
+        }
         if (!value.length) {
           // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
           // `--color-accent=#e11d48`).
@@ -2014,23 +2175,40 @@ export function registerExperimentalTheme(group, program) {
           // Three or more bare words that each name a setting are a list
           // too (`undo t accent corners spacing`); a setting with a value of
           // several words (`font Inter Tight`) is not.
+          // Commas or "and" make a list only when each item starts with a
+          // setting's name: a value with commas typed unquoted, as set takes
+          // it (`border-color rgb(1, 2, 3)`, `font Inter, Arial`), is that
+          // setting's value.
+          const items = words
+            .map(String)
+            .join(' ')
+            .split(/\s*,\s*|\s+and\s+/)
+            .filter(Boolean);
           const listed =
             words.length > 1 &&
-            (words.some(
+            ((words.some(
               (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
-            ) ||
+            ) &&
+              items.length > 1 &&
+              items.every(item => namesSetting(item.split(/\s+/)[0]))) ||
               (words.length > 2 &&
                 words.every(w => namesSetting(String(w))))) &&
             !words.some(w => String(w).startsWith('-'));
           const list = listed ? words.join(' ') : null;
+          // Otherwise the words after the thing are its value, typed
+          // unquoted as set takes it (`undo t padding 4px 8px --on card`).
+          const value =
+            which == null
+              ? undefined
+              : [which, ...(c?.args ?? []).slice(3)].map(String).join(' ');
           return (
             (await readOptionsChecked('undo', undoDoc)) ??
             (list
               ? null
-              : (strayOption('undo', undoDoc, [
+              : strayOption('undo', undoDoc, [
                   which,
                   ...(c?.args ?? []).slice(3),
-                ]) ?? extraWords('undo', undoDoc, (c?.args ?? []).slice(3)))) ??
+                ])) ??
             run(
               program,
               () =>
@@ -2040,7 +2218,7 @@ export function registerExperimentalTheme(group, program) {
                     ? {thing: list}
                     : thing == null
                       ? {}
-                      : {thing, value: which}),
+                      : {thing, value}),
                 }),
               r =>
                 r.data.action === 'step'

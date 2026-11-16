@@ -231,10 +231,11 @@ describe('one mode', () => {
       expect(card.first[0]).toMatch(
         /^set n box-shadow '.*light-dark\(transparent, .*' --on card$/,
       );
-      const pop = await answer('make context-menu shadows blue in light mode');
+      // (A trigger menu: a part the part data has not drawn, since a context menu, right-clicked, now is.)
+      const pop = await answer('make trigger-menu shadows blue in light mode');
       expect(pop.first).toEqual([]);
       expect(pop.text).toMatch(
-        /what context-menu shows in dark mode is unknown/,
+        /what trigger-menu shows in dark mode is unknown/,
       );
       const removal = await answer('remove card shadows in dark mode');
       expect(removal.first).toEqual([]);

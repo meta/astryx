@@ -19,6 +19,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
+import {PICTURE_WINDOW} from './picture-window.mjs';
 
 const [chrome, html, png, mode] = process.argv.slice(2);
 
@@ -148,7 +149,7 @@ try {
   await send('Network.setBlockedURLs', {urls: NETWORK_URL_PATTERNS}, sessionId);
   await send(
     'Emulation.setDeviceMetricsOverride',
-    {width: 1280, height: 900, deviceScaleFactor: 1, mobile: false},
+    {...PICTURE_WINDOW, deviceScaleFactor: 1, mobile: false},
     sessionId,
   );
   await send(
@@ -188,7 +189,7 @@ try {
       clip: {
         x: 0,
         y: 0,
-        width: 1280,
+        width: PICTURE_WINDOW.width,
         height: Math.max(1, Math.ceil(size.height)),
         scale: 1,
       },

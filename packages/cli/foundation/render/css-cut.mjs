@@ -7,7 +7,8 @@
  * element resets) always stay. `@property`,
  * `@font-face` and the `@keyframes` a kept rule names stay too; `@layer`
  * order statements are dropped for the caller to write once, first
- * (see layerOrderOf).
+ * (see layerOrderOf). On a page that marks elements with the state they are
+ * drawn in, each state's rules also match them (withDrawnStates).
  *
  * @position foundation/render — used by render-page.mjs
  */
@@ -84,9 +85,11 @@ function splitSelectors(list) {
  * Cut a stylesheet to the rules the page uses.
  * @param {string} css
  * @param {Set<string>} used class names in the page
+ * @param {{states?: boolean}} [options] `states`: the page marks elements
+ *   with the states they are drawn in ({@link withDrawnStates})
  * @returns {string}
  */
-export function cutCss(css, used) {
+export function cutCss(css, used, options = {}) {
   const rootNode = postcss.parse(css);
   rootNode.walkComments(c => {
     c.remove();
@@ -105,6 +108,8 @@ export function cutCss(css, used) {
     else if (kept.length !== splitSelectors(rule.selector).length) {
       rule.selector = kept.join(',');
     }
+    if (kept.length && options.states)
+      rule.selector = withDrawnStates(rule.selector);
   });
   // Drop the grouping at-rules left empty, innermost first.
   let changed = true;
@@ -131,6 +136,34 @@ export function cutCss(css, used) {
     if (!named.has(at.params.trim())) at.remove();
   });
   return rootNode.toString().replace(/\n\s*\n/g, '\n');
+}
+
+/** What each state a page draws matches, beside the browser's own pseudo-class. */
+const DRAWN_STATES = Object.freeze({
+  // A pointer over an element hovers it and every element around it; a
+  // press is active the same way.
+  hover: '[data-astryx-state~="hover"],[data-astryx-state~="hover"] *',
+  active: '[data-astryx-state~="active"],[data-astryx-state~="active"] *',
+  // Keyboard focus is on one element; `:focus-within` reaches those around it.
+  'focus-visible': '[data-astryx-state~="focus"]',
+  focus: '[data-astryx-state~="focus"]',
+  'focus-within': '[data-astryx-state~="focus"],:has([data-astryx-state~="focus"])',
+});
+
+/**
+ * A selector that also matches an element a page marks with the state it is
+ * drawn in (`data-astryx-state="hover"`, `"focus"`, `"hover active"`), so a
+ * picture taken with no pointer or keyboard shows hover, keyboard focus and a
+ * press. Each pseudo-class keeps its own match, so a real state still applies.
+ * @param {string} selector
+ * @returns {string}
+ */
+export function withDrawnStates(selector) {
+  return selector.replace(
+    /(\\.)|:(hover|active|focus-visible|focus-within|focus)(?![\w-])/g,
+    (whole, escaped, state) =>
+      escaped ? whole : `:is(:${state},${DRAWN_STATES[/** @type {keyof typeof DRAWN_STATES} */ (state)]})`,
+  );
 }
 
 /**

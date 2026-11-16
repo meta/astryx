@@ -110,8 +110,20 @@ import {
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {typographyInputProblems} from './typography-values.mjs';
+import {sourcePlugins} from './source-syntax.mjs';
+import {
+  INPUT_DECLARATION_FILES,
+  inputFieldsFrom,
+  sourceFieldProblems,
+  sourceTypography,
+} from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
-import {writtenValueProblems} from './written-values.mjs';
+import {
+  bigIntAsText,
+  writtenPrimitives,
+  writtenValueProblems,
+} from './written-values.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
@@ -162,6 +174,7 @@ import {generatedMark} from '../../theme-edit/_marks.mjs';
  */
 let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
+/** @type {string | null} */ let _coreThemeFile = null;
 
 /**
  * The bindings one Core provides: the namespaces interception spreads, the
@@ -174,6 +187,7 @@ let _coreRootModule = null;
  *   generateThemeRulesSplit: any,
  *   generateOnMediaCSS: any,
  *   generateAdaptationCSS: any,
+ *   themeFile?: string | null,
  * }} CoreBindings
  */
 
@@ -242,6 +256,7 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
+    core.themeFile = cliCoreThemeFile();
     core.rootModule = lazyRootModule(() =>
       fileURLToPath(import.meta.resolve('@astryxdesign/core')),
     );
@@ -288,6 +303,52 @@ function setCore(core) {
   _generateThemeRulesSplit = core.generateThemeRulesSplit;
   _generateOnMediaCSS = core.generateOnMediaCSS;
   _generateAdaptationCSS = core.generateAdaptationCSS;
+  _coreThemeFile = core.themeFile ?? null;
+}
+
+/**
+ * The tokens the chosen Core sets on each media surface by itself: the
+ * surfaces of a theme that sets none.
+ * @returns {{onDark?: Record<string, unknown>, onLight?: Record<string, unknown>}}
+ */
+function coreSurfaceTokens() {
+  try {
+    const bare = _defineTheme?.({name: 'astryx-defaults'});
+    return {onDark: bare?.__onDark?.tokens, onLight: bare?.__onLight?.tokens};
+  } catch {
+    return {};
+  }
+}
+
+/** @type {Map<string, import('./input-fields.mjs').InputFields | null>} */
+const _inputFields = new Map();
+/**
+ * The fields the chosen Core's theme input takes, from its type
+ * declarations; null when they cannot be read.
+ * @returns {import('./input-fields.mjs').InputFields | null}
+ */
+function coreInputFields() {
+  if (!_coreThemeFile) return null;
+  if (!_inputFields.has(_coreThemeFile))
+    _inputFields.set(
+      _coreThemeFile,
+      inputFieldsFrom(
+        INPUT_DECLARATION_FILES.map(file => {
+          try {
+            return fs.readFileSync(
+              path.join(
+                path.dirname(/** @type {string} */ (_coreThemeFile)),
+                file,
+              ),
+              'utf8',
+            );
+          } catch {
+            return null;
+          }
+        }),
+      ),
+    );
+  return _inputFields.get(_coreThemeFile) ?? null;
 }
 
 /**
@@ -424,6 +485,7 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
     generateOnMediaCSS: themeModule.generateOnMediaCSS,
     generateAdaptationCSS: themeModule.generateAdaptationCSS,
+    themeFile,
   };
 }
 
@@ -2577,7 +2639,7 @@ const THEME_MODULE_EXTENSIONS = [
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
 // prettier-ignore
 function parseRegistryModule(/** @type {string} */ source, /** @type {string} */ filePath) {
-  try { return parse(source, {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+  try { return parse(source, {sourceType: 'unambiguous', plugins: sourcePlugins(filePath)}); }
   catch (error) { throw registryGraphError(`Cannot inspect registry module ${filePath}: ${error instanceof Error ? error.message : String(error)}`); }
 }
 // prettier-ignore
@@ -2687,7 +2749,7 @@ function extendedThemeSources(filePath, source) {
     try {
       ast = parse(text, {
         sourceType: 'unambiguous',
-        plugins: ['typescript', 'jsx'],
+        plugins: sourcePlugins(file),
       });
     } catch {
       return chain;
@@ -2786,7 +2848,7 @@ function isSyncLoaderLimitation(error) {
  * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null, others?: string[], defaultHolds?: string[]}>}
  */
 // prettier-ignore
-async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined, /** @type {Set<string>} */ unbuilt = new Set()) {
   const jiti =
     loader ??
     createJiti(import.meta.url, {
@@ -2810,7 +2872,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     const commonJsPatch = interception.patchCommonJs(filePath);
     try {
       try {
-        mod = await withEmptyStylesheets(async () => jiti(filePath));
+        mod = await withEmptyStylesheets(async () => jiti(filePath), {unbuilt});
       } catch (error) {
         // Only a sync-loader limitation may fall back. Anything else is the
         // theme's own failure and belongs to the caller unchanged.
@@ -2828,6 +2890,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
             async: true,
             forceTranspile: true,
           }),
+          {unbuilt},
         );
       }
     } finally {
@@ -2836,7 +2899,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await withEmptyStylesheets(() => jiti.import(filePath));
+    mod = await withEmptyStylesheets(() => jiti.import(filePath), {unbuilt});
   }
 
   // Both loads hand back the module. The theme is read from the module's own
@@ -2967,7 +3030,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
     const call = /\bdefineTheme\s*\(/.exec(text);
     const line =
-      keyPathLine(text, ['name']) ??
+      keyPathLine(text, ['name'], filePath) ??
       (call ? text.slice(0, call.index).split('\n').length : null);
     const stem = path
       .basename(filePath)
@@ -3041,14 +3104,19 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[]}>}
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[], unbuiltStylesheets?: string[]}>}
  *   `others`: the module's other theme exports, left out (it has no theme
  *   default); `defaultHolds`: the keys of a default export that holds themes
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+  // A stylesheet the source imports that is not there yet loads as an empty
+  // module, and is named, so the build can refuse one it does not write.
+  /** @type {Set<string>} */
+  const unbuilt = new Set();
   try {
-    return await importThemeModule(filePath, interception, loader, pick);
+    const loaded = await importThemeModule(filePath, interception, loader, pick, unbuilt);
+    return unbuilt.size ? {...loaded, unbuiltStylesheets: [...unbuilt]} : loaded;
   } catch (jitiError) {
     // A module may throw anything: what it threw is told as it is (a string,
     // an object, null), never read as an Error it is not.
@@ -3768,6 +3836,33 @@ function keptWarnings(kept, cwd) {
 }
 
 /**
+ * Refuse a theme whose source imports a stylesheet that is not there, unless
+ * it is the stylesheet this build writes (which loads empty, so the first
+ * build from a clean checkout writes it).
+ * @param {string} filePath the theme source
+ * @param {string[]} unbuilt the stylesheets it imports that are not there
+ * @param {string} outPath the stylesheet this build writes
+ * @param {string} cwd
+ * @param {{check?: boolean, out?: string, iconsSpecifier?: string}} options
+ */
+function refuseMissingStylesheets(filePath, unbuilt, outPath, cwd, options) {
+  const missing = unbuilt.filter(
+    file => path.resolve(file) !== path.resolve(outPath),
+  );
+  if (missing.length === 0) return;
+  const shown = path.relative(cwd, filePath) || filePath;
+  throw new AstryxError(
+    `Failed to load theme from ${shown}: it imports ${missing.map(file => path.relative(cwd, file) || file).join(', ')}, which is not there and is not the stylesheet this build writes (${path.relative(cwd, outPath) || outPath}). Create the file, correct the import, or build what writes it first. Nothing was written.`,
+    themeLoadSuggestions(new Error('missing stylesheet'), shown, cwd, {
+      check: options.check,
+      out: options.out,
+      iconsSpecifier: options.iconsSpecifier,
+    }),
+    ERROR_CODES.ERR_THEME_LOAD,
+  );
+}
+
+/**
  * One import statement for a carried registry or slot binding. Ordinary named
  * imports stay byte-compatible; paths with quotes or escapes are encoded, and
  * default, namespace, and aliased bindings are kept.
@@ -3916,7 +4011,7 @@ function generateBuiltModule(
     }
   }
 
-  const tokensStr = JSON.stringify(resolvedTokens, null, 2)
+  const tokensStr = JSON.stringify(resolvedTokens, bigIntAsText, 2)
     .split('\n')
     .map((line, i) => (i === 0 ? line : '  ' + line))
     .join('\n');
@@ -3932,7 +4027,7 @@ function generateBuiltModule(
   const serializeField = (field, value, includeEmpty = false) => {
     if (value == null || (!includeEmpty && Object.keys(value).length === 0))
       return '';
-    const body = JSON.stringify(value, null, 2)
+    const body = JSON.stringify(value, bigIntAsText, 2)
       .split('\n')
       .map((line, i) => (i === 0 ? line : '  ' + line))
       .join('\n');
@@ -4583,6 +4678,8 @@ async function themeBuildInternal(
   let leftOutThemes;
   /** The keys of a default export that holds themes, not a theme. @type {string[]} */
   let defaultHolds;
+  /** Stylesheets the source imports that are not there yet. @type {string[]} */
+  let unbuiltStylesheets;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
   /** The one color mode the theme module exports, or null for both. */
@@ -4615,6 +4712,7 @@ async function themeBuildInternal(
     themeExportName = loaded.exportName;
     leftOutThemes = loaded.others ?? [];
     defaultHolds = loaded.defaultHolds ?? [];
+    unbuiltStylesheets = loaded.unbuiltStylesheets ?? [];
     loadDegradation = loaded.degraded;
     colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
@@ -4817,12 +4915,12 @@ async function themeBuildInternal(
    */
   const placed = items =>
     items.flatMap(item => {
-      const line = keyPathLine(themeSource, item.path);
+      const line = keyPathLine(themeSource, item.path, filePath);
       /** @type {{file: string, line: number} | null} */
       let from = null;
       if (line == null)
         for (const base of extendedSources) {
-          const at = keyPathLine(base.source, item.path);
+          const at = keyPathLine(base.source, item.path, base.file);
           if (at == null) continue;
           from = {file: path.relative(cwd, base.file) || base.file, line: at};
           break;
@@ -4837,9 +4935,9 @@ async function themeBuildInternal(
         : [{...item, line, inherited, elsewhere: line == null, from}];
     });
   const nulls = placed(nullThemeValues(themeDef));
-  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null}} n */
+  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null, at?: {file: string, line: number} | null}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.at ? ` (in ${n.at.file}, line ${n.at.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);
@@ -4881,8 +4979,66 @@ async function themeBuildInternal(
   ]);
   const badValues = writtenValueProblems(themeDef, {
     reads: tokenDefaults ? name => setNames.has(name) : undefined,
+    rootTokens: tokenDefaults,
+    surfaceDefaults: coreSurfaceTokens(),
   });
   const badValueLines = placed(badValues);
+  const cannotWrite = badValueLines.filter(n => n.unbuildable);
+  if (cannotWrite.length > 0) {
+    const first = cannotWrite.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives a value the build cannot write: ${cannotWrite.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  // defineTheme() drops a field it does not take, so only the source shows
+  // a misspelled one.
+  const fields = coreInputFields();
+  const badFields = fields
+    ? sourceFieldProblems(
+        {file: filePath, source: themeSource},
+        fields,
+        (from, specifier) => {
+          try {
+            const file = resolveThemeModule(specifier, from);
+            return {file, source: fs.readFileSync(file, 'utf8')};
+          } catch {
+            return null;
+          }
+        },
+      ).map(f => ({
+        path: f.path,
+        why: f.why,
+        line: f.file === filePath ? f.line : null,
+        at:
+          f.file === filePath || f.line == null
+            ? null
+            : {file: path.relative(cwd, f.file) || f.file, line: f.line},
+        inherited: false,
+        elsewhere: false,
+        from: null,
+      }))
+    : [];
+  // A typography value Core builds into something no browser uses (a font
+  // stack in one family, a quoted name with a space, a role weight with no
+  // type scale): warned at its line, as the editor refuses it. Only what
+  // this file writes: a theme it extends is judged in its own file. A build
+  // that loads the project's own Core captures no input: the values the
+  // source writes are read from it.
+  const typographyInput =
+    interception?.inputOf(themeDef)?.typography ??
+    sourceTypography(themeSource, filePath);
+  const badTypography = placed(
+    typographyInputProblems(typographyInput, fields?.levels ?? []),
+  ).filter(t => t.line != null);
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -4909,6 +5065,8 @@ async function themeBuildInternal(
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
     ...badKeys.map(nullLine),
     ...badValueLines.map(nullLine),
+    ...badTypography.map(nullLine),
+    ...badFields.map(nullLine),
   ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
@@ -4995,8 +5153,12 @@ async function themeBuildInternal(
       'onLight',
       'adaptations',
     ];
+    // A resolved theme always carries its tokens (an empty map when it sets
+    // none), so a theme without them, a name alone or a name and component
+    // styles, is raw input too.
     const needsResolution =
       INPUT_ONLY_FIELDS.some(field => themeDef[field] !== undefined) ||
+      themeDef.tokens === undefined ||
       ('localTokens' in themeDef && themeDef.__localTokenLineage === undefined);
     if (needsResolution) {
       try {
@@ -5112,6 +5274,12 @@ async function themeBuildInternal(
       );
     }
 
+    // Core writes a BigInt it meets as a value as its digits, but a BigInt
+    // inside an object it writes as JSON text throws: it gets the digits
+    // too. A boxed primitive in a part would be written as JSON text (with
+    // its quotes), where a token writes its text: it gets its primitive.
+    resolvedTheme = writtenPrimitives(resolvedTheme);
+
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
 
@@ -5163,16 +5331,23 @@ async function themeBuildInternal(
     // #3658: also emit attribute-specific rules so <Theme mode> can override
     // color-scheme. Inspect root and rule-owned values, not generated CSS, which
     // also carries theme-independent data-token defaults with light-dark().
-    const themeOwnValues = JSON.stringify([
-      resolvedTheme.tokens ?? {},
-      resolvedTheme.localTokens ?? {},
-      resolvedTheme.components ?? {},
-      ...(resolvedTheme.__adaptationRules ?? []).flatMap(
-        (
-          /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
-        ) => [rule.tokens ?? {}, rule.localTokens ?? {}, rule.components ?? {}],
-      ),
-    ]);
+    const themeOwnValues = JSON.stringify(
+      [
+        resolvedTheme.tokens ?? {},
+        resolvedTheme.localTokens ?? {},
+        resolvedTheme.components ?? {},
+        ...(resolvedTheme.__adaptationRules ?? []).flatMap(
+          (
+            /** @type {{tokens?: Record<string, string>, localTokens?: Record<string, string>, components?: object}} */ rule,
+          ) => [
+            rule.tokens ?? {},
+            rule.localTokens ?? {},
+            rule.components ?? {},
+          ],
+        ),
+      ],
+      bigIntAsText,
+    );
     const colorSchemeDecl =
       themeOwnValues.includes('light-dark(') ||
       adaptationCss.component.includes('light-dark(')
@@ -5290,9 +5465,51 @@ async function themeBuildInternal(
     // The name's extension is what follows its last dot, a leading one too:
     // `.css` is a name with no stem, which writes hidden files.
     const file = path.basename(outPath);
+    // A name of another kind of file a stylesheet has never names the
+    // stylesheet: a TypeScript declaration file (`p.css.d.ts`, where CSS
+    // breaks every TypeScript file that imports the stylesheet) or a source
+    // map (`p.css.map`, which bundlers and devtools read as JSON).
+    const otherKind = /\.d\.[cm]?ts$/i.test(file)
+      ? {
+          suffix: /(?:\.css)?\.d\.[cm]?ts$/i,
+          what: 'a TypeScript declaration file, where a build writes types',
+        }
+      : /\.css\.map$/i.test(file)
+        ? {
+            suffix: /\.css\.map$/i,
+            what: "a stylesheet's source map, which bundlers and devtools read as JSON",
+          }
+        : null;
+    if (otherKind) {
+      const fixed = path
+        .join(
+          path.dirname(options.out),
+          `${file.replace(otherKind.suffix, '') || baseName}.css`,
+        )
+        .split(path.sep)
+        .join('/');
+      throw new AstryxError(
+        `--out ${options.out} names ${otherKind.what}, not the stylesheet. --out names the .css file, such as ${fixed}. Nothing was written.`,
+        [
+          {
+            name: buildSuggestion(
+              path.relative(cwd, filePath),
+              {iconsSpecifier: options.iconsSpecifier, out: fixed},
+              cwd,
+              handOff.commandWords,
+            ),
+            reason: 'the same build, naming the stylesheet',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     const dot = file.lastIndexOf('.');
     const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
-    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    // `p.css.bak` slips a suffix after the stylesheet's name: its stem is p.
+    const stem = (dot < 0 ? file : file.slice(0, dot))
+      .replace(/\.d$/, '')
+      .replace(/\.css$/i, '');
     if (ext !== '.css' || !stem) {
       const fixed = path
         .join(path.dirname(options.out), `${stem || baseName}.css`)
@@ -5314,6 +5531,20 @@ async function themeBuildInternal(
   } else {
     outPath = path.join(path.dirname(filePath), `${baseName}.css`);
   }
+  // A stylesheet the source imports that is not there yet loads empty only
+  // when it is the stylesheet this build writes (an app importing the source
+  // gets its CSS); any other is a missing file, refused before anything is
+  // written.
+  // A family member's are judged by the family build, which knows the
+  // family's stylesheet.
+  if (!handOff.prepareFamily)
+    refuseMissingStylesheets(
+      filePath,
+      unbuiltStylesheets,
+      outPath,
+      cwd,
+      options,
+    );
   // The header names the source and command from the project root of the
   // outputs, so a build from any folder writes the same bytes, `--check`
   // agrees with it, and a later build reads the source back exactly.
@@ -5478,6 +5709,7 @@ async function themeBuildInternal(
       componentCount,
       warnings: warningMessages,
       unloadedFonts,
+      unbuiltStylesheets,
     };
   }
 
@@ -5991,7 +6223,7 @@ function planFamilySources(files, cwd) {
     const key = canonical(filePath), cached = reachableMemo.get(key); if (cached) return cached;
     if (visiting.has(key) || !fs.existsSync(key)) return new Set();
     visiting.add(key); /** @type {Set<string>} */ const found = new Set(), direct = new Set(); let ast;
-    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes']}); }
+    try { ast = parse(fs.readFileSync(key, 'utf8'), {sourceType: 'unambiguous', plugins: sourcePlugins(key)}); }
     catch { visiting.delete(key); reachableMemo.set(key, found); return found; }
     for (const node of /** @type {any[]} */ (ast.program.body)) {
       const specifier = node.importKind !== 'type' ? node.source?.value : null; if (typeof specifier !== 'string' || (!specifier.startsWith('.') && !path.isAbsolute(specifier))) continue;
@@ -6152,6 +6384,17 @@ async function buildFamily(
   const root = members[0];
   const outDir = path.dirname(root.filePath);
   const outPath = path.join(outDir, `${baseName}.css`);
+  // A member may import the family's stylesheet (`import './k.css'` in the
+  // root, so an app importing the source gets the family's CSS): it loads
+  // empty, and the first build writes it. Any other is a missing file.
+  for (const member of members)
+    refuseMissingStylesheets(
+      member.filePath,
+      member.unbuiltStylesheets ?? [],
+      outPath,
+      cwd,
+      options,
+    );
   const cssDtsPath = `${outPath}.d.ts`;
   const jsPath = path.join(outDir, `${baseName}.js`);
   const dtsPath = path.join(outDir, `${baseName}.d.ts`);
@@ -6338,6 +6581,8 @@ async function buildFamily(
     js: path.relative(cwd, jsPath),
     dts: path.relative(cwd, dtsPath),
   };
+  /** What the output check warns of, for the result. @type {string[]} */
+  const outputWarnings = [];
   // A family build's outputs stay inside cwd too; check mode only reads them.
   if (!options.check) {
     confineOutputs(writes, cwd, FAMILY_REMEDY);
@@ -6350,6 +6595,8 @@ async function buildFamily(
       elsewhere: '--family-key',
       refuseUnmarked: true,
       warnUnmarked: true,
+      // The result's warnings carry what text prints.
+      onWarning: message => outputWarnings.push(message),
     });
   }
   if (options.check) {
@@ -6411,7 +6658,9 @@ Or load the same stylesheet natively:
   // single build says it.
   const keptLocal = keptWarnings(localPlan.kept, cwd);
   for (const w of keptLocal) logger.warn(`Warning: ${w}`);
-  // Each member's warnings name the member they are about.
+  // Each member's warnings name the member they are about; a warning about
+  // the family's outputs (one it replaces, a module it leaves uncompiled)
+  // comes after them.
   const warnings = [
     ...new Set([
       ...members.flatMap(member =>
@@ -6421,6 +6670,7 @@ Or load the same stylesheet natively:
         ),
       ),
       ...keptLocal,
+      ...outputWarnings,
     ]),
   ];
   const unloadedFonts = [

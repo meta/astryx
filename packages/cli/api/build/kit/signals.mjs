@@ -23,12 +23,14 @@ import {CORE_PROVIDER_ID} from '../../../foundation/identity/providers.mjs';
 import {
   loadComponents,
   loadTemplates,
+  loadWeights,
   pageDestination,
   requireBuildCoreDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind} from './kind.mjs';
-import {rankPages} from './rank.mjs';
+import {pickStart, rankPages} from './rank.mjs';
+import {pickFit} from './weights.mjs';
 import {readNames} from './words.mjs';
 import {namedOutright} from './weights.mjs';
 import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
@@ -289,9 +291,23 @@ export async function kitSignals(query, options = {}) {
   // Name the ranker's next two templates beside the start: the reader judges
   // meaning better than keywords do, and an acceptable template is in these
   // three far more often than it is the start alone.
+  // How clearly the pick model prefers the start over the other pages, for a
+  // reader that acts on a start only when the choice is clear.
+  const fit =
+    chosen && chosen.basis !== 'fallback'
+      ? pickFit(
+          chosen.name,
+          query,
+          ranked,
+          pickStart(ranked, 'page'),
+          catalog,
+          loadWeights(),
+        )
+      : null;
   /** @type {Omit<BuildStart, 'isReady'> | null} */
   const picked = chosen && {
     ...chosen,
+    ...(fit === null ? {} : {fit}),
     alternatives: pickStartAlternatives(
       ranked,
       kind,

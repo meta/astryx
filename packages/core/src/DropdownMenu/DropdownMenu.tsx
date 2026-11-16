@@ -1086,6 +1086,22 @@ function DropdownMenuPopover({
   const openModalityRef = useRef<'keyboard' | 'pointer'>('keyboard');
   // ArrowUp opens with the LAST enabled row highlighted.
   const focusLastOnOpenRef = useRef(false);
+  // True while the layer holds an open that it accepted, until the trigger is
+  // a valid anchor (useLayer's `onOpenPendingChange`).
+  const openPendingRef = useRef(false);
+  const handleOpenPendingChange = useCallback((isPending: boolean) => {
+    openPendingRef.current = isPending;
+  }, []);
+
+  // Clears what an open arms. A refused open, or a hide that cancels a
+  // pending open, leaves nothing for a later open, such as ArrowUp's last row.
+  const disarmOpen = useCallback(() => {
+    notifyClickOnShowRef.current = false;
+    pendingControlledOpenRef.current = false;
+    openModalityRef.current = 'keyboard';
+    shouldFocusOnOpenRef.current = false;
+    focusLastOnOpenRef.current = false;
+  }, []);
 
   // Synchronizes the dialog's name from the custom trigger's DOM, an external
   // system React does not own: the rendered control's accessible name is only
@@ -1149,11 +1165,15 @@ function DropdownMenuPopover({
     // The entrance runs on the surface: an anchored layer lays out again on
     // each frame its own style animates.
     xstyle: layerAnimations[placement],
+    onOpenPendingChange: handleOpenPendingChange,
   });
 
   const closeMenu = useCallback(() => {
+    if (openPendingRef.current) {
+      disarmOpen();
+    }
     popover.hide();
-  }, [popover]);
+  }, [popover, disarmOpen]);
 
   // Single keyboard navigation path for both modes.
   // The selector matches plain items plus selectable items
@@ -1221,9 +1241,15 @@ function DropdownMenuPopover({
           pendingControlledOpenRef.current;
         pendingControlledOpenRef.current = false;
         popover.hide();
+      } else if (openPendingRef.current && !pendingControlledOpenRef.current) {
+        // The controller closed the menu before its pending open happened. A
+        // trigger open waits for the controller to hear of it, and a render
+        // before then is no close.
+        disarmOpen();
+        popover.hide();
       }
     }
-  }, [controlledIsOpen, isControlled, popover]);
+  }, [controlledIsOpen, isControlled, popover, disarmOpen]);
 
   // Move focus into the menu only after the layer has committed open,
   // honoring the input modality: keyboard (and programmatic) opens land on
@@ -1387,7 +1413,7 @@ function DropdownMenuPopover({
     (
       modality: 'keyboard' | 'pointer' = 'keyboard',
       notifyClick = false,
-    ): boolean => {
+    ): 'open' | 'pending' | 'refused' => {
       // An unavailable trigger never opens the menu. Button keeps an
       // aria-disabled trigger focusable for its tooltip and swallows only
       // Enter and Space, so the arrow keys, a press and a click would still
@@ -1395,7 +1421,8 @@ function DropdownMenuPopover({
       if (
         buttonRef.current?.matches(':disabled, [aria-disabled="true"]') === true
       ) {
-        return false;
+        disarmOpen();
+        return 'refused';
       }
       acceptedOpenRef.current = false;
       notifyClickOnShowRef.current = notifyClick;
@@ -1403,16 +1430,18 @@ function DropdownMenuPopover({
       openModalityRef.current = modality;
       shouldFocusOnOpenRef.current = true;
       popover.show();
-      if (!acceptedOpenRef.current) {
-        notifyClickOnShowRef.current = false;
-        pendingControlledOpenRef.current = false;
-        openModalityRef.current = 'keyboard';
-        shouldFocusOnOpenRef.current = false;
-        return false;
+      if (acceptedOpenRef.current) {
+        return 'open';
       }
-      return true;
+      // The layer can accept the open and hold it until the trigger is a
+      // valid anchor. The armed focus and click then wait for that open.
+      if (openPendingRef.current) {
+        return 'pending';
+      }
+      disarmOpen();
+      return 'refused';
     },
-    [isControlled, popover],
+    [isControlled, popover, disarmOpen],
   );
 
   const isMenuOpenNow = isControlled
@@ -1470,7 +1499,7 @@ function DropdownMenuPopover({
         focusForLastInput(buttonRef.current, {preventScroll: true});
       }
       openingPressRef.current = {gesture: currentGesture()};
-      const didOpen = openAndFocus('pointer', true);
+      const didOpen = openAndFocus('pointer', true) === 'open';
       // A mouse can release away from the trigger, or the trigger can move
       // away under it. So the layer claims a mouse's press, and that release
       // lands on the layer; over the trigger, the trigger keeps it. Only a
@@ -1574,11 +1603,7 @@ function DropdownMenuPopover({
             return;
           }
           focusLastOnOpenRef.current = e.key === 'ArrowUp';
-          if (!openAndFocus()) {
-            // A refused open (disabled trigger) must not leave ArrowUp's
-            // "land on the last row" armed for a later open.
-            focusLastOnOpenRef.current = false;
-          }
+          openAndFocus();
         }
         return;
       }

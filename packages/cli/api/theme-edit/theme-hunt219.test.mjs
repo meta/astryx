@@ -58,21 +58,19 @@ const offered = async run => {
 };
 
 describe('weight and style words after a family', () => {
-  it('reads a typo past another weight word, and never saves the name', async () => {
-    for (const typed of [
-      'Inter Bold Itallic',
-      'Inter Bold Italc',
-      'Georgia Bold Itallic',
+  it('reads a typo past another weight word, answered as the exact words are', async () => {
+    for (const [typed, exact] of [
+      ['Inter Bold Itallic', 'Inter Bold Italic'],
+      ['Inter Bold Italc', 'Inter Bold Italic'],
+      ['Georgia Bold Itallic', 'Georgia Bold Italic'],
     ])
       expect(
         await offered(() => themeEditSet('w', 'font', typed, {cwd})),
         typed,
-      ).toContain(`set w font '"${typed}"'`);
-    expect(
-      await offered(() =>
-        themeEditNew('n2', {cwd, settings: {font: 'Inter Bold Itallic'}}),
-      ),
-    ).toContain(`new n2 --font '"Inter Bold Itallic"'`);
+      ).toEqual(await offered(() => themeEditSet('w', 'font', exact, {cwd})));
+    await offered(() =>
+      themeEditNew('n2', {cwd, settings: {font: 'Inter Bold Itallic'}}),
+    );
   }, 240_000);
 
   it('reads a typo of a word whose headings rung is another word', async () => {
