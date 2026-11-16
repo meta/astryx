@@ -722,9 +722,14 @@ async function withThemeModuleGuards(load) {
   holdExit();
   /** @type {(error: unknown) => void} */
   let fail = () => {};
+  /** @type {{error: unknown} | null} */
+  let failure = null;
   /** @type {Promise<never>} */
   const failed = new Promise((_resolve, reject) => {
-    fail = reject;
+    fail = error => {
+      failure ??= {error};
+      reject(error);
+    };
   });
   // Read only through the race below; a failure after it settled is moot.
   failed.catch(() => {});
@@ -753,11 +758,15 @@ async function withThemeModuleGuards(load) {
   // Node empties its loop with the load still waiting: refused, not exit 13.
   process.once('beforeExit', drained);
   try {
-    return await Promise.race([
+    const loaded = await Promise.race([
       guardedLoad.run(store, load),
       unsettled,
       failed,
     ]);
+    // A load that settles in the same microtask checkpoint as a microtask it
+    // queued wins the race before that microtask's exception refuses it.
+    if (failure) throw failure.error;
+    return loaded;
   } finally {
     process.removeListener('beforeExit', drained);
     process.exitCode = exitCode;

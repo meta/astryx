@@ -165,3 +165,39 @@ describe('a theme module that throws from a microtask while it loads', () => {
     expect(r.stderr).not.toMatch(/^\s+at /m);
   });
 });
+
+describe('a theme module with no Core of its own that throws from a microtask while it loads', () => {
+  it('is a refused load too, never a built theme', () => {
+    // No Core in the theme's folder: the CLI loads it through its own Core,
+    // and the load settles in the same microtask checkpoint as the throw.
+    const bare = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-f42-bare-')),
+    );
+    try {
+      fs.writeFileSync(path.join(bare, 'package.json'), '{"type":"module"}\n');
+      fs.mkdirSync(path.join(bare, 'p'));
+      fs.writeFileSync(
+        path.join(bare, 'p/p.ts'),
+        `queueMicrotask(() => { throw new Error('micro-throw'); });\n${THEME}`,
+      );
+      const r = spawnSync(
+        process.execPath,
+        [BIN, 'theme', 'build', 'p/p.ts', '--json'],
+        {
+          cwd: bare,
+          encoding: 'utf8',
+          timeout: 60_000,
+        },
+      );
+      expect(r.status, r.stderr).toBe(1);
+      const out = JSON.parse(r.stdout);
+      expect(out.code).toBe('ERR_THEME_LOAD');
+      expect(out.error).toContain(
+        'Failed to load theme from p/p.ts: micro-throw',
+      );
+      expect(fs.existsSync(path.join(bare, 'p/p.css'))).toBe(false);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
+  });
+});
