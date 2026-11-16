@@ -1878,6 +1878,27 @@ export async function checkAppThemes(cwd) {
     // The generated-module check owns the parse failure. This check stays
     // evidence-driven and refuses to pass without readable imports.
   }
+  /** @param {(typeof resolved)[number]} theme */
+  const importedEntry = theme =>
+    prepared?.entries.find(entry => entry.slug === theme.slug) ?? theme;
+  // A family that any font stylesheet the module imports loads is loaded for
+  // every added theme: a theme that extends another, such as a local fork of
+  // neutral, names the families its parent's stylesheet loads.
+  const moduleLoaded = new Set();
+  for (const theme of resolved) {
+    const {fontStylesheet} = importedEntry(theme);
+    if (!theme.fontStylesheetFile || !fontStylesheet) continue;
+    if (!generatedImports?.has(fontStylesheet)) continue;
+    try {
+      const evidence = fontStylesheetEvidence(
+        readTextFile(theme.fontStylesheetFile),
+        theme.fontStylesheetFile,
+      );
+      for (const family of evidence.loaded) moduleLoaded.add(family);
+    } catch {
+      // The theme's own pass below reports a stylesheet it cannot parse.
+    }
+  }
   for (const theme of resolved) {
     const availableTheme = available.find(
       candidate =>
@@ -1888,14 +1909,15 @@ export async function checkAppThemes(cwd) {
     if (availableTheme) {
       files.push(path.join(availableTheme.sourceDir, availableTheme.entry));
     }
-    const names = namedThemeFonts(files);
-    if (names.size === 0) continue;
-    const importedTheme =
-      prepared?.entries.find(entry => entry.slug === theme.slug) ?? theme;
+    const names = [...namedThemeFonts(files)].filter(
+      name => !moduleLoaded.has(name.toLowerCase()),
+    );
+    if (names.length === 0) continue;
+    const importedTheme = importedEntry(theme);
     if (!theme.fontStylesheetFile || !importedTheme.fontStylesheet) {
       const problem = {
         theme,
-        message: `${[...names].join(', ')} (font stylesheet is not imported)`,
+        message: `${names.join(', ')} (font stylesheet is not imported)`,
       };
       missingFontWarnings.push(problem);
       continue;
@@ -1903,7 +1925,7 @@ export async function checkAppThemes(cwd) {
     if (!generatedImports?.has(importedTheme.fontStylesheet)) {
       fontFailures.push({
         theme,
-        message: `${[...names].join(', ')} (font stylesheet is not imported)`,
+        message: `${names.join(', ')} (font stylesheet is not imported)`,
       });
       continue;
     }
@@ -1912,7 +1934,7 @@ export async function checkAppThemes(cwd) {
         readTextFile(theme.fontStylesheetFile),
         theme.fontStylesheetFile,
       );
-      const missing = [...names].filter(
+      const missing = names.filter(
         name => !evidence.loaded.has(name.toLowerCase()),
       );
       if (missing.length === 0) continue;
