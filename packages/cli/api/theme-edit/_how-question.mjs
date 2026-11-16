@@ -6095,8 +6095,10 @@ export function draftAnswer(ctx, env, question) {
     )
       c.aspects = ['text'];
   }
-  // An icon's color is its text color ("the close icon red").
-  for (const c of clauses)
+  // An icon's color is its text color ("the close icon red"); also once a
+  // place's element is read as an icon ("the chevron in selects").
+  /** @param {Clause} c */
+  const iconColor = c => {
     if (
       c.parts.some(x => /-icon$/.test(x.on)) &&
       (c.aspects.includes('background') ||
@@ -6106,6 +6108,8 @@ export function draftAnswer(ctx, env, question) {
       c.aspects = c.aspects.length
         ? c.aspects.map(x => (x === 'background' ? 'text' : x))
         : ['text'];
+  };
+  for (const c of clauses) iconColor(c);
   /**
    * The element a clause names in a place, by the part data: the place
    * itself when the words name it ("the indicator in checkboxes"), a part
@@ -6126,8 +6130,9 @@ export function draftAnswer(ctx, env, question) {
     // draw.)
     /** @type {Array<{holderText: string, elementText: string, by: string}>} */
     const places = [];
+    // ("The icon after the button text": beside a part's text is in it.)
     const preps =
-      /\b(inside|within|of|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?/g;
+      /\b(inside|within|of|after|before|next to|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?/g;
     for (const m of text.matchAll(preps)) {
       const after = text.slice(/** @type {number} */ (m.index) + m[0].length);
       // (The place runs to the next place said.)
@@ -6157,6 +6162,21 @@ export function draftAnswer(ctx, env, question) {
       places.unshift({
         holderText: `${poss[1]}s`,
         elementText: poss[2],
+        by: 'possessive',
+      });
+    // A part said right before its separators, "the dropdown separators",
+    // "the context menu separators": the owner first, as a possessive.
+    // (Only "separators": a table's "row dividers" are read as its cells'.)
+    const lead = /\b(?:the\s+|my\s+)?([a-z][a-z ]*?)\s+(separators?\b.*)$/.exec(
+      text,
+    );
+    if (lead && !poss)
+      places.push({
+        holderText: lead[1].replace(
+          /^.*\b(?:make|set|turn|give|change)\s+/,
+          '',
+        ),
+        elementText: lead[2],
         by: 'possessive',
       });
     // (The first place said first: "the item in menus in cards" is a
@@ -6304,10 +6324,27 @@ export function draftAnswer(ctx, env, question) {
         if (ofPart && keys.includes(`${h}-${ofPart}`))
           found.push({k: `${h}-${ofPart}`, score: 45});
       const ownPart = ownPart0 === 'body' ? 'text' : ownPart0;
-      // (The place's own part of that kind: a dropdown menu's own divider.)
-      for (const h of members)
+      // (The place's own part of that kind: a dropdown menu's own divider;
+      // a part named by the place's own word that has one, "the dropdown
+      // separators" the dropdown menu's; else one of that kind drawn inside
+      // it, the context menu's rows' divider.)
+      const word = named.split('-')[0];
+      for (const h of [
+        ...members,
+        ...keys.filter(
+          k =>
+            ownPart &&
+            !members.includes(k) &&
+            k.split('-')[0] === word &&
+            keys.includes(`${k}-${ownPart}`),
+        ),
+      ])
         if (ownPart && keys.includes(`${h}-${ownPart}`))
           found.push({k: `${h}-${ownPart}`, score: 45});
+      for (const h of members)
+        for (const k of C.MAP[h]?.contains ?? [])
+          if (ownPart && k !== ownPart && k.endsWith(`-${ownPart}`))
+            found.push({k, score: 44});
       if (
         ownPart &&
         !members.includes(ownPart) &&
@@ -6538,6 +6575,7 @@ export function draftAnswer(ctx, env, question) {
       const element = elementOfPlace(c);
       if (element) {
         c.parts = [element.part];
+        iconColor(c);
         c.container = element.holder;
         if (element.state !== undefined) c.state = element.state;
         if (element.note) placeNotes.push({c, text: element.note});
