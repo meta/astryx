@@ -16,13 +16,7 @@ import {
 } from './module-loader.mjs';
 import {importUrl} from './import-url.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
-
-// Node runs module hooks in the loading thread from 22.15. On an older Node
-// the CLI supports (its oldest is 22.13), a theme module load matches a
-// stylesheet import by its text, from the theme module's folder, as the
-// fallback case below shows.
-const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+import {hasModuleHooks} from '../../test-utils/module-hooks.mjs';
 
 let tmpDir;
 

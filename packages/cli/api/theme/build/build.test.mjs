@@ -20,7 +20,6 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import nodeModule from 'node:module';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -37,6 +36,7 @@ import {
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 // `themeBuild` captures core's generator once at module load. Wrap the two
 // CSS-emitting exports in vi.fn (call-through by default) so the receipt tests
@@ -53,12 +53,6 @@ vi.mock('@astryxdesign/core/theme', async importActual => {
 });
 
 vi.setConfig({testTimeout: 30000});
-
-// Node runs module hooks in the loading thread from 22.15. On an older Node
-// the CLI supports (its oldest is 22.13), a stylesheet that a base theme's
-// module imports from another folder fails the load, as a case below shows.
-const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 let tmpDir;
 beforeEach(() => {
@@ -1318,7 +1312,7 @@ describe('themeBuild() — extends', () => {
         await expect(
           themeBuild('styled-child.mjs', {}, {cwd: extDir}),
         ).rejects.toThrow(
-          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later \(this is Node [\d.]+\)\. Nothing was written\./,
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later, or 23\.5 or later \(this is Node [\d.]+\)\. Nothing was written\./,
         );
       },
     );

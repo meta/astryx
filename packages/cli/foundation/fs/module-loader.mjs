@@ -290,6 +290,23 @@ function removeStylesheetHooks() {
 }
 
 /**
+ * The file Node could not load, from its refusal of an unknown extension
+ * (a native import), or from a syntax error in a file that is no JavaScript
+ * (jiti's synchronous require, which reads the file as a script and names it
+ * on the first line of the stack). Null for any other error.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+function unloadableFile(error) {
+  const e = /** @type {any} */ (error);
+  if (e?.code === 'ERR_UNKNOWN_FILE_EXTENSION')
+    return /\bfor (.+)$/.exec(String(e.message))?.[1] ?? null;
+  if (e instanceof SyntaxError)
+    return /^(.+):\d+$/.exec(String(e.stack).split('\n')[0])?.[1] ?? null;
+  return null;
+}
+
+/**
  * On a Node without module hooks, the refusal for a stylesheet or an asset a
  * theme module imports: it names the file and the Node that loads it. Null
  * for any other error.
@@ -297,9 +314,7 @@ function removeStylesheetHooks() {
  * @returns {Error | null}
  */
 function needsModuleHooks(error) {
-  if (/** @type {any} */ (error)?.code !== 'ERR_UNKNOWN_FILE_EXTENSION')
-    return null;
-  const file = /\bfor (.+)$/.exec(/** @type {Error} */ (error).message)?.[1];
+  const file = unloadableFile(error);
   if (!file || !(STYLESHEET_FILE.test(file) || ASSET_FILE.test(file)))
     return null;
   const relative = path.relative(process.cwd(), file);
@@ -308,7 +323,7 @@ function needsModuleHooks(error) {
       ? relative
       : file;
   return new Error(
-    `it imports ${shown}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later (this is Node ${process.versions.node}). Nothing was written.`,
+    `it imports ${shown}, and loading a theme that imports a stylesheet or asset needs Node 22.15 or later, or 23.5 or later (this is Node ${process.versions.node}). Nothing was written.`,
     {cause: error},
   );
 }
@@ -328,8 +343,9 @@ function needsModuleHooks(error) {
  * there, so the caller can say what its outputs do not carry. Module loads
  * outside this call's async context do not change. The module hook is
  * installed for the first overlapping load and removed after the last. A
- * Node without module hooks (before 22.15) runs the load unchanged, and a
- * stylesheet or asset it meets refuses the load, naming that Node.
+ * Node without module hooks (before 22.15, or 23.0 to 23.4) runs the load
+ * unchanged, and a stylesheet or asset it meets refuses the load, naming
+ * that Node.
  * @template T
  * @param {() => Promise<T>} load
  * @param {{unbuilt?: Set<string>, imported?: Set<string>}} [options]
