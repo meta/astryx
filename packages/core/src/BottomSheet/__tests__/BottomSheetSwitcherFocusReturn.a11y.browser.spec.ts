@@ -39,7 +39,7 @@ test.afterAll(async () => {
 
 async function openFromKeyboard(page: Page, story: string): Promise<Locator> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-bottomsheetswitcher-deprecated--${story}&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-bottomsheetswitcher--${story}&viewMode=story`,
   );
   const opener = page.getByRole('button', {
     name: 'Set up notifications',

@@ -2134,7 +2134,7 @@ describe('focus return when a flow closes without its scrim or unmounts', () => 
     ['without the scrim', false],
   ])(
     'returns focus to the opener when the switcher unmounts while a sheet is open, %s',
-    (_name, hasScrim) => {
+    async (_name, hasScrim) => {
       render(<MountedFlow hasScrim={hasScrim} />);
       const opener = screen.getByRole('button', {name: 'Filters'});
       act(() => opener.focus());
@@ -2148,6 +2148,8 @@ describe('focus return when a flow closes without its scrim or unmounts', () => 
           .getByRole('button', {name: 'Close filters', hidden: true})
           .click();
       });
+      // The repair runs once the commit has finished.
+      await act(async () => {});
       expect(opener).toHaveFocus();
     },
   );

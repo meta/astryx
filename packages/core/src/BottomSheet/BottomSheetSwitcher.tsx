@@ -94,6 +94,10 @@ import {
   type BottomSheetSwitcherPhase,
   type BottomSheetSwitcherTransitionEvent,
 } from './BottomSheetSwitcherContext';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 
 const styles = stylex.create({
   // A scrim flow's dialogs live in the top layer; the wrapper has no box.
@@ -579,6 +583,18 @@ export function BottomSheetSwitcher({
         )),
     [],
   );
+  // Whether focus was in the flow when the flow closed. Read in the commit
+  // that closes it: the closing step is marked inert in that commit, and the
+  // browser moves focus out of it only when it next renders.
+  const hadFocusAtCloseRef = useRef(false);
+  const previousActiveSheetRef = useRef(activeSheet);
+  useLayoutEffect(() => {
+    const wasOpen = previousActiveSheetRef.current != null;
+    previousActiveSheetRef.current = activeSheet;
+    if (wasOpen && activeSheet == null) {
+      hadFocusAtCloseRef.current = holdsFocus(document.activeElement);
+    }
+  }, [activeSheet, holdsFocus]);
   const onBeforeSheetShow = useCallback(() => {
     if (triggerRef.current == null) {
       triggerRef.current = document.activeElement as HTMLElement | null;
@@ -627,31 +643,43 @@ export function BottomSheetSwitcher({
       // A flow without the scrim keeps the native dialog's return rule: focus
       // goes back to the opener only while it is still inside the flow.
       const trigger = triggerRef.current;
-      if (trigger?.isConnected === true && holdsFocus(document.activeElement)) {
-        trigger.focus({preventScroll: true});
+      const active = document.activeElement;
+      const isFocusLeftInFlow =
+        active == null || active === document.body || holdsFocus(active);
+      if (
+        hadFocusAtCloseRef.current &&
+        isFocusLeftInFlow &&
+        trigger?.isConnected === true
+      ) {
+        returnFocusForLastInput(trigger);
       }
     }
+    hadFocusAtCloseRef.current = false;
     triggerRef.current = null;
     modalFlowRef.current = false;
     presentationOrderRef.current.clear();
   }, [hasScrim, holdsFocus, isFlowVisible]);
 
-  // A flow removed while a sheet is open returns focus to its opener, as a
-  // standalone sheet does, when focus was inside the flow or fell to the body
-  // with the removal. A sheet open above the flow keeps focus.
-  useLayoutEffect(
-    () => () => {
-      const trigger = triggerRef.current;
-      const active = document.activeElement;
-      if (
-        trigger?.isConnected === true &&
-        (active == null || active === document.body || holdsFocus(active))
-      ) {
-        trigger.focus({preventScroll: true});
-      }
-    },
-    [holdsFocus],
-  );
+  // A flow removed while a sheet is open runs no close, so focus would drop to
+  // the page. After the commit, the shared repair returns focus to the opener
+  // when the removal lost it, as a standalone sheet's does.
+  useLayoutEffect(() => {
+    const flow = flowRef.current;
+    if (!isFlowVisible || flow == null) {
+      return;
+    }
+    const repairOnRemoval = prepareFocusRepairOnRemoval(flow, {
+      keepRestingFocus: true,
+    });
+    return () => {
+      const opener = triggerRef.current;
+      repairOnRemoval(() => {
+        if (opener != null && opener.isConnected) {
+          returnFocusForLastInput(opener);
+        }
+      });
+    };
+  }, [isFlowVisible]);
 
   // A scrim flow is one level of the bottom-sheet stack while it is visible.
   // The step hosts present their own dialogs; the registry re-presents the
