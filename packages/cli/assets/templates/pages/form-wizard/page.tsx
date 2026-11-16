@@ -392,7 +392,7 @@ export default function FormWizardPage() {
         // stepper and the fields below it share one content line.
         <LayoutHeader hasDivider={false}>
           <VStack gap={isNarrow ? 3 : 5}>
-            <HStack gap={3} vAlign="center">
+            <HStack wrap="wrap" gap={3} vAlign="center">
               <StackItem size="fill">
                 <Heading level={1}>Create workspace</Heading>
               </StackItem>
@@ -823,7 +823,7 @@ export default function FormWizardPage() {
       }
       footer={
         <LayoutFooter>
-          <HStack gap={3} vAlign="center">
+          <HStack wrap="wrap" gap={3} vAlign="center">
             {/* Skip belongs at the far end from the button it competes with.
                 Sitting next to Next it reads as a second way forward and
                 collects mis-clicks; alone on the opposite edge it reads as
@@ -844,7 +844,7 @@ export default function FormWizardPage() {
               {step + 1} of {STEPS.length}
             </Text>
             <StackItem size="fill" style={footerZone}>
-              <HStack gap={3} hAlign="end">
+              <HStack wrap="wrap" gap={3} hAlign="end">
                 <Button
                   label="Back"
                   variant="secondary"
