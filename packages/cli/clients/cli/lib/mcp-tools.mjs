@@ -8,7 +8,8 @@
  * `outsideProject`, so it is no tool. A tool's inputs are the command's
  * arguments and options, and the root options, under their CLI names, and a
  * call becomes the command line that runs it. The manifest is the only input,
- * so the tools are the commands of this CLI, and nothing else.
+ * so the tools are the commands of this CLI, and nothing else. A docs-only
+ * server (`--docs-only`) serves the named commands that only read the docs.
  *
  * @input the CLI's manifest (`astryx manifest --json`'s data); the folder served
  * @output tool descriptors for tools/list; the command line a tools/call runs;
@@ -30,6 +31,31 @@ export const RUN_OPTIONS = Object.freeze(['--json', '--version']);
 
 /** The input that names the folder a command runs in. */
 export const CWD_INPUT = 'cwd';
+
+/**
+ * The commands a docs-only server offers (`astryx mcp --docs-only`), by
+ * command path. Each one answers from Astryx's docs and the Core the folder
+ * has: it writes nothing, reads no path a caller names, and reaches no other
+ * service. They are named, not inferred from the manifest, because offering a
+ * command on a server many people share is a decision about that command.
+ */
+export const DOCS_ONLY_COMMANDS = Object.freeze([
+  'search',
+  'build',
+  'component',
+  'hook',
+  'docs',
+  'template',
+  'discover',
+  'theme list',
+  'theme targets',
+]);
+
+/**
+ * The inputs a docs-only tool leaves out: a package to read by name or path,
+ * and the template inputs that write a file.
+ */
+export const DOCS_ONLY_OMITTED_INPUTS = Object.freeze(['package', 'path', 'cdn', 'overwrite']);
 
 /**
  * @typedef {object} McpArgument
@@ -55,6 +81,8 @@ export const CWD_INPUT = 'cwd';
  * @property {Record<string, unknown>} inputSchema
  * @property {McpArgument[]} args in command-line order
  * @property {McpOption[]} options the command's options, then the root options
+ * @property {boolean} docsOnly a docs-only tool: it takes no folder, and it
+ *   refuses an input it does not declare
  */
 
 /**
@@ -127,15 +155,18 @@ function toolRootOptions(manifest) {
  * The MCP tool for one manifest command.
  * @param {import('./manifest').ManifestCommand} command
  * @param {import('./manifest').ManifestOption[]} rootOptions
+ * @param {boolean} docsOnly
  * @returns {McpTool}
  */
-function toolOf(command, rootOptions) {
+function toolOf(command, rootOptions, docsOnly) {
   const words = command.name.split(' ');
+  /** @param {string} key */
+  const offered = key => !docsOnly || !DOCS_ONLY_OMITTED_INPUTS.includes(key);
   /** @type {Record<string, Record<string, unknown>>} */
   const properties = {};
   /** @type {string[]} */
   const required = [];
-  const args = command.arguments.map(arg => {
+  const args = command.arguments.filter(arg => offered(arg.name)).map(arg => {
     const item = {type: 'string'};
     properties[arg.name] = {
       ...(arg.variadic ? {type: 'array', items: item} : item),
@@ -151,11 +182,12 @@ function toolOf(command, rootOptions) {
     ...rootOptions.map(o => /** @type {const} */ ([o, false])),
   ]) {
     const entry = optionEntry(manifestOption);
+    if (!offered(entry.key)) continue;
     properties[entry.key] = optionSchema(manifestOption, entry, describe);
     options.push(entry);
   }
   // The server instructions describe it once.
-  properties[CWD_INPUT] = {type: 'string'};
+  if (!docsOnly) properties[CWD_INPUT] = {type: 'string'};
   return {
     name: words.join('_'),
     words,
@@ -169,21 +201,26 @@ function toolOf(command, rootOptions) {
     },
     args,
     options,
+    docsOnly,
   };
 }
 
 /**
  * The MCP tools of the CLI: one per command the manifest lists as answering
- * with --json, with an `outsideProject`, in the manifest's order.
+ * with --json, with an `outsideProject`, in the manifest's order. A docs-only
+ * server serves the DOCS_ONLY_COMMANDS among them, without the
+ * DOCS_ONLY_OMITTED_INPUTS and without a folder input.
  *
  * @param {import('./manifest').CLIManifest} manifest
+ * @param {{docsOnly?: boolean}} [mode]
  * @returns {McpTool[]}
  */
-export function mcpTools(manifest) {
+export function mcpTools(manifest, {docsOnly = false} = {}) {
   const rootOptions = toolRootOptions(manifest);
   return flatten(manifest.commands)
     .filter(command => command.json && command.outsideProject)
-    .map(command => toolOf(command, rootOptions));
+    .filter(command => !docsOnly || DOCS_ONLY_COMMANDS.includes(command.name))
+    .map(command => toolOf(command, rootOptions, docsOnly));
 }
 
 /**
@@ -215,18 +252,25 @@ export async function projectAgentText(root) {
  * the root help gives them.
  *
  * @param {import('./manifest').CLIManifest} manifest
- * @param {{agentText?: string | null}} [context] from projectAgentText()
+ * @param {{agentText?: string | null, docsOnly?: boolean}} [context]
+ *   agentText from projectAgentText(); docsOnly for a docs-only server
  * @returns {string}
  */
-export function mcpInstructions(manifest, {agentText = null} = {}) {
+export function mcpInstructions(manifest, {agentText = null, docsOnly = false} = {}) {
   const rootLines = toolRootOptions(manifest).map(o => `  ${o.flag}  ${o.description}`);
+  const toolRule =
+    "A tool name is the command's words joined by _ (theme build is theme_build), and its inputs are the command's arguments and options under their CLI names: a value option takes a string, and a list takes an array of strings.";
   return [
     ...(agentText ? [agentText] : []),
     manifest.description,
-    'Each tool runs one astryx command in this folder with --json and answers with its JSON output unchanged. ' +
-      "A tool name is the command's words joined by _ (theme build is theme_build), and its inputs are the command's arguments and options under their CLI names: a value option takes a string, and a list takes an array of strings.",
+    docsOnly
+      ? 'This server offers only the astryx commands that read the docs, and it answers for the Astryx release it has, which can differ from the one your project uses. ' +
+        `Each tool runs one of those commands with --json and answers with its JSON output unchanged. ${toolRule}`
+      : `Each tool runs one astryx command in this folder with --json and answers with its JSON output unchanged. ${toolRule}`,
     ['Every tool also takes the root options, which change only the reads their text names:', ...rootLines].join('\n'),
-    `and ${CWD_INPUT}, the folder to run the command in, inside this one (default: this one).`,
+    ...(docsOnly
+      ? []
+      : [`and ${CWD_INPUT}, the folder to run the command in, inside this one (default: this one).`]),
     "A command's full docs are the docs tool with topic cli/commands/<the command's words joined by ->.",
   ].join('\n\n');
 }
@@ -257,7 +301,8 @@ function listOf(value) {
 /**
  * The command-line arguments that run `tool` with `input`, and the folder to
  * run them in. An input the tool does not declare goes to the command as
- * `--<name>`, so the command answers it as the CLI does.
+ * `--<name>`, so the command answers it as the CLI does; a docs-only tool
+ * refuses it instead, and always runs in the folder served.
  *
  * @param {McpTool} tool
  * @param {Record<string, unknown>} input
@@ -269,7 +314,7 @@ export function commandLine(tool, input, {root}) {
   /** @type {string[]} */
   const flags = [];
   /** @type {Set<string>} */
-  const used = new Set([CWD_INPUT]);
+  const used = new Set(tool.docsOnly ? [] : [CWD_INPUT]);
 
   for (const option of tool.options) {
     used.add(option.key);
@@ -310,6 +355,9 @@ export function commandLine(tool, input, {root}) {
 
   for (const [key, value] of Object.entries(given)) {
     if (used.has(key) || value === undefined || value === null || value === false) continue;
+    if (tool.docsOnly) {
+      throw new McpInputError(`${tool.name} takes no ${key} on this server`);
+    }
     if (value === true) flags.push(`--${key}`);
     else for (const item of listOf(value)) flags.push(`--${key}=${item}`);
   }
@@ -321,7 +369,7 @@ export function commandLine(tool, input, {root}) {
       '--json',
       ...(positionals.length > 0 ? ['--', ...positionals] : []),
     ],
-    cwd: commandFolder(given[CWD_INPUT], root),
+    cwd: tool.docsOnly ? root : commandFolder(given[CWD_INPUT], root),
   };
 }
 

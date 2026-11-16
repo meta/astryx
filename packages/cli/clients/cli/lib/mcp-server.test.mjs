@@ -13,6 +13,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import * as readline from 'node:readline';
 import {PassThrough} from 'node:stream';
 import {CLI_BIN, PROTOCOL_VERSIONS, serveMcp} from './mcp-server.mjs';
+import {DOCS_ONLY_COMMANDS} from './mcp-tools.mjs';
 
 /** @type {import('./mcp-tools.mjs').McpTool} */
 const SEARCH = {
@@ -245,6 +246,38 @@ describe('astryx mcp, the real bin', () => {
     const code = await new Promise(resolve => child.on('close', resolve));
     expect(code).toBe(0);
     for (const line of lines) expect(() => JSON.parse(line)).not.toThrow();
+  }, 60_000);
+
+  it('serves only the commands that read the docs with --docs-only, and refuses any other input', () => {
+    const input = [
+      {jsonrpc: '2.0', id: 1, method: 'tools/list', params: {}},
+      {jsonrpc: '2.0', id: 2, method: 'tools/call', params: {name: 'template', arguments: {name: 'settings', path: 'src'}}},
+      {jsonrpc: '2.0', id: 3, method: 'tools/call', params: {name: 'init', arguments: {}}},
+    ]
+      .map(message => `${JSON.stringify(message)}\n`)
+      .join('');
+    const run = spawnSync(process.execPath, [CLI_BIN, 'mcp', '--docs-only'], {
+      encoding: 'utf8',
+      input,
+      env: {...process.env, CI: ''},
+    });
+    expect(run.status).toBe(0);
+    /** @type {Map<number, any>} */
+    const replies = new Map(
+      run.stdout
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+        .map(reply => [reply.id, reply]),
+    );
+    expect(replies.get(1).result.tools.map((/** @type {any} */ t) => t.name).sort()).toEqual(
+      DOCS_ONLY_COMMANDS.map(name => name.replaceAll(' ', '_')).sort(),
+    );
+    expect(replies.get(2).result).toEqual({
+      content: [{type: 'text', text: 'template takes no path on this server'}],
+      isError: true,
+    });
+    expect(replies.get(3).error.message).toBe('Unknown tool: init');
   }, 60_000);
 
   it('refuses --json before serving: stdout carries the protocol', () => {

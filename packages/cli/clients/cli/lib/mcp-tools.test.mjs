@@ -18,6 +18,8 @@ import {buildManifest} from './manifest.mjs';
 import {
   commandLine,
   CWD_INPUT,
+  DOCS_ONLY_COMMANDS,
+  DOCS_ONLY_OMITTED_INPUTS,
   mcpInstructions,
   mcpTools,
   McpInputError,
@@ -131,6 +133,48 @@ describe('mcpTools', () => {
     // A CommandDoc's choices stay in the option's text, as in help; the
     // command checks the value.
     expect(properties.type).toEqual({type: 'string', description: expect.stringContaining('component|hook')});
+  });
+});
+
+describe('a docs-only server', () => {
+  /** @type {import('./mcp-tools.mjs').McpTool[]} */
+  let docsTools;
+  beforeAll(() => {
+    docsTools = mcpTools(manifest, {docsOnly: true});
+  });
+
+  it('serves the named commands that read the docs, each a command of this CLI, in the manifest order', () => {
+    const names = docsTools.map(t => t.words.join(' '));
+    expect([...names].sort()).toEqual([...DOCS_ONLY_COMMANDS].sort());
+    expect(names).toEqual(tools.map(t => t.words.join(' ')).filter(name => DOCS_ONLY_COMMANDS.includes(name)));
+  });
+
+  it('takes no folder, and none of the inputs that name a package or a file to write', () => {
+    for (const tool of docsTools) {
+      const inputs = Object.keys(tool.inputSchema.properties);
+      expect(inputs).not.toContain(CWD_INPUT);
+      for (const omitted of DOCS_ONLY_OMITTED_INPUTS) expect(inputs, tool.name).not.toContain(omitted);
+    }
+    const template = docsTools.find(t => t.name === 'template');
+    expect(template?.args.map(a => a.key)).toEqual(['name']);
+  });
+
+  it('refuses an input a tool does not list, and runs every call in the folder served', () => {
+    const template = /** @type {import('./mcp-tools.mjs').McpTool} */ (docsTools.find(t => t.name === 'template'));
+    for (const input of [{path: 'src'}, {cwd: 'sub'}, {overwrite: true}, {package: '@astryxdesign/core'}]) {
+      expect(() => commandLine(template, {name: 'settings', ...input}, {root: '/srv'})).toThrow(McpInputError);
+    }
+    expect(commandLine(template, {name: 'settings', skeleton: true}, {root: '/srv'})).toEqual({
+      argv: ['template', '--skeleton', '--json', '--', 'settings'],
+      cwd: '/srv',
+    });
+  });
+
+  it('tells the client it answers for the release it has, and offers no folder input', () => {
+    const text = mcpInstructions(manifest, {docsOnly: true});
+    expect(text).toContain('only the astryx commands that read the docs');
+    expect(text).not.toContain(`and ${CWD_INPUT},`);
+    expect(mcpInstructions(manifest)).toContain(`and ${CWD_INPUT},`);
   });
 });
 

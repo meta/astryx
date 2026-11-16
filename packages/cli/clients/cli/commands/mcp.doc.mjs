@@ -14,16 +14,30 @@ export const doc = {
   displayName: 'astryx mcp',
   namespace: 'cli/commands',
   summary:
-    'Serve every astryx command to an AI agent as a Model Context Protocol (MCP) tool, over stdio',
+    'For AI tools that cannot run commands: serve every astryx command as an MCP tool, over stdio',
   description:
-    'Starts an MCP server on standard input and output, for an MCP client such as Claude Code, Cursor or Codex to launch. ' +
+    'For an AI tool that reaches tools only through the Model Context Protocol (MCP). ' +
+    'An agent that can run commands runs astryx itself, which is the usual way to use Astryx. ' +
+    'Starts an MCP server on standard input and output, for an MCP client to launch. ' +
     'Each command that answers with --json is one tool, named by its words (theme build is theme_build), ' +
     'with the command\'s arguments and options as its inputs under their CLI names. ' +
     'A tool call runs that command with --json in this folder, or in the folder a call names inside it, ' +
     'and answers with the command\'s output unchanged; a command that exits non-zero answers as an error. ' +
     'The tools come from the same command definitions as --help and the manifest, so they always match this CLI. ' +
+    'With --docs-only it serves only the commands that read the docs, for a server many people share, such as the one the docs site runs. ' +
     'Standard output carries only protocol messages, so --json does not apply.',
-  examples: [{label: 'Serve this folder to an MCP client', cli: 'astryx mcp'}],
+  options: [
+    {
+      flag: '--docs-only',
+      cliOnly: true,
+      description:
+        'Serve only the commands that read the docs (search, build, component, hook, docs, template, discover, theme list and theme targets), without a folder input or the inputs that name a package or a file to write, and refuse any input a tool does not list',
+    },
+  ],
+  examples: [
+    {label: 'Serve this folder to an MCP client', cli: 'astryx mcp'},
+    {label: 'Serve only the commands that read the docs', cli: 'astryx mcp --docs-only'},
+  ],
   outsideProject: 'same',
   notes: [
     {

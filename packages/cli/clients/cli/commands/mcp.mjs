@@ -27,14 +27,15 @@ import {doc as mcpCommand} from './mcp.doc.mjs';
  */
 export function registerMcp(program, {jsonSupported, version}) {
   defineCommand(program, mcpCommand, {
-    action: async () => {
+    action: async (/** @type {{docsOnly?: boolean}} */ opts) => {
+      const docsOnly = opts?.docsOnly === true;
       const manifest = storedManifest() ?? buildManifest(program, {jsonSupported, version});
-      const tools = mcpTools(manifest);
+      const tools = mcpTools(manifest, {docsOnly});
       const agentText = await projectAgentText(process.cwd());
       await serveMcp({
         tools,
         version,
-        instructions: mcpInstructions(manifest, {agentText}),
+        instructions: mcpInstructions(manifest, {agentText, docsOnly}),
       });
       // The tools served are the result: one per command.
       return resultSet({count: tools.length, resultKind: 'command'});

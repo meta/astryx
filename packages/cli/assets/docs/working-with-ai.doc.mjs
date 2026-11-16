@@ -178,11 +178,16 @@ npm run astryx -- docs tokens --dense`,
       ],
     },
     {
-      title: 'MCP Server',
+      id: 'mcp-server',
+      title: 'If your AI tool needs MCP',
       content: [
         {
           type: 'prose',
-          text: 'Astryx serves the Model Context Protocol (MCP) two ways. In a project, connect the CLI itself: {@command mcp} serves every astryx command as a tool, and each answer is for the version of Astryx the project has, with its theme and integrations. With nothing installed, the hosted server searches the docs of the latest release.',
+          text: 'Start with the CLI: an agent that can run commands runs astryx directly, guided by the agent docs that init writes. Use the Model Context Protocol (MCP) only when your AI tool cannot run commands, or reaches tools only through MCP.',
+        },
+        {
+          type: 'prose',
+          text: 'Astryx serves MCP two ways. In a project, connect the CLI itself: {@command mcp} serves every astryx command as a tool, and each answer is for the version of Astryx the project has, with its theme and integrations. With nothing installed, connect the docs site: it runs the same server for the latest published release, with only the commands that read the docs.',
         },
         {
           type: 'prose',
@@ -220,7 +225,7 @@ args = ["@astryxdesign/cli", "mcp"]`,
         },
         {
           type: 'prose',
-          text: 'The hosted server exposes two tools: search(query) for discovering components, doc topics, and templates; and get(name) for retrieving full documentation with props, usage, and examples. It answers for the latest published release, not for your project. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
+          text: 'The hosted server is the CLI server with `--docs-only`, run by the docs site: its tools are search, build, component, hook, docs, template, discover, theme list and theme targets, and each answers as that command does with --json, for the latest published release, not for your project. It takes no folder, and no input that names a package or a file to write. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
         },
         {
           type: 'code',
@@ -276,7 +281,7 @@ args = ["@astryxdesign/cli", "mcp"]`,
         },
         {
           type: 'prose',
-          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and retrieve full documentation without any manual CLI invocation. The hosted server uses the same keyword index from component docs, so search quality improves automatically as component documentation is updated.',
+          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and read full documentation, props and template source without running the CLI.',
         },
       ],
     },

@@ -3,12 +3,12 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-121
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: josephfarina
+approved_at: 2026-11-16
+phase: accepted
 owners: [josephfarina]
 affects_architecture: [architecture:cli-surface]
 affects_families: []
@@ -27,15 +27,22 @@ shell, runs every `astryx` command through `astryx mcp` and gets exactly the
 answer that command gives with `--json`, for the project the server serves.
 The tools are the CLI's own manifest (`astryx manifest --json`) in the shape
 MCP reads, so a new command or option is a tool input with nothing else to
-change, and the server never answers from logic of its own.
+change, and the server never answers from logic of its own. An agent that can
+run commands uses the CLI itself: the help line of `astryx mcp` and the guide's
+MCP section present the server only for AI tools that cannot. The docs site's
+MCP endpoint is the same server, as `astryx mcp --docs-only`, so a reader with
+nothing installed reaches the CLI's own answers for the commands that read the
+docs.
 
 This record owns what `astryx mcp` serves (FR1), which tools it lists and how
 each one is named (FR2), the inputs of a tool (FR3), what a tool call runs and
-answers (FR4), and what the server tells a client when it starts (FR5).
+answers (FR4), what the server tells a client when it starts (FR5), and the
+docs-only server that the docs site runs (FR7).
 
 ## Non-goals
 
-- The hosted docs server that the docs site runs, its tools, and its future.
+- How the docs site deploys its MCP endpoint: its host, its limits and the
+  folder it builds for the server.
 - Writing an MCP client's configuration into a project.
 - MCP transports other than standard input and output, and MCP resources,
   prompts, sampling and notifications beyond cancellation.
@@ -82,7 +89,8 @@ answers (FR4), and what the server tells a client when it starts (FR5).
   accepts it on every command. The input `cwd` names the folder the command runs
   in, inside the folder the server serves. An input that the tool does not
   declare reaches the command as `--<name>`, so the command answers it as it
-  answers that option on a command line.
+  answers that option on a command line. A docs-only tool differs in both
+  (FR7).
 - **FR4 — A tool call runs its command and answers with the command's output,
   unchanged.** A call runs the same copy of the CLI as a separate process, with
   the command's words, the options it was given, `--json`, then `--` and the
@@ -104,6 +112,20 @@ answers (FR4), and what the server tells a client when it starts (FR5).
   a copy of the CLI started in a project hands the run to the project's own
   CLI (`spec:AST-081` FR2, FR9): the tools are that CLI's commands, and each call
   runs its release.
+- **FR7 — `astryx mcp --docs-only` serves only the commands that read the
+  docs, and the docs site's endpoint is that server.** Its tools are the FR2
+  tools of `search`, `build`, `component`, `hook`, `docs`, `template`,
+  `discover`, `theme list` and `theme targets`: each answers from Astryx's docs
+  and the Core the folder has, writes nothing, reads no path a caller names, and
+  reaches no other service. A docs-only tool has no `cwd` input and leaves out
+  the inputs `package`, `path`, `cdn` and `overwrite`; a call that gives an
+  input the tool does not list is a tool error that names the input, and runs
+  nothing; every call runs in the folder served. The instructions say that the
+  server answers for the release it has. The docs site's MCP endpoint takes
+  requests over Streamable HTTP and keeps no session: each request runs `astryx
+mcp --docs-only` in a folder that holds the CLI and the Core the site
+  documents, and the endpoint answers with the server's reply. It has no tools
+  of its own.
 
 ### Admission
 
@@ -127,8 +149,9 @@ answers (FR4), and what the server tells a client when it starts (FR5).
 
 - Supported feature/engine floor: the CLI's Node.js floor; any MCP client that
   starts a server over standard input and output.
-- Unsupported behavior: an HTTP transport; a client that cannot start a local
-  process uses the hosted docs server instead.
+- Unsupported behavior: an HTTP transport in the CLI itself; a client that
+  cannot start a local process uses the docs site's endpoint, which serves FR7
+  over Streamable HTTP.
 - Browser evidence: none; nothing renders.
 
 ## Current-state impact
@@ -138,25 +161,28 @@ answers (FR4), and what the server tells a client when it starts (FR5).
   protocol messages) and INV22 (the `mcp` handler hands the run to the server,
   which starts one run of the CLI per call).
 - `spec:AST-042` FR1: `astryx mcp` joins the commands that wrap no function.
-- Consumer docs: `astryx docs cli/commands/mcp` (its `CommandDoc`) and the MCP
-  Server section of `astryx docs working-with-ai`; the README command table.
+- Consumer docs: `astryx docs cli/commands/mcp` (its `CommandDoc`) and the
+  `mcp-server` section ("If your AI tool needs MCP") of
+  `astryx docs working-with-ai`; the README command table.
+- The docs site's MCP endpoint serves FR7 and has no tools of its own.
 
 ## Verification
 
-| Contract | Verification                                                          | Representative states                                                                                                                                        | Mutation or failure expectation                                             |
-| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| FR1      | `clients/cli/lib/mcp-server.test.mjs`                                 | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin                                                      | answering another version, a stray stdout line, or a run left running fails |
-| FR2      | `clients/cli/lib/mcp-tools.test.mjs`, `test/packed-manifest.test.mjs` | every manifest command; groups; `mcp`; experimental commands; the packed package's stored manifest                                                           | a missing, extra or renamed tool fails                                      |
-| FR3      | `clients/cli/lib/mcp-tools.test.mjs`                                  | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string | an input that parses to another value, or a flag with no input, fails       |
-| FR4      | `clients/cli/lib/mcp-server.test.mjs`                                 | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                          | any change to the output, or an answer to a cancelled call, fails           |
-| FR5      | `clients/cli/lib/mcp-tools.test.mjs`                                  | the instructions with and without agent docs in reach                                                                                                        | a root option missing from the instructions fails                           |
+| Contract | Verification                                                                                                                    | Representative states                                                                                                                                                                                                 | Mutation or failure expectation                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| FR1      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin                                                                                                               | answering another version, a stray stdout line, or a run left running fails       |
+| FR2      | `clients/cli/lib/mcp-tools.test.mjs`, `test/packed-manifest.test.mjs`                                                           | every manifest command; groups; `mcp`; experimental commands; the packed package's stored manifest                                                                                                                    | a missing, extra or renamed tool fails                                            |
+| FR3      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string                                                          | an input that parses to another value, or a flag with no input, fails             |
+| FR4      | `clients/cli/lib/mcp-server.test.mjs`                                                                                           | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                                                                                   | any change to the output, or an answer to a cancelled call, fails                 |
+| FR5      | `clients/cli/lib/mcp-tools.test.mjs`                                                                                            | the instructions with and without agent docs in reach                                                                                                                                                                 | a root option missing from the instructions fails                                 |
+| FR7      | `clients/cli/lib/mcp-tools.test.mjs`, `clients/cli/lib/mcp-server.test.mjs`, the docs site's `src/__tests__/mcp-server.test.ts` | the docs-only tool list; each left-out input and `cwd`; the real bin with `--docs-only`; a call through the docs site's endpoint compared byte for byte with the command run directly; a notification; GET and DELETE | an extra tool, a left-out input that reaches a command, or a changed answer fails |
 
 ## Decision log
 
 ### DEC-1 — The tools are the CLI's manifest, never a list of their own
 
 **Reference:** `spec:AST-121/DEC-1`
-**Decider:** josephfarina (proposed), 2026-11-14
+**Decider:** josephfarina, 2026-11-14
 
 Every tool, name and input comes from the manifest, the CLI's description of
 itself, which is built from the same command definitions as its help, so the
@@ -169,7 +195,7 @@ answers from logic of its own and drifts from the CLI.
 ### DEC-2 — A call runs the CLI as a process, never an API function in the server
 
 **Reference:** `spec:AST-121/DEC-2`
-**Decider:** josephfarina (proposed), 2026-11-14
+**Decider:** josephfarina, 2026-11-14
 
 The answer is then the command's answer to the byte: the same parsing,
 defaults, global-mode hand-off, errors and exit status. A command that exits or
@@ -182,7 +208,7 @@ second client with its own input mapping and its own rendering.
 ### DEC-3 — The project's agent docs ride in the server instructions
 
 **Reference:** `spec:AST-121/DEC-3`
-**Decider:** josephfarina (proposed), 2026-11-14
+**Decider:** josephfarina, 2026-11-14
 
 An agent connected only through MCP reads the same guidance `astryx init`
 writes, from the same renderer, so the workflow and the rules reach it without
@@ -192,9 +218,21 @@ holds the text does not get it twice.
 Rejected: instructions written for MCP alone, a second guidance text to keep
 in step with the agent docs.
 
+### DEC-4 — The docs site's MCP endpoint is `astryx mcp --docs-only`
+
+**Reference:** `spec:AST-121/DEC-4`
+**Decider:** josephfarina, 2026-11-16
+
+There is one MCP implementation, reached two ways: a reader's AI tool starts
+`astryx mcp` in the project, and a reader with nothing installed connects to the
+docs site, which runs the same command. The docs site offers only the commands
+that read the docs, because a server many people share must not write files,
+read paths its callers name, or reach other services for them.
+
+Rejected: a hosted server with its own search and read tools, a second
+implementation that drifts from the CLI.
+
 ## Open questions
 
-- **OQ1 — Should the hosted docs server run the CLI's read-only commands,
-  stay as it is, or retire?** (`human-design`)
 - **OQ2 — Should `astryx init` write the MCP client entry beside the agent
   docs?** (`human-design`)
