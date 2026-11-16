@@ -112,6 +112,7 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import {useSearchTriggerRequired} from '../Selector/useSearchTriggerRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -1228,7 +1229,17 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const descriptionId = useId();
   const statusMessageId = useId();
   const fieldLabelId = useId();
-  const requiredDescriptionId = useId();
+  const {ariaRequired, requiredDescriptionId, requiredDescription} =
+    useSearchTriggerRequired({
+      hasSearch,
+      isReadOnly: isEffectivelyReadOnly,
+      isRequired: isEffectivelyRequired,
+      isLabelRequiredMarkerShown,
+      isInInputGroup: inputGroup != null,
+      ariaLabel: (rest as {'aria-label'?: string})['aria-label'],
+      ariaLabelledBy: ariaLabelledByProp,
+      requiredLabel: t('@astryx.field.required'),
+    });
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -2531,33 +2542,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
   const callerProps = withholdCallerHandlers(rest, isDisabled);
-  // With search, the editable trigger is a role-less button, where
-  // aria-required is not allowed. The closed trigger states the required
-  // state in its name, through the Field label's visible marker, or else in
-  // its description; the search combobox carries aria-required while open.
-  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
-  const isLabelRequiredInName =
-    isLabelRequiredMarkerShown &&
-    !inputGroup &&
-    ((rest as {'aria-label'?: string})['aria-label'] == null ||
-      ariaLabelledByProp != null);
-  const hasRequiredDescription =
-    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [
-        ariaDescribedByProp,
-        ariaDescribedBy,
-        hasRequiredDescription ? requiredDescriptionId : null,
-      ]
+      [ariaDescribedByProp, ariaDescribedBy, requiredDescriptionId]
         .filter(Boolean)
         .join(' ') || undefined,
     'aria-labelledby': triggerLabelledBy,
-    'aria-required':
-      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
@@ -2730,11 +2724,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             {t('@astryx.input.readOnly')}
           </VisuallyHidden>
         )}
-        {hasRequiredDescription && (
-          <VisuallyHidden id={requiredDescriptionId}>
-            {t('@astryx.field.required')}
-          </VisuallyHidden>
-        )}
+        {requiredDescription}
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}

@@ -110,6 +110,7 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
+import {useSearchTriggerRequired} from './useSearchTriggerRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -1278,7 +1279,17 @@ export function Selector<T extends SelectorOptionType>(
   const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
-  const requiredDescriptionId = useId();
+  const {ariaRequired, requiredDescriptionId, requiredDescription} =
+    useSearchTriggerRequired({
+      hasSearch,
+      isReadOnly: isEffectivelyReadOnly,
+      isRequired: isEffectivelyRequired,
+      isLabelRequiredMarkerShown,
+      isInInputGroup: inputGroup != null,
+      ariaLabel: (rest as {'aria-label'?: string})['aria-label'],
+      ariaLabelledBy: ariaLabelledByProp,
+      requiredLabel: t('@astryx.field.required'),
+    });
   const searchId = useId();
   const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
@@ -2155,17 +2166,6 @@ export function Selector<T extends SelectorOptionType>(
     callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
-  // With search, the editable trigger is a role-less button, where
-  // aria-required is not allowed. The closed trigger states the required
-  // state in its name, through the Field label's visible marker, or else in
-  // its description; the search combobox carries aria-required while open.
-  const isSearchTrigger = hasSearch && !isEffectivelyReadOnly;
-  const isLabelRequiredInName =
-    isLabelRequiredMarkerShown &&
-    !inputGroup &&
-    (callerAriaLabel == null || ariaLabelledByProp != null);
-  const hasRequiredDescription =
-    isSearchTrigger && isEffectivelyRequired && !isLabelRequiredInName;
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
@@ -2273,18 +2273,13 @@ export function Selector<T extends SelectorOptionType>(
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [
-        ariaDescribedByProp,
-        ariaDescribedBy,
-        hasRequiredDescription ? requiredDescriptionId : null,
-      ]
+      [ariaDescribedByProp, ariaDescribedBy, requiredDescriptionId]
         .filter(Boolean)
         .join(' ') || undefined,
     'aria-labelledby': isValueInTriggerName
       ? joinAriaIDs(triggerNameLabelId, valueTextId)
       : triggerLabelledBy,
-    'aria-required':
-      isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
+    'aria-required': ariaRequired,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
@@ -2379,11 +2374,7 @@ export function Selector<T extends SelectorOptionType>(
             {t('@astryx.input.readOnly')}
           </VisuallyHidden>
         )}
-        {hasRequiredDescription && (
-          <VisuallyHidden id={requiredDescriptionId}>
-            {t('@astryx.field.required')}
-          </VisuallyHidden>
-        )}
+        {requiredDescription}
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
