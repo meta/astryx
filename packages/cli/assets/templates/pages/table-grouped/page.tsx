@@ -920,6 +920,7 @@ export default function DataTableTemplate() {
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const showToast = useToast();
   const confirm = useImperativeAlertDialog();
+  const {show: showConfirm, hide: hideConfirm} = confirm;
   const columns = useMemo(
     () =>
       getColumns({
@@ -942,12 +943,12 @@ export default function DataTableTemplate() {
             uniqueID: `${action}-${task.taskId}`,
           }),
         onDelete: task =>
-          confirm.show({
+          showConfirm({
             title: `Delete ${task.taskId}?`,
             description: "This demo won't delete anything.",
             actionLabel: 'Delete issue',
             onAction: () => {
-              confirm.hide();
+              hideConfirm();
               // Demo only: replace this toast with the call that performs the action.
               showToast({
                 body: `Demo: ${task.taskId} would be deleted here`,
@@ -956,7 +957,7 @@ export default function DataTableTemplate() {
             },
           }),
       }),
-    [showToast, confirm],
+    [showToast, showConfirm, hideConfirm],
   );
   const [powerSearchFilters, setPowerSearchFilters] = useState<
     ReadonlyArray<PowerSearchFilter>

@@ -767,10 +767,12 @@ function useSurfaceWidth() {
  * unless something stops it. Guarding centrally rather than hanging
  * `stopPropagation` on each control is what keeps this true for the next
  * control somebody adds — and it has to cover the selection checkbox, which
- * the plugin renders and the template never touches.
+ * the plugin renders and the template never touches. A row's delete
+ * confirmation renders inside the row too, and its keys bubble through it, so
+ * the dialog counts as well.
  */
 const INTERACTIVE_WITHIN_ROW =
-  'button, input, a, label, [role="checkbox"], [role="button"], [role="menuitem"]';
+  'button, input, a, label, dialog, [role="checkbox"], [role="button"], [role="menuitem"]';
 
 function isRowItself(event: {target: EventTarget | null}): boolean {
   return !(event.target as HTMLElement | null)?.closest(INTERACTIVE_WITHIN_ROW);
@@ -2788,12 +2790,12 @@ export default function SupportInboxTemplate() {
         where it lands. Kept mounted rather than conditionally rendered so
         Dialog's close branch can hand focus back to the Compose button, and so
         an unsent draft survives being closed. */}
-      {confirm.element}
       <ComposeWindow
         isOpen={isComposeOpen}
         onOpenChange={setComposeOpen}
         draft={composeDraft}
       />
+      {confirm.element}
     </>
   );
 }
