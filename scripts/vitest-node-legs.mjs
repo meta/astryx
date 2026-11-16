@@ -298,8 +298,7 @@ if (
         .join(''),
     );
   else console.log(JSON.stringify(outputs));
-  // Main's unit run never stops for its plan: each leg's watchdog names the
-  // files still running near its limit.
+  // Main's unit run never stops for its plan: it runs its legs and warns.
   const notice = overBudgetNotice(plan, {main});
   if (notice) {
     console.log(notice.line);
