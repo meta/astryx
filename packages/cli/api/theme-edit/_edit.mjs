@@ -164,7 +164,10 @@ import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
 import {
   isHeadingLevel,
+  levelDuplicates,
+  missingScaleFieldWhy,
   noLevelWhy,
+  typographyBlockWhy,
   noScaleWeightWhy,
   roleWeightTokens,
   typographyValueProblem,
@@ -3878,7 +3881,41 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     }
   };
+  if (
+    input.typography != null &&
+    (typeof input.typography !== 'object' || Array.isArray(input.typography))
+  ) {
+    const e = typo[0];
+    out.push({
+      token: 'typography',
+      value: typeof input.typography === 'string' ? input.typography : '',
+      why: typographyBlockWhy(input.typography),
+      ...(e ? atOf(e) : {line: null, file: null}),
+    });
+  }
   fields(input.typography, []);
+  // Two keys for one heading level ('01' and 1): Core keeps one.
+  if (input.typography && typeof input.typography === 'object')
+    for (const [role, r] of Object.entries(input.typography)) {
+      const weights = r && typeof r === 'object' ? r.weights : undefined;
+      if (!weights || typeof weights !== 'object' || Array.isArray(weights))
+        continue;
+      for (const d of levelDuplicates(
+        role,
+        weights,
+        typeFields?.levels ?? [],
+      )) {
+        const key = `${role}.weights.${d.key}`;
+        const e = typo.find(x => x.key === key) ?? typo[0];
+        flagged.add(role);
+        out.push({
+          token: `typography.${key}`,
+          value: typeof weights[d.key] === 'string' ? weights[d.key] : '',
+          why: d.why,
+          ...(e ? atOf(e) : {line: null, file: null}),
+        });
+      }
+    }
   // Core builds a role's font list from its family, with the fallbacks
   // after it: fallbacks with no family in that role build nothing.
   if (input.typography && typeof input.typography === 'object')
@@ -3959,10 +3996,7 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     }
   const scale = input.typography?.scale;
-  for (const [field, add] of /** @type {const} */ ([
-    ['base', 'the body size in pixels, such as scale: {base: 16, ratio: …}'],
-    ['ratio', 'the step between sizes, such as scale: {base: …, ratio: 1.2}'],
-  ]))
+  for (const field of /** @type {const} */ (['base', 'ratio']))
     if (
       scale &&
       typeof scale === 'object' &&
@@ -3977,7 +4011,7 @@ async function ownTokenProblems(ctx, slug, data) {
       out.push({
         token: 'typography.scale',
         value: '',
-        why: `the type scale is given no ${field}, and Core reads the sizes from the base and the ratio together: add ${add}`,
+        why: missingScaleFieldWhy(field),
         ...(e ? atOf(e) : {line: null, file: null}),
       });
     }

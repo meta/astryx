@@ -5133,6 +5133,8 @@ async function themeBuildInternal(
   const levels = fields?.levels ?? [];
   const typographyInput =
     interception?.inputOf(themeDef)?.typography ??
+    // A plain-object theme is its own input.
+    themeDef.typography ??
     sourceTypography(themeSource, filePath);
   /** @type {Map<string, {path: string[], why: string, value: unknown}>} */
   const typographyProblems = new Map();

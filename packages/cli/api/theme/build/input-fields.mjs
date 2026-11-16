@@ -17,6 +17,7 @@
 import {babelParse as parseModule} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
+import {UNREAD} from './typography-values.mjs';
 
 /**
  * The fields Core's `defineTheme()` input takes, read from the type
@@ -528,39 +529,54 @@ export function sourceFieldProblems(entry, fields, load) {
 }
 
 /**
- * A theme source's typography block as the plain values it writes: text
- * and numbers, in nested blocks, followed through the consts of the theme
- * file. A value written as anything else (a name, a call, a spread) is
- * left out. Null when the source writes none.
+ * A theme source's typography as the plain values it writes: text,
+ * numbers (signed too) and arrays, in nested blocks, followed through the consts of the
+ * theme file. A value written as anything else (a call, a name from another
+ * module) is UNREAD, and a block with a spread of one is marked UNREAD, so
+ * a judge never reads it as missing. Null when the source writes none.
  * @param {string} source
  * @param {string} [file] the source's file name, which says whether it is
  *   read with JSX
- * @returns {Record<string, any> | null}
+ * @returns {unknown}
  */
 export function sourceTypography(source, file = '') {
   const {inputs, objectOf} = themeInputs({file, source}, () => null);
   /** @param {any} node @param {any} mod @returns {any} */
   const plain = (node, mod) => {
     const n = unwrap(node);
-    if (!n) return undefined;
+    if (!n) return UNREAD;
     if (n.type === 'StringLiteral' || n.type === 'NumericLiteral')
       return n.value;
     if (n.type === 'TemplateLiteral' && n.expressions.length === 0)
       return n.quasis.map((/** @type {any} */ q) => q.value.cooked).join('');
+    // A signed number (-100, +500) is a number as written.
+    if (
+      n.type === 'UnaryExpression' &&
+      (n.operator === '-' || n.operator === '+') &&
+      unwrap(n.argument)?.type === 'NumericLiteral'
+    )
+      return (n.operator === '-' ? -1 : 1) * unwrap(n.argument).value;
+    if (n.type === 'ArrayExpression')
+      return n.elements.map((/** @type {any} */ e) =>
+        e?.type === 'SpreadElement' ? UNREAD : plain(e, mod),
+      );
     const object = objectOf(n, mod);
-    if (!object) return undefined;
-    /** @type {Record<string, any>} */
+    if (!object) return UNREAD;
+    /** @type {Record<string | symbol, any>} */
     const out = {};
     for (const p of object.node.properties) {
       if (p.type === 'SpreadElement') {
         const spread = plain(p.argument, object.mod);
         if (spread && typeof spread === 'object') Object.assign(out, spread);
+        else out[UNREAD] = true;
         continue;
       }
       const k = keyOf(p);
-      if (k == null || p.type !== 'ObjectProperty') continue;
-      const v = plain(p.value, object.mod);
-      if (v !== undefined) out[k] = v;
+      if (k == null || p.type !== 'ObjectProperty') {
+        out[UNREAD] = true;
+        continue;
+      }
+      out[k] = plain(p.value, object.mod);
     }
     return out;
   };
@@ -569,8 +585,8 @@ export function sourceTypography(source, file = '') {
       (/** @type {any} */ x) =>
         x.type === 'ObjectProperty' && keyOf(x) === 'typography',
     );
-    const v = p ? plain(p.value, input.mod) : undefined;
-    if (v && typeof v === 'object') return v;
+    const v = p ? plain(p.value, input.mod) : UNREAD;
+    if (v !== UNREAD) return v;
   }
   return null;
 }
