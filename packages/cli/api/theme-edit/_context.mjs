@@ -1190,9 +1190,10 @@ export function styledChanges(before, after, base) {
 
 /**
  * The line that says which pictures to open after a run that took them:
- * the sample page's and the open states' (every menu, tooltip, popover and
- * list drawn open), of the mode shown first (light when the theme has
- * both). Null when this run took neither.
+ * each family of components' first ({@link familyPages}), then the sample
+ * page's and the open states' (every menu, tooltip, popover and list drawn
+ * open), of the mode shown first (light when the theme has both). Null when
+ * this run took none of them.
  * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
  * @returns {string | null}
  */
@@ -1203,11 +1204,18 @@ export function lookAtPictures(files) {
     files.find(f => path.basename(f) === `${name}-dark.png`);
   const preview = one('preview');
   const open = one(`sheet-${OPEN_SECTION}`);
-  if (!preview && !open) return null;
+  const families = FAMILY_SECTIONS.map(g => one(`sheet-${g}`)).filter(
+    f => f != null,
+  );
+  if (!preview && !open && !families.length) return null;
   const dark =
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
   return `open ${[
+    // A family's own picture reads whole; the full sheet does not.
+    ...(families.length
+      ? [`${families.join(', ')} (one family of components each)`]
+      : []),
     ...(preview
       ? [
           `${preview} (the sample page, a tooltip, a menu and a list drawn open below it)`,
@@ -1249,6 +1257,73 @@ export async function openStatesPage(ctx, slug, data) {
   await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
   stampSheet(html, slug, ctx.project.cwd);
   return {html, png};
+}
+
+/**
+ * The families of components with a picture of their own beside the full
+ * sheet, which is too tall to read whole: each section of the sheet but the
+ * overlays (the open states page shows them) and the pages (the sample page
+ * is preview.png).
+ */
+export const FAMILY_SECTIONS = Object.freeze(
+  SHOWCASE_GROUPS.filter(g => g !== OPEN_SECTION && g !== 'pages'),
+);
+
+/**
+ * One page for each family of components ({@link FAMILY_SECTIONS}), cut
+ * from the full sheet just made, so each shows its family as the sheet
+ * does, with no render of its own: the sheet's head and bar, then that
+ * family's section. Each is written where `show --section <family>` writes
+ * that family's sheet, and stamped with the build it shows. Something of
+ * yours at a family page's name is never written over: that page is left
+ * out and named.
+ * @param {string} sheet the full sheet, as written
+ * @param {string} slug
+ * @param {string} cwd
+ * @returns {{pages: Array<{html: string, png: string, family: string}>, problems: string[]}}
+ */
+export function familyPages(sheet, slug, cwd) {
+  /** @type {Array<{html: string, png: string, family: string}>} */
+  const pages = [];
+  /** @type {string[]} */
+  const problems = [];
+  const text = fs.readFileSync(sheet, 'utf8').replace(SHEET_STAMP, '');
+  // Each section of the sheet starts with its own marker, in order, and
+  // holds no section of its own: one ends where the next starts, and the
+  // last at the last section close.
+  const starts = [
+    ...text.matchAll(/<section\b[^>]*\sdata-cs-group="([a-z-]+)"[^>]*>/g),
+  ].map(m => ({family: m[1], at: /** @type {number} */ (m.index)}));
+  const close = text.lastIndexOf('</section>');
+  if (!starts.length || close < 0) return {pages, problems};
+  const end = close + '</section>'.length;
+  const before = text.slice(0, starts[0].at);
+  const after = text.slice(end);
+  for (const [i, {family, at}] of starts.entries()) {
+    if (!FAMILY_SECTIONS.includes(family)) continue;
+    const html = path.join(path.dirname(sheet), `sheet-${family}.html`);
+    const png = path.join(path.dirname(sheet), `sheet-${family}.png`);
+    const inWay = pageInTheWay(html);
+    if (inWay) {
+      problems.push(
+        `${inTheWayPhrase(shown(cwd, html), inWay, `the ${family} sheet`)}, so ${shown(cwd, png)} was not taken; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
+      );
+      continue;
+    }
+    const head = before
+      .replace('class="cs-page"', `class="cs-page cs-section-${family}"`)
+      .replace(
+        `<strong>${slug}: every component</strong>`,
+        `<strong>${slug}: every component (${family})</strong>`,
+      );
+    writeWhole(
+      html,
+      `${head}${text.slice(at, starts[i + 1]?.at ?? end)}${after}`,
+    );
+    stampSheet(html, slug, cwd);
+    pages.push({html, png, family});
+  }
+  return {pages, problems};
 }
 
 /**

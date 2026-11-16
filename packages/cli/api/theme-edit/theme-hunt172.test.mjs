@@ -70,6 +70,16 @@ describe('the pictures to open', () => {
       'open themes/t/preview-dark.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays-dark.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)',
     ],
     [['themes/t/sheet.png'], null],
+    [
+      [
+        'themes/t/preview.png',
+        'themes/t/sheet-overlays.png',
+        'themes/t/sheet-inputs.png',
+        'themes/t/sheet-navigation.png',
+        'themes/t/sheet.png',
+      ],
+      'open themes/t/sheet-inputs.png, themes/t/sheet-navigation.png (one family of components each) and themes/t/preview.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)',
+    ],
   ])('%j → %j', (files, want) => {
     expect(lookAtPictures(files)).toBe(want);
   });

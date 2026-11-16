@@ -140,7 +140,9 @@ describe('the open states picture', () => {
       expect(r.stdout).toContain(
         'sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open)',
       );
-      expect(r.stdout).toContain('open preview.png and sheet-overlays.png');
+      expect(r.stdout).toContain(
+        'open the family pictures, preview.png and sheet-overlays.png',
+      );
     },
     T,
   );

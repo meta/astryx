@@ -242,6 +242,7 @@ import {
   checkSection,
   stampSheet,
   lookAtPictures,
+  familyPages,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {readThemeState} from '../../foundation/config/theme-state.mjs';
@@ -7464,6 +7465,12 @@ export async function themeEditShow(theme, options = {}) {
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
   if (!noPages && !left(sheetFile)) stampSheet(sheetFile, theme, cwd);
+  // The full sheet is too tall to read whole: --png also takes each family
+  // of components on a page of its own, cut from it.
+  const families =
+    png && !noPages && !section && !left(sheetFile)
+      ? familyPages(sheetFile, theme, cwd)
+      : {pages: [], problems: []};
   const leftWords = leftPages.map(
     x =>
       `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
@@ -7500,6 +7507,7 @@ export async function themeEditShow(theme, options = {}) {
           [
             {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
             ...(open && !('problem' in open) ? [open] : []),
+            ...families.pages.map(({html, png: out}) => ({html, png: out})),
             // A section is photographed from its own sheet.
             section
               ? {
@@ -7526,6 +7534,10 @@ export async function themeEditShow(theme, options = {}) {
     shots.problem = [open.problem, shots.problem].filter(Boolean).join('; ');
   if (png && leftWords.length)
     shots.problem = [...leftWords, shots.problem].filter(Boolean).join('; ');
+  if (families.problems.length)
+    shots.problem = [...families.problems, shots.problem]
+      .filter(Boolean)
+      .join('; ');
   const look = lookAtPictures(shots.files);
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
