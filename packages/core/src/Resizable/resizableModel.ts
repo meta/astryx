@@ -8,9 +8,8 @@
  *   basis, clamping and snapping, persistence, and the content-box measurement
  *   of a percentage basis; and the channel from useResizable to ResizeHandle,
  *   keyed by the props the hook returns
- * @position Shared by useResizable, createResizable and ResizeHandle, so all
- *   resolve, clamp, snap and persist alike, and a handle alone does not load
- *   the hook; no React, and no DOM work on import
+ * @position Shared by useResizable, createResizable and ResizeHandle; no
+ *   React, and no DOM work on import
  */
 
 import type {DevWarnings} from '../utils/devWarning';

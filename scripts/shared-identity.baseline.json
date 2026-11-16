@@ -141,15 +141,15 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Resizable/useResizable.ts:collapseControls": {
+    "packages/core/src/Resizable/resizableModel.ts:collapseControls": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:effectiveMaxima": {
+    "packages/core/src/Resizable/resizableModel.ts:effectiveMaxima": {
       "status": "open",
       "group": "F9 Resizable"
     },
-    "packages/core/src/Resizable/useResizable.ts:releaseEnds": {
+    "packages/core/src/Resizable/resizableModel.ts:releaseEnds": {
       "status": "open",
       "group": "F9 Resizable"
     },
