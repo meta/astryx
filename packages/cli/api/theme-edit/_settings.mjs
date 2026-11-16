@@ -4227,12 +4227,17 @@ export const keyOf = s =>
 
 /** One line for a setting. @param {Setting} s */
 export function describe(s) {
+  // A setting for one mode on no part reaches the whole theme in that mode:
+  // said in one phrase, never "(whole theme) [light only]", which reads as
+  // two scopes at odds.
   const where = s.on
     ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
-    : ' (whole theme)';
+    : s.mode
+      ? ` (whole theme, ${s.mode} mode only)`
+      : ' (whole theme)';
   // An entry saved with no value says so, never "undefined".
   const value = s.value === undefined ? '(no value)' : s.value;
-  return `${s.thing} = ${value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
+  return `${s.thing} = ${value}${where}${s.mode && s.on ? ` [${s.mode} only]` : ''}`;
 }
 
 /**

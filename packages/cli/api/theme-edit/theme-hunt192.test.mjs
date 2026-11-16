@@ -246,7 +246,7 @@ describe('undo naming a value a one-mode entry does not hold', () => {
       const before = data().settings;
       const r = await cli([...ED, 'undo', 't', '--color-accent', 'blue']);
       expect(r.error).toContain(
-        '--color-accent = red (whole theme) [dark only], not blue',
+        '--color-accent = red (whole theme, dark mode only), not blue',
       );
       expect(data().settings).toEqual(before);
       expect(lines(r)).toEqual(['undo t --color-accent --mode dark']);

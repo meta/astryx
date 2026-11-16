@@ -1948,10 +1948,10 @@ export function registerExperimentalTheme(group, program) {
                  * The settings one typed word holds, each `[dial, value]`: a
                  * JSON object, `key=value` or `key: value` pairs, or `dial
                  * value` items, apart at `;` or `,`; null when it holds none.
-                 * @param {string} w
+                 * @param {string} rawWord
                  * @returns {Array<[string, string]> | null}
                  */
-                const pairsIn = rawWord => {
+                const pairsIn = (/** @type {string} */ rawWord) => {
                   // A word with its own quotes around it (`'base neutral'`,
                   // `"accent"`) is that word, as the shell would have given
                   // it: the quotes are no part of a name.
