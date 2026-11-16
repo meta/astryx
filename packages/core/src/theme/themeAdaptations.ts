@@ -227,18 +227,37 @@ function assertAllowedKeys(
   }
 }
 
-function cloneData<T>(value: T): T {
-  if (Array.isArray(value)) {
-    const cloned: unknown[] = [];
-    for (const item of value) {
-      cloned.push(cloneData(item));
+/**
+ * A deep copy of plain data. A value inside the objects that hold it never
+ * ends, so it is refused by name (`path`) instead of overflowing the stack.
+ */
+function cloneData<T>(
+  value: T,
+  path = 'value',
+  holding: Set<object> = new Set(),
+): T {
+  if (Array.isArray(value) || isRecord(value)) {
+    if (holding.has(value)) {
+      throw new Error(
+        `${path} holds an object it sits in, so it never ends and is no theme value.`,
+      );
     }
-    return cloned as T;
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nested]) => [key, cloneData(nested)]),
-    ) as T;
+    holding.add(value);
+    try {
+      if (Array.isArray(value)) {
+        return value.map((item, i) =>
+          cloneData(item, `${path}[${i}]`, holding),
+        ) as T;
+      }
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          key,
+          cloneData(nested, `${path}.${key}`, holding),
+        ]),
+      ) as T;
+    } finally {
+      holding.delete(value);
+    }
   }
   return value;
 }
@@ -397,7 +416,7 @@ function normalizeValue(value: unknown, path: string): ThemeAdaptationValue {
       throw new Error(`${path}.${key} must be an object.`);
     }
   }
-  return cloneData(value);
+  return cloneData(value, path);
 }
 
 function normalizeRule(value: unknown, path: string): ThemeAdaptationRule {
@@ -859,12 +878,23 @@ function assertNoReachableTokenCycles(
           const queries = matchingRuleIndexes
             .map(index => rules[index].query)
             .join('; ');
+          const ruleContext = `defineTheme("${themeName}").adaptations ${
+            matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
+          } [${indexes}] (${queries})`;
           assertNoTokenCycles(
             effective,
-            `defineTheme("${themeName}").adaptations ${
-              matchingRuleIndexes.length === 1 ? 'rule' : 'overlapping rules'
-            } [${indexes}] (${queries})`,
+            ruleContext,
             relevantNames,
+            // A value no matching rule sets is the theme's own root value.
+            name =>
+              relevantNames.has(name)
+                ? ruleContext
+                : `defineTheme("${themeName}").${
+                    rootLocalTokens &&
+                    Object.prototype.hasOwnProperty.call(rootLocalTokens, name)
+                      ? 'localTokens'
+                      : 'tokens'
+                  }`,
           );
         }
       }

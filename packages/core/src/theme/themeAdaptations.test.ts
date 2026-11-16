@@ -1203,6 +1203,32 @@ describe('theme-local adaptation values', () => {
     ).toThrow(
       /tokens refers to itself: the value of self holds an object it sits in/,
     );
+    // The theme's own tokens hold it, not the base's adaptation rule.
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-child',
+        extends: base,
+        tokens,
+      }),
+    ).toThrow(
+      /^defineTheme\("cycle-self-child"\)\.tokens: tokens refers to itself/,
+    );
+    // A rule's own tokens that hold it are still named by the rule.
+    const ruleTokens: Record<string, unknown> = {'--color-accent': 'blue'};
+    ruleTokens.self = ruleTokens;
+    expect(() =>
+      defineTheme({
+        name: 'cycle-self-rule',
+        adaptations: {
+          rules: [
+            {
+              when: {pointer: 'coarse'},
+              value: {tokens: ruleTokens as Record<string, string>},
+            },
+          ],
+        },
+      }),
+    ).toThrow(/rules\[0\]\.value\.tokens\.self holds an object it sits in/);
   });
 
   it('rejects conditional local-token cycles', () => {
