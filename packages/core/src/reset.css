@@ -336,11 +336,15 @@
   }
 
   /*
-   * Reset dialog padding and outline.
+   * Reset dialog padding and outline. A dialog inherits the page's text
+   * color: the browser default, CanvasText, follows the color scheme and not
+   * the theme, so text that inherits (a selected nav row) would draw black on
+   * a dark panel.
    */
   :where(dialog) {
     padding: 0;
     outline: none;
+    color: inherit;
   }
 
   /*

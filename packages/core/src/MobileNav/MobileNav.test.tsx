@@ -355,3 +355,22 @@ describe('MobileNav', () => {
     expect(declaredValue(drawer, 'width')).toBe('var(--x-width)');
   });
 });
+
+describe('MobileNav panel text color', () => {
+  it("lets the panel's dialog inherit the page's text color", async () => {
+    // The browser gives a dialog `color: CanvasText`, which follows the
+    // color scheme and not the theme. Text in the panel that sets no color
+    // of its own (a selected nav row) inherits it, so Core's reset gives
+    // every dialog the page's color instead. The real-browser proof is
+    // MobileNav.textColor.a11y.chromium.spec.ts.
+    const fs = await import('fs');
+    const path = await import('path');
+    const resetCSS = fs.readFileSync(
+      path.resolve(__dirname, '../reset.css'),
+      'utf-8',
+    );
+    const dialogRule = resetCSS.match(/:where\(dialog\) \{([^}]*)\}/);
+    expect(dialogRule).not.toBeNull();
+    expect(dialogRule![1]).toMatch(/\bcolor: inherit;/);
+  });
+});
