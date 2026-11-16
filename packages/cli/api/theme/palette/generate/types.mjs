@@ -95,4 +95,26 @@
  * @property {{ id: string; name: string; seed: string; kind: 'chromatic' | 'neutral'; anchors: TonalPaletteAnchor[]; }[]} families
  */
 
+/**
+ * The seeds `themePalette()` grows a theme's colors from.
+ * @typedef {object} ThemePaletteInput
+ * @property {string} [accent] The accent: buttons, links, focus rings, selection.
+ * @property {string} [neutral] The grays of surfaces, text, borders and icons.
+ * @property {string} [success] The success status color.
+ * @property {string} [warning] The warning status color.
+ * @property {string} [danger] The danger status color (the error tokens).
+ * @property {string} [info] The info status color.
+ * @property {number} [vibrancy] Chroma from 0 (most muted) through 50 (default) to 100 (most vivid).
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade.
+ */
+
+/**
+ * A theme's colors made by `themePalette()`, for `defineTheme({palette})`.
+ * @typedef {object} ThemePalette
+ * @property {'theme-palette'} kind
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {Readonly<Record<string, readonly [string, string]>>} tokens Each color token's `[light, dark]` value.
+ * @property {Readonly< Record<string, Record<string, Record<string, readonly [string, string]>>> >} components Part styles that lift secondary text on the accent tint and the neutral track, as the official themes do.
+ */
+
 export {};

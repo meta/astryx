@@ -583,7 +583,10 @@ its own Core entry, so the generator ships only to apps that import it (FR13).
 `defineTheme` receives the resolved tokens, not palette metadata, and explicit
 `tokens` override them one by one. The mapping is the CLI theme editor's, so a
 theme made in the editor and one made with the same seeds in code get the same
-colors. A recipe is never changed in place; a new look is a new recipe name.
+colors. A released recipe never changes. A recipe is fixed from the first
+package release that ships it, whether a CLI release or a Core release of this
+input, so `astryx-oklch-v2` is fixed and later tuning is a new recipe,
+`astryx-oklch-v3`.
 
 Rejected: a plain object option that `defineTheme` generates from, because
 `defineTheme` would then import the generator into every app.

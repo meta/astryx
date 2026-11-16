@@ -188,33 +188,55 @@ export const ANCHOR_INPUT_KEYS = Object.freeze([
  * The modes a mode strategy generates.
  */
 export function modesForStrategy(strategy: string): PaletteMode[] {
-  if (strategy === 'light-only') {return ['light'];}
-  if (strategy === 'dark-only') {return ['dark'];}
-  if (strategy === 'light-and-dark') {return ['light', 'dark'];}
+  if (strategy === 'light-only') {
+    return ['light'];
+  }
+  if (strategy === 'dark-only') {
+    return ['dark'];
+  }
+  if (strategy === 'light-and-dark') {
+    return ['light', 'dark'];
+  }
   throw new Error(`Unknown mode strategy: ${String(strategy)}`);
 }
 
 function hueBalanceFactor(hue: number) {
   const normalized = normalizeHue(hue);
-  if (normalized >= 70 && normalized < 115) {return 0.94;}
-  if (normalized >= 115 && normalized < 175) {return 0.78;}
-  if (normalized >= 175 && normalized < 230) {return 0.82;}
-  if (normalized >= 285 && normalized < 340) {return 0.9;}
+  if (normalized >= 70 && normalized < 115) {
+    return 0.94;
+  }
+  if (normalized >= 115 && normalized < 175) {
+    return 0.78;
+  }
+  if (normalized >= 175 && normalized < 230) {
+    return 0.82;
+  }
+  if (normalized >= 285 && normalized < 340) {
+    return 0.9;
+  }
   return 1;
 }
 
 function highToneChromaFactor(hue: number, tone: number) {
-  if (tone <= 60) {return 1;}
+  if (tone <= 60) {
+    return 1;
+  }
   const taper = smoothstep((tone - 60) / 35);
   const normalized = normalizeHue(hue);
-  if (normalized >= 115 && normalized < 175) {return 1 - 0.28 * taper;}
-  if (normalized >= 175 && normalized < 200) {return 1 - 0.4 * taper;}
+  if (normalized >= 115 && normalized < 175) {
+    return 1 - 0.28 * taper;
+  }
+  if (normalized >= 175 && normalized < 200) {
+    return 1 - 0.4 * taper;
+  }
   return 1;
 }
 
 function toneAdjustedHue(hue: number, tone: number) {
   const normalized = normalizeHue(hue);
-  if (normalized < 40 || normalized >= 70 || tone >= 50) {return normalized;}
+  if (normalized < 40 || normalized >= 70 || tone >= 50) {
+    return normalized;
+  }
   const darkening = clamp((50 - tone) / 40, 0, 1);
   return normalizeHue(normalized - 8 * Math.sqrt(darkening));
 }
@@ -228,8 +250,12 @@ function vibrancyMultiplier(vibrancy: number) {
   if (!Number.isFinite(vibrancy) || vibrancy < 0 || vibrancy > 100) {
     throw new Error('Vibrancy must be a number from 0 to 100.');
   }
-  if (vibrancy <= 25) {return (vibrancy / 25) * 0.72;}
-  if (vibrancy <= 50) {return 0.72 + ((vibrancy - 25) / 25) * 0.28;}
+  if (vibrancy <= 25) {
+    return (vibrancy / 25) * 0.72;
+  }
+  if (vibrancy <= 50) {
+    return 0.72 + ((vibrancy - 25) / 25) * 0.28;
+  }
   return 1 + (vibrancy - 50) * 0.0096;
 }
 
@@ -266,7 +292,9 @@ function colorToPolar(color: string): PolarColor {
 }
 
 function neutralPolar(profile: string, seed: string): PolarColor {
-  if (profile === 'custom') {return colorToPolar(seed);}
+  if (profile === 'custom') {
+    return colorToPolar(seed);
+  }
   const hue = profile === 'warm-v1' ? 75 : profile === 'cool-v1' ? 250 : 0;
   if (!['neutral-v1', 'warm-v1', 'cool-v1'].includes(profile)) {
     throw new Error(`Unknown neutral profile: ${String(profile)}`);
@@ -283,7 +311,9 @@ function anchorPolarAtStop(
   anchors: TonalPaletteAnchor[],
   stop: number,
 ): PolarColor {
-  if (anchors.length === 0) {return seed;}
+  if (anchors.length === 0) {
+    return seed;
+  }
   const sorted = [...anchors].sort((a, b) => a.stop - b.stop);
   const lower = [...sorted].reverse().find(anchor => anchor.stop <= stop);
   const upper = sorted.find(anchor => anchor.stop >= stop);
@@ -418,8 +448,11 @@ function applyAnchor(
       for (let index = 0; index < 18; index++) {
         const amount = (low + high) / 2;
         const mixed = interpolateColor(target, candidate, amount);
-        if (perceptualDelta(mixed, target) <= tolerance) {low = amount;}
-        else {high = amount;}
+        if (perceptualDelta(mixed, target) <= tolerance) {
+          low = amount;
+        } else {
+          high = amount;
+        }
       }
       generatedColor = interpolateColor(target, candidate, low);
     }
@@ -458,11 +491,15 @@ function correctionAtStop(
   stop: number,
 ): ColorTriple {
   const zero: ColorTriple = [0, 0, 0];
-  if (corrections.length === 0) {return zero;}
+  if (corrections.length === 0) {
+    return zero;
+  }
   const first = corrections[0];
   if (stop <= first.stop) {
     const boundary = Math.max(0, first.stop - 25);
-    if (stop <= boundary && boundary !== first.stop) {return zero;}
+    if (stop <= boundary && boundary !== first.stop) {
+      return zero;
+    }
     const amount =
       boundary === first.stop
         ? 1
@@ -472,7 +509,9 @@ function correctionAtStop(
   const last = corrections[corrections.length - 1];
   if (stop >= last.stop) {
     const boundary = Math.min(100, last.stop + 25);
-    if (stop >= boundary && boundary !== last.stop) {return zero;}
+    if (stop >= boundary && boundary !== last.stop) {
+      return zero;
+    }
     const amount =
       boundary === last.stop
         ? 1
@@ -494,7 +533,9 @@ function applyAnchorCorrections(
   stops: number[],
   anchors: TonalPaletteAnchor[],
 ) {
-  if (anchors.length === 0) {return {colors, anchors: []};}
+  if (anchors.length === 0) {
+    return {colors, anchors: []};
+  }
   const corrections = anchors
     .map(anchor => {
       const candidate = colors[anchor.stop];
@@ -591,9 +632,13 @@ function buildDiagnostics(
         hueIdentityRisk = 'yellow-to-brown';
       }
     }
-    if (index === 0) {continue;}
+    if (index === 0) {
+      continue;
+    }
     const previous = colors[stops[index - 1]];
-    if (luminance(color) + 0.000001 < luminance(previous)) {monotonic = false;}
+    if (luminance(color) + 0.000001 < luminance(previous)) {
+      monotonic = false;
+    }
     const adjacentDelta = perceptualDelta(previous, color);
     minimumAdjacentDeltaE = Math.min(minimumAdjacentDeltaE, adjacentDelta);
     maximumAdjacentDeltaE = Math.max(maximumAdjacentDeltaE, adjacentDelta);
@@ -624,14 +669,20 @@ function darkChromaMultiplier(
   mode: PaletteMode,
   stop: number,
 ) {
-  if (!taper || mode !== 'dark' || family.kind === 'neutral') {return 1;}
-  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) {return 1;}
+  if (!taper || mode !== 'dark' || family.kind === 'neutral') {
+    return 1;
+  }
+  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) {
+    return 1;
+  }
   // Read own keys only. A family id such as `constructor` must not get a
   // multiplier from the object prototype.
   const edge = Object.hasOwn(taper.familyMultipliers, family.id)
     ? taper.familyMultipliers[family.id]
     : taper.edgeMultiplier;
-  if (stop <= taper.throughStop) {return edge;}
+  if (stop <= taper.throughStop) {
+    return edge;
+  }
   const recovery = smoothstep(
     (stop - taper.throughStop) / (taper.recoverAtStop - taper.throughStop),
   );
@@ -673,7 +724,9 @@ function generateRamp(
       request.recipe,
     );
     colors[stop] = generated.hex;
-    if (generated.gamutMapped) {gamutMappedStops.push(stop);}
+    if (generated.gamutMapped) {
+      gamutMappedStops.push(stop);
+    }
   }
   const corrected = applyAnchorCorrections(colors, request.stops, anchors);
   const diagnostics = buildDiagnostics(
@@ -712,7 +765,9 @@ function buildCoordinationDiagnostics(
       .filter(family => chromaticIds.has(family.id) && family[mode])
       .map(family => {
         const ramp = family[mode];
-        if (!ramp) {throw new Error(`Missing ${mode} ramp for ${family.id}.`);}
+        if (!ramp) {
+          throw new Error(`Missing ${mode} ramp for ${family.id}.`);
+        }
         const color = ramp.colors[stop];
         return {
           id: family.id,
@@ -778,7 +833,9 @@ function normalizeDarkChromaTaper(
   stops: number[],
   families: NormalizedFamily[],
 ): NormalizedRequest['darkChromaTaper'] {
-  if (taper == null) {return undefined;}
+  if (taper == null) {
+    return undefined;
+  }
   if (typeof taper !== 'object' || Array.isArray(taper)) {
     throw new Error('darkChromaTaper must be an object.');
   }
@@ -855,7 +912,7 @@ export function normalizeGenerationRequest(
   }
   // A request that names no recipe runs the first one, so a config written
   // before v2 regenerates the same colors.
-  const recipe = input.recipe ?? (PALETTE_RECIPE);
+  const recipe = input.recipe ?? PALETTE_RECIPE;
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
       `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
@@ -880,7 +937,9 @@ export function normalizeGenerationRequest(
         `Family id ${id} is reserved for the standalone ${id} palette value.`,
       );
     }
-    if (ids.has(id)) {throw new Error(`Duplicate family id: ${id}.`);}
+    if (ids.has(id)) {
+      throw new Error(`Duplicate family id: ${id}.`);
+    }
     ids.add(id);
     const kind = family.kind ?? 'chromatic';
     if (!['chromatic', 'neutral'].includes(kind)) {

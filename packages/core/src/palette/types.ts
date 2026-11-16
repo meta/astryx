@@ -155,3 +155,35 @@ export interface TonalPaletteNormalizedRequest {
     anchors: TonalPaletteAnchor[];
   }[];
 }
+
+/** The seeds `themePalette()` grows a theme's colors from. */
+export interface ThemePaletteInput {
+  /** The accent: buttons, links, focus rings, selection. */
+  accent?: string;
+  /** The grays of surfaces, text, borders and icons. */
+  neutral?: string;
+  /** The success status color. */
+  success?: string;
+  /** The warning status color. */
+  warning?: string;
+  /** The danger status color (the error tokens). */
+  danger?: string;
+  /** The info status color. */
+  info?: string;
+  /** Chroma from 0 (most muted) through 50 (default) to 100 (most vivid). */
+  vibrancy?: number;
+  /** The recipe: `astryx-oklch-v1` when none is named, so the colors never move with an upgrade. */
+  recipe?: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+}
+
+/** A theme's colors made by `themePalette()`, for `defineTheme({palette})`. */
+export interface ThemePalette {
+  readonly kind: 'theme-palette';
+  readonly recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2';
+  /** Each color token's `[light, dark]` value. */
+  readonly tokens: Readonly<Record<string, readonly [string, string]>>;
+  /** Part styles that lift secondary text on the accent tint and the neutral track, as the official themes do. */
+  readonly components: Readonly<
+    Record<string, Record<string, Record<string, readonly [string, string]>>>
+  >;
+}

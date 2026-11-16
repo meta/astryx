@@ -3,7 +3,8 @@
 /**
  * @file index.ts
  * @input None
- * @output The public tonal palette API: the generator and its types
+ * @output The public palette API: `themePalette()`, the generator, and their
+ *   types
  * @position Entry of `@astryxdesign/core/palette`. It is its own entry, so an
  *   app that never imports it ships no generator code
  */
@@ -18,6 +19,7 @@ export {
   PALETTE_WHITE,
   generateTonalPalette,
 } from './generator';
+export {themePalette} from './themePalette';
 export type {
   TonalPaletteAnchor,
   TonalPaletteCandidate,
@@ -27,4 +29,6 @@ export type {
   TonalPaletteGenerationInput,
   TonalPaletteNormalizedRequest,
   TonalPaletteRampDiagnostics,
+  ThemePalette,
+  ThemePaletteInput,
 } from './types';

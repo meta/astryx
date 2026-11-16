@@ -99,6 +99,7 @@ type ThemeIconOverrides = Partial<
 >;
 import type {IndicatorRegistry} from '../Indicator/types';
 import type {TypographyConfig} from './types';
+import type {ThemePalette} from '../palette/types';
 import {
   resolveOnMedia,
   type OnMediaOverrides,
@@ -418,6 +419,23 @@ export interface DefineThemeInput<
    *  Values can be a string or [light, dark] tuple.
    *  Only include tokens you want to override; defaults fill the rest. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
+  /**
+   * Colors made from a few seeds by `themePalette()` from
+   * `@astryxdesign/core/palette`: every color token, and the part styles
+   * that keep secondary text readable on the accent tint. `tokens` and
+   * `components` still win, one by one.
+   *
+   * @example
+   * ```
+   * import {themePalette} from '@astryxdesign/core/palette';
+   *
+   * defineTheme({
+   *   name: 'acme',
+   *   palette: themePalette({accent: '#5b3cc4', neutral: '#6b6b70'}),
+   * });
+   * ```
+   */
+  palette?: ThemePalette;
   /** Theme-family-local values keyed by any valid CSS custom-property name;
    *  prefixes do not establish ownership. */
   localTokens?: Record<string, TokenValue>;
@@ -824,6 +842,71 @@ function assertCompleteMotionScale(
  * that are merged into the token map. Explicit `tokens` entries take
  * precedence over generated values.
  */
+/**
+ * The theme's palette, when it has one. A palette that `themePalette()` did
+ * not make is refused: a plain object of seeds is palette input, and
+ * `defineTheme` does not run the generator itself, so that apps without a
+ * palette never ship it.
+ */
+function readPalette(input: {
+  name: string;
+  palette?: unknown;
+}): ThemePalette | undefined {
+  const {palette} = input;
+  if (palette === undefined) {
+    return undefined;
+  }
+  if (
+    palette !== null &&
+    typeof palette === 'object' &&
+    (palette as {kind?: unknown}).kind === 'theme-palette' &&
+    typeof (palette as {tokens?: unknown}).tokens === 'object'
+  ) {
+    return palette as ThemePalette;
+  }
+  throw new Error(
+    `defineTheme("${input.name}"): \`palette\` must be made by themePalette() from @astryxdesign/core/palette, got ${palette === null ? 'null' : typeof palette === 'object' ? 'a plain object' : typeof palette}. ` +
+      `Wrap the seeds: palette: themePalette({accent: '#5b3cc4'}).`,
+  );
+}
+
+/**
+ * The palette's part styles under the theme's own: a part style the theme
+ * sets wins, property by property.
+ */
+function withPaletteComponents(
+  palette: ThemePalette,
+  own: ComponentStyleMap | undefined,
+): ComponentStyleMap | undefined {
+  const parts = Object.entries(palette.components);
+  if (!parts.length) {
+    return own;
+  }
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const [part, blocks] of parts) {
+    merged[part] = {...blocks};
+  }
+  for (const [part, blocks] of Object.entries(own ?? {})) {
+    const fromPalette = merged[part];
+    if (!fromPalette || !blocks || typeof blocks !== 'object') {
+      merged[part] = blocks as Record<string, unknown>;
+      continue;
+    }
+    for (const [block, style] of Object.entries(blocks)) {
+      const under = fromPalette[block];
+      fromPalette[block] =
+        under &&
+        typeof under === 'object' &&
+        style &&
+        typeof style === 'object' &&
+        !Array.isArray(style)
+          ? {...under, ...style}
+          : style;
+    }
+  }
+  return merged as ComponentStyleMap;
+}
+
 export function defineTheme<
   const IconVariants extends ReadonlyArray<string> | undefined = undefined,
   Base extends DefinedTheme | undefined = undefined,
@@ -854,6 +937,7 @@ export function defineTheme<
     );
   }
   const base = input.extends;
+  const palette = readPalette(input);
 
   // The theme's own value axes and the resolved base an `extends` supplies.
   // The same axis metadata is retained so adaptation rules can complete partial
@@ -886,9 +970,13 @@ export function defineTheme<
     syntax: input.syntax,
     tokens:
       inheritedScale != null && Object.keys(inheritedScale).length > 0
-        ? {...inheritedScale, ...input.tokens}
-        : input.tokens,
-    components: input.components,
+        ? {...inheritedScale, ...palette?.tokens, ...input.tokens}
+        : palette
+          ? {...palette.tokens, ...input.tokens}
+          : input.tokens,
+    components: palette
+      ? withPaletteComponents(palette, input.components)
+      : input.components,
   };
   const ownAxes: ThemeGenerativeAxes = {
     typography: input.typography,
@@ -1000,8 +1088,8 @@ export function defineTheme<
       : {}),
     indicators,
     __inputTokens:
-      base?.__inputTokens || input.tokens
-        ? {...base?.__inputTokens, ...input.tokens}
+      base?.__inputTokens || palette || input.tokens
+        ? {...base?.__inputTokens, ...palette?.tokens, ...input.tokens}
         : undefined,
     __onDark,
     __onLight,
