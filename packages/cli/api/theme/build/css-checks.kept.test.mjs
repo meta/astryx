@@ -21,6 +21,7 @@ import {
   vi,
 } from 'vitest';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 const {TEMP_ROOT} = await vi.hoisted(async () => {
@@ -49,11 +50,15 @@ vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
   const real = /** @type {any} */ (await importOriginal());
   return {
     ...real,
+    // A reinstall rewrites css-tree's files: their times are after this
+    // process started.
     fileStamp: (/** @type {string} */ file) => {
       const stamp = real.fileStamp(file);
-      return reinstalled.now && file.includes(`${path.sep}css-tree${path.sep}`)
-        ? `${stamp}:reinstalled`
-        : stamp;
+      if (!reinstalled.now || !file.includes(`${path.sep}css-tree${path.sep}`))
+        return stamp;
+      const [size, , , ino] = stamp.split(':');
+      const at = performance.timeOrigin + 1;
+      return `${size}:${at}:${at}:${ino}`;
     },
   };
 });
@@ -247,6 +252,16 @@ describe("theme build's checks of a theme's pseudo keys", () => {
     expect(after.asked).toBeGreaterThan(0);
     expect(after.problems).toEqual(fresh(theme));
     // Nothing kept under the new files' stamps: asked again.
+    expect(check(theme).asked).toBeGreaterThan(0);
+  });
+
+  it('keep nothing from a first check by a css-tree loaded another way before a reinstall', () => {
+    // css-tree loaded by another part of the build, before any check.
+    createRequire(import.meta.url)('css-tree');
+    reinstalled.now = true;
+    const theme = themeWith(PSEUDO);
+    expect(check(theme).asked).toBeGreaterThan(0);
+    expect(keptChecks()).toHaveLength(0);
     expect(check(theme).asked).toBeGreaterThan(0);
   });
 

@@ -18,8 +18,7 @@
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {persistedSummary} from '../fs/gather-cache.mjs';
-import {loadedFiles} from '../fs/loaded-files.mjs';
-import {fileStamp} from '../fs/read-record.mjs';
+import {loadedFileStamps, loadedFiles} from '../fs/loaded-files.mjs';
 
 const require = createRequire(import.meta.url);
 const CSS_TREE = require.resolve('css-tree');
@@ -74,26 +73,15 @@ export function keptCssTreeAnswer(kind, inputs, answer) {
     ],
     () => {
       const value = answer(inputs);
-      /** @type {[string, string][]} */
-      const stamps = cssTreeFiles().map(file => {
-        if (!loadedStamps.has(file)) loadedStamps.set(file, fileStamp(file));
-        return [file, /** @type {string} */ (loadedStamps.get(file))];
-      });
-      // Kept only while the files are still those this process loaded:
+      // Kept only while css-tree's files are those this process loaded:
       // after a reinstall, the answer is the old css-tree's.
-      current = stamps.every(([file, stamp]) => fileStamp(file) === stamp);
+      const {stamps, unchangedSinceStart} = loadedFileStamps(cssTreeFiles());
+      current = unchangedSinceStart;
       return {value, stamps};
     },
     {keep: () => current},
   );
 }
-
-/**
- * Each file of css-tree's code and data this process has read, with its
- * stamp when the process first found it loaded.
- * @type {Map<string, string>}
- */
-const loadedStamps = new Map();
 
 /**
  * Every file of css-tree's code that is loaded, and each MDN data file it
