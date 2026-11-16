@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useEffect, useState, type CSSProperties} from 'react';
+import {useSyncExternalStore, type CSSProperties} from 'react';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -39,6 +39,9 @@ const outlinePanel: CSSProperties = {
   paddingBlockStart: 120,
 };
 
+/** Whether the page runs script never changes, so nothing is subscribed. */
+const subscribeToNothing = () => () => {};
+
 export default function TechnicalDocumentationPage() {
   // Mobile first: the server render and a shared static copy, which run no
   // script, get one column with the section links on top. That reads well at
@@ -46,8 +49,11 @@ export default function TechnicalDocumentationPage() {
   const isMobile = useMediaQuery('(max-width: 768px)', true);
   // Copy buttons need script, so they appear once the page runs rather than
   // sitting in a static copy as buttons that do nothing.
-  const [isInteractive, setIsInteractive] = useState(false);
-  useEffect(() => setIsInteractive(true), []);
+  const isInteractive = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
 
   return (
     <Layout
