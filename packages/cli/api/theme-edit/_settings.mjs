@@ -11697,20 +11697,32 @@ function buttonStyleProblems(ctx, data, res) {
     style.value === 'soft'
       ? {fill: 'var(--color-accent-muted)', color: 'var(--color-text-accent)'}
       : {fill: 'transparent', color: 'var(--color-text-accent)'};
-  /** A later setting of a property on the primary button, in a mode. @param {RegExp} thing @param {string} m */
-  const later = (thing, m) =>
-    [...data.settings.slice(at + 1)]
-      .reverse()
-      .find(
-        y =>
-          y.source === 'property' &&
-          thing.test(y.thing) &&
-          !y.state &&
-          (!y.mode || y.mode === m) &&
-          y.on &&
-          (!y.when || y.when === 'variant:primary') &&
-          partsOf(ctx, y).includes('button'),
-      ) ?? null;
+  /**
+   * The setting of a property that wins on the primary button, in a mode:
+   * an exact property on the primary variant's own rule, set before the
+   * style or after (an exact property wins over a dial on the same rule);
+   * else a later one on the plain rule.
+   * @param {RegExp} thing @param {string} m
+   */
+  const later = (thing, m) => {
+    /** @param {import('./_settings.mjs').Setting} y */
+    const fits = y =>
+      y.source === 'property' &&
+      thing.test(y.thing) &&
+      !y.state &&
+      (!y.mode || y.mode === m) &&
+      !!y.on &&
+      partsOf(ctx, y).includes('button');
+    return (
+      [...data.settings]
+        .reverse()
+        .find(y => fits(y) && y.when === 'variant:primary') ??
+      [...data.settings.slice(at + 1)]
+        .reverse()
+        .find(y => fits(y) && !y.when) ??
+      null
+    );
+  };
   /** @type {ThemeProblem[]} */
   const out = [];
   for (const m0 of modes) {
