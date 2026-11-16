@@ -143,26 +143,38 @@ export async function kitSignals(query, options = {}) {
   const wantsPages = !type || type === 'template';
   const templates = wantsPages
     ? await loadTemplates(cwd)
-    : {pages: [], blocks: []};
+    : {pages: [], blocks: [], notReadyPages: 0};
   const catalog = templates.pages;
   // Search reads a page template the idea names in any case, separator or
   // with a neighbour-letter swap in a word of six or more letters as that template's own words
   // (readNames), as the page ranker does, so such a name matches by name.
   const searched = wantsPages ? readNames(query, catalog) : query;
+  // Search wider than the surfaced kit so a flood of doc matches cannot bury
+  // the page templates past the cutoff; the caller's `limit` still caps the
+  // kit below. A non-positive or non-integer limit is passed through
+  // unchanged so search rejects it (ERR_INVALID_ARGUMENT).
+  const wide =
+    Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit;
+  // A page template not ready yet is still a search match, but build reads
+  // search as if it were absent: it asks for one more result per such
+  // template, sets them aside, and keeps the same number of results, so none
+  // takes a block's or a component's place.
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
       await search(searched, {
         cwd,
         type,
-        // Search wider than the surfaced kit so a flood of doc matches cannot
-        // bury the page templates past the cutoff; the caller's `limit` still
-        // caps the kit below. A non-positive or non-integer limit is passed
-        // through unchanged so search rejects it (ERR_INVALID_ARGUMENT).
-        limit:
-          Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit,
+        limit: wide + (wide > 0 ? templates.notReadyPages : 0),
       })
     );
-  const results = result.data.results;
+  /** @param {SearchResultEntry} r */
+  const isReady = r =>
+    catalog.some(t => t.name === r.name && t.package === r.package);
+  /** @param {SearchResultEntry} r */
+  const notReadyPage = r =>
+    r.domain === 'template' && r.kind !== 'block' && !isReady(r);
+  const allResults = result.data.results;
+  const results = allResults.filter(r => !notReadyPage(r)).slice(0, wide);
   // The TOTAL number of matches, not the number that survived `limit`. The kit
   // below is deliberately small (≤3 pages, ≤5 blocks, ≤6 components) and
   // `results` is itself capped, so every other count here is a cap; this is the
@@ -188,24 +200,23 @@ export async function kitSignals(query, options = {}) {
   // the reason: when the idea names a not-ready template that search matched
   // directly, the reason says it is not ready yet.
   /** @param {SearchResultEntry} r */
-  const isReady = r =>
-    catalog.some(t => t.name === r.name && t.package === r.package);
-  const pageMatches = results.filter(
-    r =>
-      r.domain === 'template' &&
-      r.kind !== 'block' &&
-      r.score >= PAGE_FLOOR &&
-      covers(r),
-  );
-  const matchedPages = pageMatches.filter(isReady).slice(0, 3);
-  const top = pageMatches[0];
+  const pageMatch = r =>
+    r.domain === 'template' &&
+    r.kind !== 'block' &&
+    r.score >= PAGE_FLOOR &&
+    covers(r);
+  const matchedPages = results.filter(pageMatch).slice(0, 3);
+  // Any not-ready template the idea names and search matched directly, not
+  // only search's first: another not-ready template ranked above it must not
+  // hide the one the reader asked for.
   const namedUnready =
-    top &&
-    !isReady(top) &&
-    top.score >= PAGE_DIRECT &&
-    namedOutright([top.name], readNames(query, [{name: top.name}]), [top])[0]
-      ? top.name
-      : null;
+    allResults.find(
+      r =>
+        pageMatch(r) &&
+        !isReady(r) &&
+        r.score >= PAGE_DIRECT &&
+        namedOutright([r.name], readNames(query, [{name: r.name}]), [r])[0],
+    )?.name ?? null;
   const searchedBlocks = results.filter(
     r => r.domain === 'template' && r.kind === 'block',
   );
