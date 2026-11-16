@@ -455,9 +455,6 @@ const DONUT_GAP_ANGLE =
 // ============= SHARED PIECES =============
 
 const pageStyles = stylex.create({
-  // A chart keeps its axes in every reading direction: time runs left to
-  // right and the row labels stay beside their bars.
-  chartPlot: {direction: 'ltr'},
   contentBottomPad: {
     paddingBlockEnd: 'var(--spacing-10)',
   },
@@ -678,10 +675,9 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
 
   return (
     <VStack gap={3}>
-      <ResponsiveContainer
-        width="100%"
-        height={height}
-        {...stylex.props(pageStyles.chartPlot)}>
+      {/* A chart keeps its axes in every reading direction: time runs left to
+          right and the row labels stay beside their bars. */}
+      <ResponsiveContainer width="100%" height={height} dir="ltr">
         <BarChart
           data={data}
           layout="vertical"
@@ -868,7 +864,8 @@ const BURNDOWN_HEIGHT = DONUT_SIZE;
 function BurndownChart() {
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT}>
+      {/* Left to right in every reading direction, like every chart. */}
+      <ResponsiveContainer width="100%" height={BURNDOWN_HEIGHT} dir="ltr">
         <LineChart
           data={BURNDOWN}
           margin={{top: 16, right: 4, left: 4, bottom: 4}}>
