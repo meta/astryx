@@ -87,6 +87,9 @@ export const PRESS_MODULES = {
       'privateAttributes/pressHeld.stylex',
       'privateAttributes/pressHoldsDrag.stylex',
       'privateAttributes/pressGroupItem.stylex',
+      // The stretched-control helper: a control's press layer covers the row
+      // its caller stretches it across.
+      'utils/pressLayerBox',
       // The group profile: the action-group tracker, reached through these.
       'hooks/useGroupPressTracking',
       'hooks/useActionGroupTracking',
