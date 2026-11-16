@@ -217,12 +217,113 @@ jobs:
         if: inputs.recheck
         run: npx playwright install chromium
 
-      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      # The full run records what each Node test file touches, for the record
+      # a pull request selects its file-reading tests by (scripts/test-inputs,
+      # spec:AST-030 FR13). Each leg's JSON results name the files that fail.
+      - name: Run this shard of the Node tests, recording their inputs
+        run: |
+          mkdir -p "$ASTRYX_TEST_INPUTS_DIR"
+          pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
+            --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/node-results.json"
         env:
+          ASTRYX_TEST_INPUTS_DIR: ${{ runner.temp }}/node-test-inputs
           # A release re-check proves every swizzle target, in Chromium too
           # (spec:AST-110 FR7).
           SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
           SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
+
+      - name: Keep this leg's recorded inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-test-inputs-leg-${{ matrix.shard }}
+          path: ${{ runner.temp }}/node-test-inputs
+          retention-days: 1
+
+      - name: Keep this leg's results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-results-leg-${{ matrix.shard }}
+          path: ${{ runner.temp }}/node-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # After the Node legs (scripts/test-inputs, spec:AST-030 FR13, DEC-30):
+  # when they all passed, merges their lines into this commit's test-inputs
+  # record and keeps it for pull requests (a failed leg may not have recorded
+  # all its files' inputs); when one failed, names any pull request merged
+  # since the last passing full run that left a failed test out, and opens an
+  # issue, so a wrong skip shows within the hour.
+  node-test-inputs:
+    needs: [main-commit, test-node]
+    if: always() && github.event_name != 'push' && (needs.test-node.result == 'success' || needs.test-node.result == 'failure')
+    # A full run's lines took 3.5 GB to merge, more than a slim runner holds
+    # and near Node's default heap; the heap gets twice that.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
+          persist-credentials: false
+
+      - name: Download every leg's recorded inputs
+        if: needs.test-node.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: node-test-inputs-leg-*
+          path: ${{ runner.temp }}/legs
+
+      - name: Merge the legs into the record
+        if: needs.test-node.result == 'success'
+        run: |
+          mkdir -p "$RUNNER_TEMP/record"
+          node --max-old-space-size=7168 scripts/test-inputs/merge.mjs --out "$RUNNER_TEMP/record/record.json" "$RUNNER_TEMP"/legs/*
+
+      - name: Keep the record for pull requests
+        if: needs.test-node.result == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-test-inputs
+          path: ${{ runner.temp }}/record/record.json
+          retention-days: 7
+
+      - name: Download every leg's results
+        if: needs.test-node.result == 'failure'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: node-results-leg-*
+          path: ${{ runner.temp }}/results
+
+      - name: Name failed tests that a merged pull request left out
+        if: needs.test-node.result == 'failure'
+        uses: actions/github-script@v9
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.main-commit.outputs.sha }}
+          RESULTS: ${{ runner.temp }}/results
+        with:
+          retries: 3
+          script: |
+            const {skippedFailures} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/skipped-test-alarm.cjs`);
+            const found = await skippedFailures({github, ...context.repo, sha: process.env.SHA, results: process.env.RESULTS, runId: context.runId});
+            if (found.length === 0) {
+              core.info('No failed test was left out by a pull request merged since the last passing full run.');
+              return;
+            }
+            const lines = found.map(({test, pr}) => `- \`${test}\` failed on main; #${pr} left it out by its recorded inputs.`);
+            for (const line of lines) core.error(line.slice(2));
+            const title = 'A test that a pull request left out failed on main';
+            const body = `${lines.join('\n')}\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nThe record missed an input of these tests (scripts/test-inputs). Fix the record or the rule that read it, then close this issue.`;
+            const {data: open} = await github.rest.issues.listForRepo({...context.repo, state: 'open', creator: 'github-actions[bot]', per_page: 100});
+            const existing = open.find(issue => issue.title === title);
+            if (existing) await github.rest.issues.createComment({...context.repo, issue_number: existing.number, body});
+            else await github.rest.issues.create({...context.repo, title, body});
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its

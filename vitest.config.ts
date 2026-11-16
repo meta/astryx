@@ -212,7 +212,14 @@ export default defineConfig({
           env: {ASTRYX_VISUAL_GATE_READ_ONLY: '1'},
           // A fixture project resolves packages only from its own folders, never
           // through the NODE_PATH pnpm's bin shim gives the worker.
-          setupFiles: ['./vitest.setup.node.mjs'],
+          // A recording run (Main's full unit run) also records what each
+          // test file touches (scripts/test-inputs, spec:AST-030 FR13).
+          setupFiles: [
+            ...(process.env.ASTRYX_TEST_INPUTS_DIR
+              ? ['./scripts/test-inputs/setup.mjs']
+              : []),
+            './vitest.setup.node.mjs',
+          ],
           // Prebuilt and plain-data modules load as Node loads them for the
           // CLI, not through Vite's transform, which would otherwise inline
           // every file: Core's built bundle (the workspace link resolves it

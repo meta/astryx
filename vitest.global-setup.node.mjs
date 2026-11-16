@@ -54,11 +54,20 @@ export default async function setup(project) {
   // process's exit: a run stopped with Ctrl-C calls no teardown.
   const endRun = registerTestRun();
   process.once('exit', endRun);
+  // A recording run records what each part of this setup reads and writes:
+  // a test that reads what a part wrote depends on what that part read
+  // (scripts/test-inputs).
+  if (process.env.ASTRYX_TEST_INPUTS_DIR) {
+    await import('./scripts/test-inputs/record.mjs');
+  }
+  const recordStep = name => globalThis.__astryxTestInputs?.switchTo(name);
   try {
+    recordStep('step:core-build');
     // A stale Core is rebuilt only here, before the workers. A suite that
     // rebuilt it mid-run would delete dist under suites still reading it. The
     // wait for an earlier run is a timer, so Ctrl-C still stops this one.
     await ensureCoreBuiltForRun();
+    recordStep('step:sync-templates');
     // The ignored registry and ~700 physical page wrappers are build outputs,
     // not fixtures to check in. The route-manifest test must see the same
     // inputs as `pnpm -F @astryxdesign/sandbox build` on a clean CI checkout.
@@ -70,6 +79,7 @@ export default async function setup(project) {
         maxBuffer: 32 * 1024 * 1024,
       },
     );
+    recordStep('step:run-folders');
     // An earlier run's child may have been stopped before it removed that
     // run's folder.
     sweepTrash(os.tmpdir(), Date.now());
@@ -86,6 +96,7 @@ export default async function setup(project) {
       process.env.npm_config_cache ??= path.join(os.homedir(), '.npm');
       process.env.HOME = userHome;
     }
+    recordStep('step:theme-cache');
     // Every theme editor fixture that links the CLI's own Core reads the
     // same part data and component docs, which take a render of every
     // component to build. They are built once here, and each fixture starts
@@ -112,6 +123,7 @@ export default async function setup(project) {
     } catch {
       // Each fixture builds its own.
     }
+    recordStep('step:pack-cli');
     // `npm pack` costs about 5 s of CPU. Packing once here keeps that out of
     // every suite that places CLI copies, and out of their timed tests. A watch
     // session packs again before a rerun of this project's tests, so they see
@@ -132,6 +144,7 @@ export default async function setup(project) {
         pack();
       }
     });
+    recordStep(undefined);
     return () => {
       // Vitest gives close() 10 s, and the folder holds thousands of files.
       // It moves aside at once, and a detached child removes it.

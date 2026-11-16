@@ -1228,9 +1228,75 @@ jobs:
         run: pnpm test:ui:isolated
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
+  # Picks the one test-inputs record a pull request's Node legs narrow their
+  # file-reading tests with (scripts/test-inputs, spec:AST-030 FR13): Main's
+  # newest record of a commit the merge base contains, and every path changed
+  # between that commit and the base. Every leg reads this one choice, so all
+  # legs split the same list. Without a usable record it uploads nothing, and
+  # the legs run every file-reading test, as without a record.
+  node-test-inputs:
+    needs: [admission]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && !cancelled() && needs.admission.result == 'success') }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      record: ${{ steps.upload.outcome == 'success' }}
+    steps:
+      - name: Check out the record picker
+        uses: actions/checkout@v7
+        timeout-minutes: 3
+        with:
+          sparse-checkout: .github/scripts/lib
+          persist-credentials: false
+
+      - name: Pick Main's record for the merge base
+        id: pick
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {pickRecord} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/test-inputs-pick.cjs`);
+            // The merge commit's first parent is the base the legs test on.
+            const {data: merge} = await github.rest.repos.getCommit({...context.repo, ref: context.sha});
+            const base = merge.parents[0].sha;
+            const picked = await pickRecord({github, ...context.repo, base});
+            if (picked.none) {
+              core.notice(`Every file-reading Node test runs: ${picked.none}.`);
+              return;
+            }
+            const dir = path.join(process.env.RUNNER_TEMP, 'node-test-inputs');
+            fs.mkdirSync(dir, {recursive: true});
+            fs.writeFileSync(path.join(dir, 'since-record.txt'), picked.changed.map(file => `${file}\n`).join(''));
+            core.setOutput('run-id', picked.runId);
+            core.info(`Record of ${picked.commit} (run ${picked.runId}); ${picked.changed.length} paths changed since it.`);
+
+      - name: Download Main's record
+        id: download
+        if: steps.pick.outputs.run-id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: node-test-inputs
+          run-id: ${{ steps.pick.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/node-test-inputs
+
+      - name: Keep the record and the paths changed since it for the legs
+        id: upload
+        if: steps.download.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-test-inputs-selection
+          path: ${{ runner.temp }}/node-test-inputs
+          retention-days: 1
+
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [room, admission, heavy-ci]
+    needs: [room, admission, heavy-ci, node-test-inputs]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
@@ -1347,6 +1413,16 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm -F @astryxdesign/core build
 
+      # The record node-test-inputs picked. A leg that cannot read it fails,
+      # rather than run a list the other legs do not split.
+      - name: Download the test-inputs record
+        id: test-inputs
+        if: needs.node-test-inputs.outputs.record == 'true' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: node-test-inputs-selection
+          path: ${{ runner.temp }}/node-test-inputs
+
       # Scoped like test-ui's run. The shard watchdog
       # (scripts/vitest-shard-watchdog.mjs) fires a minute before the job's
       # 15-minute limit, counted from the job's start (the runner's worker
@@ -1376,7 +1452,13 @@ jobs:
             # Every leg splits the same list, so a leg that cannot list the
             # tests fails rather than split a different one.
             .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
-            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            # With Main's record, only the file-reading tests whose recorded
+            # inputs the change reaches (scripts/test-inputs).
+            INPUTS=()
+            if [ -f "$RUNNER_TEMP/node-test-inputs/record.json" ]; then
+              INPUTS=(--inputs "$RUNNER_TEMP/node-test-inputs/record.json" --since-record "$RUNNER_TEMP/node-test-inputs/since-record.txt" --skipped "$RUNNER_TEMP/node-skipped-tests.txt")
+            fi
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json" "${INPUTS[@]}"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
               .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
@@ -1385,6 +1467,17 @@ jobs:
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      # Main's full unit run names a failed test that this pull request left
+      # out, so a wrong skip shows within the hour (scripts/test-inputs).
+      - name: Keep the file-reading tests the record left out
+        if: matrix.shard == 1 && steps.test-inputs.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-skipped-tests
+          path: ${{ runner.temp }}/node-skipped-tests.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       # A test file this change touches that now runs far past its recorded
       # time, or has none, gets a notice naming both times. It never fails the

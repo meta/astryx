@@ -71,7 +71,8 @@ describe('the Node legs inside their job limit', () => {
   it('run no browser step: the browser contracts have a job of their own', () => {
     // A step only one leg runs takes a share of that leg no split can book.
     // The first leg keeps only the steps that run where no Node share runs (a
-    // spec-only change's record readers) or a Lab-only change's one check.
+    // spec-only change's record readers), a Lab-only change's one check, and
+    // the upload of the tests the record left out (seconds).
     const legOneOnly = job.steps
       .filter(
         each =>
@@ -80,6 +81,7 @@ describe('the Node legs inside their job limit', () => {
       .map(each => each.name);
     expect(legOneOnly.sort()).toEqual([
       'Check out the change for the tests that read its records',
+      'Keep the file-reading tests the record left out',
       'Lab-only: CLI official-packages check',
       'List the tests that read a changed record',
     ]);

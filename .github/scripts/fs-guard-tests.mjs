@@ -31,13 +31,19 @@
 //   change reaches, in the same formats) and then the other tests, each once,
 //   so one run covers both lists and its legs balance them together.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file> | --reached <file>]
+// - With `--inputs <record.json> --since-record <file>`: only the guards
+//   whose inputs, as Main's full unit run recorded them, the change reaches
+//   (scripts/test-inputs/select.mjs); `--skipped <file>` names the rest.
+//
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file> | --reached <file>] [--inputs <record.json> --since-record <file> [--skipped <file>]]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {expandRecord} from '../../scripts/test-inputs/merge.mjs';
+import {selectByInputs} from '../../scripts/test-inputs/select.mjs';
 
 const TEST_FILE = /\.test\.(?:tsx?|mjs|cjs|js)$/;
 const FILE_MODULE = String.raw`(?:fs|fs\/promises|fs-extra|child_process|typescript|ts-morph|@babel\/core|esbuild|vite|rollup|eslint|prettier|glob|fast-glob|tinyglobby|globby|execa|cross-spawn)`;
@@ -174,9 +180,16 @@ export function changedWorkspacePackages(files, read, changedFiles) {
  * @param {string[]} files tracked repository paths
  * @param {(file: string) => string} read
  * @param {string[]} changedFiles the pull request's paths
+ * @param {(guards: string[]) => string[]} [narrowGuards] the guards a change
+ *   can reach (by their recorded inputs); all of them by default
  */
-export function scopedExtraTests(files, read, changedFiles = []) {
-  const guards = new Set(fsGuardTests(files, read));
+export function scopedExtraTests(
+  files,
+  read,
+  changedFiles = [],
+  narrowGuards = tests => tests,
+) {
+  const guards = new Set(narrowGuards(fsGuardTests(files, read)));
   const changed = changedWorkspacePackages(files, read, changedFiles);
   if (changed.length > 0) {
     const reachesBuild = (_source, specifiers) =>
@@ -411,9 +424,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             'diff',
             '--name-only',
             '-z',
-            // A renamed record counts under its old name too: a test that
-            // reads the old path is the one the rename breaks.
-            ...(specReaders ? ['--no-renames'] : []),
+            // A renamed record or input counts under its old name too: a
+            // test that reads the old path is the one the rename breaks.
+            ...(specReaders || process.argv.includes('--inputs')
+              ? ['--no-renames']
+              : []),
             process.argv[changedFlag + 1],
             'HEAD',
           ],
@@ -440,7 +455,44 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       tests = tests.filter(test => inUi(test) === (project === 'ui'));
     }
   } else {
-    tests = scopedExtraTests(files, read, changedFiles);
+    // `--inputs <record.json> --since-record <paths file>`: only the guards
+    // whose recorded inputs the change reaches (scripts/test-inputs). The
+    // change is the pull request's paths and those between the record's
+    // commit and the base. `--skipped <file>` writes the guards left out.
+    const inputsFlag = process.argv.indexOf('--inputs');
+    let narrow;
+    if (inputsFlag !== -1) {
+      const sinceFlag = process.argv.indexOf('--since-record');
+      if (sinceFlag === -1) throw new Error('--inputs needs --since-record');
+      const record = expandRecord(
+        JSON.parse(read(process.argv[inputsFlag + 1])),
+      );
+      const changed = [
+        ...new Set([
+          ...changedFiles,
+          ...read(process.argv[sinceFlag + 1])
+            .split('\n')
+            .filter(Boolean),
+        ]),
+      ];
+      narrow = guards => {
+        const {run, skipped, reason} = selectByInputs(guards, record, changed);
+        console.error(
+          reason
+            ? `Every file-reading test runs: ${reason}.`
+            : `File-reading tests: ${run.length} run, ${skipped.length} left out by their inputs recorded at ${record.commit.slice(0, 12)}.`,
+        );
+        const skippedFlag = process.argv.indexOf('--skipped');
+        if (skippedFlag !== -1) {
+          fs.writeFileSync(
+            process.argv[skippedFlag + 1],
+            skipped.length > 0 ? `${skipped.join('\n')}\n` : '',
+          );
+        }
+        return run;
+      };
+    }
+    tests = scopedExtraTests(files, read, changedFiles, narrow);
   }
   const reachedFlag = process.argv.indexOf('--reached');
   if (reachedFlag !== -1) {

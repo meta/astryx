@@ -532,17 +532,23 @@ describe('peaks', () => {
       names
         .map(name => legs(main.jobs[name]))
         .reduce((sum, count) => sum + count, 0);
-    // A dispatched unit run holds every job beside main-commit and the join.
+    // A dispatched unit run holds every job beside main-commit and the jobs
+    // that start only once a unit lane ended (the join, the test-inputs
+    // record).
+    const afterLanes = name =>
+      name === 'test' || needsOf(main.jobs[name]).includes('test-node');
     expect(unit).toBeGreaterThanOrEqual(
       held(
         Object.keys(main.jobs).filter(
-          name => name !== 'main-commit' && name !== 'test',
+          name => name !== 'main-commit' && !afterLanes(name),
         ),
       ),
     );
     // A push skips the unit legs (spec:AST-030 FR21).
     const fast = Object.keys(main.jobs).filter(
-      name => main.jobs[name].if !== "github.event_name != 'push'",
+      name =>
+        main.jobs[name].if !== "github.event_name != 'push'" &&
+        !(afterLanes(name) && name !== 'test'),
     );
     expect(push).toBeGreaterThanOrEqual(fast.length);
     expect(push).toBeLessThan(unit);
