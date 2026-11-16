@@ -549,7 +549,9 @@ they are separately named.
   commit in full itself. Pull-request legs never grow to finish sooner: a pull
   request runs as many Node legs as the recorded times need for every leg to
   end inside its job budget, at most eight, at the widths admission picks
-  (FR16); a suite that needs more fails every Node leg with the reason.
+  (FR16); a suite that needs more fails every Node leg with the reason. A Main
+  run whose suite needs more than eight Node legs runs eight and warns with the
+  reason; it never fails for the plan.
 
 - **FR23 — A release-check finishes in minutes, and the release owner can
   re-check `main`'s tip at once.** A release-check runs its browser owners in
