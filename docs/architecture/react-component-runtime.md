@@ -202,8 +202,10 @@ those contracts.
   height, whether a keyboard is up, and whether it has settled, with a
   notification when it settles. The keyboard height
   and each keyboard change's transition (start
-  time, resting value, curve) reach styles only as the hook's value and live
-  only in the hook: each consumer applies them through a StyleX functional style
+  time, resting value, curve) reach styles only as the hook's value, or as a
+  Core host's read-only layout value that includes the keyboard's lift
+  (`spec:AST-099` FR3), and live nowhere else: each consumer applies them
+  through a StyleX functional style
   on its own element, and no CSS custom property on the document root or a
   shared ancestor carries them. The keyboard module may also write, and remove,
   a CSS `translate` on the nearest fixed-position ancestor of a focused Core
