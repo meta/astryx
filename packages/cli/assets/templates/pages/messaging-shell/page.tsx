@@ -3,34 +3,46 @@
 'use client';
 
 /**
- * Messaging Shell — Slack-style column frame for team messaging tools.
+ * Messaging Shell: the app frame of a team messaging tool.
  *
  * Frame (desktop, left to right):
- *   workspace rail 68px | channel sidebar 260px | message stream (fill) | thread panel 340px
+ *   side navigation (workspace, search, channels, direct messages) |
+ *   message stream (fill) | thread panel 340px
  *
- * Container policy: dense rows, zero Cards. Channels and DMs are List/ListItem
- * rows, presence is AvatarStatusDot/StatusDot, unread counts are the only
- * Badge usage. The stream and thread are built on the Chat component family.
+ * The side navigation is the app's global chrome, so AppShell owns it and
+ * moves it into its mobile drawer on narrow screens. Channels and direct
+ * messages are SideNav rows with presence dots and unread badges. The stream
+ * is built on the Chat component family; the thread lists replies as rows
+ * above a ChatComposer.
  *
  * Responsive contract:
- *   >1024px  — full four-column frame (rail | sidebar | stream | thread)
- *   <=1024px — thread panel hidden; stream takes the reclaimed width
- *   <=768px  — sidebar also hidden; rail + stream keep full width
+ *   >1024px  thread panel beside the stream
+ *   <=1024px the thread opens in a Drawer over the stream
+ *   below AppShell's mobile breakpoint the side navigation moves into the
+ *   AppShell drawer, opened from its toggle
  *
- * Fixtures are deterministic: fixed ISO timestamps rendered via <Timestamp>,
- * no Date.now()/Math.random() anywhere.
+ * Fixtures are deterministic: fixed ISO timestamps rendered via <Timestamp>.
+ * Only a message sent in the page reads the current time.
  */
 
-import {useState, type CSSProperties} from 'react';
+import {useState} from 'react';
 
+import {AppShell} from '@astryxdesign/core/AppShell';
+import {
+  SideNav,
+  SideNavHeading,
+  SideNavItem,
+  SideNavSection,
+} from '@astryxdesign/core/SideNav';
 import {
   Layout,
   LayoutContent,
+  LayoutFooter,
+  LayoutHeader,
   LayoutPanel,
-  Stack,
-  StackItem,
   HStack,
   VStack,
+  StackItem,
 } from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {
@@ -40,27 +52,24 @@ import {
   ChatMessageBubble,
   ChatMessageList,
   ChatMessageMetadata,
-  ChatSystemMessage,
 } from '@astryxdesign/core/Chat';
-import {Avatar, AvatarStatusDot} from '@astryxdesign/core/Avatar';
+import {Avatar} from '@astryxdesign/core/Avatar';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {Badge} from '@astryxdesign/core/Badge';
-import {List, ListItem} from '@astryxdesign/core/List';
+import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
+import {Drawer} from '@astryxdesign/core/Drawer';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 
 import {
-  BellIcon,
-  BookmarkIcon,
-  ChatBubbleLeftRightIcon,
   Cog6ToothIcon,
   HashtagIcon,
-  HomeIcon,
   InboxIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
@@ -69,88 +78,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 // ---------------------------------------------------------------------------
-// Styles — plain CSS properties with semantic tokens only.
-// ---------------------------------------------------------------------------
-
-const styles: Record<string, CSSProperties> = {
-  root: {
-    height: '100dvh',
-    width: '100%',
-  },
-  rail: {
-    height: '100%',
-    alignItems: 'center',
-    paddingTop: 'var(--spacing-3)',
-    paddingBottom: 'var(--spacing-3)',
-  },
-  railSpacer: {
-    flex: 1,
-  },
-  sidebar: {
-    height: '100%',
-    minHeight: 0,
-  },
-  sidebarHeader: {
-    alignItems: 'center',
-    paddingInline: 'var(--spacing-3)',
-    paddingBlock: 'var(--spacing-3)',
-  },
-  sidebarSearch: {
-    paddingInline: 'var(--spacing-3)',
-    paddingBottom: 'var(--spacing-2)',
-  },
-  sidebarScroll: {
-    minHeight: 0,
-    overflowY: 'auto',
-    paddingInline: 'var(--spacing-2)',
-    paddingBottom: 'var(--spacing-3)',
-  },
-  sectionGap: {
-    marginTop: 'var(--spacing-4)',
-  },
-  streamColumn: {
-    height: '100%',
-    minHeight: 0,
-  },
-  streamHeader: {
-    alignItems: 'center',
-    paddingInline: 'var(--spacing-4)',
-    paddingBlock: 'var(--spacing-3)',
-  },
-  streamTopic: {
-    minWidth: 0,
-  },
-  chatArea: {
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  chatFill: {
-    flex: 1,
-    minHeight: 0,
-  },
-  threadColumn: {
-    height: '100%',
-    minHeight: 0,
-  },
-  threadHeader: {
-    alignItems: 'center',
-    paddingInline: 'var(--spacing-3)',
-    paddingBlock: 'var(--spacing-2)',
-  },
-  threadScroll: {
-    minHeight: 0,
-    overflowY: 'auto',
-    paddingInline: 'var(--spacing-3)',
-    paddingBlock: 'var(--spacing-3)',
-  },
-  threadComposer: {
-    padding: 'var(--spacing-3)',
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Deterministic fixtures — fixed ISO timestamps, stable ordering.
+// Deterministic fixtures: fixed ISO timestamps, stable ordering.
 // ---------------------------------------------------------------------------
 
 type Presence = 'online' | 'busy' | 'offline';
@@ -159,12 +87,14 @@ interface User {
   name: string;
 }
 
-const USERS: Record<string, User> = {
+const USERS = {
   mira: {name: 'Mira Chen'},
   devon: {name: 'Devon Park'},
   sasha: {name: 'Sasha Ortiz'},
   you: {name: 'Riley Quinn'},
-};
+} satisfies Record<string, User>;
+
+type UserId = keyof typeof USERS;
 
 interface Channel {
   id: string;
@@ -197,7 +127,7 @@ const CHANNELS: Channel[] = [
 
 interface DirectMessage {
   id: string;
-  userId: string;
+  userId: UserId;
   presence: Presence;
   unread: number;
 }
@@ -208,7 +138,6 @@ const DIRECT_MESSAGES: DirectMessage[] = [
   {id: 'dm-sasha', userId: 'sasha', presence: 'offline', unread: 0},
 ];
 
-// AvatarStatusDot supports success | neutral | error (no warning).
 const PRESENCE_VARIANT: Record<Presence, 'success' | 'error' | 'neutral'> = {
   online: 'success',
   busy: 'error',
@@ -224,19 +153,27 @@ const PRESENCE_LABEL: Record<Presence, string> = {
 /** One message group: consecutive bubbles from the same sender. */
 interface StreamMessage {
   id: string;
-  userId: string;
+  userId: UserId;
   time: string;
   bubbles: string[];
 }
 
-const MESSAGES_BY_CHANNEL: Record<string, StreamMessage[]> = {
+interface ThreadReply {
+  id: string;
+  userId: UserId;
+  time: string;
+  text: string;
+}
+
+/** Messages per conversation, keyed by channel or direct-message id. */
+const INITIAL_MESSAGES: Record<string, StreamMessage[]> = {
   'design-systems': [
     {
       id: 'm1',
       userId: 'mira',
       time: '2026-06-30T09:12:00',
       bubbles: [
-        'Morning! The Timestamp component now supports a `system_date` format — worth switching the audit log over.',
+        'Morning! The Timestamp component now supports a `system_date` format, worth switching the audit log over.',
         'I put the migration notes in the wiki under Decisions.',
       ],
     },
@@ -251,8 +188,8 @@ const MESSAGES_BY_CHANNEL: Record<string, StreamMessage[]> = {
       userId: 'you',
       time: '2026-06-30T09:17:00',
       bubbles: [
-        'It does — I will pick that up after the template review.',
-        'One question on the List density defaults, will start a thread.',
+        'It does. I will pick that up after the template review.',
+        'One question on the List density defaults: should channel sidebars use compact or balanced? The spec shows both.',
       ],
     },
     {
@@ -267,7 +204,7 @@ const MESSAGES_BY_CHANNEL: Record<string, StreamMessage[]> = {
       id: 'm5',
       userId: 'mira',
       time: '2026-06-30T09:26:00',
-      bubbles: ['Great — closing out the drift task then.'],
+      bubbles: ['Great, closing out the drift task then.'],
     },
   ],
   'frontend-guild': [
@@ -283,53 +220,73 @@ const MESSAGES_BY_CHANNEL: Record<string, StreamMessage[]> = {
       id: 'g2',
       userId: 'you',
       time: '2026-06-30T08:44:00',
-      bubbles: ['Works for me — agenda doc is updated.'],
+      bubbles: ['Works for me. The agenda doc is updated.'],
+    },
+  ],
+  'dm-mira': [
+    {
+      id: 'd1',
+      userId: 'mira',
+      time: '2026-06-30T08:05:00',
+      bubbles: ['Can you review the density note before standup?'],
+    },
+    {
+      id: 'd2',
+      userId: 'you',
+      time: '2026-06-30T08:07:00',
+      bubbles: ['On it, I will leave comments inline.'],
+    },
+  ],
+  'dm-devon': [
+    {
+      id: 'd3',
+      userId: 'devon',
+      time: '2026-06-30T09:30:00',
+      bubbles: [
+        'Pushed the timeline fix to a branch.',
+        'Want to pair on the review after lunch?',
+      ],
     },
   ],
 };
 
-interface ThreadReply {
-  id: string;
-  userId: string;
-  time: string;
-  text: string;
-}
-
-const THREAD_ROOT: ThreadReply = {
-  id: 't0',
-  userId: 'you',
-  time: '2026-06-30T09:17:30',
-  text: 'One question on the List density defaults — should channel sidebars use compact or balanced? The spec shows both.',
+/** Thread replies, keyed by the message group they answer. */
+const INITIAL_THREADS: Record<string, ThreadReply[]> = {
+  m3: [
+    {
+      id: 't1',
+      userId: 'mira',
+      time: '2026-06-30T09:19:00',
+      text: 'Compact for navigation surfaces. Balanced is for content lists where descriptions carry weight.',
+    },
+    {
+      id: 't2',
+      userId: 'devon',
+      time: '2026-06-30T09:21:00',
+      text: 'Agreed. The sidebar rows here are a good reference implementation.',
+    },
+  ],
 };
 
-const THREAD_REPLIES: ThreadReply[] = [
-  {
-    id: 't1',
-    userId: 'mira',
-    time: '2026-06-30T09:19:00',
-    text: 'Compact for navigation surfaces. Balanced is for content lists where descriptions carry weight.',
-  },
-  {
-    id: 't2',
-    userId: 'devon',
-    time: '2026-06-30T09:21:00',
-    text: 'Agreed — the sidebar rows here are a good reference implementation.',
-  },
-];
-
-const RAIL_ITEMS = [
-  {id: 'home', label: 'Home', icon: HomeIcon},
-  {id: 'dms', label: 'Direct messages', icon: ChatBubbleLeftRightIcon},
-  {id: 'activity', label: 'Activity', icon: BellIcon},
-  {id: 'saved', label: 'Saved items', icon: BookmarkIcon},
-];
+const INITIAL_UNREAD: Record<string, number> = Object.fromEntries(
+  [...CHANNELS, ...DIRECT_MESSAGES].map(item => [item.id, item.unread]),
+);
 
 // ---------------------------------------------------------------------------
-// Stream message group — avatar + name on the first bubble, timestamp on the
-// last, `group` positions tighten corner radii between consecutive bubbles.
+// Stream message group: avatar and name on the first bubble, timestamp and
+// thread link on the last. `group` positions tighten corner radii between
+// consecutive bubbles.
 // ---------------------------------------------------------------------------
 
-function StreamMessageGroup({message}: {message: StreamMessage}) {
+function StreamMessageGroup({
+  message,
+  replyCount,
+  onOpenThread,
+}: {
+  message: StreamMessage;
+  replyCount: number;
+  onOpenThread: () => void;
+}) {
   const isSelf = message.userId === 'you';
   const user = USERS[message.userId];
   const lastIndex = message.bubbles.length - 1;
@@ -355,6 +312,18 @@ function StreamMessageGroup({message}: {message: StreamMessage}) {
             index === lastIndex ? (
               <ChatMessageMetadata
                 timestamp={<Timestamp value={message.time} format="time" />}
+                footer={
+                  replyCount > 0 ? (
+                    <Button
+                      label={
+                        replyCount === 1 ? '1 reply' : `${replyCount} replies`
+                      }
+                      variant="ghost"
+                      size="sm"
+                      onClick={onOpenThread}
+                    />
+                  ) : undefined
+                }
               />
             ) : undefined
           }>
@@ -365,310 +334,331 @@ function StreamMessageGroup({message}: {message: StreamMessage}) {
   );
 }
 
+function ThreadReplyRow({reply}: {reply: ThreadReply}) {
+  const user = USERS[reply.userId];
+  return (
+    <HStack gap={2} vAlign="start">
+      <Avatar name={user.name} size="sm" />
+      <StackItem size="fill">
+        <VStack gap={0.5}>
+          <HStack gap={2} vAlign="center">
+            <Text type="body" weight="bold">
+              {user.name}
+            </Text>
+            <Text type="supporting" color="secondary">
+              <Timestamp value={reply.time} format="time" />
+            </Text>
+          </HStack>
+          <Text type="body">{reply.text}</Text>
+        </VStack>
+      </StackItem>
+    </HStack>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function MessagingShellPage() {
-  const [selectedChannelId, setSelectedChannelId] = useState('design-systems');
-  const [selectedDmId, setSelectedDmId] = useState<string | null>(null);
-  const [isThreadOpen, setIsThreadOpen] = useState(true);
+  const showToast = useToast();
+  const [conversationId, setConversationId] = useState('design-systems');
+  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [threads, setThreads] = useState(INITIAL_THREADS);
+  const [unread, setUnread] = useState(INITIAL_UNREAD);
+  const [threadId, setThreadId] = useState<string | null>('m3');
+  const [isThreadDrawerOpen, setIsThreadDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const isNarrow = useMediaQuery('(max-width: 1024px)');
 
-  // Responsive contract (see file header).
-  const isThreadHidden = useMediaQuery('(max-width: 1024px)');
-  const isSidebarHidden = useMediaQuery('(max-width: 768px)');
-
-  const selectedChannel =
-    CHANNELS.find(channel => channel.id === selectedChannelId) ?? CHANNELS[0];
-  const messages = MESSAGES_BY_CHANNEL[selectedChannel.id] ?? [];
+  const channel = CHANNELS.find(item => item.id === conversationId);
+  const dm = DIRECT_MESSAGES.find(item => item.id === conversationId);
+  const title = channel ? channel.name : USERS[dm?.userId ?? 'you'].name;
+  const stream = messages[conversationId] ?? [];
+  const threadRoot = stream.find(message => message.id === threadId);
+  const threadReplies = threadId ? (threads[threadId] ?? []) : [];
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const visibleChannels = CHANNELS.filter(channel =>
-    channel.name.toLowerCase().includes(normalizedQuery),
+  const visibleChannels = CHANNELS.filter(item =>
+    item.name.toLowerCase().includes(normalizedQuery),
   );
-  const visibleDms = DIRECT_MESSAGES.filter(dm =>
-    USERS[dm.userId].name.toLowerCase().includes(normalizedQuery),
+  const visibleDms = DIRECT_MESSAGES.filter(item =>
+    USERS[item.userId].name.toLowerCase().includes(normalizedQuery),
   );
 
-  const showThreadPanel = isThreadOpen && !isThreadHidden;
+  // Demo only: replace these toasts with the calls that open the real views.
+  const demoAction = (what: string) =>
+    showToast({body: `Demo: ${what} would open here`, uniqueID: what});
 
-  const workspaceRail = (
-    <VStack gap={2} style={styles.rail}>
-      <Avatar name="Astryx HQ" size="md" />
-      {RAIL_ITEMS.map(item => (
-        <IconButton
-          key={item.id}
-          label={item.label}
-          tooltip={item.label}
-          icon={<Icon icon={item.icon} size="sm" color="inherit" />}
-          variant={item.id === 'home' ? 'secondary' : 'ghost'}
-          onClick={() => {}}
+  const openConversation = (id: string) => {
+    setConversationId(id);
+    setThreadId(null);
+    setUnread(current => ({...current, [id]: 0}));
+  };
+
+  const sendMessage = (text: string) => {
+    const body = text.trim();
+    if (!body) {
+      return;
+    }
+    setMessages(current => ({
+      ...current,
+      [conversationId]: [
+        ...(current[conversationId] ?? []),
+        {
+          id: `sent-${conversationId}-${(current[conversationId] ?? []).length}`,
+          userId: 'you',
+          time: new Date().toISOString(),
+          bubbles: [body],
+        },
+      ],
+    }));
+  };
+
+  const sendReply = (text: string) => {
+    const body = text.trim();
+    if (!body || !threadId) {
+      return;
+    }
+    setThreads(current => ({
+      ...current,
+      [threadId]: [
+        ...(current[threadId] ?? []),
+        {
+          id: `reply-${threadId}-${(current[threadId] ?? []).length}`,
+          userId: 'you',
+          time: new Date().toISOString(),
+          text: body,
+        },
+      ],
+    }));
+  };
+
+  const sideNav = (
+    <SideNav
+      resizable={{defaultWidth: 260, minWidth: 220, maxWidth: 360}}
+      header={
+        <SideNavHeading
+          heading="Astryx HQ"
+          icon={<Avatar name="Astryx HQ" size="sm" />}
+          headerEndContent={
+            <IconButton
+              label="New message"
+              tooltip="New message"
+              icon={<Icon icon={PencilSquareIcon} size="sm" color="inherit" />}
+              variant="ghost"
+              size="sm"
+              onClick={() => demoAction('A new message')}
+            />
+          }
         />
-      ))}
-      <div style={styles.railSpacer} />
-      <IconButton
-        label="Settings"
-        tooltip="Settings"
-        icon={<Icon icon={Cog6ToothIcon} size="sm" color="inherit" />}
-        variant="ghost"
-        onClick={() => {}}
-      />
-      <Avatar
-        name={USERS.you.name}
-        size="md"
-        status={<AvatarStatusDot variant="success" label="Online" />}
-      />
-    </VStack>
-  );
-
-  const channelSidebar = (
-    <Stack direction="vertical" style={styles.sidebar}>
-      <HStack gap={2} style={styles.sidebarHeader}>
-        <StackItem size="fill">
-          <Heading level={5}>Astryx HQ</Heading>
-        </StackItem>
-        <IconButton
-          label="New message"
-          tooltip="New message"
-          icon={<Icon icon={PencilSquareIcon} size="sm" color="inherit" />}
-          variant="ghost"
-          size="sm"
-          onClick={() => {}}
-        />
-      </HStack>
-      <div style={styles.sidebarSearch}>
+      }
+      topContent={
         <TextInput
           label="Jump to"
           isLabelHidden
-          size="sm"
           placeholder="Jump to..."
-          startIcon={MagnifyingGlassIcon}
           value={searchQuery}
           onChange={setSearchQuery}
+          startIcon={MagnifyingGlassIcon}
+          hasClear
         />
-      </div>
-      <StackItem size="fill" style={styles.sidebarScroll}>
-        <List
-          density="compact"
-          hasDividers={false}
-          header={
-            <Text type="label" size="sm" color="secondary">
-              Channels
-            </Text>
-          }>
-          {visibleChannels.map(channel => (
-            <ListItem
-              key={channel.id}
-              label={channel.name}
-              isSelected={
-                selectedDmId === null && channel.id === selectedChannelId
-              }
-              onClick={() => {
-                setSelectedChannelId(channel.id);
-                setSelectedDmId(null);
-              }}
-              startContent={
-                <Icon icon={HashtagIcon} size="sm" color="secondary" />
-              }
-              endContent={
-                channel.unread > 0 ? (
-                  <Badge label={String(channel.unread)} variant="neutral" />
-                ) : undefined
-              }
-            />
-          ))}
-        </List>
-        <div style={styles.sectionGap}>
-          <List
-            density="compact"
-            hasDividers={false}
-            header={
-              <Text type="label" size="sm" color="secondary">
-                Direct messages
-              </Text>
-            }>
-            {visibleDms.map(dm => (
-              <ListItem
-                key={dm.id}
-                label={USERS[dm.userId].name}
-                isSelected={selectedDmId === dm.id}
-                onClick={() => setSelectedDmId(dm.id)}
-                startContent={
-                  <Avatar
-                    name={USERS[dm.userId].name}
-                    size="sm"
-                    status={
-                      <AvatarStatusDot
-                        variant={PRESENCE_VARIANT[dm.presence]}
-                        label={PRESENCE_LABEL[dm.presence]}
-                      />
-                    }
-                  />
-                }
-                endContent={
-                  dm.unread > 0 ? (
-                    <Badge label={String(dm.unread)} variant="neutral" />
-                  ) : undefined
-                }
-              />
-            ))}
-          </List>
-        </div>
-      </StackItem>
-    </Stack>
-  );
-
-  const messageStream = (
-    <Stack direction="vertical" style={styles.streamColumn}>
-      <HStack gap={3} style={styles.streamHeader}>
-        <Icon icon={HashtagIcon} size="sm" color="secondary" />
-        <Heading level={5}>{selectedChannel.name}</Heading>
-        <StackItem size="fill" style={styles.streamTopic}>
-          <Text type="supporting" color="secondary" maxLines={1}>
-            {selectedChannel.topic}
-          </Text>
-        </StackItem>
-        <StatusDot variant="success" label="12 online" />
-        <IconButton
-          label="Members"
-          tooltip="Members"
-          icon={<Icon icon={UserGroupIcon} size="sm" color="inherit" />}
-          variant="ghost"
-          size="sm"
-          onClick={() => {}}
-        />
-      </HStack>
-      <Divider />
-      <StackItem size="fill" style={styles.chatArea}>
-        <div style={styles.chatFill}>
-          <ChatLayout
-            composer={
-              <ChatComposer
-                placeholder={`Message #${selectedChannel.name}`}
-                onSubmit={() => {}}
-              />
+      }
+      footer={
+        <SideNavSection title="Account" isHeaderHidden>
+          <SideNavItem
+            label="Preferences"
+            icon={Cog6ToothIcon}
+            onClick={() => demoAction('Preferences')}
+          />
+        </SideNavSection>
+      }>
+      <SideNavSection title="Channels">
+        {visibleChannels.map(item => (
+          <SideNavItem
+            key={item.id}
+            label={item.name}
+            icon={HashtagIcon}
+            isSelected={item.id === conversationId}
+            onClick={() => openConversation(item.id)}
+            endContent={
+              (unread[item.id] ?? 0) > 0 ? (
+                <Badge label={String(unread[item.id] ?? 0)} variant="neutral" />
+              ) : undefined
             }
-            emptyState={
-              <EmptyState
-                icon={<Icon icon={InboxIcon} size="lg" />}
-                title="No messages yet"
-                description="Start the conversation — messages posted here are visible to the whole channel."
-              />
-            }>
-            {messages.length > 0 ? (
-              <ChatMessageList density="balanced">
-                <ChatSystemMessage variant="divider">
-                  Tuesday, June 30
-                </ChatSystemMessage>
-                <ChatSystemMessage>
-                  Sasha Ortiz joined #{selectedChannel.name}
-                </ChatSystemMessage>
-                {messages.map(message => (
-                  <StreamMessageGroup key={message.id} message={message} />
-                ))}
-              </ChatMessageList>
-            ) : null}
-          </ChatLayout>
-        </div>
-      </StackItem>
-    </Stack>
+          />
+        ))}
+      </SideNavSection>
+      <SideNavSection title="Direct messages">
+        {visibleDms.map(item => (
+          <SideNavItem
+            key={item.id}
+            label={USERS[item.userId].name}
+            isSelected={item.id === conversationId}
+            onClick={() => openConversation(item.id)}
+            endContent={
+              <HStack gap={2} vAlign="center">
+                <StatusDot
+                  variant={PRESENCE_VARIANT[item.presence]}
+                  label={PRESENCE_LABEL[item.presence]}
+                />
+                {(unread[item.id] ?? 0) > 0 ? (
+                  <Badge
+                    label={String(unread[item.id] ?? 0)}
+                    variant="neutral"
+                  />
+                ) : null}
+              </HStack>
+            }
+          />
+        ))}
+      </SideNavSection>
+    </SideNav>
   );
 
-  const threadPanel = (
-    <Stack direction="vertical" style={styles.threadColumn}>
-      <HStack gap={2} style={styles.threadHeader}>
-        <StackItem size="fill">
-          <HStack gap={2} style={{alignItems: 'baseline'}}>
-            <Text weight="semibold">Thread</Text>
-            <Text type="supporting" color="secondary">
-              #{selectedChannel.name}
-            </Text>
+  const threadView = threadRoot ? (
+    <Layout
+      height="fill"
+      header={
+        <LayoutHeader hasDivider padding={3}>
+          <HStack gap={2} vAlign="center">
+            <StackItem size="fill">
+              <VStack gap={0}>
+                <Heading level={4}>Thread</Heading>
+                <Text type="supporting" color="secondary" maxLines={1}>
+                  {channel ? `#${channel.name}` : title}
+                </Text>
+              </VStack>
+            </StackItem>
+            <IconButton
+              label="Close thread"
+              tooltip="Close thread"
+              icon={<Icon icon={XMarkIcon} size="sm" color="inherit" />}
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setThreadId(null);
+                setIsThreadDrawerOpen(false);
+              }}
+            />
           </HStack>
-        </StackItem>
-        <IconButton
-          label="Close thread"
-          tooltip="Close thread"
-          icon={<Icon icon={XMarkIcon} size="sm" color="inherit" />}
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsThreadOpen(false)}
-        />
-      </HStack>
-      <Divider />
-      <StackItem size="fill" style={styles.threadScroll}>
-        <ChatMessageList density="compact">
-          <ChatMessage
-            sender="assistant"
-            avatar={<Avatar name={USERS[THREAD_ROOT.userId].name} size="md" />}>
-            <ChatMessageBubble
-              name={USERS[THREAD_ROOT.userId].name}
-              metadata={
-                <ChatMessageMetadata
-                  timestamp={
-                    <Timestamp value={THREAD_ROOT.time} format="time" />
-                  }
-                />
-              }>
-              {THREAD_ROOT.text}
-            </ChatMessageBubble>
-          </ChatMessage>
-          <ChatSystemMessage variant="divider">
-            {THREAD_REPLIES.length} replies
-          </ChatSystemMessage>
-          {THREAD_REPLIES.map(reply => (
-            <ChatMessage
-              key={reply.id}
-              sender="assistant"
-              avatar={<Avatar name={USERS[reply.userId].name} size="md" />}>
-              <ChatMessageBubble
-                name={USERS[reply.userId].name}
-                metadata={
-                  <ChatMessageMetadata
-                    timestamp={<Timestamp value={reply.time} format="time" />}
-                  />
-                }>
-                {reply.text}
-              </ChatMessageBubble>
-            </ChatMessage>
-          ))}
-        </ChatMessageList>
-      </StackItem>
-      <div style={styles.threadComposer}>
-        <ChatComposer
-          density="compact"
-          placeholder="Reply in thread..."
-          onSubmit={() => {}}
-        />
-      </div>
-    </Stack>
-  );
+        </LayoutHeader>
+      }
+      content={
+        <LayoutContent padding={3}>
+          <VStack gap={4}>
+            <ThreadReplyRow
+              reply={{
+                id: threadRoot.id,
+                userId: threadRoot.userId,
+                time: threadRoot.time,
+                text: threadRoot.bubbles.at(-1) ?? '',
+              }}
+            />
+            <Divider />
+            {threadReplies.map(reply => (
+              <ThreadReplyRow key={reply.id} reply={reply} />
+            ))}
+          </VStack>
+        </LayoutContent>
+      }
+      footer={
+        <LayoutFooter padding={3}>
+          <ChatComposer placeholder="Reply in thread" onSubmit={sendReply} />
+        </LayoutFooter>
+      }
+    />
+  ) : null;
 
   return (
-    <div style={styles.root}>
+    <AppShell contentPadding={0} sideNav={sideNav}>
       <Layout
         height="fill"
-        start={
-          <>
-            <LayoutPanel width={68} padding={0}>
-              {workspaceRail}
-            </LayoutPanel>
-            {!isSidebarHidden && (
-              <LayoutPanel width={260} padding={0}>
-                {channelSidebar}
-              </LayoutPanel>
-            )}
-          </>
+        header={
+          <LayoutHeader hasDivider padding={3}>
+            <HStack gap={3} vAlign="center">
+              {channel ? (
+                <Icon icon={HashtagIcon} size="sm" />
+              ) : (
+                <Avatar name={title} size="sm" />
+              )}
+              <StackItem size="fill">
+                <VStack gap={0}>
+                  <Heading level={3}>{title}</Heading>
+                  <Text type="supporting" color="secondary" maxLines={1}>
+                    {channel
+                      ? channel.topic
+                      : PRESENCE_LABEL[dm?.presence ?? 'offline']}
+                  </Text>
+                </VStack>
+              </StackItem>
+              {channel ? (
+                <IconButton
+                  label="Members"
+                  tooltip="Members"
+                  icon={<Icon icon={UserGroupIcon} size="sm" color="inherit" />}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => demoAction(`The #${channel.name} member list`)}
+                />
+              ) : null}
+            </HStack>
+          </LayoutHeader>
+        }
+        content={
+          <LayoutContent padding={0} isScrollable={false}>
+            <VStack height="100%">
+              <ChatLayout
+                composer={
+                  <ChatComposer
+                    placeholder={
+                      channel ? `Message #${channel.name}` : `Message ${title}`
+                    }
+                    onSubmit={sendMessage}
+                  />
+                }
+                emptyState={
+                  <EmptyState
+                    icon={<Icon icon={InboxIcon} size="lg" />}
+                    title="No messages yet"
+                    description="Start the conversation. Messages posted here are visible to everyone in it."
+                  />
+                }>
+                {stream.length > 0 ? (
+                  <ChatMessageList density="balanced">
+                    {stream.map(message => (
+                      <StreamMessageGroup
+                        key={message.id}
+                        message={message}
+                        replyCount={(threads[message.id] ?? []).length}
+                        onOpenThread={() => {
+                          setThreadId(message.id);
+                          setIsThreadDrawerOpen(true);
+                        }}
+                      />
+                    ))}
+                  </ChatMessageList>
+                ) : null}
+              </ChatLayout>
+            </VStack>
+          </LayoutContent>
         }
         end={
-          showThreadPanel ? (
-            <LayoutPanel width={340} padding={0}>
-              {threadPanel}
+          threadView && !isNarrow ? (
+            <LayoutPanel width={340} padding={0} hasDivider>
+              {threadView}
             </LayoutPanel>
           ) : undefined
         }
-        content={<LayoutContent padding={0}>{messageStream}</LayoutContent>}
       />
-    </div>
+      <Drawer
+        label="Thread"
+        isOpen={isNarrow && isThreadDrawerOpen && threadView !== null}
+        onOpenChange={setIsThreadDrawerOpen}
+        width={360}
+        padding={0}>
+        {isNarrow ? threadView : null}
+      </Drawer>
+    </AppShell>
   );
 }
