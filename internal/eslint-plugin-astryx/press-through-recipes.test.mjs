@@ -125,6 +125,11 @@ tester.run('press-through-recipes', rule, {
       code: 'const name = `data-${dataAttrNamespace}-press`;',
       filename: component,
     },
+    // (a) Other names through the gestures index.
+    {
+      code: "import type {GestureRecognizer} from '../gestures';",
+      filename: component,
+    },
     // (c) A name interpolated right after `data-` may be the namespace.
     {code: 'const name = `data-${part}-pressing`;', filename: component},
     // (b) Names that only contain `pressed` or `platter` are not pressed state.
@@ -212,6 +217,12 @@ tester.run('press-through-recipes', rule, {
     {
       code: "export {createPressTracker} from './PressTracker';",
       filename: '/repo/packages/core/src/gestures/index.ts',
+      errors: [{messageId: 'innerImport'}],
+    },
+    // (a) A type-only import of the tracker through the gestures index.
+    {
+      code: "import type {PressTracker} from '../gestures';",
+      filename: component,
       errors: [{messageId: 'innerImport'}],
     },
     // (a) One more import than the baseline allows.

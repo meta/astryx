@@ -34,8 +34,9 @@
  *
  * Known limitations: pressed state held in a ref, a reducer or an external
  * store, a handler passed through another component, a press attribute
- * built at run time, and an inner module re-exported through an entry such
- * as `internal/touch` (none is today) are not seen.
+ * built at run time, and an inner module re-exported through an entry other
+ * than the gestures folder index (`internal/touch` re-exports none today)
+ * are not seen.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
  * baseline lists, per file, each report's token once per site that predates
@@ -137,6 +138,18 @@ const IMPORT_HINTS = {
   'utils/pressGesture': 'Import only its constants, or use `usePressFeedback`',
   'hooks/menuPressValues': 'Use `useMenuPress`',
   'hooks/menuPressMarker': 'Use `useMenuPress`',
+};
+
+/**
+ * The tracker names the gestures folder index re-exports, with their modules.
+ * A type-only import through that index escapes the barrel rule.
+ */
+const GESTURES_INDEX_NAMES = {
+  createPressTracker: 'gestures/PressTracker',
+  PressTracker: 'gestures/PressTracker',
+  PressTrackerOptions: 'gestures/PressTracker',
+  usePressTracker: 'gestures/usePressTracker',
+  UsePressTrackerOptions: 'gestures/usePressTracker',
 };
 
 const CORE_PACKAGE = /^@astryxdesign\/core\//;
@@ -256,6 +269,11 @@ export default {
       const modules = new Set();
       if (relative != null && INNER_MODULES.has(relative)) {
         modules.add(relative);
+      } else if (relative === 'gestures') {
+        for (const name of importedNames ?? []) {
+          const module = GESTURES_INDEX_NAMES[name];
+          if (module != null) modules.add(module);
+        }
       } else if (CORE_PACKAGE.test(specifier)) {
         const subpath = specifier.replace(CORE_PACKAGE, '');
         if (INNER_MODULES.has(subpath)) modules.add(subpath);
