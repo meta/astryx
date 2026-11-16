@@ -34,6 +34,7 @@ import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {coreVarValues} from './_parts.mjs';
 import {
+  hexToOklch,
   oklabCoordinates,
   oklabCoordinatesToHex,
 } from '../theme/palette/generate/color.mjs';
@@ -7004,6 +7005,95 @@ export function compileTheme(ctx, data, base) {
     )
       putTok('--color-border-emphasized', border, m);
   }
+  // A flat panel is tinted with the muted fill. The pieces inside it drawn
+  // in that same color (a neutral badge, a track, whatever token the base
+  // theme draws them from) would vanish into the tint, so inside the panel
+  // each fill that shows as the tint is the panel's own surface instead (as
+  // on a raised card, the other way round), and the emphasized border is
+  // stepped where it stands out less from the tint than from that surface.
+  // The tint is written as the colors it shows, since the panel then points
+  // the muted fill elsewhere.
+  /** The color a token shows in a mode, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
+  const shown = (k, m) => {
+    let v = String(tok[k]?.[m] ?? base[m]?.[k] ?? '');
+    for (let i = 0; i < 4; i++) {
+      const ref = /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1];
+      if (!ref) break;
+      v = String(tok[ref]?.[m] ?? base[m]?.[ref] ?? '');
+    }
+    const rgb = parseColor(v.trim());
+    return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
+  };
+  for (const t of SURFACE_PARTS) {
+    const own = /^var\((--[\w-]+)\)$/.exec(
+      String(ctx.C.MAP[t]?.own?.['background-color']?.values?.[0] ?? ''),
+    )?.[1];
+    for (const b of Object.values(
+      /** @type {Record<string, Record<string, unknown>>} */ (
+        theme.components[t] ?? {}
+      ),
+    )) {
+      if (b?.backgroundColor !== 'var(--color-background-muted)' || !own)
+        continue;
+      /** @type {Partial<Record<'light' | 'dark', string>>} */
+      const tint = {};
+      /** @type {Partial<Record<'light' | 'dark', string>>} */
+      const edge = {};
+      for (const m of /** @type {const} */ (['light', 'dark'])) {
+        const fill = shown('--color-background-muted', m);
+        const surface = shown(own, m);
+        const line = shown('--color-border-emphasized', m);
+        if (!fill) continue;
+        tint[m] = fill;
+        if (!surface || !line) continue;
+        const rgb = (/** @type {string} */ x) =>
+          /** @type {[number, number, number]} */ (parseColor(x));
+        const need = ratio(rgb(line), rgb(surface));
+        let [l, a, bb] = oklabCoordinates(line);
+        const away = oklabCoordinates(fill)[0] > 0.5 ? -1 : 1;
+        let stepped = line;
+        for (let i = 0; i < 40 && ratio(rgb(stepped), rgb(fill)) < need; i++) {
+          l = Math.max(0, Math.min(1, l + away * 0.02));
+          stepped = oklabCoordinatesToHex([l, a, bb]);
+        }
+        if (stepped !== line) edge[m] = stepped;
+      }
+      if (!tint.light && !tint.dark) continue;
+      b.backgroundColor =
+        tint.light && tint.dark && tint.light !== tint.dark
+          ? `light-dark(${tint.light}, ${tint.dark})`
+          : (tint.light ?? tint.dark);
+      for (const k of Object.keys(TOKENS).filter(isPieceFill)) {
+        if (k === own) continue;
+        /** @type {Partial<Record<'light' | 'dark', boolean>>} */
+        const blends = {};
+        for (const m of /** @type {const} */ (['light', 'dark'])) {
+          const v = shown(k, m);
+          const f = tint[m];
+          // A gray piece reads as the tint when it is near its lightness; a
+          // colored one (a status or category fill) keeps its hue.
+          blends[m] =
+            k === '--color-background-muted' ||
+            Boolean(
+              v &&
+              f &&
+              hexToOklch(v).C < GRAY_PIECE &&
+              ratio(
+                /** @type {[number, number, number]} */ (parseColor(v)),
+                /** @type {[number, number, number]} */ (parseColor(f)),
+              ) < BLENDS,
+            );
+        }
+        if (blends.light && blends.dark) b[k] = `var(${own})`;
+        else if (blends.light || blends.dark)
+          b[k] =
+            `light-dark(${blends.light ? `var(${own})` : shown(k, 'light')}, ${blends.dark ? `var(${own})` : shown(k, 'dark')})`;
+      }
+      if (edge.light || edge.dark)
+        b['--color-border-emphasized'] =
+          `light-dark(${edge.light ?? shown('--color-border-emphasized', 'light')}, ${edge.dark ?? shown('--color-border-emphasized', 'dark')})`;
+    }
+  }
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? shownHalf(k, 'light');
     const d = dark ?? shownHalf(k, 'dark');
@@ -7179,6 +7269,23 @@ const SURFACE_FAMILY = [
   '--color-syntax-background',
   '--color-skeleton',
 ];
+
+/**
+ * The fills the pieces inside a panel are drawn from (a badge, a track, a
+ * placeholder): Core's background tokens other than the page's and the
+ * panels' own, and the skeleton.
+ */
+/** @param {string} k */
+const isPieceFill = k =>
+  (/^--color-background-/.test(k) &&
+    !/^--color-background-(body|surface|card|popover|inverted)$/.test(k)) ||
+  k === '--color-skeleton';
+
+/** Below this contrast a gray piece reads as the tint it sits on. */
+const BLENDS = 1.25;
+
+/** Below this OKLCH chroma a piece's fill reads as a gray. */
+const GRAY_PIECE = 0.02;
 
 /**
  * The tokens that follow another one the theme sets exactly (where it
