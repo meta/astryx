@@ -1077,6 +1077,25 @@ describe('app-theme doctor checks', () => {
     expect(steps).toHaveLength(3);
   });
 
+  it('check 1 names the package to add a theme from when a bundled theme shares its slug', async () => {
+    // The app adds stone from @acme/themes, which it no longer lists or
+    // installs. The CLI carries a stone theme of its own.
+    const {dir, packageDir} = await fixture([{slug: 'stone'}]);
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    delete pkg.dependencies['@acme/themes'];
+    write(path.join(dir, 'package.json'), JSON.stringify(pkg));
+    write(path.join(dir, 'package-lock.json'), '{}\n');
+    fs.rmSync(packageDir, {recursive: true});
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    expect(owners.fix).toMatch(
+      /^npm install @acme\/themes; .* theme add stone --package @acme\/themes$/,
+    );
+  });
+
   it('check 2 fails when the generated module is hand-edited', async () => {
     const {dir, moduleFile} = await fixture();
     fs.appendFileSync(moduleFile, '// hand edit\n');

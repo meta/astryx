@@ -129,12 +129,14 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
     if (install) return install;
     // The package is added the way the project adds it, at the release its
     // Core peer needs, then the theme again; by its owner only when another
-    // package owns the same slug.
-    const owners = new Set(
-      available
+    // package owns the same slug. The recorded owner counts even when it is
+    // not installed, so a bundled theme with the same slug still needs it.
+    const owners = new Set([
+      owner,
+      ...available
         .filter(candidate => candidate.slug === slug)
         .map(themeRecordOwner),
-    );
+    ]);
     const add =
       owners.size > 1
         ? `${run} theme add ${slug} --package ${owner}`
