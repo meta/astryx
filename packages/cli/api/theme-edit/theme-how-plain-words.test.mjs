@@ -119,11 +119,12 @@ describe('plain words for looks', () => {
     expect(writes(await how('q0', '32px rows in the menu'))[0]).toBe(
       'set q0 min-height 32px --on dropdown-menu-item',
     );
-    const pill = top(
+    // (One reader for a color with a shape: the item's state is kept.)
+    const pill = writes(
       await how('q0', 'the active nav item should be a #e8def8 pill'),
-    );
-    expect(pill).toContain('set q0 corners pill --on top-nav-item');
-    expect(pill[0]).toMatch(
+    ).join(' ');
+    expect(pill).toMatch(/corners pill --on top-nav-item --state selected/);
+    expect(pill).toMatch(
       /background-color '#e8def8' --on top-nav-item --state selected/,
     );
     expect(

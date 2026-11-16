@@ -4337,14 +4337,6 @@ export function draftAnswer(ctx, env, question) {
     // ("divided by 1px lines", "separated by thin lines": lines between,
     // never an amount.)
     .replace(/\b(?:divided|separated)\s+by\s+/gi, 'with ')
-    // ("be a #e8def8 pill": a fill of that color, pill-shaped.)
-    .replace(
-      /\b(?:(?:should|must|to)\s+)?(?:be\s+)?an?\s+(#[0-9a-f]{3,8}|[a-z]+)\s+(pill|capsule)\b/gi,
-      (m, color) =>
-        colorsIn(String(color).toLowerCase()).length
-          ? `with a ${color} background and pill corners`
-          : m,
-    )
     // ("big touch targets": the controls a finger presses.)
     .replace(
       /\b(?:big|bigger|large|larger)\s+touch\s+targets?\b/gi,
