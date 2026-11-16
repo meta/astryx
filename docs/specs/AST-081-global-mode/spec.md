@@ -611,7 +611,9 @@ works on is `spec:AST-040` FR9's.
   - Inside a project, when the release that answers it is older than the newest
     release the check found: the command installs `@astryxdesign/core` and
     `@astryxdesign/cli`, so a project that installed only Core gets its own CLI
-    too, at the newest release with the project's own package manager, then runs
+    too, and every other package the project lists for its install that Astryx
+    releases with Core, such as its themes, which name Core's exact release,
+    all at the newest release with the project's own package manager, then runs
     `astryx upgrade --from <current> --apply` with the command name FR5 picks
     for that release, as `<install command>, then <upgrade command>`. For this
     notice, the project is the one `spec:AST-040` FR9 defines, as in FR2's
