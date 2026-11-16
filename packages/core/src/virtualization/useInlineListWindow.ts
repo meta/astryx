@@ -190,8 +190,8 @@ export function useInlineListWindow({
 }: UseInlineListWindowOptions): InlineListWindowResult {
   const [tracking, setTracking] = useState<InlineTracking | undefined>();
   const pending = tracking?.pending;
-  // A new selector for new items or a pending anchor reads the snapshot
-  // fresh. While an anchor scroll is pending, the window reads every
+  // New items or insets make a new selector, which reads the current
+  // snapshot. While an anchor scroll is pending, the window reads every
   // snapshot, so it sees the scroll land.
   const getSnapshot = useMemo(
     () =>
@@ -210,6 +210,7 @@ export function useInlineListWindow({
       canWindow,
       pending,
       geometry,
+      keys,
       offsets,
       insetStart,
       insetEnd,
