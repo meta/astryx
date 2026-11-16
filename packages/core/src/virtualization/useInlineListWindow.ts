@@ -86,6 +86,10 @@ interface InlineTracking {
   source: InlineListWindowGeometrySource;
   keys: ReadonlyArray<ListWindowKey>;
   offsets: ReadonlyArray<number>;
+  // The insets the items were laid out between. Pinning or unpinning an end
+  // item changes them together with the items.
+  insetStart: number;
+  insetEnd: number;
   pending: InlinePending | undefined;
 }
 
@@ -168,7 +172,13 @@ export function useInlineListWindow({
     canWindow && isMeasured && last !== undefined && hasItemChange
       ? calculateVariableListRange({
           offsets: last.offsets,
-          viewportSize,
+          // The previous items showed between the previous insets.
+          viewportSize:
+            viewportSize +
+            insetStart +
+            insetEnd -
+            last.insetStart -
+            last.insetEnd,
           scrollOffset: isAwaitingAnchor
             ? pending.to
             : (snapshot.scrollLeft ?? 0),
@@ -206,9 +216,7 @@ export function useInlineListWindow({
         overscan,
       })
     : undefined;
-  // The planned items feed the anchor, so they live in state. Only a change
-  // of items, of source or of the pending anchor updates it: a scroll does
-  // not, so a scroll renders the window once.
+  // The planned items feed the anchor, so they live in state.
   if (range !== undefined && isMeasured) {
     const nextPending =
       anchorScroll !== undefined
@@ -220,9 +228,18 @@ export function useInlineListWindow({
       tracking === undefined ||
       tracking.source !== geometry ||
       hasItemChange ||
+      tracking.insetStart !== insetStart ||
+      tracking.insetEnd !== insetEnd ||
       tracking.pending !== nextPending
     ) {
-      setTracking({source: geometry, keys, offsets, pending: nextPending});
+      setTracking({
+        source: geometry,
+        keys,
+        offsets,
+        insetStart,
+        insetEnd,
+        pending: nextPending,
+      });
     }
   } else if (tracking !== undefined && !canWindow) {
     setTracking(undefined);
