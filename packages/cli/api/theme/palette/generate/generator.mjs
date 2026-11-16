@@ -219,6 +219,15 @@ function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
   return recipe === PALETTE_RECIPE_V2 ? Math.min(sourceChroma, drawn) : drawn;
 }
 
+/**
+ * How narrow a stop's gamut is for v2 to share it: the most vivid seed at
+ * the default vibrancy asks this many times what the stop holds. From the
+ * first the stop starts to share its gamut in proportion; from the second
+ * it shares it wholly.
+ */
+const V2_SHARED_FROM = 1.3;
+const V2_SHARED_FULL = 2;
+
 /** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
 const MOST_VIVID_CHROMA = coordinatedChroma(0.32, PALETTE_RECIPE_V2);
 
@@ -294,19 +303,30 @@ function generateCandidate(
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
   const maxChroma = maxOklchChroma(adjustedHue, lightness);
-  // v2: a stop whose gamut cannot hold what the most vivid seed at the
-  // highest vibrancy asks there (a pale tint, a near-black) gives every
-  // request the same share of its gamut, so it follows the seed's chroma
-  // and the vibrancy instead of every request landing on the gamut's edge.
+  // v2: the narrower a stop's gamut is for the most vivid seed at the
+  // default vibrancy (a pale tint, a near-black), the more every request
+  // shares that gamut in proportion (the most vivid seed at vibrancy 100
+  // takes all of it), so such a stop follows the seed's chroma and the
+  // vibrancy instead of every request landing on the gamut's edge. A stop
+  // whose gamut holds the default (the middle of a ramp) is drawn as v1
+  // draws it, so the default looks as it did.
   if (recipe === PALETTE_RECIPE_V2 && coordinateWithOtherFamilies) {
-    const most =
-      MOST_VIVID_CHROMA *
-      vibrancyMultiplier(100) *
+    const shape =
       hueBalanceFactor(adjustedHue) *
       highToneChromaFactor(adjustedHue, adjustedTone) *
       toneChromaEnvelope(adjustedTone) *
       (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
-    if (most > maxChroma) chroma = (chroma / most) * maxChroma;
+    const narrow =
+      (MOST_VIVID_CHROMA * vibrancyMultiplier(50) * shape) /
+      Math.max(maxChroma, 1e-6);
+    const share = smoothstep(
+      (narrow - V2_SHARED_FROM) / (V2_SHARED_FULL - V2_SHARED_FROM),
+    );
+    if (share > 0) {
+      const most = MOST_VIVID_CHROMA * vibrancyMultiplier(100) * shape;
+      const shared = (chroma / most) * maxChroma;
+      chroma = (1 - share) * Math.min(chroma, maxChroma) + share * shared;
+    }
   }
   // A taper scales the chroma the stop shows after gamut mapping, so a stop
   // the gamut already limits loses the same share as any other stop.
