@@ -603,7 +603,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
   in place; when the keyboard rises it moves up above it and then holds.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
   viewport geometry is measured after paint and then applied, with two
-  exceptions. The runtime observes anchor visibility for every layer, and,
+  exceptions. The runtime observes anchor visibility for every layer (which
+  also drives `spec:AST-116` FR7's hide), and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
   leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the
@@ -692,14 +693,15 @@ layers use Layer rendering without joining Escape/platform dismissal.
   layer stops at its own root. The native event is not stopped, so document
   and window listeners and light dismiss still receive it. Keyboard, focus,
   input, wheel, and drag events are out of scope.
-- **INV18 — Only a shown layer's trigger is an anchor.**
-  A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
+- **INV18 — Only a shown layer's anchor carries an anchor name.**
+  The element a layer anchors to, its trigger unless the caller names a separate anchor (`spec:AST-116` FR1), carries its CSS anchor name only while its layer is shown; a closed layer's anchor is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
 - **INV20 — An entrance starts from the side its layer lands on.** An
   anchored layer's shared entrance (`layerAnimations`) slides from, and
   scales about, the side it lands on after any flip. So it never slides onto
-  its trigger. It scales about the point where the layer meets its trigger:
-  on the edge that faces the trigger, on the trigger's center line. A layer
+  its anchor (its trigger unless a separate anchor is named). It scales about
+  the point where the layer meets its anchor: on the edge that faces the
+  anchor, on the anchor's center line. A layer
   that covers its trigger's center has no side: its entrance scales about
   that center and does not slide. A show that leaves the layer in place
   reads the side in its one measurement pass. Popover's touch growth starts
@@ -715,8 +717,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
 
 - **INV22 — A layer never inherits its trigger's press transform.** Press
   feedback scales only the trigger's own visual; a layer renders outside that
-  scaled subtree and anchors to the trigger's untransformed box
-  (`spec:AST-059` DEC-10).
+  scaled subtree and anchors to its anchor's untransformed box, the trigger's
+  unless a separate anchor is named (`spec:AST-059` DEC-10).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
