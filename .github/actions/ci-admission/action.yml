@@ -50,6 +50,13 @@
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
+# - A pull request labelled `release-critical` starts at once, even when CI
+#   is full and ahead of a waiting `main` check, and still runs every job
+#   (spec:AST-030 DEC-30).
+#   The label counts only when its newest application came from someone with
+#   write access, the rule the `ci:run-*` labels follow (run-labels.cjs); a
+#   lookup that fails does not count it. A job that uses this action checks
+#   out `.github/scripts/lib`, which brings those scripts.
 # - A run can hold more matrix legs at once when CI has room for them
 #   (`leg-widths`). It waits for `peak`, which counts each such matrix at its
 #   tight width. When the look that starts it also has room for every matrix
@@ -156,6 +163,7 @@ runs:
         MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
         MAX_LOOKS: ${{ inputs.max-looks }}
         COUNT_MODULE: ${{ github.action_path }}/count.mjs
+        RUN_LABELS_MODULE: ${{ github.action_path }}/../../scripts/run-labels.cjs
       with:
         retries: 3
         script: |
@@ -215,6 +223,26 @@ runs:
             }
             const extra = JSON.parse(process.env.LABEL_LEGS || '{}');
             for (const label of labels) peak += extra[label] ?? 0;
+            // A release-critical pull request starts at once: no ceiling, no
+            // yield to a waiting `main` check, no longest-wait rule. Only a
+            // label someone with write access applied counts.
+            const RELEASE_CRITICAL = 'release-critical';
+            if (labels.includes(RELEASE_CRITICAL)) {
+              let trusted = false;
+              try {
+                const {decideRunLabel} = await import(pathToFileURL(process.env.RUN_LABELS_MODULE).href);
+                trusted = await decideRunLabel({github, context, core, suite: RELEASE_CRITICAL, label: RELEASE_CRITICAL});
+              } catch (error) {
+                core.warning(`Could not check who applied ${RELEASE_CRITICAL}: ${error.message}`);
+              }
+              if (trusted) {
+                core.setOutput('started', String(Date.now()));
+                core.setOutput('looks', '0');
+                core.setOutput('fits', 'true');
+                core.notice(`${RELEASE_CRITICAL}: this run starts at once, without waiting for room under the CI ceiling.`);
+                return;
+              }
+            }
           }
 
           // 'rest' carries on the wait 'room' began: its clock and its looks.
