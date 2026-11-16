@@ -153,7 +153,8 @@ export async function kitSignals(query, options = {}) {
   // A not-ready template's name, typed as one word or with its own
   // separators, reads as its plain words too: search reads a whole entry name
   // as naming that one entry, and build reads search as if a not-ready
-  // template were absent.
+  // template were absent. The whole kit, the block picker included, reads the
+  // idea this way.
   const searched = wantsPages
     ? readNames(readNames(query, catalog), templates.notReadyPages, {
         spaced: true,

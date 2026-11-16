@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from '../build.mjs';
 import {loadTemplates} from '../_adapter.mjs';
+import {readNames} from './words.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -45,4 +46,18 @@ describe("a not-ready page template's name as the whole idea", () => {
       }
     }
   }, 60_000);
+
+  it('leaves a one-word not-ready name, a plural and a name typed as words as typed', async () => {
+    const {notReadyPages} = await loadTemplates(REPO);
+    for (const {name} of notReadyPages) {
+      const words = name.split('-');
+      const asWords = `a ${words.join(' ')} page`;
+      expect(readNames(asWords, notReadyPages, {spaced: true})).toBe(asWords);
+      if (words.length === 1) {
+        for (const idea of [`a ${name} page`, `${name}s with filters`]) {
+          expect(readNames(idea, notReadyPages, {spaced: true})).toBe(idea);
+        }
+      }
+    }
+  });
 });
