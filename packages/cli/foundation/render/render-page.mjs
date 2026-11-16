@@ -1009,6 +1009,9 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
+  // A page that draws elements in a state (hovered, focused, pressed) marks
+  // them; its stylesheet then applies those states' rules to them too.
+  const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
   try {
@@ -1027,7 +1030,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, used), 'css', {
+        return inlineAssets(cutCss(own, used, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });

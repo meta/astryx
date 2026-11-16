@@ -73,7 +73,7 @@ import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
-import {isShadowRoot} from '../utils/nodeType';
+import {isDialogShown, isShadowRoot, isShownAsPopover} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -508,6 +508,12 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   watchesOutsidePans?: (layer: HTMLElement) => () => void;
   /**
+   * Called with true when a `show()` that the layer accepted starts to wait
+   * for a valid anchor, and with false when that wait ends. The owner reads
+   * it right after `show()`, to tell an open that waits from a refused one.
+   */
+  onOpenPendingChange?: (isPending: boolean) => void;
+  /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
    * then skips its own read as the layer shows, so a show reads the layer
@@ -841,16 +847,6 @@ function observeAnchorClearance(
   };
 }
 
-/** Whether `element` is shown as a popover (`:popover-open`). */
-function isShownAsPopover(element: HTMLElement): boolean {
-  try {
-    return element.matches(':popover-open');
-  } catch {
-    // An engine without the pseudo-class has no popovers to be shown as.
-    return false;
-  }
-}
-
 /**
  * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
  * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
@@ -871,7 +867,7 @@ function isAnchorReady(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog == null || dialog.open || isShownAsPopover(dialog);
+  return dialog == null || isDialogShown(dialog);
 }
 
 /**
@@ -885,7 +881,7 @@ function isInClosedDialog(anchor: HTMLElement): boolean {
     return false;
   }
   const dialog = anchor.closest('dialog');
-  return dialog != null && !dialog.open && !isShownAsPopover(dialog);
+  return dialog != null && !isDialogShown(dialog);
 }
 
 /**
@@ -1294,6 +1290,8 @@ function useLayerImplementation(
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
+  const onOpenPendingChange =
+    mode === 'context' ? options.onOpenPendingChange : undefined;
   const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
@@ -1738,6 +1736,7 @@ function useLayerImplementation(
   }, [closedDialogCommit]);
 
   const cancelPendingAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current?.();
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
@@ -1745,14 +1744,21 @@ function useLayerImplementation(
       pendingRestartRef.current.cancelled = true;
       pendingRestartRef.current = null;
     }
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A wait that reached its end: nothing is pending any more, so a later
   // trigger swap must not restart it.
   const finishAnchorWait = useCallback(() => {
+    const wasPending = pendingAnchorWaitRef.current != null;
     pendingAnchorWaitRef.current = null;
     pendingAnchorElementRef.current = null;
-  }, []);
+    if (wasPending) {
+      onOpenPendingChange?.(false);
+    }
+  }, [onOpenPendingChange]);
 
   // A trigger with no layout box (no client rect) is not a valid CSS anchor. Opening against it now resolves the popover to
   // its fallback position (the viewport corner), and unlike a live layout
@@ -1913,7 +1919,17 @@ function useLayerImplementation(
       cancelSettleWait();
     };
     pendingAnchorElementRef.current = anchor;
-  }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
+    // An open that did not happen within this call now waits.
+    if (!isOpenRef.current) {
+      onOpenPendingChange?.(true);
+    }
+  }, [
+    mode,
+    openNow,
+    cancelPendingAnchorWait,
+    finishAnchorWait,
+    onOpenPendingChange,
+  ]);
 
   const hide = useCallback(() => {
     cancelAfterReleaseRef.current?.();

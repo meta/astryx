@@ -166,10 +166,11 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
- * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
- *   model: its own tables and blend numbers, used only to choose which page
- *   starts once the call model (the top-level tables and blend) has called a
- *   page. Without it, one model does both.
+ * @property {{tables?: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own blend numbers, used only to choose which page starts once
+ *   the call model (the top-level tables and blend) has called a page. It
+ *   reads the top-level tables unless it carries its own. Without it, one
+ *   model does both.
  */
 
 /**
@@ -178,19 +179,27 @@ export function weightWords(idea) {
  * @param {WeightsFile} weights
  * @returns {boolean}
  */
-const hasPickModel = weights =>
-  isWordModel(weights.pick, weights.candidates.length);
+const hasPickModel = weights => {
+  const pick = weights.pick;
+  return (
+    pick != null &&
+    isWordModel(
+      {...pick, tables: pick.tables ?? weights.tables},
+      weights.candidates.length,
+    )
+  );
+};
 
 /**
- * The pick model of a weights file: its `pick` tables and blend when present,
- * else the file's own.
+ * The pick model of a weights file: its `pick` blend, over its own tables or
+ * else the top-level ones, when present; else the file's own model.
  * @param {WeightsFile} weights
  * @returns {WeightsFile}
  */
 const pickModel = weights => {
   const pick = weights.pick;
   return pick && hasPickModel(weights)
-    ? {...weights, tables: pick.tables, blend: pick.blend}
+    ? {...weights, tables: pick.tables ?? weights.tables, blend: pick.blend}
     : weights;
 };
 
@@ -749,4 +758,20 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,
   };
+}
+
+/**
+ * Whether the idea names at least one content word of a template's own
+ * descriptor (display name, category, keywords, description, components).
+ * @param {string} name
+ * @param {string} idea
+ * @param {DescribedTemplate[]} catalog
+ * @returns {boolean}
+ */
+export function sharesOwnWord(name, idea, catalog) {
+  const t = catalog.find(c => c.name === name);
+  if (!t) return false;
+  const order = contentWords(idea);
+  const own = descriptorWords(t, order);
+  return order.some(x => own.has(x));
 }

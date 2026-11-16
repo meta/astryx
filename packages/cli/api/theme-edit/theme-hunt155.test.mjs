@@ -10,14 +10,24 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {pillDrawnRadios} from './_check.mjs';
+import {context} from './_context.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -64,9 +74,16 @@ describe('answers that hold together', () => {
     async test => {
       needsBases(test);
       const r = await answer('no rounding anywhere, badges and switches too');
+      // On a Core that draws a radio's circle with the pill token, the
+      // radio marks keep it at Core's value.
+      const radios = pillDrawnRadios((await context(cwd)).C);
       expect(r.first).toEqual([
         'set n corners square',
         'set n --radius-full 0px',
+        ...radios.map(
+          m =>
+            `set n --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
+        ),
       ]);
       expect(r.text).toMatch(/badge/);
       expect((await answer('corners square')).first).toEqual([

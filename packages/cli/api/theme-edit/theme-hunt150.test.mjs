@@ -10,8 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {fontsourceSuggestion} from './_settings.mjs';
 import {missingThemePackage} from '../theme/build/build.mjs';
@@ -24,13 +23,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The assertions are about builds, notes and lines, not rendered pages: a
+// render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt150-', FIXTURE_PACKAGES);
@@ -42,8 +46,10 @@ afterAll(() => {
 });
 
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
+const cli = async args => {
+  const r = await runCli(args, {cwd});
+  return {status: r.status, stdout: r.stdout, stderr: r.stderr};
+};
 /** @param {string} slug @param {string} body @param {string} [imports] */
 const writeSource = (slug, body, imports = '') =>
   fs.writeFileSync(
@@ -52,7 +58,7 @@ const writeSource = (slug, body, imports = '') =>
   );
 
 describe('install lines for fonts', () => {
-  it('names none for a font a system ships, on any platform', () => {
+  it('names none for a font a system ships, on any platform', async () => {
     for (const family of [
       'Avenir Next',
       'Optima',
@@ -69,7 +75,7 @@ describe('install lines for fonts', () => {
       expect(fontsourceSuggestion(family), family).toBe(null);
   });
 
-  it('vouches for an open font only, and keeps Roboto, which a system ships too', () => {
+  it('vouches for an open font only, and keeps Roboto, which a system ships too', async () => {
     expect(fontsourceSuggestion('Inter')).toEqual({
       pkg: '@fontsource/inter',
       known: true,
@@ -88,14 +94,14 @@ describe('install lines for fonts', () => {
       'w3',
       "export const w3Theme = defineTheme({extends: w3Settings, name: 'w3', tokens: {'--font-family-heading': 'Bungee, Avenir Next, sans-serif'}});",
     );
-    const full = cli([
+    const full = (await cli([
       'experimental',
       'theme',
       'compile',
       'themes/w3/w3.theme.ts',
       '--detail',
       'full',
-    ]).stdout;
+    ])).stdout;
     const lines = full
       .split('\n')
       .filter(l =>
@@ -108,7 +114,7 @@ describe('install lines for fonts', () => {
 });
 
 describe('an import through a path alias', () => {
-  it('names no package', () => {
+  it('names no package', async () => {
     for (const s of ['@/lib/c', '~/lib/c', '#lib/c'])
       expect(
         missingThemePackage(new Error(`Cannot find module '${s}'`)),
@@ -126,7 +132,7 @@ describe('an import through a path alias', () => {
       "export const w4Theme = defineTheme({extends: w4Settings, name: 'w4', tokens: {'--radius-element': c}});",
       "import {c} from '@/lib/c';",
     );
-    const r = cli([
+    const r = await cli([
       '--json',
       'experimental',
       'theme',
@@ -146,7 +152,7 @@ describe('typography fallbacks', () => {
       'w6',
       "export const w6Theme = defineTheme({extends: w6Settings, name: 'w6', typography: {body: {fallbacks: 'Georgia, serif'}}});",
     );
-    const r = cli([
+    const r = await cli([
       'experimental',
       'theme',
       'compile',
@@ -160,7 +166,7 @@ describe('typography fallbacks', () => {
 });
 
 describe('a quoted glob', () => {
-  it('is expanded as the shell would', () => {
+  it('is expanded as the shell would', async () => {
     const dir = path.join(cwd, 'globbed');
     fs.mkdirSync(path.join(dir, 'a'), {recursive: true});
     fs.writeFileSync(path.join(dir, 'a', 'x.ts'), '');
@@ -175,14 +181,14 @@ describe('a quoted glob', () => {
   it('suggests the theme sources it matches, and none when it matches none', async () => {
     await themeEditNew('w9', {cwd});
     const env = JSON.parse(
-      cli(['--json', 'experimental', 'theme', 'compile', 'themes/w9/*.ts'])
+      (await cli(['--json', 'experimental', 'theme', 'compile', 'themes/w9/*.ts']))
         .stdout,
     );
     const names = env.suggestions.map((/** @type {any} */ s) => s.name);
     expect(names.join(' ')).toContain('compile themes/w9/w9.theme.ts');
     expect(names.join(' ')).not.toContain('*');
     const none = JSON.parse(
-      cli(['--json', 'experimental', 'theme', 'compile', 'nowhere/*.ts'])
+      (await cli(['--json', 'experimental', 'theme', 'compile', 'nowhere/*.ts']))
         .stdout,
     );
     expect(
@@ -214,13 +220,13 @@ describe("the base theme's font stylesheet", () => {
     const shown = await themeEditShow('w10', {cwd});
     expect(JSON.stringify(shown.data.notes)).toContain('800 shows as 700');
     const json = JSON.parse(
-      cli([
+      (await cli([
         '--json',
         'experimental',
         'theme',
         'compile',
         'themes/w10/w10.theme.ts',
-      ]).stdout,
+      ])).stdout,
     );
     expect(JSON.stringify(json.data.notices)).toContain('800 shows as 700');
   }, 240_000);

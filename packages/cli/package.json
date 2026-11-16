@@ -126,6 +126,7 @@
   "dependencies": {
     "@babel/core": "7.29.7",
     "@babel/parser": "7.29.8",
+    "@babel/plugin-transform-react-jsx": "7.29.7",
     "@babel/plugin-transform-typescript": "7.29.7",
     "@babel/types": "7.29.8",
     "@csstools/css-syntax-patches-for-csstree": "1.1.6",

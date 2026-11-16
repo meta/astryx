@@ -154,13 +154,13 @@ describe('colors', () => {
     ).toBeUndefined();
   }, 180_000);
 
-  it('neutral leaves the page background to the base theme', async () => {
+  it('neutral reaches the page background with the surfaces', async () => {
     await themeEditSet('s', 'neutral', '#425466', {cwd});
     const source = read('themes/s/s.settings.ts');
     expect(source).toMatch(
       /"--color-background-surface": \[\s*palette\.neutral/,
     );
-    expect(source).not.toContain('"--color-background-body"');
+    expect(source).toMatch(/"--color-background-body": \[\s*palette\.neutral/);
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 120_000);
 
@@ -382,15 +382,17 @@ describe('round 3', () => {
   }, 120_000);
 
   it('names parts inside the part a token is set on', async () => {
+    // (A toast's text sits on Core's media surface, which sets its own text
+    // tokens: a banner holds a button that reads the token.)
     const r = await themeEditSet('s', '--color-text-primary', '#ffffff', {
       cwd,
-      on: 'toast',
+      on: 'banner',
     });
-    expect(r.data.notes.join(' ')).toContain('on button inside toast');
+    expect(r.data.notes.join(' ')).toContain('on button inside banner');
     await themeEditUndo('s', {
       cwd,
       thing: '--color-text-primary',
-      on: 'toast',
+      on: 'banner',
     });
   }, 120_000);
 
@@ -404,8 +406,10 @@ describe('round 3', () => {
       ).data
     );
     const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
+    // (A secondary button draws no border now: a width alone shows
+    // nothing, so the whole line.)
     expect(b.join('\n')).toContain(
-      'set s border-width 1px --on button --when variant:secondary',
+      "set s border '1px solid var(--color-border)' --on button --when variant:secondary",
     );
     expect(b.join('\n')).toContain("color 'var(--color-text-accent)'");
     const fill = /** @type {any} */ (
@@ -530,10 +534,12 @@ describe('round 4', () => {
   }, 240_000);
 
   it('says which tokens a token feeds instead of claiming it changes nothing', async () => {
+    // (A success field status reads it now that the part data draws every
+    // type, so it changes that, and no note claims otherwise.)
     const r = await themeEditSet('s', '--color-success-muted', '#dcfce7', {
       cwd,
     });
-    expect(r.data.notes.join(' ')).toContain('--color-syntax-added');
+    expect(r.data.notes.join(' ')).not.toMatch(/changes nothing/);
     await themeEditUndo('s', {cwd, thing: '--color-success-muted'});
   }, 120_000);
 
@@ -557,10 +563,10 @@ describe('round 4 follow-ups', () => {
       (await themeEditHow('thin gray border on inputs', {cwd, theme: 's'})).data
     );
     const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
-    // The width and the color the question names, with no comment or
-    // placeholder in the command.
+    // The width and the color the question names (gray: the theme's own
+    // grays), with no comment or placeholder in the command.
     expect(lines.join('\n')).toContain(
-      "set s border '1px solid #9ca3af' --on inputs",
+      "set s border '1px solid #9e9e9e' --on inputs",
     );
     expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });

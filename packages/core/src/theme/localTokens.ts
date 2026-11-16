@@ -51,9 +51,16 @@ function resolveTokenValue(value: TokenValue, path: string): string {
   );
 }
 
+/**
+ * Thrown when a token value holds itself: the object it is, or one inside
+ * it, refers back to an object it sits in.
+ */
+class SelfReferenceError extends Error {}
+
 function collectCustomPropertyReferences(
   value: unknown,
   refs: Set<string>,
+  holding: Set<object> = new Set(),
 ): void {
   if (typeof value === 'string') {
     CSS_VAR_PATTERN.lastIndex = 0;
@@ -66,16 +73,17 @@ function collectCustomPropertyReferences(
     }
     return;
   }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectCustomPropertyReferences(item, refs);
-    }
-    return;
-  }
   if (value && typeof value === 'object') {
-    for (const nested of Object.values(value)) {
-      collectCustomPropertyReferences(nested, refs);
+    // A value inside the objects that hold it never ends: stop there.
+    if (holding.has(value)) {
+      throw new SelfReferenceError();
     }
+    holding.add(value);
+    const nested = Array.isArray(value) ? value : Object.values(value);
+    for (const item of nested) {
+      collectCustomPropertyReferences(item, refs, holding);
+    }
+    holding.delete(value);
   }
 }
 
@@ -87,7 +95,17 @@ export function assertNoTokenCycles(
   const dependencies = new Map<string, string[]>();
   for (const [name, value] of Object.entries(tokenValues)) {
     const refs = new Set<string>();
-    collectCustomPropertyReferences(value, refs);
+    try {
+      collectCustomPropertyReferences(value, refs, new Set([tokenValues]));
+    } catch (error) {
+      if (!(error instanceof SelfReferenceError)) {
+        throw error;
+      }
+      throw new Error(
+        `${context ? `${context}: ` : ''}tokens refers to itself: the value of ${name} holds an object it sits in, so it never ends and is no token value.`,
+        {cause: error},
+      );
+    }
     dependencies.set(
       name,
       [...refs].filter(reference => hasOwn(tokenValues, reference)),

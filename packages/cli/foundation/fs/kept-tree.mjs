@@ -20,24 +20,35 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {persistedSummary, persistedSummaryAsync} from './gather-cache.mjs';
-import {PRESENT, RESOLVED, fileStamp, recordReads} from './read-record.mjs';
+import {
+  PRESENT,
+  RESOLVED,
+  fileStamp,
+  listingOf,
+  listingStamp,
+  recordReads,
+  resolvedNow,
+} from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
 
 /**
  * One folder of the tree: its path from the root (`''` for the root) and its
- * entries, in the order the disk lists them.
- * @typedef {{rel: string, entries: Array<{name: string, isDir: boolean}>}} TreeFolder
+ * entries, in the order the disk lists them. A link is never a folder here:
+ * the walk does not follow it.
+ * @typedef {{rel: string, entries: Array<{name: string, isDir: boolean, isLink: boolean}>}} TreeFolder
  */
 
 /**
  * The tree under `root`, folder by folder, outside any folder `skip` names.
- * Each folder's stamp goes into `stamps` before the folder is read, so a
- * change during the read shows as a change. A folder that cannot be read has
- * no entries.
+ * Each folder's stamp is its listing (read-record.mjs listingOf): its
+ * entries' names and types, as the walk read them, so a save that renames a
+ * new copy over a file keeps it, and an entry added, removed or renamed
+ * changes it. A folder that cannot be read has no entries.
  * @param {string} root
- * @param {(name: string) => boolean} skip
+ * @param {(name: string, rel: string) => boolean} skip a folder's name and
+ *   the path of the folder that holds it from the root (`''` for the root)
  * @param {Array<[string, string]>} stamps
  * @returns {TreeFolder[]}
  */
@@ -47,21 +58,23 @@ function walkTree(root, skip, stamps) {
   /** @param {string} rel */
   const visit = rel => {
     const full = rel === '' ? root : path.join(root, rel);
-    stamps.push([rel, fileStamp(full)]);
     /** @type {fs.Dirent[]} */
     let dirents;
     try {
       dirents = fs.readdirSync(full, {withFileTypes: true});
+      stamps.push([rel, listingOf(dirents, full)]);
     } catch {
       dirents = [];
+      stamps.push([rel, listingStamp(full)]);
     }
     const entries = dirents.map(entry => ({
       name: entry.name,
       isDir: entry.isDirectory(),
+      isLink: entry.isSymbolicLink(),
     }));
     folders.push({rel, entries});
     for (const entry of entries) {
-      if (entry.isDir && !skip(entry.name)) {
+      if (entry.isDir && !skip(entry.name, rel)) {
         visit(rel === '' ? entry.name : path.join(rel, entry.name));
       }
     }
@@ -105,7 +118,7 @@ export function hasNameLine(lines, name) {
 
 /**
  * What a kept tree summary is kept under, and what makes it.
- * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean}} TreeSummaryOptions
+ * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string, rel: string) => boolean}>, code: string[], skip?: (name: string, rel: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean, keep?: (value: any) => boolean}} TreeSummaryOptions
  *   `roots`: each a folder, or a folder with the folder names its own walk
  *   does not enter; `code`: the files whose code makes the summary; `skip`:
  *   folder names the walk of a root without its own does not enter (both are
@@ -113,7 +126,8 @@ export function hasNameLine(lines, name) {
  *   `recorded`: every path `summarize` reads through fs or probes is checked
  *   too, by its own stamp, so it can read files outside the trees and through
  *   caches that stat a file before they reuse it; `accept`: whether a stored
- *   summary serves this call (gather-cache.mjs persistedSummary)
+ *   summary serves this call; `keep`: whether a summary just made is stored
+ *   (both gather-cache.mjs persistedSummary)
  */
 
 /**
@@ -150,6 +164,10 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
         for (const [rel, stamp] of own) {
           stamps.push([rel === '' ? root : root + path.sep + rel, stamp]);
         }
+        // Where the root resolves, beside its listing: two folders can list
+        // the same names (a package's version folders, a link re-pointed
+        // between them), and a listing alone cannot tell them apart.
+        stamps.push([root, resolvedNow(root)]);
         return {
           root,
           folders,
@@ -167,7 +185,12 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
         finish: seen => {
           const walked = new Set(stamps.map(([file]) => file));
           for (const [file, state] of seen) {
-            if (walked.has(file)) continue;
+            // A listed folder the summary also resolved keeps where it
+            // resolves too, beside its listing, which names alone give.
+            if (walked.has(file)) {
+              if (state.startsWith(RESOLVED)) stamps.push([file, state]);
+              continue;
+            }
             // A folder probe, an existence check and a real-path lookup each
             // record less than a stamp, which a stored summary cannot check.
             // The full stamp, taken now, is stricter; a change during the
@@ -207,7 +230,7 @@ export function keptTreeSummary(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {accept: options.accept},
+    {accept: options.accept, keep: options.keep},
   );
 }
 
@@ -235,6 +258,6 @@ export function keptTreeSummaryAsync(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {accept: options.accept},
+    {accept: options.accept, keep: options.keep},
   );
 }
