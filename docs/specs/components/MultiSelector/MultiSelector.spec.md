@@ -344,6 +344,11 @@ empty-state content remains one shared tree.
 
 ## Current-state impact
 
+- **Popover popup named by the trigger (AR1).** A MultiSelector with no search
+  in a popover names its popup (listbox or group) through the trigger, so it
+  reads the trigger's value text ("Select...") instead of the label; tracked
+  separately.
+
 - **Active option perception.** The active option shows only the
   `--color-overlay-hover` fill, under 3:1 against the listbox in light and
   dark, against `spec:AST-020` FR1 (WCAG 2.2 1.4.11). Selector draws the
