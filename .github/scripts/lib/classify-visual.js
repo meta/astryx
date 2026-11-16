@@ -1153,10 +1153,14 @@ function styleContextLines(source, jsx) {
       }
     }
   };
+  // Each called function is expanded once, however many results read it.
+  const expanded = new Set();
   const settle = entry => {
     if (done.has(entry)) return;
     done.add(entry);
     if (entry.calls != null) {
+      if (expanded.has(entry.calls)) return;
+      expanded.add(entry.calls);
       for (const binding of bindingsOf.get(entry.calls) ?? []) {
         if (done.has(binding)) continue;
         done.add(binding);
@@ -1167,7 +1171,7 @@ function styleContextLines(source, jsx) {
     for (let at = entry.from; at <= entry.to; at += 1) markLine(at);
   };
   for (const binding of bindings) if (binding.typed) settle(binding);
-  pending.push(...byName.keys());
+  for (const name of byName.keys()) pending.push(name);
   while (pending.length > 0) {
     const state = byName.get(pending.pop());
     const {byFrom, byTo} = state;
@@ -1179,6 +1183,16 @@ function styleContextLines(source, jsx) {
     }
   }
   return covered;
+}
+
+// A file the style-context test cannot finish reading counts as one that does
+// not lex: its CSS-named keys count as before.
+function styleContextsOrNull(source, jsx) {
+  try {
+    return styleContextLines(source, jsx);
+  } catch {
+    return null;
+  }
 }
 
 function isVisualEvidenceFile(file) {
@@ -1316,7 +1330,7 @@ function classifyVisualDiff(diffText, opts = {}) {
         typeof source === 'string'
           ? {
               lines: source.split(/\r?\n/),
-              style: styleContextLines(source, !/\.ts$/.test(path)),
+              style: styleContextsOrNull(source, !/\.ts$/.test(path)),
             }
           : null,
       );

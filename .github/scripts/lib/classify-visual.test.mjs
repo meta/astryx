@@ -960,6 +960,26 @@ describe('CSS-named keys count only in a style context', () => {
     expect(performance.now() - started).toBeLessThan(10_000);
   });
 
+  it('reads a style context with very many names, and a function called very many times, quickly', () => {
+    const names = [
+      'const styles = stylex.create({',
+      ...Array.from({length: 130000}, (_, i) => `  n${i}: {width: 1},`),
+      '});',
+    ].join('\n');
+    expect(styleContextLines(names, false)).not.toBeNull();
+    const calls = [
+      ...Array.from(
+        {length: 20000},
+        (_, i) => `function f${i % 5}() { return {width: 1}; }`,
+      ),
+      ...Array.from({length: 20000}, (_, i) => `const r${i} = f${i % 5}();`),
+      'const styles = stylex.create({x: r0});',
+    ].join('\n');
+    const started = performance.now();
+    expect(styleContextLines(calls, false)).not.toBeNull();
+    expect(performance.now() - started).toBeLessThan(10_000);
+  });
+
   it('marks a long chain of named objects in time near linear in the file', () => {
     const count = 20000;
     const source = [
