@@ -101,7 +101,9 @@ export default function UseLongPressHookUsage() {
       <div
         ref={surfaceRef}
         data-testid="long-press-surface"
-        style={{position: 'relative', userSelect: 'none', width: 360}}
+        // Safari, the browser that starts a text selection on a long press,
+        // reads only the prefixed property; Chrome and Firefox read it too.
+        style={{position: 'relative', WebkitUserSelect: 'none', width: 360}}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
