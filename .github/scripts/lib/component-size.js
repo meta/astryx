@@ -173,9 +173,23 @@ function importLevels(graph, start, kinds) {
 }
 
 // Chunks an entry chunk reaches in a build's metafile outputs, following only
-// the given import kinds.
+// the given import kinds. The set's order is the order `eagerText`
+// concatenates before gzip, so a change of order changes every gzip figure.
+// It holds the same chunks as `importLevels` over the same kinds.
 function reachableChunks(outputs, entryOutput, kinds) {
-  return new Set(importLevels(outputs, entryOutput, kinds).keys());
+  const seen = new Set();
+  const pending = [entryOutput];
+  while (pending.length > 0) {
+    const key = pending.pop();
+    if (key === undefined || seen.has(key)) continue;
+    seen.add(key);
+    for (const imported of outputs[key].imports || []) {
+      if (kinds.includes(imported.kind) && !imported.external) {
+        pending.push(imported.path);
+      }
+    }
+  }
+  return seen;
 }
 
 // What importing an entry loads eagerly: its chunk and every chunk it imports
