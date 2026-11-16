@@ -340,6 +340,8 @@ export async function withEmptyStylesheets(load, options = {}) {
  * @type {AsyncLocalStorage<GuardedLoad>}
  */
 const guardedLoad = new AsyncLocalStorage();
+/** @type {Map<unknown, GuardedLoad>} */
+const microtaskThrows = new Map();
 let exitGuards = 0;
 /** @type {typeof process.exit | null} */
 let realExit = null;
@@ -558,12 +560,29 @@ export class ThemeModuleUnsettledError extends Error {
 function installThemeModuleGuards() {
   if (guardsInstalled) return;
   guardsInstalled = true;
+  const microtask = globalThis.queueMicrotask;
+  globalThis.queueMicrotask = callback => {
+    const load = guardedLoad.getStore();
+    if (!load || typeof callback !== 'function') return microtask(callback);
+    return microtask(() => {
+      try {
+        callback();
+      } catch (error) {
+        // Older Node versions report microtask throws after restoring the
+        // async context. Keep the origin until the exception handler runs.
+        microtaskThrows.set(error, load);
+        microtask(() => microtaskThrows.delete(error));
+        throw error;
+      }
+    });
+  };
   // An exception thrown from a module's callback after its load is told as
   // a warning (theme-module-rejections.mjs), never the command's crash.
   // One thrown while the module still loads (from a microtask it queued)
   // refuses that load with it, as a throw from its top level does.
   tellThemeModuleCallbacks(error => {
-    const load = guardedLoad.getStore();
+    const load = guardedLoad.getStore() ?? microtaskThrows.get(error);
+    microtaskThrows.delete(error);
     if (!load) return null;
     if (load.done) return 'after';
     load.fail(error);
