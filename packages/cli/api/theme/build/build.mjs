@@ -1835,9 +1835,12 @@ async function loadKnownValuesIndex(coreSrc) {
  */
 async function getKnownValues(componentName) {
   const coreSrc = coreSrcPath();
-  if (!_knownValuesIndexes.has(coreSrc))
-    _knownValuesIndexes.set(coreSrc, loadKnownValuesIndex(coreSrc));
-  const index = await _knownValuesIndexes.get(coreSrc);
+  let pending = _knownValuesIndexes.get(coreSrc);
+  if (!pending) {
+    pending = loadKnownValuesIndex(coreSrc);
+    _knownValuesIndexes.set(coreSrc, pending);
+  }
+  const index = await pending;
   return index[componentName] ?? {};
 }
 
