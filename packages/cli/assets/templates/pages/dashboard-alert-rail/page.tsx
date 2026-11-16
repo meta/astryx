@@ -1314,7 +1314,9 @@ function UptimeRow({entry}: {entry: ServiceUptime}) {
             label={STATUS_LABEL[entry.status]}
             isPulsing={entry.status === 'critical'}
           />
-          <Heading level={4}>{entry.service}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {entry.service}
+          </Heading>
         </HStack>
         <Text type="supporting" color="secondary">
           {entry.uptime.toFixed(2)}% uptime
@@ -1444,6 +1446,7 @@ export default function ServiceHealthMonitorPage() {
 
   return (
     <Layout
+      role="main"
       height="fill"
       style={pageStyle}
       header={

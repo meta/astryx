@@ -469,7 +469,9 @@ function ScorecardTile({kpi, period}: {kpi: Kpi; period: Period}) {
           {kpi.label}
         </Text>
         <HStack gap={4} vAlign="center">
-          <Heading level={2}>{kpi.value}</Heading>
+          <Heading level={2} accessibilityLevel={3}>
+            {kpi.value}
+          </Heading>
           <DeltaIndicator deltaPct={deltaPct} rag={rag} />
         </HStack>
       </VStack>
@@ -488,7 +490,9 @@ function OkrRow({okr}: {okr: Okr}) {
     <VStack gap={2}>
       <HStack hAlign="between" vAlign="center" gap={3}>
         <StackItem size="fill">
-          <Heading level={4}>{okr.objective}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {okr.objective}
+          </Heading>
         </StackItem>
         <Text type="supporting" color="secondary">
           {pct}%
@@ -699,7 +703,9 @@ function NarrativeCard({callout}: {callout: Callout}) {
         />
         <StackItem size="fill">
           <VStack gap={1}>
-            <Heading level={4}>{callout.title}</Heading>
+            <Heading level={4} accessibilityLevel={3}>
+              {callout.title}
+            </Heading>
             <Text type="body" color="secondary">
               {callout.detail}
             </Text>
@@ -765,6 +771,7 @@ export default function ExecutiveReviewPage() {
 
   return (
     <Layout
+      role="main"
       height="fill"
       contentWidth={1440}
       header={

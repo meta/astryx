@@ -1075,6 +1075,7 @@ export default function ProjectStatusPage() {
 
   return (
     <Layout
+      role="main"
       height="fill"
       header={<ProgramHeader phase={phase} onPhaseChange={setPhase} />}
       content={
