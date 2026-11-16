@@ -190,8 +190,8 @@ export function useInlineListWindow({
 }: UseInlineListWindowOptions): InlineListWindowResult {
   const [tracking, setTracking] = useState<InlineTracking | undefined>();
   const pending = tracking?.pending;
-  // New items or insets make a new selector, which reads the current
-  // snapshot. While an anchor scroll is pending, the window reads every
+  // New offsets or insets make a new selector, which reads the current
+  // snapshot. Table rebuilds the offsets whenever its column keys change. While an anchor scroll is pending, the window reads every
   // snapshot, so it sees the scroll land.
   const getSnapshot = useMemo(
     () =>
@@ -210,7 +210,6 @@ export function useInlineListWindow({
       canWindow,
       pending,
       geometry,
-      keys,
       offsets,
       insetStart,
       insetEnd,
