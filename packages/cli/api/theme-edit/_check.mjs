@@ -79,6 +79,7 @@ import {
   isNumber,
   isSafeValue,
   UNSAFE_VALUE,
+  LONE_VAR,
   withoutCssEscapes,
   isSize,
   parseColor,
@@ -2039,7 +2040,7 @@ function checkTypedValue(
   if (
     type === 'number' &&
     multiplied &&
-    !/^var\(--[a-z0-9-]+\)$/i.test(v0) &&
+    !LONE_VAR.test(v0) &&
     read?.unit !== '' &&
     !(MATH_FUNCTION.test(v0) && matchType('number', v0) != null)
   ) {

@@ -985,6 +985,15 @@ export function ratio(a, b) {
 }
 
 /**
+ * A value that is one var() of a custom property and nothing else, with
+ * any spaces inside its brackets as CSS reads them (`var( --x )`).
+ */
+export const LONE_VAR = /^var\(\s*--[a-z0-9-]+\s*\)$/i;
+
+/** A var() of a custom property with a fallback: the fallback, captured. */
+const VAR_FALLBACK = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i;
+
+/**
  * Whether a value is one CSS color: a hex, a color function, a named or
  * system color, a color keyword, or a variable. A function with plain
  * numbers must be well formed; one with `var()`, `calc()`, `env()` or a
@@ -1007,10 +1016,10 @@ export const isColorValue = v => {
   return (
     /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ||
     FUNCTIONS.test(s) ||
-    /^var\(--[a-z0-9-]+\)$/i.test(s) ||
+    LONE_VAR.test(s) ||
     // A variable with a color to fall back to.
-    (/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.test(s) &&
-      isColorValue(/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.exec(s)?.[1] ?? '')) ||
+    (VAR_FALLBACK.test(s) &&
+      isColorValue(/** @type {string} */ (VAR_FALLBACK.exec(s)?.[1]))) ||
     Object.hasOwn(NAMED, s.toLowerCase()) ||
     KEYWORDS.includes(s.toLowerCase()) ||
     SYSTEM.includes(s.toLowerCase())
@@ -1033,7 +1042,7 @@ export const isSize = (v, name = '') => {
   const n = cssNumber(s);
   if (n && n.unit && matchType('length-percentage', s) != null)
     return n.value >= 0 || /offset|tracking|letter-spacing|indent/.test(name);
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;
 };
@@ -1047,7 +1056,7 @@ export const isSize = (v, name = '') => {
  */
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   const n = cssNumber(s);
   // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
