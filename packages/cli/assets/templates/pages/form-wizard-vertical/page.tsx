@@ -591,6 +591,16 @@ export default function FormWizardVerticalPage() {
       return;
     }
     if (isLastStep) {
+      // An earlier step can still have problems after a jump through the
+      // stepper. Send the person to the first one instead of finishing.
+      const firstBroken = errorsByStep.findIndex(
+        errors => Object.keys(errors).length > 0,
+      );
+      if (firstBroken !== -1) {
+        markAttempted(firstBroken);
+        setStep(firstBroken);
+        return;
+      }
       // Demo only: replace this toast with the call that performs the action.
       showToast({
         body: 'Demo: your audiobook would be submitted for review here',
