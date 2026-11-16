@@ -10,20 +10,22 @@
  *
  * Reported, in shipped Core and Lab source outside the press modules:
  *   - (a) an import of a press profile or a recipe's inner module
- *     (`PressTracker`, the group trackers, the menu press helpers, the
- *     engine's gesture module), by relative path or through
+ *     (`PressTracker`, the action-group tracker's own module, the menu press
+ *     helpers, the engine's gesture module), by relative path or through
  *     `@astryxdesign/core/internal/touch`. A recipe's entry point is always
- *     allowed: the engine (`usePressFeedback`, `utils/pressFeedback`), the
- *     row-wide target (`useClickableContainer`, `utils/boxHold`), the cell or
+ *     allowed: the engine (`usePressFeedback`, `utils/pressFeedback`), its
+ *     group profile (`useGroupPressTracking`, `useActionGroupTracking`,
+ *     `pressGroupContext`), the row-wide target (`useClickableContainer`, `utils/boxHold`), the cell or
  *     menu row (`useMenuPress`), and the recipe styles. An import that brings
  *     only constants (UPPER_SNAKE_CASE names) is allowed: the guard is about
  *     trackers and pressed state, not shared numbers;
- *   - (b) pressed state of a component's own: a `useState` whose name matches
- *     `pressed`, `isPressed` or `platter`, set from a pointer-down or
- *     touch-start handler;
- *   - (c) a press data attribute of a component's own: a `data-*press*`
- *     name outside the `data-astryx-` namespace (no-raw-private-attribute
- *     covers that namespace);
+ *   - (b) pressed state of a component's own: a `useState` whose name starts
+ *     with `pressed`, `isPressed` or `platter`, or ends in `Pressed` or
+ *     `Platter`, set from a pointer-down or touch-start handler;
+ *   - (c) a press data attribute of a component's own: a `data-` name with
+ *     a `press`, `pressed`, `pressing` or `pressable` word between dashes,
+ *     outside the `data-astryx-` namespace (no-raw-private-attribute covers
+ *     that namespace);
  *   - (d) a `:active` arm in `stylex.create` or a `stylex.when.*` selector
  *     outside the shared press styles, since the engine paints a mouse press
  *     in place of CSS `:active`.
@@ -81,17 +83,17 @@ export const PRESS_MODULES = {
       'privateAttributes/pressHeld.stylex',
       'privateAttributes/pressHoldsDrag.stylex',
       'privateAttributes/pressGroupItem.stylex',
+      // The group profile: the action-group tracker, reached through these.
+      'hooks/useGroupPressTracking',
+      'hooks/useActionGroupTracking',
+      'hooks/pressGroupContext',
     ],
     inner: [
       'utils/pressGesture',
-      // Profiles still to fold into the engine: a press held through a drag,
-      // and the group slide.
+      'hooks/actionGroupTracker',
+      // A press tracker still to fold into the engine.
       'gestures/PressTracker',
       'gestures/usePressTracker',
-      'hooks/useGroupPressTracking',
-      'hooks/useActionGroupTracking',
-      'hooks/actionGroupTracker',
-      'hooks/pressGroupContext',
     ],
   },
   'row-wide target': {
@@ -135,15 +137,19 @@ const TOUCH_ENTRY_NAMES = {
   createPressTracker: 'gestures/PressTracker',
   PressTracker: 'gestures/PressTracker',
   usePressTracker: 'gestures/usePressTracker',
-  useGroupPressTracking: 'hooks/useGroupPressTracking',
-  useActionGroupTracking: 'hooks/useActionGroupTracking',
 };
 
 const CORE_PACKAGE = /^@astryxdesign\/core\//;
-const PRESSED_NAME = /pressed|isPressed|platter/i;
+// A state name that starts with `pressed`, `isPressed` or `platter`, or ends
+// in `Pressed` or `Platter` (`isCompressed` and `unpressedCount` do not).
+const PRESSED_NAME =
+  /^(?:is)?[Pp]ressed(?![a-z])|^[Pp]latter(?![a-z])|[a-z](?:Pressed|Platter)$/;
 const POINTER_DOWN_PROP = /^on(?:PointerDown|TouchStart)(?:Capture)?$/;
 const POINTER_DOWN_EVENT = /^(?:pointerdown|touchstart)$/;
-const OWN_PRESS_ATTRIBUTE = /^data-(?!astryx-)[\w$-]*press/i;
+// A `press` word between dashes (`data-is-pressed`, `data-card-press-state`);
+// `data-expressive` is not one.
+const OWN_PRESS_ATTRIBUTE =
+  /^data-(?!astryx-)(?:[a-z0-9]+-)*press(?:ed|ing|able)?(?:-|$)/i;
 const CONSTANT_NAME = /^[A-Z][A-Z0-9_]*$/;
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 
@@ -436,7 +442,10 @@ export default {
         const text = node.quasis
           .map(quasi => quasi.value.cooked ?? '')
           .join('${}');
-        const match = /^data-[\w${}-]*press[\w${}-]*/i.exec(text);
+        const match =
+          /^data-(?:[a-z0-9]+-)*press(?:ed|ing|able)?(?:-[\w${}-]*)?$/i.exec(
+            text,
+          ) ?? /^data-(?:[a-z0-9]+-)*press(?:ed|ing|able)?-/i.exec(text);
         if (
           match &&
           !text.startsWith('data-astryx-') &&

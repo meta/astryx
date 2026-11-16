@@ -69,6 +69,19 @@ tester.run('press-through-recipes', rule, {
       code: "import {menuPressGesture} from './menuPressGesture';",
       filename: menuHelper,
     },
+    // (a) The group profile's entries, relative and through the touch entry.
+    {
+      code: "import {useGroupPressTracking} from '../hooks/useGroupPressTracking';",
+      filename: component,
+    },
+    {
+      code: "import {PressGroupContext} from '../hooks/pressGroupContext';",
+      filename: component,
+    },
+    {
+      code: "import {useActionGroupTracking} from '@astryxdesign/core/internal/touch';",
+      filename: labComponent,
+    },
     // (a) Lab importing a non-press name through the touch entry.
     {
       code: "import {useFingerScroll} from '@astryxdesign/core/internal/touch';",
@@ -106,6 +119,21 @@ tester.run('press-through-recipes', rule, {
     },
     // (c) A name interpolated right after `data-` may be the namespace.
     {code: 'const name = `data-${part}-pressing`;', filename: component},
+    // (b) Names that only contain `pressed` or `platter` are not pressed state.
+    {
+      code: 'function C() { const [isCompressed, setIsCompressed] = useState(false); return <div onPointerDown={() => setIsCompressed(true)} />; }',
+      filename: component,
+    },
+    {
+      code: 'function C() { const [unpressedCount, setUnpressedCount] = useState(0); return <div onPointerDown={() => setUnpressedCount(1)} />; }',
+      filename: component,
+    },
+    // (c) Names that only contain `press` are not press attributes.
+    {
+      code: "const a = <div data-expressive='' data-compressed='' />;",
+      filename: component,
+    },
+    {code: "const NAME = 'data-impression-id';", filename: component},
     // (c) Other data attributes.
     {
       code: "const a = <div data-state='open' data-testid='x' />;",
@@ -135,7 +163,7 @@ tester.run('press-through-recipes', rule, {
       errors: [{messageId: 'innerImport'}],
     },
     {
-      code: "import {useGroupPressTracking} from '../hooks/useGroupPressTracking';",
+      code: "import {actionGroupTracker} from '../hooks/actionGroupTracker';",
       filename: component,
       errors: [{messageId: 'innerImport'}],
     },
@@ -164,9 +192,9 @@ tester.run('press-through-recipes', rule, {
       filename: component,
       errors: [{messageId: 'innerImport'}],
     },
-    // (a) Lab through the touch entry.
+    // (a) Lab reaching a press tracker through the touch entry.
     {
-      code: "import {useActionGroupTracking} from '@astryxdesign/core/internal/touch';",
+      code: "import {createPressTracker} from '@astryxdesign/core/internal/touch';",
       filename: labComponent,
       errors: [{messageId: 'innerImport'}],
     },
@@ -196,6 +224,12 @@ tester.run('press-through-recipes', rule, {
     },
     {
       code: "function C(el) { const [isPressed, setIsPressed] = useState(false); useEffect(() => { el.addEventListener('touchstart', () => setIsPressed(true)); }, []); }",
+      filename: component,
+      errors: [{messageId: 'pressedState'}],
+    },
+    // (b) A name that ends in `Pressed`.
+    {
+      code: 'function C() { const [rowPressed, setRowPressed] = useState(false); return <div onPointerDown={() => setRowPressed(true)} />; }',
       filename: component,
       errors: [{messageId: 'pressedState'}],
     },

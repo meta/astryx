@@ -1,25 +1,12 @@
 {
-  "packages/core/src/AlertDialog/AlertDialog.tsx": [
-    "import:hooks/pressGroupContext",
-    "import:hooks/useActionGroupTracking"
-  ],
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": [
     "import:hooks/menuPressOnItems"
   ],
-  "packages/core/src/Button/Button.tsx": [
-    ":active",
-    ":active",
-    "import:hooks/pressGroupContext"
-  ],
-  "packages/core/src/ButtonGroup/ButtonGroup.tsx": [
-    "import:hooks/pressGroupContext",
-    "import:hooks/useGroupPressTracking"
-  ],
+  "packages/core/src/Button/Button.tsx": [":active", ":active"],
   "packages/core/src/ClickableCard/ClickableCard.tsx": [":active", ":active"],
   "packages/core/src/ComplexSelector/ComplexSelector.tsx": [":active"],
   "packages/core/src/DropdownMenu/DropdownMenu.tsx": [
-    "import:hooks/menuPressGesture",
-    "import:hooks/pressGroupContext"
+    "import:hooks/menuPressGesture"
   ],
   "packages/core/src/DropdownMenu/DropdownMenuItem.tsx": [":active"],
   "packages/core/src/Lightbox/Lightbox.tsx": [
@@ -48,27 +35,13 @@
   ],
   "packages/core/src/TabList/Tab.tsx": [":active"],
   "packages/core/src/Thumbnail/Thumbnail.tsx": [":active", ":active"],
-  "packages/core/src/ToggleButton/ToggleButton.tsx": [
-    "import:hooks/pressGroupContext"
-  ],
-  "packages/core/src/ToggleButton/ToggleButtonGroup.tsx": [
-    "import:hooks/pressGroupContext",
-    "import:hooks/useGroupPressTracking"
-  ],
   "packages/core/src/TopNav/TopNavHeading.tsx": [
     "import:hooks/menuPressOnItems"
   ],
   "packages/core/src/TopNav/TopNavItem.tsx": [":active"],
   "packages/core/src/TopNav/TopNavMenu.tsx": ["import:hooks/menuPressOnItems"],
   "packages/core/src/gestures/GestureHost.ts": ["import:gestures/PressTracker"],
-  "packages/core/src/internal/touch.ts": [
-    "import:hooks/useActionGroupTracking",
-    "import:hooks/useActionGroupTracking"
-  ],
   "packages/lab/src/CircleCheckIndicator/CircleCheckIndicator.tsx": [":active"],
-  "packages/lab/src/TabBar/useTabBarLens.ts": [
-    "data-tab-bar-pressed",
-    "import:hooks/useActionGroupTracking"
-  ],
+  "packages/lab/src/TabBar/useTabBarLens.ts": ["data-tab-bar-pressed"],
   "packages/lab/src/TransferList/TransferList.tsx": [":active"]
 }

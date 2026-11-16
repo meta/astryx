@@ -1051,6 +1051,19 @@ export default defineConfig(
       ],
     },
   },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
+    },
+  },
   // One engine writes every pressed state in Core, and each pressable surface
   // uses one of three recipes: a momentary control, a row-wide target, or a
   // cell or menu row. A component adds no press tracker, pressed state, press
@@ -1068,19 +1081,6 @@ export default defineConfig(
         reactSeverity,
         {baseline: pressRecipesBaseline, root: import.meta.dirname},
       ],
-    },
-  },
-  // React attaches its wheel, touchstart and touchmove listeners as passive,
-  // so preventDefault() in those handlers does nothing. Shipped package
-  // source, the same files as the block above.
-  {
-    files: privateAttributeScope.files,
-    ignores: privateAttributeScope.ignores,
-    plugins: {
-      '@astryx': astryxEslintPlugin,
-    },
-    rules: {
-      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
     },
   },
   // A source comment explains a reason, a constraint, or a quirk. It does not
