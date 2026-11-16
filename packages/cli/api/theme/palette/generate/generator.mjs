@@ -26,18 +26,13 @@ import {
 
 /** @typedef {'astryx-oklch-v1' | 'astryx-oklch-v2'} PaletteRecipe */
 
-/**
- * The first recipe: what a palette config that names no recipe runs (a
- * config written before v2 regenerates the same colors). A config pins it by
- * naming it.
- */
+/** The recipe a request that names none runs: the first one. */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
 /**
  * The recipe whose pale stops follow the vibrancy and the seed's own
  * chroma: a stop whose gamut cannot hold the most vivid request gives every
  * request the same share of it, and coordination never raises a seed's
- * chroma. A fresh palette (a bare request that names no recipe) runs it; a
- * config runs it by naming it.
+ * chroma. A request runs it by naming it.
  */
 export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
 /** Every recipe the generator runs. */
@@ -215,8 +210,8 @@ function vibrancyMultiplier(vibrancy) {
 
 /**
  * A family's chroma drawn toward the shared one, so its families sit
- * together. In v2 it is never raised above the seed's own, so a dusty seed
- * stays dusty.
+ * together. As v2 shares a narrow stop's gamut it is never raised above the
+ * seed's own, so a dusty seed stays dusty in its pale and dark stops.
  * @param {number} sourceChroma @param {PaletteRecipe} [recipe]
  */
 function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
@@ -296,8 +291,10 @@ function generateCandidate(
 ) {
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
+  // Every recipe starts from v1's chroma, so a stop v2 does not share is
+  // drawn exactly as v1 draws it.
   const baseChroma = coordinateWithOtherFamilies
-    ? coordinatedChroma(source.chroma, recipe)
+    ? coordinatedChroma(source.chroma)
     : source.chroma;
   let chroma =
     baseChroma *
@@ -311,10 +308,11 @@ function generateCandidate(
   // v2: the narrower a stop's gamut is for the most vivid seed at the
   // default vibrancy (a pale tint, a near-black), the more every request
   // shares that gamut in proportion (the most vivid seed at vibrancy 100
-  // takes all of it), so such a stop follows the seed's chroma and the
-  // vibrancy instead of every request landing on the gamut's edge. A stop
-  // whose gamut holds the default (the middle of a ramp) is drawn as v1
-  // draws it, so the default looks as it did.
+  // takes all of it), so such a stop follows the seed's chroma, never
+  // raised above the seed's own, and the vibrancy, instead of every request
+  // landing on the gamut's edge. A stop whose gamut holds the most vivid
+  // seed at the default vibrancy shares nothing and is drawn exactly as v1
+  // draws it, for every seed at every vibrancy.
   if (recipe === PALETTE_RECIPE_V2 && coordinateWithOtherFamilies) {
     const shape =
       hueBalanceFactor(adjustedHue) *
@@ -329,7 +327,11 @@ function generateCandidate(
     );
     if (share > 0) {
       const most = MOST_VIVID_CHROMA * vibrancyMultiplier(100) * shape;
-      const shared = (chroma / most) * maxChroma;
+      const own =
+        coordinatedChroma(source.chroma, recipe) *
+        vibrancyMultiplier(vibrancy) *
+        shape;
+      const shared = (own / most) * maxChroma;
       chroma = (1 - share) * Math.min(chroma, maxChroma) + share * shared;
     }
   }
@@ -803,17 +805,8 @@ function normalizeDarkChromaTaper(taper, stops, families) {
   };
 }
 
-/**
- * @typedef {object} GenerationOptions
- * @property {PaletteRecipe} [recipeIfNone] The recipe a request that names
- * none runs. A palette made fresh (a bare request) runs the newest,
- * astryx-oklch-v2; one read from a palette config (a file the CLI or the
- * editor regenerates) passes astryx-oklch-v1, so a config written before v2
- * regenerates the same colors.
- */
-
-/** @param {TonalPaletteGenerationInput} input @param {GenerationOptions} [options] @returns {NormalizedRequest} */
-export function normalizeGenerationRequest(input, options = {}) {
+/** @param {TonalPaletteGenerationInput} input @returns {NormalizedRequest} */
+export function normalizeGenerationRequest(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Palette generation config must be an object.');
   }
@@ -821,11 +814,9 @@ export function normalizeGenerationRequest(input, options = {}) {
   if (!Array.isArray(families) || families.length === 0) {
     throw new Error('Palette generation requires at least one family.');
   }
-  // A request that names no recipe: a fresh one runs the newest recipe; one
-  // read from a config runs the recipe its reader says (the first one).
-  const recipe = /** @type {PaletteRecipe} */ (
-    input.recipe ?? options.recipeIfNone ?? PALETTE_RECIPE_V2
-  );
+  // A request that names no recipe runs the first one, so a config written
+  // before v2 regenerates the same colors.
+  const recipe = /** @type {PaletteRecipe} */ (input.recipe ?? PALETTE_RECIPE);
   if (!PALETTE_RECIPES.includes(recipe)) {
     throw new Error(
       `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
@@ -947,9 +938,9 @@ export function normalizeGenerationRequest(input, options = {}) {
   return request;
 }
 
-/** @param {TonalPaletteGenerationInput} input @param {GenerationOptions} [options] @returns {PaletteGenerationResult} */
-export function generatePaletteSet(input, options = {}) {
-  const request = normalizeGenerationRequest(input, options);
+/** @param {TonalPaletteGenerationInput} input @returns {PaletteGenerationResult} */
+export function generatePaletteSet(input) {
+  const request = normalizeGenerationRequest(input);
   /** @type {GeneratedFamily[]} */
   const families = [];
   /** @type {{familyId: string, message: string}[]} */
@@ -987,11 +978,10 @@ export function generatePaletteSet(input, options = {}) {
  * Generate candidate palette data without reading or writing files.
  *
  * @param {import('../../theme.type.mjs').TonalPaletteGenerationInput} input
- * @param {GenerationOptions} [options]
  * @returns {import('../../theme.type.mjs').TonalPaletteCandidate}
  */
-export function generateTonalPalette(input, options = {}) {
-  const result = generatePaletteSet(input, options);
+export function generateTonalPalette(input) {
+  const result = generatePaletteSet(input);
   if (result.errors.length > 0) {
     throw new Error(
       result.errors

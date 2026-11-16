@@ -13,8 +13,6 @@ import {
   generatePaletteSet,
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
-  PALETTE_RECIPE,
-  PALETTE_RECIPES,
   PALETTE_WHITE,
   serializeGenerationResult,
 } from './generator.mjs';
@@ -319,29 +317,6 @@ function writeFilesAtomically(files, overwrite) {
 }
 
 /**
- * The recipe the receipt beside an output records, or null when there is
- * none (no output, no receipt, or one that does not read).
- * @param {string | undefined} out
- * @param {string} cwd
- * @returns {import('./generator.mjs').PaletteRecipe | null}
- */
-function recordedRecipe(out, cwd) {
-  if (!out) return null;
-  try {
-    const receipt = JSON.parse(
-      fs.readFileSync(
-        receiptPathFor(resolveSafe(out, cwd, 'palette output path')),
-        'utf-8',
-      ),
-    );
-    const r = receipt?.request?.recipe ?? receipt?.recipe;
-    return PALETTE_RECIPES.includes(r) ? r : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Generate an author-reviewable palette candidate from a JSON request.
  *
  * @param {string} configPath
@@ -378,11 +353,7 @@ export function themePaletteGenerate(
   /** @type {PaletteGenerationResult} */
   let result;
   try {
-    // A config that names no recipe keeps the recipe its last receipt
-    // records, else it was written before v2 and keeps v1.
-    result = generatePaletteSet(request, {
-      recipeIfNone: recordedRecipe(options.out, cwd) ?? PALETTE_RECIPE,
-    });
+    result = generatePaletteSet(request);
   } catch (error) {
     throw new AstryxError(
       error instanceof Error ? error.message : String(error),

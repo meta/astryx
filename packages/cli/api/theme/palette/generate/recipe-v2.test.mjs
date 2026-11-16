@@ -14,7 +14,6 @@ import {
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
   generatePaletteSet,
-  generateTonalPalette,
 } from './generator.mjs';
 import {hexToOklch} from './color.mjs';
 
@@ -34,32 +33,13 @@ const chromaAt = (result, stop) =>
   hexToOklch(result.families[0].light.colors[stop]).C;
 
 describe('palette recipes', () => {
-  it('a bare request that names no recipe is a fresh palette, and runs v2', () => {
+  it('a request that names no recipe runs v1, and regenerates what v1 made', () => {
     for (const seed of [DUSTY, VIVID])
       for (const vibrancy of [20, 50, 80]) {
         const none = ramp(seed, vibrancy);
-        expect(none.recipe).toBe('astryx-oklch-v2');
-        expect(none.request.recipe).toBe('astryx-oklch-v2');
-        expect(none.families).toEqual(
-          ramp(seed, vibrancy, PALETTE_RECIPE_V2).families,
-        );
-        expect(generateTonalPalette({families: [{id: 'f', seed}]}).recipe).toBe(
-          'astryx-oklch-v2',
-        );
-      }
-  });
-
-  it('a request read from a config that names no recipe runs v1, and regenerates what v1 made', () => {
-    for (const seed of [DUSTY, VIVID])
-      for (const vibrancy of [20, 50, 80]) {
-        const none = generatePaletteSet(
-          {vibrancy, families: [{id: 'f', seed}]},
-          {recipeIfNone: PALETTE_RECIPE},
-        );
+        const v1 = ramp(seed, vibrancy, PALETTE_RECIPE);
         expect(none.recipe).toBe('astryx-oklch-v1');
-        expect(none.families).toEqual(
-          ramp(seed, vibrancy, PALETTE_RECIPE).families,
-        );
+        expect(none.families).toEqual(v1.families);
       }
   });
 
@@ -71,9 +51,9 @@ describe('palette recipes', () => {
     const named = JSON.parse(fs.readFileSync(file, 'utf8'));
     expect(named.recipe).toBe('astryx-oklch-v1');
     const {recipe: _, ...none} = named;
-    expect(
-      generatePaletteSet(none, {recipeIfNone: PALETTE_RECIPE}).families,
-    ).toEqual(generatePaletteSet(named).families);
+    expect(generatePaletteSet(none).families).toEqual(
+      generatePaletteSet(named).families,
+    );
   });
 
   it('v2 runs only when named, with the same result shape', () => {
@@ -102,6 +82,27 @@ describe('palette recipes', () => {
       expect(chromaAt(ramp(DUSTY, 50, PALETTE_RECIPE_V2), stop)).toBeLessThan(
         chromaAt(ramp(VIVID, 50, PALETTE_RECIPE_V2), stop),
       );
+  });
+
+  it('v2 draws the stops it does not share exactly as v1, for a dusty and a vivid seed', () => {
+    // A stop whose gamut holds the most vivid seed at the default vibrancy
+    // is not shared: orange's stops from 50 up, green's from 40 up.
+    for (const [seed, from] of /** @type {const} */ ([
+      ['#c2603d', 50],
+      ['#16a34a', 40],
+    ]))
+      for (const vibrancy of [20, 50, 80]) {
+        const v1 = ramp(seed, vibrancy, PALETTE_RECIPE).families[0].light
+          .colors;
+        const v2 = ramp(seed, vibrancy, PALETTE_RECIPE_V2).families[0].light
+          .colors;
+        for (const stop of [50, 55, 60, 65, 70].filter(x => x >= from))
+          expect(v2[stop], `${seed} @${vibrancy} stop ${stop}`).toBe(v1[stop]);
+      }
+    // The stops it shares still keep a dusty seed dusty.
+    expect(chromaAt(ramp(DUSTY, 50, PALETTE_RECIPE_V2), 95)).toBeLessThan(
+      chromaAt(ramp(DUSTY, 50, PALETTE_RECIPE), 95),
+    );
   });
 
   it('refuses a recipe it does not know, naming the ones it does', () => {

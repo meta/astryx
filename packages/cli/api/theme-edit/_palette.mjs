@@ -37,7 +37,7 @@ import {
   PALETTE_RECIPE,
   PALETTE_RECIPE_V2,
   PALETTE_WHITE,
-  generateTonalPalette as generateFresh,
+  generateTonalPalette,
   modesForStrategy,
   perceptualDelta,
 } from '../theme/palette/generate/generator.mjs';
@@ -735,16 +735,6 @@ function savedSettings(cwd, slug) {
   }
 }
 
-/**
- * Generate from a palette config the editor wrote or reads: one that names
- * no recipe was written before v2 and keeps the first recipe, so a theme's
- * colors never move with a CLI upgrade (a new config names v2 itself). The
- * editor's own probes read as that first recipe too.
- * @param {any} config
- */
-const fromConfig = config =>
-  generateFresh(config, {recipeIfNone: PALETTE_RECIPE});
-
 /** The generator's mode strategy for a list of modes. @param {Mode[]} modes */
 const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
@@ -1435,7 +1425,7 @@ function planPalette(cwd, slug, data, base) {
     for (const id of add) {
       const tried = withDark(id, next);
       try {
-        fromConfig(tried);
+        generateTonalPalette(tried);
         next = tried;
         fills[id].dark = true;
       } catch {
@@ -1830,7 +1820,7 @@ export function paletteEdited(cwd, slug) {
     }
   if (request && (receipt?.request || configMine))
     try {
-      const candidate = fromConfig(request);
+      const candidate = generateTonalPalette(request);
       return !(
         samePalette(candidate.palette, data.palette) &&
         (data.black == null || data.black === candidate.black) &&
@@ -1987,7 +1977,7 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
  */
 function generate(config, file = 'palette.config.json') {
   try {
-    return fromConfig(config);
+    return generateTonalPalette(config);
   } catch (e) {
     throw new AstryxError(
       `${file}: the colors could not be generated: ${(e instanceof Error ? e.message : String(e)).replace(/\.$/, '')}. Fix that part of the file by hand, or remove it. Nothing was changed.`,
@@ -2048,7 +2038,7 @@ const shade = s => String(round(s));
  */
 function grownGrays(seed, m) {
   try {
-    const g = fromConfig({
+    const g = generateTonalPalette({
       modeStrategy: m === 'light' ? 'light-only' : 'dark-only',
       neutralProfile: 'custom',
       families: [{id: 'gray', seed, kind: 'neutral'}],
