@@ -390,4 +390,28 @@
  * @typedef {IconNewSetResponse | IconNewDefinitionResponse} IconNewResponse
  */
 
+/**
+ * One icon set as an icon index stores it: the part of a set the ranking
+ * reads, as plain JSON.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconIndexSet
+ * @property {string} name - The set's name.
+ * @property {string} package - The integration package that ships the set.
+ * @property {import('../../authoring/doctypes/icon-set/type').IconSetData} data - The set's data file.
+ * @property {Array<{doc: Record<string, unknown>}>} definitions - The set's own icon definitions.
+ */
+
+/**
+ * The icon sets `icon` searches in a folder, as `exportIconIndex()` returns
+ * them: plain JSON to store and rank later with `rankIconIndex()`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconIndex
+ * @property {string} version - The CLI version that made it. `rankIconIndex()`
+ *   ranks only indexes made by its own version.
+ * @property {IconIndexSet[]} sets - The valid sets, in tie order. Their fields
+ *   are the ranker's input, not a contract: they may change in any release,
+ *   which is why `version` must match.
+ * @property {Array<{name: string, package: string, reason: string}>} withdrawn - The sets read but withdrawn, and why, so a `set` that names one gives the same error as `icon()`.
+ */
+
 export {};
