@@ -5,11 +5,13 @@
 /**
  * @file page.tsx
  * @input A finger on a phone: a tap on the text field opens the on-screen
- *   keyboard, and a tap on a row closes it
+ *   keyboard, and a tap on a row closes it. `?interactive-widget=` sets the
+ *   viewport's keyboard mode (resizes-visual by default, resizes-content,
+ *   overlays-content)
  * @output A bare page with Lab's TabBar at the bottom and a text field among
  *   long scrolling rows. A readout at the top of the visual viewport shows the
- *   display mode, both viewports, the bar's box, and how much of the bar the
- *   visual viewport shows, as they change
+ *   display mode, the keyboard mode, both viewports, the bar's box, and how
+ *   much of the bar the visual viewport shows, as they change
  * @position A raw page, with no sandbox chrome, for checking on a real phone
  *   where the bar sits while the keyboard is up
  */
@@ -80,8 +82,16 @@ const styles = stylex.create({
   },
 });
 
+/** The keyboard modes a viewport meta tag can name. */
+const KEYBOARD_MODES = [
+  'resizes-visual',
+  'resizes-content',
+  'overlays-content',
+] as const;
+
 interface Reading {
   displayMode: string;
+  keyboardMode: string;
   layoutHeight: number;
   visualHeight: number;
   visualTop: number;
@@ -113,7 +123,12 @@ function read(bar: HTMLElement | null): Reading {
   );
   const barHeight = barBottom - barTop;
   const active = document.activeElement;
+  const viewport = document.querySelector('meta[name="viewport"]');
+  const mode = /interactive-widget=([a-z-]+)/.exec(
+    viewport?.getAttribute('content') ?? '',
+  );
   return {
+    keyboardMode: mode?.[1] ?? 'resizes-visual (default)',
     displayMode: window.matchMedia('(display-mode: standalone)').matches
       ? 'standalone (Home Screen app)'
       : 'browser',
@@ -135,6 +150,29 @@ export default function TabBarKeyboardProbePage() {
   const [reading, setReading] = useState<Reading | null>(null);
   const [tab, setTab] = useState('home');
   const [text, setText] = useState('');
+
+  useEffect(() => {
+    // A page or a WebView shell that shrinks its window when the keyboard
+    // opens moves fixed content above the keys. resizes-content does that in
+    // a browser.
+    const requested = new URLSearchParams(window.location.search).get(
+      'interactive-widget',
+    );
+    const viewport = document.querySelector('meta[name="viewport"]');
+    if (
+      viewport == null ||
+      requested == null ||
+      !(KEYBOARD_MODES as ReadonlyArray<string>).includes(requested)
+    ) {
+      return;
+    }
+    const original = viewport.getAttribute('content') ?? '';
+    viewport.setAttribute(
+      'content',
+      `${original.replace(/,?\s*interactive-widget=[a-z-]+/, '')}, interactive-widget=${requested}`,
+    );
+    return () => viewport.setAttribute('content', original);
+  }, []);
 
   useEffect(() => {
     const update = () => setReading(read(barRef.current));
@@ -178,6 +216,9 @@ export default function TabBarKeyboardProbePage() {
         ) : (
           <>
             <Text size="sm">display: {reading.displayMode}</Text>
+            <Text size="sm">
+              keyboard mode (viewport meta): {reading.keyboardMode}
+            </Text>
             <Text size="sm">
               layout viewport h {reading.layoutHeight} · visual viewport h{' '}
               {reading.visualHeight} top {reading.visualTop}
