@@ -107,20 +107,40 @@ export const FIT_CELLS = `(() => {
     for (const item of document.querySelectorAll('.cs-item')) {
       let need = 0;
       for (const el of item.querySelectorAll('*')) {
-        if (el.scrollWidth <= el.clientWidth + 1) continue;
+        // A text cut by less than a pixel still ends in an ellipsis.
+        if (el.scrollWidth <= el.clientWidth) continue;
         if (getComputedStyle(el).textOverflow !== 'ellipsis') continue;
-        need = Math.max(need, el.scrollWidth - el.clientWidth);
+        need = Math.max(need, el.scrollWidth - el.clientWidth + 1);
       }
       if (!need) continue;
       const width = item.getBoundingClientRect().width;
       const most = item.closest('.cs-sheet')?.clientWidth ?? width;
-      const next = Math.min(Math.ceil(width + need), most);
+      const next = Math.min(Math.ceil(width + need), Math.max(most, width));
       if (next > width + 0.5) {
         item.style.minWidth = next + 'px';
         grew = true;
       }
     }
     if (!grew) break;
+  }
+})()`;
+
+/**
+ * The script run on a sheet before its picture: an overlay drawn open
+ * after its part (a toolbar's menu) moves along the row to sit under the
+ * control that opens it, as a browser places it, as far as its item has
+ * room. A flyout drawn beside its menu stays there.
+ */
+export const PLACE_LAYERS = `(() => {
+  for (const layer of document.querySelectorAll('.cs-item [data-astryx-layer-root]')) {
+    if (layer.parentElement?.closest('[data-astryx-layer-root], [data-astryx-layer-nest]')) continue;
+    const item = layer.closest('.cs-item');
+    const ids = [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean);
+    const opener = [...item.querySelectorAll('[aria-controls]')].find(c => !layer.contains(c) && !c.closest('[data-astryx-layer-root]') && ids.includes(c.getAttribute('aria-controls')));
+    if (!opener) continue;
+    const at = layer.getBoundingClientRect();
+    const shift = Math.min(opener.getBoundingClientRect().left - at.left, item.getBoundingClientRect().right - at.right);
+    if (shift > 0.5) layer.style.setProperty('margin-inline-start', shift + 'px', 'important');
   }
 })()`;
 
