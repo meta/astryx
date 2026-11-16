@@ -2,23 +2,50 @@
 
 /**
  * @file The run's base, readable by modules that load before the base
- * resolver. It imports nothing, so the release modules the bin reads first
- * can ask for the base and pay nothing for it.
- * @input the resolver, which registers itself when it loads
- * @output currentRunBase()
+ * resolver: the package `--base` names, and the resolver's answer once it
+ * loads. It imports nothing, so the bin can record `--base`, and the modules
+ * it reads first can ask for the base, and pay nothing for it.
+ * @input `--base`, and the resolver, which registers itself when it loads
+ * @output requestedBase(), loadedRunBase() and currentNonCoreBase()
  * @position foundation/bases — no resolver loaded means no project loaded,
  *   and Core answers
  */
 
-/** @type {(() => {ok: boolean, base: {name: string, core: boolean, version: string | null} | null}) | null} */
+/** @type {string | null} */
+let requested = null;
+
+/**
+ * Set the package `--base` names for this run; null when it names none.
+ * @param {string | null | undefined} name
+ */
+export function setRequestedBase(name) {
+  requested = typeof name === 'string' && name.length > 0 ? name : null;
+}
+
+/** @returns {string | null} */
+export function requestedBase() {
+  return requested;
+}
+
+/** @typedef {import('./resolve.mjs').BaseResolution} BaseResolution */
+
+/** @type {(() => BaseResolution) | null} */
 let resolver = null;
 
 /**
  * Register the function that resolves the run's base.
- * @param {() => {ok: boolean, base: {name: string, core: boolean, version: string | null} | null}} resolve
+ * @param {() => BaseResolution} resolve
  */
 export function registerRunBaseResolver(resolve) {
   resolver = resolve;
+}
+
+/**
+ * The resolver's answer for the run, or null when no resolver has loaded.
+ * @returns {BaseResolution | null}
+ */
+export function loadedRunBase() {
+  return resolver == null ? null : resolver();
 }
 
 /** True while the resolver runs, so a lookup it makes reads no base. */
