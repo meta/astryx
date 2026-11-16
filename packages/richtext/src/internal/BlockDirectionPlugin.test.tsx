@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file blockDirection.test.tsx
+ * @file BlockDirectionPlugin.test.tsx
  * @input Renders RichTextEditor and RichTextView over a mixed-direction
  *   document.
  * @output Proves each top-level block carries the direction of its own text,

@@ -18,6 +18,20 @@ affects_consumer_docs: [Markdown, RichTextEditor, RichTextView]
 
 # Markdown document surface parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/core/src/i18n/firstStrongDirection.ts",
+    "packages/core/src/Markdown/blockDirection.ts",
+    "packages/richtext/src/internal/BlockDirectionPlugin.tsx",
+    "packages/richtext/src/internal/BlockDirectionPlugin.test.tsx",
+    "packages/richtext/src/editorTheme.ts"
+  ]
+}
+```
+
 <!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
@@ -170,6 +184,21 @@ clause, for its own output, except where FR7 names
 a link title and FR7 names character references. `RichTextEditor` and
 `RichTextView` are governed by FR2–FR11 for the
 constructs they render; their default editor theme follows FR2 and FR3.
+Each surface reads a block's direction with the same classifier,
+`firstStrongDirection` in `@astryxdesign/core/i18n`, so one answer covers
+both and the sets that approximate Bidi_Class live in one place.
+
+The surfaces apply that answer differently, because their documents are
+different things. `Markdown` renders from an abstract syntax tree it owns
+and resolves each block as it renders, which is what `Markdown/blockDirection.ts`
+does. The RichText surfaces render from Lexical's editor state, which the
+caller stores and reopens, and which a keystroke changes in place: the
+direction has to be written onto the node inside the update that changed the
+text, so it belongs to that keystroke's own undo step, and it has to be
+stored so a reopened document reads as it was written. A render-time
+resolver cannot do either, so `BlockDirectionPlugin.tsx` registers the
+transforms that write it, and `RichTextEditor` and `RichTextView` mount it.
+
 Implementation gap: `Markdown` and RichText lay every block out in the
 provider's direction (FR6, and FR5's opposite-edge clause); RichText's `direction: inherit` override in
 `editorTheme.ts` is part of that gap.
