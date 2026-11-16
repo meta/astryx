@@ -614,8 +614,24 @@ async function answer(subject, options, cwd) {
           .replace(/\b(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode\b/gi, ' '),
       ),
     );
-    if (dial && !/\b(on|for|of)\s+(the\s+)?[a-z]+s?\b/i.test(t))
-      return {...(await answer(dial, options, cwd)), subject: t};
+    // (Asked as a question, its example lines are said, never offered to
+    // run: "what does spacing less do" asks what a change would do.)
+    if (dial && !/\b(on|for|of)\s+(the\s+)?[a-z]+s?\b/i.test(t)) {
+      const looked = await answer(dial, options, cwd);
+      const results = /** @type {any} */ (looked).results;
+      if (Array.isArray(results))
+        for (const r of results) {
+          const runs = r.commands.filter((/** @type {string} */ c) =>
+            / editor (?:set|undo) /.test(c),
+          );
+          if (!runs.length) continue;
+          r.text += ` (for example: ${runs.map((/** @type {string} */ c) => c.replace(/^.* editor (?:set|undo) \S+ /, '')).join('; ')})`;
+          r.commands = r.commands.filter(
+            (/** @type {string} */ c) => !runs.includes(c),
+          );
+        }
+      return {...looked, subject: t};
+    }
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
