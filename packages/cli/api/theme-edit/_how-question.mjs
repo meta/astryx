@@ -2503,6 +2503,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
+ * @property {string} [compound] - a compound subject a part word begins, which names no part ("radio station")
  * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
  * @property {{holder: string, part: string}} [placeStrict] - an element named in a place it cannot be kept to: answered only when the answer holds there (a token on the place)
  * @property {{owner: string, child: string}} [possMiss] - a possessive owner's element it does not have ("the date picker's days")
@@ -2999,9 +3000,16 @@ function namedLists(q, partWords, isVariant) {
  * Read a question into clauses.
  * @param {string} q lower-case, translated, corrected
  * @param {Array<[RegExp, PartRef]>} partWords
+ * @param {{known: (w: string) => boolean, ask: (w: string) => boolean} | null} [words]
+ *   `known`: whether the editor knows a word as anything (a property,
+ *   state, part, value or joining word); `ask`: whether a word asks for a
+ *   change or joins one (an aspect, a color, an amount, a direction, a
+ *   joining word). A part word right before a word it does not know, with
+ *   no asking word after it in the clause, is one half of a compound
+ *   subject
  * @returns {Clause[]}
  */
-function clausesOf(q, partWords) {
+function clausesOf(q, partWords, words = null) {
   // "except primary and ghost buttons", "except hover or disabled": one
   // except list, never an except and a new clause (unless an ask follows:
   // "… except cards and make buttons bigger").
@@ -3079,6 +3087,8 @@ function clausesOf(q, partWords) {
   return pieces.map(({text, joint}) => {
     /** @type {Clause['parts']} */
     const parts = [];
+    /** A compound subject a part word begins ("radio station"). @type {string | undefined} */
+    let compound;
     // A property name is not a part: "backdrop-filter" names no backdrop.
     let rest = ` ${text} `
       // "3 steps rounder": a count, never the stepper part.
@@ -3120,28 +3130,39 @@ function clausesOf(q, partWords) {
         break;
       }
       if (!m) continue;
-      // ("a medical records table view", "the card page", "a radio station
-      // site", "a table booking app": a screen or product named by what it
-      // shows or is about, never that part. The words between the part word
-      // and the product noun, at most two, name no part and join nothing.)
-      const named =
-        /^((?:\s+[a-z]+){0,2}?)\s+(?:views?|pages?|screens?|apps?|sites?|websites?|portals?|dashboards?|layouts?|platforms?|stores?|shops?)\b/.exec(
-          rest.slice((m.index ?? 0) + m[0].length),
-        );
+      // ("a medical records table view", "the card page": a screen named
+      // by what it shows, never that part.)
       if (
-        named &&
-        String(named[1])
-          .trim()
-          .split(/\s+/)
-          .filter(Boolean)
-          .every(
-            w =>
-              !/^(?:and|or|with|in|on|of|for|to|the|a|an|my|our|its|is|are|be|more|less|very)$/.test(
-                w,
-              ) && !partWords.some(([r]) => r.test(` ${w} `)),
-          )
+        /^\s+(?:views?|pages?|screens?|apps?|dashboards?|layouts?)\b/.test(
+          rest.slice((m.index ?? 0) + m[0].length),
+        )
       ) {
         rest = rest.replace(re, ' ');
+        continue;
+      }
+      // ("a radio station", "a button factory", "a card game": a part word
+      // right before a noun the editor knows as nothing, no property,
+      // state, part, value or joining word, is one half of a compound
+      // subject, never that part. The clause keeps the compound, which the
+      // unknown-subject guard names. A word the clause asks for something
+      // after, before its next stop, is the ask's verb or a word between the part and what
+      // changes, "links turn red", "the card zorp border", "secondary text
+      // fails contrast on white", never a compound.)
+      const tail = rest.slice((m.index ?? 0) + m[0].length);
+      const after = /^ ([a-z]+)\b(?!['’(-])/.exec(tail);
+      if (
+        after &&
+        after[1].length >= 3 &&
+        words &&
+        !words.known(after[1]) &&
+        !tail
+          .slice(after[0].length)
+          .split(/[:;,.!?]/)[0]
+          .split(/\s+/)
+          .some(w => w && words.ask(w))
+      ) {
+        compound ??= `${m[0].trim()} ${after[1]}`;
+        rest = `${rest.slice(0, m.index)} ${rest.slice((m.index ?? 0) + m[0].length + after[0].length)}`;
         continue;
       }
       const p = {...part};
@@ -3633,6 +3654,7 @@ function clausesOf(q, partWords) {
       text,
       joint,
       parts,
+      ...(compound ? {compound} : {}),
       ...(colorRef ? {colorRef} : {}),
       ...(refSpan ? {colorRefSpan: refSpan} : {}),
       ...(colorRefWhen ? {colorRefWhen} : {}),
@@ -6435,7 +6457,7 @@ export function draftAnswer(ctx, env, question) {
           .join(' and '),
     );
   }
-  const clauses0 = clausesOf(q, lex.parts);
+  const clauses0 = clausesOf(q, lex.parts, {known: knownWord, ask: askWord});
   // "cream background, terracotta accent, serif headings": a list whose
   // items each ask their own thing is each of them, never the first one's
   // part taking the rest.
@@ -6479,7 +6501,9 @@ export function draftAnswer(ctx, env, question) {
         )
     )
       return [c];
-    const each = pieces.map(x => clausesOf(x, lex.parts));
+    const each = pieces.map(x =>
+      clausesOf(x, lex.parts, {known: knownWord, ask: askWord}),
+    );
     const asks = each.map(
       cs =>
         cs.length === 1 &&
@@ -6745,14 +6769,20 @@ export function draftAnswer(ctx, env, question) {
         `${c.text.slice(0, m.index)} ${c.text.slice(m.index + m[0].length)}`
           .replace(/\s+/g, ' ')
           .trim();
-      const restClauses = clausesOf(rest, lex.parts);
+      const restClauses = clausesOf(rest, lex.parts, {
+        known: knownWord,
+        ask: askWord,
+      });
       if (
         !restClauses.some(
           x => x.aspects.length || x.colors.length || x.parts.length,
         )
       )
         continue;
-      const piece = clausesOf(m[0], lex.parts);
+      const piece = clausesOf(m[0], lex.parts, {
+        known: knownWord,
+        ask: askWord,
+      });
       clauses.splice(i, 1, ...piece, ...restClauses);
       break;
     }
@@ -7236,7 +7266,10 @@ export function draftAnswer(ctx, env, question) {
           )
           .replace(/\s+/g, ' ')
           .trim();
-        const again = clausesOf(text, lex.parts);
+        const again = clausesOf(text, lex.parts, {
+          known: knownWord,
+          ask: askWord,
+        });
         if (again.length === 1) {
           if (!again[0].parts.length) again[0].parts = c.parts;
           clauses[i] = again[0];
@@ -7732,7 +7765,7 @@ export function draftAnswer(ctx, env, question) {
     if (!hasAsk) continue;
     // (A clause whose subject is a word how knows as no part, "and the
     // gizmo red", takes no part from the one before: it is said.)
-    if (!c.parts.length && unknownSlot(c.text, true)) {
+    if (!c.parts.length && (c.compound || unknownSlot(c.text, true))) {
       c.unknownSubject = true;
       continue;
     }
@@ -11652,9 +11685,13 @@ export function draftAnswer(ctx, env, question) {
     // knows as no part ("from widgets") is never answered for the whole
     // theme or dropped; it says so.
     {
+      // (A compound subject a part word begins, "the radio station": that
+      // subject, named, never the part.)
       const slot =
         (!c.parts.length || c.unknownSubject) && !c.except && c.text
-          ? unknownSlot(c.text, Boolean(c.unknownSubject))
+          ? c.compound && !c.parts.length
+            ? {word: c.compound}
+            : unknownSlot(c.text, Boolean(c.unknownSubject))
           : null;
       if (slot) {
         push({
@@ -22992,6 +23029,85 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
+   * Whether the editor knows a word as anything: a design word, part,
+   * aspect, dial, color, role, state, value, mode or joining word. A word it
+   * does not know, right after a part word, makes a compound subject
+   * ("radio station"); in a part slot, a part it cannot name.
+   * @param {string} w
+   */
+  function knownWord(w) {
+    const word = singular(w);
+    return Boolean(
+      lex.vocab.includes(w) ||
+      lex.vocab.includes(word) ||
+      corrected(w, lex.vocab) !== w ||
+      lex.parts.some(([re]) => re.test(` ${w} `)) ||
+      aspectsOf(w).length ||
+      aspectsOf(word).length ||
+      stateWord(w) != null ||
+      KEEP.has(w) ||
+      Object.hasOwn(DIALS, w) ||
+      Object.hasOwn(HUES, w) ||
+      // (A role color, "the brand color", and what the browser draws,
+      // which how answers by name, "the scrollbar".)
+      ROLE_WORDS.test(w) ||
+      /^(?:scrollbars?|scroll|carets?|cursors?|selections?)$/.test(w) ||
+      parseColor(w) ||
+      /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
+        w,
+      ) ||
+      // (A property's own name, "cards transform", and a word that is no
+      // noun by its ending: a way or amount, "buttons fully", "ring
+      // easier", "cards used", "corners rounded".)
+      cssProperties().has(w) ||
+      cssProperties().has(word) ||
+      // (What a part has, "the h3 size", "the header bar", and a word
+      // some part's own name or look holds, "the checkbox check mark",
+      // "the card surface".)
+      /^(?:padding|spacing|shadows?|borders?|corners?|radius|background|fill|text|font|colou?r|outline|gap|size|height|width|titles?|headings?|headers?|footers?|bar|area|section|region|panel|box|element|component|container|part|piece|block|wrapper|surface|min|max|half|twice|double|triple|quarter|third|up|down|out|off|back|away)$/.test(
+        w,
+      ) ||
+      [...TARGET.keys()].some(k => k.split('-').includes(word)) ||
+      Object.values(C.MAP).some(m =>
+        Object.values(m.attrs ?? {}).some(
+          vals => Array.isArray(vals) && vals.includes(w),
+        ),
+      ) ||
+      /(?:ly|er|est|ed|ing)$/.test(w) ||
+      // (A pronoun or a chat word: "button it", "cards thx", "plz".)
+      /^(?:it|its|me|my|you|your|ur|we|us|our|they|them|their|this|that|these|those|thx|thanks|thank|plz|pls|please|lol|okay|ok|yeah|yes|hey|hi)$/.test(
+        w,
+      ) ||
+      // (A joining or helping word: "buttons with", "cards should".)
+      /^(?:and|or|nor|but|so|yet|with|without|in|on|of|for|to|at|by|from|into|onto|over|under|below|above|between|inside|outside|within|around|near|after|before|across|like|than|then|as|if|when|while|the|a|an|is|are|was|were|be|been|being|should|must|can|could|would|will|shall|may|might|do|did|look|looks|feel|feels|have|had|get|gets|need|needs|use|uses|stand|stands|appear|appears|seem|seems|that|which|who|only|also|too|all|not|no|just|please|pls|now|still|again|instead|both|either|neither|here|there)$/.test(
+        w,
+      ),
+    );
+  }
+
+  /**
+   * Whether a word asks for a change (an aspect, a color, an amount, a
+   * direction, a state): one after a part word's unknown neighbor makes the
+   * neighbor the ask's verb or a word between, never a compound ("links
+   * turn red", "the card zorp border").
+   * @param {string} w
+   */
+  function askWord(w) {
+    return Boolean(
+      aspectsOf(w).length ||
+      parseColor(w) ||
+      /^[#\d]/.test(w) ||
+      Object.hasOwn(HUES, w) ||
+      Object.hasOwn(DIALS, w) ||
+      stateWord(w) != null ||
+      /(?:er|est)$/.test(w) ||
+      /^(?:up|down|more|less|half|twice|double|triple|contrast|visible|invisible|hidden|none|no)$/.test(
+        w,
+      ),
+    );
+  }
+
+  /**
    * A part word how cannot name: the clause starts with a word a component
    * doc lists as a keyword, or a near catalog name, and asks for a shape
    * change. Gives the word and the parts of the components that list it.
@@ -23129,20 +23245,8 @@ export function draftAnswer(ctx, env, question) {
       const without = aspectsOf(text.replace(new RegExp(`\\b${w}\\b`), ' '));
       const withIt = aspectsOf(text);
       if (
-        lex.vocab.includes(w) ||
-        lex.vocab.includes(word) ||
-        corrected(w, lex.vocab) !== w ||
-        lex.parts.some(([re]) => re.test(` ${w} `)) ||
-        aspectsOf(w).length ||
-        aspectsOf(word).length ||
+        knownWord(w) ||
         withIt.some(x => !without.includes(x)) ||
-        KEEP.has(w) ||
-        Object.hasOwn(DIALS, w) ||
-        Object.hasOwn(HUES, w) ||
-        // (A role color, "the brand color", and what the browser draws,
-        // which how answers by name, "the scrollbar".)
-        ROLE_WORDS.test(w) ||
-        /^(?:scrollbars?|scroll|carets?|cursors?|selections?)$/.test(w) ||
         (between &&
           (/^(?:own|outer|inner|whole|main|full|bottom|top|left|right|side|each|every|default|plain|base)$/.test(
             w,
@@ -23151,11 +23255,7 @@ export function draftAnswer(ctx, env, question) {
               Object.values(m.attrs ?? {}).some(
                 vals => Array.isArray(vals) && vals.includes(w),
               ),
-            ))) ||
-        parseColor(w) ||
-        /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
-          w,
-        )
+            )))
       )
         continue;
       return {word, parts: /** @type {string[]} */ ([])};

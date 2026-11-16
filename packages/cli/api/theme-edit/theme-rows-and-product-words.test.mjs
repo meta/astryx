@@ -3,8 +3,9 @@
 /**
  * Rows said of a part that holds no table rows are that part's own rows
  * ("menus with 32px rows" sizes the menu items, never the table rows), and
- * a part word that names what a product is about ("a radio station site")
- * names no part. Against real bundled base themes.
+ * a part word right before a noun the editor knows as nothing begins a
+ * compound subject ("a radio station", "a card game"), which is named and
+ * never written as the part. Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -75,7 +76,7 @@ describe("a part's rows and a product's words", () => {
     ]);
   }, 240_000);
 
-  it('names no part with the words a product is about', async ctx => {
+  it('reads a part word before an unknown noun as a compound subject', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('s', {cwd, like: 'neutral'});
     const site = await answer(
@@ -89,4 +90,29 @@ describe("a part's rows and a product's words", () => {
       'radio-indicator',
     ]);
   }, 240_000);
+
+  it.each([
+    // [ask, the parts read, a compound named, if any]
+    ['make the radio buttons bold', ['radio-indicator'], null],
+    ['make the button text bigger', ['button'], null],
+    ['make the card border red', ['card'], null],
+    ['radio station app: rounder corners', [], 'radio station'],
+    ['button factory app: rounder corners', [], 'button factory'],
+    ['card game app: rounded corners', [], 'card game'],
+  ])('%s', async (ask, parts, compound) => {
+    // (The bundled theme the cases above made; skipped with them.)
+    if (unbuilt) return;
+    const {data} = await themeEditHow(ask, {cwd, theme: 's'});
+    expect(data.understood?.parts ?? []).toEqual(parts);
+    const text = (data.results ?? [])
+      .map((/** @type {any} */ r) => r.text)
+      .join('\n');
+    const writes = (data.results ?? [])
+      .flatMap((/** @type {any} */ r) => r.commands)
+      .filter((/** @type {string} */ c) => / editor set /.test(c));
+    if (compound) {
+      expect(text).toContain(`no part is called "${compound}"`);
+      expect(writes).toEqual([]);
+    } else expect(writes.length).toBeGreaterThan(0);
+  });
 });
