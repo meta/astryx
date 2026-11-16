@@ -422,6 +422,7 @@ export function SideNavHeading({
     contentProps,
     menuRef,
     setTriggerEl,
+    onTriggerKeyDown,
     close: closeMenu,
   } = useMenuHover<HTMLDivElement>({
     show: popover.show,
@@ -789,6 +790,7 @@ export function SideNavHeading({
                 e.stopPropagation();
                 triggerProps.onClick();
               }}
+              onKeyDown={onTriggerKeyDown}
               {...popover.triggerProps}
               {...focusOutlineProps.focusVisible(
                 styles.chevron,
@@ -872,6 +874,7 @@ export function SideNavHeading({
                   e.stopPropagation();
                   triggerProps.onClick();
                 }}
+                onKeyDown={onTriggerKeyDown}
                 {...popover.triggerProps}
                 {...focusOutlineProps.focusVisible(
                   styles.chevron,
