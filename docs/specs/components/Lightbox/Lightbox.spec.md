@@ -68,17 +68,21 @@ a filmstrip or a zoom control that a page adds through its own import.
   exit (FR5–FR10, FR16) and the fine-pointer gestures (FR11), which are named
   cross-device consistency under FR59 and need fine-pointer evidence before and
   after. `[experimental]`: the thumbnail transition and `experimental.sourceFor`
-  (FR12, FR21)
+  (FR12; `spec:AST-017` FR21)
 - Controlled/uncontrolled behavior: unchanged; a swipe reports through
   `onIndexChange`, and a controlled `index` the caller refuses springs back
 - Migration decision: none required. `hasZoom={false}` turns off FR6, FR9, and
   FR10 (FR13)
 - Item model and chrome (FR20–FR32): additive `[feat]`. `media` takes
   `LightboxItem`, a photo, a video or a custom item; every existing value keeps
-  its meaning. Two observable changes reach existing callers. A consumer
+  its meaning. Three key changes reach existing callers (AR3). A consumer
   `onKeyDown` that prevents the default of a gallery or zoom key skips that
   shortcut. An arrow key with a modifier, during IME composition, or on a
-  field, a select, a video, or an audio element does not page (AR3)
+  field, a select, a video, or an audio element does not page. With Ctrl, Alt,
+  or Meta held, `+`, `-`, and a zoomed photo's arrow pan do nothing, so Ctrl+=
+  zooms the page, not the photo
+- Backdrop press (`family:overlay-dismissal` FR10): `[fix]`. A press that
+  crosses the media's edge either way no longer closes the viewer
 - Failed image (FR26): `[fix]`. An image that fails shows a line that it could
   not load instead of the browser's broken image
 
@@ -121,7 +125,8 @@ the requirement it misses and the person it affects.
   key pages from a field, a video or an audio element and with a modifier
   held.
 - **Backdrop press (`family:overlay-dismissal` FR10).** A press that starts on
-  the photo and ends beside it closes the viewer.
+  the photo and ends beside it, or starts beside it and ends on the photo,
+  closes the viewer.
 
 ## Ownership boundary
 
@@ -207,7 +212,7 @@ props and usage are documented in `Lightbox.doc.mjs`.
 | FR26 | An image item whose source fails to load shows, in the media's place, a localized line from the i18n catalog saying it could not load, while its Title and actions stay. It does not zoom. Showing the item again, by paging back or reopening the viewer, loads its source again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | DEC-11                                       | proposed                    |
 | FR27 | An image item with `initialZoom: 'width'` opens zoomed to the viewer's width at its top, as if zoomed there by hand, up to the maximum zoom: it pans vertically (ORD1), a double tap, a double-click or `0` returns it to the fitted size (FR6, AR3), and it closes by a drag only from that size (ORD2). Without `hasZoom` it opens fitted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | DEC-12                                       | proposed                    |
 | FR28 | With `loader={createLightboxLoader({resolve, subscribe, onLoad, onError})}`, from its own import, Lightbox loads each image from the URL `resolve(item)` returns, which may resolve later. It resolves again whenever `subscribe` reports a change, `onLoad(item, image)` reports the loaded image element, and `onError(item)` reports a failure. After a failure Lightbox resolves once more: a different URL loads, and the same URL shows FR26's line.                                                                                                                                                                                                                                                                                                                                                             | DEC-10                                       | proposed                    |
-| FR29 | With `dragOut={createLightboxDragOut(fileFor)}`, from its own import, a mouse or pen drag that starts on the Title part carries the active item's file, as `fileFor(item)` names it (a URL, a name and a type), to the desktop as far as the browser's drag supports. A drag on the photo never starts it (DEC-2) and a finger never does. An item with a file also offers a download action (AR2).                                                                                                                                                                                                                                                                                                                                                                                                                    | DEC-10                                       | proposed                    |
+| FR29 | With `dragOut={createLightboxDragOut(fileFor)}`, from its own import, a mouse or pen drag that starts on the Title part carries the active item's file to the desktop, as far as the browser's drag supports. `fileFor(item)` names the file: a URL, a name and a type. A drag on the photo never starts it (DEC-2) and a finger never does. An item with a file keeps a download action as the drag's alternative (AR2). It is the item's own action with `download`, or else one Lightbox adds first, which counts toward FR23's three.                                                                                                                                                                                                                                                                              | DEC-10                                       | proposed                    |
 | FR30 | When a custom item's content throws while it renders, the item shows FR26's line in its place; the Title, the actions, Close and paging stay. Showing the item again renders its content anew. The boundary is Lightbox's own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | DEC-11                                       | proposed                    |
 | FR31 | With `finalFocusRef`, as BottomSheet takes it, the viewer returns focus on close to that ref's element, read at the close, when it is connected and can receive focus; otherwise focus returns as AR3 says. It suits an opener that can remount.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `family:overlay-dismissal` AV1               | proposed                    |
 | FR32 | An image's maximum zoom is never less than the zoom that shows one image pixel per device pixel, so a person can inspect a picture's own pixels on any screen. The measured motion table sets how far past that it goes (AV4).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests                     | proposed                    |
@@ -297,7 +302,8 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   close has the Close button; drag paging has the Previous and Next buttons; a
   zoomed photo's pan has the double tap or double-click, which returns to the
   fitted size, and a double tap or double-click on a point, which zooms in about
-  that point (FR6, FR11).
+  that point (FR6, FR11). A drag of an item's file to the desktop has the item's
+  download action (FR29).
 - **AR3 — Keyboard operation (WCAG 2.2 2.1.1, 2.1.2, 2.4.3).** Escape closes
   the viewer. ArrowLeft and ArrowRight page in the logical direction, so in a
   right-to-left page ArrowLeft moves to the next item. With `hasZoom`, `+` zooms
@@ -421,8 +427,8 @@ that the component's consumer docs name.
 
 - `spec:AST-094` owns touch physics, release decisions, measured values, and
   motion roles; this record names which gestures Lightbox presents and when.
-- `spec:AST-017` owns experimental isolation (FR21) and fine-pointer
-  preservation (FR59); FR11 and FR12 apply them.
+- `spec:AST-017` owns experimental isolation (its FR21) and fine-pointer
+  preservation (its FR59); FR11 and FR12 apply them.
 - `spec:AST-020` owns the WCAG 2.2 A and AA baseline AR1–AR5, AR7, and AR8 cite.
 - `spec:AST-086` owns how position and zoom announcements are delivered inside
   an open modal (FR14).
@@ -430,7 +436,8 @@ that the component's consumer docs name.
 - `architecture:component-theming-surface` owns anatomy qualification, target
   mapping, delegation, and factual `none` dispositions.
 - `architecture:layer-runtime` owns the current native-dialog host and shared
-  layer plumbing; Lightbox retains its media and local backdrop behavior.
+  layer plumbing; Lightbox retains its media behavior, and its backdrop press
+  follows `family:overlay-dismissal` FR10.
 - `architecture:react-component-runtime` owns the shared internal touch modules
   FR14 uses (INV13).
 - `architecture:public-component-api` owns the caller's way back from touch
