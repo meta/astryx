@@ -5647,6 +5647,11 @@
       "aliases": []
     },
     {
+      "name": "template-review-workspace",
+      "path": "templates/review-workspace",
+      "aliases": []
+    },
+    {
       "name": "template-run-console",
       "path": "templates/run-console",
       "aliases": []
@@ -5729,6 +5734,11 @@
     {
       "name": "template-theme-showcase",
       "path": "templates/theme-showcase",
+      "aliases": []
+    },
+    {
+      "name": "template-welcome-portal",
+      "path": "templates/welcome-portal",
       "aliases": []
     },
     {
