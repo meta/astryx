@@ -153,6 +153,14 @@ function scaffold() {
     'export function ZorbletCard() { return null; }\n',
   );
   fs.writeFileSync(
+    path.join(pkgDir, 'components', 'ZorbletKnob.doc.mjs'),
+    "export default {type: 'component', name: 'ZorbletKnob', description: 'A knob.', props: []};\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'components', 'ZorbletKnob.tsx'),
+    'export function ZorbletKnob() { return null; }\n',
+  );
+  fs.writeFileSync(
     path.join(pkgDir, 'components', 'ThemeSwatch.doc.mjs'),
     "export default {type: 'component', name: 'ThemeSwatch', description: 'A swatch.', props: []};\n",
   );
@@ -166,6 +174,14 @@ function scaffold() {
   );
   fs.writeFileSync(
     path.join(pkgDir, 'templates', 'glimmer-panel.tsx'),
+    'export default function Fixture() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'glimmer-swirl.doc.mjs'),
+    "export default {type: 'block', name: 'Glimmer swirl', description: 'A swirl.'};\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'glimmer-swirl.tsx'),
     'export default function Fixture() { return null; }\n',
   );
 }
@@ -194,8 +210,8 @@ describe('docs() for a name another command reads', () => {
     'stays not found and gives the command alone when no doc shares a word',
     async () => {
       for (const [typed, command] of [
-        ['zorblet-card', 'astryx component ZorbletCard'],
-        ['glimmer panel', 'astryx template glimmer-panel'],
+        ['zorblet-knob', 'astryx component ZorbletKnob'],
+        ['glimmer swirl', 'astryx template glimmer-swirl'],
       ]) {
         const plain = await docs(typed, undefined, {cwd: bareDir}).catch(
           e => e,
@@ -366,7 +382,10 @@ describe('the cheap name checks', () => {
       'widgets',
       'templates',
     );
-    expect(integrationTemplateIds({templates})).toEqual(['glimmer-panel']);
+    expect(integrationTemplateIds({templates})).toEqual([
+      'glimmer-panel',
+      'glimmer-swirl',
+    ]);
     const ids = (await hintNameIndex(process.cwd(), null, [{templates}]))
       .templates;
     expect(templateFilesNaming(ids, 'glimmerpanel').listed).toBe(true);

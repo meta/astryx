@@ -686,6 +686,7 @@ export async function discoverIntegrationDocs(
         title: parsed.title,
         // Rendered once, where the tree is built (api/docs/_adapter.mjs).
         summary: parsed.description,
+        ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
         group: null,
         placement: parsed.placement,
         ref: {topicFile: file},
