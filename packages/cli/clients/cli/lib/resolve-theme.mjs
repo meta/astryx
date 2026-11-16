@@ -107,8 +107,10 @@ function resolvedThemeData(mod, specifier) {
  * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
  */
 export async function resolveTheme(cwd = process.cwd()) {
-  // The theme API loads on first use: a command's JSON output never needs it.
-  const {resolveRecordedTheme} = await import('../../../api/theme/theme.mjs');
+  // The recorded theme's reader loads on first use: a command's JSON output
+  // never needs it.
+  const {resolveRecordedTheme} =
+    await import('../../../api/theme/_adapter.mjs');
   const loaded = await resolveRecordedTheme(cwd);
   if (loaded.configured) {
     if (!loaded.module) {
