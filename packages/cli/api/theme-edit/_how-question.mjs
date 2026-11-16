@@ -701,6 +701,72 @@ function colorsFound(c) {
 }
 
 /**
+ * The words that name a part by its own last word: a calendar day is
+ * also its date, a list item its option.
+ * @param {string} k
+ */
+function ownWords(k) {
+  const last = String(k.split('-').at(-1));
+  return (
+    /** @type {Record<string, string>} */ ({
+      day: 'day|date',
+      item: 'item|option|entry',
+      row: 'row|line',
+    })[last] ?? last
+  );
+}
+
+/**
+ * A typed value no page could show, for the properties whose range is
+ * plain: a line height that draws lines over each other (under 0.8) or
+ * far apart (over 4), a padding, margin or gap wider than any screen
+ * (over 512px), a font size under 6px or over 256px, a border over 64px.
+ * The reason, or null for a value in range (and for any other property).
+ * @param {{thing: string, value?: unknown}} st
+ * @returns {string | null}
+ */
+function outOfBounds(st) {
+  const v = String(st.value ?? '').trim();
+  const m = /^(-?\d*\.?\d+)(px|rem|em|%)?$/.exec(v);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unit = m[2] ?? '';
+  const px =
+    unit === 'rem' || unit === 'em' ? n * 16 : unit === 'px' ? n : null;
+  const thing = st.thing;
+  if (/^line-height$|^--text-[a-z0-9-]+-leading$/.test(thing)) {
+    const ratio = unit === '' ? n : unit === '%' ? n / 100 : null;
+    if (ratio != null && (ratio < 0.5 || ratio > 4))
+      return `a line height of ${v} ${ratio < 0.5 ? 'draws each line over the one before it' : 'leaves lines far apart'}; a line height reads between 0.5 and 4`;
+    return null;
+  }
+  if (
+    /^(?:padding|margin|gap|row-gap|column-gap)(?:-[a-z-]+)?$|^--spacing-/.test(
+      thing,
+    )
+  ) {
+    const each = v.split(/\s+/);
+    if (px != null && Math.abs(px) > 512)
+      return `${thing} ${v} is wider than any screen; a ${thing.replace(/^--/, '')} reads up to 512px`;
+    void each;
+    return null;
+  }
+  if (
+    /^font-size$|^--text-[a-z0-9-]+-size$/.test(thing) &&
+    px != null &&
+    (px < 6 || px > 256)
+  )
+    return `a font size of ${v} ${px < 6 ? 'cannot be read' : 'is wider than the screen for a word'}; a font size reads between 6px and 256px`;
+  if (
+    /^border(?:-[a-z]+)?-width$|^--border-width$/.test(thing) &&
+    px != null &&
+    px > 64
+  )
+    return `a border of ${v} covers the part; a border reads up to 64px`;
+  return null;
+}
+
+/**
  * A hex color written with the wrong number of digits ("#12345").
  * @param {string} c
  */
@@ -2362,7 +2428,11 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(after i check|once checked|i check)\b/, 'checked'],
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
-  [/\bvisited\b/, 'visited'],
+  // ("after visiting", "once you've been there": the visited look.)
+  [
+    /\b(visited|(?:after|once|when) (?:i'?ve |you'?ve |they'?ve )?(?:visiting|visited|been (?:there|clicked)))\b/,
+    'visited',
+  ],
   // ("The open select", "when open": a part shown open.)
   [
     /\bopened\b|\b(?:when|while|once|if) (?:it'?s |they'?re |it is |they are )?open\b|\bthe open\b/,
@@ -4151,7 +4221,7 @@ export function draftAnswer(ctx, env, question) {
     // ("headings semibold, not bold": the rung said, and the one it is
     // set against; never a second ask.)
     .replace(
-      /\b(thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b([^,;.]*?)[,;]?\s*(?:but\s+)?not\s+(?:too\s+)?(?:thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b/gi,
+      /\b(thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b([^,;.]*?)[,;]?\s*(?:(?:but\s+)?not|instead\s+of|rather\s+than)\s+(?:too\s+)?(?:thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b/gi,
       '$1$2',
     )
     // ("lots of data on screen", "information-dense": the theme denser.)
@@ -6624,6 +6694,40 @@ export function draftAnswer(ctx, env, question) {
       });
       c.lengths = [];
     }
+  // ("selected tab with a 2px #635bff underline": the tab before a clause
+  // that names its underline is the tab indicator.)
+  for (const [ci, c] of clauses.entries()) {
+    const prev = clauses[ci - 1];
+    if (
+      !c.parts.length &&
+      /\bunderline/.test(c.text) &&
+      prev?.parts.some(p => p.on === 'tab') &&
+      !prev.aspects.length
+    ) {
+      c.parts = [{on: 'tab-indicator'}];
+      prev.parts = prev.parts.filter(p => p.on !== 'tab');
+      if (!prev.parts.length) prev.text = '';
+    }
+    for (const p of c.parts)
+      if (p.on === 'tab' && /\bunderline/.test(c.text)) p.on = 'tab-indicator';
+  }
+  // ("list items more spacing between them": the room between items is
+  // the gap of the part that holds them, never each item's padding.)
+  for (const c of clauses)
+    if (
+      c.aspects.includes('spacing') &&
+      /\bbetween\b/.test(c.text) &&
+      c.parts.length
+    )
+      c.parts = c.parts.map(p => {
+        const item = String(p.on);
+        const holder = item.replace(/-(?:items?|rows?|cells?|options?)$/, '');
+        return holder !== item &&
+          TARGET.has(holder) &&
+          (C.MAP[holder]?.contains ?? []).includes(item)
+          ? {...p, on: holder, between: item}
+          : p;
+      });
   // ("badges uppercase bold": two looks of a part's text said together are
   // each an ask of their own, run in turn.)
   const TEXT_LOOKS = ['case', 'weight', 'italic', 'tracking', 'fontsize'];
@@ -9467,9 +9571,9 @@ export function draftAnswer(ctx, env, question) {
           String.raw`\b(?:${w})\s+(?:shadows?|padding|radius|corners?|borders?|gaps?|spacing|text|fonts?|type|outlines?|rings?|margins?|weight|bold|letters?|headings?)\b`,
         ).test(c.text) &&
         // ("buttons medium weight": a weight, never a size.)
-        !new RegExp(String.raw`\b(?:${w})\s*(?:-\s*)?(?:weight|bold)\b`).test(
-          c.text,
-        );
+        !new RegExp(
+          String.raw`\b(?:${w})\s*(?:-\s*)?(?:weight|bold)\b|\b(?:weight|bold)\s+(?:${w})\b`,
+        ).test(c.text);
       const size =
         /\b(small|sm)\b/.test(c.text) && besidePart('small|sm')
           ? ['sm', 'small']
@@ -15516,7 +15620,7 @@ export function draftAnswer(ctx, env, question) {
         k =>
           k !== one(on) &&
           (ctx.project.target.get(k)?.states ?? []).includes(noState) &&
-          new RegExp(`\\b${String(k.split('-').at(-1))}s?\\b`).test(c.text),
+          new RegExp(`\\b(?:${ownWords(k)})s?\\b`).test(c.text),
       );
       if (other.length === 1) {
         const k = other[0];
@@ -18505,6 +18609,23 @@ export function draftAnswer(ctx, env, question) {
           ? null
           : c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
+        // ("list items more spacing between them": the room between the
+        // items is the gap of the part that holds them. A way with no
+        // amount is no step of the holder's whole room, which also pads
+        // it: its gap is named, for a value.)
+        const between = /** @type {{between?: string}} */ (
+          c.parts.find(x => x.on === on) ?? {}
+        ).between;
+        if (between && !px && !pctLength) {
+          const gapRead = (C.partReads(one(String(on)), 'spacing') ?? []).find(
+            r => r.props.some(x => /^(?:row-)?gap$/.test(x)),
+          );
+          return {
+            text: `the room between ${between}s is ${on}'s gap${gapRead ? ` (${gapRead.token}, now ${current(gapRead.token)})` : ''}, not ${between}'s padding: give it a value, such as gap 8px --on ${on}`,
+            options: [],
+            lookup: `${HOW} ${on}`,
+          };
+        }
         // The way the words give, if any.
         const way =
           new RegExp(`\\b(?:${densityWords('roomy', 'crowded')})\\b`).test(
@@ -22638,6 +22759,21 @@ export function draftAnswer(ctx, env, question) {
     // The page never takes the color the text takes in the same mode.
     const all = [...last.values()]
       .map(x => x.step)
+      // (The page joins as it shows: with the frame and main panel lines
+      // its own answer gives, so the main panel takes the color too.)
+      .flatMap(st => {
+        if (st.thing !== '--color-background-body' || st.on) return [st];
+        const page = drafts.find(
+          d =>
+            d.options.length === 2 &&
+            d.options[0].length === 1 &&
+            d.options[0][0].thing === st.thing &&
+            String(d.options[0][0].value) === String(st.value) &&
+            (d.options[0][0].mode ?? '') === (st.mode ?? '') &&
+            d.options[1].some(x => x.on === 'app-shell'),
+        );
+        return page ? [st, ...page.options[1]] : [st];
+      })
       .filter(
         (st, i, list) =>
           !(
@@ -24555,6 +24691,84 @@ export function draftAnswer(ctx, env, question) {
           ),
       ),
     );
+  // "line height 0", "padding 99999px on buttons": a typed value no
+  // page could show (lines drawn on top of each other, a box wider than
+  // any screen) is not written; the answer says what it would do and the
+  // range that reads.
+  for (const d of result) {
+    /** @type {string[]} */
+    const why = [];
+    const kept = d.options.filter(o => {
+      const bad = o.map(st => outOfBounds(st)).find(Boolean);
+      if (bad) why.push(bad);
+      return !bad;
+    });
+    if (!why.length) continue;
+    d.options = kept;
+    d.text = kept.length
+      ? `${d.text} (left out: ${[...new Set(why)].join('; ')})`
+      : `${d.text}: nothing is written: ${[...new Set(why)].join('; ')}`;
+    if (!kept.length) delete d.sequence;
+  }
+  // "bold white text in the header": a text color typed for a region of
+  // the page (a part filled with the page or surface color, which flips
+  // with the mode), with no fill asked for it, is measured on that fill;
+  // where it would not read (under 3:1) in one mode only, it is set for
+  // the mode it reads in, and the answer says how to have it in both.
+  {
+    const filled = new Set(
+      result.flatMap(d =>
+        d.options
+          .flat()
+          .filter(
+            st =>
+              st.on &&
+              (/^background(?:-color)?$/.test(st.thing) ||
+                /^--color-background-/.test(st.thing)),
+          )
+          .map(st => String(st.on)),
+      ),
+    );
+    for (const d of result) {
+      if (d.options.length !== 1 || !modal) continue;
+      const o = d.options[0];
+      const inks = o.filter(
+        st =>
+          st.on &&
+          !st.mode &&
+          !st.state &&
+          !st.when &&
+          (st.thing === 'color' ||
+            /^--color-text-(?:primary|secondary)$/.test(st.thing)),
+      );
+      if (!inks.length || inks.length !== o.length) continue;
+      const on = String(inks[0].on);
+      if (filled.has(on) || !C.MAP[one(on)] || C.MAP[one(on)]?.media) continue;
+      if (inks.some(st => st.value !== inks[0].value)) continue;
+      const ink = parseColor(String(inks[0].value ?? ''));
+      const bgTok = restRead(C.partReads(one(on), 'background') ?? []);
+      if (
+        !ink ||
+        (bgTok !== '--color-background-body' &&
+          bgTok !== '--color-background-surface')
+      )
+        continue;
+      /** @param {'light' | 'dark'} m */
+      const ground = m => parseColor(String(current(bgTok, m) ?? ''));
+      const reads = /** @type {Array<'light' | 'dark'>} */ ([
+        'light',
+        'dark',
+      ]).filter(m => {
+        const g = ground(m);
+        return !g || ratio(ink, g) >= 3;
+      });
+      if (reads.length !== 1) continue;
+      const other = reads[0] === 'light' ? 'dark' : 'light';
+      const g = ground(other);
+      for (const st of inks) st.mode = reads[0];
+      d.text = `${d.text}, in ${reads[0]} mode only: ${on} is ${g ? hex(g.slice(0, 3)) : 'light'} in ${other} mode, where ${inks[0].value} would not read; for both modes, give ${on} a background too`;
+    }
+  }
   // "make the primary button #0064E0", "pumpkin orange buttons": a fill
   // typed on a part is measured against the text each of its looks draws
   // on it, as set measures it after; a look whose text would not read
@@ -24616,10 +24830,13 @@ export function draftAnswer(ctx, env, question) {
       .map(x =>
         `${x.when ? `${x.when.replace(':', ' ')} ` : ''}${x.mode ? `in ${x.mode} mode` : ''}`.trim(),
       )
+      .filter(Boolean)
       .join(', ');
-    d.text = `${d.text}; its text would not read on that fill (${where}): the next line keeps it readable`;
+    // (A one-mode theme's line names no mode: nothing to put in brackets.)
+    const at = where ? ` (${where})` : '';
+    d.text = `${d.text}; its text would not read on that fill${at}: the next line keeps it readable`;
     result.splice(di + 1, 0, {
-      text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value} (${where}), so ${[...new Set(fixes.map(x => x.value))].join(' or ')} there`,
+      text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value}${at}, so ${[...new Set(fixes.map(x => x.value))].join(' or ')}`,
       options: [fixes],
       ...(fixes.length > 1 ? {sequence: true} : {}),
     });
