@@ -440,7 +440,6 @@ const HUES = wordTable(
     inkblue: '#1e3a5f',
     grassgreen: '#4caf50',
     safetyorange: '#ff6700',
-    bluegray: '#64748b',
   }),
 );
 /**
@@ -454,7 +453,6 @@ const PALETTE_NAMES = new Set([
   'inkblue',
   'grassgreen',
   'safetyorange',
-  'bluegray',
   'terracotta',
   'sage',
   'rust',
@@ -650,7 +648,7 @@ function colorsFound(c) {
       c.slice((m.index ?? 0) + m[0].length);
   }
   const re =
-    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle|soft)\s+)?([a-z]+)\b/g;
+    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle)\s+)?([a-z]+)\b/g;
   for (const m of c
     .replace(GRAY_STOP, s => ' '.repeat(s.length))
     .matchAll(re)) {
@@ -671,7 +669,6 @@ function colorsFound(c) {
     const shade =
       /** @type {Record<string, string>} */ ({
         subtle: 'pale',
-        soft: 'pale',
         lighter: 'light',
         darker: 'dark',
         deep: 'dark',
@@ -692,7 +689,9 @@ function colorsFound(c) {
       (shade === 'light' ||
         shade === 'pale' ||
         shade === 'pastel' ||
-        (shade === 'dark' && Math.max(...base.slice(0, 3)) > 150))
+        // (A hue already dark, "dark brown", is itself: measured by how
+        // light it reads, so a medium teal still deepens.)
+        (shade === 'dark' && relLum(base) > 0.12))
     ) {
       const to = shade === 'dark' ? 0 : 255;
       // (A pastel is a hue well toward white, keeping some of its color.)
@@ -785,6 +784,18 @@ function outOfBounds(st) {
   )
     return `a border of ${v} covers the part; a border reads up to 64px`;
   return null;
+}
+
+/**
+ * How light a color reads (WCAG relative luminance, 0 to 1).
+ * @param {number[]} rgb
+ */
+function relLum(rgb) {
+  const [r, g, b] = rgb.slice(0, 3).map(v => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /**
@@ -4347,7 +4358,8 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bink[- ]blue\b/gi, 'inkblue')
     .replace(/\bgrass[- ]green\b/gi, 'grassgreen')
     .replace(/\bsafety[- ]orange\b/gi, 'safetyorange')
-    .replace(/\b(?:slate\s+)?blue[- ]gr[ae]y\b/gi, 'bluegray')
+    // ("slate blue-gray": the tinted gray reader takes blue-gray.)
+    .replace(/\bslate\s+(?=blue[- ]gr[ae]y\b)/gi, '')
     // ("pure white", "true black": that exact color, never a shade.)
     .replace(
       /(?<!\bnot\s)\b(?:pure|true|plain|solid)\s+(white|black)\b/gi,
@@ -4355,10 +4367,103 @@ export function draftAnswer(ctx, env, question) {
     )
     // ("amber for warnings", "red only for alerts": the role color.)
     .replace(
-      /\b((?:[a-z]+\s+)?[a-z]+|#[0-9a-f]{3,8})\s+(?:only\s+|just\s+)?(?:for|reserved for|on)\s+(?:the\s+|all\s+)?(warnings?|success(?:es)?|info(?:rmation)?|notices?)\b/gi,
+      /(?<![\w#-])((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8})(?:\s+#[0-9a-f]{3,8})?)\s+(?:only\s+|just\s+)?(?:for|reserved for|on)\s+(?:the\s+|all\s+)?(warnings?|success(?:es)?|info(?:rmation)?|notices?|errors?)\b/gi,
+      (m, color, role) => {
+        if (!colorsIn(String(color).toLowerCase()).length) return m;
+        // (A typed value said with a name is the color.)
+        const typed = /#[0-9a-f]{3,8}/i.exec(String(color))?.[0];
+        const r = /^warn/i.test(role)
+          ? 'warning'
+          : /^succ/i.test(role)
+            ? 'success'
+            : /^err/i.test(role)
+              ? 'danger'
+              : 'info';
+        return `${r} color ${typed ?? color}`;
+      },
+    )
+    // ("status colors: green #15803d, amber #b45309, red #b91c1c"): with
+    // status said, each hue is its status's color, green success, amber
+    // or yellow or orange warning, red danger, blue info.
+    .replace(/\bstatus(?:es)?\s+colou?rs?\s*:?\s*([^.;]*)/gi, (m, list) => {
+      const ROLE = /** @type {Record<string, string>} */ ({
+        green: 'success',
+        amber: 'warning',
+        yellow: 'warning',
+        orange: 'warning',
+        red: 'danger',
+        blue: 'info',
+      });
+      const parts = [
+        ...String(list).matchAll(
+          /\b(green|amber|yellow|orange|red|blue)\b(?:\s+(#[0-9a-f]{3,8}))?/gi,
+        ),
+      ].map(x => `${ROLE[x[1].toLowerCase()]} color ${x[2] ?? x[1]}`);
+      return parts.length ? parts.join(', ') : m;
+    })
+    // ("light gray fill #F1F2F4": a color named before
+    // the value typed for it names that value; the value is the color.)
+    .replace(
+      /\b(?:(?:light|dark|pale|deep|soft|bright|warm|cool)\s+)?([a-z]+)\s+((?:fill|background|bg|colou?r|text|border|accent)\s+)?(#[0-9a-f]{3,8})\b/gi,
+      // (Only said with what it colors, "fill #…": a name alone before a
+      // value may start a clause of its own.)
+      (m, name, what, hex) =>
+        what && Object.hasOwn(HUES, String(name).toLowerCase())
+          ? `${what}${hex}`
+          : m,
+    )
+    // ("less contrast", "a softer dark mode", "big type", "thin borders",
+    // "lots of white space": the readers' own words for them.)
+    .replace(
+      /\b(?:less|lower|softer|gentler|reduced)\s+contrast\b/gi,
+      'softer text',
+    )
+    .replace(
+      /\b(?:soft|softer|gentle|gentler|easy|easier)\s+dark\s+mode\b/gi,
+      'softer text in dark mode, lighter page in dark mode',
+    )
+    .replace(
+      /\b(?:big|bigger|large|larger|huge)\s+(?:and\s+)?(?:readable\s+|legible\s+)?(?:type|text|font|lettering)\b/gi,
+      'larger text',
+    )
+    // (Theme-wide only: "a thin border" on a part is its own line.)
+    .replace(
+      /\b(?:thin|hairline|fine|gentle|subtle)\s+(borders|lines)\b/gi,
+      (m, what, at, whole) =>
+        partLexicon(ctx).parts.some(([re]) =>
+          re.test(` ${String(whole).toLowerCase()} `),
+        )
+          ? m
+          : `thinner ${what}`,
+    )
+    .replace(
+      /\b(?:lots of|plenty of|generous|lots more)\s+(?:white\s*space|whitespace|breathing room|room)\b/gi,
+      'more spacing',
+    )
+    // ("clear error messages", "clear labels": clear as plain, never a
+    // reset.)
+    .replace(
+      /\bclear\s+(?=(?:error|errors|feedback|labels?|focus|messages?|states?|text|hierarchy|headings?|instructions?)\b)/gi,
+      '',
+    )
+    // ("magenta for highlights": the color that marks what stands out is
+    // the accent.)
+    .replace(
+      /(?<![\w#-])([a-z]+(?:\s+#[0-9a-f]{3,8})?|#[0-9a-f]{3,8})\s+(?:for|on)\s+(?:the\s+)?(?:highlights?|accents?|emphasis|calls? to action|ctas?)\b/gi,
+      (m, color) =>
+        colorsIn(String(color).toLowerCase()).length ? `accent ${color}` : m,
+    )
+    // ("no border on inputs except the bottom one": only that side's.)
+    .replace(
+      /\bno\s+borders?((?:\s+on\s+(?:the\s+)?[a-z]+(?:\s+[a-z]+)?)?)\s*,?\s*(?:except|but|apart from|other than)\s+(?:the\s+|a\s+)?(top|bottom|left|right)(?:\s+(?:one|side|edge|border))?\b/gi,
+      'only a $2 border$1',
+    )
+    // ("amber warnings", "red errors": a role's color said before it.)
+    .replace(
+      /(?<![\w#-])([a-z]+|#[0-9a-f]{3,8})\s+(warnings|errors|alerts)\b(?!\s+(?:badges?|banners?|toasts?|text|icons?|messages?|borders?|states?))/gi,
       (m, color, role) =>
         colorsIn(String(color).toLowerCase()).length
-          ? `${/^warn/i.test(role) ? 'warning' : /^succ/i.test(role) ? 'success' : 'info'} color ${color}`
+          ? `${/^warn/i.test(role) ? 'warning' : 'danger'} color ${color}`
           : m,
     )
     // ("make it brighter and more cheerful": a livelier, more colorful
@@ -25688,6 +25793,52 @@ export function draftAnswer(ctx, env, question) {
     d.options.push([set(dial, String(st.value))]);
     d.text = `${d.text}; or, the second line, the ${dial} color for the whole theme (every ${role} banner, badge and toast follows it): set ${env.slug} ${dial} <color>`;
   }
+  // ("the blue info banner clashes with the green"): a complaint that a
+  // status look clashes names how things look now, never a color to
+  // write; the answer is the status color itself, which every banner,
+  // badge and toast of that status follows.
+  {
+    const clash =
+      /\b(?:clash(?:es|ing)?|fights?|competes?|doesn'?t (?:match|go)|don'?t (?:match|go)|looks? (?:off|wrong|out of place))\b/.test(
+        q,
+      );
+    const status = /\b(info|warning|success|error|danger)\b/.exec(q)?.[1];
+    if (clash && status && !/\b(?:make|set|change|turn)\b/.test(q)) {
+      const dial = status === 'error' ? 'danger' : status;
+      const said = new Set(colorsIn(q));
+      for (let i = result.length - 1; i >= 0; i--)
+        if (
+          /^readable text on that fill/.test(result[i].text) ||
+          result[i].options
+            .flat()
+            .some(st => said.has(String(st.value ?? '').toLowerCase()))
+        )
+          result.splice(i, 1);
+      result.unshift({
+        text: `the ${status} look is the ${dial} color (now ${current(`--color-${status === 'danger' ? 'error' : status}`)}): every ${status} banner, badge and toast follows it; set it to a color that sits with the rest, set ${env.slug} ${dial} <color>`,
+        options: [],
+        lookup: `${HOW} ${dial}`,
+      });
+    }
+  }
+  // ("chart colors", "a palette for charts", "chart-friendly colors"):
+  // charts draw from the data tokens, which set takes like any token; the
+  // answer names them, with a line to start from.
+  const chartWords =
+    /\b(?:charts?|chart-friendly|graphs?|data[- ]viz|visuali[sz]ations?|plots?)\b/;
+  if (
+    chartWords.test(q) &&
+    Object.hasOwn(TOKENS, '--color-data-categorical-blue')
+  ) {
+    const series = Object.keys(TOKENS)
+      .filter(k => /^--color-data-categorical-/.test(k))
+      .map(k => k.replace('--color-data-categorical-', ''));
+    result.push({
+      text: `chart colors: charts draw from the data tokens, --color-data-categorical-<color> for one color per series (${series.join(', ')}) and --color-data-<color>-1 to -5 for a ramp of one measure; each takes a color like any token, in each mode`,
+      options: [],
+      lookup: `${HOW} --color-data-categorical-blue`,
+    });
+  }
   // "a calm, Linear-like dark theme with a violet accent": a look said as
   // a list of words takes each word a setting reads; the words none reads
   // are named, never dropped without a word.
@@ -25698,7 +25849,7 @@ export function draftAnswer(ctx, env, question) {
         q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3))
   ) {
     const STOP =
-      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich)$/;
+      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses)$/;
     const notTaken = [
       ...new Set(
         (q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).filter(
@@ -25714,6 +25865,7 @@ export function draftAnswer(ctx, env, question) {
             !/^(?:dark|light)(?:-only)?$/.test(w) &&
             // (A way, "softer", is read by the way readers.)
             !/[a-z]{3}er$/.test(w) &&
+            !chartWords.test(w) &&
             !/^(?:dark|light|bright|pale|soft|subtle)$/.test(w) &&
             !partsSeen.some(p => w.startsWith(String(p))),
         ),
