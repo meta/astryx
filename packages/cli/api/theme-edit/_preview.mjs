@@ -191,6 +191,71 @@ export function touchedFamilies(project, data) {
   return [...out];
 }
 
+/** The Astryx control each plain HTML text control is drawn as. */
+const ASTRYX_CONTROLS = Object.freeze({
+  input: 'TextInput',
+  textarea: 'TextArea',
+});
+
+/** The input types a text input draws. */
+const TEXT_TYPES = new Set([
+  '',
+  'text',
+  'email',
+  'search',
+  'url',
+  'tel',
+  'password',
+]);
+
+/**
+ * A value with each plain HTML text control in a doc's sample (a field's
+ * `<input>`) drawn as the Astryx control for it, its label hidden, so the
+ * sheet shows the theme's own control where an app would use one: a bare
+ * browser control shows nothing of the theme. Every other value is the same
+ * object.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withAstryxControls(project, v) {
+  if (Array.isArray(v)) {
+    const out = v.map(x => withAstryxControls(project, x));
+    return out.every((x, i) => x === v[i]) ? v : out;
+  }
+  if (!v || typeof v !== 'object') return v;
+  if (isElement(v)) {
+    const own = /** @type {Record<string, string>} */ (ASTRYX_CONTROLS)[
+      v.__element
+    ];
+    const p = /** @type {Record<string, unknown>} */ (v.props ?? {});
+    if (
+      own &&
+      project.components[own] &&
+      (v.__element !== 'input' || TEXT_TYPES.has(String(p.type ?? '')))
+    )
+      return {
+        __element: own,
+        props: {
+          label: String(p['aria-label'] ?? p.placeholder ?? 'Text'),
+          isLabelHidden: true,
+          ...(p.placeholder != null ? {placeholder: p.placeholder} : {}),
+          ...(p.id != null ? {id: p.id} : {}),
+        },
+      };
+    const props = withAstryxControls(project, v.props);
+    const children = withAstryxControls(project, v.children);
+    return props === v.props && children === v.children
+      ? v
+      : {...v, props, children};
+  }
+  const entries = Object.entries(v);
+  const out = entries.map(([k, x]) => [k, withAstryxControls(project, x)]);
+  return out.every(([, x], i) => x === entries[i][1])
+    ? v
+    : {...v, ...Object.fromEntries(out)};
+}
+
 /**
  * What the cached component items are built by ({@link codeFingerprint}):
  * this file and every file it imports, read the first time it is needed.
@@ -319,7 +384,13 @@ function componentItems(project, group) {
           // A doc's sample children may name a part by an older name (a
           // stack, a heading): each is drawn by the name Core exports.
           props: /** @type {Record<string, unknown>} */ (
-            withCoreAliases(project, withSampleContent(project, name, v.props))
+            withAstryxControls(
+              project,
+              withCoreAliases(
+                project,
+                withSampleContent(project, name, v.props),
+              ),
+            )
           ),
         }),
         // An overlay shown open is drawn open: Core places a popover,
