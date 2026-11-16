@@ -107,12 +107,14 @@ describe('the stock accent pair', () => {
 
 // architecture:theme-tokens INV13: a form control's edge is often the only cue
 // to where the control is, so --color-border-control meets 3:1 (WCAG 1.4.11)
-// against the surface and the page body.
+// against the surface and the page body. A card is checked too: a form often
+// sits on one.
 describe('the form-control edge (--color-border-control)', () => {
   const MODES = ['light', 'dark'] as const;
   const AGAINST = [
     '--color-background-surface',
     '--color-background-body',
+    '--color-background-card',
   ] as const;
 
   function expectControlEdge(theme: DefinedTheme | null, label: string): void {
