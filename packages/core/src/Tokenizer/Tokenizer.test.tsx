@@ -3233,44 +3233,69 @@ describe('Tokenizer', () => {
     });
 
     it('reveals the whole token when keyboard focus reaches its remove button in a group', async () => {
-      // jsdom has no scrollIntoView; record the calls instead.
-      const scrollIntoView = vi.fn();
-      Element.prototype.scrollIntoView = scrollIntoView;
-      try {
-        const user = userEvent.setup();
-        render(
-          <InputGroup label="Recipients">
-            <InputGroupText>To</InputGroupText>
-            <Tokenizer
-              label="People"
-              isLabelHidden
-              searchSource={userSource}
-              value={[users[0], users[1]]}
-              onChange={() => {}}
-            />
-          </InputGroup>,
-        );
-        act(() => {
-          screen.getByRole('combobox', {name: 'Recipients People'}).focus();
-        });
-        // The keyboard path to a token: back from the input.
-        await user.tab({shift: true});
-        const removeBob = screen.getByRole('button', {name: 'Remove Bob'});
-        expect(removeBob).toHaveFocus();
+      const user = userEvent.setup();
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+      // jsdom has no layout: give the strip a 200px box with 24px fades,
+      // and Bob's token a box past its end.
+      const row = screen.getByRole('group', {name: 'People'});
+      const strip = getTokenStrip(row);
+      // jsdom keeps no scroll padding in computed styles: report the fades'.
+      const computedStyle = globalThis.getComputedStyle.bind(globalThis);
+      vi.stubGlobal('getComputedStyle', (element: Element) => {
+        const style = computedStyle(element);
+        if (element !== strip) {
+          return style;
+        }
+        return {
+          ...style,
+          scrollPaddingLeft: '24px',
+          scrollPaddingRight: '24px',
+        };
+      });
+      vi.spyOn(strip, 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({x: 0, y: 0, width: 200, height: 32}),
+      );
+      const bobToken = screen
+        .getByRole('button', {name: 'Remove Bob'})
+        .closest('.astryx-token')!;
+      vi.spyOn(bobToken, 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({x: 230, y: 0, width: 60, height: 32}),
+      );
+      let scrollLeft = 0;
+      Object.defineProperty(strip, 'scrollLeft', {
+        configurable: true,
+        get: () => scrollLeft,
+        set: (value: number) => {
+          scrollLeft = value;
+        },
+      });
 
-        // Browsers scroll a focused control into view only as far as the
-        // control, which can leave the token's label cut off or under a fade.
-        // The scroll padding the token is revealed against is the fade width.
-        expect(scrollIntoView).toHaveBeenLastCalledWith({
-          block: 'nearest',
-          inline: 'nearest',
-        });
-        expect(scrollIntoView.mock.contexts.at(-1)).toBe(
-          removeBob.closest('.astryx-token'),
-        );
-      } finally {
-        delete (Element.prototype as Partial<Element>).scrollIntoView;
-      }
+      act(() => {
+        screen.getByRole('combobox', {name: 'Recipients People'}).focus();
+      });
+      const before = scrollLeft;
+      // The keyboard path to a token: back from the input.
+      await user.tab({shift: true});
+      const removeBob = screen.getByRole('button', {name: 'Remove Bob'});
+      expect(removeBob).toHaveFocus();
+
+      // Browsers scroll a focused control into view only as far as the
+      // control, which can leave the token's label cut off or under a fade.
+      // The track scrolls until the whole token sits inside the fade width:
+      // its right edge at 290 meets the visible end at 200 - 24.
+      expect(scrollLeft - before).toBe(290 - 176);
+      vi.unstubAllGlobals();
     });
 
     it('names the strip as the keyboard path when disabled in a group', () => {
