@@ -580,6 +580,7 @@ export function SideNavItem({
   // the flyout opens.
   const isRailGroup = isCollapsed && hasChildren;
   const [isGroupLabelShown, setIsGroupLabelShown] = useState(false);
+  const showGroupLabel = useCallback(() => setIsGroupLabelShown(true), []);
   const hideGroupLabel = useCallback(() => setIsGroupLabelShown(false), []);
   const railTooltip = useTooltip({
     placement: 'end',
@@ -591,7 +592,10 @@ export function SideNavItem({
     isOpen: isRailLeaf
       ? undefined
       : isRailGroup && isGroupLabelShown && !popover.isOpen,
-    // Escape asks a held-open tooltip to close.
+    // The tooltip reports a focus that would show it while it is held shut.
+    onShow: isRailGroup ? showGroupLabel : undefined,
+    // The tooltip reports each hide here, Escape included. Clear the request,
+    // so only the next keyboard focus shows the label.
     onHide: hideGroupLabel,
   });
   const railLeafRef = useMergedRefs(ref, railTooltip.ref);
@@ -747,12 +751,6 @@ export function SideNavItem({
             data-testid={testId}
             {...popover.triggerProps}
             {...collapsedItemStyles}
-            onFocus={event => {
-              rest.onFocus?.(event);
-              if (event.currentTarget.matches(':focus-visible')) {
-                setIsGroupLabelShown(true);
-              }
-            }}
             onBlur={event => {
               rest.onBlur?.(event);
               setIsGroupLabelShown(false);
