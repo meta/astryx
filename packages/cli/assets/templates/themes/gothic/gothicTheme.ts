@@ -13,6 +13,7 @@
  */
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {gothicIconRegistry} from './icons';
 import {gothicPaletteRefs} from './gothicPaletteRefs.generated';
 
@@ -21,14 +22,63 @@ const {blue, cyan, green, neutral, orange, pink, purple, red, teal, yellow} =
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
-// A surface that repaints inside a card (a nested card, a field) draws
-// the theme's own text and links again: a coloured card's category ink on
-// its pastel fill must not reach a dark surface inside it.
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
 const SURFACE_TEXT = {
   '--color-text-primary': neutral.dark[95],
   '--color-text-secondary': neutral.dark[75],
   '--color-text-accent': neutral.dark[95],
 };
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill). A coloured card's ink must not
+ * reach them, so each sets the theme's own text and link colours again. A
+ * transparent card is left out: it paints nothing, so it keeps its parent's
+ * ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['code', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['alert-dialog', 'variant:standard'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key] of OWN_FILL_RULES)
+    out[part] = {...out[part], [key]: {...SURFACE_TEXT, ...out[part]?.[key]}};
+  return out;
+}
 
 /**
  * Gothic syntax palette — atmospheric tones drawn from the gothic
@@ -261,7 +311,7 @@ export const gothicTheme = defineTheme({
     '--shadow-inset-error': `inset 0 0 0 1px ${withAlpha(red.dark[75], '50')}`,
   },
 
-  components: {
+  components: withOwnFillText({
     button: {
       'variant:secondary': SECONDARY_BUTTON,
       'variant:ghost': {
@@ -278,11 +328,9 @@ export const gothicTheme = defineTheme({
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
     selector: {
-      base: SURFACE_TEXT,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
-      base: SURFACE_TEXT,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'complex-selector': {'variant:secondary': SECONDARY_BUTTON},
@@ -336,18 +384,8 @@ export const gothicTheme = defineTheme({
       },
     },
 
-    'text-input': {base: SURFACE_TEXT},
-    'text-area': {base: SURFACE_TEXT},
-    typeahead: {base: SURFACE_TEXT},
-    tokenizer: {base: SURFACE_TEXT},
-    'number-input': {base: SURFACE_TEXT},
-    'date-input': {base: SURFACE_TEXT},
-    'date-range-input': {base: SURFACE_TEXT},
-    'time-input': {base: SURFACE_TEXT},
-    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
-        ...SURFACE_TEXT,
         padding: 'var(--spacing-3)',
         borderRadius: 'var(--radius-container)',
       },
@@ -433,7 +471,7 @@ export const gothicTheme = defineTheme({
           '"Manufacturing Consent", "UnifrakturMaguntia", "Old English Text MT", serif',
       },
     },
-  },
+  }),
 
   // Gothic's accent text and icons are one light color. On a media surface
   // they follow that surface's accent, so a dark surface inside a light one

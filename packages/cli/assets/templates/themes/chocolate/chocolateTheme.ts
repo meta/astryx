@@ -12,17 +12,24 @@ import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import {chocolateIconRegistry} from './icons';
 
 /** Chocolate syntax palette — warm browns and amber tones. */
+/**
+ * Comments and operators in light code: stop 45 of the astryx-oklch-v1 ramp
+ * grown from #B88859 (anchored at its own stop, 60), the nearest stop that
+ * reads at 4.5:1 on the code background and on the page.
+ */
+const CODE_BROWN = '#955c26';
+
 const chocolateSyntax = defineSyntaxTheme({
   name: 'astryx-chocolate',
   tokens: {
     keyword: ['#8C5927', '#d4a06a'],
     string: ['#2e6b4a', '#7bc49e'],
-    comment: ['#B88859', '#B88859'],
+    comment: [CODE_BROWN, '#B88859'],
     number: ['#a06018', '#d4b870'],
     function: ['#3a5e8c', '#7ba8d4'],
     type: ['#6b4a8c', '#b08ed4'],
     variable: ['#4a3520', '#EDE4D4'],
-    operator: ['#B88859', '#c4a882'],
+    operator: [CODE_BROWN, '#c4a882'],
     constant: ['#a06018', '#d4b870'],
     tag: ['#8c3a3a', '#d47a7a'],
     attribute: ['#8C5927', '#d4a06a'],
@@ -197,13 +204,17 @@ export const chocolateTheme = defineTheme({
     '--color-background-green': ['#70990033', '#96bf2a33'],
     '--color-border-green': ['#709900', '#96bf2a'],
     '--color-icon-green': ['#709900', '#96bf2a'],
-    '--color-text-green': ['#5a7a00', '#a8d43a'],
+    // Light category text (green, orange, red, yellow): each is the stop of
+    // the astryx-oklch-v1 ramp grown from the earlier value (anchored at its
+    // own stop) nearest it that reads at 4.5:1 on its own category fill:
+    // #5a7a00 stop 40, #a06018 stop 45, #cc0000 stop 40, #cc9200 stop 45.
+    '--color-text-green': ['#4e6c00', '#a8d43a'],
 
     // Categorical — Orange
     '--color-background-orange': ['#c4762033', '#d4903a33'],
     '--color-border-orange': ['#c47620', '#d4903a'],
     '--color-icon-orange': ['#c47620', '#d4903a'],
-    '--color-text-orange': ['#a06018', '#e0a04a'],
+    '--color-text-orange': ['#925314', '#e0a04a'],
 
     // Categorical — Pink
     '--color-background-pink': ['#c44a7033', '#e07a9a33'],
@@ -221,7 +232,7 @@ export const chocolateTheme = defineTheme({
     '--color-background-red': ['#FD000033', '#ff5c5c33'],
     '--color-border-red': ['#FD0000', '#ff5c5c'],
     '--color-icon-red': ['#FD0000', '#ff5c5c'],
-    '--color-text-red': ['#cc0000', '#ff7a7a'],
+    '--color-text-red': ['#b60000', '#ff7a7a'],
 
     // Categorical — Teal
     '--color-background-teal': ['#2e6b5a33', '#5ab89833'],
@@ -233,7 +244,7 @@ export const chocolateTheme = defineTheme({
     '--color-background-yellow': ['#FFB60033', '#ffc94033'],
     '--color-border-yellow': ['#FFB600', '#ffc940'],
     '--color-icon-yellow': ['#FFB600', '#ffc940'],
-    '--color-text-yellow': ['#cc9200', '#ffd960'],
+    '--color-text-yellow': ['#8b6200', '#ffd960'],
 
     // =========================================================================
     // Radius — soft and rounded

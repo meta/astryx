@@ -11,6 +11,7 @@
  */
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {butterIconRegistry} from './icons';
 import {butterPaletteRefs} from './butterPaletteRefs.generated';
 
@@ -32,14 +33,63 @@ const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 const lightDark = (light: string, dark: string): string =>
   `light-dark(${light}, ${dark})`;
 
-// A surface that repaints inside a card (a nested card, a field) draws
-// the theme's own text and links again: a coloured card's dark ink on its
-// pastel fill must not reach a dark surface inside it.
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
 const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
   '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
 };
+
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill). A coloured card's ink must not
+ * reach them, so each sets the theme's own text and link colours again. A
+ * transparent card is left out: it paints nothing, so it keeps its parent's
+ * ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['code', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['alert-dialog', 'variant:standard'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key] of OWN_FILL_RULES)
+    out[part] = {...out[part], [key]: {...SURFACE_TEXT, ...out[part]?.[key]}};
+  return out;
+}
 
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
@@ -369,7 +419,31 @@ export const butterTheme = defineTheme({
     '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[30], '30')}`,
   },
 
-  components: {
+  components: withOwnFillText({
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': `light-dark(${neutral.light[45]}, ${neutral.dark[80]})`,
+      },
+    },
     // TopNav uses Butter's blue accent: the heading and the selected item are
     // the full brand blue; unselected items (default + hover) use a lighter
     // blue. Dark mode keeps the theme's butter-yellow accent.
@@ -471,11 +545,8 @@ export const butterTheme = defineTheme({
       },
     },
 
-    'date-range-input': {base: SURFACE_TEXT},
-    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
-        ...SURFACE_TEXT,
         borderRadius: 'var(--radius-container)',
         padding: 'var(--spacing-4)',
       },
@@ -604,7 +675,6 @@ export const butterTheme = defineTheme({
     // (icons inherit from --color-{success,warning,error}).
     'text-input': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -613,7 +683,6 @@ export const butterTheme = defineTheme({
     },
     'text-area': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -622,7 +691,6 @@ export const butterTheme = defineTheme({
     },
     'number-input': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -631,7 +699,6 @@ export const butterTheme = defineTheme({
     },
     'date-input': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -640,7 +707,6 @@ export const butterTheme = defineTheme({
     },
     'time-input': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -649,7 +715,6 @@ export const butterTheme = defineTheme({
     },
     selector: {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -659,7 +724,6 @@ export const butterTheme = defineTheme({
     },
     'multi-selector': {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -670,7 +734,6 @@ export const butterTheme = defineTheme({
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
     typeahead: {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -679,7 +742,6 @@ export const butterTheme = defineTheme({
     },
     tokenizer: {
       base: {
-        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -703,7 +765,7 @@ export const butterTheme = defineTheme({
         fontFamily: 'Sarina, "Brush Script MT", "Snell Roundhand", cursive',
       },
     },
-  },
+  }),
 
   icons: butterIconRegistry,
 });

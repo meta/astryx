@@ -9,6 +9,7 @@
  */
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
+import type {ComponentStyleMap} from '@astryxdesign/core/theme';
 import {y2kIconRegistry} from './icons';
 import {y2kPaletteRefs} from './y2kPaletteRefs.generated';
 
@@ -28,31 +29,80 @@ const {
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
-// A surface that repaints inside a card (a nested card, a field) draws
-// the theme's own text and links again: a coloured card's dark ink on its
-// pastel fill must not reach a dark surface inside it.
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
 const SURFACE_TEXT = {
   '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
   '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[70]})`,
   '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
 };
 
+/**
+ * The rules of the parts that paint a fill of their own (a surface, a
+ * popover, the muted fill or a card fill). A coloured card's ink must not
+ * reach them, so each sets the theme's own text and link colours again. A
+ * transparent card is left out: it paints nothing, so it keeps its parent's
+ * ink.
+ */
+const OWN_FILL_RULES: ReadonlyArray<readonly [string, string]> = [
+  ['card', 'variant:default'],
+  ['card', 'variant:muted'],
+  ['clickable-card', 'variant:default'],
+  ['clickable-card', 'variant:muted'],
+  ['selectable-card', 'variant:default'],
+  ['selectable-card', 'variant:muted'],
+  ['section', 'variant:section'],
+  ['section', 'variant:muted'],
+  ['code', 'base'],
+  ['text-input', 'base'],
+  ['text-area', 'base'],
+  ['number-input', 'base'],
+  ['date-input', 'base'],
+  ['date-range-input', 'base'],
+  ['date-time-input-date-segment', 'base'],
+  ['date-time-input-time-segment', 'base'],
+  ['time-input', 'base'],
+  ['file-input', 'base'],
+  ['typeahead', 'base'],
+  ['tokenizer', 'base'],
+  ['selector', 'variant:input'],
+  ['multi-selector', 'variant:input'],
+  ['selector-popup', 'base'],
+  ['multi-selector-popup', 'base'],
+  ['dropdown-menu', 'base'],
+  ['context-menu', 'base'],
+  ['popover', 'base'],
+  ['hover-card', 'base'],
+  ['dialog', 'base'],
+  ['alert-dialog', 'variant:standard'],
+  ['drawer', 'base'],
+  ['bottom-sheet', 'base'],
+];
+
+/** Puts SURFACE_TEXT under each own-fill rule; a rule's own values win. */
+function withOwnFillText(components: ComponentStyleMap): ComponentStyleMap {
+  const out: ComponentStyleMap = {...components};
+  for (const [part, key] of OWN_FILL_RULES)
+    out[part] = {...out[part], [key]: {...SURFACE_TEXT, ...out[part]?.[key]}};
+  return out;
+}
+
 const y2kSyntax = defineSyntaxTheme({
   name: 'astryx-y2k',
   tokens: {
     keyword: [purple.light[40], purple.dark[75]],
-    string: [green.light[40], green.dark[65]],
-    comment: [neutral.light[40], neutral.dark[70]],
-    number: [orange.light[40], orange.dark[80]],
-    function: [blue.light[40], blue.dark[75]],
+    string: [green.light[35], green.dark[65]],
+    comment: [neutral.light[35], neutral.dark[70]],
+    number: [orange.light[35], orange.dark[80]],
+    function: [blue.light[35], blue.dark[75]],
     type: [purple.light[40], purple.dark[75]],
-    variable: [neutral.light[40], neutral.dark[70]],
-    operator: [neutral.light[40], neutral.dark[70]],
-    constant: [orange.light[40], orange.dark[80]],
+    variable: [neutral.light[35], neutral.dark[70]],
+    operator: [neutral.light[35], neutral.dark[70]],
+    constant: [orange.light[35], orange.dark[80]],
     tag: [red.light[35], red.dark[75]],
-    attribute: [yellow.light[40], yellow.dark[70]],
-    property: [teal.light[40], teal.dark[70]],
-    punctuation: [neutral.light[40], neutral.dark[70]],
+    attribute: [yellow.light[35], yellow.dark[70]],
+    property: [teal.light[35], teal.dark[70]],
+    punctuation: [neutral.light[35], neutral.dark[70]],
     background: [neutral.light[95], neutral.dark[5]],
     // Markers stay readable on diff tints in both modes. The closest pairing
     // is the dark added marker, which remains above the 4.5:1 text threshold.
@@ -322,7 +372,31 @@ export const y2kTheme = defineTheme({
     '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[30], '50')}`,
   },
 
-  components: {
+  components: withOwnFillText({
+    // In light mode, secondary text falls under 4.5:1 on the selected fill (the
+    // accent tint) and under its hover. Selected rows, a dropzone's hint and
+    // a numbered citation, all on that fill, use the nearest stop that clears
+    // both.
+    item: {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+    },
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+    },
+    'file-input': {
+      'mode:dropzone': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+      },
+    },
     // Display sizes use a Crimson Text serif, distinct from the Poppins
     // used for body/headings.
     text: {
@@ -377,11 +451,9 @@ export const y2kTheme = defineTheme({
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
     selector: {
-      base: SURFACE_TEXT,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
-      base: SURFACE_TEXT,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
@@ -445,18 +517,8 @@ export const y2kTheme = defineTheme({
 
     // Coloured cards keep their pastel fill in dark mode, so their text
     // takes dark ink there: the nearest neutral stops that read at 4.5:1.
-    'text-input': {base: SURFACE_TEXT},
-    'text-area': {base: SURFACE_TEXT},
-    typeahead: {base: SURFACE_TEXT},
-    tokenizer: {base: SURFACE_TEXT},
-    'number-input': {base: SURFACE_TEXT},
-    'date-input': {base: SURFACE_TEXT},
-    'date-range-input': {base: SURFACE_TEXT},
-    'time-input': {base: SURFACE_TEXT},
-    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
-        ...SURFACE_TEXT,
         borderRadius: '0px',
         padding: 'var(--spacing-3)',
       },
@@ -517,7 +579,7 @@ export const y2kTheme = defineTheme({
         padding: 'var(--spacing-3)',
       },
     },
-  },
+  }),
 
   icons: y2kIconRegistry,
 });
