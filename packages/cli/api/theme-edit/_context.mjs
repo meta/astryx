@@ -1310,10 +1310,11 @@ export function lookAtPictures(files) {
     files.filter(f =>
       new RegExp(`^sheet-${g}${dark}(?:-\\d+)?\\.png$`).test(path.basename(f)),
     );
-  const families = FAMILY_SECTIONS.flatMap(g =>
-    cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'),
-  );
-  if (!preview && !open && !families.length) return null;
+  /** @param {string} g */
+  const pictured = g => (cuts(g, '').length ? cuts(g, '') : cuts(g, '-dark'));
+  const families = FAMILY_SECTIONS.flatMap(pictured);
+  const pages = pictured('pages');
+  if (!preview && !open && !families.length && !pages.length) return null;
   const dark =
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
@@ -1321,6 +1322,9 @@ export function lookAtPictures(files) {
     // A family's own picture reads whole; the full sheet does not.
     ...(families.length
       ? [`${families.join(', ')} (one family of components each)`]
+      : []),
+    ...(pages.length
+      ? [`${pages.join(', ')} (the sample app and each page template)`]
       : []),
     ...(preview
       ? [
