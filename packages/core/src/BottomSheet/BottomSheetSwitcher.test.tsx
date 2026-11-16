@@ -2063,7 +2063,10 @@ describe('focus return when a flow closes without its scrim or unmounts', () => 
           activeSheet={step}
           onActiveSheetChange={setStep}
           hasScrim={false}>
-          <BottomSheet sheetId="filters" label="Filters">
+          <BottomSheet
+            sheetId="filters"
+            label="Filters"
+            data-testid="filters-sheet">
             <button type="button" onClick={() => setStep(null)}>
               Done
             </button>
@@ -2081,6 +2084,7 @@ describe('focus return when a flow closes without its scrim or unmounts', () => 
     const done = screen.getByRole('button', {name: 'Done'});
     act(() => done.focus());
     fireEvent.click(done);
+    finishSheetTransition(getSheetLayer('filters-sheet'), 'transform');
     expect(opener).toHaveFocus();
   });
 
@@ -2097,6 +2101,7 @@ describe('focus return when a flow closes without its scrim or unmounts', () => 
     const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
     act(() => elsewhere.focus());
     fireEvent.click(screen.getByRole('button', {name: 'Done', hidden: true}));
+    finishSheetTransition(getSheetLayer('filters-sheet'), 'transform');
     expect(elsewhere).toHaveFocus();
   });
 

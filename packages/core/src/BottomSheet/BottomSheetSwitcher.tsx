@@ -568,6 +568,22 @@ export function BottomSheetSwitcher({
     presentationCounterRef.current += 1;
     presentationOrderRef.current.set(sheetId, presentationCounterRef.current);
   }, []);
+  // The step dialogs can render outside the flow's element, so focus counts as
+  // inside the flow when the flow or one of its step dialogs holds it.
+  const holdsFocus = useCallback(
+    (active: Element | null): boolean =>
+      active != null &&
+      (flowRef.current?.contains(active) === true ||
+        [...sheetDialogsRef.current.values()].some(dialog =>
+          dialog.contains(active),
+        )),
+    [],
+  );
+  const onBeforeSheetShow = useCallback(() => {
+    if (triggerRef.current == null) {
+      triggerRef.current = document.activeElement as HTMLElement | null;
+    }
+  }, []);
   // Syncs document focus with the flow's visibility. When the flow hides, focus
   // goes to the opener, to the sheet now on top, or to the target of the
   // registry.
@@ -607,11 +623,35 @@ export function BottomSheetSwitcher({
           trigger?.focus({preventScroll: true});
         }
       }
+    } else if (!hasScrim) {
+      // A flow without the scrim keeps the native dialog's return rule: focus
+      // goes back to the opener only while it is still inside the flow.
+      const trigger = triggerRef.current;
+      if (trigger?.isConnected === true && holdsFocus(document.activeElement)) {
+        trigger.focus({preventScroll: true});
+      }
     }
     triggerRef.current = null;
     modalFlowRef.current = false;
     presentationOrderRef.current.clear();
-  }, [hasScrim, isFlowVisible]);
+  }, [hasScrim, holdsFocus, isFlowVisible]);
+
+  // A flow removed while a sheet is open returns focus to its opener, as a
+  // standalone sheet does, when focus was inside the flow or fell to the body
+  // with the removal. A sheet open above the flow keeps focus.
+  useLayoutEffect(
+    () => () => {
+      const trigger = triggerRef.current;
+      const active = document.activeElement;
+      if (
+        trigger?.isConnected === true &&
+        (active == null || active === document.body || holdsFocus(active))
+      ) {
+        trigger.focus({preventScroll: true});
+      }
+    },
+    [holdsFocus],
+  );
 
   // A scrim flow is one level of the bottom-sheet stack while it is visible.
   // The step hosts present their own dialogs; the registry re-presents the
@@ -1036,6 +1076,7 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetPurpose,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       isCoveredInTopLayer,
       onSheetEnterStart,
       onSheetTransitionComplete,
@@ -1058,6 +1099,7 @@ export function BottomSheetSwitcher({
       isScrimOwner,
       onActiveSheetChange,
       onBeforeSheetPresent,
+      onBeforeSheetShow,
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,
