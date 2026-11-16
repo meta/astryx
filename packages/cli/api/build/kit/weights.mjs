@@ -637,8 +637,8 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
  * The pick model's probability for a page template among the ready, non-shell
  * templates: a softmax over the pick model's scores. It says how clearly the
  * pick model prefers that template over the others, not whether the template
- * is right. Null without weights or for a template the pick model does not
- * score.
+ * is right. Null without weights or for a template the word tables do not
+ * list.
  * @param {string} name
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked
@@ -649,13 +649,15 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
  */
 export function pickFit(name, idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(
+  const {cands, scores, position} = blend(
     readNames(idea, catalog),
     ranked,
     pick,
     catalog,
     pickModel(weights),
   );
+  // The tables cannot judge a template they do not list, so it has no fit.
+  if (!position.has(name)) return null;
   const pages = cands.flatMap((c, i) => (c === SHELL ? [] : [scores[i]]));
   const at = cands.filter(c => c !== SHELL).indexOf(name);
   if (at < 0) return null;

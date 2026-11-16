@@ -369,6 +369,12 @@ describe('build kit — every page starts from a template', () => {
     if (shell.type !== 'build.kit') throw new Error(shell.type);
     expect(shell.data.start?.basis).toBe('fallback');
     expect(shell.data.start).not.toHaveProperty('fit');
+    // The word tables do not list the template this starts from, so it has no
+    // fit.
+    const unlisted = await build('a table of orders', {cwd: REPO});
+    if (unlisted.type !== 'build.kit') throw new Error(unlisted.type);
+    expect(unlisted.data.start?.basis).not.toBe('fallback');
+    expect(unlisted.data.start).not.toHaveProperty('fit');
   });
 
   it('reads a clear page pick at or above CLEAR_FIT and a loose one below it', async () => {
