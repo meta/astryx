@@ -50,10 +50,6 @@
     "./fonts.css": {
       "types": "./fonts.css.d.ts",
       "default": "./fonts.css"
-    },
-    "./fonts.google.css": {
-      "types": "./fonts.google.css.d.ts",
-      "default": "./fonts.google.css"
     }
   },
   "files": [
@@ -62,8 +58,6 @@
     "fonts.css",
     "fonts.css.d.ts",
     "fonts",
-    "fonts.google.css",
-    "fonts.google.css.d.ts",
     "theme.css.d.ts",
     "palette.config.json",
     "!**/*.test.*",

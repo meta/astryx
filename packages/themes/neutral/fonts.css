@@ -2,16 +2,17 @@
 
 /*
  * The theme's fonts, shipped in this package (their licenses are in
- * fonts/): each face is a local woff2 file with font-display: swap, so a
- * page draws at once in its fallback font and never waits on a network.
- * fonts.google.css loads the same faces from Google Fonts instead.
+ * fonts/): each face is a local woff2 file with font-display: fallback:
+ * the text waits a moment for its face, which loads from the package in
+ * that time, so it draws in the theme's font from its first paint; a page
+ * never waits on a network.
  * Written by scripts/vendor-theme-fonts.mjs: do not edit by hand.
  */
 
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/figtree-latin-ext-400-normal.woff2') format('woff2');
   unicode-range:
@@ -23,7 +24,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/figtree-latin-400-normal.woff2') format('woff2');
   unicode-range:
@@ -35,7 +36,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/figtree-latin-ext-500-normal.woff2') format('woff2');
   unicode-range:
@@ -47,7 +48,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/figtree-latin-500-normal.woff2') format('woff2');
   unicode-range:
@@ -59,7 +60,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/figtree-latin-ext-600-normal.woff2') format('woff2');
   unicode-range:
@@ -71,7 +72,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/figtree-latin-600-normal.woff2') format('woff2');
   unicode-range:
@@ -83,7 +84,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/figtree-latin-ext-700-normal.woff2') format('woff2');
   unicode-range:
@@ -95,7 +96,7 @@
 @font-face {
   font-family: 'Figtree';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/figtree-latin-700-normal.woff2') format('woff2');
   unicode-range:

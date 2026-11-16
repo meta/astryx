@@ -6,7 +6,6 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PREVIEW_IMAGE_WIDTH,
-  fontStylesheetOf,
   previewDocument,
   previewMarkup,
   previewPageSource,
@@ -50,17 +49,6 @@ describe('previewPageSource', () => {
     expect(previewPageSource('./template/page')).toContain(
       '<Theme theme={neutralTheme} mode="system">\n      <Page />\n    </Theme>',
     );
-  });
-});
-
-describe('fontStylesheetOf', () => {
-  it('reads the stylesheet URL from the theme fonts file', () => {
-    expect(
-      fontStylesheetOf(
-        "/* Fonts */\n@import url('https://fonts.example/css2?family=Figtree');\n",
-      ),
-    ).toBe('https://fonts.example/css2?family=Figtree');
-    expect(fontStylesheetOf('body { margin: 0 }')).toBeNull();
   });
 });
 

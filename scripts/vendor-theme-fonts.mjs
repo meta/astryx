@@ -2,16 +2,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Ship each built-in theme's open-licensed fonts in its package. A
- * theme's `fonts.google.css` names its families and weights (the Google
- * Fonts stylesheet, kept as the remote path); this script takes those
- * faces from the Fontsource packages, copies their woff2 files and licenses
+ * @file Ship each built-in theme's open-licensed fonts in its package.
+ * THEME_FONTS names each theme's families and weights, as a Google Fonts
+ * request names them; this script takes those faces from the Fontsource
+ * packages, copies their woff2 files and licenses
  * into the theme's `fonts/` folder, and writes `fonts.css`: local
- * `@font-face` rules with `font-display: swap`, so a page draws at once and
- * never waits on a network. Run it after changing a theme's fonts, then
- * format the written stylesheets: `pnpm prettier --write packages/themes/*/fonts.css`.
- * @input packages/themes/<theme>/fonts.google.css; the Fontsource packages,
- *   fetched with `npm pack`
+ * `@font-face` rules with `font-display: fallback`, so a page never waits
+ * on a network, and a face read from the package within the brief block
+ * period draws the text from its first paint, with no fallback flash. Run it after changing a theme's fonts, then
+ * format the stylesheets it writes with prettier (each
+ * `packages/themes/<theme>/fonts.css`).
+ * @input THEME_FONTS; the Fontsource packages, fetched with `npm pack`
  * @output packages/themes/<theme>/fonts.css and fonts/
  * @position scripts/ — a maintainer's tool, run by hand
  */
@@ -29,16 +30,54 @@ const root = path.resolve(import.meta.dirname, '..');
 const themesDir = path.join(root, 'packages/themes');
 
 /**
- * The families a Google Fonts stylesheet asks for: each with its weights,
+ * Each built-in theme's fonts, as the Google Fonts request for them names
+ * their families, axes and weights (`Figtree:wght@400;700`).
+ * @type {Record<string, string[]>}
+ */
+export const THEME_FONTS = {
+  butter: [
+    'JetBrains Mono:wght@400;500;600;700',
+    'Outfit:wght@400;500;600;700',
+    'Sarina',
+  ],
+  chocolate: [
+    'Albert Sans:wght@400;500;600;700',
+    'Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700',
+    'JetBrains Mono:wght@400;500;600;700',
+  ],
+  gothic: [
+    'Fustat:wght@400;500;600;700',
+    'JetBrains Mono:wght@400;500;600;700',
+    'Manufacturing Consent',
+    'UnifrakturMaguntia',
+  ],
+  matcha: [
+    'DM Sans:wght@400;500;600;700',
+    'JetBrains Mono:wght@400;500;600;700',
+    'Playwrite US Trad',
+  ],
+  neutral: ['Figtree:wght@400;500;600;700'],
+  stone: [
+    'Figtree:wght@400;500;600;700',
+    'JetBrains Mono:wght@400;500;600;700',
+    'Montserrat:wght@400;500;600;700',
+  ],
+  y2k: [
+    'Crimson Text:wght@400;600;700',
+    'JetBrains Mono:wght@400;500;600;700',
+    'Poppins:wght@400;500;600;700',
+  ],
+};
+
+/**
+ * The families a Google Fonts request asks for: each with its weights,
  * and the axes it asks for beyond weight (`opsz`, an optical size), which
  * only a variable face carries.
- * @param {string} css
+ * @param {string[]} specs one per family (`Figtree:wght@400;700`)
  * @returns {Array<{family: string, weights: number[], axes: string[]}>}
  */
-export function googleFamilies(css) {
-  const url = /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/.exec(css)?.[1];
-  if (!url) return [];
-  return [...new URL(url).searchParams.getAll('family')].map(spec => {
+export function googleFamilies(specs) {
+  return specs.map(spec => {
     const [name, request = ''] = spec.split(':');
     const [axisList = '', values = ''] = request.split('@');
     const names = axisList ? axisList.split(',') : ['wght'];
@@ -100,15 +139,13 @@ function faces(css) {
  */
 function vendorTheme(theme, tmp) {
   const dir = path.join(themesDir, theme);
-  const google = path.join(dir, 'fonts.google.css');
-  if (!fs.existsSync(google)) return;
+  const specs = THEME_FONTS[theme];
+  if (!specs) return;
   const out = path.join(dir, 'fonts');
   fs.rmSync(out, {recursive: true, force: true});
   fs.mkdirSync(out);
   const rules = [];
-  for (const {family, weights, axes} of googleFamilies(
-    fs.readFileSync(google, 'utf8'),
-  )) {
+  for (const {family, weights, axes} of googleFamilies(specs)) {
     const slug = slugOf(family);
     // An axis beyond weight (an optical size) lives in the variable face
     // only: that face is shipped, under the family's own name, so the theme
@@ -129,6 +166,9 @@ function vendorTheme(theme, tmp) {
         fs.copyFileSync(path.join(pkg, 'files', file), path.join(out, file));
         const local = body
           .replace(/font-family:[^;]*;/, `font-family: '${family}';`)
+          // The face loads from the package within the block period, so the
+          // text never paints in its fallback first.
+          .replace(/font-display:[^;]*;/, 'font-display: fallback;')
           .replace(/src:[^;]*;/, `src: url('./fonts/${file}') format('woff2');`)
           .trim()
           .split('\n')
@@ -145,9 +185,10 @@ function vendorTheme(theme, tmp) {
       '',
       '/*',
       " * The theme's fonts, shipped in this package (their licenses are in",
-      ' * fonts/): each face is a local woff2 file with font-display: swap, so a',
-      ' * page draws at once in its fallback font and never waits on a network.',
-      ' * fonts.google.css loads the same faces from Google Fonts instead.',
+      ' * fonts/): each face is a local woff2 file with font-display: fallback:',
+      ' * the text waits a moment for its face, which loads from the package in',
+      " * that time, so it draws in the theme's font from its first paint; a page",
+      ' * never waits on a network.',
       ' * Written by scripts/vendor-theme-fonts.mjs: do not edit by hand.',
       ' */',
       '',

@@ -92,13 +92,13 @@ This theme uses a custom typeface:
 | Heading | Figtree                     |
 | Code    | System monospace (built in) |
 
-**Load it with the theme's font stylesheet.** It loads Figtree from font files shipped in this package (in `fonts/`, with its license), each with `font-display: swap`, so a page draws at once with its fallback fonts and never waits on a network (an offline machine, a sandbox, CI):
+**Load it with the theme's font stylesheet.** It loads Figtree from font files shipped in this package (in `fonts/`, with its license), each with `font-display: fallback`, so a page draws its text in the theme's fonts from its first paint and never waits on a network (an offline machine, a sandbox, CI):
 
 ```css
 @import '@astryxdesign/theme-neutral/fonts.css';
 ```
 
-To load it from Google Fonts instead, import `@astryxdesign/theme-neutral/fonts.google.css`; a page offline then waits on that request.
+To use Google Fonts' CDN instead, add its stylesheet to your page in place of the import: `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />`.
 
 Without it, the theme falls back to system fonts, a supported choice: the system stack is designed to hold up on its own.
 

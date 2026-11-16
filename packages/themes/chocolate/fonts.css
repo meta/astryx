@@ -2,16 +2,17 @@
 
 /*
  * The theme's fonts, shipped in this package (their licenses are in
- * fonts/): each face is a local woff2 file with font-display: swap, so a
- * page draws at once in its fallback font and never waits on a network.
- * fonts.google.css loads the same faces from Google Fonts instead.
+ * fonts/): each face is a local woff2 file with font-display: fallback:
+ * the text waits a moment for its face, which loads from the package in
+ * that time, so it draws in the theme's font from its first paint; a page
+ * never waits on a network.
  * Written by scripts/vendor-theme-fonts.mjs: do not edit by hand.
  */
 
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/albert-sans-latin-ext-400-normal.woff2') format('woff2');
   unicode-range:
@@ -23,7 +24,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/albert-sans-latin-400-normal.woff2') format('woff2');
   unicode-range:
@@ -35,7 +36,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/albert-sans-latin-ext-500-normal.woff2') format('woff2');
   unicode-range:
@@ -47,7 +48,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/albert-sans-latin-500-normal.woff2') format('woff2');
   unicode-range:
@@ -59,7 +60,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/albert-sans-latin-ext-600-normal.woff2') format('woff2');
   unicode-range:
@@ -71,7 +72,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/albert-sans-latin-600-normal.woff2') format('woff2');
   unicode-range:
@@ -83,7 +84,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/albert-sans-latin-ext-700-normal.woff2') format('woff2');
   unicode-range:
@@ -95,7 +96,7 @@
 @font-face {
   font-family: 'Albert Sans';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/albert-sans-latin-700-normal.woff2') format('woff2');
   unicode-range:
@@ -107,7 +108,7 @@
 @font-face {
   font-family: 'Fraunces';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 100 900;
   src: url('./fonts/fraunces-vietnamese-opsz-normal.woff2') format('woff2');
   unicode-range:
@@ -119,7 +120,7 @@
 @font-face {
   font-family: 'Fraunces';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 100 900;
   src: url('./fonts/fraunces-latin-ext-opsz-normal.woff2') format('woff2');
   unicode-range:
@@ -131,7 +132,7 @@
 @font-face {
   font-family: 'Fraunces';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 100 900;
   src: url('./fonts/fraunces-latin-opsz-normal.woff2') format('woff2');
   unicode-range:
@@ -143,7 +144,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-cyrillic-ext-400-normal.woff2')
     format('woff2');
@@ -154,7 +155,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-cyrillic-400-normal.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
@@ -163,7 +164,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-greek-400-normal.woff2') format('woff2');
   unicode-range:
@@ -173,7 +174,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-vietnamese-400-normal.woff2') format('woff2');
   unicode-range:
@@ -185,7 +186,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-latin-ext-400-normal.woff2') format('woff2');
   unicode-range:
@@ -197,7 +198,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 400;
   src: url('./fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
   unicode-range:
@@ -209,7 +210,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-cyrillic-ext-500-normal.woff2')
     format('woff2');
@@ -220,7 +221,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-cyrillic-500-normal.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
@@ -229,7 +230,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-greek-500-normal.woff2') format('woff2');
   unicode-range:
@@ -239,7 +240,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-vietnamese-500-normal.woff2') format('woff2');
   unicode-range:
@@ -251,7 +252,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-latin-ext-500-normal.woff2') format('woff2');
   unicode-range:
@@ -263,7 +264,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 500;
   src: url('./fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
   unicode-range:
@@ -275,7 +276,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-cyrillic-ext-600-normal.woff2')
     format('woff2');
@@ -286,7 +287,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-cyrillic-600-normal.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
@@ -295,7 +296,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-greek-600-normal.woff2') format('woff2');
   unicode-range:
@@ -305,7 +306,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-vietnamese-600-normal.woff2') format('woff2');
   unicode-range:
@@ -317,7 +318,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-latin-ext-600-normal.woff2') format('woff2');
   unicode-range:
@@ -329,7 +330,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 600;
   src: url('./fonts/jetbrains-mono-latin-600-normal.woff2') format('woff2');
   unicode-range:
@@ -341,7 +342,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-cyrillic-ext-700-normal.woff2')
     format('woff2');
@@ -352,7 +353,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-cyrillic-700-normal.woff2') format('woff2');
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
@@ -361,7 +362,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-greek-700-normal.woff2') format('woff2');
   unicode-range:
@@ -371,7 +372,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-vietnamese-700-normal.woff2') format('woff2');
   unicode-range:
@@ -383,7 +384,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-latin-ext-700-normal.woff2') format('woff2');
   unicode-range:
@@ -395,7 +396,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-display: swap;
+  font-display: fallback;
   font-weight: 700;
   src: url('./fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2');
   unicode-range:

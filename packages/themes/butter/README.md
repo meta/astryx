@@ -61,11 +61,11 @@ copies synchronized.
 
 The theme's font stylesheet loads Sarina, Outfit and JetBrains Mono from font
 files shipped in this package (in `fonts/`, with their licenses), each with
-`font-display: swap`, so a page draws at once with its fallback fonts and never
-waits on a network:
+`font-display: fallback`, so a page draws its text in the theme's fonts from its
+first paint and never waits on a network:
 
 ```css
 @import '@astryxdesign/theme-butter/fonts.css';
 ```
 
-To load them from Google Fonts instead, import `@astryxdesign/theme-butter/fonts.google.css`; a page offline then waits on that request.
+To use Google Fonts' CDN instead, add its stylesheet to your page in place of the import: `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sarina&display=swap" />`.

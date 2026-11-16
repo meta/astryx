@@ -2,10 +2,9 @@
 
 /**
  * Each built-in theme ships its fonts: its font stylesheet loads every face
- * from a woff2 file in the package, with font-display: swap, so a page that
- * imports it draws at once and never waits on a network (an offline
- * machine, a sandbox, CI). Each family it ships has its license beside it,
- * and the Google Fonts stylesheet names the same families.
+ * from a woff2 file in the package, with font-display: fallback, so a page
+ * that imports it never waits on a network (an offline machine, a sandbox,
+ * CI) and draws its text in the face it loads from the package. Each family it ships has its license beside it.
  */
 
 import * as fs from 'node:fs';
@@ -17,16 +16,6 @@ const themes = fs
   .readdirSync(themesDir)
   .filter(name => fs.existsSync(path.join(themesDir, name, 'fonts.css')));
 
-/** The families a Google Fonts stylesheet asks for. */
-function googleFamilies(css: string) {
-  const url = /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/.exec(css)?.[1];
-  return url
-    ? new URL(url).searchParams
-        .getAll('family')
-        .map(spec => ({family: (spec.split(':')[0] ?? '').replace(/\+/g, ' ')}))
-    : [];
-}
-
 /** The `@font-face` rules of a stylesheet. */
 function faces(css: string) {
   return [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(m => {
@@ -34,6 +23,7 @@ function faces(css: string) {
     return {
       family: /font-family:\s*'([^']+)'/.exec(body)?.[1],
       display: /font-display:\s*([a-z]+)/.exec(body)?.[1],
+      ranged: /unicode-range:/.test(body),
       urls: [...body.matchAll(/url\(\s*'?([^')]+)'?\s*\)/g)].map(
         u => u[1] as string,
       ),
@@ -54,43 +44,38 @@ describe('a theme font stylesheet', () => {
     const all = faces(css);
     expect(all.length).toBeGreaterThan(0);
     for (const face of all) {
-      expect(face.display, face.family).toBe('swap');
+      expect(face.display, face.family).toBe('fallback');
+      // A subset: a page fetches only the files its text needs.
+      expect(face.ranged, face.family).toBe(true);
       expect(face.urls.length).toBeGreaterThan(0);
       for (const url of face.urls) {
         expect(url).toMatch(/^\.\/fonts\/[^/]+\.woff2$/);
         expect(fs.existsSync(path.join(dir, url)), url).toBe(true);
       }
     }
-    // The same families as the Google Fonts stylesheet, each with its license.
-    const google = googleFamilies(
-      fs.readFileSync(path.join(dir, 'fonts.google.css'), 'utf8'),
-    );
-    expect(new Set(all.map(f => f.family))).toEqual(
-      new Set(google.map(g => g.family)),
-    );
-    for (const {family} of google)
+    // Each family it loads has its license beside its files.
+    for (const family of new Set(all.map(f => f.family)))
       expect(
         fs.existsSync(
           path.join(
             dir,
             'fonts',
-            `${family.toLowerCase().replace(/\s+/g, '-')}.LICENSE.txt`,
+            `${String(family).toLowerCase().replace(/\s+/g, '-')}.LICENSE.txt`,
           ),
         ),
         family,
       ).toBe(true);
+    // Every file it ships is a face it loads, or a license.
+    const named = new Set(all.flatMap(f => f.urls.map(u => path.basename(u))));
+    for (const file of fs.readdirSync(path.join(dir, 'fonts')))
+      expect(named.has(file) || file.endsWith('.LICENSE.txt'), file).toBe(true);
   });
 
-  it.each(themes)(
-    'of %s ships its fonts and the Google Fonts stylesheet',
-    theme => {
-      const pkg = JSON.parse(
-        fs.readFileSync(path.join(themesDir, theme, 'package.json'), 'utf8'),
-      );
-      expect(pkg.files).toEqual(
-        expect.arrayContaining(['fonts', 'fonts.css', 'fonts.google.css']),
-      );
-      expect(pkg.exports['./fonts.google.css']).toBeTruthy();
-    },
-  );
+  it.each(themes)('of %s ships its fonts', theme => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(themesDir, theme, 'package.json'), 'utf8'),
+    );
+    expect(pkg.files).toEqual(expect.arrayContaining(['fonts', 'fonts.css']));
+    expect(pkg.exports['./fonts.css']).toBeTruthy();
+  });
 });
