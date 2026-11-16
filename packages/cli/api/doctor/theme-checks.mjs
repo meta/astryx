@@ -9,7 +9,7 @@
 
 import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
-import postcss from 'postcss';
+import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
@@ -466,7 +466,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
   let unread = false;
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkAtRules(atRule => {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
@@ -533,7 +533,7 @@ function scopedToTheme(rule, slug) {
 /** @param {string} css @param {string} slug */
 function globalRules(css, slug) {
   const rules = new Map();
-  const root = postcss.parse(css);
+  const root = postcss().parse(css);
   root.walkRules(rule => {
     if (scopedToTheme(rule, slug)) return;
     /** @type {import('postcss').Node|undefined} */

@@ -49,7 +49,7 @@ describe('a border width set for the whole theme', () => {
     await themeEditNew('w1', {cwd});
     const r = await themeEditSet('w1', '--border-width', '4px', {cwd});
     const [surfaces, dividers] = r.data.leftOut;
-    for (const part of ['popover', 'tooltip', 'banner', 'button', 'dialog'])
+    for (const part of ['popover', 'tooltip', 'banner', 'dialog'])
       expect(surfaces.run, part).toContainEqual(
         expect.stringMatching(
           new RegExp(
@@ -57,6 +57,14 @@ describe('a border width set for the whole theme', () => {
           ),
         ),
       );
+    // A part whose variants differ is framed in the variants that draw a
+    // box (the button's ghost keeps none), as show's missed list frames it.
+    expect(surfaces.run).toContainEqual(
+      expect.stringMatching(/ --on button --when variant:primary$/),
+    );
+    expect(surfaces.run).not.toContainEqual(
+      expect.stringMatching(/ --on button$/),
+    );
     expect(surfaces.run.length).toBeGreaterThan(5);
     const named = dividers.run.map((/** @type {string} */ l) =>
       l.replace(/.* --on /, ''),

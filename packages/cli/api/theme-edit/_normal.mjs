@@ -268,7 +268,10 @@ export function normalizeEntry(thing, value) {
   } else if (
     v == null ||
     v.trim() === '' ||
-    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v)
+    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v) ||
+    // A declaration whose value went on past a space (`font=Inter,` then
+    // `Arial`, an unquoted list split by the shell): the rest of its value.
+    /^[^\s:=]+\s*[:=]\s*\S/.test(t)
   ) {
     // A mode label after the thing (`--color-accent (dark mode): #7c3aed`)
     // goes with the scope, as on a change line, also when the words after
@@ -1005,7 +1008,8 @@ export function stateSpelling(text) {
  * value names one (`dark-only`), with the word mode (`darkmode`, `dark
  * mode`, `mode dark`), or as a word for it (MODE_WORDS: night, day). The
  * one mode reader: the `--mode` flag, a mode label in a value, a saved
- * entry's mode and the settings file's mode all read it.
+ * entry's mode and the settings file's mode all read it; a typo of a mode
+ * is read by {@link modeNear}.
  * @param {unknown} text
  * @returns {'light' | 'dark' | null}
  */
@@ -1017,6 +1021,58 @@ export function modeWord(text) {
   const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
   if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
   return MODE_WORDS[w] ?? null;
+}
+
+/**
+ * The one mode a word names as {@link modeWord} reads it, or as a typo of
+ * light or dark that keeps its letters (`drak`, `darkk`, `ligth`, `lght`,
+ * `drak mode`, `kdar`): its letters in any order, or one doubled, dropped or
+ * added, never one
+ * letter for another, so a word of its own (right, tight, bark, park) is
+ * never a mode. The reading of a mode a person types with a typo, wherever
+ * it is typed: the `--mode` flag, a mode label in a `set` value or a `how`
+ * question; each offers or writes the line with the mode it names.
+ * @param {unknown} text
+ * @returns {'light' | 'dark' | null}
+ */
+export function modeNear(text) {
+  const exact = modeWord(text);
+  if (exact) return exact;
+  const stem = String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-?(?:only|mode)$/, '')
+    .replace(/^mode-?/, '');
+  // Same letters in any order (`kdar`), or one letter more or fewer
+  // within the typo limit.
+  const near = /** @type {const} */ (['light', 'dark']).filter(mode =>
+    stem.length === mode.length
+      ? lettersBeyond(stem, mode) === 0
+      : typoNear(stem, mode) &&
+        lettersBeyond(mode, stem) <= (stem.length < mode.length ? 1 : 0) &&
+        lettersBeyond(stem, mode) <= (stem.length > mode.length ? 1 : 0),
+  );
+  return near.length === 1 ? near[0] : null;
+}
+
+/**
+ * How many letters one word has beyond the other's, counted with repeats
+ * (`darkk` has one beyond `dark`; `bark` one beyond it too).
+ * @param {string} a
+ * @param {string} b
+ */
+function lettersBeyond(a, b) {
+  /** @type {Map<string, number>} */
+  const left = new Map();
+  for (const c of b) left.set(c, (left.get(c) ?? 0) + 1);
+  let more = 0;
+  for (const c of a) {
+    const k = left.get(c) ?? 0;
+    if (k) left.set(c, k - 1);
+    else more++;
+  }
+  return more;
 }
 
 /**
@@ -1617,6 +1673,7 @@ export function readsTyped({
       if (
         i > 0 &&
         /^font(-family)?$|^--font-family/.test(typedKey) &&
+        !READINGS.has(w) &&
         Object.keys(WEIGHT_WORDS).some(
           x => typoNear(w, x) && (x === o || READINGS.get(x)?.has(o)),
         )

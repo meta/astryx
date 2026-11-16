@@ -119,7 +119,9 @@ owns response fields and compatibility.
   over a docs topic; among docs routes, the route with the fewest segments
   wins, then the first in tree order. That command goes right after the last
   suggestion that matches at its tier or a better one, so it goes first when
-  none does. The list never grows: the last suggestion drops, and a command
+  none does; a suggested component whose doc's keywords or search card's
+  synonyms hold the argument (in any case, without spaces and hyphens) matches
+  at folded. The list never grows: the last suggestion drops, and a command
   that would come last is left out. That command is the only suggestion when
   the list is otherwise empty, and, for docs, when no route it suggests shares
   a word with the argument. A component error for an example block keeps its

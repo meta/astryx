@@ -394,10 +394,13 @@ works on is `spec:AST-040` FR9's.
     the component list (with each integration's component replacements),
     each integration's components with the doc parts the not-found matcher
     scores, integrations' theme records, what `theme build` checks a theme
-    against in Core's component docs, the lookup commands' not-found hint's
-    name summaries of folder trees, npm's list of the files an integration
+    against in Core's component docs, what `theme build` finds when it checks
+    a theme's pseudo-class keys and token names, the lookup commands'
+    not-found hint's name summaries of folder trees, npm's list of the files an integration
     package packs (for `integration check` and `doctor integration validate`
-    in the package's own folder), the CLI's own docs tree, and doctor's
+    in the package's own folder), the locale and time zone a run's debug
+    record names (on Linux, kept by any command that delivers a debug
+    record), the CLI's own docs tree, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
@@ -426,8 +429,9 @@ works on is `spec:AST-040` FR9's.
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
-    verifying a package, and for Node's compile cache of the CLI's own modules
-    in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
+    verifying a package, for a scratch copy of a template at a path the caller
+    names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
+    compile cache of the CLI's own modules in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
     written from that run, used only while it is a real folder the user owns
     and others cannot open, never where the system has no user ids, and off
     when `NODE_DISABLE_COMPILE_CACHE` is set;

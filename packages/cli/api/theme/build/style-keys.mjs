@@ -20,13 +20,21 @@
 
 import {
   cssTree,
+  keptCssTreeAnswer,
   mdnCssSelectors,
 } from '../../../foundation/runtime/css-tree.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 
-/** @param {unknown} value @returns {value is Record<string, any>} */
+/**
+ * A block of keys: a plain object. An array, a Date or a boxed primitive is
+ * a value, which the value judge names.
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
 const isBlock = value =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+  value !== null &&
+  typeof value === 'object' &&
+  Object.prototype.toString.call(value) === '[object Object]';
 
 /** The closer each opener in a selector waits for. */
 const CLOSERS = /** @type {Record<string, string>} */ ({
@@ -167,6 +175,29 @@ const knownPseudoElements = () =>
     ...Object.keys(AFTER_FUNCTIONAL_PSEUDO_ELEMENT),
   ]));
 
+/** @type {Set<string> | null} */
+let knownClasses = null;
+/** The pseudo-class names MDN's selector data lists, lower case. */
+const knownPseudoClasses = () =>
+  (knownClasses ??= new Set(
+    Object.keys(mdnCssSelectors())
+      .filter(k => k.startsWith(':') && !k.startsWith('::'))
+      .map(k => k.slice(1).replace(/\(\)$/, '')),
+  ));
+
+/**
+ * The known pseudo-class one or two edits from a name it is not, or null.
+ * @param {string} name
+ */
+const nearPseudoClass = name =>
+  knownPseudoClasses().has(name.toLowerCase())
+    ? null
+    : ([...knownPseudoClasses()].find(
+        known =>
+          levenshteinDistance(known, name.toLowerCase(), 2, {swaps: true}) <=
+          (name.length > 5 ? 2 : 1),
+      ) ?? null);
+
 /**
  * The known pseudo-element one or two edits from a name, or null.
  * @param {string} name
@@ -272,6 +303,13 @@ function compoundProblem(key, ast) {
       nearPseudoElement(node.name)
     )
       why ??= `${key} names ::${node.name}, a pseudo-element no browser knows, so the browser drops the rule; did you mean ::${nearPseudoElement(node.name)}?`;
+    else if (
+      node.type === 'PseudoClassSelector' &&
+      !node.name.startsWith('-') &&
+      !node.name.includes('\\') &&
+      nearPseudoClass(node.name)
+    )
+      why ??= `${key} names :${node.name}, a pseudo-class no browser knows, so the browser drops the rule; did you mean :${nearPseudoClass(node.name)}?`;
     else if (node.name.includes('\\'))
       why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
     else if (
@@ -409,12 +447,24 @@ export const innerBlock = (key, kind) =>
  * @returns {string | null}
  */
 export function partKeyProblem(key, value, kind) {
+  return keyProblem(key, value, kind, pseudoKeyProblem);
+}
+
+/**
+ * {@link partKeyProblem}, with a pseudo key's problem from `pseudoProblem`.
+ * @param {string} key
+ * @param {unknown} value
+ * @param {PartBlock} kind
+ * @param {(key: string) => string | null} pseudoProblem
+ * @returns {string | null}
+ */
+function keyProblem(key, value, kind, pseudoProblem) {
   if (value === undefined) return null;
   if (key.trim() === '')
     return `an empty key holds ${isBlock(value) ? 'a block' : 'a value'}, which the build writes as a declaration with no property, and the browser drops it: name the property or the pseudo key`;
   if (key.startsWith('--')) return partCustomPropertyProblem(key);
   if (isBlock(value)) {
-    if (key.startsWith(':') && kind !== 'pseudo') return pseudoKeyProblem(key);
+    if (key.startsWith(':') && kind !== 'pseudo') return pseudoProblem(key);
     if (kind === 'style' && MODE_KEYS.includes(key)) return null;
     return `${key} holds a block, but ${kind === 'pseudo' ? 'a pseudo key holds properties only' : `only a pseudo key (':hover', '::before')${kind === 'style' ? ' or @light / @dark' : ''} holds one here`}, so the build writes it as a declaration the browser drops`;
   }
@@ -444,44 +494,96 @@ export function partCustomPropertyProblem(name) {
  */
 
 /**
+ * What {@link pseudoKeyProblem} and {@link pseudoKeyNotes} give each key in
+ * `keys`. They read nothing but the key, css-tree and the MDN data it ships,
+ * so their answers are kept between runs (keptCssTreeAnswer).
+ * @param {string[]} keys sorted, each once
+ * @returns {Map<string, {problem: string | null, notes: string[]}>}
+ */
+function pseudoKeyChecks(keys) {
+  if (keys.length === 0) return new Map();
+  /** @type {Array<[string, string | null, string[]]>} */
+  const answers = keptCssTreeAnswer('theme-pseudo-key-checks', keys, keys =>
+    keys.map(key => {
+      const problem = pseudoKeyProblem(key);
+      return [key, problem, problem === null ? pseudoKeyNotes(key) : []];
+    }),
+  );
+  return new Map(
+    answers.map(([key, problem, notes]) => [key, {problem, notes}]),
+  );
+}
+
+/**
  * Every key in a part's style blocks that Core cannot build as written, on
  * the page, its surfaces (onDark, onLight) and the adaptation rules' values.
  * @param {Record<string, any>} theme
  * @returns {StyleKeyProblem[]}
  */
 export function styleKeyProblems(theme) {
+  /** @type {Array<{surface: any, at: string[]}>} */
+  const surfaces = [
+    {surface: theme, at: []},
+    {surface: theme.onDark ?? theme.__onDark, at: ['onDark']},
+    {surface: theme.onLight ?? theme.__onLight, at: ['onLight']},
+  ];
+  const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
+  if (Array.isArray(rules))
+    rules.forEach((rule, i) =>
+      surfaces.push({
+        surface: rule?.value,
+        at: ['adaptations', 'rules', String(i), 'value'],
+      }),
+    );
+  /**
+   * Each part's style block, with where it is.
+   * @param {(rules: any, at: string[]) => void} visit
+   */
+  const eachStyle = visit => {
+    for (const {surface, at} of surfaces) {
+      if (!isBlock(surface) || !isBlock(surface.components)) continue;
+      for (const [name, styles] of Object.entries(surface.components))
+        if (isBlock(styles))
+          for (const [key, rules] of Object.entries(styles))
+            visit(rules, [...at, 'components', name, key]);
+    }
+  };
+
+  // Every pseudo key the checks below can ask about: each one at any depth
+  // of a block, whatever the keys around it give.
+  /** @type {Set<string>} */
+  const pseudoKeys = new Set();
+  /** @param {any} node @param {PartBlock} kind @param {number} depth */
+  const collect = (node, kind, depth) => {
+    if (!isBlock(node) || depth > 12) return;
+    for (const [k, v] of Object.entries(node)) {
+      if (k.startsWith(':') && isBlock(v) && kind !== 'pseudo')
+        pseudoKeys.add(k);
+      collect(v, innerBlock(k, kind), depth + 1);
+    }
+  };
+  eachStyle(rules => collect(rules, 'style', 0));
+  const checks = pseudoKeyChecks([...pseudoKeys].sort());
+  const checked = (/** @type {string} */ key) =>
+    /** @type {{problem: string | null, notes: string[]}} */ (checks.get(key));
+
   /** @type {StyleKeyProblem[]} */
   const out = [];
   /** @param {any} node @param {string[]} at @param {PartBlock} kind @param {number} depth */
   const block = (node, at, kind, depth) => {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
-      const why = partKeyProblem(k, v, kind);
+      const why = keyProblem(k, v, kind, key => checked(key).problem);
       if (why) {
         out.push({path: [...at, k], why});
         continue;
       }
       if (k.startsWith(':') && isBlock(v))
-        for (const note of pseudoKeyNotes(k))
+        for (const note of checked(k).notes)
           out.push({path: [...at, k], why: note});
       block(v, [...at, k], innerBlock(k, kind), depth + 1);
     }
   };
-  /** @param {any} surface @param {string[]} at */
-  const parts = (surface, at) => {
-    if (!isBlock(surface) || !isBlock(surface.components)) return;
-    for (const [name, styles] of Object.entries(surface.components))
-      if (isBlock(styles))
-        for (const [key, rules] of Object.entries(styles))
-          block(rules, [...at, 'components', name, key], 'style', 0);
-  };
-  parts(theme, []);
-  parts(theme.onDark ?? theme.__onDark, ['onDark']);
-  parts(theme.onLight ?? theme.__onLight, ['onLight']);
-  const rules = theme.adaptations?.rules ?? theme.__adaptations?.rules;
-  if (Array.isArray(rules))
-    rules.forEach((rule, i) =>
-      parts(rule?.value, ['adaptations', 'rules', String(i), 'value']),
-    );
+  eachStyle((rules, at) => block(rules, at, 'style', 0));
   return out;
 }

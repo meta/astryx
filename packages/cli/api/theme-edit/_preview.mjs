@@ -28,6 +28,8 @@ import {
   bindingFrom,
   SAMPLE_SEARCH_ITEMS,
   SAMPLE_SOURCE,
+  OPEN_SCENES,
+  sampleControls,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -43,7 +45,9 @@ import {
   builtFontWeights,
   builtItalic,
   fontPackages,
+  mediaSurfaceSides,
   modesOf,
+  settleMediaSides,
   shown,
   themeFiles,
   APP_COPY_BUILT,
@@ -191,6 +195,30 @@ export function showcaseItems(project, group) {
             : {}),
       }),
     );
+  }
+  // The overlays section also shows overlays in deeper states (a submenu, a
+  // form in a popover), and the sample page's controls in each state a
+  // person puts them in. A scene a Core without one of its parts cannot
+  // draw is left out.
+  if (!group || group === 'overlays') {
+    for (const scene of OPEN_SCENES)
+      if ([...elementNames(scene.tree)].every(n => importPathOf(project, n)))
+        items.push({
+          ...scene,
+          // A cell of its own: a deeper state is as tall as the overlay.
+          name: `${scene.name} ${scene.label}`,
+          group: 'overlays',
+          ...(scene.openable ? {onlyOpen: true} : {}),
+        });
+    for (const c of sampleControls())
+      if ([...elementNames(c.tree)].every(n => importPathOf(project, n)))
+        items.push({
+          group: 'overlays',
+          name: [...elementNames(c.tree)].at(-1) ?? '',
+          label: c.label,
+          tree: c.tree,
+          states: true,
+        });
   }
   items.push({
     group: 'pages',
@@ -863,8 +891,19 @@ export async function renderPreview(ctx, slug, data) {
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   refuseOverIrregular(project.cwd, out, 'the sample page');
-  // Written whole and renamed in, never through a link.
-  writeWhole(out, withRenderKey(html, key));
+  // Written whole and renamed in, never through a link; an auto media
+  // surface drawn on the side the app's measurement picks.
+  writeWhole(
+    out,
+    withRenderKey(
+      settleMediaSides(
+        html,
+        await mediaSurfaceSides(ctx, slug, data),
+        themeImports(ctx, slug, data, renderDir(project)).mode,
+      ),
+      key,
+    ),
+  );
   return shown(project.cwd, out);
 }
 
@@ -914,8 +953,19 @@ export async function renderSheet(ctx, slug, data, options = {}) {
   );
   fs.mkdirSync(path.dirname(out), {recursive: true});
   refuseOverIrregular(project.cwd, out, 'the sheet');
-  // Written whole and renamed in, never through a link.
-  writeWhole(out, withRenderKey(html, key));
+  // Written whole and renamed in, never through a link; an auto media
+  // surface drawn on the side the app's measurement picks.
+  writeWhole(
+    out,
+    withRenderKey(
+      settleMediaSides(
+        html,
+        await mediaSurfaceSides(ctx, slug, data),
+        themeImports(ctx, slug, data, renderDir(project)).mode,
+      ),
+      key,
+    ),
+  );
   return {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
@@ -1236,11 +1286,20 @@ function changeLine(project, C, name, theme) {
     ['border', '"1px solid <color>"'],
     ['text', '"<color>"'],
   ]))
-    if (C.partReads(part, aspect).length)
+    if (C.partReads(part, aspect).length) {
+      // A part whose paint is a line inside it (a divider) takes the token
+      // its line reads: a fill on its own element would be under the line.
+      const lineToken =
+        aspect === 'background' &&
+        (C.MAP[part]?.line ?? []).includes('background-color')
+          ? Object.keys(C.MAP[part]?.own?.['background-color']?.tokens ?? {})[0]
+          : null;
+      if (lineToken) return `${P} set ${t} ${lineToken} ${value} --on ${part}`;
       // A part whose color comes from its color prop takes the text token.
       return aspect === 'text' && COLOR_PROP_PARTS.includes(part)
         ? `${P} set ${t} --color-text-primary ${value}`
         : `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+    }
   if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
   return `${P} how ${part}`;
 }
@@ -1281,6 +1340,10 @@ function componentsPage(project, {theme = null, C}) {
     .items.filter(
       it =>
         it.group !== 'pages' &&
+        // The sheet's own deeper overlays and drawn states: the app's page
+        // opens and hovers its parts live.
+        !it.states &&
+        Boolean(project.components[it.name]) &&
         !PAGE_SKIP.has(it.name) &&
         !project.components[it.name]?.overlay,
     )
