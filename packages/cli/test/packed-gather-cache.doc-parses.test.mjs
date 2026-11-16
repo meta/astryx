@@ -2,10 +2,11 @@
 
 /**
  * @file The parse of a doc the CLI reads from its stored docs is kept per
- * user, by the doc's text, in a run that keeps catalogs. A run that reads it
- * back prints what a fresh parse prints, on stdout and on stderr, and parses
- * nothing new. Every module that imports zod loads one copy of it, in a run
- * that keeps a parse and in one that reads it back.
+ * user, by the doc's text and the zod release the parsers load, in a run that
+ * keeps catalogs. A run that reads it back prints what a fresh parse prints,
+ * on stdout and on stderr, and parses nothing new; under another zod release
+ * the doc is parsed and kept again. Every module that imports zod loads one
+ * copy of it, in a run that keeps a parse and in one that reads it back.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -17,6 +18,7 @@ import {
   freshTmp,
   hasModuleHooks,
   keptTmp,
+  packed,
   run,
   usePackedCli,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
@@ -44,6 +46,38 @@ function docParses(tmp) {
   return out;
 }
 
+/**
+ * Give the packed CLI a copy of zod that names another version, in place of
+ * its linked dependencies, until the returned function links them back.
+ * @returns {() => void}
+ */
+function useAnotherZod() {
+  const modules = path.join(packed, 'node_modules');
+  const link = fs.readlinkSync(modules);
+  const own = fs.realpathSync(modules);
+  fs.unlinkSync(modules);
+  fs.mkdirSync(modules);
+  for (const name of fs.readdirSync(own)) {
+    if (name === 'zod') continue;
+    fs.symlinkSync(
+      fs.realpathSync(path.join(own, name)),
+      path.join(modules, name),
+    );
+  }
+  const zod = path.join(modules, 'zod');
+  fs.cpSync(fs.realpathSync(path.join(own, 'zod')), zod, {recursive: true});
+  const manifest = path.join(zod, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  fs.writeFileSync(
+    manifest,
+    JSON.stringify({...pkg, version: `${pkg.version}-another`}),
+  );
+  return () => {
+    fs.rmSync(modules, {recursive: true, force: true});
+    fs.symlinkSync(link, modules, 'dir');
+  };
+}
+
 describe.skipIf(!hasModuleHooks)('a kept doc parse', () => {
   it('prints what a fresh parse prints, on stdout and stderr, and a later run parses nothing new', () => {
     const tmp = keptTmp('doc-parses');
@@ -59,6 +93,23 @@ describe.skipIf(!hasModuleHooks)('a kept doc parse', () => {
     expect(kept.size).toBeGreaterThan(0);
     run(['component', 'Button'], {tmp, json: false});
     expect(docParses(tmp)).toEqual(kept);
+  });
+
+  it('is parsed and kept again under another zod release, and prints the same', () => {
+    const tmp = keptTmp('doc-parses-another-zod');
+    run(['component', 'Button'], {tmp: freshTmp(), json: false});
+    const fresh = run(['component', 'Button'], {tmp: freshTmp(), json: false});
+    expect(run(['component', 'Button'], {tmp, json: false})).toEqual(fresh);
+    const kept = docParses(tmp);
+    expect(kept.size).toBeGreaterThan(0);
+    const linkBack = useAnotherZod();
+    try {
+      expect(run(['component', 'Button'], {tmp, json: false})).toEqual(fresh);
+      const added = [...docParses(tmp).keys()].filter(name => !kept.has(name));
+      expect(added.length).toBe(kept.size);
+    } finally {
+      linkBack();
+    }
   });
 
   it('loads one copy of zod in a run that keeps a parse and in one that reads it back', () => {
