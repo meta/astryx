@@ -26,6 +26,12 @@ Generation is authoring work: it produces colors for people to inspect, adjust,
 and accept. The accepted result is saved as private, theme-owned palette data.
 Ordinary theme builds do not rerun the generator.
 
+A theme may instead opt into a palette input. `themePalette()` from
+`@astryxdesign/core/palette` takes a few seed colors and a pinned recipe,
+generates the palette, and maps it to the theme's color tokens. The theme passes
+the result to `defineTheme({palette})`. The theme source is then the accepted
+record of its colors: the same input always gives the same tokens.
+
 The Palette Generator Lab compares candidate recipes, complete families, modes,
 anchors, and existing themes, then lets an author copy candidate JSON. The
 versioned OKLCH recipe is the visual basis for supported generation. A later
@@ -34,7 +40,8 @@ lifecycle of accepted palette data and any first-class palette/theme integration
 
 The Astryx CLI theme-authoring workflow exposes the pure
 `generateTonalPalette()` authoring API and the
-`astryx theme palette generate` command. Both use one versioned engine. Neither
+`astryx theme palette generate` command. Core exposes the same engine through
+`@astryxdesign/core/palette`. All of them use one versioned engine. None of them
 implicitly rewrites a theme.
 
 New-authoring interfaces recommend the palette workflow and do not present the
@@ -54,9 +61,9 @@ TypeScript declaration metadata is not executable runtime behavior.
 
 ## Non-goals
 
-- Choose the public API, accepted data shape, semantic-role reference model,
-  compiler integration, or runtime projection for a future first-class palette.
-  A later current authority—AST-018 only if amended and accepted—owns those choices.
+- Choose the accepted palette-file shape or the semantic-role reference model
+  for themes that keep a committed palette. `spec:AST-018` owns that path once
+  accepted. This record owns only the opt-in palette input (FR19).
 - Remove `DefineThemeInput.color`, `ThemeAdaptationValue.color`, or
   `expandColorScale()` before their separately identified cleanup items are
   approved for a minor release.
@@ -71,7 +78,8 @@ TypeScript declaration metadata is not executable runtime behavior.
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | AST-008                         | Candidate generation, the new-authoring recommendation, and the three legacy color-scale deprecation lifecycles.                 |
 | Ruby                            | The visual recipe and recommendation, after the required comparison evidence.                                                    |
-| Later current palette authority | Accepted palette shape, stable semantic-role references, validation, and any first-class authoring or compilation integration.   |
+| AST-008                         | The opt-in palette input (`themePalette()` and `defineTheme({palette})`), its token mapping, and its pinned recipes.             |
+| Later current palette authority | Accepted palette-file shape, stable semantic-role references, and validation for themes that keep a committed palette.           |
 | `theme:<name>`                  | Accepted exact palette values, mappings and deviations, required states, compatibility, and rendered evidence.                   |
 | Current theme architecture      | Productive `defineTheme` normalization and compilation, including byte-equivalent legacy behavior during the deprecation window. |
 | CLI authoring surface           | The generation command, pure API, candidate serialization, receipts, safe writes, migration tooling, and authoring diagnostics.  |
@@ -145,7 +153,9 @@ TypeScript declaration metadata is not executable runtime behavior.
   without explicit author intent. Once adopted, the palette is ordinary
   author-owned data: it may be edited freely and does not remain under generator
   control. Edited accepted data MUST NOT claim exact regeneration, and ordinary
-  theme builds MUST NOT rerun the generator.
+  theme builds MUST NOT rerun the generator. A theme that opts into the palette
+  input (FR19) declares the generator run in its source; its build runs that
+  declared, pinned run and no other.
 - **FR8 — The selected recipe preserves complete-family evidence.** The first
   production recipe MUST be pinned by its normative algorithm and canonical
   fixtures rather than another implementation. Before release, its
@@ -180,17 +190,18 @@ TypeScript declaration metadata is not executable runtime behavior.
 - **FR13 — Authoring has no runtime cost.** Generator code, color-math
   dependencies, candidates, reproducibility data, and suggestion logic MUST NOT
   enter Core component runtime, theme mounting, default theme CSS or JavaScript,
-  or a theme package's default runtime export.
+  or a theme package's default runtime export. The engine and the palette
+  mapping live in their own Core entry, `@astryxdesign/core/palette`. Nothing
+  else in Core imports it, so an app that does not import it ships none of it.
+  The engine adds no third-party dependency to Core.
 - **FR14 — Supported generation surfaces stay narrow.**
   `generateTonalPalette(request)` is a pure authoring function that returns
   candidate data without reading or writing files.
   `astryx theme palette generate <config>` is its non-interactive file adapter.
   TypeScript is the primary committed output so exact family and stop keys remain
   checkable; JSON MAY be requested for interoperable tooling. These surfaces MUST
-  NOT rewrite a theme or perform semantic mapping implicitly. A future explicit
-  first-class palette input, stable mapping contract, or compiler integration
-  requires separate current authority; this requirement neither approves nor
-  forbids one.
+  NOT rewrite a theme or perform semantic mapping implicitly. Semantic mapping
+  happens only through the explicit palette input (FR19).
 - **FR15 — Visual review uses one standard artifact.** The CLI MAY explicitly
   write a self-contained HTML preview from the same candidate data. The preview
   MUST identify itself as `palette-preview-v1`, show every generated family,
@@ -234,6 +245,31 @@ TypeScript declaration metadata is not executable runtime behavior.
   data or literal token values and references them through `tokens`. Removal
   requires the separate cleanup ids and minor-release approval in the lifecycle
   table below.
+
+- **FR19 — The palette input is opt-in, pinned, and yields to explicit
+  tokens.** `themePalette(input)` from `@astryxdesign/core/palette` takes
+  `accent`, `neutral`, `success`, `warning`, `danger`, and `info` seed colors
+  (each optional, at least one), `vibrancy` (0–100, default 50), and `recipe`.
+  - A palette that names no recipe runs `astryx-oklch-v1`, so its colors never
+    move with a package upgrade. The CLI theme editor names
+    `astryx-oklch-v2` explicitly for a new palette.
+  - It builds the same generation request as the CLI theme editor builds for
+    the same color settings: one family per seed, the seed pinned exactly at
+    its nearest light stop, and in dark when it reads there.
+  - It maps the generated stops to color tokens with the theme editor's
+    mapping, against Core's default token values: neutral stops for surfaces,
+    text, borders, and icons; and for the accent and each status color its
+    fill, the text on that fill, its text, icon, muted fill, and border,
+    picked by contrast against the surfaces as the editor picks them.
+  - `defineTheme({palette})` writes those tokens under the theme's own
+    `tokens`: an explicit token wins, token by token. A theme without
+    `palette`, `color`, and every official theme build exactly as before.
+- **FR20 — One engine, generated into the CLI.** The engine and the palette
+  mapping have one source, in Core. The CLI runs a copy generated from that
+  source, so `astryx theme palette generate` keeps working with no Core
+  installed or with an older one. A test fails when the copy differs from
+  what the source generates by one byte, and when the copy and Core give
+  different output for the same request.
 
 ## Deprecation lifecycle
 
@@ -326,9 +362,10 @@ approval for one id does not authorize removal of another.
 ## Implementation contract
 
 1. `astryx-oklch-v1` is defined in one owned production engine that pins its
-   constants, transformations, and exact regression vectors.
-2. The pure authoring API and CLI adapter use one deterministic engine and agree
-   on recipe semantics. The CLI follows `architecture:cli-surface` for its
+   constants, transformations, and exact regression vectors. Its source is
+   `packages/core/src/palette`.
+2. The pure authoring API, the CLI adapter, and the palette input use one
+   deterministic engine and agree on recipe semantics. The CLI follows `architecture:cli-surface` for its
    command, response, error, documentation, support, and write contract.
 3. Generated TypeScript exports author-owned palette data without importing the
    generator. Generated JSON contains the same canonical palette values.
@@ -404,6 +441,8 @@ not become universal accessibility or contrast guarantees for isolated colors.
 | State                       | Required result                                                                                                           |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Generation absent           | Existing themes, builds, runtime bytes, and supported package ranges stay unchanged.                                      |
+| Palette input absent        | `defineTheme` output, `color`, official themes, and app bundles stay unchanged; no generator code ships.                  |
+| Palette input used          | The theme's color tokens come from its pinned palette; each explicit token overrides its palette value.                   |
 | Candidate produced          | No source, theme, package, or runtime output changes.                                                                     |
 | Palette accepted            | Exact values enter theme-owned palette data under `theme:<name>`; a later current authority may standardize the shape.    |
 | Mapping accepted            | Under that authority, stable semantic-role references are inspectable, reviewable, and update coherently.                 |
@@ -446,7 +485,9 @@ do not define the production recipe.
 Accepted palettes are committed snapshots. Theme mappings use literal CSS values
 or explicit references to committed palette data; generation never runs implicitly.
 A generated candidate changes no accepted source or rendered output until an author
-explicitly accepts it.
+explicitly accepts it. The palette input (DEC-16) is an explicit source: its
+seeds and pinned recipe are the accepted record, and they give the same colors
+on every build.
 
 Rejected: an implicit generator run during ordinary theme normalization or build,
 because it would recolor a theme without an explicit accepted source change.
@@ -455,11 +496,15 @@ because it would recolor a theme without an explicit accepted source change.
 
 **Decider:** `cixzhang`, `2026-09-03`
 
-The CLI theme-authoring workflow is the first supported consumer. The pure
-`generateTonalPalette()` API enables programmatic authoring without filesystem
-effects; `astryx theme palette generate` adds preview and explicit file output.
-Both use the same `astryx-oklch-v1` engine. Neither enters Core or
-`defineTheme()`.
+The pure `generateTonalPalette()` API enables programmatic authoring without
+filesystem effects; `astryx theme palette generate` adds preview and explicit
+file output. The engine's source is in Core, in its own entry
+`@astryxdesign/core/palette`, which also serves the palette input (DEC-16). The
+CLI runs a copy generated from that source and checked byte for byte, so the
+CLI does not depend on the installed Core version.
+
+Rejected: the CLI importing the engine from the installed Core, because the
+palette command would then fail with no Core or an older one.
 
 ### DEC-12 — The generator defaults without restricting palette authors
 
@@ -522,19 +567,27 @@ diagnostics, maintained-source migration, and compatibility proof. They then
 enter `deprecated` with byte-equivalent executable behavior and no runtime warning
 or branch. Each public surface owns a separate deprecation and cleanup id.
 
-Future first-class palette input, stable semantic-role mapping, and compiler
-integration remain open to AST-018 if amended and accepted, or to a later current
-authority. AST-008 requires explicit acceptance, coherent mapped updates, and no
-implicit generator run without selecting that future API shape.
+The first-class palette input is DEC-16. The committed-palette path for themes
+that do not use it remains open to AST-018 if amended and accepted.
 
 Rejected: a runtime compatibility flag or deprecation warning, or a permanent ban
 on first-class palette/theme integration.
 
+### DEC-16 — An opt-in palette input in Core
+
+**Decider:** pending AST-008 owner approval
+
+A theme may pass `themePalette({accent, neutral, success, warning, danger, info,
+vibrancy, recipe})` to `defineTheme({palette})` (FR19). The palette input is
+its own Core entry, so the generator ships only to apps that import it (FR13).
+`defineTheme` receives the resolved tokens, not palette metadata, and explicit
+`tokens` override them one by one. The mapping is the CLI theme editor's, so a
+theme made in the editor and one made with the same seeds in code get the same
+colors. A recipe is never changed in place; a new look is a new recipe name.
+
+Rejected: a plain object option that `defineTheme` generates from, because
+`defineTheme` would then import the generator into every app.
+
 ## Open questions
 
-- **OQ1 — What is the first-class accepted palette/theme contract?** A later
-  current authority—AST-018 only if amended and accepted—must settle the public
-  input shape, stable semantic-role references, authoring and compilation
-  behavior, validation, and artifact lifecycle. AST-008 requires explicit review,
-  coherent mapped updates, and no implicit generator run without selecting among
-  those API shapes.
+None.
