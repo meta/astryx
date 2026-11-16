@@ -89,7 +89,7 @@ const styles = stylex.create({
   },
   content: {
     // Clears the readout above and the bar below.
-    paddingBlockStart: `calc(${spacingVars['--spacing-12']} * 2)`,
+    paddingBlockStart: `calc(${spacingVars['--spacing-12']} * 5)`,
     paddingBlockEnd: `calc(${spacingVars['--spacing-12']} * 2)`,
   },
 });
@@ -104,6 +104,7 @@ const KEYBOARD_MODES = [
 interface Reading {
   displayMode: string;
   keyboardMode: string;
+  claim: string;
   scrollY: number;
   layoutHeight: number;
   visualHeight: number;
@@ -115,6 +116,10 @@ interface Reading {
   barBottom: number;
   barShown: number;
   focused: string;
+}
+
+function isClaimQuery(): boolean {
+  return new URLSearchParams(window.location.search).get('claim') === '1';
 }
 
 function round(value: number): number {
@@ -137,7 +142,10 @@ function read(
   const visualTop = visual?.offsetTop ?? 0;
   const visualHeight = visual?.height ?? window.innerHeight;
   const frameOffset = frame?.getBoundingClientRect().top ?? 0;
-  const box = bar?.getBoundingClientRect();
+  // The tab list is the visible capsule; the root adds a transparent inset.
+  const box = (
+    bar?.querySelector('[role="tablist"]') ?? bar
+  )?.getBoundingClientRect();
   const barTop = (box?.top ?? 0) - frameOffset;
   const barBottom = (box?.bottom ?? 0) - frameOffset;
   const overlap = Math.max(
@@ -152,6 +160,7 @@ function read(
   );
   return {
     keyboardMode: mode?.[1] ?? 'resizes-visual (default)',
+    claim: isClaimQuery() ? 'on' : 'off',
     // An iOS Home Screen app without a web manifest reports itself only
     // through `navigator.standalone`.
     displayMode:
@@ -179,7 +188,6 @@ function read(
 export default function TabBarKeyboardProbePage() {
   const barRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLElement | null>(null);
-  const [isClaim, setIsClaim] = useState(false);
   const panLargestRef = useRef(0);
   const [reading, setReading] = useState<Reading | null>(null);
   const [tab, setTab] = useState('home');
@@ -206,30 +214,6 @@ export default function TabBarKeyboardProbePage() {
       `${original.replace(/,?\s*interactive-widget=[a-z-]+/, '')}, interactive-widget=${requested}`,
     );
     return () => viewport.setAttribute('content', original);
-  }, []);
-
-  useEffect(() => {
-    // An app can focus its field from the press itself, with `preventScroll`,
-    // so the browser does not pan to reveal it.
-    if (new URLSearchParams(window.location.search).get('claim') !== '1') {
-      return;
-    }
-    setIsClaim(true);
-    const field = document.querySelector('[data-testid="text-field"]');
-    const input = field?.matches('input')
-      ? field
-      : field?.querySelector('input');
-    if (!(input instanceof HTMLInputElement)) {
-      return;
-    }
-    const claim = () => {
-      if (input.ownerDocument.activeElement !== input) {
-        input.focus({preventScroll: true});
-      }
-    };
-    input.addEventListener('pointerdown', claim, {capture: true});
-    return () =>
-      input.removeEventListener('pointerdown', claim, {capture: true});
   }, []);
 
   useEffect(() => {
@@ -283,7 +267,7 @@ export default function TabBarKeyboardProbePage() {
             <Text size="sm">display: {reading.displayMode}</Text>
             <Text size="sm">
               keyboard mode (viewport meta): {reading.keyboardMode} · focus
-              claim: {isClaim ? 'on' : 'off'}
+              claim: {reading.claim}
             </Text>
             <Text size="sm">
               layout viewport h {reading.layoutHeight} · visual viewport h{' '}
@@ -306,6 +290,14 @@ export default function TabBarKeyboardProbePage() {
         <Heading level={1}>{title}</Heading>
         {Array.from({length: 6}, (_, index) => row(index))}
         <TextInput
+          // An app can focus its field from the press itself, with
+          // `preventScroll`, so the browser does not pan to reveal it.
+          onPointerDownCapture={event => {
+            const field = event.currentTarget;
+            if (isClaimQuery() && field.ownerDocument.activeElement !== field) {
+              field.focus({preventScroll: true});
+            }
+          }}
           label="Message"
           value={text}
           onChange={next => setText(next)}
