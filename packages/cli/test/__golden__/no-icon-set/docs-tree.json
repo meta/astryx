@@ -117,6 +117,7 @@
     "sections": [
       "start-from-the-generated-doc",
       "explain-when-to-use-it",
+      "choose-keywords",
       "document-every-public-prop",
       "add-focused-examples",
       "read-the-result"

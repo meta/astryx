@@ -888,6 +888,13 @@ export default function EditorPage() {
                       icon={<Icon icon={EyeIcon} size="sm" />}
                       variant="ghost"
                       isIconOnly
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: a preview of the page would open here',
+                          uniqueID: 'preview',
+                        })
+                      }
                     />
                     <Button
                       label="Publish"

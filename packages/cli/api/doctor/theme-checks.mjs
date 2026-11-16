@@ -12,6 +12,7 @@ import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mj
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   collectUnloadedFonts,
+  fontPackagesInstallLine,
   discoverDoctorThemes,
   themeIdentifier,
   discoverDoctorUnmigratedCopies,
@@ -21,6 +22,7 @@ import {
   doctorRendersElement,
   doctorStylesheetImports,
   findDoctorInstalledPackage,
+  fontServiceFamilies,
   realDoctorFile,
   isLocalThemeOwner,
   listDoctorThemePackages,
@@ -40,6 +42,7 @@ import {
   isPrivateVarRefusal,
   missingThemePackage,
   dependencyInstallFor,
+  coreAddCommand,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
@@ -464,8 +467,9 @@ function namedThemeFonts(files) {
 /**
  * The families a font stylesheet loads with `@font-face`, following its
  * local `@import`s (a relative file, or a package's stylesheet such as
- * `@fontsource/inter/index.css`); `external` when it imports a URL
- * (http, https, `//`), whose families doctor cannot read.
+ * `@fontsource/inter/index.css`), and the families the `family` parameters
+ * of a font service URL it imports name; `external` when it imports a URL
+ * (http, https, `//`), which may load families doctor cannot read.
  * @param {string} css
  * @param {string} [file] the stylesheet's path, to resolve local imports
  * @param {Set<string>} [seen]
@@ -479,6 +483,11 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
       if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
+        // A family the request names counts as loaded, as an @font-face rule
+        // does: the stylesheet asks the service for it.
+        for (const family of fontServiceFamilies(spec ?? '')) {
+          loaded.add(family);
+        }
         external = true;
         return;
       }
@@ -1701,8 +1710,14 @@ export async function checkAppThemes(cwd) {
     );
   }
 
+  // The inputs load with Core, and doctor reads only the Core the project
+  // installed, never the one the answering copy carries.
+  const privateCoreMissing =
+    !incompleteResolution &&
+    resolved.length > 0 &&
+    !findDoctorCoreDir(state.projectDir);
   const privateProblems = [];
-  for (const theme of resolved) {
+  for (const theme of privateCoreMissing ? [] : resolved) {
     const availableTheme = available.find(
       candidate =>
         candidate.slug === theme.slug &&
@@ -1733,33 +1748,41 @@ export async function checkAppThemes(cwd) {
           message:
             'Could not inspect every theme input until built imports resolve.',
         }
-      : privateProblems.length > 0
+      : privateCoreMissing
         ? {
             id: 'theme-private-variables',
             label: 'Private theme variables',
-            status: 'fail',
-            message: `Added theme inputs set private --_* variables directly (${privateProblems
-              .map(problem => `${problem.theme.slug}: ${problem.message}`)
-              .join('; ')}).`,
-            fix: `Remove the direct private input keys, then ${privateProblems
-              .map(problem =>
-                refreshThemeCommand(
-                  state.projectDir,
-                  run,
-                  available,
-                  problem.theme.slug,
-                  problem.theme.owner,
-                ),
-              )
-              .join(' ')}`,
-          }
-        : {
-            id: 'theme-private-variables',
-            label: 'Private theme variables',
-            status: 'pass',
+            status: 'info',
             message:
-              'No added theme input sets a private --_* variable directly.',
-          },
+              "The project's Core isn't installed, so theme inputs were not checked for private variables. Install the project's dependencies, then run doctor again.",
+          }
+        : privateProblems.length > 0
+          ? {
+              id: 'theme-private-variables',
+              label: 'Private theme variables',
+              status: 'fail',
+              message: `Added theme inputs set private --_* variables directly (${privateProblems
+                .map(problem => `${problem.theme.slug}: ${problem.message}`)
+                .join('; ')}).`,
+              fix: `Remove the direct private input keys, then ${privateProblems
+                .map(problem =>
+                  refreshThemeCommand(
+                    state.projectDir,
+                    run,
+                    available,
+                    problem.theme.slug,
+                    problem.theme.owner,
+                  ),
+                )
+                .join(' ')}`,
+            }
+          : {
+              id: 'theme-private-variables',
+              label: 'Private theme variables',
+              status: 'pass',
+              message:
+                'No added theme input sets a private --_* variable directly.',
+            },
   );
 
   const coreDir = findDoctorCoreDir(state.projectDir);
@@ -1801,7 +1824,7 @@ export async function checkAppThemes(cwd) {
             fix: peerProblems
               .map(problem =>
                 problem.range
-                  ? `npm install '@astryxdesign/core@${problem.range}'; ${run} doctor`
+                  ? `${coreAddCommand(state.projectDir, problem.range)}; ${run} doctor`
                   : refreshThemeCommand(
                       state.projectDir,
                       run,
@@ -1898,7 +1921,7 @@ export async function checkAppThemes(cwd) {
       } else if (evidence.unread) {
         unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
       } else {
-        fontFailures.push({theme, message: missing.join(', ')});
+        fontFailures.push({theme, message: missing.join(', '), missing});
       }
     } catch {
       fontFailures.push({
@@ -1947,6 +1970,16 @@ export async function checkAppThemes(cwd) {
       'Confirm the font service stylesheet loads each named family.',
     );
   }
+  // A family with no loader in a stylesheet the app imports loads once
+  // the package that loads it is installed and the theme's stylesheet is
+  // written again, so the fix names that package when a known one loads
+  // it; a self-hosted family keeps the stylesheet step.
+  const fontInstall = fontFailures.some(f => f.missing)
+    ? await fontPackagesInstallLine(
+        state.projectDir,
+        fontFailures.flatMap(f => f.missing ?? []),
+      )
+    : {line: null, coversAll: false};
   checks.push(
     incompleteResolution
       ? {
@@ -1964,7 +1997,13 @@ export async function checkAppThemes(cwd) {
             message: `Named font families have no proven loader (${fontFailures
               .map(problem => `${problem.theme.slug}: ${problem.message}`)
               .join('; ')}).`,
-            fix: `Add the missing font stylesheet export or local <slug>.fonts.css, then ${fontFailures
+            fix: `${
+              fontInstall.line &&
+              fontInstall.coversAll &&
+              fontFailures.every(f => f.missing)
+                ? `Install the packages that load them (${fontInstall.line})`
+                : `Add the missing font stylesheet export or local <slug>.fonts.css${fontInstall.line ? ` (${fontInstall.line} installs the packages that load the open fonts among them)` : ''}`
+            }, then ${fontFailures
               .map(problem =>
                 refreshThemeCommand(
                   state.projectDir,
@@ -1989,7 +2028,7 @@ export async function checkAppThemes(cwd) {
               label: 'Theme font loading',
               status: 'pass',
               message:
-                'Every named non-system font has a local @font-face loader.',
+                'Every named non-system font is loaded by an @font-face rule or a font service URL that names it.',
             },
   );
 

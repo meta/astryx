@@ -125,12 +125,16 @@ owns response fields and compatibility.
   that would come last is left out. That command is the only suggestion when
   the list is otherwise empty, and, for docs, when no route it suggests shares
   a word with the argument. A component error for an example block keeps its
-  suggestions, since its message already names `astryx template`. A name that
-  resolves keeps resolving to the same entry, except `tag-list`: a keyword in
-  OverflowList's doc and one slip from TabList, it does not resolve, and its
-  list gives OverflowList first, then TabList. A component's exact name in
-  another case is that component's: a module that only shares its spelling
-  never resolves for it. Which candidates fill a component list and the order
+  suggestions, since its message already names `astryx template`. A keyword is
+  a word to find a component by, not another name for it: `astryx component`
+  resolves a name only by its file name or by a component's exact name in any
+  case, and never by a keyword. A name that is exactly one component's keyword,
+  where no other Core component matches within 20 points, does not resolve: it
+  gets the unknown-component error, and that component is its first
+  suggestion, ahead of any other command, in a list no longer than the
+  component list. Every other name that resolves keeps resolving to the same
+  entry. A component's exact name in another case is that component's: a
+  module that only shares its spelling never resolves for it. Which candidates fill a component list and the order
   of every list change only under FR6, measured on the held-out and fresh
   failed-lookup evaluation sets. FR5 holds for this order.
 

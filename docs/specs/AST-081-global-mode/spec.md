@@ -167,6 +167,15 @@ works on is `spec:AST-040` FR9's.
     lockfile records, else the newest published release that the Core range
     the project declares allows; a project that records no Core is matched by
     the CLI it locks or declares, in the same order.
+  - Every command the CLI prints that adds `@astryxdesign/*` packages at one
+    version, such as the hint above, `doctor`'s fixes, `discover`'s install
+    lines, and FR10's project notice, saves them as exactly that version when
+    the project's `package.json` pins its Core (or, with no Core, its CLI) to
+    one version, such as `0.7.16` or `=0.7.16`, as a starter's does (FR8): the
+    package manager's flag that saves a version exactly, `-E` or Bun's
+    `--exact`, follows its add command. A command that adds a range, or a
+    package outside `@astryxdesign/*`, carries no such flag, so the package
+    manager saves it as it saves any package.
   - When the project's own CLI is installed but cannot start, the matched
     release answers: the copy that started the run when it is that release,
     otherwise the release in the per-user cache, installed there through the
@@ -419,7 +428,7 @@ works on is `spec:AST-040` FR9's.
     create it to keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept). A
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id and the folder the CLI runs from stand for their contents (an upgrade, a reinstall or a copy installed in another folder, such as a patched one, changes them; in-place edits to an installed CLI aren't supported, and deleting the per-user `astryx/catalogs` folder clears what was kept); for the same reason, a run that keeps catalogs loads the installed CLI's own modules by their path in that folder, without Node first checking that each file exists and where it really lives. A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
@@ -467,9 +476,10 @@ works on is `spec:AST-040` FR9's.
   - Every agent text a release prints or writes names only the command name FR5
     picks for its surface. The computer-level text is its own short text: it
     tells an agent that Astryx is on the computer, when it is relevant, and to
-    start with `astryx search`; it names no version, no release-specific
-    command or prop, and only entry points every release keeps (`search`,
-    `docs`, `component`, and the like), so an older copy never misleads.
+    start a page with `astryx build` and anything else with `astryx search`;
+    it names no version, no release-specific command or prop, and only entry
+    points every release keeps (`search`, `docs`, `component`, and the like),
+    so an older copy never misleads.
     It also gives the build route the project agent docs give, through their
     shared workflow wording: work in a project folder, new or existing, adding
     `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already

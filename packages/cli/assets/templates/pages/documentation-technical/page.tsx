@@ -138,9 +138,11 @@ export default function TechnicalDocumentationPage() {
                 Prerequisites
               </Heading>
               <List density="compact" listStyle="disc">
-                <ListItem label="Node.js 18+" />
-                <ListItem label="React 19 or later" />
-                <ListItem label="A package manager (npm, yarn, or pnpm)" />
+                {/* A node label wraps on a narrow screen; a string label
+                    truncates to one line. */}
+                <ListItem label={<>Node.js 18+</>} />
+                <ListItem label={<>React 19 or later</>} />
+                <ListItem label={<>A package manager (npm, yarn, or pnpm)</>} />
               </List>
             </VStack>
 
@@ -234,11 +236,39 @@ export default function App({ children }) {
                 Next steps
               </Heading>
               <List density="compact" listStyle="disc">
-                <ListItem label="Fundamental concepts — How theming, layout, and composition work" />
-                <ListItem label="Component API reference — Props, variants, and examples for every component" />
-                <ListItem label="Accessibility — Built-in a11y features and ARIA patterns" />
-                <ListItem label="CLI tools — Scaffold projects and manage templates" />
-                <ListItem label="Design tokens — Colors, spacing, typography, and sizing" />
+                <ListItem
+                  label={
+                    <>
+                      Fundamental concepts — How theming, layout, and
+                      composition work
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Component API reference — Props, variants, and examples
+                      for every component
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>
+                      Accessibility — Built-in a11y features and ARIA patterns
+                    </>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>CLI tools — Scaffold projects and manage templates</>
+                  }
+                />
+                <ListItem
+                  label={
+                    <>Design tokens — Colors, spacing, typography, and sizing</>
+                  }
+                />
               </List>
             </VStack>
           </VStack>
