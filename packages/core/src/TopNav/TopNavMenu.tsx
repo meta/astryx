@@ -276,6 +276,14 @@ export interface TopNavMenuItemData {
    * Callback when item is clicked.
    */
   onClick?: () => void;
+
+  /**
+   * Whether picking the item closes the menu and returns focus to the
+   * trigger. Set `false` for an action that reports its result on the item
+   * itself, as with DropdownMenuItem.
+   * @default true
+   */
+  hasCloseOnSelect?: boolean;
 }
 
 function getMenuItemKey(item: TopNavMenuItemData): string {
@@ -640,7 +648,9 @@ export function TopNavMenu({
                 // A pick ends the menu, as in DropdownMenu.
                 onClick={() => {
                   item.onClick?.();
-                  close();
+                  if (item.hasCloseOnSelect !== false) {
+                    close();
+                  }
                 }}
                 {...focusOutlineProps.focusVisible(styles.menuItem)}>
                 <div {...stylex.props(styles.menuItemIcon)}>{item.icon}</div>

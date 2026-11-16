@@ -227,6 +227,63 @@ describe('keyboard navigation (APG menu pattern)', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('keeps the menu open after a pick on an item that sets hasCloseOnSelect to false', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavMenu
+        label="Menu"
+        items={[{title: 'Copy link', onClick, hasCloseOnSelect: false}]}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Menu'});
+    await user.click(trigger);
+
+    await user.click(screen.getByRole('menuitem', {hidden: true}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('does not reopen a hover-opened menu closed by a pick until the pointer leaves and returns', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <TopNavMenu
+          label="Menu"
+          items={[{title: 'Action', onClick: () => {}}]}
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Menu'});
+      await user.hover(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      await user.click(screen.getByRole('menuitem', {hidden: true}));
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The closing popup puts the trigger back under a still pointer, and
+      // the browser fires a new mouseenter: it must not reopen the menu.
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // A real leave and return opens it again.
+      fireEvent.mouseLeave(trigger);
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('closes the menu with Escape', async () => {
     const user = userEvent.setup();
     render(<TopNavMenu label="Products" items={mockItems} />);
