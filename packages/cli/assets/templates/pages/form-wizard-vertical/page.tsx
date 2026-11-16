@@ -709,7 +709,17 @@ export default function FormWizardVerticalPage() {
                     types. */}
                 <Text type="label">Publish audiobook</Text>
               </StackItem>
-              <Button label="Cancel" variant="ghost" onClick={() => {}} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving the audiobook flow would return you to the app here',
+                    uniqueID: 'cancel-audiobook',
+                  })
+                }
+              />
               <Button
                 label="Save & exit"
                 variant="secondary"

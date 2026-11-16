@@ -840,7 +840,13 @@ export default function PaymentFormPage() {
                             variant="secondary"
                             size="lg"
                             style={fullWidth}
-                            onClick={() => {}}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that performs the action.
+                              showToast({
+                                body: 'Demo: the store would open here',
+                                uniqueID: 'continue-shopping',
+                              })
+                            }
                           />
                         </VStack>
                         <Divider />
