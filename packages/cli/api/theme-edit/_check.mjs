@@ -136,6 +136,7 @@ import {
   propertySpelling,
   modesOf,
   dialNumber,
+  dialValueFits,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -4005,6 +4006,33 @@ export function checkSetting(
         },
       );
     }
+  }
+  // A dial's value that names a part or group, plural included, as a label
+  // (`spacing 'buttons: roomy'`, `corners 'cards: pill'`), after `on`
+  // (`'pill on card'`) or as its first or last word (`'card pill'`): the
+  // part is read first, by the one part-in-value reader the properties
+  // use, so the line keeps the change on that part, never the whole theme
+  // (and never a dial the label also spells, when the rest is this dial's
+  // value). The font takes any words, so its value is never split.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    DIALS[thing] &&
+    thing !== 'font' &&
+    !flags.on &&
+    !dialValueFits(thing, value)
+  ) {
+    const named = partInValue(ctx, value);
+    if (named && dialValueFits(thing, named.value))
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${named.on} in "${value}" is a part; a value for one part is given with --on ${named.on}.`,
+        {
+          run: [
+            `${P} set ${slug} ${thing} ${quoteCommandArgument(named.value)} --on ${named.on}${named.state ? ` --state ${named.state}` : ''}${flags.when ? ` --when ${flags.when}` : ''}${flags.mode ? ` --mode ${flags.mode}` : ''}`,
+          ],
+        },
+      );
   }
   // A value labeled with a word that is not this setting's own name (a
   // mode, a state, a device, a part, or a word the editor does not read) is
