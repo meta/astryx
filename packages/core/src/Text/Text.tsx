@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {use, useCallback, useRef, useState, type ReactNode} from 'react';
+import {use, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -46,7 +46,7 @@ import {
   tabularNumbersStyle,
   truncationTooltipStyles,
 } from './text.stylex';
-import {measureTruncation, useTruncation} from './useTruncation';
+import {useTruncationMeasure} from './useTruncation';
 import {
   TruncationTooltip,
   useTruncationTooltipInterest,
@@ -61,7 +61,6 @@ import {
   TextClampContext,
   TextMeasureOnInterestContext,
 } from './textClampContext';
-import {observeContent} from '../utils/sharedMutationObserver';
 
 export type {TextType, TextSize};
 
@@ -211,8 +210,6 @@ export function resolveStyleColor(color: TextColor): BuiltinTextColor {
   return 'primary';
 }
 
-const NO_INTEREST_ANSWER = {isTruncated: false, fullText: ''};
-
 /**
  * Semantic text component. Renders text with type-based styling from the theme.
  *
@@ -278,74 +275,27 @@ export function Text({
   // Truncation detection. Only the tooltip reads the measured overflow, so
   // with the tooltip off the text is clipped by CSS alone and nothing is
   // measured or observed.
-  const truncation = useTruncation({
-    maxLines: hasTruncateTooltip === false || measuresOnInterest ? 0 : maxLines,
+  const truncation = useTruncationMeasure({
+    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+    measuresOnInterest,
   });
 
   // Ref for the text element (used as tooltip anchor)
   const textRef = useRef<HTMLElement>(null);
 
-  // Text that measures on interest keeps the answer of its last hover, tap or
-  // focus, and measures again at each one. After the first, a content change
-  // also measures it again, so an open tooltip follows the text.
-  const [interestAnswer, setInterestAnswer] = useState(NO_INTEREST_ANSWER);
-  const contentMeasureRef = useRef<(() => void) | null>(null);
-  const unobserveContentRef = useRef<(() => void) | null>(null);
-  const measureOnInterest = useCallback((): boolean => {
-    const element = textRef.current;
-    if (element == null) {
-      return false;
-    }
-    const measure = (): boolean => {
-      const isTruncated = measureTruncation(element, maxLines);
-      const fullText = element.textContent ?? '';
-      // The tooltip reads the text only while the text is truncated.
-      setInterestAnswer(current =>
-        !isTruncated
-          ? NO_INTEREST_ANSWER
-          : current.isTruncated && current.fullText === fullText
-            ? current
-            : {isTruncated, fullText},
-      );
-      return isTruncated;
-    };
-    contentMeasureRef.current = measure;
-    unobserveContentRef.current ??= observeContent(element, () => {
-      contentMeasureRef.current?.();
-    });
-    return measure();
-  }, [maxLines]);
-  // Stops the content observation when the element goes.
-  const contentObservationRef = useCallback((element: HTMLElement | null) => {
-    if (element == null) {
-      return undefined;
-    }
-    return () => {
-      unobserveContentRef.current?.();
-      unobserveContentRef.current = null;
-      contentMeasureRef.current = null;
-    };
-  }, []);
-  const answer = measuresOnInterest ? interestAnswer : truncation;
-
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
-    maxLines > 0 && hasTruncateTooltip !== false && answer.isTruncated;
+    maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
   // The tooltip mounts on the first hover, tap or focus, not with the text.
   const tooltipInterest = useTruncationTooltipInterest(
     tooltipEnabled,
-    measuresOnInterest ? measureOnInterest : undefined,
+    truncation.measure,
   );
 
   // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(
-    ref,
-    truncation.ref,
-    textRef,
-    contentObservationRef,
-  );
+  const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
   const isInClampedText = use(TextClampContext);
   // A capsize block removes a multi-line clamp.
   const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
@@ -413,7 +363,7 @@ export function Text({
           anchorRef={textRef}
           content={
             <span {...stylex.props(truncationTooltipStyles.content)}>
-              {answer.fullText}
+              {truncation.fullText}
             </span>
           }
           placement={tooltipPlacement}
