@@ -276,7 +276,7 @@ const styles = stylex.create({
     // viewport edge when the reader scrolls a long line.
     minWidth: 'max-content',
     // Lines lay out their gutter in the page's direction; each line's code
-    // carries dir="ltr" (see `lineContent`).
+    // carries dir="auto" (see `lineContent`).
     direction: 'var(--_codeblock-direction)',
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
@@ -338,12 +338,13 @@ const styles = stylex.create({
   },
   // Each line's code sits in this element, so it forms a single grid item in
   // column 2 (otherwise each token span would flow into its own grid cell).
-  // It carries dir="ltr": code keeps its own direction on a right-to-left
-  // page while the gutter mirrors. minWidth:0 lets it shrink so long lines
-  // wrap within the track.
+  // It carries dir="auto": a line takes its direction from its first strong
+  // character, and a line with none (`});`) falls back to the left-to-right
+  // viewport. The gutter mirrors with the page. minWidth:0 lets it shrink so
+  // long lines wrap within the track.
   lineContent: {
-    // A block, so the code starts at its own left edge even when the line
-    // around it follows a right-to-left page.
+    // A block, so each line aligns to the start edge of its own direction,
+    // whatever the direction of the row around it.
     display: 'block',
     minWidth: 0,
   },
@@ -876,7 +877,7 @@ function SpanCodeContent({
               )}>
               {diff.glyphs[lineIndex] || ' '}
             </span>
-            <span dir="ltr" {...stylex.props(styles.lineContent)}>
+            <span dir="auto" {...stylex.props(styles.lineContent)}>
               {kind === 'header'
                 ? content || '\u200b'
                 : buildSpanLine(content, tokens)}
@@ -887,7 +888,7 @@ function SpanCodeContent({
       // Wrap tokens in a single element so they occupy one grid cell when line
       // numbers are on (see `lineNumbered`); an inline span is a no-op when off.
       return (
-        <span dir="ltr" {...stylex.props(styles.lineContent)}>
+        <span dir="auto" {...stylex.props(styles.lineContent)}>
           {buildSpanLine(line, tokens)}
         </span>
       );
@@ -971,11 +972,11 @@ function RangeCodeContent({
 
   // Range mode keeps each line's text as the only child of one content span,
   // so applyHighlightRangesChunked can map token offsets onto that text node.
-  // The span carries dir="ltr", and it is the single grid item beside the
+  // The span carries dir="auto", and it is the single grid item beside the
   // number, which is a ::before pseudo-element and never a child node here.
   const renderLineContent = useCallback(
     (line: string): React.ReactNode => (
-      <span dir="ltr" {...stylex.props(styles.lineContent)}>
+      <span dir="auto" {...stylex.props(styles.lineContent)}>
         {line || '\u200b'}
       </span>
     ),

@@ -137,9 +137,11 @@ function applyLineRanges(
     return;
   }
 
-  // In range mode a line holds one content element (its dir="ltr" code)
-  // whose only child is the line's text.
-  const textNode = lineDiv.firstElementChild?.firstChild ?? null;
+  // A line holds its text directly, or inside one content element (CodeBlock
+  // wraps each line's code in a dir="auto" span).
+  const first = lineDiv.firstChild;
+  const textNode =
+    first?.nodeType === Node.ELEMENT_NODE ? first.firstChild : first;
   if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
     return;
   }

@@ -44,12 +44,37 @@ describe('CodeBlock on a right-to-left page', () => {
         // The row itself follows the page, so its gutter mirrors.
         expect(row.hasAttribute('dir')).toBe(false);
         const content = row.querySelector('[dir]');
-        expect(content?.getAttribute('dir')).toBe('ltr');
+        expect(content?.getAttribute('dir')).toBe('auto');
       }
-      // "});" reads as written: the isolated element holds it in source order.
-      expect(rows[2].querySelector('[dir="ltr"]')?.textContent).toBe('});');
+      // "});" reads as written: its content element holds it in source order.
+      expect(rows[2].querySelector('[dir="auto"]')?.textContent).toBe('});');
     });
   }
+
+  it('lets each line take its direction from its first strong character', () => {
+    const {container} = inRtl(
+      <CodeBlock
+        code={['});', 'const a = 1;', 'مرحبا = 1;'].join('\n')}
+        language="tsx"
+        hasLineNumbers
+      />,
+    );
+    const [neutral, latin, arabic] = lineRows(container).map(row =>
+      row.querySelector('[dir="auto"]'),
+    );
+    // Every line resolves inside the left-to-right viewport: a line with no
+    // strong character (punctuation only) takes the viewport's direction, a
+    // Latin-first line reads left to right, an Arabic-first line right to left.
+    for (const line of [neutral, latin, arabic]) {
+      expect(line?.getAttribute('dir')).toBe('auto');
+      expect(line?.parentElement?.closest('[dir]')?.getAttribute('dir')).toBe(
+        'ltr',
+      );
+    }
+    expect(neutral?.textContent).toBe('});');
+    expect(latin?.textContent?.startsWith('const')).toBe(true);
+    expect(arabic?.textContent?.startsWith('مرحبا')).toBe(true);
+  });
 
   it('scrolls and wraps code left to right', () => {
     const {container} = inRtl(<CodeBlock code={SOURCE} language="tsx" />);
@@ -73,7 +98,7 @@ describe('CodeBlock on a right-to-left page', () => {
     );
     const added = lineRows(container)[2];
     expect(added.hasAttribute('dir')).toBe(false);
-    expect(added.querySelector('[dir="ltr"]')?.textContent).toBe('b();');
+    expect(added.querySelector('[dir="auto"]')?.textContent).toBe('b();');
   });
 });
 
@@ -103,6 +128,8 @@ describe('Markdown code on a right-to-left page', () => {
     );
     expect(inline?.getAttribute('dir')).toBe('ltr');
     const fenced = lineRows(container)[0];
-    expect(fenced?.querySelector('[dir="ltr"]')?.textContent).toBe('});');
+    expect(fenced?.querySelector('[dir="auto"]')?.textContent).toBe('});');
+    // The fence's viewport is left to right, so a neutral line falls back to it.
+    expect(fenced?.closest('[dir="ltr"]')).not.toBeNull();
   });
 });
