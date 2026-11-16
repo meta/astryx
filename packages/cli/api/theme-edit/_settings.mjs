@@ -9734,16 +9734,19 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
-  /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string} [when] */
-  const override = (side, _which, m, when) => {
+  /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string | null} [when] @param {string | null} [state] the state the pair is drawn in */
+  const override = (side, _which, m, when, state = null) => {
     if (!side.target) return null;
     const hit = [...data.settings]
       .reverse()
+      // (A pair drawn in a state: a fill set for that state wins over one
+      // at rest.)
+      .sort((a, b) => Number(!!b.state) - Number(!!a.state))
       .find(
         x =>
           partsOf(ctx, x).includes(/** @type {string} */ (side.target)) &&
           (!x.when || x.when === when) &&
-          !x.state &&
+          (!x.state || (state != null && x.state === state)) &&
           (!x.mode || x.mode === m) &&
           ((x.source === 'property' &&
             ['background', 'background-color'].includes(x.thing)) ||
@@ -10104,6 +10107,7 @@ export async function contrastProblems(ctx, data, res) {
                   (s.target && s.target === p.fg.target
                     ? pairVariant(p)
                     : null),
+                pairState(p),
               )),
         m,
       ) ??
@@ -10270,6 +10274,49 @@ export async function contrastProblems(ctx, data, res) {
     )
       for (const over of grounds)
         headerPairs.push({...p, text: `${p.text} in the ${HEADER}`, over});
+  /**
+   * The fill a part with none of its own sits on: that of the nearest part
+   * the census drew it in that paints one. Where the part's text is the
+   * text that part draws only in a condition (a checkbox's check takes the
+   * on-accent text its box draws when checked), the part shows only then,
+   * so it sits on that part's fill in that condition. Null when no part
+   * around it paints a fill.
+   * @param {string} t
+   * @returns {{part: string, token: string} | null}
+   */
+  const holderFill = t => {
+    const holders = Object.entries(ctx.C.MAP)
+      .filter(([, r]) => /** @type {any} */ (r?.contains ?? []).includes(t))
+      .map(([h]) => h);
+    const nearest = holders.find(
+      h =>
+        !holders.some(
+          o =>
+            o !== h &&
+            /** @type {any} */ (ctx.C.MAP[h]?.contains ?? []).includes(o),
+        ),
+    );
+    if (!nearest) return null;
+    const fills = (ctx.C.partReads(nearest, 'background') ?? []).filter(r =>
+      r.props.some(q => /^background/.test(q)),
+    );
+    if (!fills.length) return null;
+    const ownText = (ctx.C.partReads(t, 'text') ?? []).find(r =>
+      r.when.includes(''),
+    )?.token;
+    const conds = (ctx.C.partReads(nearest, 'text') ?? [])
+      .filter(r => r.token === ownText)
+      .flatMap(r => r.when)
+      .filter(w => w !== '');
+    const inCond = conds.length
+      ? fills.find(
+          r => r.when.some(w => conds.includes(w)) && !r.when.includes(''),
+        )
+      : null;
+    const atRest = fills.find(r => r.when.includes(''));
+    const read = inCond ?? atRest;
+    return read ? {part: nearest, token: read.token} : null;
+  };
   // Text written straight in a part takes the part's own `color`: a part
   // with one set, whose text no census pair draws itself, is measured as
   // its own text on its own fill.
@@ -10284,7 +10331,8 @@ export async function contrastProblems(ctx, data, res) {
     for (const t of partsOf(ctx, x)) {
       if (drawnParts.has(t)) continue;
       // The fill the census saw the part draw (with its default props),
-      // else what it reads at rest, else none: the page shows.
+      // else what it reads at rest, else the fill of the part it sits in
+      // (a checkbox's check on its box), else none: the page shows.
       const seen = census.pairs.find(
         (/** @type {TextPair} */ p) => p.bg.target === t,
       )?.bg;
@@ -10293,16 +10341,22 @@ export async function contrastProblems(ctx, data, res) {
         ctx.C.partReads(t, 'background').find(
           r => r.when.includes('') && r.props.some(q => /^background/.test(q)),
         )?.token;
+      const holder = !seen && !fill ? holderFill(t) : null;
       ownTextPairs.push(
         /** @type {any} */ ({
           text: t,
           sample: 'text written straight in it',
+          // (Its own color: measured on what it sits on, whatever text
+          // that part sets.)
+          ownColor: true,
           fg: {target: t, tokens: [], raw: null},
-          bg: {
-            target: t,
-            tokens: fill ? [fill] : [],
-            raw: fill ? null : (seen?.raw ?? 'transparent'),
-          },
+          bg: holder
+            ? {target: holder.part, tokens: [holder.token], raw: null}
+            : {
+                target: t,
+                tokens: fill ? [fill] : [],
+                raw: fill ? null : (seen?.raw ?? 'transparent'),
+              },
           ...(x.when ? {when: x.when} : {}),
         }),
       );
@@ -10525,6 +10579,16 @@ export async function contrastProblems(ctx, data, res) {
         // state.)
         const pairIn = pairState(pair);
         const stateFlag = pairIn ? ` --state ${pairIn}` : '';
+        // (The state goes on a line for a part that has it: a part shown
+        // only in another part's state, a checkbox's check in its checked
+        // box, takes its line at rest.)
+        /** @param {string | null | undefined} part */
+        const stateOn = part =>
+          pairIn &&
+          (!part ||
+            (ctx.project.target.get(part)?.states ?? []).includes(pairIn))
+            ? ` --state ${pairIn}`
+            : '';
         // Text with a role of its own (secondary text, a placeholder, a
         // link's accent, a status color) keeps it: its own color moved
         // toward black or white just far enough to read at 4.5:1, not the
@@ -10704,7 +10768,7 @@ export async function contrastProblems(ctx, data, res) {
             holds(x.bgPart, x.textPart) &&
             ratio(fg, paneColor) >= 4.5
           )
-            return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateFlag}${modeFlag(x.mode)}`;
+            return `${P} set ${slug} background-color '${String(pane.value)}' --on ${x.bgPart}${only(x.bgPart)}${stateOn(x.bgPart)}${modeFlag(x.mode)}`;
         }
         // Text a whole-theme token setting draws, too faint in several
         // places: one line on that token, the nearest color that reads on
@@ -10744,13 +10808,13 @@ export async function contrastProblems(ctx, data, res) {
               ),
             ].includes(name)
           )
-            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateFlag}${modeFlag(x.mode)}`;
+            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${stateOn(drawn.on)}${modeFlag(x.mode)}`;
         }
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
         if (x.textPart && autoMediaPart(ctx, x.textPart))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
         // Text on a surface's own ground drawn from its on-color (a
         // lightbox's caption bar): the ground is what changed, and that
         // on-color on the surface is the line that reaches it, set to the
@@ -10785,7 +10849,7 @@ export async function contrastProblems(ctx, data, res) {
         if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
           return sidesOver > 1
             ? null
-            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
+            : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
         const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
         // A ground part that draws several grounds the theme cannot tell
         // apart (variants set cannot name): a token set on it would turn
@@ -10810,7 +10874,7 @@ export async function contrastProblems(ctx, data, res) {
         // the region reaches its text there, and nowhere else.
         const region = /** @type {any} */ (pair).over?.target;
         if (token && region && !onMedia)
-          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateFlag}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${stateOn(region)}${modeFlag(x.mode)}`;
         const mixed =
           token &&
           x.bgPart &&
@@ -10823,7 +10887,7 @@ export async function contrastProblems(ctx, data, res) {
             groundsOf(
               (/** @type {TextPair} */ q) => q.fg.target === x.textPart,
             ) === 1
-            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateFlag}${modeFlag(x.mode)}`
+            ? `${P} set ${slug} ${token} ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
             : null;
         // (The ground is the part the theme painted under the text, where
         // it painted one: a tab given a fill of its own.)
@@ -10831,10 +10895,10 @@ export async function contrastProblems(ctx, data, res) {
           nearerFillOf(pair, inScheme(pair, 'bg', x.mode))?.part ?? x.bgPart;
         if (token)
           return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${token} ${color} --on ${groundPart}${only(String(groundPart))}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateFlag}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateFlag}${modeFlag(x.mode)}`;
+            ? `${P} set ${slug} ${token} ${color} --on ${groundPart}${only(String(groundPart))}${when(/** @type {any} */ (pair).groundWhen ?? x.when)}${stateOn(groundPart)}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}${only(x.textPart)}` : ''}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
         return x.textPart
-          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateFlag}${modeFlag(x.mode)}`
+          ? `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(x.when)}${stateOn(x.textPart)}${modeFlag(x.mode)}`
           : null;
       })(),
     })),
