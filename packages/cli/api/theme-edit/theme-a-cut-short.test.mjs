@@ -52,11 +52,12 @@ describe('text the pictures draw cut short', () => {
   it(
     "a fresh theme's pictures name none",
     async () => {
-      await themeEditNew('fresh', {cwd, like: 'neutral'});
+      // The theme the next case makes too big, while it is fresh.
+      await themeEditNew('big', {cwd, like: 'neutral'});
       const r = /** @type {any} */ (
-        await themeEditShow('fresh', {cwd, png: true, section: SMALL})
+        await themeEditShow('big', {cwd, png: true, section: SMALL})
       );
-      expect(r.data.pictures).toContain('themes/fresh/preview.png');
+      expect(r.data.pictures).toContain('themes/big/preview.png');
       expect(cutNotes(r)).toEqual([]);
     },
     T,
@@ -79,7 +80,7 @@ describe('text the pictures draw cut short', () => {
   it(
     "a text size that cuts the sample card's badge labels is a problem with the line that keeps them whole, and following it draws them whole",
     async () => {
-      await themeEditNew('big', {cwd, like: 'neutral'});
+      // The fresh theme of the first case.
       const set = /** @type {any} */ (
         await themeEditSet('big', 'text-size', '28', {cwd, png: true})
       );
