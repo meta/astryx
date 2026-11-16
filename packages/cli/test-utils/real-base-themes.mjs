@@ -6,8 +6,11 @@
  * @input A linked fixture's path and the bundled theme names it needs.
  * @output An empty string, or why a theme could not be installed.
  * @position Test support. A checkout that built only Core has no theme
- *   `dist`: the theme is then built as its package build's theme step does,
- *   from its own source with its own installed packages.
+ *   `dist`, and a package build that is still running has a module without
+ *   its icon registry: the theme is then built as its package build's theme
+ *   step does, from its own source with its own installed packages. Parallel
+ *   workers install at once, so nothing is written in a theme package's
+ *   `dist` or in a scope folder that another fixture shares.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,26 +23,77 @@ const THEMES = path.resolve(
 );
 
 /**
+ * The fixture's own `@astryxdesign` folder. A fixture that links the whole
+ * scope links the CLI's folder, which every such fixture shares: it gets a
+ * folder of its own that links each package the shared one holds.
+ * @param {string} cwd
+ * @returns {string}
+ */
+function ownScope(cwd) {
+  const scope = path.join(path.dirname(cwd), 'node_modules/@astryxdesign');
+  if (!fs.lstatSync(scope, {throwIfNoEntry: false})?.isSymbolicLink()) {
+    fs.mkdirSync(scope, {recursive: true});
+    return scope;
+  }
+  const shared = fs.realpathSync(scope);
+  fs.unlinkSync(scope);
+  fs.mkdirSync(scope);
+  for (const entry of fs.readdirSync(shared)) {
+    fs.symlinkSync(
+      fs.realpathSync(path.join(shared, entry)),
+      path.join(scope, entry),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+  }
+  return scope;
+}
+
+/**
+ * Whether the theme package's build is complete: its module, and the icon
+ * registry the module imports, which a later build step writes.
+ * @param {string} own
+ * @param {string} like
+ */
+function builtWhole(own, like) {
+  const module = path.join(own, 'dist', `${like}.js`);
+  if (!fs.existsSync(module)) return false;
+  return (
+    !/from ["']\.\/icons\.mjs["']/.test(fs.readFileSync(module, 'utf8')) ||
+    fs.existsSync(path.join(own, 'dist', 'icons.mjs'))
+  );
+}
+
+/**
  * Install the bundled themes `likes` in the fixture at `cwd`.
  * @param {string} cwd a fixture from makeLinkedFixture
  * @param {string[]} likes bundled theme names, such as 'neutral'
+ * @param {{themes?: string}} [options] the folder that holds the theme
+ *   packages (the repository's by default)
  * @returns {Promise<string>} why a theme could not be built here, or ''
  */
-export async function installRealBaseThemes(cwd, likes) {
+export async function installRealBaseThemes(
+  cwd,
+  likes,
+  {themes = THEMES} = {},
+) {
+  const scope = ownScope(cwd);
   for (const like of likes) {
-    const own = path.join(THEMES, like);
-    const link = path.join(
-      path.dirname(cwd),
-      'node_modules/@astryxdesign',
-      `theme-${like}`,
-    );
+    const own = path.join(themes, like);
+    const link = path.join(scope, `theme-${like}`);
     fs.rmSync(link, {recursive: true, force: true});
-    if (fs.existsSync(path.join(own, 'dist', `${like}.js`))) {
+    if (builtWhole(own, like)) {
       fs.symlinkSync(own, link, 'dir');
       continue;
     }
     try {
-      const out = `node_modules/.astryx-test-built/${process.pid}`;
+      // Each install builds in a folder of its own: two installs at once
+      // in one worker must not share one.
+      const built = path.join(own, 'node_modules/.astryx-test-built');
+      fs.mkdirSync(built, {recursive: true});
+      const out = path.relative(
+        own,
+        fs.mkdtempSync(path.join(built, `${process.pid}-`)),
+      );
       await themeBuild(
         `src/${like}Theme.ts`,
         {out: `${out}/dist/theme.css`, iconsSpecifier: './icons.mjs'},
