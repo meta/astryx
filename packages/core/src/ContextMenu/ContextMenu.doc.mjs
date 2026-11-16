@@ -132,8 +132,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        'Presentation policy. `popover` opens at the pointer position, `bottom-sheet` always uses an action sheet, and `adaptive` uses the BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px.',
-      default: "'popover'",
+        'Presentation policy. Omitted, the menu opens at the pointer position, and under a finger a held finger opens it on iOS timing (the touch model). `popover` opens at the pointer position on every device, and a held finger opens it at 500 ms (the long press), as before; so does a finger where the primary pointer is fine. `bottom-sheet` always uses an action sheet, and `adaptive` uses the BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px.',
     },
     {
       name: 'isDisabled',
@@ -160,7 +159,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons. Under a finger, where the primary pointer is coarse, a held finger opens it with iOS timing: the menu opens at 735 ms, or as soon as the finger lifts after 400 ms.',
     bestPractices: [
       {
         guidance: true,
@@ -224,7 +223,7 @@ export const docs = {
 export const docsZh = {
   usage: {
     description:
-      '右键点击时在光标位置出现的上下文菜单。用于为特定元素或区域提供上下文操作，而不使 UI 杂乱。',
+      '右键点击时在光标位置出现的上下文菜单。用于为特定元素或区域提供上下文操作，而不使 UI 杂乱。在主指针为粗指针（触摸屏）时，按住手指即可打开，时序与 iOS 相同：735 毫秒时菜单打开；若手指在 400 毫秒后抬起，菜单在抬起时立即打开。',
     bestPractices: [
       {guidance: true, description: '保持菜单项简洁和面向操作。'},
       {guidance: true, description: '有很多项时使用分组和分隔线。'},
@@ -260,7 +259,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions. Under a finger (a coarse primary pointer): a held finger opens it at 735 ms, or on a lift after 400 ms.',
     bestPractices: [
       {guidance: true, description: 'Keep items concise and action-oriented.'},
       {
