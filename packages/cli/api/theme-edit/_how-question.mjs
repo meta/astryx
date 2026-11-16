@@ -11216,6 +11216,10 @@ export function draftAnswer(ctx, env, question) {
             continue;
           }
           if (!members || !k.when) continue;
+          // A shadow kept in a state (a status's focus ring): the step it is
+          // kept from writes that state on every member, so every member
+          // keeps it, whether or not it draws a look of its own there.
+          if (k.thing === 'box-shadow' && k.state) continue;
           // Any other property: a member with no look of its own under the
           // condition (a date input's error look, which its field draws)
           // keeps by inheriting, so it takes no pin.
