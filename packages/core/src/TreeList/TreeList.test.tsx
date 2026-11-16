@@ -18,7 +18,7 @@ import {TreeList} from './TreeList';
 import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
-import {FOCUS_OUTLINE} from '../utils/focusOutline.stylex';
+import {FOCUS_OUTLINE, focusOutlineStyles} from '../utils/focusOutline.stylex';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -412,6 +412,37 @@ describe('TreeList', () => {
   // Focus-visible outline scoping (regression: focusing a parent row must not
   // leak the ring onto descendant rows — see #4130)
   // ===========================================================================
+
+  it('draws the focus ring on a plain row that has keyboard focus', () => {
+    // A plain row has no action, but it is a tab stop in the roving focus.
+    render(
+      <TreeList
+        items={[
+          {id: 'first', label: 'First'},
+          {id: 'second', label: 'Second', isSelected: true},
+        ]}
+      />,
+    );
+    const second = screen.getByText('Second').closest('li')!;
+    const row = screen
+      .getByText('Second')
+      .closest<HTMLElement>('.astryx-tree-list-item')!;
+
+    fireEvent.keyDown(document.body, {key: 'Tab'});
+    screen.getByText('First').closest('li')!.focus();
+    fireEvent.keyDown(document.activeElement!, {key: 'ArrowDown'});
+    expect(second).toHaveFocus();
+
+    expect(
+      getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
+    ).toBe(FOCUS_OUTLINE);
+    const ringClasses = stylex
+      .props(focusOutlineStyles.focusWithinOrPublished)
+      .className!.split(' ');
+    for (const cls of ringClasses) {
+      expect(row.className.split(' ')).toContain(cls);
+    }
+  });
 
   it('scopes the focus-visible outline to the focused row, not its descendants', () => {
     render(<TreeList items={deepItems} />);
@@ -1060,10 +1091,10 @@ describe('TreeList', () => {
       expect(getComputedStyle(treeRoot).isolation).toBe('isolate');
     });
 
-    it('lifts only rows that draw a focus ring above the guides', () => {
-      // A plain row (no onClick, href or children) draws no focus ring, so it
-      // stays under the guides: a focused selected plain row must not hide
-      // them with its fill (DD3). Rows that draw the ring take the lift.
+    it('lifts every row, plain ones included, since every row draws a focus ring', () => {
+      // A plain row (no onClick, href or children) is still a tab stop in the
+      // tree's roving focus, so it draws the ring and takes the lift like any
+      // other row (DD3).
       render(
         <TreeList
           items={[
@@ -1081,7 +1112,7 @@ describe('TreeList', () => {
       );
       const rowOf = (label: string) =>
         screen.getByText(label).closest<HTMLElement>('.astryx-tree-list-item')!;
-      expect(rowOf('Plain').className).not.toContain('focusLift');
+      expect(rowOf('Plain').className).toContain('focusLift');
       expect(rowOf('Run').className).toContain('focusLift');
       expect(rowOf('Root').className).toContain('focusLift');
     });
