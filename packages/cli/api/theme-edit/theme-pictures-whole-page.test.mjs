@@ -71,7 +71,7 @@ describe('a navigation drawer', () => {
 });
 
 describe('an overlay drawn after its part', () => {
-  it('moves under its opener, as far as its item has room', () => {
+  it('moves under its opener, as far as its item has room for what it draws', () => {
     const rect = (/** @type {number} */ left, /** @type {number} */ right) => ({
       left,
       right,
@@ -93,16 +93,52 @@ describe('an overlay drawn after its part', () => {
       closest: () => item,
       contains: () => false,
       querySelectorAll: () => [{id: 'menu-1'}],
-      getBoundingClientRect: () => rect(0, 260),
+      // The layer box spans its row; the menu it draws is 260px wide.
+      getBoundingClientRect: () => rect(0, 500),
+      children: [{getBoundingClientRect: () => rect(0, 260)}],
       style: {
         setProperty: (/** @type {string} */ k, /** @type {string} */ v) =>
           (set[k] = v),
       },
     };
-    const document = {querySelectorAll: () => [layer]};
-    new Function('document', PLACE_LAYERS)(document);
+    const document = {
+      querySelectorAll: (/** @type {string} */ q) =>
+        q.includes('dialog') ? [] : [layer],
+    };
+    new Function('document', 'window', PLACE_LAYERS)(document, {
+      innerWidth: 1280,
+    });
     // Under the opener would be 300px along; the item has 240px of room.
     expect(set['margin-inline-start']).toBe('240px');
+  });
+});
+
+describe('a panel as wide as the window', () => {
+  it('is drawn as wide as its cell', () => {
+    /** @param {number} width */
+    const dialog = width => {
+      /** @type {Record<string, string>} */
+      const set = {};
+      return {
+        set,
+        getBoundingClientRect: () => ({width}),
+        style: {
+          setProperty: (/** @type {string} */ k, /** @type {string} */ v) =>
+            (set[k] = v),
+        },
+      };
+    };
+    const wide = dialog(1280);
+    const narrow = dialog(480);
+    const document = {
+      querySelectorAll: (/** @type {string} */ q) =>
+        q.includes('dialog') ? [wide, narrow] : [],
+    };
+    new Function('document', 'window', PLACE_LAYERS)(document, {
+      innerWidth: 1280,
+    });
+    expect(wide.set.width).toBe('100%');
+    expect(narrow.set.width).toBeUndefined();
   });
 });
 

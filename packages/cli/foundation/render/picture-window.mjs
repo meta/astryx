@@ -129,7 +129,8 @@ export const FIT_CELLS = `(() => {
  * The script run on a sheet before its picture: an overlay drawn open
  * after its part (a toolbar's menu) moves along the row to sit under the
  * control that opens it, as a browser places it, as far as its item has
- * room. A flyout drawn beside its menu stays there.
+ * room for what it draws. A flyout drawn beside its menu stays there. A
+ * panel as wide as the window is drawn as wide as its cell.
  */
 export const PLACE_LAYERS = `(() => {
   for (const layer of document.querySelectorAll('.cs-item [data-astryx-layer-root]')) {
@@ -138,9 +139,19 @@ export const PLACE_LAYERS = `(() => {
     const ids = [layer, ...layer.querySelectorAll('[id]')].map(e => e.id).filter(Boolean);
     const opener = [...item.querySelectorAll('[aria-controls]')].find(c => !layer.contains(c) && !c.closest('[data-astryx-layer-root]') && ids.includes(c.getAttribute('aria-controls')));
     if (!opener) continue;
+    // The layer box spans its row; what it draws is its content, so the
+    // room is measured from the content's right edge.
     const at = layer.getBoundingClientRect();
-    const shift = Math.min(opener.getBoundingClientRect().left - at.left, item.getBoundingClientRect().right - at.right);
+    const drawn = Math.max(at.left, ...[...layer.children].map(c => c.getBoundingClientRect().right));
+    const shift = Math.min(opener.getBoundingClientRect().left - at.left, item.getBoundingClientRect().right - drawn);
     if (shift > 0.5) layer.style.setProperty('margin-inline-start', shift + 'px', 'important');
+  }
+  // A panel as wide as the window (a navigation drawer's dialog) is drawn as
+  // wide as its cell: the window's width would stretch the cell, and the
+  // page, past it.
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    if (dialog.getBoundingClientRect().width >= window.innerWidth - 0.5)
+      dialog.style.setProperty('width', '100%', 'important');
   }
 })()`;
 
