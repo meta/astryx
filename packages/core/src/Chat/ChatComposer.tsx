@@ -223,15 +223,23 @@ const styles = stylex.create({
     // Footer buttons should use size="md" to match 32px send button height
     minHeight: '32px',
   },
+  // On a narrow composer the caller's actions wrap onto more lines inside the
+  // footer instead of pushing the send action past the composer's edge: the
+  // group may shrink below its content, and its items move to a new line
+  // rather than truncating.
   footerLeft: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    minWidth: 0,
   },
+  // The primary action never gives up width to the caller's actions.
   footerRight: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    flexShrink: 0,
   },
   interruptibleFooter: {
     // The composer may disable editing while a response is streaming. Restore
