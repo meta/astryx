@@ -419,13 +419,6 @@ function InvoiceCard() {
             <Button
               label="Refund"
               variant="ghost"
-              onClick={() =>
-                // Demo only: replace this toast with the call that performs the action.
-                showToast({
-                  body: 'Demo: a refund would start for order #1001 here',
-                  uniqueID: 'refund',
-                })
-              }
             />
             <Button
               label="Send Invoice"
