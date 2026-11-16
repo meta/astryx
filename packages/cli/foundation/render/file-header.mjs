@@ -69,7 +69,7 @@ export function headerNote(facts) {
     ...(facts.interactive
       ? [
           "This is one file. The page's own script, at the end of the file, draws the page when it",
-          'opens, so its buttons and other controls work. It loads nothing from the network.',
+          'opens, so its buttons and other controls work. The render adds no network request.',
         ]
       : ['This is one static file. It runs no script and loads nothing from the network.']),
     'It also carries the source of the page, so the page can come back exactly.',
