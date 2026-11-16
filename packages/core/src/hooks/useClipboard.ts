@@ -4,8 +4,8 @@
 
 /**
  * @file useClipboard.ts
- * @input Uses React state/effect/callback; navigator.clipboard (else a
- *   selected hidden field and the copy command); useAnnounce
+ * @input Uses React state/effect/callback; navigator.clipboard (else the
+ *   copy command and its copy event); useAnnounce
  * @output Exports useClipboard hook plus its options/return types
  * @position Core behavior hook; owns the copy-to-clipboard behavior shared by
  *   CodeBlock and Timestamp — the clipboard write, the transient "copied"
@@ -134,9 +134,9 @@ export interface UseClipboardReturn {
   /**
    * Write `text` to the clipboard. On success, flips `isCopied` to true,
    * announces the configured message, and (re)starts the reset timer;
-   * resolves `true`. Where the document may not use the async Clipboard API
-   * (a frame whose permissions policy does not allow `clipboard-write`), the
-   * text is copied through a selection instead. A failed write is a silent
+   * resolves `true`. Where the frame refuses the async Clipboard API, or the
+   * browser refuses the write, the text is copied with the browser copy
+   * command inside the reader's click or key press. A failed write is a silent
    * no-op that leaves the copied state unchanged and resolves `false`.
    */
   copy: (text: string) => Promise<boolean>;

@@ -4,11 +4,12 @@
 /**
  * @file useClipboardFrame.a11y.chromium.spec.ts
  * @input The `Core/CodeBlock` Copy in a dialog story in a built Storybook,
- *   served from a second origin into a frame whose permissions policy does
- *   not allow `clipboard-write`, in Chromium.
+ *   served from a second origin into a sandboxed frame, with and without
+ *   `clipboard-write`, in Chromium.
  * @output Proof, read back from the clipboard, that Copy puts the exact code
- *   there through a selection: outside a dialog, and inside an open modal
- *   Dialog, whose page the browser makes inert.
+ *   there with the copy command where the frame refuses the async API:
+ *   outside a dialog, and inside an open modal Dialog, whose page the browser
+ *   makes inert; and with the async API where the frame may use it.
  * @position Run with `pnpm test:a11y-contract`. The clipboard, a frame's
  *   permissions policy and a modal's inert page need a real browser.
  */
