@@ -220,7 +220,7 @@ export default function FormTwoColumnPage() {
           {/* Contact strip; stacks below ~440px. */}
           <VStack gap={6}>
             <Divider />
-            <Grid columns={{minWidth: 200}} gap={6}>
+            <Grid columns={{minWidth: 200, max: 3}} gap={6}>
               {CONTACT_COLUMNS.map(col => (
                 <VStack key={col.label} gap={1} hAlign="center">
                   <Text type="supporting" color="secondary">
