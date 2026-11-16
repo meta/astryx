@@ -733,7 +733,9 @@ const styles = stylex.create({
   // scales it — so it clips instead. `clip` over `hidden`: nothing here
   // should scroll, including the quiet scroll that focusing a clipped child
   // would otherwise cause.
-  artboardFrame: {overflow: 'clip'},
+  // The artboard is a physical coordinate space: layers sit at x/y from its
+  // top-left corner in every reading direction, so it stays left-to-right.
+  artboardFrame: {overflow: 'clip', direction: 'ltr'},
   // The canvas pans in both axes, which centring normally breaks.
   //
   // A scroll port that centres with `justify-content`/`align-items` has no

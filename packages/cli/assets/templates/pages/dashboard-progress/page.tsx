@@ -455,6 +455,9 @@ const DONUT_GAP_ANGLE =
 // ============= SHARED PIECES =============
 
 const pageStyles = stylex.create({
+  // A chart keeps its axes in every reading direction: time runs left to
+  // right and the row labels stay beside their bars.
+  chartPlot: {direction: 'ltr'},
   contentBottomPad: {
     paddingBlockEnd: 'var(--spacing-10)',
   },
@@ -675,7 +678,10 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
 
   return (
     <VStack gap={3}>
-      <ResponsiveContainer width="100%" height={height}>
+      <ResponsiveContainer
+        width="100%"
+        height={height}
+        {...stylex.props(pageStyles.chartPlot)}>
         <BarChart
           data={data}
           layout="vertical"
