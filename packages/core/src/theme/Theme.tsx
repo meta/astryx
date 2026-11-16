@@ -277,7 +277,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *   outside the Theme wrapper (e.g. toast fallback viewports, portals).
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
- * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ * - 'system' → removes data-theme (Core's stylesheet and reset.css default the
+ *   root to color-scheme: light dark)
  *
  * A theme that reduces motion for everyone also marks `<html>` with
  * `data-astryx-reduced-motion` and its custom property, so layers portaled
@@ -360,6 +361,7 @@ export function Theme({
   children,
 }: ThemeProps): React.ReactElement {
   const isNested = use(ThemeNestingContext);
+  const parentMode = use(ThemeContext)?.mode;
 
   registerTheme(theme);
 
@@ -371,13 +373,19 @@ export function Theme({
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
   useRootTextSizeSync(isNested);
 
-  // Get color-scheme style
+  // A system Theme takes the scheme around it: the page root's (Core's
+  // stylesheet and reset.css make it follow the reader's preference, and a
+  // host can set its own) or a system Theme's above it. Only under a Theme
+  // that forces light or dark does it declare `light dark`, to follow the
+  // reader's preference again.
   const colorSchemeStyle =
     mode === 'dark'
       ? wrapperStyles.dark
       : mode === 'light'
         ? wrapperStyles.light
-        : wrapperStyles.system;
+        : parentMode === 'light' || parentMode === 'dark'
+          ? wrapperStyles.system
+          : null;
 
   // Memoize the context value to prevent unnecessary re-renders
   const ctxValue = useMemo(() => ({theme, mode}), [theme, mode]);

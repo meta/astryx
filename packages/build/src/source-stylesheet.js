@@ -412,13 +412,29 @@ async function compileRules(file, options) {
 /** The cascade-layer order every Astryx stylesheet registers before its rules. */
 const LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
-/** A stylesheet's block: the layer order, then `css` inside `@layer astryx-base`. */
-function layerBlock(css) {
+/**
+ * The one block Core's stylesheet carries outside `astryx-base`
+ * (spec:AST-080 FR3): the page root follows the reader's light or dark
+ * preference without `reset.css`. A `system` Theme inherits the root's scheme
+ * (component:Theme FR2). Zero specificity in the lowest layer, so a host or an
+ * app that sets the root's scheme wins.
+ */
+const CORE_ROOT_BLOCK =
+  '@layer reset {\n  :where(html) {\n    color-scheme: light dark;\n  }\n}';
+
+/**
+ * A stylesheet's block: the layer order, then `css` inside `@layer astryx-base`.
+ * Core's begins with its root block.
+ * @param {string} css
+ * @param {{core?: boolean}} [options]
+ */
+function layerBlock(css, {core = false} = {}) {
   const body = css
     .split('\n')
     .map(line => `  ${line}`)
     .join('\n');
-  return `${LAYER_ORDER}\n\n@layer astryx-base {\n${body}\n}\n`;
+  const root = core ? `${CORE_ROOT_BLOCK}\n\n` : '';
+  return `${LAYER_ORDER}\n\n${root}@layer astryx-base {\n${body}\n}\n`;
 }
 
 /** StyleX's CSS for `rules`, from the copy of StyleX that compiled them. */
@@ -431,9 +447,9 @@ function processRules(rules) {
  * when there are no rules. Each block carries the order, so the order holds
  * whichever block or chunk loads first. The product needs no line of its own.
  */
-function renderPackage(rules) {
+function renderPackage(rules, options) {
   const css = processRules(rules);
-  return css.trim() ? layerBlock(css) : '';
+  return css.trim() ? layerBlock(css, options) : '';
 }
 
 /**
@@ -451,7 +467,7 @@ async function sourceStylesheet({cwd}) {
     if (pkg.name === CORE) {
       provided = new Set([...modules].filter(file => STYLEX_MODULE.test(file)));
     }
-    blocks.push(renderPackage(rules));
+    blocks.push(renderPackage(rules, {core: pkg.name === CORE}));
   }
   return {css: blocks.filter(Boolean).join('\n'), packages};
 }
@@ -464,6 +480,7 @@ module.exports = {
   STYLEX_ENTRIES,
   STYLEX_MODULE,
   LAYER_ORDER,
+  CORE_ROOT_BLOCK,
   prebuiltStylesheet,
   findPackageDir,
   sourcePackages,
