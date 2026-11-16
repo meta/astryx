@@ -98,8 +98,8 @@ describe('an unready template in search', () => {
         expect(typeof row.isReady, row.name).toBe('boolean');
         expect(Object.keys(row).at(-1), row.name).toBe('isReady');
       }
-      const unready = kit.pages.find(p => p.name === 'quokka-unready');
-      if (unready) expect(unready.isReady).toBe(false);
+      // Build lists only pages it could start from.
+      expect(kit.pages.map(p => p.name)).not.toContain('quokka-unready');
     },
     SLOW,
   );

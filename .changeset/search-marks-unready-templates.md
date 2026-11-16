@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[feat] Every template result in `astryx search --json`, and every page and block in `astryx build --json`, adds `isReady`: false for a template whose doc sets `isReady: false`, else true. In text, `astryx search` marks an unready template's kind `(not ready)`, and `astryx template --list` marks it `(not ready)` instead of `(WIP)`. Search still lists it in the same place.
+[feat] Every `--json` result that lists or returns a template gives it `isReady`: false for a template whose doc sets `isReady: false`, else true. That covers `search` results, `build`'s start, alternatives, pages and blocks, `template <id>` (shown, `--skeleton`, and copied), and `component <Name> --blocks`; `template --list` already had it. In text, those commands mark an unready template `(not ready)`, and `template --list` says `(not ready)` instead of `(WIP)`. Search still lists an unready template in the same place.
 
 @josephfarina

@@ -16,7 +16,7 @@
  * @position packages/cli/clients/cli/commands — cross-command output rules
  */
 
-import {execFileSync, spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -316,23 +316,34 @@ describe('a template that is not ready', () => {
     expect(unplaced).toEqual([]);
   });
 
-  it('is never tagged (WIP) in a file the CLI ships or documents a template with', () => {
-    const files = execFileSync(
-      'git',
-      ['ls-files', '--', 'packages/cli', 'apps/docsite/src', 'docs'],
-      {cwd: REPO, encoding: 'utf8'},
-    )
-      .split('\n')
-      .filter(f => /\.(mjs|ts|tsx|md|json)$/.test(f))
-      .filter(f => !f.endsWith('CHANGELOG.md'))
-      .filter(f => path.join(REPO, f) !== fileURLToPath(import.meta.url));
-    const tagged = files.filter(f => {
-      try {
-        return fs.readFileSync(path.join(REPO, f), 'utf8').includes('(WIP)');
-      } catch {
-        return false;
-      }
-    });
+  it('is never tagged (WIP) in a file the CLI ships', () => {
+    // The folders package.json publishes, minus tests.
+    const shipped = [
+      'clients',
+      'api',
+      'assets',
+      'authoring',
+      'foundation',
+      'host',
+    ];
+    /** @param {string} at @returns {string[]} */
+    const walk = at =>
+      fs.readdirSync(at, {withFileTypes: true}).flatMap(entry => {
+        const file = path.join(at, entry.name);
+        if (entry.isDirectory()) {
+          return entry.name === 'node_modules' || entry.name === '__tests__'
+            ? []
+            : walk(file);
+        }
+        return /\.(mjs|cjs|js|ts|md|json)$/.test(entry.name) &&
+          !/\.test\./.test(entry.name)
+          ? [file]
+          : [];
+      });
+    const tagged = shipped
+      .flatMap(folder => walk(path.join(CLI, folder)))
+      .filter(file => fs.readFileSync(file, 'utf8').includes('(WIP)'))
+      .map(file => path.relative(CLI, file));
     expect(tagged).toEqual([]);
   });
 });
