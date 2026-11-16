@@ -9,17 +9,12 @@
  * @position Internal presentation primitive for selection controls
  */
 
-import {lazy, Suspense, useEffect, type ReactNode, type RefObject} from 'react';
+import {useEffect, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {BottomSheet} from '../BottomSheet/BottomSheet';
 import {Heading} from '../Heading';
 import {Section} from '../Section';
 import {spacingVars} from '../theme/tokens.stylex';
-
-const LazyBottomSheet = lazy(async () =>
-  import('../BottomSheet/BottomSheet').then(module => ({
-    default: module.BottomSheet,
-  })),
-);
 
 const styles = stylex.create({
   content: {
@@ -31,7 +26,7 @@ const styles = stylex.create({
   },
 });
 
-interface SelectorBottomSheetProps {
+export interface SelectorBottomSheetProps {
   children: ReactNode;
   finalFocusRef: RefObject<HTMLElement | null>;
   initialFocusRef: RefObject<HTMLElement | null>;
@@ -69,28 +64,26 @@ export function SelectorBottomSheet({
   onOpenChange,
 }: SelectorBottomSheetProps) {
   return (
-    <Suspense fallback={null}>
-      <LazyBottomSheet
-        isOpen={isOpen}
-        onOpenChange={onOpenChange}
-        finalFocusRef={finalFocusRef}
-        label={label}
-        height="hug"
-        purpose="info">
-        <Section paddingBlockStart={4} paddingBlockEnd={0} paddingInline={1}>
-          <div {...stylex.props(styles.content)}>
-            <Heading level={3} xstyle={styles.heading}>
-              {label}
-            </Heading>
-            {children}
-            <SelectorBottomSheetInitialFocus
-              isOpen={isOpen}
-              targetRef={initialFocusRef}
-            />
-          </div>
-        </Section>
-      </LazyBottomSheet>
-    </Suspense>
+    <BottomSheet
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      finalFocusRef={finalFocusRef}
+      label={label}
+      height="hug"
+      purpose="info">
+      <Section paddingBlockStart={4} paddingBlockEnd={0} paddingInline={1}>
+        <div {...stylex.props(styles.content)}>
+          <Heading level={3} xstyle={styles.heading}>
+            {label}
+          </Heading>
+          {children}
+          <SelectorBottomSheetInitialFocus
+            isOpen={isOpen}
+            targetRef={initialFocusRef}
+          />
+        </div>
+      </Section>
+    </BottomSheet>
   );
 }
 

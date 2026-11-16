@@ -76,6 +76,7 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 // resolves from the module cache and every sheet test waits only on the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
 });
 
 beforeEach(() => {
@@ -302,6 +303,7 @@ function expectSilentBusySpinner() {
 // here, and each test's open waits only for the open.
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
+  await import('./SelectorBottomSheet');
 });
 
 describe('Selector', () => {
