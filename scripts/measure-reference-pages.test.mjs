@@ -144,7 +144,7 @@ describe('rolldownPageStats', () => {
       type: 'chunk',
       fileName: 'index.js',
       isEntry: true,
-      imports: ['shared.js'],
+      imports: ['shared.js', 'react'],
       dynamicImports: ['lazy.js'],
       code: 'export{a}from"./shared.js";',
       modules: {
@@ -162,6 +162,7 @@ describe('rolldownPageStats', () => {
       modules: {
         '/b.js': {renderedLength: 17},
         '/barrel.js': {renderedLength: 0},
+        '\0vite/preload-helper.js': {renderedLength: 300},
       },
     },
     {
@@ -218,7 +219,8 @@ describe('measurePageRolldown', () => {
       const stats = await measurePageRolldown(dist, ['Widget']);
       expect(stats.chunks).toBe(1);
       expect(stats.keptModules).toBe(2);
-      expect(stats.min).toBeLessThan(1000);
+      // The lazy module's 2,000 characters stay out of the first load.
+      expect(stats.min).toBeLessThan(2000);
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
     }

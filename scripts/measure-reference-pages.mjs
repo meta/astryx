@@ -436,50 +436,65 @@ function isAppExternal(id) {
 }
 
 /**
- * What a page loads up front in a Rolldown build, from its output chunks:
- * the entry chunk and the chunks it imports statically, as `min` and `gzip`
- * bytes, `chunks` and `depth` (breadth-first levels, the entry chunk at 1),
- * and `keptModules`, the modules with rendered code in those chunks, the
- * page entry not counted. `import()` targets load later, so they are not
- * part of it.
+ * Rolldown's output chunks in the shape of an esbuild metafile's `outputs`,
+ * so the shared walks read both builds alike: each chunk's static and
+ * dynamic imports, and each module's rendered bytes as `bytesInOutput`.
+ * Modules without a file path (a bundler's virtual helpers) are left out of
+ * `inputs`.
+ */
+export function rolldownOutputs(output) {
+  const outputs = {};
+  const textByPath = new Map();
+  let entryOutput;
+  const chunks = output.filter(item => item.type === 'chunk');
+  const files = new Set(chunks.map(chunk => chunk.fileName));
+  // A chunk's imports also name the packages the build leaves external.
+  const edge = kind => file => ({
+    path: file,
+    kind,
+    ...(files.has(file) ? {} : {external: true}),
+  });
+  for (const chunk of chunks) {
+    if (chunk.isEntry) entryOutput = chunk.fileName;
+    textByPath.set(chunk.fileName, chunk.code);
+    outputs[chunk.fileName] = {
+      imports: [
+        ...(chunk.imports ?? []).map(edge('import-statement')),
+        ...(chunk.dynamicImports ?? []).map(edge('dynamic-import')),
+      ],
+      inputs: Object.fromEntries(
+        Object.entries(chunk.modules ?? {})
+          .filter(([id]) => !id.startsWith('\0'))
+          .map(([id, module]) => [id, {bytesInOutput: module.renderedLength}]),
+      ),
+    };
+  }
+  if (entryOutput === undefined) {
+    throw new Error('The Rolldown build has no entry chunk.');
+  }
+  return {outputs, textByPath, entryOutput};
+}
+
+/**
+ * What a page loads up front in a Rolldown build: the entry chunk and the
+ * chunks it imports statically, as `min` and `gzip` bytes, `keptModules`,
+ * `chunks` and `depth`, by the same walks as the esbuild figures. `import()`
+ * targets load later, so they are not part of it.
  */
 export function rolldownPageStats(output, entryModule) {
-  const byFile = new Map(
-    output
-      .filter(item => item.type === 'chunk')
-      .map(chunk => [chunk.fileName, chunk]),
-  );
-  const entry = [...byFile.values()].find(chunk => chunk.isEntry);
-  if (entry === undefined)
-    throw new Error('The Rolldown build has no entry chunk.');
-  const level = new Map([[entry.fileName, 1]]);
-  const order = [entry.fileName];
-  for (let index = 0; index < order.length; index += 1) {
-    for (const file of byFile.get(order[index]).imports ?? []) {
-      if (level.has(file) || !byFile.has(file)) continue;
-      level.set(file, level.get(order[index]) + 1);
-      order.push(file);
-    }
-  }
-  const kept = new Set();
-  for (const file of order) {
-    for (const [id, module] of Object.entries(byFile.get(file).modules ?? {})) {
-      if (module.renderedLength > 0 && id !== entryModule) kept.add(id);
-    }
-  }
-  const text = order.map(file => byFile.get(file).code).join('');
+  const {outputs, textByPath, entryOutput} = rolldownOutputs(output);
+  const text = eagerText(outputs, textByPath, entryOutput);
   return {
     min: Buffer.byteLength(text),
     gzip: gzipBytes(text),
-    keptModules: kept.size,
-    chunks: order.length,
-    depth: Math.max(...level.values()),
+    keptModules: keptModuleCount(outputs, entryOutput, entryModule),
+    ...chunkGraphStats(outputs, entryOutput),
   };
 }
 
 /**
  * One page as a production Vite app bundle, built by Rolldown, as a consumer
- * of the built package ships it.
+ * of the built package ships it: Vite's defaults, module preload included.
  */
 export async function measurePageRolldown(distDir, components) {
   const {build} = await import('vite');
@@ -507,8 +522,7 @@ export async function measurePageRolldown(distDir, components) {
     build: {
       write: false,
       minify: true,
-      modulePreload: false,
-      rollupOptions: {
+      rolldownOptions: {
         input: entryModule,
         external: isAppExternal,
         preserveEntrySignatures: 'strict',
@@ -607,7 +621,7 @@ async function main(argv) {
     const labels = {
       base: args.base,
       head: args.head === '.' ? 'the working tree' : args.head,
-      bundler: args.bundler,
+      ...(args.bundler === 'esbuild' ? {} : {bundler: args.bundler}),
     };
     console.log(
       args.json
