@@ -353,15 +353,10 @@ const variants = stylex.create({
 });
 
 /**
- * Button variant type derived from ButtonVariantMap.
- * Extensible via module augmentation of ButtonVariantMap.
- */
-/**
- * Internal to Core: true where a Core part names its Button with words that
- * already contain the tooltip text, such as Banner's dismiss ("Dismiss
- * {title}") and the field clear button ("Clear {label}"). The short tooltip
- * then still shows but adds no description, so a screen reader does not read
- * its word twice. The package does not export it.
+ * Internal to Core. True where a Core part's Button name already contains its
+ * tooltip text, such as Banner's dismiss button and the field clear button.
+ * The tooltip still shows but adds no description. The package does not
+ * export it.
  */
 export const ButtonTooltipInNameContext = createSharedContext<boolean>(
   'ButtonTooltipInNameContext',
@@ -369,6 +364,10 @@ export const ButtonTooltipInNameContext = createSharedContext<boolean>(
   false,
 );
 
+/**
+ * Button variant type derived from ButtonVariantMap.
+ * Extensible via module augmentation of ButtonVariantMap.
+ */
 export type ButtonVariant = keyof ButtonVariantMap;
 
 /**

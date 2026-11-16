@@ -901,6 +901,11 @@ describe('Banner', () => {
       for (const button of buttons) {
         expect(button).toHaveAccessibleDescription('');
       }
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .filter(el => el.textContent === 'Dismiss'),
+      ).toHaveLength(2);
     });
 
     it('keeps the bare name and tooltip for a rich title', () => {

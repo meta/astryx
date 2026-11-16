@@ -31,6 +31,7 @@ import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {ButtonTooltipInNameContext} from '../Button/Button';
 import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboardCopy} from '../hooks/useClipboard';
@@ -157,37 +158,39 @@ function CopyButton({value}: {value: string}) {
   }, [copy, value]);
 
   return (
-    <IconButton
-      variant="ghost"
-      size="sm"
-      icon={
-        <ComponentIcon
-          slot="timestamp-copy"
-          state={{copied: copied && !copyFailed}}
-          fallback={{
-            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
-            size: 'sm',
-          }}
-          color="inherit"
-        />
-      }
-      // The tooltip stays short. At rest the name carries the full value for
-      // assistive technology.
-      tooltip={
-        copyFailed
-          ? copyFailedLabel
-          : t(copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy')
-      }
-      label={
-        copyFailed
-          ? copyFailedLabel
-          : copied
-            ? t('@astryx.timestamp.copied')
-            : t('@astryx.timestamp.copyValue', {value})
-      }
-      onClick={handleCopy}
-      {...themeProps('timestamp-copy-button')}
-    />
+    <ButtonTooltipInNameContext value>
+      <IconButton
+        variant="ghost"
+        size="sm"
+        icon={
+          <ComponentIcon
+            slot="timestamp-copy"
+            state={{copied: copied && !copyFailed}}
+            fallback={{
+              icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+              size: 'sm',
+            }}
+            color="inherit"
+          />
+        }
+        // The tooltip stays short. At rest the name carries the full value for
+        // assistive technology.
+        tooltip={
+          copyFailed
+            ? copyFailedLabel
+            : t(copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy')
+        }
+        label={
+          copyFailed
+            ? copyFailedLabel
+            : copied
+              ? t('@astryx.timestamp.copied')
+              : t('@astryx.timestamp.copyValue', {value})
+        }
+        onClick={handleCopy}
+        {...themeProps('timestamp-copy-button')}
+      />
+    </ButtonTooltipInNameContext>
   );
 }
 
