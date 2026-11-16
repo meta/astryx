@@ -75,6 +75,7 @@ export {
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
+export {themeIconSet} from '../../foundation/config/theme-icon-set.mjs';
 export {
   GENERATED_MARKER,
   isPrivateVarRefusal,

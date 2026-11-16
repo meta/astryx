@@ -61,6 +61,7 @@ import {
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {themeIconSet} from '../../foundation/config/theme-icon-set.mjs';
 
 export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
 
@@ -1151,9 +1152,16 @@ async function writeThemeApp(
   themes = kept;
   const finalState = {...state, themes, defaultSlug, configured: true};
   const resolved = resolveRecordedThemes(finalState, available);
+  const iconSet = await themeIconSet(state.projectDir);
   let prepared;
   try {
-    prepared = planThemeAppWrite(finalState, themes, defaultSlug, resolved);
+    prepared = planThemeAppWrite(
+      finalState,
+      themes,
+      defaultSlug,
+      resolved,
+      iconSet,
+    );
   } catch (error) {
     throw asThemeError(error);
   }
@@ -1195,9 +1203,66 @@ async function writeThemeApp(
         changed,
         firstAdd: action === 'add' && !state.configured,
       },
+      ...(iconSet ? {iconSet: themeIconSetReceipt(iconSet)} : {}),
       ...(notes.length > 0 ? {notes} : {}),
     },
   };
+}
+
+/**
+ * How a receipt names the icon set that draws the built-in icons.
+ * @param {import('../../foundation/config/theme-state.mjs').ThemeIconSet} iconSet
+ */
+function themeIconSetReceipt(iconSet) {
+  return {set: iconSet.set, module: iconSet.module, export: iconSet.exportName};
+}
+
+/**
+ * Regenerate the generated theme module after the project's icon set
+ * changed, so every added theme draws the built-in icons from the new set.
+ * A project without a generated theme module is left as it is.
+ * @param {string} cwd
+ * @returns {Promise<import('./theme.type.mjs').ThemeModuleRefresh | null>}
+ */
+export async function refreshThemeAppIconSet(cwd) {
+  return withThemeAppLock(cwd, async () => {
+    let state;
+    try {
+      state = readThemeState(cwd);
+    } catch {
+      // No readable generated module: the theme commands own that problem.
+      return null;
+    }
+    if (!state.configured || state.defaultSlug == null) return null;
+    const iconSet = await themeIconSet(state.projectDir, {fresh: true});
+    try {
+      const available = await listAvailableThemes(state.projectDir);
+      const resolved = resolveRecordedThemes(state, available);
+      const prepared = planThemeAppWrite(
+        state,
+        state.themes,
+        state.defaultSlug,
+        resolved,
+        iconSet,
+      );
+      const changed =
+        prepared.moduleContents !==
+        state.module.expectedOriginal?.toString('utf-8');
+      if (changed) applyWrites([prepared.plan]);
+      return {
+        path: prepared.module.path,
+        changed,
+        iconSet: iconSet ? themeIconSetReceipt(iconSet) : null,
+      };
+    } catch (error) {
+      return {
+        path: state.module.path,
+        changed: false,
+        iconSet: null,
+        problem: `${error instanceof Error ? error.message : String(error)} Run \`${formatCliCommand(`theme use ${state.defaultSlug}`, state.projectDir)}\` once it is fixed, so the themes draw the built-in icons from the icon set.`,
+      };
+    }
+  });
 }
 
 /**

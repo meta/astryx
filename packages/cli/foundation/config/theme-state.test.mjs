@@ -181,3 +181,108 @@ describe('generated theme-module state', () => {
     });
   });
 });
+
+describe('generated theme module with a project icon set', () => {
+  const iconSet = {
+    set: '@acme/glyphs/glyphs',
+    module: '@acme/glyphs',
+    exportName: 'themeIcons',
+  };
+
+  it('draws every theme from the icon set and keeps the record as it was', () => {
+    const source = renderThemeModule(
+      [packageEntry(), packageEntry('dusk')],
+      'ocean',
+      true,
+      iconSet,
+    );
+    expect(source).toContain(
+      'import {themeIcons as _astryxIconSet} from "@acme/glyphs";',
+    );
+    expect(source).toContain('"ocean": _astryxWithIconSet(_astryxTheme0),');
+    expect(source).toContain('"dusk": _astryxWithIconSet(_astryxTheme1),');
+    expect(source).toContain(
+      'function _astryxWithIconSet<T extends object>(theme: T): T {',
+    );
+    expect(
+      [...source.matchAll(/^export (?:const|type) (\w+)/gmu)].map(
+        match => match[1],
+      ),
+    ).toEqual(['themes', 'ThemeSlug', 'defaultThemeSlug']);
+    expect(parseThemeModuleRecord(source)).toEqual({
+      themes: {ocean: '@acme/themes', dusk: '@acme/themes'},
+      defaultSlug: 'ocean',
+    });
+  });
+
+  it('emits the helper as JavaScript in a JavaScript project', () => {
+    const source = renderThemeModule([packageEntry()], 'ocean', false, iconSet);
+    expect(source).toContain('function _astryxWithIconSet(theme) {');
+    expect(source).not.toContain('<T');
+    expect(source).not.toContain(' as const');
+  });
+
+  it('carries each theme as built when there is no icon set', () => {
+    const plain = renderThemeModule([packageEntry()], 'ocean', true);
+    expect(renderThemeModule([packageEntry()], 'ocean', true, null)).toBe(
+      plain,
+    );
+    expect(plain).not.toContain('_astryxIconSet');
+    expect(plain).toContain('"ocean": _astryxTheme0,');
+  });
+
+  it("puts the set's icons over the theme's own, in both icon views", () => {
+    const source = renderThemeModule([packageEntry()], 'ocean', false, iconSet);
+    const helper = source.slice(
+      source.indexOf('function _astryxWithIconSet'),
+      source.indexOf('\nexport const themes'),
+    );
+    const withIconSet = new Function(
+      '_astryxIconSet',
+      `${helper}\nreturn _astryxWithIconSet;`,
+    )({close: 'set close', search: 'set search'});
+    const built = {
+      name: 'ocean',
+      __built: true,
+      icons: {close: 'own close', check: 'own check'},
+      __icons: {close: 'own close function', check: 'own check function'},
+    };
+    expect(withIconSet(built)).toEqual({
+      name: 'ocean',
+      __built: true,
+      icons: {close: 'set close', check: 'own check', search: 'set search'},
+      __icons: {
+        close: 'set close',
+        check: 'own check function',
+        search: 'set search',
+      },
+    });
+    expect(built.icons.close).toBe('own close');
+    expect(withIconSet({name: 'bare'})).toEqual({
+      name: 'bare',
+      icons: {close: 'set close', search: 'set search'},
+    });
+  });
+
+  it('still names the themes to add again when the record header is damaged', () => {
+    const source = renderThemeModule(
+      [packageEntry(), packageEntry('dusk')],
+      'ocean',
+      true,
+      iconSet,
+    )
+      .split('\n')
+      .filter(line => !line.includes('@astryx-theme-record'))
+      .join('\n');
+    let refusal;
+    try {
+      parseThemeModuleRecord(source, 'src/astryx-themes.ts');
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal?.suggestions?.map(each => each.name)).toEqual([
+      expect.stringMatching(/ theme add ocean$/),
+      expect.stringMatching(/ theme add dusk$/),
+    ]);
+  });
+});

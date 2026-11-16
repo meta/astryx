@@ -474,7 +474,18 @@ export function registerExperimentalIcon(group, program) {
                     : `[note] ${look.set} declares no variants: its icons draw its one look.`,
                 ),
               ),
-            ...(data.themeMap
+            ...(data.themeModule?.problem
+              ? [text(`[warn] ${data.themeModule.problem}`)]
+              : data.themeModule?.iconSet
+                ? [
+                    text(
+                      data.themeModule.changed
+                        ? `[ok] Components now draw their built-in icons, such as the dialog close button and the select arrow, from ${data.themeModule.iconSet.set}: rewrote ${data.themeModule.path}.`
+                        : `[ok] ${data.themeModule.path} already draws the built-in icons from ${data.themeModule.iconSet.set}.`,
+                    ),
+                  ]
+                : []),
+            ...(data.themeMap && !data.themeModule?.iconSet
               ? [
                   text(
                     `A theme draws the built-in icons in this look with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
