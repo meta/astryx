@@ -302,26 +302,60 @@ describe('Toolbar', () => {
       expect(endStyle.minWidth).not.toBe('0px');
     });
 
-    it('supports OverflowList inside the two-slot start lane beside endContent', () => {
-      render(
+    it('floors an OverflowList start lane at the trigger plus non-folding siblings', () => {
+      const {rerender} = render(
         <Toolbar
           label="Actions"
+          gap={1}
           startContent={
-            <OverflowList
-              behavior="observeParent"
-              overflowRenderer={() => <Button label="+1" />}>
-              <Button label="Save" />
-              <Button label="Edit" />
-            </OverflowList>
+            <>
+              <span data-testid="badge">5 selected</span>
+              <OverflowList
+                behavior="observeParent"
+                overflowRenderer={() => <Button label="+2" />}>
+                <Button label="Save" />
+                <Button label="Edit" />
+              </OverflowList>
+            </>
           }
           endContent={<Button label="Clear" />}
         />,
       );
-      const startLane = screen
-        .getByRole('button', {name: 'Save'})
-        .closest('.astryx-overflow-list')?.parentElement;
-      expect(startLane).toBeTruthy();
-      expect(startLane?.querySelector('.astryx-overflow-list')).not.toBeNull();
+      const badge = screen.getByTestId('badge');
+      const startLane = badge.parentElement!;
+      const measure = startLane.querySelector('[inert]') as HTMLElement;
+      const indicator = measure.lastElementChild as HTMLElement;
+
+      Object.defineProperty(badge, 'offsetWidth', {
+        configurable: true,
+        value: 71,
+      });
+      Object.defineProperty(indicator, 'offsetWidth', {
+        configurable: true,
+        value: 66,
+      });
+
+      rerender(
+        <Toolbar
+          label="Actions"
+          gap={2}
+          startContent={
+            <>
+              <span data-testid="badge">5 selected</span>
+              <OverflowList
+                behavior="observeParent"
+                overflowRenderer={() => <Button label="+2" />}>
+                <Button label="Save" />
+                <Button label="Edit" />
+              </OverflowList>
+            </>
+          }
+          endContent={<Button label="Clear" />}
+        />,
+      );
+
+      expect(badge.style.flexShrink).toBe('0');
+      expect(startLane.style.getPropertyValue('--_start-floor')).toBe('137px');
     });
 
     it('keeps vertical two-slot lanes at natural height without horizontal flex-basis collapse', () => {
