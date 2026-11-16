@@ -8,10 +8,12 @@
  *
  * jsdom reports every element as 0px wide and lacks ResizeObserver, so these
  * tests install a minimal ResizeObserver stub and drive layout math through a
- * `data-w` attribute read by a mocked `offsetWidth`. Each item declares its
- * pixel width via `data-w`; the visible container's available width is the
- * `data-w` passed straight through to it. This lets the real fit algorithm run
- * deterministically instead of collapsing to the trivial all-fit case.
+ * `data-w` attribute read by mocked `offsetWidth`, `getBoundingClientRect`
+ * and `clientWidth`. Each item declares its pixel width via `data-w`; the
+ * visible container's available width is the `data-w` passed straight
+ * through to it (its parent's, with `observeParent`). This lets the real fit
+ * algorithm run deterministically instead of collapsing to the trivial
+ * all-fit case.
  *
  * SYNC: When OverflowList.tsx changes, update tests to match new behavior
  */
@@ -26,6 +28,12 @@ const originalOffsetWidth = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
   'offsetWidth',
 );
+const originalClientWidth = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  'clientWidth',
+);
+const originalGetBoundingClientRect =
+  HTMLElement.prototype.getBoundingClientRect;
 const originalResizeObserver = (
   globalThis as unknown as {ResizeObserver?: unknown}
 ).ResizeObserver;
@@ -53,23 +61,42 @@ class StubResizeObserver {
   }
 }
 
+/** The width an element declares, read off its child for wrapper boxes. */
+function declaredWidth(el: HTMLElement): number {
+  const own = el.getAttribute('data-w');
+  if (own != null) {
+    return Number(own);
+  }
+  // The overflow indicator is wrapped in a measurement <div>; read the
+  // width off its child so the reserved indicator space is measurable.
+  const child = el.firstElementChild;
+  if (child) {
+    return Number(child.getAttribute('data-w') ?? 0);
+  }
+  return 0;
+}
+
 beforeAll(() => {
   (globalThis as unknown as {ResizeObserver: unknown}).ResizeObserver =
     StubResizeObserver;
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
     configurable: true,
     get(this: HTMLElement): number {
-      const own = this.getAttribute('data-w');
-      if (own != null) {
-        return Number(own);
-      }
-      // The overflow indicator is wrapped in a measurement <div>; read the
-      // width off its child so the reserved indicator space is measurable.
-      const child = this.firstElementChild;
-      if (child) {
-        return Number(child.getAttribute('data-w') ?? 0);
-      }
-      return 0;
+      return Math.round(declaredWidth(this));
+    },
+  });
+  // The published bounds read fractional widths; jsdom reports zero.
+  HTMLElement.prototype.getBoundingClientRect = function (
+    this: HTMLElement,
+  ): DOMRect {
+    const rect = originalGetBoundingClientRect.call(this);
+    return new DOMRect(rect.x, rect.y, declaredWidth(this), rect.height);
+  };
+  // observeParent measures its parent's content width.
+  Object.defineProperty(Element.prototype, 'clientWidth', {
+    configurable: true,
+    get(this: Element): number {
+      return Math.round(declaredWidth(this as HTMLElement));
     },
   });
 });
@@ -80,6 +107,14 @@ afterAll(() => {
       HTMLElement.prototype,
       'offsetWidth',
       originalOffsetWidth,
+    );
+  }
+  HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+  if (originalClientWidth) {
+    Object.defineProperty(
+      Element.prototype,
+      'clientWidth',
+      originalClientWidth,
     );
   }
   (globalThis as unknown as {ResizeObserver?: unknown}).ResizeObserver =
@@ -339,7 +374,7 @@ describe('OverflowList', () => {
   });
 
   describe('inline bounds', () => {
-    it('publishes its collapsed indicator width as minInlineSize', async () => {
+    it('publishes its collapsed indicator width as the lane floor', async () => {
       await renderMeasured(
         <OverflowList
           gap={0}
@@ -354,7 +389,119 @@ describe('OverflowList', () => {
           </button>
         </OverflowList>,
       );
-      expect(visibleContainer().getAttribute('style')).toContain('36px');
+      expect(visibleContainer().getAttribute('style')).toContain(
+        'minInlineSize: 36px',
+      );
+    });
+
+    it('rounds the published floor up from fractional widths', async () => {
+      await renderMeasured(
+        <OverflowList
+          gap={0}
+          data-w="60"
+          data-testid="ov"
+          overflowRenderer={indicator('more:', 35.2)}>
+          <button type="button" data-w="40">
+            A
+          </button>
+          <button type="button" data-w="40">
+            B
+          </button>
+        </OverflowList>,
+      );
+      // offsetWidth rounds 35.2 down to 35; the floor must still fit the
+      // trigger at its true width.
+      expect(visibleContainer().getAttribute('style')).toContain(
+        'minInlineSize: 36px',
+      );
+    });
+
+    it('never caps an observeSelf list at its rendered span', async () => {
+      await renderMeasured(
+        <OverflowList
+          gap={0}
+          data-w="60"
+          data-testid="ov"
+          overflowRenderer={indicator('more:', 36)}>
+          <button type="button" data-w="40">
+            A
+          </button>
+          <button type="button" data-w="40">
+            B
+          </button>
+        </OverflowList>,
+      );
+      // Folded to A + indicator: a rendered cap would hold the list at that
+      // span and feed it back as the measured width, blocking grow-back.
+      expect(visibleContainer().getAttribute('style')).toContain(
+        'maxInlineSize: none',
+      );
+    });
+
+    it('caps an observeParent list at its rendered span while its items fit', async () => {
+      await renderMeasured(
+        // jsdom resolves computed padding only from inline style.
+        <div data-w="200" style={{padding: 0}}>
+          <OverflowList
+            gap={0}
+            behavior="observeParent"
+            data-testid="ov"
+            overflowRenderer={indicator('more:', 36)}>
+            <button type="button" data-w="40">
+              A
+            </button>
+            <button type="button" data-w="40">
+              B
+            </button>
+          </OverflowList>
+        </div>,
+      );
+      expect(visibleContainer().getAttribute('style')).toContain(
+        'maxInlineSize: 80px',
+      );
+    });
+
+    it('drops the observeParent cap once items collapse', async () => {
+      await renderMeasured(
+        <div data-w="60" style={{padding: 0}}>
+          <OverflowList
+            gap={0}
+            behavior="observeParent"
+            data-testid="ov"
+            overflowRenderer={indicator('more:', 36)}>
+            <button type="button" data-w="40">
+              A
+            </button>
+            <button type="button" data-w="40">
+              B
+            </button>
+          </OverflowList>
+        </div>,
+      );
+      expect(visibleContainer().getAttribute('style')).toContain(
+        'maxInlineSize: none',
+      );
+    });
+
+    it('publishes no bounds for a multi-row list', async () => {
+      await renderMeasured(
+        <OverflowList
+          gap={0}
+          maxRows={2}
+          data-w="60"
+          data-testid="ov"
+          overflowRenderer={indicator('more:', 36)}>
+          <button type="button" data-w="40">
+            A
+          </button>
+          <button type="button" data-w="40">
+            B
+          </button>
+        </OverflowList>,
+      );
+      expect(visibleContainer().getAttribute('style') ?? '').not.toContain(
+        'InlineSize',
+      );
     });
   });
 

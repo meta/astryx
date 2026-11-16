@@ -53,11 +53,14 @@ async function readLanes(page: Page) {
       throw new Error('No toolbar');
     }
     const toolbarBox = toolbar.getBoundingClientRect();
-    // The lane elements; the keyboard hint is not a lane.
+    // The lane elements. The keyboard hint leaves a <template> layer marker
+    // here and portals its popover out; neither is a lane.
     const lanes = [...toolbar.children]
       .filter(
         (lane): lane is HTMLElement =>
-          lane instanceof HTMLElement && !lane.hasAttribute('popover'),
+          lane instanceof HTMLElement &&
+          lane.tagName !== 'TEMPLATE' &&
+          !lane.hasAttribute('popover'),
       )
       .map(lane => {
         const range = document.createRange();

@@ -30,6 +30,7 @@ import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
+import {overflowLaneMarker} from '../internal/overflowLane.stylex';
 import {themeProps} from '../utils/themeProps';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {useAttachment} from '../hooks/useAttachment';
@@ -113,7 +114,9 @@ const styles = stylex.create({
     justifyContent: 'flex-end',
   },
   // Take the leftover row width so collapsible start content (such as
-  // OverflowList) measures the space beside endContent.
+  // OverflowList) measures the space beside endContent. The lane marker lets
+  // a single-row OverflowList floor the lane at its collapsed minimum
+  // instead of its unfolded items.
   startFill: {
     flexGrow: 1,
     flexShrink: 1,
@@ -461,6 +464,7 @@ export function Toolbar({
                   {...stylex.props(
                     styles.startSlot,
                     orientation === 'horizontal' && styles.startFill,
+                    orientation === 'horizontal' && overflowLaneMarker,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>

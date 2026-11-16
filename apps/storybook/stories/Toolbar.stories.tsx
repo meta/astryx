@@ -10,6 +10,7 @@ import {Section} from '@astryxdesign/core/Section';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Badge} from '@astryxdesign/core/Badge';
+import {OverflowList} from '@astryxdesign/core/OverflowList';
 import {Table} from '@astryxdesign/core/Table';
 import {Layout} from '@astryxdesign/core/Layout';
 import {LayoutHeader} from '@astryxdesign/core/Layout';
@@ -300,6 +301,36 @@ export const BulkActions: Story = {
         </>
       }
       endContent={<Button label="Deselect all" variant="ghost" />}
+    />
+  ),
+};
+
+/** Bulk selection with an OverflowList of actions: the start lane grows into the leftover row width, and the list folds actions into a whole trigger instead of clipping them. */
+export const OverflowActions: Story = {
+  name: 'Composition: Bulk Selection with Overflow Actions',
+  render: () => (
+    <Toolbar
+      label="Bulk actions"
+      size="sm"
+      variant="muted"
+      startContent={
+        <>
+          <Badge label="5 selected" />
+          <OverflowList
+            gap={2}
+            overflowRenderer={items => (
+              <Button label={`+${items.length}`} variant="ghost" size="sm" />
+            )}>
+            <Button label="Save" variant="ghost" size="sm" />
+            <Button label="Edit" variant="ghost" size="sm" />
+            <Button label="Duplicate" variant="ghost" size="sm" />
+            <Button label="Share" variant="ghost" size="sm" />
+            <Button label="Archive" variant="ghost" size="sm" />
+            <Button label="Delete" variant="ghost" size="sm" />
+          </OverflowList>
+        </>
+      }
+      endContent={<Button label="Clear" variant="ghost" size="sm" />}
     />
   ),
 };

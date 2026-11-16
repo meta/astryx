@@ -36,16 +36,23 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {overflowLaneMarker} from '../internal/overflowLane.stylex';
 const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    contain: 'inline-size',
-    inlineSize: '100%',
-    flexShrink: 10000,
-    minInlineSize: 0,
+    // In a lane that grows into the leftover row width, the list's unfolded
+    // items must not floor the lane: containment drops their intrinsic
+    // contribution, and the published collapsed minimum floors it instead.
+    // Outside such a lane the list keeps its content-sized width, so a
+    // shrink-to-fit parent still sizes to the items.
+    [stylex.when.ancestor(':is(*)', overflowLaneMarker)]: {
+      contain: 'inline-size',
+      inlineSize: '100%',
+      flexShrink: 10000,
+    },
   },
   containerMultiRow: {
     display: 'flex',
@@ -79,12 +86,16 @@ const multiRowHeight = stylex.create({
   }),
 });
 
+// The collapsed minimum and the rendered bound. The minimum floors the list
+// at its trigger so a growing lane never clips it; the bound caps an
+// observeParent list at its content span while its items fit. A base
+// `min-width: 0` would outrank a marker-gated floor (the ancestor condition
+// compiles to `:where()`, a lower cascade layer), so the bounds publish as
+// direct properties and the base sets no competing minimum.
 const inlineBounds = stylex.create({
-  min: (width: number) => ({
-    minInlineSize: `${width}px`,
-  }),
-  max: (width: number) => ({
-    maxInlineSize: `${width}px`,
+  publish: (minWidth: number, maxWidth: number | null) => ({
+    minInlineSize: `${minWidth}px`,
+    maxInlineSize: maxWidth == null ? 'none' : `${maxWidth}px`,
   }),
 });
 
@@ -421,13 +432,15 @@ export function OverflowList({
               rowHeight > 0 &&
               maxRows != null &&
               multiRowHeight.height(maxRows, rowHeight, gapPx),
+            // An observeSelf list measures the width it is given, so a
+            // rendered cap would feed its own output back as its input and
+            // hold it folded. Only observeParent, content-sized while its
+            // items fit, publishes the rendered bound.
             !isMultiRow &&
-              collapsedWidth > 0 &&
-              inlineBounds.min(collapsedWidth),
-            !isMultiRow &&
-              renderedWidth != null &&
-              !(observeParent && hasOverflow) &&
-              inlineBounds.max(renderedWidth),
+              inlineBounds.publish(
+                collapsedWidth,
+                observeParent && !hasOverflow ? renderedWidth : null,
+              ),
             observeParent && hasOverflow && styles.fillParent,
             xstyle,
           ),

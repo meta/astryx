@@ -119,6 +119,33 @@ export const NoOverflow: Story = {
   ),
 };
 
+// A shrink-to-fit parent sizes to the list's items: the list must keep its
+// intrinsic width there, not collapse to its folded minimum.
+export const ContentSizedParent: Story = {
+  render: () => (
+    <div style={{width: 700, border: '1px dashed #ccc', padding: 8}}>
+      <div style={{display: 'inline-block', verticalAlign: 'top'}}>
+        <OverflowList
+          gap={2}
+          overflowRenderer={overflowItems => (
+            <Button
+              label={`+${overflowItems.length}`}
+              variant="ghost"
+              size="sm"
+            />
+          )}>
+          <Button label="Save" size="sm" />
+          <Button label="Edit" size="sm" />
+          <Button label="Duplicate" size="sm" />
+          <Button label="Share" size="sm" />
+          <Button label="Archive" size="sm" />
+          <Button label="Delete" size="sm" />
+        </OverflowList>
+      </div>
+    </div>
+  ),
+};
+
 // With badges instead of buttons
 export const WithBadges: Story = {
   render: () => (

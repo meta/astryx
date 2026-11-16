@@ -524,26 +524,37 @@ export function useOverflowInternal(
         collapseFrom,
       });
 
-      const spanWidth = (count: number): number => {
-        const shown =
-          collapseFrom === 'end'
-            ? widths.slice(0, count)
-            : widths.slice(widths.length - count);
-        const parts =
-          count < children.length && indicatorWidth > 0
-            ? [...shown, indicatorWidth]
-            : shown;
-        return (
-          parts.reduce((sum, w) => sum + w, 0) +
-          gap * Math.max(0, parts.length - 1)
+      // The published bounds round up from fractional widths: a floor or cap
+      // summed from rounded offsetWidths can land under the true span and
+      // clip the indicator at it.
+      let nextCollapsedWidth = 0;
+      let nextRenderedWidth: number | null = null;
+      if (tracksInlineBounds) {
+        const preciseWidths = children.map(
+          child => child.getBoundingClientRect().width,
         );
-      };
-      const nextCollapsedWidth = tracksInlineBounds
-        ? spanWidth(Math.min(minVisibleItems, children.length))
-        : 0;
-      const nextRenderedWidth = tracksInlineBounds
-        ? spanWidth(nextVisible)
-        : null;
+        const preciseIndicator = hasIndicator
+          ? allChildren[allChildren.length - 1].getBoundingClientRect().width
+          : 0;
+        const spanWidth = (count: number): number => {
+          const shown =
+            collapseFrom === 'end'
+              ? preciseWidths.slice(0, count)
+              : preciseWidths.slice(preciseWidths.length - count);
+          const parts =
+            count < children.length && indicatorWidth > 0
+              ? [...shown, preciseIndicator]
+              : shown;
+          return Math.ceil(
+            parts.reduce((sum, w) => sum + w, 0) +
+              gap * Math.max(0, parts.length - 1),
+          );
+        };
+        nextCollapsedWidth = spanWidth(
+          Math.min(minVisibleItems, children.length),
+        );
+        nextRenderedWidth = spanWidth(nextVisible);
+      }
 
       // Folding to a new list height inside the resize step makes Chromium
       // report a loop error. That update renders after paint. The measure copy
@@ -579,11 +590,12 @@ export function useOverflowInternal(
         const changesRowHeight =
           (maxRows ?? 1) > 1 &&
           measuredRowHeight !== appliedRef.current.rowHeight;
+        // Only the collapsed floor can resize an observed box: it floors the
+        // marked lane. The rendered bound caps the list itself under
+        // observeParent and never reaches the lane's width.
         const changesInlineBounds =
           tracksInlineBounds &&
-          (nextCollapsedWidth !== appliedRef.current.collapsedWidth ||
-            (!observeParent &&
-              nextRenderedWidth !== appliedRef.current.renderedWidth));
+          nextCollapsedWidth !== appliedRef.current.collapsedWidth;
         const observed =
           observeParent && container.parentElement
             ? container.parentElement

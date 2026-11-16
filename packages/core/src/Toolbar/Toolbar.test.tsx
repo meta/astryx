@@ -16,6 +16,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Toolbar} from './Toolbar';
 import {Badge} from '../Badge/Badge';
 import {OverflowList} from '../OverflowList/OverflowList';
+import {overflowLaneMarker} from '../internal/overflowLane.stylex';
 import {Button} from '../Button/Button';
 import {MoreMenu} from '../MoreMenu';
 import {
@@ -331,6 +332,10 @@ describe('Toolbar', () => {
         configurable: true,
         value: 66,
       });
+      Object.defineProperty(indicator, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => new DOMRect(0, 0, 66, 30),
+      });
 
       rerender(
         <Toolbar
@@ -357,6 +362,29 @@ describe('Toolbar', () => {
       expect(startStyle.minWidth).not.toBe('0');
       expect(startStyle.minWidth).not.toBe('0px');
       expect(actions.getAttribute('style')).toContain('66px');
+      // observeSelf measures the width it is given: no rendered cap.
+      expect(actions.getAttribute('style')).toContain('none');
+    });
+
+    it('marks the horizontal start lane for overflow containment, not the vertical one', () => {
+      const markerClass = stylex.props(overflowLaneMarker).className!;
+      const {rerender} = render(
+        <Toolbar
+          label="Actions"
+          startContent={<span data-testid="start">Start</span>}
+          endContent={<span>End</span>}
+        />,
+      );
+      expect(slotOf('start').className).toContain(markerClass);
+      rerender(
+        <Toolbar
+          label="Actions"
+          orientation="vertical"
+          startContent={<span data-testid="start">Start</span>}
+          endContent={<span>End</span>}
+        />,
+      );
+      expect(slotOf('start').className).not.toContain(markerClass);
     });
 
     it('keeps vertical two-slot lanes at natural height without horizontal flex-basis collapse', () => {
