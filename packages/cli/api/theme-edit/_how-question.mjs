@@ -12399,6 +12399,27 @@ export function draftAnswer(ctx, env, question) {
           );
           continue;
         }
+        // A radio's circle the theme leaves as it is: the corners change
+        // leaves it too (the dial never rounds a circle), so it is kept.
+        if (
+          (FAMILIES[p.on] ?? [p.on]).every(m => radioCircle(C, m)) &&
+          !(env.data?.settings ?? []).some(
+            (/** @type {any} */ x) =>
+              /^(corners|border-radius)$/.test(x.thing) &&
+              (FAMILIES[p.on] ?? [p.on]).includes(x.on),
+          ) &&
+          priorSteps.every(
+            (st, i) =>
+              keep[i] != null ||
+              !/^(corners|border-radius|--radius-)/.test(st.thing) ||
+              st.thing === 'corners',
+          )
+        ) {
+          said.push(
+            `${name} is a radio's circle, which the corners change leaves as it is`,
+          );
+          continue;
+        }
         if (
           priorSteps.some(
             (st, i) =>

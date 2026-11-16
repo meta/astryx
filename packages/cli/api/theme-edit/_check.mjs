@@ -4781,22 +4781,25 @@ function checkOne(
     });
   // --only is checked on a part this Core has; a part in other letters or
   // misspelt gets the part's own refusal first, with --only kept.
+  // --only keeps a change to the part named. On a group itself, or with no
+  // part, it names nothing to keep to, and is refused. On a part that is
+  // styled on its own already (a part in no group that spreads, such as a
+  // sub-part or a member of a group that spreads only when named), it asks
+  // for what the change does anyway: the change is made, without it, and
+  // said, so the escape always works.
   if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
     const fam = s.on ? familyOf(s.on) : null;
-    if (!fam || FAMILIES[/** @type {string} */ (s.on)])
+    if (!s.on || FAMILIES[s.on])
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--only is for one member of a group, such as text-input (how --list groups).',
         {run: [`${HOW} --list groups`]},
       );
-    if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
-      refuse(
-        E.ERR_INVALID_ARGUMENT,
-        `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
-        // The same command with only --only dropped: every other scope
-        // (a variant, a state, a mode) kept, never a wider write.
-        {run: [setLine(slug, thing, v, {...s, only: undefined}, unset)]},
-      );
+    if (!fam || !AUTO_SPREAD.includes(fam)) {
+      s.only = undefined;
+      if (!unset)
+        s.note = `${s.on} is styled on its own already (only the ${AUTO_SPREAD.join(' and ')} groups spread), so --only changes nothing: it is saved without it`;
+    }
   }
   // A font role in other letters (Body, CODE) is that role.
   if (
@@ -5911,7 +5914,7 @@ function checkOne(
     if (thing === 'corners') {
       if (s.on) {
         refuseInvisibleCorners(ctx, slug, s, data);
-        refuseRadioCorners(ctx, slug, s);
+        refuseRadioCorners(ctx, slug, s, data);
       }
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
@@ -7941,21 +7944,34 @@ function checkOne(
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').Setting} s
+ * @param {import('./_settings.mjs').ThemeData} data
  */
-function refuseRadioCorners(ctx, slug, s) {
+function refuseRadioCorners(ctx, slug, s, data) {
   if (ctx.unchecked) return;
   const parts = partsOf(ctx, s);
   if (!parts.length || !parts.every(t => radioCircle(ctx.C, t))) return;
   // A radius set on the part itself overrides the circle: a square radio
-  // is asked of this component, by name.
+  // is asked of this component, by name. A fully round ask (pill, round)
+  // is the circle it has: with a radius the theme set on it, the undo of
+  // that radius gives the circle back.
   const px = cornerPxOf(String(s.value));
-  const own =
-    Number.isFinite(px) && px < 9999
-      ? setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s)
+  const saved = (data?.settings ?? []).find(
+    (/** @type {any} */ x) =>
+      x.thing === 'border-radius' &&
+      x.on === s.on &&
+      !x.when &&
+      !x.state &&
+      !x.mode,
+  );
+  const round = !Number.isFinite(px) || px >= 9999;
+  const own = !round
+    ? setLine(slug, 'border-radius', px === 0 ? '0' : `${px}px`, s)
+    : saved
+      ? `${P} undo ${slug} border-radius --on ${s.on}`
       : null;
   refuse(
     E.ERR_THEME_NO_EFFECT,
-    `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.${own ? ` A border-radius on it sets its shape: ${own.replace(`${P} `, '')}.` : ''}`,
+    `${s.on} is a radio's circle (border-radius 50%), not a corner, so the corners dial leaves it and changes nothing you see.${round ? (saved ? ` ${slug} sets border-radius ${saved.value} on it; undoing that gives the circle back: ${String(own).replace(`${P} `, '')}.` : ` It is fully round already.`) : own ? ` A border-radius on it sets its shape: ${own.replace(`${P} `, '')}.` : ''}`,
     {run: own ? [own] : [`${HOW} ${s.on}`]},
   );
 }

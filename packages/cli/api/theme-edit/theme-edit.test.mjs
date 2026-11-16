@@ -469,14 +469,17 @@ describe('groups', () => {
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
 
-  it('--only is refused for a group that does not spread', async () => {
-    const r = await refusal(() =>
-      themeEditSet('t', 'box-shadow', 'none', {cwd, on: 'card', only: true}),
+  it('--only on a part of a group that does not spread is taken, and said', async () => {
+    const r = await themeEditSet('t', 'box-shadow', 'none', {
+      cwd,
+      on: 'card',
+      only: true,
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /card is styled on its own already .* so --only changes nothing/,
     );
-    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(r.run).toEqual([
-      'astryx experimental theme editor set t box-shadow none --on card',
-    ]);
+    // Taken back, so the settings stay as the other cases expect them.
+    await themeEditUndo('t', {cwd});
   });
 });
 
