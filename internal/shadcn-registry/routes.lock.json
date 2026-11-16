@@ -5737,6 +5737,11 @@
       "aliases": []
     },
     {
+      "name": "template-welcome-portal",
+      "path": "templates/welcome-portal",
+      "aliases": []
+    },
+    {
       "name": "template-work-item-detail",
       "path": "templates/work-item-detail",
       "aliases": []
