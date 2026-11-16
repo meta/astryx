@@ -51,6 +51,7 @@ import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {
   Aperture,
@@ -2275,7 +2276,11 @@ export default function CanvasEditor() {
                                           tooltip="Undo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Undo2} size={ICON} />
+                                            <Icon
+                                              icon={Undo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
@@ -2290,7 +2295,11 @@ export default function CanvasEditor() {
                                           tooltip="Redo"
                                           variant="ghost"
                                           icon={
-                                            <Icon icon={Redo2} size={ICON} />
+                                            <Icon
+                                              icon={Redo2}
+                                              size={ICON}
+                                              xstyle={rtlStyles.mirror}
+                                            />
                                           }
                                           xstyle={styles.toolBarControl}
                                         />
