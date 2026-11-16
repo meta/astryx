@@ -351,7 +351,7 @@ for (const mode of ['light', 'dark'] as const) {
   for (const direction of ['ltr', 'rtl'] as const) {
     cases.push({
       key: `interaction-steppers-${mode}-${direction}`,
-      group: 'interaction',
+      group: 'interaction-steppers',
       story: 'core-numberinput--with-number-steppers',
       theme: 'neutral',
       mode,
@@ -411,7 +411,7 @@ for (const mode of ['light', 'dark'] as const) {
         const up = page.locator(
           '#storybook-root button[aria-label="Increment Quantity"]',
         );
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 7; i++) {
           await up.click();
         }
         await settle(page);
@@ -428,7 +428,7 @@ for (const mode of ['light', 'dark'] as const) {
     });
     cases.push({
       key: `interaction-rejection-${mode}-${direction}`,
-      group: 'interaction',
+      group: 'interaction-rejection',
       story: 'core-numberinput--default',
       theme: 'neutral',
       mode,
@@ -473,7 +473,7 @@ for (const mode of ['light', 'dark'] as const) {
     });
     cases.push({
       key: `interaction-clear-${mode}-${direction}`,
-      group: 'interaction',
+      group: 'interaction-clear',
       story: 'core-numberinput--clearable',
       theme: 'neutral',
       mode,
@@ -498,7 +498,7 @@ for (const mode of ['light', 'dark'] as const) {
     });
     cases.push({
       key: `interaction-disabled-${mode}-${direction}`,
-      group: 'interaction',
+      group: 'interaction-disabled',
       story: 'core-numberinput--disabled-with-message',
       theme: 'neutral',
       mode,
@@ -576,6 +576,7 @@ async function runCase(page: Page, item: AuditCase) {
   const onError = (error: Error) => pageErrors.push(String(error));
   page.on('pageerror', onError);
   const url = `${server.origin}/iframe.html?id=${item.story}&viewMode=story&globals=colorMode:${item.mode};astryxTheme:${item.theme};direction:${item.direction}`;
+  await page.mouse.move(0, 0);
   await page.goto(url, {waitUntil: 'load'});
   await page.locator(SPINBUTTON).first().waitFor();
   await settle(page);
