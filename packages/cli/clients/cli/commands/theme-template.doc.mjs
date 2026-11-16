@@ -21,7 +21,9 @@ export const doc = {
     'consumed, naming the CLI command that prints the authoritative reference for each. Read ' +
     'it, copy what you need into your own theme file, delete it. Use `theme add <slug>` to ' +
     'use an installed built theme, extend that theme for ordinary customization, or use ' +
-    '`theme eject <slug>` for a complete source fork. The path is a .ts file, never a folder. Leaves an existing file untouched unless --overwrite, which replaces only an earlier copy of the template or a file named like a theme source (`*.theme.ts`, `*Theme.ts`, `*.template.ts`).',
+    '`theme eject <slug>` for a complete source fork. The path is a .ts file, never a folder. Leaves an existing file untouched unless --overwrite, which replaces only an earlier copy of the template or a file named like a theme source (`*.theme.ts`, `*Theme.ts`, `*.template.ts`).' +
+    ' A path is read from the current folder and must stay inside the project root (the nearest folder with a package.json); with no path it writes at the project root.' +
+    ' Outside a project (no package.json in the folder or above it) it writes in the current folder and warns; run it inside a project, or run `npm init -y` in the folder first, to write it at a project root.',
   fn: 'themeTemplate',
   args: [{name: 'path', param: 'options.targetPath', required: false}],
   options: [

@@ -89,6 +89,7 @@ import {
   checkAppThemes,
   checkThemes,
   themeImportWiring,
+  withProviderWiring,
 } from './theme-checks.mjs';
 import {
   availableLine,
@@ -100,6 +101,8 @@ import {
   COMPUTER_INSTALL_STEP,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
+  keptFileCheck,
+  THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -109,6 +112,7 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
   computerIntegrationsToAdd,
@@ -117,6 +121,10 @@ import {
   releaseFacts,
   builtIntegrationPackages,
   authoringAudit,
+  corePeerRange,
+  isLocalThemeOwner,
+  readThemeState,
+  builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -140,6 +148,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string|null} coreDir - Resolved core package directory, or null.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
+ * @property {string[]} [addedThemePackages] - Packages of the project's added
+ *   themes, which `theme-core-peers` checks against Core
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
@@ -162,7 +172,7 @@ import {checkBuilt} from './built-checks.mjs';
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
- * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
+ * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
  *   The project's icon sets (AST-084 FR17), or null when they could not be read.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
@@ -187,6 +197,22 @@ function readPkg(pkgPath) {
     return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Packages that own the project's added themes (local themes excluded); empty
+ * when the project manages no themes or its theme state cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function addedThemePackages(cwd) {
+  try {
+    return Object.values(readThemeState(cwd).themes ?? {}).filter(
+      owner => typeof owner === 'string' && !isLocalThemeOwner(owner),
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -260,6 +286,18 @@ function projectRootOf(ctx) {
 }
 
 /* ── individual checks ────────────────────────────────────────────────── */
+
+/**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when they are not paths it can check: the path itself when there is
+ * one, else the project folder that holds them all.
+ * @param {string[]} paths
+ * @param {{cwd?: string}} [options]
+ * @returns {string | null}
+ */
+export function builtTarget(paths, {cwd = process.cwd()} = {}) {
+  return builtTargetOf(cwd, paths);
+}
 
 /**
  * Check 1 — running Node version meets the CLI's minimum.
@@ -630,9 +668,11 @@ export function checkImplicitIntegrations(ctx) {
 
 /**
  * The sentence `implicit-integrations` adds for dependencies whose manifest
- * could not be loaded, or '' when there are none. Still informational: the
- * package is a dependency's own bug, which `doctor integration validate`
- * diagnoses, but doctor must not report it as absent.
+ * could not be loaded, or '' when there are none. Still informational: a
+ * broken install (a package the dependency requires is missing) is also that
+ * package's integration issue (INV14), and anything else is the dependency's
+ * own bug, which `doctor integration validate` diagnoses; either way doctor
+ * must not report it as absent.
  * @param {Array<{spec: string, error: string}>} failures
  * @returns {string}
  */
@@ -1006,6 +1046,69 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
+ * Every loaded integration's `@astryxdesign/core` peer range admits the
+ * installed Core: a package's declared peer ranges define the Core versions it
+ * supports (spec:AST-017 FR12). A package made for another Core installs with
+ * only a package manager warning, and its components, themes and docs may not
+ * work. New, so it warns: a project that passed before keeps passing.
+ * Packages of added themes are left to `theme-core-peers` (spec:AST-050 FR11),
+ * which applies the same rule. Null when Core is not installed or no other
+ * loaded integration declares a Core range.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIntegrationCoreRange(ctx) {
+  const core = pkgVersion(ctx.coreDir);
+  if (!core || ctx.integrations == null) return null;
+  // `theme-core-peers` already judges each added theme package by the same
+  // rule (`corePeerRange`), with a fix that keeps the theme setup working.
+  const reportedByThemeChecks = new Set(ctx.addedThemePackages ?? []);
+  /** @type {Array<{name: string, version: string | null, range: string, accepts: boolean}>} */
+  const declared = [];
+  for (const integration of ctx.integrations) {
+    if (integration.__loadError != null || !integration.__packageDir) continue;
+    const pkg = readPkg(path.join(integration.__packageDir, 'package.json'));
+    const name = typeof pkg?.name === 'string' ? pkg.name : integration.name;
+    if (reportedByThemeChecks.has(name)) continue;
+    const {range, accepts} = corePeerRange(pkg, core);
+    // An integration need not depend on Core; only a declared, non-empty range
+    // is a claim about which Core it supports.
+    if (range == null || range === '') continue;
+    declared.push({
+      name,
+      version: typeof pkg?.version === 'string' ? pkg.version : null,
+      range,
+      accepts,
+    });
+  }
+  if (declared.length === 0) return null;
+  const excluded = declared.filter(d => !d.accepts);
+  const label = 'Integrations support the installed Core';
+  if (excluded.length === 0) {
+    return {
+      id: 'integration-core-range',
+      label,
+      status: 'pass',
+      message: `${declared.length} loaded integration${declared.length === 1 ? ' supports' : 's support'} @astryxdesign/core ${core} (${nameIntegrations(declared)}).`,
+    };
+  }
+  return {
+    id: 'integration-core-range',
+    label,
+    status: 'warn',
+    message: `${excluded
+      .map(
+        d =>
+          `${d.name}${d.version ? `@${d.version}` : ''} supports @astryxdesign/core ${d.range}`,
+      )
+      .join(
+        '; ',
+      )}, but the project has ${core}. ${excluded.length === 1 ? 'Its' : 'Their'} components, themes and docs were made for another Core and may not work.`,
+    fix: `Install a release of ${excluded.length === 1 ? 'that package' : 'each package'} whose @astryxdesign/core range includes ${core}, or move the project to a Core in that range. When no such release exists, ask the package's owner for one.`,
+  };
+}
+
+/**
  * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet`
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
@@ -1060,11 +1163,34 @@ export function checkIconSets(ctx) {
       fix: 'Write each name in experimental.iconSet as "<package>/<set>" (`astryx experimental icon --list` names them).',
     };
   }
+  // The look a project picks is one of its main set's variants.
+  const declared = choice.set?.data.variants ?? [];
+  if (choice.set && choice.variant && !declared.includes(choice.variant)) {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message:
+        declared.length === 0
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+      fix:
+        declared.length === 0
+          ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
+          : `Pick one of its variants: \`${iconUseCommandOf(choice, '<variant>')}\`.`,
+    };
+  }
   const order = choice.order ?? [];
   const unlisted = sets.filter(set => !order.includes(set));
   if (sets.length > 1 && unlisted.length > 0 && order.length > 0) {
     const [main, ...backups] = order;
-    const {problem, fix} = unlistedIconSets(sets, main, backups, unlisted);
+    const {problem, fix} = unlistedIconSets(
+      sets,
+      main,
+      backups,
+      unlisted,
+      choice.variant,
+    );
     return {
       id,
       label,
@@ -1086,8 +1212,22 @@ export function checkIconSets(ctx) {
     id,
     label,
     status: 'pass',
-    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}`,
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" look where its set has one.` : ''}`,
   };
+}
+
+/**
+ * The `experimental icon use` command that writes the project's list again,
+ * as astryx.config names it, with a variant when one is given.
+ * @param {NonNullable<DoctorContext['iconSets']>['choice']} choice
+ * @param {string} [variant]
+ */
+function iconUseCommandOf(choice, variant) {
+  return iconUseCommand(
+    /** @type {string} */ (choice.configured),
+    (choice.backups ?? []).map(each => each.selector),
+    variant,
+  );
 }
 
 /**
@@ -1122,7 +1262,12 @@ export function checkIconPlaceholders(ctx) {
     )
     .join(', ');
   const uses = found.reduce((total, each) => total + each.uses, 0);
-  const [mapFix, backupFix] = placeholderFixes(meanings, main);
+  const [mapFix, backupFix] = placeholderFixes(
+    meanings,
+    main,
+    (choice.backups ?? []).map(each => each.selector),
+    choice.variant,
+  );
   return {
     id,
     label,
@@ -1865,7 +2010,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+        "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     };
   }
   if (
@@ -2179,9 +2324,10 @@ async function runComputerChecks(cwd) {
 }
 
 /**
- * Where `search` and `build` keep their gathered catalog between runs, and
- * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
- * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
+ * Where `search` and `build` keep their gathered catalog between runs, how
+ * much it holds, and the most it and jiti's transpile cache hold; and, in a
+ * run under Yarn Plug'n'Play's loader, that the run keeps none
+ * (runsUnderPnp). Left out of a checkout, which keeps none.
  * @returns {DoctorCheck | null}
  */
 export function checkGatherCache() {
@@ -2192,7 +2338,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme and discover keep what they gather (search's catalogs and each integration's check results) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, what theme build checks a theme against in Core's component docs, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands' not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported), and deleting the folder clears it. A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's \`integration check\` of itself, for npm's list. On Linux, when a debug handler is set, runs also keep the locale and time zone here. The folder holds at most ${summary.limitBytes / (1024 * 1024)} MB, dropping oldest entries first, as does the transpile cache in ${summary.jitiDir}, which keeps every copy written, or read where the file system records reads, in the last day.`,
   };
 }
 
@@ -2210,6 +2356,7 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
   checkAgentDocs,
@@ -2280,8 +2427,6 @@ export async function runChecks(options = {}) {
   let projectError = null;
   /** @type {DoctorContext['iconSets']} */
   let iconSets = null;
-  /** @type {DoctorContext['iconPlaceholders']} */
-  let iconPlaceholders = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
@@ -2379,9 +2524,6 @@ export async function runChecks(options = {}) {
       }
       try {
         iconSets = await project.iconSets();
-        if (iconSets.choice.configured) {
-          iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
-        }
       } catch {
         iconSets = null;
       }
@@ -2400,6 +2542,7 @@ export async function runChecks(options = {}) {
     coreDir,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
+    addedThemePackages: addedThemePackages(cwd),
     configPath,
     integrations,
     docsCatalog,
@@ -2411,8 +2554,34 @@ export async function runChecks(options = {}) {
     configError,
     projectError,
     iconSets,
-    iconPlaceholders,
+    // Set after the docs checks, below.
+    iconPlaceholders: null,
   };
+
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read. They
+  // run first, though they print last: a kept check depends on every file
+  // its run read before it, and the placeholder-icon scan and the wiring
+  // scan below read the app's source, which the docs never read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  const docsChecks = [
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  ];
+  // Only a project that names an icon set scans its source for placeholders.
+  if (iconSets?.choice.configured) {
+    try {
+      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      // A scan that fails leaves the icon facts unknown.
+      ctx.iconSets = null;
+    }
+  }
 
   /** @type {DoctorCheck[]} */
   const checks = [];
@@ -2423,9 +2592,17 @@ export async function runChecks(options = {}) {
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
+      // The wiring scan reads only files and modules (the app's source, the
+      // themes and the packages that declare them) and runs nothing, so it is
+      // kept like the docs checks.
+      const wiring = await keptFileCheck(
+        {name: 'theme-wiring', cwd, coreDir: coreDir ?? null},
+        () => themeImportWiring(cwd),
+        THEME_WIRING_CODEC,
+      );
       checks.push(
-        checkThemes(cwd, appThemeChecks, await themeImportWiring(cwd)),
-        ...appThemeChecks,
+        checkThemes(cwd, appThemeChecks, wiring),
+        ...withProviderWiring(appThemeChecks, wiring),
       );
       checks.push(await checkConfig(ctx));
     }
@@ -2465,9 +2642,7 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  checks.push(await checkCliDocs(ctx));
-  checks.push(await checkDocsTree(ctx));
-  checks.push(await checkDocsProgressiveDisclosure(ctx));
+  checks.push(...docsChecks);
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

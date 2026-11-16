@@ -8,8 +8,13 @@
  * wrapped regardless of how each changeset author wrote their entry.
  */
 
+import {createRequire} from 'node:module';
 import {describe, it, expect} from 'vitest';
 import {reflowBulletBody, formatVersionBlock} from './format-changelogs.mjs';
+
+const {parseEntry, renderReleaseLine} = createRequire(import.meta.url)(
+  './changeset-entry-format.cjs',
+);
 
 describe('reflowBulletBody', () => {
   it('collapses a hard-wrapped prose paragraph into a single indented line', () => {
@@ -148,5 +153,38 @@ describe('formatVersionBlock line-wrapping', () => {
     const out = formatVersionBlock('0.9.9', body);
     expect(out).toContain('- One entry.');
     expect(out).not.toContain('- One entry.\n\n  #### Contributors');
+  });
+
+  it("keeps a Changeset's list of details under its own entry", () => {
+    // Abridged from a v0.7.16 Changeset: a headline, then a list of details.
+    const changeset = [
+      "[experimental] `astryx experimental theme editor`: CSS read with the current specifications' grammar.",
+      '',
+      "- The editor also reads the current specifications' grammar from `@csstools/css-syntax-patches-for-csstree` (a new dependency, pinned).",
+      '- A negative number the current grammar ranges at 0 or more is refused on a part (`line-height -1`, `gap -2px`), with the positive value as the suggestion.',
+      '- A `color-mix()` share outside 0% to 100% is refused for tokens, part colors and the color dials, and the mix with the share at its limit is suggested.',
+      '',
+      '@josephfarina',
+    ].join('\n');
+    const body = [
+      '### Patch Changes',
+      '',
+      renderReleaseLine(parseEntry(changeset)),
+      '- [fix] Another entry. — thanks @cixzhang',
+    ].join('\n');
+    const out = formatVersionBlock('0.9.9', body);
+    const lines = out.split('\n');
+    const entry = lines.findIndex(line =>
+      line.startsWith('- `astryx experimental theme editor`: CSS read'),
+    );
+    expect(entry, out).toBeGreaterThan(-1);
+    expect(lines.slice(entry + 1, entry + 4)).toEqual([
+      "  - The editor also reads the current specifications' grammar from `@csstools/css-syntax-patches-for-csstree` (a new dependency, pinned).",
+      '  - A negative number the current grammar ranges at 0 or more is refused on a part (`line-height -1`, `gap -2px`), with the positive value as the suggestion.',
+      '  - A `color-mix()` share outside 0% to 100% is refused for tokens, part colors and the color dials, and the mix with the share at its limit is suggested.',
+    ]);
+    // No detail becomes an entry of its own.
+    expect(out).not.toContain('#### Other Changes');
+    expect(out).not.toMatch(/^- The editor also reads/m);
   });
 });

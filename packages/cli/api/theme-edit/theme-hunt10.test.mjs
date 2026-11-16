@@ -47,7 +47,7 @@ describe('states', () => {
       state: 'disabled',
     });
     expect(css()).toMatch(
-      /\.astryx-button:is\(:disabled,\[aria-disabled="true"\]\)\s*\{\s*opacity: 0\.6;/,
+      /\.astryx-button:is\(:disabled,\[aria-disabled="true"\][^{]*\{\s*opacity: 0\.6;/,
     );
     await themeEditUndo('h', {cwd});
   }, 240_000);

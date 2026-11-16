@@ -7,7 +7,12 @@
 
 import * as path from 'node:path';
 import {AstryxError} from '../../error.mjs';
+import {logger} from '../../logger.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {
   ejectThemeFiles,
   findTheme,
@@ -54,12 +59,28 @@ export async function themeEject(slug, options = {}) {
     );
   }
 
-  const {outputDir, files} = ejectThemeFiles(match, {
+  const {outputDir, files, editorFolder} = ejectThemeFiles(match, {
     cwd,
     targetPath,
     overwrite,
     takenSlugs: await availableSlugs(cwd),
   });
+  // A folder the theme editor made holds that theme only, but a subfolder of
+  // it was always writable, so the fork is written there with one warning.
+  if (editorFolder != null) {
+    const fork = formatCliCommand(
+      [
+        'theme eject',
+        match.slug,
+        ...(packageName
+          ? ['--package', quoteCommandArgument(packageName)]
+          : []),
+      ].join(' '),
+      cwd,
+    );
+    const warning = `Warning: ${editorFolder} is a folder the theme editor made, and the fork in ${outputDir} is inside it; eject writes there anyway. Fork into the project's local themes folder (${fork}), or pick a path outside ${editorFolder}, to keep the editor's folder to its own theme.`;
+    logger.warn(warning);
+  }
   const {missingPackages, installCommand} = forkNeeds(outputDir, files, cwd);
   return {
     type: 'theme.eject',

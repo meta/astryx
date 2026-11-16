@@ -157,7 +157,7 @@ export function findProjectCli(startDir) {
 }
 
 /** Version-control metadata that marks a repository's root. */
-const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
+export const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
 
 /**
  * The Astryx ranges a package.json declares, from any dependency field.

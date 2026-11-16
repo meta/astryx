@@ -61,6 +61,24 @@ export async function withRealRenders(fn) {
 const shown = (cwd, file) => path.relative(cwd, file).split(path.sep).join('/');
 
 /**
+ * The editor's render stamp on a stand-in page, so the editor reads it as a
+ * page it wrote (a page without the stamp is the user's and is left alone).
+ */
+const STAND_IN_STAMP = `<!-- astryx: render of ${'0'.repeat(24)} ${'0'.repeat(16)} -->`;
+
+/**
+ * The settings a stand-in preview was written from, as its key, so the
+ * stand-in is current exactly when the real page would be.
+ * @param {any} data
+ */
+const standInKey = data =>
+  JSON.stringify([
+    data?.like ?? null,
+    data?.mode ?? null,
+    data?.settings ?? [],
+  ]).replace(/-->/g, '');
+
+/**
  * The preview module with its two renders replaced by the stand-in while
  * real renders are off.
  * @template {Record<string, any>} M
@@ -77,9 +95,23 @@ export function stubRenders(original) {
       const out = path.join(cwd, 'themes', slug, 'preview.html');
       fs.writeFileSync(
         out,
-        `<!doctype html><title>${slug}: sample page</title><!-- test stand-in -->\n`,
+        `<!doctype html><title>${slug}: sample page</title><!-- test stand-in ${standInKey(data)} -->\n${STAND_IN_STAMP}\n`,
       );
       return shown(cwd, out);
+    },
+    /** @param {any} ctx @param {string} slug @param {any} data */
+    previewIsCurrent(ctx, slug, data) {
+      if (state().real) return original.previewIsCurrent(ctx, slug, data);
+      try {
+        return fs
+          .readFileSync(
+            path.join(ctx.project.cwd, 'themes', slug, 'preview.html'),
+            'utf8',
+          )
+          .includes(`<!-- test stand-in ${standInKey(data)} -->`);
+      } catch {
+        return false;
+      }
     },
     /** @param {any} ctx @param {string} slug @param {any} data @param {any} [options] */
     async renderSheet(ctx, slug, data, options = {}) {
@@ -97,9 +129,9 @@ export function stubRenders(original) {
       fs.mkdirSync(path.dirname(out), {recursive: true});
       fs.writeFileSync(
         out,
-        `<!doctype html><title>${slug}: every component${options.group ? ` (${options.group})` : ''}</title><!-- test stand-in -->\n`,
+        `<!doctype html><title>${slug}: every component${options.group ? ` (${options.group})` : ''}</title><!-- test stand-in -->\n${STAND_IN_STAMP}\n`,
       );
-      return {file: shown(cwd, out), components: 1, skipped: []};
+      return {file: shown(cwd, out), components: 1, skipped: [], notes: []};
     },
   };
 }

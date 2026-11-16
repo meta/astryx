@@ -91,7 +91,7 @@ function sortPluginEntries<T extends Record<string, unknown>>(
 // Plugin Validation (dev mode only)
 // ======================================================================
 /** Known declaration fields on the TablePlugin interface. */
-const VALID_DECLARATION_KEYS = new Set(['rowModel']);
+const VALID_DECLARATION_KEYS = new Set(['rowModel', 'renderState']);
 
 /** Known transform method names on the TablePlugin interface. */
 const VALID_TRANSFORM_KEYS = new Set([
@@ -151,7 +151,7 @@ function validatePlugin<T extends Record<string, unknown>>(
       VALID_TRANSFORM_KEYS.has(key) &&
       typeof (plugin as Record<string, unknown>)[key] === 'function',
   );
-  if (!hasTransforms) {
+  if (!hasTransforms && plugin.renderState == null) {
     devWarn(
       'Table',
       `Plugin "${name}" has no transform methods. ` +

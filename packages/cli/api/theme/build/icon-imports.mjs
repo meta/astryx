@@ -97,9 +97,14 @@ function bindingNames(pattern) {
 
 /** @param {string} [name] @param {string} [reason] @param {string} [field] @returns {never} */
 function registryError(name, reason = '', field = 'icons') {
+  throw registryFailure(name, reason, field);
+}
+
+/** The refusal registryError throws. @param {string} [name] @param {string} [reason] @param {string} [field] @returns {AstryxError & {packageTheme?: string}} */
+function registryFailure(name, reason = '', field = 'icons') {
   if (field === 'componentIcons') {
     const value = name ? `\`componentIcons: ${name}\`` : 'componentIcons';
-    throw new AstryxError(
+    return new AstryxError(
       `Theme sets ${value} but the build cannot carry it. ` +
         (reason ? `${reason} ` : '') +
         'A built theme carries names, null, and requests made of static values, ' +
@@ -109,7 +114,7 @@ function registryError(name, reason = '', field = 'icons') {
     );
   }
   const registry = name ? `\`icons: ${name}\`` : 'an icon registry';
-  throw new AstryxError(
+  return new AstryxError(
     `Theme sets ${registry} but no import for the registry was found. ` +
       'The generated module cannot preserve inline registries because they ' +
       'may contain React elements, which cannot be serialized. ' +
@@ -160,6 +165,19 @@ export async function resolveIconImports(
   const defaultName = staticSlots ? 'themeComponentIcons' : 'themeIcons';
   /** @param {string} [name] @param {string} [reason] @returns {never} */
   const invalidRegistry = (name, reason) => registryError(name, reason, field);
+  /**
+   * A theme written as an expression the build does not follow (a call to
+   * a helper, a conditional): where its icons come from cannot be read.
+   * @param {any} node
+   * @returns {never}
+   */
+  const untraceableTheme = node => {
+    throw new AstryxError(
+      `The build carries a theme's ${field === 'icons' ? 'icon registry' : 'componentIcons'} from the source that writes it, and follows a theme only through its name, an import of it, or defineTheme({...}); here a theme is written as ${node?.type === 'CallExpression' ? 'a call to a helper' : node?.type === 'ConditionalExpression' ? 'a conditional' : 'an expression'}, which it cannot follow. Write each theme as defineTheme({...}), and the theme it extends by its name (extends: neutralTheme).`,
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  };
 
   if (exportName === undefined) {
     if (!hasIcons) return null;
@@ -281,8 +299,14 @@ export async function resolveIconImports(
               module.aliases.set(name, original);
           }
           if (item.id.type !== 'Identifier') continue;
+          // A `let` or `var` given a value and never assigned again holds
+          // that value as a `const` does (an assignment marks it mutated,
+          // below); one declared without a value is not followed.
           module.bindings.set(item.id.name, {
-            kind: declaration.kind === 'const' ? 'const' : 'unsupported',
+            kind:
+              declaration.kind === 'const' || item.init
+                ? 'const'
+                : 'unsupported',
             node: item.init,
           });
           if (statement.type === 'ExportNamedDeclaration') {
@@ -355,14 +379,27 @@ export async function resolveIconImports(
     return module;
   }
 
-  /** @param {any} module @param {string} name */
-  function checkedBinding(module, name) {
-    if (module.mutated.has(name))
+  /**
+   * @param {any} module
+   * @param {string} name
+   * @param {'registry' | 'theme'} [role] what the name stands for: a theme
+   *   is refused as a theme the build cannot follow, never as a registry
+   *   the theme sets
+   */
+  function checkedBinding(module, name, role = 'registry') {
+    const binding = module.bindings.get(name);
+    const mutated = module.mutated.has(name);
+    if (role === 'theme' && (mutated || binding?.kind === 'unsupported'))
+      throw new AstryxError(
+        `The build carries a theme's ${field === 'icons' ? 'icon registry' : 'componentIcons'} from the source that writes it, and follows a theme through a binding only while it keeps the value it was declared with; ${name} ${mutated ? 'is assigned again, or passed to code that may change it' : 'is declared without a value'}. Declare it once with its theme (export const ${name} = defineTheme({...})).`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    if (mutated)
       invalidRegistry(
         name,
         'The referenced binding is mutated or passed to unsupported code.',
       );
-    const binding = module.bindings.get(name);
     if (!binding || binding.kind === 'unsupported') invalidRegistry(name);
     return binding;
   }
@@ -723,7 +760,7 @@ export async function resolveIconImports(
     node = unwrap(node);
     if (node?.type === 'Identifier') {
       return guarded(`${module.filename}:fields:${node.name}`, async () => {
-        const binding = checkedBinding(module, node.name);
+        const binding = checkedBinding(module, node.name, 'theme');
         if (binding.kind === 'const') return fields(module, binding.node);
         return referenceFields(importedReference(module, binding));
       });
@@ -739,8 +776,24 @@ export async function resolveIconImports(
     const result = new Map();
     for (const item of node.properties) {
       if (item.type === 'SpreadElement' || item.type === 'SpreadProperty') {
-        for (const [key, value] of await fields(module, item.argument))
-          result.set(key, value);
+        /** @type {Map<string, any>} */
+        let spread;
+        try {
+          spread = await fields(module, item.argument);
+        } catch (error) {
+          // A spread of a package's theme copies its icon registry, which a
+          // package cannot be inspected for: said as what the file does,
+          // with the form that builds.
+          const from = /** @type {any} */ (error)?.packageTheme;
+          if (from && item.argument?.type === 'Identifier')
+            throw new AstryxError(
+              `The theme spreads ${from} (\`...${from}\`), a theme from a package: a spread copies its icon registry, which the build cannot carry from a package. Extend it instead: extends: ${from}.`,
+              undefined,
+              ERROR_CODES.ERR_THEME_INVALID,
+            );
+          throw error;
+        }
+        for (const [key, value] of spread) result.set(key, value);
         continue;
       }
       const key = item.computed
@@ -765,11 +818,16 @@ export async function resolveIconImports(
   /** @param {RegistryReference} ref @returns {Promise<Map<string, any>>} */
   async function referenceFields(ref) {
     const target = await importedExport(ref);
-    if (!target)
-      invalidRegistry(
+    if (!target) {
+      const error = registryFailure(
         ref.binding.localName,
         'A package configuration cannot be inspected for inherited registries.',
+        field,
       );
+      // Named for a spread of it, which words its own refusal.
+      error.packageTheme = ref.binding.localName;
+      throw error;
+    }
     return guarded(
       `${target.module.filename}:fields-export:${target.name}`,
       async () => {
@@ -786,7 +844,7 @@ export async function resolveIconImports(
     node = unwrap(node);
     if (node?.type === 'Identifier') {
       return guarded(`${module.filename}:theme:${node.name}`, async () => {
-        const binding = checkedBinding(module, node.name);
+        const binding = checkedBinding(module, node.name, 'theme');
         return binding.kind === 'const'
           ? theme(module, binding.node, rejectOpaque)
           : themeReference(importedReference(module, binding), rejectOpaque);
@@ -797,10 +855,20 @@ export async function resolveIconImports(
       if (ref) return themeReference(ref, rejectOpaque);
     }
     if (node?.type === 'CallExpression') {
-      if (!isDefineTheme(module, node.callee) || node.arguments.length !== 1)
-        invalidRegistry();
+      if (!isDefineTheme(module, node.callee)) untraceableTheme(node);
+      if (node.arguments.length !== 1) invalidRegistry();
       node = unwrap(node.arguments[0]);
     }
+    // Any other expression (a helper's call, a conditional) is a theme the
+    // build cannot read from the source: it does not say the theme sets a
+    // registry, only that it cannot be followed.
+    if (
+      node &&
+      node.type !== 'ObjectExpression' &&
+      node.type !== 'Identifier' &&
+      node.type !== 'MemberExpression'
+    )
+      untraceableTheme(node);
     const config = await fields(module, node);
     const baseField = config.get('extends');
     // A built module keeps its functions in `__icons` (or `__componentIcons`)

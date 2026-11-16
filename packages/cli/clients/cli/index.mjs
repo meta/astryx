@@ -17,8 +17,9 @@ import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
+import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
@@ -28,7 +29,6 @@ import {buildManifest, storedManifest} from './lib/manifest.mjs';
 import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
 import {markReportsResult} from './lib/define-command.mjs';
 // The light modules, not agent-docs.mjs: that one loads discovery and the
@@ -44,6 +44,7 @@ import {
   setupNudge,
 } from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
+import {intlDefaults} from '../../foundation/env/intl-defaults.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +55,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package
 // filesystem, no environment probe, no config — and it must run ahead of the
 // --version preflight below so even that early exit is recorded. The env
 // probe is deferred to delivery. See foundation/debug.
-debug.begin({cliVersion: pkg.version});
+debug.begin({cliVersion: pkg.version, intl: intlDefaults});
 
 /**
  * Intercept `astryx --version --json` (or `-V --json`) before Commander
@@ -235,7 +236,10 @@ export async function loadProjectDebugHandler() {
  * Commander parses, before any hook, so the preAction load cannot reach it.
  * `Project.load` reads astryx.config and each integration's manifest; it does
  * no discovery. Skipped when the debug preload already loaded the project, and
- * outside a package. Called from the bin before Commander parses.
+ * where no integration can load (no config, no manifest of its own, no
+ * installed dependency that ships one): nothing there declares a command, so
+ * help prints the same without loading the project module. Called from the
+ * bin before Commander parses.
  *
  * @param {string[]} [argv] arguments after the binary.
  * @returns {Promise<void>}
@@ -247,6 +251,11 @@ export async function loadProjectForHelp(argv = process.argv.slice(2)) {
   try {
     const cwd = process.cwd();
     if (hasRecordedProject(cwd)) return;
+    if (!mayHaveIntegrations(cwd)) {
+      // What loading this project would record: no declared command.
+      recordDeclaredCliCommands(cwd, []);
+      return;
+    }
     const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(cwd);
   } catch {
@@ -586,7 +595,7 @@ export async function createProgram({argv} = {}) {
 
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling')
+    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.
@@ -614,29 +623,20 @@ export async function createProgram({argv} = {}) {
       'Output as typed JSON. Success envelope: { apiVersion, type, package?, data, meta? }. Error envelope: { apiVersion, error, code, suggestions? }.',
     )
     .addHelpCommand('help', 'Show all commands')
-    .action((options, cmd) => {
+    .action(async (options, cmd) => {
       // If Commander handed us a positional that didn't match any subcommand,
       // treat it as "unknown command" — exit 1 with a helpful suggestion.
       // This is the bare-invocation handler; if cmd.args has content here,
       // none of the registered subcommands matched.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
+        const {findEntry, unknownCommandAnswer} = await import('./lib/unknown-command.mjs');
+        const answer = await unknownCommandAnswer(program, process.argv.slice(2), {findEntry});
         const unknown = String(extras[0]);
-        const known = (program.commands || [])
-          .filter((c) => !(/** @type {any} */ (c)._hidden) && c.name() !== 'help')
-          .map((c) => c.name());
-        const close = known
-          .map((name) => ({name, distance: levenshteinDistance(unknown.toLowerCase(), name.toLowerCase())}))
-          .filter((s) => s.distance <= 3)
-          .sort((a, b) => a.distance - b.distance)
-          .slice(0, 3)
-          .map((s) => ({name: s.name, reason: 'did you mean this?'}));
-        // If we have close matches, surface those. Otherwise list all known commands
-        // so callers (including AI agents) can see what's available.
-        const suggestions = close.length > 0
-          ? close
-          : known.map((name) => ({name, reason: 'available command'}));
-        cliError(`unknown command '${unknown}'`, {suggestions, code: ERROR_CODES.ERR_UNKNOWN_COMMAND});
+        cliError(answer?.message ?? `unknown command '${unknown}'`, {
+          suggestions: answer?.suggestions,
+          code: ERROR_CODES.ERR_UNKNOWN_COMMAND,
+        });
         return;
       }
 
@@ -792,13 +792,20 @@ export async function createProgram({argv} = {}) {
    * Load the project's integrations before any command runs, so every command
    * it prints starts with the `cliCommand` they declare (the picker reads them
    * synchronously; see foundation/env/cli-command.mjs). Skipped when this
-   * process already loaded the project, such as the bin's debug preload. A
-   * project that cannot load is the command's to report, never this hook's.
+   * process already loaded the project, such as the bin's debug preload, and
+   * where no integration can load, so nothing declares a command (a command
+   * that needs the project still loads it). A project that cannot load is the
+   * command's to report, never this hook's.
    */
   program.hook('preAction', async () => {
     try {
       const cwd = process.cwd();
       if (hasRecordedProject(cwd)) return;
+      if (!mayHaveIntegrations(cwd)) {
+        // What loading this project would record: no declared command.
+        recordDeclaredCliCommands(cwd, []);
+        return;
+      }
       const {Project} = await import('../../foundation/config/project.mjs');
       await Project.load(cwd);
     } catch {
@@ -933,6 +940,10 @@ export async function createProgram({argv} = {}) {
       const stub = program
         .command(cmd.name)
         .description(`(failed to load: ${reason})`)
+        // Whatever options and words the run passed, it gets the load
+        // error, not a complaint about an option this stand-in never knew.
+        .allowUnknownOption()
+        .allowExcessArguments()
         .action(() => {
           // Nothing loaded, so nothing was answered — say that rather than
           // leaving the run's result unreported.
@@ -951,7 +962,7 @@ export async function createProgram({argv} = {}) {
   // extends the --json contract to cover Commander's parse-time short
   // circuits (parse errors, unknown options, --help, unknown commands).
   // See packages/cli/lib/json-shim.mjs for the rationale.
-  installJsonShim(program);
+  installJsonShim(program, {jsonSupported: name => JSON_SUPPORTED.has(name)});
 
   return program;
 }

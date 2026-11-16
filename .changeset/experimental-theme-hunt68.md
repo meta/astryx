@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor how`: "lighter" or "darker" on a part's fill starts from the fill it shows at rest (its own setting first; never a pressed overlay), uses the amount asked and keeps a see-through color see-through. "except" keeps every excepted part or variant at the value it has now (its own shadow, its own weight) in one answer, says when a part reads none of what changes, and says when an excepted place is not a part. Sub-parts and catalog parts named in words go to that part ("dialog header", "dialog title", "code block header", "text inputs", "date pickers", "toggle buttons", "select boxes", "switches"); a sub-part Core lacks ("card header") is answered for the whole part, and the answer says so. "As round as", "the same padding as" and "match" copy the other part's value onto the first part only (an amount of it with "twice as round as"). Each clause keeps its own variant; a bare size in a list of text changes is the font size; "headings 20% bigger" scales every heading level from its own size; a font stack stays whole on the part; side words write only those padding sides; a part whose name has a state word ("hover card") is the part; "card text lighter" and "dialog text twice as big" get commands; a second part with an ask of its own keeps it; and a theme name near the one typed with `--theme` suggests the same question.
+
+@josephfarina

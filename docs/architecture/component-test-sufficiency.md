@@ -39,7 +39,8 @@ deciding_specs: []
       "INV6",
       "INV7",
       "INV10",
-      "INV11"
+      "INV11",
+      "INV12"
     ]
   }
 }
@@ -160,6 +161,15 @@ rows, or inventory entries.
   partition that existing evidence cannot detect at the correct layer. Otherwise
   the change cites existing evidence or uses the applicable non-test proof, such as
   typed documentation validation, source review, or rendered browser evidence.
+- **INV12 — Touch and scroll evidence uses the page's own scroll.** The
+  recordings, measurements and preview links that a pull request offers for
+  the browser's own scroll physics (rubber-band, momentum, keyboard reveal,
+  browser chrome collapse, pull or swipe gestures) are taken on an apps/sandbox
+  page that scrolls the document, not in Storybook and not inside an inner
+  overflow container, unless the component under test is itself a scroll
+  container. Those physics are part of what the evidence shows (DEC-1). Other
+  scroll evidence, such as a layout trace of a scroll inside a panel, and
+  automated tests stay under INV1–INV11 and each record's verification map.
 
 ## Rational partitioning
 
@@ -288,7 +298,7 @@ product-behavior checklist as follows:
 - score the **Behavior** slot from observed conformance to the assembled applicable
   behavior requirements and objective standards;
 - score the **Testing** slot from INV1–INV8 and INV10–INV11 evidence sufficiency
-  and quality, and retain INV9 as pull-request or audit-run evidence;
+  and quality, and retain INV9 and INV12 as pull-request or audit-run evidence;
 - exclude non-applicable requirements and keep the rubric's existing explicit
   unmeasured treatment when required evidence cannot be obtained;
 - preserve one-defect/one-section ownership so one missing behavior or test is not
@@ -338,22 +348,33 @@ it does not require unrelated full-suite expansion.
 
 ## Deciding specs
 
-None. `spec:AST-029` continues to own audit backfill, evidence receipts, mode, and
+`spec:AST-029` continues to own audit backfill, evidence receipts, mode, and
 Night Watch operation; it explicitly does not own the general component-test
 quality rubric. Applicable current component, module, family, architecture, system,
 design, and theme contracts plus objective standards remain the sources of expected
 behavior.
 
+### DEC-1 — Touch and scroll evidence uses the page's own scroll
+
+**Reference:** `architecture:component-test-sufficiency/DEC-1`
+**Decider:** `cixzhang`, `2026-11-07`
+
+Touch and scroll evidence is taken on an apps/sandbox page that scrolls the
+document (INV12). A page embedded in a viewer's chrome or an inner scroller
+changes iOS bounce, momentum and URL-bar behavior, so it cannot show what a
+real app does.
+
 ## Verification
 
-| Invariant         | Evidence                                                                                                             | Mutation or failure expectation                                                                                                                                                                                                                                                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV10–INV11 | Authority-vs-coverage, established-public-interface, and no-new-test decision fixtures                               | Missing product authority is hidden, established public-interface evidence is denied a sufficiency result, optional hardening blocks acceptance, a docs/value-only-visual/private-only change receives a duplicate or non-observing component test, or a current public class/target change is excused as a private implementation detail |
-| INV2–INV3         | Critical-promise, behavior-defect, documentation-correction, and historical-regression fixtures                      | A primary, accessibility, callback, compatibility, composition, or previously fixed behavior defect loses its only mutation-sensitive evidence and still passes, or an unchanged prose-only documentation correction is required to add a regression test                                                                                 |
-| INV4              | Rational-partition fixtures                                                                                          | Proven-equivalent values require duplicate tests, private implementation identity is required to establish equivalence, or behaviorally different states collapse into one case                                                                                                                                                           |
-| INV5              | Public/runtime/compile-time seam replacement fixtures                                                                | Incidental private assertions pass while the promised user or consumer outcome is broken, contractual DOM/type/class/target evidence is incorrectly rejected, a DOM/class assertion is credited for pixels it cannot observe, or selector/state behavior is misclassified as a value-only visual change                                   |
-| INV6              | Tautology, declaration-copy, snapshot-noise, and behavior mutations; a held set missing the named motion             | An insensitive assertion receives credit, a meaningful behavior mutation leaves the credited test green, or a motion judgement passes on unrelated animations                                                                                                                                                                             |
-| INV7              | Same-partition duplicates, justified multi-layer evidence, exhaustive Cartesian, and broad defensive matrix fixtures | Distinct required evidence layers are collapsed as duplicates, or volume without a named distinct risk is credited as sufficiency                                                                                                                                                                                                         |
-| INV8              | Verification-map relationship fixtures                                                                               | Every audit row mechanically becomes a test, evidence cannot be traced to authority, or one test cannot satisfy inseparable requirements                                                                                                                                                                                                  |
-| INV9              | Pull-request and audit-run red/green trace fixtures                                                                  | Audit-authored remediation lacks a failing pre-change case, production remediation precedes the new case, or horizontal test generation replaces one observable vertical slice                                                                                                                                                            |
-| B1–B16 migration  | Rubric-version, section-ownership, and Behavior-slot migration fixture                                               | Generic B rules remain product authority, B12 is reactivated or reused, test evidence is double-scored in Behavior and Testing, B16 remains a Behavior check, unrelated IDs are renumbered, the Behavior weight disappears, or scoring changes without a minor-version bump                                                               |
+| Invariant         | Evidence                                                                                                                                                                                                                            | Mutation or failure expectation                                                                                                                                                                                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV10–INV11 | Authority-vs-coverage, established-public-interface, and no-new-test decision fixtures                                                                                                                                              | Missing product authority is hidden, established public-interface evidence is denied a sufficiency result, optional hardening blocks acceptance, a docs/value-only-visual/private-only change receives a duplicate or non-observing component test, or a current public class/target change is excused as a private implementation detail |
+| INV2–INV3         | Critical-promise, behavior-defect, documentation-correction, and historical-regression fixtures                                                                                                                                     | A primary, accessibility, callback, compatibility, composition, or previously fixed behavior defect loses its only mutation-sensitive evidence and still passes, or an unchanged prose-only documentation correction is required to add a regression test                                                                                 |
+| INV4              | Rational-partition fixtures                                                                                                                                                                                                         | Proven-equivalent values require duplicate tests, private implementation identity is required to establish equivalence, or behaviorally different states collapse into one case                                                                                                                                                           |
+| INV5              | Public/runtime/compile-time seam replacement fixtures                                                                                                                                                                               | Incidental private assertions pass while the promised user or consumer outcome is broken, contractual DOM/type/class/target evidence is incorrectly rejected, a DOM/class assertion is credited for pixels it cannot observe, or selector/state behavior is misclassified as a value-only visual change                                   |
+| INV6              | Tautology, declaration-copy, snapshot-noise, and behavior mutations; a held set missing the named motion                                                                                                                            | An insensitive assertion receives credit, a meaningful behavior mutation leaves the credited test green, or a motion judgement passes on unrelated animations                                                                                                                                                                             |
+| INV7              | Same-partition duplicates, justified multi-layer evidence, exhaustive Cartesian, and broad defensive matrix fixtures                                                                                                                | Distinct required evidence layers are collapsed as duplicates, or volume without a named distinct risk is credited as sufficiency                                                                                                                                                                                                         |
+| INV8              | Verification-map relationship fixtures                                                                                                                                                                                              | Every audit row mechanically becomes a test, evidence cannot be traced to authority, or one test cannot satisfy inseparable requirements                                                                                                                                                                                                  |
+| INV9              | Pull-request and audit-run red/green trace fixtures                                                                                                                                                                                 | Audit-authored remediation lacks a failing pre-change case, production remediation precedes the new case, or horizontal test generation replaces one observable vertical slice                                                                                                                                                            |
+| INV12             | Review check: the recordings, measurements and preview links a pull request offers for rubber-band, momentum, keyboard reveal, browser chrome collapse, or pull or swipe gestures name an apps/sandbox route whose document scrolls | Evidence of those scroll physics comes from Storybook, an embedded viewer, or an inner overflow container while the component under test is not itself a scroll container, or INV12 is applied to other scroll evidence or to an automated test                                                                                           |
+| B1–B16 migration  | Rubric-version, section-ownership, and Behavior-slot migration fixture                                                                                                                                                              | Generic B rules remain product authority, B12 is reactivated or reused, test evidence is double-scored in Behavior and Testing, B16 remains a Behavior check, unrelated IDs are renumbered, the Behavior weight disappears, or scoring changes without a minor-version bump                                                               |

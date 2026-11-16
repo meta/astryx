@@ -36,7 +36,11 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
-import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {
+  modeValue,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -211,7 +215,7 @@ describe('set', () => {
       themeEditSet('h', 'color', '#ff0000', {cwd, on: 'text'}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000'$/);
+    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000' --on text$/);
   });
 
   it('refuses blank scope flags', async () => {
@@ -224,11 +228,13 @@ describe('set', () => {
     ).toBe('ERR_MISSING_ARGUMENT');
   });
 
-  it('points a property written another way at the property', async () => {
-    const r = await refusal(() =>
-      themeEditSet('h', 'background_color', '#ff0000', {cwd, on: 'card'}),
-    );
-    expect(r.run[0]).toMatch(/set h background-color '#ff0000' --on card$/);
+  it('reads a property written another way as the property', async () => {
+    // `_` or spaces for its dashes read as camel case does: the property.
+    const r = await themeEditSet('h', 'background_color', '#ff0000', {
+      cwd,
+      on: 'card',
+    });
+    expect(JSON.stringify(r.data)).toContain('background-color');
   });
 
   it('quotes every suggested value so a shell passes it unchanged', async () => {
@@ -236,9 +242,12 @@ describe('set', () => {
       const r = await refusal(() =>
         themeEditSet('h', 'background_color', value, {cwd, on: 'card'}),
       );
-      expect(r.run[0]).toContain(
-        `background-color ${quoteCommandArgument(value)} --on card`,
-      );
+      // None of these is a color, so the set `background-color` would
+      // refuse is left out; no line carries the value unquoted.
+      for (const line of r.run)
+        expect(line.replace(quoteCommandArgument(value), '')).not.toContain(
+          value,
+        );
       expect(quoteCommandArgument(value)).toMatch(/^'/);
     }
   });
@@ -329,6 +338,16 @@ describe('builds that stay the same', () => {
 
   it('the preview route imports a b-2 theme by its module name', async () => {
     await themeEditNew('b-2', {cwd});
+    // A Next app's routes folder has a root layout; the preview goes under it.
+    const layout = path.join(cwd, 'src/app/layout.tsx');
+    const madeLayout = !fs.existsSync(layout);
+    if (madeLayout) {
+      fs.mkdirSync(path.dirname(layout), {recursive: true});
+      fs.writeFileSync(
+        layout,
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
+    }
     await themeEditPreviewAdd(undefined, {
       cwd,
       path: 'src/app/b2',
@@ -343,6 +362,8 @@ describe('builds that stay the same', () => {
     expect(route).toContain('b2Theme as theme');
     expect(route).not.toContain('b-2Theme');
     fs.rmSync(path.join(cwd, 'src/app/b2'), {recursive: true, force: true});
+    if (madeLayout)
+      fs.rmSync(path.join(cwd, 'src/app'), {recursive: true, force: true});
     drop('b-2');
   }, 240_000);
 
@@ -385,16 +406,22 @@ describe('builds that stay the same', () => {
     await themeEditNew('dj', {cwd});
     fs.writeFileSync(path.join(cwd, 'themes/dj/dj.js'), 'export const = ;');
     const r = await themeEditShow('dj', {cwd});
-    expect(r.data.notes.join(' ')).toContain('could not be read');
+    expect(r.data.notes.join(' ')).toMatch(
+      /could not be read|dj\.js differs from what the settings build/,
+    );
     drop('dj');
   }, 240_000);
 });
 
 describe('the command line', () => {
-  it('names an editor theme to the package commands', async () => {
+  it('the package commands take an editor theme through its app copy', async () => {
+    // src/themes/h/ is a standard local theme the editor writes after every
+    // build: use names the add that works.
     const r = await cli(['use', 'h']);
     expect(r.status).toBe(1);
-    expect(r.body.error).toContain('a theme the editor made');
+    expect(r.body.error).toMatch(
+      /Theme "h" is not added\. Run `.* theme add h` first/,
+    );
   }, 120_000);
 
   it('a moved name points where it went; a bare group answers --json', async () => {
@@ -544,30 +571,33 @@ describe('fonts', () => {
 });
 
 describe('one mode with a state', () => {
-  it('never changes the other mode: variants are named, and a part with nothing to keep is refused', async () => {
+  it('never changes the other mode: a one-mode hover writes that mode only, on any part', async () => {
     await themeEditNew('sm', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('sm', 'background-color', '#00ff00', {
-        cwd,
-        on: 'button',
-        state: 'hover',
-        mode: 'dark',
-      }),
+    await themeEditSet('sm', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+      mode: 'dark',
+    });
+    const hover = (/** @type {string} */ variant) =>
+      `.astryx-button[data-variant="${variant}"]:hover:where(:not(:disabled,[aria-disabled="true"]))`;
+    let css = read('themes/sm/sm.css');
+    expect(modeValue(css, hover('primary'), 'background-color', 'dark')).toBe(
+      '#00ff00',
     );
-    expect(r.code).toBe('ERR_THEME_NO_MODE');
-    expect(r.run[0]).toMatch(/--when variant:\w+ --state hover --mode dark$/);
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('sm', 'background-color', '#00ff00', {
-            cwd,
-            on: 'tab',
-            state: 'hover',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+    expect(css).not.toMatch(/light-dark\([^;]*#00ff00/);
+    // A part with no hover color of its own takes one for one mode too: the
+    // other mode keeps what Core gives it.
+    await themeEditSet('sm', 'background-color', '#00ff00', {
+      cwd,
+      on: 'tab',
+      state: 'hover',
+      mode: 'light',
+    });
+    css = read('themes/sm/sm.css');
+    expect(css).toMatch(
+      /:is\(\.astryx-tab[^){]*\):where\(:scope\[data-theme="light"\] \*\)[^{]*:hover[^{]*\{\s*background-color: #00ff00;/,
+    );
     await themeEditSet('sm', 'background-color', '#00ff00', {
       cwd,
       on: 'button',
@@ -575,10 +605,11 @@ describe('one mode with a state', () => {
       state: 'hover',
       mode: 'dark',
     });
-    // Light keeps the ghost button's own color.
-    expect(read('themes/sm/sm.css')).toMatch(
-      /light-dark\(var\(--color-[a-z-]+\), #00ff00\)/,
+    css = read('themes/sm/sm.css');
+    expect(modeValue(css, hover('ghost'), 'background-color', 'dark')).toBe(
+      '#00ff00',
     );
+    expect(css).not.toMatch(/light-dark\([^;]*#00ff00/);
     drop('sm');
   }, 240_000);
 });

@@ -6,7 +6,8 @@
  * @file useTableWindow.ts
  * @input Parent-admitted data/keys, parent-owned shared geometry source and DOM refs
  * @output Table's admission into the shared list window, logical-position
- *   column widths and mounted-row diagnostics
+ *   column widths and mounted-row diagnostics, reading cells by column
+ *   position beside column spacers
  * @position Table's adapter over the private list-windowing hook
  *   (`virtualization/useListWindow`); DOM refs are effect resources, with no
  *   owned observation
@@ -30,6 +31,7 @@ import {
   type TableVirtualizationCapability,
   type UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
+import {getCellAtColumn, getCellColumnIndex} from '../../tableColumnWindowing';
 
 export type TableWindowGeometry = ListWindowGeometry;
 export type TableWindowGeometrySource = ListWindowGeometrySource;
@@ -101,16 +103,21 @@ function areWidthsEqual(
   return true;
 }
 
+/** The font and the chrome around the text in a logical-position cell. */
+interface LogicalPositionMetrics {
+  font: string;
+  spacing: number;
+  chrome: number;
+}
+
 /**
- * The column width that fits `text` in a logical-position cell, at the cell's
- * own font, padding and density. It reads computed styles and canvas text
- * metrics only, so it adds no layout read and no DOM write. Undefined when it
- * cannot be measured.
+ * The font, letter spacing, padding and borders of a logical-position cell.
+ * It reads computed styles only, so it adds no layout read and no DOM write.
+ * Undefined when the cell has no text or no resolved font.
  */
-function measureLogicalPositionWidth(
+function readLogicalPositionMetrics(
   cell: HTMLTableCellElement,
-  text: string,
-): number | undefined {
+): LogicalPositionMetrics | undefined {
   const view = cell.ownerDocument.defaultView;
   if (view == null) {
     return undefined;
@@ -137,10 +144,6 @@ function measureLogicalPositionWidth(
     .filter(part => part !== '')
     .concat(style.fontFamily)
     .join(' ');
-  const textWidth = measureText(font, text);
-  if (textWidth === undefined || !(textWidth > 0)) {
-    return undefined;
-  }
   const spacing =
     style.letterSpacing === 'normal' ? 0 : readPixels(style.letterSpacing);
   // Padding and borders between the text and the column edge.
@@ -156,6 +159,21 @@ function measureLogicalPositionWidth(
       readPixels(box.paddingRight) +
       readPixels(box.borderLeftWidth) +
       readPixels(box.borderRightWidth);
+  }
+  return {font, spacing, chrome};
+}
+
+/**
+ * The column width that fits `text` at the given metrics, from canvas text
+ * metrics. Undefined when the text cannot be measured.
+ */
+function getLogicalPositionWidth(
+  {font, spacing, chrome}: LogicalPositionMetrics,
+  text: string,
+): number | undefined {
+  const textWidth = measureText(font, text);
+  if (textWidth === undefined || !(textWidth > 0)) {
+    return undefined;
   }
   return Math.ceil(textWidth + spacing * text.length + chrome + 1);
 }
@@ -211,7 +229,11 @@ function getContentViolation(
   row: HTMLTableRowElement,
   logicalPositionColumns: ReadonlySet<number>,
 ): string | undefined {
-  for (const [columnIndex, cell] of Array.from(row.cells).entries()) {
+  for (const cell of Array.from(row.cells)) {
+    const columnIndex = getCellColumnIndex(cell);
+    if (columnIndex === undefined) {
+      continue;
+    }
     if (logicalPositionColumns.has(columnIndex) && hasClippedRowNumber(cell)) {
       return 'Mounted row-number content exceeds the column width.';
     }
@@ -399,6 +421,7 @@ export function useTableWindow<T>({
     keys.length === data.length &&
     data.length > 0;
   const [positionWidths, setPositionWidths] = useState(EMPTY_POSITION_WIDTHS);
+  const positionMetricsRef = useRef(new Map<number, LogicalPositionMetrics>());
   const validationRef = useRef<ValidationState | null>(null);
   useDevWarningPerMessage(
     'Table',
@@ -482,11 +505,20 @@ export function useTableWindow<T>({
         state.isPositionWidthMeasured = true;
         const next = new Map<number, number>();
         for (const index of logicalPositionColumns) {
-          const cell = row.cells[index];
-          const width =
+          // A column windowed out keeps the font and padding last read from
+          // it, so its width still fits the current row count.
+          const cell = getCellAtColumn(row, index);
+          const metrics =
             cell == null
-              ? undefined
-              : measureLogicalPositionWidth(cell, String(data.length));
+              ? positionMetricsRef.current.get(index)
+              : readLogicalPositionMetrics(cell);
+          if (cell != null && metrics !== undefined) {
+            positionMetricsRef.current.set(index, metrics);
+          }
+          const width =
+            metrics === undefined
+              ? positionWidths.get(index)
+              : getLogicalPositionWidth(metrics, String(data.length));
           if (width !== undefined) {
             next.set(index, width);
           }

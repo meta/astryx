@@ -26,6 +26,7 @@ import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Icon} from '@astryxdesign/core/Icon';
 import {DropdownMenu, DropdownMenuItem} from '@astryxdesign/core/DropdownMenu';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   Cog6ToothIcon,
   AtSymbolIcon,
@@ -240,6 +241,9 @@ const composerTriggers = [mentionTrigger, commandTrigger];
 
 export default function AIChatTemplate() {
   const [mode, setMode] = useState<string | null>('auto');
+  const showToast = useToast();
+  // Demo only: replace these toasts with the calls that perform each action.
+  const demo = (body: string, uniqueID: string) => showToast({body, uniqueID});
   const [category, setCategory] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<string[]>([
     'project_brief.pdf',
@@ -318,7 +322,9 @@ export default function AIChatTemplate() {
 
             {/* Composer */}
             <ChatComposer
-              onSubmit={() => {}}
+              onSubmit={() =>
+                demo('Demo: the message would be sent here', 'send')
+              }
               placeholder="Ask anything"
               input={
                 <ChatComposerInput
@@ -415,9 +421,30 @@ export default function AIChatTemplate() {
                     }}
                     menuWidth={200}
                     items={[
-                      {label: 'Preferences', onClick: () => {}},
-                      {label: 'Keyboard shortcuts', onClick: () => {}},
-                      {label: 'About', onClick: () => {}},
+                      {
+                        label: 'Preferences',
+                        onClick: () =>
+                          demo(
+                            'Demo: preferences would open here',
+                            'preferences',
+                          ),
+                      },
+                      {
+                        label: 'Keyboard shortcuts',
+                        onClick: () =>
+                          demo(
+                            'Demo: the keyboard shortcuts would open here',
+                            'shortcuts',
+                          ),
+                      },
+                      {
+                        label: 'About',
+                        onClick: () =>
+                          demo(
+                            'Demo: details about the assistant would open here',
+                            'about',
+                          ),
+                      },
                     ]}
                   />
                 </>

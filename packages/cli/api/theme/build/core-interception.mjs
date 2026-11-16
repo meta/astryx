@@ -95,6 +95,10 @@ const retainedLineageByReference = new WeakMap();
  * @property {(theme: any) => boolean} observed - Whether authored input was captured.
  * @property {(theme: any) => void} retain - Retain capture before stripping.
  * @property {(theme: any) => any} parentOf - Exact authored `extends` value.
+ * @property {(theme: any) => any} inputOf - The raw `defineTheme()` argument
+ *   that produced a theme, or undefined.
+ * @property {any[]} inputs - Every `defineTheme()` argument in call order,
+ *   recorded before Core reads it, so an input Core refuses is seen too.
  * @property {(theme: any) => any[]} lineageOf - Every raw input that fed a
  *   theme, following its own `extends` chain and spread provenance.
  * @property {(theme: any) => any[]} unobservedIn - Lineage members this
@@ -243,6 +247,8 @@ function mergeGenerativeAxes(inherited, own) {
 export function interceptCore(coreThemeModule, coreRootModule) {
   /** @type {WeakMap<object, ThemeLineage>} */
   const byReference = new WeakMap();
+  /** @type {any[]} */
+  const inputs = [];
 
   /** @param {any} value @param {ThemeLineage} lineage */
   const mark = (value, lineage) => {
@@ -281,6 +287,7 @@ export function interceptCore(coreThemeModule, coreRootModule) {
       ...namespace,
       /** @param {any} input */
       defineTheme(input) {
+        inputs.push(input);
         const result = real.call(namespace, input);
         mark(result, {input, result});
         return result;
@@ -317,6 +324,9 @@ export function interceptCore(coreThemeModule, coreRootModule) {
 
   return {
     modules,
+    inputs,
+    // prettier-ignore
+    inputOf(theme) { return lineageFor(theme)?.input; },
 
     // prettier-ignore
     observed(theme) { return wasObserved(theme, byReference); },

@@ -15,11 +15,10 @@
  */
 export function previewColorModeFragment(
   themeMode: 'system' | 'light' | 'dark',
-  osPrefersDark: boolean,
+  osMode: 'light' | 'dark',
 ): '' | '#light' | '#dark' {
   if (themeMode === 'system') {
     return '';
   }
-  const osMode = osPrefersDark ? 'dark' : 'light';
   return themeMode === osMode ? '' : `#${themeMode}`;
 }

@@ -62,9 +62,11 @@ describe('G1: a stale new marker', () => {
 });
 
 describe('G2: a theme named by a file name', () => {
-  it('suggests show <theme>', async () => {
+  it('suggests the same undo with the theme name', async () => {
     await themeEditNew('fn', {cwd});
     for (const typed of ['fn.theme.ts', 'FN.settings.json', 'fn.ts']) {
+      // fn was just made: a step back has nothing to go back to, so the
+      // line offered is fn's show.
       const r = await refusal(() => themeEditUndo(typed, {cwd}));
       expect(r.run[0], typed).toMatch(/ show fn$/);
     }

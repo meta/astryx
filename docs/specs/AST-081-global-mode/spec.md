@@ -388,24 +388,54 @@ works on is `spec:AST-040` FR9's.
     folder that an environment setting points at counts only when it is an
     absolute path), for saved discover answers (`spec:AST-051` FR8), for the
     releases global mode installs into a project's run (FR2, FR3), and for
-    what `search`, `build`, `component`, `template`, `theme` and `discover`
-    keep in `astryx/catalogs` (search's catalogs and each integration's
-    contribution-check results), a folder only the user can reach (made
-    `0700`, used only while it is a real folder the user owns and others
-    cannot open, never where the system has no user ids), each kept value
-    used only while every input its gather read is unchanged; a run
-    under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and uses no
-    catalog; `doctor` lists that folder and its size in an info row, which in
-    such a run also says that it keeps none;
+    what `search`, `build`, `component`, `template`, `theme`, `discover`,
+    `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
+    integration's contribution-check results, template discovery's records,
+    the component list (with each integration's component replacements),
+    each integration's components with the doc parts the not-found matcher
+    scores, integrations' theme records, what `theme build` checks a theme
+    against in Core's component docs, what `theme build` finds when it checks
+    a theme's pseudo-class keys and token names, the lookup commands'
+    not-found hint's name summaries of folder trees, npm's list of the files an integration
+    package packs (for `integration check` and `doctor integration validate`
+    in the package's own folder), the locale and time zone a run's debug
+    record names (on Linux, kept by any command that delivers a debug
+    record), the CLI's own docs tree, and doctor's
+    file-only docs checks and theme-wiring scan, which doctor keeps only
+    while the folder exists), a
+    folder only the user can
+    reach (made `0700` by the first run that keeps a gather: `search` or
+    `build`, or another of those commands where an integration can load,
+    never `doctor`; that run keeps its gathers at once; a lookup command's
+    not-found path may create the per-user catalogs folder to keep its name
+    index, and an integration package's `integration check` of itself may
+    create it to keep npm's list; used only while it is
+    a real folder the user owns and others cannot open, never where the
+    system has no user ids), each
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A
+    run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
+    uses no catalog; `doctor` lists that folder and its size in an info row,
+    which also names the size limit it shares with the transpile cache below
+    and in such a run says that it keeps none;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
-    topics and codemods, a TypeScript config, a built theme artifact), in
-    `astryx/jiti`: made `0700` on first use and used at once, only while it is
-    a real folder the user owns and others cannot open; otherwise nothing is
+    topics and codemods, a TypeScript config, a built theme artifact, and the
+    theme sources `theme build` loads), in `astryx/jiti`: made `0700` on first
+    use and used at once, only while it is a real folder the user owns and
+    others cannot open, and kept within the same size limit as the catalogs
+    by removing its least recently used copies once it has grown, never one
+    written in the last day or read in the last day where the file system
+    records reads; otherwise nothing is
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
-    verifying a package;
+    verifying a package, for a scratch copy of a template at a path the caller
+    names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
+    compile cache of the CLI's own modules in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
+    written from that run, used only while it is a real folder the user owns
+    and others cannot open, never where the system has no user ids, off
+    when `NODE_DISABLE_COMPILE_CACHE` is set, and neither made nor used when
+    Node already has a compile cache in use (`NODE_COMPILE_CACHE`);
   - the per-user configuration directory of the platform, for the documented
     settings of the computer-level agent text and the per-user state file,
     `astryx/state.json`, which holds what the update check found and when
@@ -489,6 +519,14 @@ works on is `spec:AST-040` FR9's.
   - A copy hands the run off before it loads anything the project provides
     (FR2). It does not hand off when it is itself the release FR2 names, or
     when the door that started it declined the project's CLI (FR2).
+  - In a Yarn Plug'n'Play project, only the project's runtime knows where the
+    project's packages are, and Yarn preloads it into every command it runs.
+    A copy started without that runtime first starts again with it preloaded
+    through `NODE_OPTIONS`, as Yarn preloads it, and the run started again
+    makes the choice this requirement names. A run whose Node options preload
+    the runtime already, and a programmatic host's run, never start again.
+    Starting again is not a hand-off: the same copy runs, with the same
+    arguments, folder, and standard streams.
   - A command that acts on the computer rather than the folder it runs in,
     `astryx init --user` (FR8) and `astryx docs global` with its pages, the
     docs of global mode itself, is never handed to a project's release: it is
@@ -505,13 +543,15 @@ works on is `spec:AST-040` FR9's.
   - The copy the run is handed to receives what it would receive if started
     directly in that folder: the same arguments, working folder, and standard
     input, output, and error, with nothing added to its environment, options,
-    or configuration (FR1). The run ends with that copy's exit status, or the
-    signal that ended it. A termination or hangup signal sent to the copy that
-    started the run reaches the copy it handed the run to. A SIGINT that
-    reaches only the starting copy is forwarded if the handed-off CLI is still
-    running 5 seconds later, so an interrupt the whole process group got (a
-    terminal's Ctrl-C) reaches a CLI that stops within that time exactly once.
-    On Windows the starting copy forwards no interrupt.
+    or configuration (FR1); in a Yarn Plug'n'Play project, started directly
+    means started with the project's runtime preloaded, as Yarn starts it.
+    The run ends with that copy's exit status, or the signal that ended it. A
+    termination or hangup signal sent to the copy that started the run reaches
+    the copy it handed the run to. A SIGINT that reaches only the starting
+    copy is forwarded if the handed-off CLI is still running 5 seconds later,
+    so an interrupt the whole process group got (a terminal's Ctrl-C) reaches
+    a CLI that stops within that time exactly once. On Windows the starting
+    copy forwards no interrupt.
   - When the project's own CLI cannot be started, the matched release answers
     (FR2). When the matched release cannot be obtained, the copy that started
     the run answers, announced (FR2).
@@ -692,7 +732,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G13 An `astryx` earlier on the search path that is not the Astryx CLI                                                        | That other program                                                                                                           | `init --user` and `doctor` warn                                                                                                                                                                                                                                 | `› G13`                                                                                               |
 | G14 A Node version manager switches Node, so each Node has its own global copy                                               | That Node's own global copy                                                                                                  | As for that case                                                                                                                                                                                                                                                | `› G14`                                                                                               |
 | G15 A project whose package manager is pinned through a package manager shim                                                 | As for that project                                                                                                          | As for that project; releases install in the cache folder, never the project                                                                                                                                                                                    | `› G15`                                                                                               |
-| G16 Global copy installed with administrator rights, run by a person                                                         | As for that case; nothing is written to the install folder                                                                   | As for that case                                                                                                                                                                                                                                                | `› G16`                                                                                               |
+| G16 Global copy installed with administrator rights, run by a person                                                         | As for that case; nothing is written to the install folder                                                                   | As for that case                                                                                                                                                                                                                                                | `global-local.rows-16-39.test.mjs › G16`                                                              |
 | G17 The per-user cache cannot be written                                                                                     | Outside a project and in a project with only Core: the global copy; in a project whose own CLI cannot start: the global copy | For the last, FR2's warning line naming the cache folder; `copy` is `fallback`                                                                                                                                                                                  | `› G17`                                                                                               |
 | G18 Home unset, or cache and configuration folders set by environment                                                        | Unchanged; an absolute folder setting is used, a relative one is ignored                                                     | As for that case                                                                                                                                                                                                                                                | `› G18`                                                                                               |
 | G19 Continuous integration (`CI` set) with a fresh home each run                                                             | As for that case; no update check                                                                                            | No notice                                                                                                                                                                                                                                                       | `› G19`                                                                                               |
@@ -704,7 +744,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G25 A file system that ignores letter case                                                                                   | As for the folder, whatever case was typed                                                                                   | As for that folder                                                                                                                                                                                                                                              | `› G25` (path rules); the file system itself: the cross-platform smoke workflow only (macOS, Windows) |
 | G26 Windows paths and installs                                                                                               | The same rules; releases install through `npm.cmd` with the time limit                                                       | As for that case                                                                                                                                                                                                                                                | `› G26` (path rules); Windows itself: the cross-platform smoke workflow only                          |
 | G27 A package script, which puts the project's own commands first                                                            | The project's own CLI, whatever its version                                                                                  | As for that case                                                                                                                                                                                                                                                | `› G27`                                                                                               |
-| G28 A Yarn Plug'n'Play project, whose own CLI Astryx cannot see                                                              | The copy that started the run                                                                                                | FR2's daily hint with Yarn's command                                                                                                                                                                                                                            | `› G28`                                                                                               |
+| G28 A Yarn Plug'n'Play project whose runtime does not start                                                                  | The copy that started the run, after the run starts again once                                                               | FR2's daily hint with Yarn's command                                                                                                                                                                                                                            | `› G28`                                                                                               |
 | G29 A package runner that reuses the global install                                                                          | As the global copy                                                                                                           | As for that case                                                                                                                                                                                                                                                | `› G29`                                                                                               |
 | G30 `astryx init --user` inside a project                                                                                    | The starting copy, for the computer                                                                                          | `answered by CLI <v> with Core <v>, for this computer`                                                                                                                                                                                                          | `› G30`                                                                                               |
 | G31 A cached release a project whose own CLI cannot start needs is damaged or removed                                        | The release, installed again                                                                                                 | As for that case; when it cannot be installed, FR2's warning line and the starting copy                                                                                                                                                                         | `› G31`                                                                                               |
@@ -716,7 +756,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G37 A project that installs the same integration as the computer                                                             | The project's release, with the project's copy only                                                                          | As for that case                                                                                                                                                                                                                                                | `› G37`                                                                                               |
 | G38 An integration installed for the computer whose peer range excludes the answering release                                | The global copy, without it                                                                                                  | As for that case; `doctor` warns                                                                                                                                                                                                                                | `› G38`                                                                                               |
 | G39 A door's package set: the CLI and an integration installed together in one root                                          | That copy, with the integration loaded outside a project                                                                     | As for that case                                                                                                                                                                                                                                                | `› G39`                                                                                               |
-| G40 pnpm global folders: one shared folder, or a folder per package                                                          | The global copy, with the integrations in every such folder loaded outside a project                                         | As for that case                                                                                                                                                                                                                                                | `› G40`                                                                                               |
+| G40 pnpm global folders: one shared folder, or a folder per package                                                          | The global copy, with the integrations in every such folder loaded outside a project                                         | As for that case                                                                                                                                                                                                                                                | `global-local.rows-40-59.test.mjs › G40`                                                              |
 | G41 Outside a project, in an integration's own source folder                                                                 | That copy, with the folder's own copy of the integration                                                                     | As for that case; `doctor` names the computer's copy as not used, without a warning                                                                                                                                                                             | `› G41`                                                                                               |
 | G42 Inside a project, an integration installed for the computer that the project's release excludes, or that fails to load   | The project's release                                                                                                        | As for that case; neither `discover` nor `doctor` offers it                                                                                                                                                                                                     | `› G42`                                                                                               |
 | G43 Inside a project with only Core that a door's package set answers                                                        | That copy                                                                                                                    | `copy` is `starting`; its integrations are offered as available                                                                                                                                                                                                 | `› G43`                                                                                               |
@@ -735,6 +775,7 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 | G56 An open `search` outside a project before the release's Core is cached                                                   | The global copy                                                                                                              | Gets the Core as `component` does; when it cannot, `meta.partial` names the skipped domains and the reason, with one standard-error line                                                                                                                        | `› G56`                                                                                               |
 | G57 A folder more than four levels deep in a project with only Core                                                          | The copy that started the run                                                                                                | Reads the project's Core, never the carried one; `meta.answeredBy.core` names it                                                                                                                                                                                | `› G57`                                                                                               |
 | G58 An interrupt sent to the copy that started a handed-off run alone, or to its whole process group                         | The project's own CLI                                                                                                        | Alone: forwarded once after 5 seconds; group: received once, not forwarded to a CLI that stopped in time; the run ends with that CLI's exit status or signal                                                                                                    | `› G58`                                                                                               |
+| G59 A Yarn Plug'n'Play project, run from a copy started outside the project's runtime                                        | The project's own CLI, from the run started again with the runtime                                                           | The hand-off line                                                                                                                                                                                                                                               | `› G59`                                                                                               |
 
 ### Platform support
 
@@ -745,10 +786,9 @@ with another skills folder links it to `.agents/skills/astryx` themselves.
 - Unsupported behavior: a door that cannot obtain the release FR2 names fails
   before any write; a global copy that cannot reach the registry answers as
   always, and prints no notice (FR6). In a Yarn Plug'n'Play project, a
-  copy cannot see the project's own CLI without running the project's
-  loader, which FR2 forbids before the hand-off, so the release equal to the
-  project's Core answers from the per-user cache instead; it is the same
-  release whenever the project's CLI matches its Core.
+  programmatic host's run does not start again with the project's runtime
+  (FR9), so it answers as in a project with no CLI of its own unless its door
+  runs the project's own CLI (FR1).
 - Browser evidence: not applicable; the contract is CLI output, exit status,
   and file changes.
 
