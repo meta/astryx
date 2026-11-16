@@ -709,7 +709,11 @@ export const SHEET_CSS = [
   'body:has(#cs-light:checked) .cs-light,body:has(#cs-dark:checked) .cs-dark{display:block!important}',
   'body:has(#cs-light:checked) .cs-dark,body:has(#cs-dark:checked) .cs-light{display:none!important}',
   '.cs-group-name{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}',
-  '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
+  // Cells wrap, about three to a row; a cell is never narrower than what it
+  // holds (a calendar, a stepper, a toolbar), so nothing is cut at its edge:
+  // a wide part takes a row of its own.
+  '.cs-sheet{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;padding:14px}',
+  '.cs-sheet>.cs-cell{flex:1 1 360px;min-width:min-content;max-width:100%;box-sizing:border-box}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
   // A cell is as tall as what it holds, so every variant is drawn whole.
   // A focus ring drawn outside a part at the cell's edge shows whole: the
@@ -725,14 +729,15 @@ export const SHEET_CSS = [
   '.cs-label{font:10px ui-monospace,monospace;opacity:.5}',
   // An item takes a share of its row, so a part as wide as its container
   // (a divider, a form layout) is drawn at a width, never at none.
-  '.cs-item{max-width:100%;position:relative;flex:1 1 200px;min-width:0}',
+  '.cs-item{max-width:100%;position:relative;flex:1 1 200px;min-width:min-content}',
   // A part that needs a row's width (a table, code, an app shell) takes the
   // whole row of the grid, so its text is never cut or wrapped mid-word.
-  '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){grid-column:1/-1}',
+  '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell){flex-basis:100%}',
   // A part that needs a row's width draws each variant on a row of its own,
-  // and an app shell at a height that shows its frame, not a window's.
+  // and an app shell on the sheet at a height that shows its frame, not a
+  // window's (the pages section draws the sample app whole).
   '.cs-sheet>.cs-cell:has(table,pre,.astryx-app-shell)>.cs-row>.cs-item{flex-basis:100%}',
-  '.cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
+  '.cs-sheet .cs-item .astryx-app-shell{height:360px!important;min-height:0!important}',
   // A frame that draws nothing of its own (an aspect ratio) shows its box.
   '.cs-item .astryx-aspect-ratio{outline:1px dashed #8888}',
   // A part as tall as its container (a vertical divider) is drawn at a
@@ -747,15 +752,15 @@ export const SHEET_CSS = [
   '.cs-strip-row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}',
   '.cs-strip-item{max-width:300px;position:relative}',
   '.cs-strip [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
-  // An overlay shown in place is no wider than its cell (a popover that
-  // holds a form), so nothing it holds is cut at the cell's edge.
-  '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}',
+  // An overlay shown in place keeps its own width (a popover that holds a
+  // form, a date input's calendar): its cell grows to hold it.
+  '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important;box-sizing:border-box!important}',
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
   // The overlays section's own page (sheet-overlays.png): five to a row,
   // a panel over the page cropped to its top at 260px, the small overlays
   // first.
-  '.cs-section-overlays .cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
+  '.cs-section-overlays .cs-open-group .cs-sheet>.cs-cell{flex-basis:200px}',
   '.cs-section-overlays .cs-open-group .cs-cell dialog{max-height:260px!important}',
   // The states section: one row per control, one column per state.
   '.cs-states-grid{display:grid;gap:10px;padding:14px}',
