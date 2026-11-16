@@ -5,7 +5,9 @@
 /**
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
- * @output Exports useTruncation hook for detecting text overflow
+ * @output Exports useTruncation hook for detecting text overflow, and
+ *   useTruncationMeasure, its internal form with Core's measure-on-interest
+ *   mode
  * @position Hook; consumed by Text.tsx, Heading.tsx and Lightbox.tsx
  *
  * SYNC: When modified, update:

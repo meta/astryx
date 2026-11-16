@@ -627,6 +627,54 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       }
     });
 
+    it('opens the tooltip again when a resize cuts off text that a hover found fitting after it was open', async () => {
+      const {showPopover, restore} = withOverflowAndPopover();
+      try {
+        render(
+          <TextMeasureOnInterestContext value={true}>
+            <Text type="body" maxLines={1}>
+              {LABEL}
+            </Text>
+          </TextMeasureOnInterestContext>,
+        );
+        const text = screen.getByText(LABEL);
+        setWidths(text, 400);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+        await waitFor(
+          () => {
+            expect(showPopover).toHaveBeenCalled();
+          },
+          {timeout: 3000},
+        );
+        fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+        fireEvent.mouseLeave(text);
+        // The column widens: a hover finds the text fitting.
+        setWidths(text, 80);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+        await waitFor(() => {
+          expect(text).not.toHaveAttribute('aria-describedby');
+        });
+        fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+        fireEvent.mouseLeave(text);
+        // The column narrows again: the next hover opens the tooltip. In a
+        // browser the hover's mouseenter fires before the tooltip mounts
+        // again, so the tooltip must read the hover itself.
+        showPopover.mockClear();
+        setWidths(text, 400);
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        await waitFor(
+          () => {
+            expect(showPopover).toHaveBeenCalled();
+          },
+          {timeout: 3000},
+        );
+      } finally {
+        restore();
+      }
+    });
+
     it('measures again at each hover, so text that stops fitting shows its tooltip', async () => {
       render(
         <TextMeasureOnInterestContext value={true}>
