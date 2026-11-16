@@ -475,11 +475,22 @@ export function baseFontsSheet(ctx, data) {
   } catch {
     return null;
   }
-  // The families the sheet loads; with the theme's build at hand, the sheet
-  // is imported only while the build still names one of them.
-  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
-    decodeURIComponent(m[1].replace(/\+/g, ' ')),
-  );
+  // The families the sheet loads, from a font service request or from its
+  // own `@font-face` rules (a base that ships its font files); with the
+  // theme's build at hand, the sheet is imported only while the build still
+  // names one of them.
+  const faces = [...text.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(m => ({
+    family: /font-family:\s*['"]?([^'";]+?)['"]?\s*;/.exec(m[1])?.[1],
+    weight: /font-weight:\s*([^;]+);/.exec(m[1])?.[1].trim() ?? '400',
+  }));
+  const families = [
+    ...new Set([
+      ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+        decodeURIComponent(m[1].replace(/\+/g, ' ')),
+      ),
+      ...faces.flatMap(f => (f.family ? [f.family] : [])),
+    ]),
+  ];
   /** @type {string | null} */
   let built = null;
   try {
@@ -514,6 +525,21 @@ export function baseFontsSheet(ctx, data) {
       weights.set(
         family,
         [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  // The weights a face of the sheet's own loads: one weight each; a range
+  // (`100 900`) is a variable face, every weight in it.
+  for (const family of new Set(faces.map(f => f.family))) {
+    if (!family) continue;
+    const own = faces.filter(f => f.family === family).map(f => f.weight);
+    if (own.some(w => /\s/.test(w))) continue;
+    const list = own.map(Number).filter(n => Number.isInteger(n));
+    if (list.length)
+      weights.set(
+        family,
+        [...new Set([...(weights.get(family) ?? []), ...list])].sort(
+          (a, b) => a - b,
+        ),
       );
   }
   return {spec: sheet, families, remote, weights};

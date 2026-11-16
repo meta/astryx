@@ -1125,7 +1125,8 @@ describe('render(): every write stays inside the current folder', () => {
   }, 60_000);
 
   it('handles every kind of stylesheet import', async () => {
-    const themeFonts = fs.readFileSync(path.join(CLI_DIR, '../themes/butter/fonts.css'), 'utf8');
+    // A remote font stylesheet, as a theme's Google Fonts sheet imports one.
+    const themeFonts = fs.readFileSync(path.join(CLI_DIR, '../themes/butter/fonts.google.css'), 'utf8');
     put('kinds/fonts.css', themeFonts);
     put('kinds/legacy.css', '.legacy-btn { padding: 3px; }\n');
     put('kinds/main.css', "@import './fonts.css';\n@import './legacy.css' layer(reset);\n@import './print.css' print;\n@import '@astryxdesign/core/astryx.css';\n.k { color: red; }\n");

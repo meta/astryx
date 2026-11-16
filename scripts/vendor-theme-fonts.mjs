@@ -19,6 +19,7 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 /** The Fontsource release the shipped files come from. */
 const FONTSOURCE_VERSION = '5.3.0';
@@ -27,20 +28,28 @@ const root = path.resolve(import.meta.dirname, '..');
 const themesDir = path.join(root, 'packages/themes');
 
 /**
- * The families and weights a Google Fonts stylesheet asks for.
+ * The families a Google Fonts stylesheet asks for: each with its weights,
+ * and the axes it asks for beyond weight (`opsz`, an optical size), which
+ * only a variable face carries.
  * @param {string} css
- * @returns {Array<{family: string, weights: number[]}>}
+ * @returns {Array<{family: string, weights: number[], axes: string[]}>}
  */
 export function googleFamilies(css) {
   const url = /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/.exec(css)?.[1];
   if (!url) return [];
   return [...new URL(url).searchParams.getAll('family')].map(spec => {
-    const [name, axes = ''] = spec.split(':');
-    const values = axes.split('@')[1] ?? '';
+    const [name, request = ''] = spec.split(':');
+    const [axisList = '', values = ''] = request.split('@');
+    const names = axisList ? axisList.split(',') : ['wght'];
+    const at = names.indexOf('wght');
     const weights = values
-      ? values.split(';').map(v => Number(v.split(',').at(-1)))
+      ? values.split(';').map(v => Number(v.split(',')[at]))
       : [400];
-    return {family: name.replace(/\+/g, ' '), weights};
+    return {
+      family: name.replace(/\+/g, ' '),
+      weights,
+      axes: names.filter(a => a !== 'wght' && a !== 'ital'),
+    };
   });
 }
 
@@ -48,16 +57,19 @@ export function googleFamilies(css) {
 const slugOf = family => family.toLowerCase().replace(/\s+/g, '-');
 
 /**
- * A Fontsource package's files, fetched once into a temp folder.
+ * A Fontsource package's files, fetched once into a temp folder: the static
+ * faces, or with `variable` the variable ones.
  * @param {string} slug
  * @param {string} tmp
+ * @param {boolean} [variable]
  */
-function fontsource(slug, tmp) {
-  const dir = path.join(tmp, slug);
+function fontsource(slug, tmp, variable = false) {
+  const scope = variable ? 'fontsource-variable' : 'fontsource';
+  const dir = path.join(tmp, `${scope}-${slug}`);
   if (!fs.existsSync(dir)) {
     const tgz = execFileSync(
       'npm',
-      ['pack', `@fontsource/${slug}@${FONTSOURCE_VERSION}`, '--silent'],
+      ['pack', `@${scope}/${slug}@${FONTSOURCE_VERSION}`, '--silent'],
       {cwd: tmp, encoding: 'utf8'},
     ).trim();
     fs.mkdirSync(dir);
@@ -93,21 +105,29 @@ function vendorTheme(theme, tmp) {
   fs.rmSync(out, {recursive: true, force: true});
   fs.mkdirSync(out);
   const rules = [];
-  for (const {family, weights} of googleFamilies(
+  for (const {family, weights, axes} of googleFamilies(
     fs.readFileSync(google, 'utf8'),
   )) {
     const slug = slugOf(family);
-    const pkg = fontsource(slug, tmp);
+    // An axis beyond weight (an optical size) lives in the variable face
+    // only: that face is shipped, under the family's own name, so the theme
+    // keeps the axis it asked for.
+    const variable = axes.length > 0;
+    const pkg = fontsource(slug, tmp, variable);
     fs.copyFileSync(
       path.join(pkg, 'LICENSE'),
       path.join(out, `${slug}.LICENSE.txt`),
     );
-    for (const weight of weights) {
+    const sheets = variable
+      ? [`${axes[0]}.css`]
+      : weights.map(weight => `${weight}.css`);
+    for (const sheet of sheets) {
       for (const {file, body} of faces(
-        fs.readFileSync(path.join(pkg, `${weight}.css`), 'utf8'),
+        fs.readFileSync(path.join(pkg, sheet), 'utf8'),
       )) {
         fs.copyFileSync(path.join(pkg, 'files', file), path.join(out, file));
         const local = body
+          .replace(/font-family:[^;]*;/, `font-family: '${family}';`)
           .replace(/src:[^;]*;/, `src: url('./fonts/${file}') format('woff2');`)
           .trim()
           .split('\n')
@@ -136,7 +156,10 @@ function vendorTheme(theme, tmp) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-fonts-'));
   try {
     for (const theme of fs.readdirSync(themesDir)) vendorTheme(theme, tmp);

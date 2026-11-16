@@ -55,7 +55,9 @@ export const CLIENT_NAVIGATION_FILE = path.join(
 const STORE_TEMPLATE = 'theme-showcase';
 const themeFontsFile = path.resolve(
   docsiteDir,
-  '../../packages/themes/neutral/fonts.css',
+  // The hosted previews load the theme's fonts from Google Fonts: its
+  // `fonts.google.css` names that stylesheet.
+  '../../packages/themes/neutral/fonts.google.css',
 );
 const themesStoreModule = path.join(
   docsiteDir,
@@ -117,7 +119,7 @@ export default function Preview() {
 
 /**
  * The stylesheet URL that loads the theme's fonts, read from the theme's
- * `fonts.css`.
+ * `fonts.google.css`.
  * @param {string} fontsCss
  * @returns {string | null}
  */
