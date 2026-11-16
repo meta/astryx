@@ -30,7 +30,6 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Collapsible} from '@astryxdesign/core/Collapsible';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
-import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   CalendarIcon,
   FlagIcon,
@@ -406,7 +405,6 @@ function ItemsCard() {
 // ─── Invoice Card ───────────────────────────────────────────────────────────
 function InvoiceCard() {
   const showToast = useToast();
-  const confirm = useImperativeAlertDialog();
   return (
     <Section>
       <VStack gap={4}>
@@ -418,25 +416,8 @@ function InvoiceCard() {
             </HStack>
           </StackItem>
           <HStack gap={2}>
-            <Button
-              label="Refund"
-              variant="ghost"
-              onClick={() =>
-                confirm.show({
-                  title: 'Refund this order?',
-                  description: "This demo won't refund anything.",
-                  actionLabel: 'Refund',
-                  onAction: () => {
-                    confirm.hide();
-                    // Demo only: replace this toast with the call that performs the action.
-                    showToast({
-                      body: 'Demo: the refund would be issued here',
-                      uniqueID: 'refund',
-                    });
-                  },
-                })
-              }
-            />
+            {/* A refund cannot be undone: wire it only behind a confirm step. */}
+            <Button label="Refund" variant="ghost" />
             <Button
               label="Send Invoice"
               variant="secondary"
@@ -506,7 +487,6 @@ function InvoiceCard() {
             </HStack>
           </MetadataListItem>
         </MetadataList>
-        {confirm.element}
       </VStack>
     </Section>
   );
@@ -606,12 +586,14 @@ function TimelineSection() {
 // ─── Right Panel ────────────────────────────────────────────────────────────
 // Renders as a fixed-width side panel on desktop, and as a plain stacked section
 // on mobile (so it flows below the content instead of squishing beside it).
-function PanelContent() {
+// Under the narrow layout's "Order details" heading its sections sit a level
+// deeper.
+function PanelContent({sectionLevel = 2}: {sectionLevel?: 2 | 3}) {
   return (
     <VStack gap={4}>
       <Collapsible
         trigger={
-          <Heading level={4} accessibilityLevel={2}>
+          <Heading level={4} accessibilityLevel={sectionLevel}>
             Notes
           </Heading>
         }>
@@ -626,7 +608,7 @@ function PanelContent() {
       </Collapsible>
       <Collapsible
         trigger={
-          <Heading level={4} accessibilityLevel={2}>
+          <Heading level={4} accessibilityLevel={sectionLevel}>
             Customer
           </Heading>
         }>
@@ -644,7 +626,7 @@ function PanelContent() {
       </Collapsible>
       <Collapsible
         trigger={
-          <Heading level={4} accessibilityLevel={2}>
+          <Heading level={4} accessibilityLevel={sectionLevel}>
             Fraud Analysis
           </Heading>
         }>
@@ -710,7 +692,7 @@ export default function DetailPage2Template() {
             {isNarrow && (
               <VStack gap={4}>
                 <Heading level={2}>Order details</Heading>
-                <PanelContent />
+                <PanelContent sectionLevel={3} />
               </VStack>
             )}
           </VStack>
