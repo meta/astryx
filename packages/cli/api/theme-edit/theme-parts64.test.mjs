@@ -354,16 +354,19 @@ describe("a part's piece Core has no part for", () => {
   }, 240_000);
 });
 
-describe("a toast's text color refused in one mode", () => {
-  it('keeps the mode on both lines it offers', async ctx => {
+describe("a toast's text token refused in one mode", () => {
+  it('keeps the mode on the line it offers', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('t', {cwd, like: 'neutral'});
     const r = await refusal(() =>
-      themeEditSet('t', 'color', 'red', {cwd, on: 'toast', mode: 'dark'}),
+      themeEditSet('t', '--color-text-primary', 'red', {
+        cwd,
+        on: 'toast',
+        mode: 'dark',
+      }),
     );
     expect(r.run.map(x => x.replace(/^.*? editor /, ''))).toEqual([
-      'set t --color-on-dark red --on toast --mode dark',
-      'set t --color-on-light red --on toast --mode dark',
+      'set t color red --on toast --mode dark',
     ]);
   }, 240_000);
 });

@@ -2,7 +2,7 @@
 
 /**
  * @file Tests for the render helpers: the CSS cut, the embedded source, the
- * HTML reader, and the time limit.
+ * HTML reader, the time limit, and drawing the overlays a page opens.
  */
 
 import * as fs from 'node:fs';
@@ -187,4 +187,46 @@ describe('renderPage time limit', () => {
       removeLinkedFixture(dir);
     }
   }, 30_000);
+});
+
+describe('drawing the overlays a page opens', () => {
+  it('draws each part alone: a part on the document hears no press on another part', async () => {
+    const dir = makeLinkedFixture('astryx-render-alone-', [
+      'react',
+      'react-dom',
+    ]);
+    try {
+      const heard = path.join(dir, 'heard.txt');
+      fs.writeFileSync(heard, '');
+      const file = path.join(dir, 'page.mjs');
+      fs.writeFileSync(
+        file,
+        `import * as React from 'react';
+import * as fs from 'node:fs';
+const h = React.createElement;
+// A part that listens on the document, as an outside press does.
+function Listener() {
+  React.useEffect(() => {
+    const on = () => fs.appendFileSync(${JSON.stringify(heard)}, 'x');
+    document.addEventListener('pointerdown', on);
+    return () => document.removeEventListener('pointerdown', on);
+  }, []);
+  return h('div', null, 'listens');
+}
+// A part with controls the drawing presses.
+const Opener = () => h('div', null, ...[1, 2, 3].map(i => h('button', {key: i, 'aria-haspopup': 'menu', 'aria-expanded': 'false'}, 'open ' + i)));
+export function openLayerElements() {
+  return [h(Listener), h(Opener)];
+}
+export default function Page() {
+  return h('div', null, h(Listener), h(Opener));
+}
+`,
+      );
+      await renderPage(file, {openLayers: true, timeoutMs: 60_000});
+      expect(fs.readFileSync(heard, 'utf8')).toBe('');
+    } finally {
+      removeLinkedFixture(dir);
+    }
+  }, 120_000);
 });

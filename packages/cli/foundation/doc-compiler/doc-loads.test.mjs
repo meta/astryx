@@ -442,7 +442,7 @@ const RUNNERS = {
   },
   'foundation/render/layers.mjs': {
     runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
-    sites: ['g[<computed>] ×3'],
+    sites: ['g[<computed>] ×4'],
   },
   'foundation/render/picture-chrome.mjs': {
     runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',

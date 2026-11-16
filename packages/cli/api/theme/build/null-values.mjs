@@ -14,6 +14,7 @@
  *           writes it as it is), so the build only warns.
  */
 
+import {sourcePlugins} from './source-syntax.mjs';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 
 const WRAPPERS = new Set([
@@ -145,15 +146,17 @@ export function nullThemeValues(theme) {
  * an import, a computed key).
  * @param {string} source
  * @param {string[]} keyPath
+ * @param {string} [file] the source's file name, which says whether it is
+ *   read with JSX (a `.ts` file is not)
  * @returns {number | null}
  */
-export function keyPathLine(source, keyPath) {
+export function keyPathLine(source, keyPath, file) {
   /** @type {any} */
   let ast;
   try {
     ast = parse(source, {
       sourceType: 'unambiguous',
-      plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes'],
+      plugins: sourcePlugins(file),
     });
   } catch {
     return null;

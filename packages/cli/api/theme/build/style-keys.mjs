@@ -25,9 +25,16 @@ import {
 } from '../../../foundation/runtime/css-tree.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 
-/** @param {unknown} value @returns {value is Record<string, any>} */
+/**
+ * A block of keys: a plain object. An array, a Date or a boxed primitive is
+ * a value, which the value judge names.
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
 const isBlock = value =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+  value !== null &&
+  typeof value === 'object' &&
+  Object.prototype.toString.call(value) === '[object Object]';
 
 /** The closer each opener in a selector waits for. */
 const CLOSERS = /** @type {Record<string, string>} */ ({
@@ -168,6 +175,29 @@ const knownPseudoElements = () =>
     ...Object.keys(AFTER_FUNCTIONAL_PSEUDO_ELEMENT),
   ]));
 
+/** @type {Set<string> | null} */
+let knownClasses = null;
+/** The pseudo-class names MDN's selector data lists, lower case. */
+const knownPseudoClasses = () =>
+  (knownClasses ??= new Set(
+    Object.keys(mdnCssSelectors())
+      .filter(k => k.startsWith(':') && !k.startsWith('::'))
+      .map(k => k.slice(1).replace(/\(\)$/, '')),
+  ));
+
+/**
+ * The known pseudo-class one or two edits from a name it is not, or null.
+ * @param {string} name
+ */
+const nearPseudoClass = name =>
+  knownPseudoClasses().has(name.toLowerCase())
+    ? null
+    : ([...knownPseudoClasses()].find(
+        known =>
+          levenshteinDistance(known, name.toLowerCase(), 2, {swaps: true}) <=
+          (name.length > 5 ? 2 : 1),
+      ) ?? null);
+
 /**
  * The known pseudo-element one or two edits from a name, or null.
  * @param {string} name
@@ -273,6 +303,13 @@ function compoundProblem(key, ast) {
       nearPseudoElement(node.name)
     )
       why ??= `${key} names ::${node.name}, a pseudo-element no browser knows, so the browser drops the rule; did you mean ::${nearPseudoElement(node.name)}?`;
+    else if (
+      node.type === 'PseudoClassSelector' &&
+      !node.name.startsWith('-') &&
+      !node.name.includes('\\') &&
+      nearPseudoClass(node.name)
+    )
+      why ??= `${key} names :${node.name}, a pseudo-class no browser knows, so the browser drops the rule; did you mean :${nearPseudoClass(node.name)}?`;
     else if (node.name.includes('\\'))
       why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
     else if (
