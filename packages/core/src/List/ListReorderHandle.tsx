@@ -7,8 +7,8 @@
  * @input The List's reorder session (List/listReorderEngine.tsx, through
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
- * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
- *   `UNREAD_HANDLE_NAME`. The handle starts or ends a reorderable List row,
+ * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle`,
+ *   `reorderGutterStyle`, `reorderRoomStyle` and `UNREAD_HANDLE_NAME`. The handle starts or ends a reorderable List row,
  *   as the reorderable's `handle` option places it. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
  *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
@@ -74,9 +74,15 @@ import type {IconVariant} from '../Icon/index';
 import {useComponentIcon} from '../Icon/useIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
-import {ListContext} from './ListContext';
+import {
+  ListContext,
+  type ListContextValue,
+  type ListDensity,
+  type ListEdge,
+} from './ListContext';
 import type {
   ListReorderHandleProps,
+  ListReorderOptions,
   ListReorderRowNameProps,
 } from './listReorderContext';
 import type {
@@ -231,7 +237,7 @@ const styles = stylex.create({
 });
 
 /**
- * The style of a row that starts with a handle, which ListItem applies. Its
+ * The style of a row that has a handle, which ListItem applies. Its
  * ring on focus within stays off for the handle, which rings itself. The row
  * is the container that reveals its handle.
  */
@@ -273,6 +279,197 @@ const listStyles = stylex.create({
 /** The style of a reorderable list (List applies it): its insertion line. */
 export const reorderListStyle = [listStyles.list, reorderLineStyles.list];
 
+// The room a list keeps for handles that hang outside its rows' text, which
+// List applies through the session. A padded row's own inset holds part of
+// that room (Item's `--_item-inset-inline`).
+const PADDED_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-2']})`;
+const SPACIOUS_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-3']})`;
+const FLUSH_ROOM = `${REORDER_HANDLE_HANG}px`;
+// As much of a room as the container's padding on that side holds, or all
+// of it outside a container that sets its padding.
+const reachOf = (room: string, side: 'start' | 'end') =>
+  `min(${room}, var(--container-padding-inline-${side}, ${room}))`;
+
+// The list pads the room on the handles' side, and reaches out into its
+// container's padding by as much of it as the padding holds. So its inline
+// clip keeps the handles, a clipping container never cuts them, and the rows
+// move in only by the room the padding lacks. Under a coarse pointer the
+// handles sit in their rows.
+const gutterStyles = stylex.create({
+  paddedAtStart: {
+    marginInlineStart: {
+      default: `calc(-1 * ${reachOf(PADDED_ROOM, 'start')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineStart: {default: PADDED_ROOM, '@media (pointer: coarse)': 0},
+  },
+  spaciousAtStart: {
+    marginInlineStart: {
+      default: `calc(-1 * ${reachOf(SPACIOUS_ROOM, 'start')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineStart: {
+      default: SPACIOUS_ROOM,
+      '@media (pointer: coarse)': 0,
+    },
+  },
+  flushAtStart: {
+    marginInlineStart: {
+      default: `calc(-1 * ${reachOf(FLUSH_ROOM, 'start')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineStart: {default: FLUSH_ROOM, '@media (pointer: coarse)': 0},
+  },
+  paddedAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${reachOf(PADDED_ROOM, 'end')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {default: PADDED_ROOM, '@media (pointer: coarse)': 0},
+  },
+  spaciousAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${reachOf(SPACIOUS_ROOM, 'end')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {default: SPACIOUS_ROOM, '@media (pointer: coarse)': 0},
+  },
+  flushAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${reachOf(FLUSH_ROOM, 'end')})`,
+      '@media (pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {default: FLUSH_ROOM, '@media (pointer: coarse)': 0},
+  },
+});
+
+/**
+ * The style of a reorderable list (List applies it): the room it keeps on
+ * its handles' side where they hang outside its rows' text. Null where the
+ * handles show in their rows: they always show, or the rows reach the
+ * container's padding edge (`outset`, `bleed`).
+ */
+export function reorderGutterStyle(
+  handle: ListReorderOptions['handle'],
+  edge: ListEdge,
+  density: ListDensity,
+): StyleXStyles | null {
+  if (handle?.visibility !== 'hover' || edge === 'outset' || edge === 'bleed') {
+    return null;
+  }
+  const room =
+    edge === 'flush' ? 'flush' : density === 'spacious' ? 'spacious' : 'padded';
+  if (handle.placement === 'start') {
+    return room === 'flush'
+      ? gutterStyles.flushAtStart
+      : room === 'spacious'
+        ? gutterStyles.spaciousAtStart
+        : gutterStyles.paddedAtStart;
+  }
+  return room === 'flush'
+    ? gutterStyles.flushAtEnd
+    : room === 'spacious'
+      ? gutterStyles.spaciousAtEnd
+      : gutterStyles.paddedAtEnd;
+}
+
+// A row's inline padding before a handle's room: its inset, or for `bleed`
+// the container's padding when that is larger (ListItem's bleed edge).
+const INSET = 'var(--_item-inset-inline)';
+const BLEED_START =
+  'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
+const BLEED_END =
+  'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
+// A handle's room in its row: its side and the row's gap after it.
+const IN_ROW_ROOM = `${HANDLE_SIZE}px + ${spacingVars['--spacing-2']}`;
+const COARSE = '@media (pointer: coarse)';
+
+// The room a row that stays put keeps where its neighbours' handles sit in
+// their rows: always, or under a coarse pointer when they show on hover.
+// After a list marker, the room goes after the marker (Item's
+// `--_item-marker-room`), where those handles sit whether or not they show.
+const roomStyles = stylex.create({
+  afterMarker: {'--_item-marker-room': `calc(${IN_ROW_ROOM})`},
+  shownAtStart: {paddingInlineStart: `calc(${INSET} + ${IN_ROW_ROOM})`},
+  shownAtEnd: {paddingInlineEnd: `calc(${INSET} + ${IN_ROW_ROOM})`},
+  coarseAtStart: {
+    paddingInlineStart: {
+      default: INSET,
+      [COARSE]: `calc(${INSET} + ${IN_ROW_ROOM})`,
+    },
+  },
+  coarseAtEnd: {
+    paddingInlineEnd: {
+      default: INSET,
+      [COARSE]: `calc(${INSET} + ${IN_ROW_ROOM})`,
+    },
+  },
+  bleedShownAtStart: {
+    paddingInlineStart: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
+  },
+  bleedShownAtEnd: {paddingInlineEnd: `calc(${BLEED_END} + ${IN_ROW_ROOM})`},
+  bleedCoarseAtStart: {
+    paddingInlineStart: {
+      default: BLEED_START,
+      [COARSE]: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
+    },
+  },
+  bleedCoarseAtEnd: {
+    paddingInlineEnd: {
+      default: BLEED_END,
+      [COARSE]: `calc(${BLEED_END} + ${IN_ROW_ROOM})`,
+    },
+  },
+});
+
+/**
+ * Where the handles of a List's rows sit and when they show: its
+ * reorderable's `handle`, read with the list's marker and edge.
+ */
+function placementIn(list: ListContextValue | null) {
+  const handle = list?.reorder?.options.handle;
+  const isAtEnd = handle?.placement !== 'start';
+  // A handle cannot hang after a list marker, which it would cover, or in a
+  // row that reaches the container's padding edge, where nothing keeps it.
+  const isAfterMarker = !isAtEnd && (list?.listStyle ?? 'none') !== 'none';
+  const isInRow =
+    isAfterMarker || list?.edge === 'outset' || list?.edge === 'bleed';
+  // Shown handles are found without hovering a row, so a List shows them
+  // unless the reorderable hides them.
+  const isAlwaysVisible = (handle?.visibility ?? 'always') === 'always';
+  return {isAtEnd, isAfterMarker, isInRow, isAlwaysVisible};
+}
+
+/**
+ * The style of a reorderable List row without a handle (ListItem applies
+ * it): the room its neighbours' handles take, so every label lines up.
+ */
+export function reorderRoomStyle(list: ListContextValue): StyleXStyles {
+  const {isAtEnd, isAfterMarker, isInRow, isAlwaysVisible} = placementIn(list);
+  // Whether the handles take a place in their rows for every pointer.
+  const areHandlesInRow = isAlwaysVisible || isInRow;
+  const edge = isAtEnd ? 'end' : 'start';
+  const isBleed = list.edge === 'bleed';
+  if (isAfterMarker) {
+    // A custom property alone is not a StyleXStyles value; the array is.
+    return [roomStyles.afterMarker] as StyleXStyles;
+  }
+  if (isBleed) {
+    if (edge === 'end') {
+      return areHandlesInRow
+        ? roomStyles.bleedShownAtEnd
+        : roomStyles.bleedCoarseAtEnd;
+    }
+    return areHandlesInRow
+      ? roomStyles.bleedShownAtStart
+      : roomStyles.bleedCoarseAtStart;
+  }
+  if (edge === 'end') {
+    return areHandlesInRow ? roomStyles.shownAtEnd : roomStyles.coarseAtEnd;
+  }
+  return areHandlesInRow ? roomStyles.shownAtStart : roomStyles.coarseAtStart;
+}
+
 /** The text the row's label element shows, collapsed; empty without one. */
 function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
   const element =
@@ -293,9 +490,9 @@ export function ListReorderHandle({
   rowLabel,
   rowLabelledBy,
   rowAlign,
-  isInRow = false,
-  isAlwaysVisible = false,
-  placement = 'start',
+  isInRow: isInRowProp,
+  isAlwaysVisible: isAlwaysVisibleProp,
+  placement,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
@@ -304,9 +501,16 @@ export function ListReorderHandle({
     undefined,
     GRIP_FALLBACK,
   );
-  const controller = use(ListContext)?.reorder?.session as
+  const list = use(ListContext);
+  const controller = list?.reorder?.session as
     ListReorderController | undefined;
-  const isAtEnd = placement === 'end';
+  // A List row's handle reads its place from the list; a collection that
+  // renders the handle itself passes it.
+  const fromList = placementIn(list);
+  const isAtEnd = placement == null ? fromList.isAtEnd : placement === 'end';
+  const isInRow = isInRowProp ?? (list == null ? false : fromList.isInRow);
+  const isAlwaysVisible =
+    isAlwaysVisibleProp ?? (list == null ? false : fromList.isAlwaysVisible);
   // The row's label element, when the handle sits in an Item's slot.
   const labelID = use(ItemLabelContext);
   const verbID = useId();

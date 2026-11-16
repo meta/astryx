@@ -239,8 +239,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
   handle is the one element reordering adds to a row (`spec:AST-103` FR5),
-  at the row edge its reorderable's `handle.placement` names: its leading
-  edge, before the row's start content, by default, or its trailing edge.
+  at the row edge its reorderable's `handle.placement` names: its trailing
+  edge by default, or its leading edge, before the row's start content.
   The handle always shows and takes its place in the row, and a row that
   stays put keeps that room, unless `handle.visibility` is `'hover'`.
   Then, where the primary pointer is fine, the handle shows while its row is
@@ -252,7 +252,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   a coarse pointer the handle always shows and takes its place in the row.
   It also takes its place in the row after a list marker at the leading
   edge, and under `outset` and `bleed`, whose rows reach the host's padding
-  edge. Hidden, it keeps its tab stop. The reorder
+  edge. Hidden, it keeps its tab stop. The handle's room styles, for the
+  list and for a row that stays put, come with the reorderable object's
+  session, so a List without `reorderable` loads none of them
+  (`architecture:component-import-boundaries` INV7). The reorder
   controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.

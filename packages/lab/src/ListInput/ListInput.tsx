@@ -470,8 +470,8 @@ function joinIDs(...ids: Array<string | undefined>): string | undefined {
   return resolved.length > 0 ? resolved.join(' ') : undefined;
 }
 
-// The reorder handle, a toggle button, starts the first cell. Field focus
-// skips it.
+// The reorder handle, a toggle button, can start the first cell. Field
+// focus skips it.
 const focusableFieldSelector =
   '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button, [data-list-input-cell] [tabindex]:not([tabindex="-1"])';
 
@@ -734,7 +734,7 @@ export function ListInput<T>({
   // The owner's `handle`: the record edge the handle sits at, and when it
   // shows. ListInput's handles show on hover or focus unless the owner's
   // object says otherwise: a record's controls stay quiet until used.
-  const isHandleAtEnd = reorderScope?.options.handle?.placement === 'end';
+  const isHandleAtEnd = reorderScope?.options.handle?.placement !== 'start';
   const isHandleAlwaysVisible =
     (reorderScope?.options.handle?.visibility ?? 'hover') === 'always';
   const showStartHandle = showReorderHandle && !isHandleAtEnd;

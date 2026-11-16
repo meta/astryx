@@ -254,10 +254,10 @@ describe('TransferList', () => {
       const rowButtons = within(nameRow as HTMLLIElement).getAllByRole(
         'button',
       );
-      // List's reorder handle at the row's start, then the row's action.
-      expect(rowButtons[0]).toHaveAccessibleName('Reorder Name');
-      expect(rowButtons[0]).toHaveAttribute('data-astryx-list-reorder');
-      expect(rowButtons[1]).toHaveAccessibleName('Remove Name');
+      // The row's action, then List's reorder handle at the row's end.
+      expect(rowButtons[0]).toHaveAccessibleName('Remove Name');
+      expect(rowButtons[1]).toHaveAccessibleName('Reorder Name');
+      expect(rowButtons[1]).toHaveAttribute('data-astryx-list-reorder');
     });
 
     it('keeps support metadata out of rows while retaining search and groups', async () => {
@@ -638,7 +638,7 @@ describe('TransferList', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it("puts the handle after Remove when the owner's object places handles at the end", () => {
+    it("puts the handle before Remove when the owner's object places handles at the start", () => {
       render(
         <TransferList
           label="Columns"
@@ -647,15 +647,15 @@ describe('TransferList', () => {
           onChange={() => {}}
           reorderable={createReorderable<string>({
             onReorder: () => {},
-            handle: {placement: 'end'},
+            handle: {placement: 'start'},
           })}
         />,
       );
       const row = screen.getByText('Name').closest('li') as HTMLElement;
       const buttons = within(row).getAllByRole('button');
       expect(buttons).toHaveLength(2);
-      expect(buttons[0]).toHaveAccessibleName('Remove Name');
-      expect(buttons[1]).toHaveAccessibleName('Reorder Name');
+      expect(buttons[0]).toHaveAccessibleName('Reorder Name');
+      expect(buttons[1]).toHaveAccessibleName('Remove Name');
     });
 
     it("applies an owner object's moves the way it reports them, a value without an option keeping its place among the hidden", async () => {

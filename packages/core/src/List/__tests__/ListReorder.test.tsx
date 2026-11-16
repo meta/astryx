@@ -412,7 +412,7 @@ describe('List reorderable', () => {
     rerender(rows(createReorderable({onReorder: () => {}})));
     expect(outsideHandle(inbox, handleOf('Inbox'))).toBe(before[0] + 1);
     expect(outsideHandle(sent, handleOf('Sent'))).toBe(before[1] + 1);
-    // The handle is the row's own child, before the label.
+    // The handle is the row's own child, after the label.
     expect(handleOf('Inbox').parentElement).toBe(inbox);
     expect(handleOf('Sent').parentElement).toBe(sent);
   });
@@ -476,23 +476,49 @@ describe('List reorderable', () => {
     expect(handleOf('Inbox')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it("puts the handle at the row's end with handle.placement 'end'", () => {
+  it.each([undefined, 'end' as const])(
+    "puts the handle at the row's end, after its end content, with handle.placement %s",
+    placement => {
+      render(
+        <List
+          reorderable={createReorderable({
+            onReorder: () => {},
+            handle: {placement},
+          })}>
+          <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+          <ListItem itemKey="sent" label="Sent" />
+        </List>,
+      );
+      const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+      const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+      // The row's own last child, after its end content.
+      expect(inbox.lastElementChild).toBe(handleOf('Inbox'));
+      expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+      expect(sent.lastElementChild).toBe(handleOf('Sent'));
+    },
+  );
+
+  it("puts the handle at the row's start, before its start content, with handle.placement 'start'", () => {
     render(
       <List
         reorderable={createReorderable({
           onReorder: () => {},
-          handle: {placement: 'end'},
+          handle: {placement: 'start'},
         })}>
-        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem
+          itemKey="inbox"
+          label="Inbox"
+          startContent={<span>icon</span>}
+        />
         <ListItem itemKey="sent" label="Sent" />
       </List>,
     );
     const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
     const sent = screen.getByText('Sent').closest('li') as HTMLElement;
-    // The row's own last child, after its end content.
-    expect(inbox.lastElementChild).toBe(handleOf('Inbox'));
-    expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
-    expect(sent.lastElementChild).toBe(handleOf('Sent'));
+    // The row's own first child, before its start content.
+    expect(inbox.firstElementChild).toBe(handleOf('Inbox'));
+    expect(handleOf('Inbox').nextElementSibling).toHaveTextContent('icon');
+    expect(sent.firstElementChild).toBe(handleOf('Sent'));
   });
 
   it("always shows the handle by default; with handle.visibility 'hover' it fades with its row", () => {

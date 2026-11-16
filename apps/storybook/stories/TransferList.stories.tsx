@@ -232,7 +232,7 @@ type ReorderHandleArgs = {
 
 /** The reorderable's `handle` option: the handle's edge and visibility. */
 export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
-  args: {visibility: 'always', placement: 'start'},
+  args: {visibility: 'always', placement: 'end'},
   argTypes: {
     visibility: {control: 'inline-radio', options: ['always', 'hover']},
     placement: {control: 'inline-radio', options: ['start', 'end']},

@@ -6,7 +6,7 @@
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
  *   the shared press overlays and the compositor press layer, and a row's
- *   control a row adds at one edge of the slots (ItemEdgeControlContext)
+ *   control a row adds at one edge of the slots (ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -58,7 +58,7 @@ import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
 import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
-import {ItemEdgeControlContext} from './ItemEdgeControlContext';
+import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -872,8 +872,8 @@ export function Item({
   };
 
   // A control a row adds before or after the slots, unwrapped
-  // (ItemEdgeControlContext): a List row's reorder handle.
-  const edgeControl = use(ItemEdgeControlContext);
+  // (ItemTrailingContext): a List row's reorder handle.
+  const edgeControl = use(ItemTrailingContext);
   const leading = edgeControl?.edge === 'start' ? edgeControl.control : null;
   const trailing = edgeControl?.edge === 'end' ? edgeControl.control : null;
 
@@ -1081,7 +1081,7 @@ export function Item({
       )}
       role={role}
       onClick={rootOnClick}>
-      <ItemEdgeControlContext value={null}>
+      <ItemTrailingContext value={null}>
         <ItemDescriptionContext
           value={hasRenderableDescription ? descriptionID : null}>
           <ItemLabelContext value={publishedLabelID}>
@@ -1103,7 +1103,7 @@ export function Item({
             </ItemLabelNeededContext>
           </ItemLabelContext>
         </ItemDescriptionContext>
-      </ItemEdgeControlContext>
+      </ItemTrailingContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one
         // the row had before the split. Suspense and lazy add no element, and

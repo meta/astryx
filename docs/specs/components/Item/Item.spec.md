@@ -85,9 +85,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Reflecting the resolved alignment on the `item` theme target.
 - Reflecting highlighted, selected, and disabled state on the `item` theme target.
 - The forwarding rule for rows that compose Item and expose `align`.
-- The edge control seam, `ItemEdgeControlContext`, internal to Core: a row
+- The edge control seam, `ItemTrailingContext`, internal to Core: a row
   component that composes Item passes one control through it, with the edge
-  it sits at. Item renders that control before its slots or after them,
+  it sits at. Item renders that control after its slots or before them,
   unwrapped, so the control adds one element to the row. One seam serves
   both edges, so a row adds one provider and a deeply nested list keeps its
   render depth. Item resets the seam for what it renders, so a nested Item

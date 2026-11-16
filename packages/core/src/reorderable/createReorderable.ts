@@ -60,7 +60,7 @@ export interface ReorderHandleOptions {
   /**
    * The edge of each item that the handle sits at: `'start'`, before the
    * item's content, or `'end'`, after it.
-   * @default 'start'
+   * @default 'end'
    */
   readonly placement?: 'start' | 'end';
 }
@@ -85,7 +85,7 @@ export interface ReorderableOptions<
   isReorderable?: (key: TKey) => boolean;
   /**
    * How each item's handle shows: whether it always shows, and the edge it
-   * sits at. Without it, the handle starts each item, and the collection
+   * sits at. Without it, the handle ends each item, and the collection
    * decides whether it always shows.
    */
   handle?: ReorderHandleOptions;

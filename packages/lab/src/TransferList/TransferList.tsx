@@ -654,7 +654,7 @@ export function TransferList<T extends string = string>({
     (optionValue: T) => owner?.isReorderable?.(optionValue) ?? true,
     [owner],
   );
-  const isHandleAtEnd = owner?.handle?.placement === 'end';
+  const isHandleAtEnd = owner?.handle?.placement !== 'start';
   // An ordering list is read for its order, so its handles show by default.
   const isHandleAlwaysVisible =
     (owner?.handle?.visibility ?? 'always') === 'always';

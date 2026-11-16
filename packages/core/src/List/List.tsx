@@ -92,8 +92,8 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle, at its start
-   * unless the object's `handle.placement` is `'end'`. It always shows, in a
+   * Each ListItem with an `itemKey` gets a reorder handle, at its end
+   * unless the object's `handle.placement` is `'start'`. It always shows, in a
    * place of its own in the row. With `handle.visibility` `'hover'`, it
    * shows while the row is hovered or holds the focus. It then hangs 30px
    * outside the row's text, so the text keeps its place. The list takes that
@@ -196,24 +196,6 @@ export interface ListProps extends BaseProps<
 // Styles
 // =============================================================================
 
-/**
- * The room a hanging handle needs before the text of a row with no inline
- * inset, px. SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG.
- */
-const REORDER_GUTTER = 30;
-/** A padded row's own inset holds part of that room. SYNC: Item/Item.tsx. */
-const PADDED_ROOM = `calc(${REORDER_GUTTER}px - ${spacingVars['--spacing-2']})`;
-const SPACIOUS_ROOM = `calc(${REORDER_GUTTER}px - ${spacingVars['--spacing-3']})`;
-const FLUSH_ROOM = `${REORDER_GUTTER}px`;
-// As much of each room as the container's padding holds, or all of it
-// outside a container that sets its padding.
-const PADDED_REACH = `min(${PADDED_ROOM}, var(--container-padding-inline-start, ${PADDED_ROOM}))`;
-const SPACIOUS_REACH = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-start, ${SPACIOUS_ROOM}))`;
-const FLUSH_REACH = `min(${FLUSH_ROOM}, var(--container-padding-inline-start, ${FLUSH_ROOM}))`;
-const PADDED_REACH_END = `min(${PADDED_ROOM}, var(--container-padding-inline-end, ${PADDED_ROOM}))`;
-const SPACIOUS_REACH_END = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-end, ${SPACIOUS_ROOM}))`;
-const FLUSH_REACH_END = `min(${FLUSH_ROOM}, var(--container-padding-inline-end, ${FLUSH_ROOM}))`;
-
 const styles = stylex.create({
   root: {
     display: 'flex',
@@ -236,73 +218,6 @@ const styles = stylex.create({
     // They stay below a page-level sticky header at the same z-index. With a
     // mouse nothing rises, so the list keeps its stacking.
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
-  },
-  // Where a reorderable list's handles show only on hover or focus, they hang
-  // outside their rows' text. The list pads that room on the handles' side,
-  // and reaches out into its container's padding by as much of it as the
-  // padding holds. So its inline clip keeps the handles, a clipping container
-  // never cuts them, and the rows move in only by the room the padding lacks.
-  // Outside a container that sets its padding, the list reaches the whole
-  // room. Under a coarse pointer the handles sit in their rows.
-  reorderGutterPadded: {
-    marginInlineStart: {
-      default: `calc(-1 * ${PADDED_REACH})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineStart: {
-      default: PADDED_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
-  },
-  reorderGutterSpacious: {
-    marginInlineStart: {
-      default: `calc(-1 * ${SPACIOUS_REACH})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineStart: {
-      default: SPACIOUS_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
-  },
-  reorderGutterFlush: {
-    marginInlineStart: {
-      default: `calc(-1 * ${FLUSH_REACH})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineStart: {
-      default: FLUSH_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
-  },
-  reorderGutterPaddedAtEnd: {
-    marginInlineEnd: {
-      default: `calc(-1 * ${PADDED_REACH_END})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineEnd: {
-      default: PADDED_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
-  },
-  reorderGutterSpaciousAtEnd: {
-    marginInlineEnd: {
-      default: `calc(-1 * ${SPACIOUS_REACH_END})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineEnd: {
-      default: SPACIOUS_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
-  },
-  reorderGutterFlushAtEnd: {
-    marginInlineEnd: {
-      default: `calc(-1 * ${FLUSH_REACH_END})`,
-      '@media (pointer: coarse)': 0,
-    },
-    paddingInlineEnd: {
-      default: FLUSH_ROOM,
-      '@media (pointer: coarse)': 0,
-    },
   },
   // A list under an `animatedLayout` handle isolates for every pointer. A row
   // that slides across others rides above them with a mouse too, and it must
@@ -384,20 +299,6 @@ const styles = stylex.create({
     marginBottom: spacingVars['--spacing-2'],
   },
 });
-
-/** The room a list keeps for handles that hang at its rows' start. */
-const reorderGutters = {
-  padded: styles.reorderGutterPadded,
-  spacious: styles.reorderGutterSpacious,
-  flush: styles.reorderGutterFlush,
-};
-
-/** The room a list keeps for handles that hang at its rows' end. */
-const reorderGuttersAtEnd = {
-  padded: styles.reorderGutterPaddedAtEnd,
-  spacious: styles.reorderGutterSpaciousAtEnd,
-  flush: styles.reorderGutterFlushAtEnd,
-};
 
 const dynamicStyles = stylex.create({
   counterStart: (value: number) => ({
@@ -490,18 +391,10 @@ export function List({
     edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
   // Handles that show only on hover or focus hang outside their rows, and
-  // the list keeps their room. Rows that reach the container's padding keep
-  // their handles in the rows (ListItem), so the list keeps none.
-  const gutterRoom =
-    edge === 'flush' ? 'flush' : density === 'spacious' ? 'spacious' : 'padded';
+  // the list keeps their room. The session decides it, so a list without one
+  // loads none of the handles' placement logic or styles.
   const reorderGutter =
-    reorderSession != null &&
-    reorderOptions?.handle?.visibility === 'hover' &&
-    !reachesContainerPadding
-      ? (reorderOptions.handle.placement === 'end'
-          ? reorderGuttersAtEnd
-          : reorderGutters)[gutterRoom]
-      : null;
+    reorderSession?.gutterStyle(reorderOptions?.handle, edge, density) ?? null;
 
   const contextValue = useMemo(
     () => ({

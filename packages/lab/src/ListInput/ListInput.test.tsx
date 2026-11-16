@@ -817,7 +817,7 @@ describe('ListInput', () => {
     ).not.toBeInTheDocument();
   });
 
-  it("starts each record with core List's reorder handle, revealed on hover or focus", () => {
+  it("ends each record with core List's reorder handle, after Remove, revealed on hover or focus", () => {
     // A fine pointer (jsdom models a mouse): hover reveals the handle.
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const reveal = revealClasses();
@@ -826,12 +826,10 @@ describe('ListInput', () => {
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     const remove = screen.getByRole('button', {name: 'Remove guest 1'});
 
-    // The handle is the record's first control, beside its first field.
-    expect(within(row!).getAllByRole('button')).toEqual([handle, remove]);
+    // The handle is the record's last control, in Remove's cell.
+    expect(within(row!).getAllByRole('button')).toEqual([remove, handle]);
     expect(handle).toHaveAttribute('data-astryx-list-reorder');
-    expect(
-      row!.querySelector('[data-list-input-cell="0"]')?.contains(handle),
-    ).toBe(true);
+    expect(handle.parentElement).toBe(remove.parentElement);
 
     // The row is the reveal container. The handle fades with opacity alone,
     // so at rest it stays mounted, named, and focusable.
@@ -842,19 +840,21 @@ describe('ListInput', () => {
     expect(handle).not.toHaveAttribute('tabindex', '-1');
   });
 
-  it("puts the handle after Remove, in Remove's cell, when the owner's object places handles at the end", () => {
+  it("puts the handle in the first cell, before the first field, when the owner's object places handles at the start", () => {
     const reveal = revealClasses();
     const {container} = renderListInput({
       reorderable: createReorderable({
         onReorder: () => {},
-        handle: {placement: 'end'},
+        handle: {placement: 'start'},
       }),
     });
     const row = container.querySelector<HTMLElement>('[data-list-input-row]');
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     const remove = screen.getByRole('button', {name: 'Remove guest 1'});
-    expect(within(row!).getAllByRole('button')).toEqual([remove, handle]);
-    expect(handle.parentElement).toBe(remove.parentElement);
+    expect(within(row!).getAllByRole('button')).toEqual([handle, remove]);
+    expect(
+      row!.querySelector('[data-list-input-cell="0"]')?.contains(handle),
+    ).toBe(true);
     // ListInput's handles fade with their record unless the object says
     // otherwise.
     expect(classTokens(handle)).toEqual(expect.arrayContaining(reveal.fade));

@@ -991,7 +991,7 @@ type ReorderHandleArgs = {
 };
 
 export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
-  args: {visibility: 'always', placement: 'start'},
+  args: {visibility: 'always', placement: 'end'},
   argTypes: {
     visibility: {control: 'inline-radio', options: ['always', 'hover']},
     placement: {control: 'inline-radio', options: ['start', 'end']},
@@ -1008,7 +1008,7 @@ export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
       description: {
         story:
           "`createReorderable`'s `handle` option. `placement` puts each " +
-          "handle at its row's start or end. List's handles always show, " +
+          "handle at its row's end (the default) or start. List's handles always show, " +
           "each in a place of its own. With `visibility: 'hover'`, the " +
           'handle shows while its row is hovered or holds the focus, and ' +
           "hangs outside the row's content, so the content keeps its place; " +
@@ -1050,7 +1050,7 @@ export const ReorderInCard: Story = {
             <ReorderDemo
               initial={['Inbox', 'Sent', 'Drafts']}
               edge={edge}
-              handle={{visibility: 'hover'}}
+              handle={{visibility: 'hover', placement: 'start'}}
             />
           </VStack>
         </Card>
@@ -1062,7 +1062,7 @@ export const ReorderInCard: Story = {
             initial={['Inbox', 'Sent', 'Drafts']}
             pinned={['Sent']}
             listStyle="decimal"
-            handle={{visibility: 'hover'}}
+            handle={{visibility: 'hover', placement: 'start'}}
           />
         </VStack>
       </Card>
@@ -1072,7 +1072,7 @@ export const ReorderInCard: Story = {
     docs: {
       description: {
         story:
-          "With `handle.visibility: 'hover'`, a handle shows on hover and hangs before its row's text. The " +
+          "With `handle: {visibility: 'hover', placement: 'start'}`, a handle shows on hover and hangs before its row's text. The " +
           "list takes that room from the card's padding, and its rows move " +
           'in by the room the padding lacks, so the card never cuts a ' +
           "handle. Under outset and bleed, whose rows reach the card's " +

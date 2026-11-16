@@ -95,7 +95,7 @@ const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
 test.describe('with a mouse', () => {
   test.use({hasTouch: false, isMobile: false});
 
-  test('by default the handle always shows in its row, and a row that stays put keeps its room', async ({
+  test('at the start, a handle that always shows starts its row, inside it, and a row that stays put keeps its room', async ({
     page,
   }) => {
     await openOptions(page, storybook(), true, 'start');
@@ -119,7 +119,7 @@ test.describe('with a mouse', () => {
     expect(spread(rows.map(row => row.labelLeft)), detail).toBeLessThan(1);
   });
 
-  test('at the end, a handle that always shows ends its row, inside it', async ({
+  test('at the end (the default), a handle that always shows ends its row, inside it', async ({
     page,
   }) => {
     await openOptions(page, storybook(), true, 'end');

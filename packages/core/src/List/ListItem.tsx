@@ -21,7 +21,8 @@
  * @position Core implementation. Consumed by List, index.ts, tested by List.test.tsx
  *
  * In a reorderable List (`List reorderable`), each row with an `itemKey`
- * that the reorderable object lets move starts with its handle. The handle
+ * that the reorderable object lets move has its handle, at the row's end
+ * unless the object's `handle.placement` is `'start'`. The handle
  * comes through ListContext's `reorder` with the rest of the reorder
  * machinery (List/listReorderContext.ts). A row without one keeps its place.
  *
@@ -55,9 +56,9 @@ import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {
-  ItemEdgeControlContext,
+  ItemTrailingContext,
   type ItemEdgeControl,
-} from '../Item/ItemEdgeControlContext';
+} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -185,51 +186,6 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 // Styles
 // =============================================================================
-
-// A row's inline padding before a handle's room: its inset, or for `bleed`
-// the container's padding when that is larger (styles.edgeBleed).
-const INSET = 'var(--_item-inset-inline)';
-const BLEED_START =
-  'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
-const BLEED_END =
-  'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
-// The same padding with a handle's room: its side and the row's gap after it.
-// SYNC: List/ListReorderHandle.tsx HANDLE_SIZE.
-const INSET_ROOM = `calc(${INSET} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_START_ROOM = `calc(${BLEED_START} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_END_ROOM = `calc(${BLEED_END} + 28px + ${spacingVars['--spacing-2']})`;
-const COARSE = '@media (pointer: coarse)';
-
-// After a list marker, a row that stays put keeps its neighbours' handle
-// room after the marker (Item's `--_item-marker-room`). Their handles take
-// their place there whether or not they show.
-const markerRoomStyles = stylex.create({
-  room: {
-    '--_item-marker-room': `calc(28px + ${spacingVars['--spacing-2']})`,
-  },
-});
-
-// The room a row that stays put keeps where its neighbours' handles sit in
-// their rows. They sit there always, or under a coarse pointer when they
-// show on hover.
-const reorderRoomStyles = stylex.create({
-  shownAtStart: {paddingInlineStart: INSET_ROOM},
-  shownAtEnd: {paddingInlineEnd: INSET_ROOM},
-  coarseAtStart: {
-    paddingInlineStart: {default: INSET, [COARSE]: INSET_ROOM},
-  },
-  coarseAtEnd: {
-    paddingInlineEnd: {default: INSET, [COARSE]: INSET_ROOM},
-  },
-  bleedShownAtStart: {paddingInlineStart: BLEED_START_ROOM},
-  bleedShownAtEnd: {paddingInlineEnd: BLEED_END_ROOM},
-  bleedCoarseAtStart: {
-    paddingInlineStart: {default: BLEED_START, [COARSE]: BLEED_START_ROOM},
-  },
-  bleedCoarseAtEnd: {
-    paddingInlineEnd: {default: BLEED_END, [COARSE]: BLEED_END_ROOM},
-  },
-});
 
 const styles = stylex.create({
   numberColumns: {
@@ -529,23 +485,14 @@ export function ListItem({
     itemKey != null &&
     (reorder.options.isReorderable?.(itemKey) ?? true);
   // The handle is the one element reordering adds to a row. It starts or
-  // ends the row's content, unwrapped (ItemEdgeControlContext): a slot of
+  // ends the row's content, unwrapped (ItemTrailingContext): a slot of
   // its own would be a second element.
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
   const rowAlign = hasHandle ? (align ?? 'center') : undefined;
-  // Shown handles are found without hovering a row, so List shows them
-  // unless the reorderable hides them.
-  const isHandleAlwaysVisible =
-    (reorder?.options.handle?.visibility ?? 'always') === 'always';
-  const isHandleAtEnd = reorder?.options.handle?.placement === 'end';
-  const isAfterMarker = !isHandleAtEnd && (ctx?.listStyle ?? 'none') !== 'none';
-  // A handle cannot hang after a list marker, which it would cover, or in a
-  // row that reaches the container's padding edge, where nothing keeps it.
-  const handleStaysInRow =
-    isAfterMarker || ctx?.edge === 'outset' || ctx?.edge === 'bleed';
-  // Whether the handles take a place in their rows for every pointer.
-  const areHandlesInRow = isHandleAlwaysVisible || handleStaysInRow;
+  // The handle ends the row unless the reorderable places it at the start.
+  // The handle reads the rest of its placement from the list.
+  const isHandleAtStart = reorder?.options.handle?.placement === 'start';
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -557,18 +504,12 @@ export function ListItem({
           rowLabel={rowLabel}
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
-          isInRow={handleStaysInRow}
-          isAlwaysVisible={isHandleAlwaysVisible}
-          placement={isHandleAtEnd ? 'end' : 'start'}
         />
       ) : null,
     [
       Handle,
       hasHandle,
-      handleStaysInRow,
       isDisabled,
-      isHandleAlwaysVisible,
-      isHandleAtEnd,
       itemKey,
       label,
       rowAlign,
@@ -580,8 +521,8 @@ export function ListItem({
     (): ItemEdgeControl | null =>
       reorderHandle == null
         ? null
-        : {control: reorderHandle, edge: isHandleAtEnd ? 'end' : 'start'},
-    [isHandleAtEnd, reorderHandle],
+        : {control: reorderHandle, edge: isHandleAtStart ? 'start' : 'end'},
+    [isHandleAtStart, reorderHandle],
   );
   // Under a finger, the row's hit target grows where its neighbors leave room.
   const isTouchTarget =
@@ -707,25 +648,10 @@ export function ListItem({
           reorderHandle && reorder?.session.rowStyle,
           // A row that stays put keeps the column its neighbours' handles
           // take, so every label lines up.
-          reorder != null &&
+          ctx != null &&
+            reorder != null &&
             !hasHandle &&
-            (isAfterMarker
-              ? markerRoomStyles.room
-              : edge === 'bleed'
-                ? isHandleAtEnd
-                  ? areHandlesInRow
-                    ? reorderRoomStyles.bleedShownAtEnd
-                    : reorderRoomStyles.bleedCoarseAtEnd
-                  : areHandlesInRow
-                    ? reorderRoomStyles.bleedShownAtStart
-                    : reorderRoomStyles.bleedCoarseAtStart
-                : isHandleAtEnd
-                  ? areHandlesInRow
-                    ? reorderRoomStyles.shownAtEnd
-                    : reorderRoomStyles.coarseAtEnd
-                  : areHandlesInRow
-                    ? reorderRoomStyles.shownAtStart
-                    : reorderRoomStyles.coarseAtStart),
+            reorder.session.roomStyle(ctx),
           xstyle,
         ] as StyleXStyles
       }
@@ -746,12 +672,12 @@ export function ListItem({
     <>
       {/* One shape whether or not the row has a handle, so the row keeps its
           element when that changes. */}
-      <ItemEdgeControlContext value={edgeControl}>
+      <ItemTrailingContext value={edgeControl}>
         {/* The handle is named after the row's label. */}
         <ItemLabelNeededContext value={reorderHandle != null}>
           {marked}
         </ItemLabelNeededContext>
-      </ItemEdgeControlContext>
+      </ItemTrailingContext>
       {reorderName}
     </>
   );

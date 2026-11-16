@@ -35,6 +35,7 @@ import {sharedKey} from '../utils/sharedRealm';
 import type {Reorderable} from '../reorderable/createReorderable';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
+import type {ListContextValue, ListDensity, ListEdge} from './ListContext';
 
 /**
  * The key a reorderable object carries its machinery under. `sharedKey`
@@ -65,7 +66,7 @@ export interface ListReorderOptions {
   readonly startedBy?: ListReorderOptions;
 }
 
-/** The handle a reorderable row starts with (List/ListReorderHandle.tsx). */
+/** The handle a reorderable row has (List/ListReorderHandle.tsx). */
 export interface ListReorderHandleProps {
   /** The row's label: its text names the handle. */
   readonly label: ReactNode;
@@ -88,7 +89,7 @@ export interface ListReorderHandleProps {
   readonly isDisabled?: boolean;
   /**
    * The row's alignment (ListItem `align`). The handle is the row's own
-   * child, before its label, so no slot aligns it.
+   * child, at an edge of its content, so no slot aligns it.
    */
   readonly rowAlign?: ItemAlign;
   /**
@@ -96,15 +97,20 @@ export interface ListReorderHandleProps {
    * It does so at the start after a list marker, which it would cover. It
    * also does so in a row that reaches its container's padding edge (List
    * `edge` `'outset'` or `'bleed'`), where nothing past the row keeps it.
+   * A List row's handle reads it from its list; without a list, false.
    */
   readonly isInRow?: boolean;
   /**
-   * Whether the handle always shows, in a place of its own in the row. Its
-   * collection resolves it: the reorderable's `handle.visibility`, else the
-   * collection's own default.
+   * Whether the handle always shows, in a place of its own in the row: the
+   * reorderable's `handle.visibility`, else the collection's own default. A
+   * List row's handle reads it from its list (`'always'` by default); a
+   * collection that renders the handle itself passes it.
    */
   readonly isAlwaysVisible?: boolean;
-  /** The row edge the handle sits at: the reorderable's `handle.placement`. */
+  /**
+   * The row edge the handle sits at: the reorderable's `handle.placement`,
+   * `'end'` without it. A List row's handle reads it from its list.
+   */
   readonly placement?: 'start' | 'end';
 }
 
@@ -138,7 +144,7 @@ export interface ListReorderSession {
    * handles' instructions and disposes of the session when it goes.
    */
   readonly Host: ComponentType<{reorder: ListReorderContextValue}>;
-  /** The handle each reorderable row starts with. */
+  /** The handle each reorderable row has. */
   readonly Handle: ComponentType<ListReorderHandleProps>;
   /** Names a row without a handle for the announcements; renders nothing. */
   readonly RowName: ComponentType<ListReorderRowNameProps>;
@@ -146,6 +152,19 @@ export interface ListReorderSession {
   readonly rowStyle: StyleXStyles;
   /** The list itself: its insertion line, a pseudo-element. */
   readonly listStyle: typeof reorderListStyle;
+  /**
+   * The room a list keeps on its handles' side, where they hang outside its
+   * rows' text; null where they show in their rows. The handles' placement
+   * logic and styles come with the session, so a List without a reorderable
+   * loads none of them.
+   */
+  gutterStyle(
+    handle: ListReorderOptions['handle'],
+    edge: ListEdge,
+    density: ListDensity,
+  ): StyleXStyles | null;
+  /** The room a row without a handle keeps for its neighbours' handles. */
+  roomStyle(list: ListContextValue): StyleXStyles;
 }
 
 /** How a reorder session finds a collection's rows in its container. */
