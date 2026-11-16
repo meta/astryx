@@ -1565,6 +1565,42 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 passes when a font service URL names the family, as Google Fonts imports do', async () => {
+    for (const fontCss of [
+      "@import url('https://fonts.googleapis.com/css2?family=Ocean+Sans:wght@400;500;600;700&display=swap');\n",
+      '@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&family=Ocean+Sans&display=swap");\n',
+      '@import "//fonts.googleapis.com/css?family=Roboto:400,700|Ocean+Sans:400";\n',
+    ]) {
+      const {dir} = await fixture([
+        {slug: 'ocean', fontFamily: 'Ocean Sans', fontCss},
+      ]);
+      expect(
+        check(await checkAppThemes(dir), 'theme-fonts'),
+        fontCss,
+      ).toMatchObject({
+        status: 'pass',
+        message:
+          'Every named non-system font is loaded by an @font-face rule or a font service URL that names it.',
+      });
+    }
+  });
+
+  it('check 9 still warns for a family the font service URL does not name', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+      },
+    ]);
+
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: 'External font imports prevent proof for ocean: Ocean Sans.',
+    });
+  });
+
   it('check 9 follows a local font import, a relative file or a package stylesheet, and proves its families', async () => {
     for (const spec of [
       './ocean-faces.css',

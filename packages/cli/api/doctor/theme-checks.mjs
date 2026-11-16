@@ -454,10 +454,35 @@ function namedThemeFonts(files) {
 }
 
 /**
+ * The families a font service stylesheet URL names in the Google Fonts CSS
+ * API's form: a `/css` or `/css2` path with `family` parameters, such as
+ * `family=Figtree:wght@400;700` or `family=Roboto:400|Lato`. None for any
+ * other URL.
+ * @param {string | undefined} spec
+ * @returns {string[]}
+ */
+function fontServiceFamilies(spec) {
+  if (!spec) return [];
+  let url;
+  try {
+    url = new URL(spec.startsWith('//') ? `https:${spec}` : spec);
+  } catch {
+    return [];
+  }
+  if (!/^\/css2?$/u.test(url.pathname)) return [];
+  return url.searchParams
+    .getAll('family')
+    .flatMap(value => value.split('|'))
+    .map(family => normalizeFontName(family.split(':')[0]))
+    .filter(Boolean);
+}
+
+/**
  * The families a font stylesheet loads with `@font-face`, following its
  * local `@import`s (a relative file, or a package's stylesheet such as
- * `@fontsource/inter/index.css`); `external` when it imports a URL
- * (http, https, `//`), whose families doctor cannot read.
+ * `@fontsource/inter/index.css`), and the families a font service URL it
+ * imports names (see {@link fontServiceFamilies}); `external` when it imports
+ * a URL (http, https, `//`), which may load families doctor cannot read.
  * @param {string} css
  * @param {string} [file] the stylesheet's path, to resolve local imports
  * @param {Set<string>} [seen]
@@ -471,6 +496,11 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
     if (atRule.name.toLowerCase() === 'import') {
       const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
       if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
+        // A family the request names counts as loaded, as an @font-face rule
+        // does: the stylesheet asks the service for it.
+        for (const name of fontServiceFamilies(spec)) {
+          loaded.add(name.toLowerCase());
+        }
         external = true;
         return;
       }
@@ -1975,7 +2005,7 @@ export async function checkAppThemes(cwd) {
               label: 'Theme font loading',
               status: 'pass',
               message:
-                'Every named non-system font has a local @font-face loader.',
+                'Every named non-system font is loaded by an @font-face rule or a font service URL that names it.',
             },
   );
 
