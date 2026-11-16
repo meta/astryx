@@ -39,13 +39,16 @@ affects_consumer_docs: [Popover, usePopover, Dialog, DropdownMenu]
 
 ## Intent
 
-A Popover can point at something other than the control that opens it. A
-caller anchors the surface to any element, to an element it looks up again when
-the page changes, or to a rectangle inside a scrolling region, and the control
-that opens the popover keeps its trigger semantics. The caller decides what
-happens when the anchor scrolls out of view, which outside presses close the
-popover, and whether the popover is modal: a modal popover holds Tab, a
-non-modal one (a coachmark, a tour step) lets focus move through the page.
+A popover built with `usePopover` can point at something other than the
+control that opens it. A caller anchors the surface to any element, to an
+element it looks up again when the page changes, or to a rectangle inside a
+scrolling region, and the control that opens the popover keeps its trigger
+semantics. The caller decides what happens when the anchor scrolls out of view
+and which outside presses close the popover. These are composition inputs: they
+live on the hook, and the Popover component keeps its trigger-first props
+(DEC-8). Popover and `usePopover` both decide whether the popover is modal: a
+modal popover holds Tab, a non-modal one (a coachmark, a tour step) lets focus
+move through the page.
 
 When any layer closes, focus lands somewhere reasonable without the caller
 asking. Popover, Dialog and DropdownMenu share one rule: focus that the close
@@ -63,6 +66,8 @@ where it is.
 - Layout-following by script. Every anchored layer follows its anchor through
   CSS anchor positioning (`architecture:layer-runtime` INV21).
 - `useLayer`'s own options.
+- New Popover component props other than `isModal`'s widened meaning
+  (DEC-8).
 - Focus entry. Each component keeps its own initial focus.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
@@ -76,8 +81,8 @@ where it is.
 
 ### Anchor
 
-- **FR1 — The anchor is separate from the trigger.** Popover and `usePopover`
-  take an optional `anchor`. When it is set, the layer anchors to the anchor
+- **FR1 — The anchor is separate from the trigger.** `usePopover` takes an
+  optional `anchor`; the Popover component does not (DEC-8). When it is set, the layer anchors to the anchor
   and the trigger keeps only its trigger role: its toggle, `aria-haspopup`,
   `aria-expanded` and `aria-controls`. The anchor receives no handler and no
   ARIA attribute. When it is unset, the trigger is the anchor, which is the
@@ -102,19 +107,18 @@ where it is.
   positioning keeps the layer on it. The box is not focusable, is hidden from
   assistive technology, and receives no pointer events. When `contextElement`
   leaves the document, the anchor is out of view (FR7).
-- **FR5 — A Popover without a trigger.** A Popover with `anchor` and neither
-  children nor `anchorRef` has no trigger. It opens and closes through
-  `isOpen`; a dismissal reports `onOpenChange(false)`. Without `isOpen` it
-  warns in development and stays closed.
+- **FR5 — A popover without a trigger.** A `usePopover` composition with
+  `anchor` that attaches no trigger opens and closes only through `show`,
+  `hide` and `toggle`; a dismissal reports `onHide`.
 - **FR6 — An unresolved anchor never shows an unanchored surface.** While the
   anchor resolves to nothing, an open popover renders no visible surface. It
   shows on the frame a later read (FR3) resolves it.
 
 ### Anchor out of view
 
-- **FR7 — The caller chooses hold or hide.** `anchorOutOfView` is `hold`
-  (default) or `hide`. `hold` is the layer runtime's released behavior
-  (`spec:AST-059` FR5). With `hide`, while the anchor is out of view — clipped
+- **FR7 — The caller chooses stay or hide.** `anchorOutOfViewBehavior` is
+  `stay` (default) or `hideWhileOutOfView`. `stay` is the layer runtime's
+  released behavior (`spec:AST-059` FR5). With `hideWhileOutOfView`, while the anchor is out of view — clipped
   by the viewport or by any scrolling ancestor, or no longer in the document —
   the surface is hidden: it takes no pointer input and leaves keyboard and
   accessibility navigation, and a modal popover stops containing Tab. It stays
@@ -127,8 +131,8 @@ where it is.
 
 ### Outside dismissal veto
 
-- **FR9 — The caller may cancel an outside dismissal.** `onOutsidePress`
-  receives each press that the layer runtime counts as an outside press
+- **FR9 — The caller may cancel an outside dismissal.** `usePopover`'s
+  `onOutsidePress` receives each press that the layer runtime counts as an outside press
   (`architecture:layer-runtime` INV7), before the popover closes for it. A
   touch that pans is a gesture, not an outside press, so it is never reported.
   The event names the pressed element and the pointer type, and nothing more:
@@ -211,13 +215,13 @@ Dialog and DropdownMenu.
 ### Accessibility
 
 - **AR1 — Focus leaves a surface that hides.** When the surface hides under
-  `anchorOutOfView: 'hide'` with focus inside it, focus moves to the anchor if
+  `anchorOutOfViewBehavior: 'hideWhileOutOfView'` with focus inside it, focus moves to the anchor if
   it can take focus, else to the trigger, else through FR20's chain. When the
   surface shows again, focus is not moved back.
 - **AR2 — A separate anchor is named in the surface.** The anchor carries no
   ARIA attribute (FR1), so a popover whose anchor is separate states what it
-  points at in its accessible name or description, from its `label` or its
-  content. The trigger keeps `aria-controls`; a popover without a trigger is
+  points at in its accessible name or description, from its `dialogLabel` or
+  its content. The trigger keeps `aria-controls`; a popover without a trigger is
   reached by the focus it moves in or by AR4's announcement.
 - **AR3 — A temporary tab stop changes nothing else.** The tab stop FR20 adds
   to a candidate that cannot take focus is removed when focus leaves it. The
@@ -230,14 +234,16 @@ Dialog and DropdownMenu.
 ### Compatibility
 
 - **FR22 — Defaults are the released behavior, with two named changes.** A
-  Popover or `usePopover` that sets none of `anchor`, `anchorOutOfView` and
-  `onOutsidePress` anchors, holds and dismisses as before. Two released
+  Popover, and a `usePopover` that sets none of `anchor`,
+  `anchorOutOfViewBehavior` and `onOutsidePress`, anchors, stays and dismisses
+  as before. Two released
   behaviors change, and the release notes say so: `isModal: false` stops
   containing Tab and scopes its Escape (FR12, FR15), and Popover, Dialog and
   DropdownMenu return focus that used to fall to the body (FR17–FR20).
-- **FR23 — `anchorRef` keeps its meaning.** `anchorRef` remains a referenced
-  trigger and anchor (`component:Popover` AV1). With both `anchorRef` and
-  `anchor`, `anchorRef` is the trigger and `anchor` is the anchor.
+- **FR23 — The trigger inputs keep their meaning.** Popover's `anchorRef`
+  remains a referenced trigger and anchor (`component:Popover` AV1). With
+  `usePopover`, the element given to `triggerRef` is the trigger, and `anchor`,
+  when set, is the anchor.
 
 ### Platform support
 
@@ -255,7 +261,8 @@ Dialog and DropdownMenu.
 ## Current-state impact
 
 - `component:Popover`: Public concepts gains Anchor, Anchor out of view and
-  Outside press rows, and its Modality row says `isModal` sets containment.
+  Outside press rows, available on `usePopover` only, and its Modality row
+  says `isModal` sets containment.
   DEC-9's rule that every Popover is a focus region, modal or not, and its
   rejection of "no Tab containment for non-modal popovers", are superseded for
   `isModal: false` (DEC-5); DEC-9 still governs the modal default. AR3, which
@@ -271,15 +278,17 @@ Dialog and DropdownMenu.
 - `family:overlay-dismissal`: its rule that Escape closes the topmost
   participant gains one exception: a non-modal participant takes Escape only
   while focus is inside it or on its anchor or trigger (FR15).
-- Consumer docs: `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
-  `DropdownMenu.doc.mjs` document the inputs, `isModal`'s meaning, and that
-  focus return has no off switch.
+- Consumer docs: `usePopover.doc.mjs` documents the anchoring inputs;
+  `Popover.doc.mjs`, `usePopover.doc.mjs`, `Dialog.doc.mjs` and
+  `DropdownMenu.doc.mjs` document `isModal`'s meaning and that focus return has
+  no off switch.
 - Callers that set `isModal: false` today: PowerSearch's token editor (a
   dialog popover) and Popover's own tests. The token editor then lets Tab
   leave the editor in page order.
 
-FR1 gap: `anchorRef` must reference a button; any other element warns in
-development and the popover never anchors.
+FR1 gap: `usePopover` anchors to its trigger only; Popover's `anchorRef` must
+reference a button, and any other element warns in development and never
+anchors.
 FR7 gap: an anchor scrolled out of a scrolling panel leaves the surface held
 over unrelated content.
 FR9 gap: outside presses close the popover through native light dismiss, which
@@ -295,12 +304,12 @@ the body.
 
 | Contract   | Verification                                                          | Representative states                                                                                                  | Mutation or failure expectation                                                                                                                              |
 | ---------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR23  | `Popover.test.tsx` anchor suite                                       | `anchor` with a trigger; with `anchorRef`; neither                                                                     | ARIA or a handler on the anchor, or the trigger losing ARIA, fails                                                                                           |
-| FR2, FR5   | `Popover.test.tsx` anchor suite                                       | A `div`, a table cell, an SVG element; trigger-less controlled open; trigger-less without `isOpen`                     | A non-button anchor that warns or does not anchor, or a trigger-less popover that opens uncontrolled, fails                                                  |
-| FR3, FR6   | `Popover.test.tsx` and a real-browser interaction spec                | A new function passed while open; anchor removed and re-added; function returning `null` at open                       | A remount, a close, a focus move, or a visible surface without an anchor fails                                                                               |
-| FR4        | Real-browser interaction spec                                         | A rectangle inside a scrolling panel, scrolled; without `contextElement`                                               | A box that is focusable, takes pointer input, or does not scroll with the panel fails                                                                        |
-| FR7, FR8   | `useLayer.test.tsx` and a real-browser interaction spec               | Anchor clipped by a panel, by the viewport, removed; `hold` and `hide`                                                 | A dismissal on hide, a hidden surface that takes pointer input, or a layout read in a scroll frame fails                                                     |
-| FR9–FR11   | `Popover.test.tsx` outside-press suite and a real-browser spec        | Veto and no veto; press on the anchor and on the trigger; a touch pan; `hasLightDismiss: false`; Escape                | A vetoed press that closes, a reported pan, a native event on the callback, or a callback for a non-outside close fails                                      |
+| FR1, FR23  | `PopoverAnchor.test.tsx`                                              | `anchor` with a trigger; with no trigger; Popover `anchorRef`                                                          | ARIA or a handler on the anchor, or the trigger losing ARIA, fails                                                                                           |
+| FR2, FR5   | `PopoverAnchor.test.tsx`                                              | A `div`, a table cell, an SVG element; a trigger-less popover opened by `show()` and dismissed                         | A non-button anchor that warns or does not anchor, or a trigger-less dismissal without `onHide`, fails                                                       |
+| FR3, FR6   | `PopoverAnchor.test.tsx` and a real-browser interaction spec          | A new function passed while open; anchor removed and re-added; function returning `null` at open                       | A remount, a close, a focus move, or a visible surface without an anchor fails                                                                               |
+| FR4        | `PopoverRectAnchor.test.tsx` and a real-browser interaction spec      | A rectangle inside a scrolling panel, scrolled; without `contextElement`                                               | A box that is focusable, takes pointer input, or does not scroll with the panel fails                                                                        |
+| FR7, FR8   | `PopoverAnchorOutOfView.test.tsx` and a real-browser interaction spec | Anchor clipped by a panel, by the viewport, removed; `stay` and `hideWhileOutOfView`                                   | A dismissal on hide, a hidden surface that takes pointer input, or a layout read in a scroll frame fails                                                     |
+| FR9–FR11   | `PopoverOutsidePress.test.tsx` and a real-browser spec                | Veto and no veto; press on the anchor and on the trigger; a touch pan; `hasLightDismiss: false`; Escape                | A vetoed press that closes, a reported pan, a native event on the callback, or a callback for a non-outside close fails                                      |
 | FR12–FR16  | `useFocusTrap.test.tsx`, `Popover.test.tsx` and a real-browser spec   | Modal and non-modal; Tab at each edge and from the anchor; Tab from outside; role `none`; Escape in and out; the sheet | A non-modal popover that holds Tab, a modal one that leaks it (FR14's role-neutral popups excepted), `aria-modal` on a non-modal one, or a modal sheet fails |
 | FR17, FR18 | `focusReturn.test.ts` and the Popover, Dialog and DropdownMenu suites | Focus inside at close; on the body; moved outside before close; moved by the hide notification                         | Focus moved from outside the layer, or left on the body, fails                                                                                               |
 | FR19       | Menu-to-Dialog suite in jsdom and real Chromium                       | A menu row opens a Dialog; the Dialog closes; nested popovers                                                          | Focus on the body or on the removed row fails                                                                                                                |
@@ -342,7 +351,8 @@ which INV21 forbids.
 **Reference:** `spec:AST-116/DEC-3`
 **Decider:** pending owner review
 
-A popover whose anchor is out of view under `hide` stays open. Closing it would
+A popover whose anchor is out of view under `hideWhileOutOfView` stays open.
+The value names a temporary state, because `hide()` and `onHide` mean close. Closing it would
 lose the caller's state and fire `onOpenChange` for something the person did
 not do.
 
@@ -403,10 +413,24 @@ keeps the cost of an open popover fixed.
 Rejected: re-reading the function after every commit and observing the page
 for the element's removal.
 
+### DEC-8 — Anchoring inputs live on `usePopover`, not on Popover
+
+**Reference:** `spec:AST-116/DEC-8`
+**Decider:** `nynexman4464` (direction, 2026-11-16), pending owner review
+
+`anchor`, `anchorOutOfViewBehavior` and `onOutsidePress` serve compositions
+such as a tour, a popover shared between table rows, or a filter that moves
+between column headers. `usePopover` is the public layer for composition, so
+the inputs live there. The Popover component keeps its trigger-first props, so
+its common use stays small. The out-of-view input follows the `<thing>Behavior`
+naming of `architecture:public-component-api` INV2.
+
+Rejected: the same inputs on Popover, which grows the component for few
+callers; and a `BasePopover` component, which would share `usePopover`'s job
+(`architecture:public-component-api` INV21).
+
 ## Open questions
 
-- **OQ1 — Input names.** (`human-api`) `anchor`, `anchorOutOfView` and
-  `onOutsidePress` are proposed names for their concepts.
 - **OQ2 — Is the rectangle anchor in scope?** (`human-api`) FR4 serves a caller
   that holds a rectangle and no element. Every consumer that holds an element
   can use a function anchor instead.
