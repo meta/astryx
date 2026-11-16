@@ -5720,6 +5720,35 @@ async function changeOnce(
     }
     s = stored;
   }
+  // A color set with no --mode in a one-mode theme is that mode's color, as
+  // the build reads it (it fills that mode's half): saved with the mode, so
+  // the theme going back to both modes keeps it there, and a color saved
+  // for the other mode (the half a toast or a lightbox reads) stays. An
+  // undo with no --mode names that entry too.
+  const ownMode =
+    data.mode === 'dark-only'
+      ? 'dark'
+      : data.mode === 'light-only'
+        ? 'light'
+        : null;
+  if (
+    ownMode &&
+    sub === 'set' &&
+    !s.mode &&
+    s.source !== 'dial' &&
+    typeof s.value === 'string' &&
+    parseColor(s.value.trim()) != null &&
+    (s.source === 'property' || MODAL.has(ctx.C.typeOf(s.thing)))
+  )
+    s = {...s, mode: ownMode};
+  if (
+    ownMode &&
+    sub === 'undo' &&
+    !s.mode &&
+    !data.settings.some(x => keyOf(x) === keyOf(s)) &&
+    data.settings.some(x => keyOf(x) === keyOf({...s, mode: ownMode}))
+  )
+    s = {...s, mode: ownMode};
   let k = keyOf(s);
   let prevIdx =
     rawIdx >= 0
