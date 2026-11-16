@@ -720,7 +720,7 @@ export default function FormWizardVerticalPage() {
       header={
         <LayoutHeader hasDivider>
           <VStack gap={4}>
-            <HStack gap={3} vAlign="center">
+            <HStack wrap="wrap" gap={3} vAlign="center">
               <StackItem size="fill">
                 {/* The flow, not the book. The book's own title is a field on
                     step 2 and is echoed back on the review step, so repeating

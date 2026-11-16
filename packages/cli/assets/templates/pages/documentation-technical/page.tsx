@@ -86,7 +86,7 @@ export default function TechnicalDocumentationPage() {
 
             <Card>
               <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
+                <HStack wrap="wrap" gap={2} vAlign="center">
                   <StackItem size="fill">
                     <HStack gap={2} vAlign="center">
                       <Icon icon={SparklesIcon} size="sm" color="secondary" />

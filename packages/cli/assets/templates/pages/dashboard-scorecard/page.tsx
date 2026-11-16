@@ -787,7 +787,7 @@ export default function ExecutiveReviewPage() {
                 />
               </HStack>
             </VStack>
-            <HStack gap={3}>
+            <HStack wrap="wrap" gap={3}>
               <SegmentedControl
                 label="Comparison period"
                 value={period}

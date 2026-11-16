@@ -733,6 +733,9 @@ const styles = stylex.create({
   // scales it — so it clips instead. `clip` over `hidden`: nothing here
   // should scroll, including the quiet scroll that focusing a clipped child
   // would otherwise cause.
+  // The save note and Export keep their width; the tab strip beside them is
+  // the part that gives up room when the bar is narrow.
+  headerTrail: {flexShrink: 0},
   artboardFrame: {overflow: 'clip'},
   // The canvas pans in both axes, which centring normally breaks.
   //
@@ -2036,7 +2039,7 @@ export default function CanvasEditor() {
                     icon={<Icon icon={Plus} size={ICON} color="secondary" />}
                   />
                 </HStack>
-                <HStack gap={3} vAlign="center">
+                <HStack gap={3} vAlign="center" xstyle={styles.headerTrail}>
                   <Text type="supporting" color="secondary">
                     Saved · 2 min ago
                   </Text>

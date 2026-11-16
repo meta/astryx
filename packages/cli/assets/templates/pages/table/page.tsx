@@ -494,7 +494,7 @@ export default function SimpleTableTemplate() {
         header={
           <LayoutHeader hasDivider padding={4}>
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center">
+              <HStack wrap="wrap" gap={3} vAlign="center">
                 <StackItem size="fill">
                   <Heading level={1}>Members</Heading>
                 </StackItem>
