@@ -183,8 +183,11 @@ export default function ShellNav() {
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const searchSource = useMemo(() => createStaticSource(COMMANDS), []);
 
+  // Both combos on every platform, as the page has always accepted.
+  const openPalette = () => setIsPaletteOpen(true);
   useHotkeys([
-    {keys: 'mod+k', onPress: () => setIsPaletteOpen(true), allowInInputs: true},
+    {keys: 'meta+k', onPress: openPalette, allowInInputs: true},
+    {keys: 'ctrl+k', onPress: openPalette, allowInInputs: true},
   ]);
 
   return (
