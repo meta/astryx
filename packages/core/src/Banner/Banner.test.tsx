@@ -216,8 +216,10 @@ describe('Banner', () => {
             ? document.getElementById(describedBy)
             : (screen
                 .getAllByRole('tooltip', {hidden: true})
-                .find(
-                  el => el.textContent === button.getAttribute('aria-label'),
+                .find(el =>
+                  (button.getAttribute('aria-label') ?? '').includes(
+                    el.textContent ?? '',
+                  ),
                 ) ?? null);
         expect(tooltip).not.toBeNull();
         expect(
@@ -226,6 +228,21 @@ describe('Banner', () => {
       }
     },
   );
+
+  it('names the dismiss button "Dismiss {title}" once: its "Dismiss" tooltip shows but adds no description', () => {
+    render(
+      <Banner status="info" title="Project A was archived" isDismissable />,
+    );
+    const button = screen.getByRole('button', {
+      name: 'Dismiss Project A was archived',
+    });
+    expect(button).toHaveAccessibleDescription('');
+    expect(
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(tooltip => tooltip.textContent === 'Dismiss'),
+    ).toBe(true);
+  });
 
   it('renders dismiss button when isDismissable', () => {
     render(<Banner status="info" title="Dismissable" isDismissable />);
@@ -879,8 +896,10 @@ describe('Banner', () => {
         'Dismiss Upload invoice failed',
         'Dismiss Delete report failed',
       ]);
+      // Each name already contains the "Dismiss" tooltip, so the tooltip
+      // shows but adds no description.
       for (const button of buttons) {
-        expect(button).toHaveAccessibleDescription('Dismiss');
+        expect(button).toHaveAccessibleDescription('');
       }
     });
 
@@ -931,7 +950,12 @@ describe('Banner', () => {
       const button = screen.getByRole('button', {
         name: 'Schließen Wartungshinweis',
       });
-      expect(button).toHaveAccessibleDescription('Schließen');
+      expect(button).toHaveAccessibleDescription('');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Schließen'),
+      ).toBe(true);
     });
   });
 });
