@@ -107,8 +107,10 @@ export const FIT_CELLS = `(() => {
     for (const item of document.querySelectorAll('.cs-item')) {
       let need = 0;
       for (const el of item.querySelectorAll('*')) {
-        // A text cut by less than a pixel still ends in an ellipsis.
-        if (el.scrollWidth <= el.clientWidth) continue;
+        // A text cut by less than a pixel still ends in an ellipsis. Text
+        // drawn in no width at all (a label only a screen reader reads) is
+        // not cut: no width given to it would show it.
+        if (el.clientWidth < 2 || el.scrollWidth <= el.clientWidth) continue;
         if (getComputedStyle(el).textOverflow !== 'ellipsis') continue;
         need = Math.max(need, el.scrollWidth - el.clientWidth + 1);
       }
