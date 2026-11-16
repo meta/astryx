@@ -220,7 +220,7 @@ describe('every suggested compile passes the same checks', () => {
 });
 
 describe('the app copy and the app module', () => {
-  it('a module that imports a file beside the theme keeps the copy as it was, and the check says why', async () => {
+  it('a module that imports a file of its own folder is carried with the copy, and the check passes', async () => {
     await themeEditNew('x12', {cwd});
     fs.writeFileSync(
       path.join(cwd, 'themes/x12/icons.mjs'),
@@ -232,10 +232,28 @@ describe('the app copy and the app module', () => {
       "import {x12Settings} from './x12.settings';\nimport myIcons from './icons.mjs';",
     );
     await compile('themes/x12/x12.theme.ts');
-    expect(read('src/themes/x12/x12.js')).not.toContain('./icons.mjs');
+    // The module is in the theme's own folder: the copy carries it.
+    expect(read('src/themes/x12/x12.js')).toContain('./icons.mjs');
+    expect(read('src/themes/x12/icons.mjs')).toContain('export default {};');
     const check = await compileJson('themes/x12/x12.theme.ts', '--check');
-    expect(check.data.upToDate).toBe(false);
-    expect(check.data.appCopyStale).toContain('imports ./icons.mjs');
+    expect(check.data.upToDate).toBe(true);
+    // One outside the folder keeps the copy as it was, and the check says
+    // why.
+    fs.writeFileSync(
+      path.join(cwd, 'shared-icons.mjs'),
+      'export default {};\n',
+    );
+    writeSource(
+      'x12',
+      "export const x12Theme = defineTheme({extends: x12Settings, name: 'x12', icons: myIcons});",
+      "import {x12Settings} from './x12.settings';\nimport myIcons from '../../shared-icons.mjs';",
+    );
+    await compile('themes/x12/x12.theme.ts');
+    const outside = await compileJson('themes/x12/x12.theme.ts', '--check');
+    expect(outside.data.upToDate).toBe(false);
+    expect(outside.data.appCopyStale).toContain(
+      'imports ../../shared-icons.mjs, a file outside themes/x12/',
+    );
   }, 240_000);
 
   it("compile's JSON says what the copy write did: the files of a first write, and what kept it back", async () => {

@@ -96,6 +96,7 @@ import {
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -390,6 +391,8 @@ async function validateAtPackageDir(
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {string | undefined} */
@@ -397,11 +400,17 @@ async function validateAtPackageDir(
   /** @type {string | undefined} */
   let cliCommandError;
   try {
-    ({manifest, unknownKeys, declaredKeys, agentDocsError, cliCommandError} =
-      await loadManifest(
-        manifestFile,
-        `Integration manifest (${path.basename(manifestFile)})`,
-      ));
+    ({
+      manifest,
+      unknownKeys,
+      ignoredFields,
+      declaredKeys,
+      agentDocsError,
+      cliCommandError,
+    } = await loadManifest(
+      manifestFile,
+      `Integration manifest (${path.basename(manifestFile)})`,
+    ));
   } catch (err) {
     issues.push(error('invalid_manifest', /** @type {any} */ (err).message));
     return result;
@@ -468,6 +477,7 @@ async function validateAtPackageDir(
     __cliCommandError: cliCommandError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __spec: identity.name,
     __declaredProviderId: manifest.providerId,
@@ -760,15 +770,16 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
- * @param {{iconSets?: boolean}} [options] `iconSets`: check the package's
- *   experimental icon sets; by default only when the project at `cwd` sets
- *   `experimental.iconSet`
+ * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
+ *   `iconSets`: check the package's experimental icon sets; by default only
+ *   when the project at `cwd` sets `experimental.iconSet`.
+ *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */
 export async function validateInstalledIntegration(
   spec,
   cwd = process.cwd(),
-  {iconSets} = {},
+  {iconSets, shippedImports = true} = {},
 ) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
@@ -803,7 +814,7 @@ export async function validateInstalledIntegration(
           exists ? 'invalid_package_json' : 'package_not_found',
           exists
             ? `Could not parse ${pkgJsonPath}: ${err instanceof Error ? err.message : String(err)}`
-            : `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`,
+            : notInstalledMessage(spec, pkgJsonPath, cwd),
         ),
       ],
     };
@@ -812,8 +823,36 @@ export async function validateInstalledIntegration(
   return validateAtPackageDir(
     packageDir,
     {name: pkg.name ?? spec, version: pkg.version},
-    {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
+    {
+      cwd,
+      iconSets: iconSets ?? (await projectUsesIconSets(cwd)),
+      shippedImports,
+    },
   );
+}
+
+/**
+ * Why `spec` is not installed here. This command checks a package the project
+ * in `cwd` installs; when `cwd` is that package's own folder, the check the
+ * author wants is `integration check`.
+ * @param {string} spec
+ * @param {string} pkgJsonPath
+ * @param {string} cwd
+ */
+function notInstalledMessage(spec, pkgJsonPath, cwd) {
+  /** @type {unknown} */
+  let own;
+  try {
+    own = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'),
+    )?.name;
+  } catch {
+    own = undefined;
+  }
+  if (own === spec) {
+    return `"${spec}" is the package in this folder, not one it installs: this command checks a package the project installs. To check the package you are making, run \`${formatCliCommand('integration check', cwd)}\`.`;
+  }
+  return `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`;
 }
 
 /**
@@ -905,6 +944,18 @@ async function docTargetNotes(integration) {
  * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
  */
 export async function validateIntegration(pkg, options = {}) {
+  // Its checks read the package and change none of its files: one listing
+  // of each folder, and one answer from npm on what the package packs.
+  return withListingCache(() => validateIntegrationOnce(pkg, options));
+}
+
+/**
+ * {@link validateIntegration}'s checks, run once.
+ * @param {string | undefined} pkg
+ * @param {{cwd?: string}} options
+ * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
+ */
+async function validateIntegrationOnce(pkg, options) {
   const {cwd = process.cwd()} = options;
   const result = pkg
     ? await validateInstalledIntegration(pkg, cwd)

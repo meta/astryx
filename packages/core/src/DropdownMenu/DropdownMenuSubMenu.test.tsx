@@ -1592,6 +1592,45 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
   const shownMenu = (name: string) =>
     screen.getAllByRole('menu', {name, ...h}).find(isShown)!;
 
+  it('names a node-label sub-menu by its label alone, and its nested Back row after it', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu
+          label={
+            <>
+              <em>Move</em> to
+            </>
+          }
+          description="Pick a folder">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          <DropdownMenuSubMenu label="Archive">
+            <DropdownMenuItem label="2025" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+
+    const moveTo = screen
+      .getAllByRole('menuitem', {name: /Move to/, ...h})
+      .find(isShown)!;
+    fireEvent.click(moveTo, {detail: 1});
+    // The view is named by the label, not by the whole row with its
+    // description.
+    await waitFor(() => shownMenu('Move to'));
+
+    fireEvent.click(shownRow('Archive'), {detail: 1});
+    await waitFor(() => shownMenu('Archive'));
+    // The nested view's Back row is named after the node-label parent.
+    expect(visibleRows()).toEqual(['Back to Move to', '2025']);
+  });
+
   it('on a phone a sub-menu drills in, is named by its row, and Back returns', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();

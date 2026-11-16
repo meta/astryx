@@ -494,6 +494,50 @@ import '@acme/widgets/themes/ocean.css';
 export {oceanTheme} from '../themes/ocean/ocean.js';
 `;
 
+describe('a theme built with --out and a TypeScript registry', () => {
+  it("verifies: a rebuild to the theme's own name writes the same imports", () => {
+    writePackage();
+    const ocean = path.join(tmpDir, 'themes', 'ocean');
+    fs.writeFileSync(
+      path.join(ocean, 'icons.ts'),
+      "export const oceanIcons: Record<string, string> = {close: 'x'};\n",
+    );
+    fs.writeFileSync(
+      path.join(ocean, 'oceanTheme.ts'),
+      "import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanIcons} from './icons';\n\nexport const oceanTheme = defineTheme({name: 'ocean', icons: oceanIcons});\n",
+    );
+    const built = spawnSync(
+      process.execPath,
+      [
+        path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+        'theme',
+        'build',
+        'themes/ocean/oceanTheme.ts',
+        '--out',
+        'dist/theme.css',
+      ],
+      {cwd: tmpDir, encoding: 'utf-8', timeout: 60_000},
+    );
+    expect(built.status, built.stderr || built.stdout).toBe(0);
+    // The module is named for the theme, whatever --out names the stylesheet.
+    expect(
+      fs.readFileSync(path.join(tmpDir, 'dist/ocean.js'), 'utf-8'),
+    ).toContain("from './ocean.modules/icons.ts.js'");
+    const packageFile = path.join(tmpDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
+    pkg.files = ['astryx.integration.mjs', 'themes', 'dist'];
+    pkg.exports = {
+      './themes/ocean': './dist/ocean.js',
+      './themes/ocean.css': './dist/theme.css',
+    };
+    fs.writeFileSync(packageFile, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    const cli = runCliVerify();
+    expect(cli.status, cli.stderr).toBe(0);
+    expect(cli.receipt?.data.issues).toEqual([]);
+  });
+});
+
 describe('a theme module that loads its own styles', () => {
   it('passes an entry that imports the theme stylesheet and fonts and re-exports the built module', async () => {
     writePackage({themeExports: true});

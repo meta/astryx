@@ -117,9 +117,12 @@ describe('where runs wait', () => {
     // Every job but the Storybook build reaches admission, directly or through
     // the jobs it needs, never only through the build.
     // heavy-ci, the agent-push deferral decision (spec:AST-030 FR20), is one
-    // slim job beside admission that the build needs.
+    // slim job beside admission that the build needs. superseded-runs, one
+    // slim job, starts with the run so that a waiting run still cancels its
+    // older heads' runs (superseded-runs.test.mjs); `peak` counts it (below).
     const BESIDE = 'build-storybook';
     const DEFERRAL = 'heavy-ci';
+    const SWEEP = 'superseded-runs';
     expect(needsOf(ci.jobs[BESIDE])).toEqual(['room', DEFERRAL]);
     expect(needsOf(ci.jobs[DEFERRAL])).toEqual(['room']);
     const reaches = id =>
@@ -129,7 +132,9 @@ describe('where runs wait', () => {
           (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
+      if (
+        !['room', 'admission', 'ci-full', BESIDE, DEFERRAL, SWEEP].includes(id)
+      )
         expect(reaches(id), id).toBe(true);
     }
   });
@@ -614,6 +619,9 @@ describe('peaks', () => {
         condition,
       );
     });
+    // The superseded-runs sweep needs no job: it starts before the waits and
+    // counts here with the first jobs.
+    expect(onPullRequest).toContain('superseded-runs');
     const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);

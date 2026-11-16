@@ -84,37 +84,30 @@ describe('every token and part property the source gives is judged', () => {
     );
   }, 240_000);
 
-  it('takes an undefined page token as not set, and names one a part rule would write', async () => {
+  it('takes an undefined token as not set, on the page and in a part', async () => {
     await withOwn(
       'un',
       "  tokens: {'--radius-element': narrow ? '2px' : undefined, '--spacing-1': '5px'},",
       'const narrow = false;\n',
     );
     await accepted('un');
-    // In a part's rule the build writes the text `undefined`.
+    // In a part's rule, too, the build writes nothing for it.
     await withOwn(
       'us',
       "  components: {button: {base: {'--radius-element': undefined}}} as any,",
     );
-    await refused(
-      'us',
-      /components\.button\.base --radius-element \(line \d+\): .*writes as the text undefined/,
-    );
+    await accepted('us');
   }, 240_000);
 
   it("refuses a theme's own token or a part property that is no text", async () => {
     await withOwn(
       'ct',
-      "  tokens: {'--my-brand': null as any, '--my-size': 4 as any},",
+      "  tokens: {'--my-brand': true as any, '--my-size': 4 as any},",
     );
-    await refused('ct', /--my-brand the value null, which is not text/);
+    await refused('ct', /--my-brand the value true, which is not text/);
     await withOwn(
       'pp',
       '  components: {button: {base: {borderRadius: null, padding: 4}}} as any,',
-    );
-    await refused(
-      'pp',
-      /components\.button\.base border-radius \(line \d+\): .*value null, which is not text/,
     );
     await refused(
       'pp',

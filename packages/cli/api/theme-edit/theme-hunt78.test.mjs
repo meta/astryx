@@ -227,9 +227,13 @@ describe('except keeps every excepted part, variant and state', () => {
     'shadows everywhere but cards keep the cards own shadow',
     async () => {
       const r = await answer('remove shadows from everything except cards');
-      expect(r.commands.some(c => /box-shadow .+ --on card/.test(c))).toBe(
-        true,
-      );
+      // (The card picks its shadow by its elevation: the shadow tokens are
+      // kept on it, so every elevation keeps its shadow.)
+      expect(
+        r.commands.some(c =>
+          /(?:box-shadow|--shadow-[a-z]+) .+ --on card/.test(c),
+        ),
+      ).toBe(true);
     },
     T,
   );
@@ -307,7 +311,10 @@ describe('scope words', () => {
       );
       expect(
         (await answer('make the dialog header title bold')).commands[0],
-      ).toBe('set q font-weight 700 --on dialog-header-title-block');
+        // The title sets its own weight: its tokens, on the title block.
+      ).toMatch(
+        /^set q --text-heading-\d-weight 700 --on dialog-header-title-block$/,
+      );
     },
     T,
   );
@@ -478,7 +485,9 @@ describe('"like" and "as" compare only in comparison forms', () => {
     /** @type {Array<[string, string, string]>} */ ([
       // Comparisons: the subject changes, the other part never.
       ['cards as round as buttons', 'card', 'button'],
-      ['make cards as round as dialogs', 'card', 'dialog'],
+      // (Cards and dialogs read the same corner token, so "as round as
+      // dialogs" changes nothing; badges read their own.)
+      ['make badges as round as dialogs', 'badge', 'dialog'],
       ['dialogs the same padding as cards', 'dialog', 'card'],
       ['make badges rounded like buttons', 'badge', 'button'],
       ['make cards round like the dialogs are', 'card', 'dialog'],
@@ -502,9 +511,12 @@ describe('the answer that joins every clause is measured too', () => {
         'make form controls like inputs and checkboxes rounder',
         {cwd, theme: 'q'},
       );
-      expect(
-        (data.results ?? []).some(r => /^all of it, in order/.test(r.text)),
-      ).toBe(false);
+      // (Both clauses work now: checkboxes leave out the radio, which is
+      // fully round already. "All of it" holds both, never one.)
+      const all = (data.results ?? []).find(r =>
+        /^all of it, in order/.test(r.text),
+      );
+      expect(all?.commands.length ?? 0).not.toBe(1);
     },
     T,
   );
@@ -531,6 +543,36 @@ describe('the answer that joins every clause is measured too', () => {
       );
       expect(commands.some(c => c.includes('--on checks'))).toBe(false);
       expect(commands[0]).toBe('set q corners more --on inputs');
+      // A radio's circle alone is no corner the dial reaches.
+      await expect(
+        themeEditSet('q', 'corners', 'more', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        }),
+      ).rejects.toThrow(/a radio's circle \(border-radius 50%\), not a corner/);
+      // A square radio is asked of the radio by name: its own border-radius.
+      /** @type {any} */
+      let err = null;
+      try {
+        await themeEditSet('q', 'corners', 'square', {
+          cwd,
+          on: 'radio-indicator',
+          only: true,
+        });
+      } catch (e) {
+        err = e;
+      }
+      expect(
+        err.suggestions.map((/** @type {{name: string}} */ x) => x.name),
+      ).toContainEqual(
+        expect.stringMatching(
+          / set q border-radius 0 --on radio-indicator --only$/,
+        ),
+      );
+      expect((await answer('make radios square')).commands).toEqual([
+        'set q border-radius 0 --on radio-indicator --only',
+      ]);
     },
     T,
   );

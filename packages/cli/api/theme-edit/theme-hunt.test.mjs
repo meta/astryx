@@ -283,8 +283,12 @@ describe('exact tokens', () => {
     const r = await refusal(() =>
       themeEditSet('h', '--color-accnt', 'red', {cwd}),
     );
-    // No token holds "accnt": the whole list, never one that shows nothing.
-    expect(r.run[0]).toMatch(/how --list tokens$/);
+    // The one token the typo is near, then the whole list (no token
+    // holds "accnt"), never one that shows nothing.
+    expect(r.run[0]).toMatch(/ set h --color-accent red$/);
+    expect(
+      r.run.some((/** @type {string} */ x) => /how --list tokens$/.test(x)),
+    ).toBe(true);
   });
 
   it('accepts Core own shadows and a negative offset, and undo removes a shadow saved for one mode', async () => {

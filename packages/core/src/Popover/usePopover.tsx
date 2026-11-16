@@ -404,6 +404,11 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    */
   getOpener?: () => HTMLElement | null;
   /**
+   * useLayer's `onOpenPendingChange`: true when a `show()` that the layer
+   * accepted starts to wait for a valid anchor, false when that wait ends.
+   */
+  onOpenPendingChange?: (isPending: boolean) => void;
+  /**
    * The owner decides what a touch outside that pans does to the popover.
    * Otherwise a light-dismiss popover keeps such a pan from dismissing it
    * (useLayer's `watchesOutsidePans`).
@@ -482,6 +487,7 @@ function usePopoverImplementation(
     restoreFocusTo,
     getOpener,
     ownsOutsidePan = false,
+    onOpenPendingChange,
   } = options;
 
   const t = useComponentTranslator();
@@ -522,6 +528,7 @@ function usePopoverImplementation(
     watchesOutsidePans:
       hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
     writesEntranceSide,
+    onOpenPendingChange,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
