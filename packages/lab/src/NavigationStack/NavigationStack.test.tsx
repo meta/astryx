@@ -14,7 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {useState, type ReactNode} from 'react';
+import {useEffect, useState, type ReactNode} from 'react';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {
@@ -136,6 +136,72 @@ describe('NavigationStack', () => {
       {timeout: 3000},
     );
     expect(screenCard('Settings')).not.toHaveAttribute('inert');
+  });
+
+  describe('after the platform animated a history traversal', () => {
+    // An app that keeps its path in the history: a traversal (Safari's edge
+    // swipe, an iOS Home Screen app's back gesture) sets the path it reaches.
+    function HistoryHarness() {
+      const [path, setPath] = useState<string[]>(['General']);
+      useEffect(() => {
+        const onPopState = (event: PopStateEvent) =>
+          setPath((event.state as {path: string[]}).path);
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+      }, []);
+      return (
+        <NavigationStack
+          label="Settings"
+          root={
+            <NavigationScreen title="Settings">
+              <Root />
+            </NavigationScreen>
+          }
+          path={path}
+          onPathChange={setPath}
+          getKey={entry => entry}
+          renderScreen={entry => (
+            <NavigationScreen title={entry}>
+              <Detail entry={entry} />
+            </NavigationScreen>
+          )}
+        />
+      );
+    }
+
+    const traverse = (path: string[], hasUAVisualTransition: boolean) => {
+      const event = new PopStateEvent('popstate', {state: {path}});
+      Object.defineProperty(event, 'hasUAVisualTransition', {
+        value: hasUAVisualTransition,
+      });
+      act(() => {
+        window.dispatchEvent(event);
+      });
+    };
+
+    it('applies a platform-animated back at once: the popped screen leaves with no slide', () => {
+      render(<HistoryHarness />);
+      traverse([], true);
+      expect(screen.queryByText('General content')).toBeNull();
+      expect(screenCard('Settings')).not.toHaveAttribute('inert');
+    });
+
+    it('still slides a back the platform did not animate', () => {
+      render(<HistoryHarness />);
+      traverse([], false);
+      expect(screen.getByText('General content')).toBeInTheDocument();
+      expect(screenCard('General')).toHaveAttribute('inert');
+    });
+
+    it('applies a platform-animated forward at once: the pushed screen is on top with no slide', () => {
+      render(<HistoryHarness />);
+      traverse([], true);
+      traverse(['General'], true);
+      expect(screenCard('General')).toHaveAttribute('data-navigation-top');
+      expect(document.activeElement).toBe(
+        screen.getByRole('heading', {name: 'General'}),
+      );
+    });
   });
 
   it('moves focus to the new title after a push, and back to the pushing control after the pop', async () => {

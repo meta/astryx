@@ -26,12 +26,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -764,6 +766,61 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
 }
 
 /**
+ * Whether the platform has just animated a history traversal itself: Safari's
+ * edge swipe back or forward, or the back gesture of an iOS Home Screen app.
+ * The browser says so with `hasUAVisualTransition` on the Navigation API's
+ * `navigate` event and on `popstate`. The mark lasts two frames, long enough
+ * for the app to commit the path change the traversal causes. `take` reads
+ * the mark and clears it, so it applies to one transition only.
+ */
+function usePlatformAnimatedTraversal(
+  containerRef: RefObject<HTMLElement | null>,
+): {take: () => boolean} {
+  const markRef = useRef(false);
+  useEffect(() => {
+    const view = containerRef.current?.ownerDocument.defaultView;
+    if (view == null) {
+      return;
+    }
+    let frame = 0;
+    const mark = (event: Event) => {
+      if (Reflect.get(event, 'hasUAVisualTransition') !== true) {
+        return;
+      }
+      markRef.current = true;
+      view.cancelAnimationFrame(frame);
+      frame = view.requestAnimationFrame(() => {
+        frame = view.requestAnimationFrame(() => {
+          markRef.current = false;
+        });
+      });
+    };
+    // Capture runs first at the window, before an app's own popstate
+    // listener commits the path change.
+    view.addEventListener('popstate', mark, {capture: true});
+    const navigation: unknown = Reflect.get(view, 'navigation');
+    const navigationTarget =
+      navigation instanceof view.EventTarget ? navigation : null;
+    navigationTarget?.addEventListener('navigate', mark);
+    return () => {
+      view.cancelAnimationFrame(frame);
+      view.removeEventListener('popstate', mark, {capture: true});
+      navigationTarget?.removeEventListener('navigate', mark);
+    };
+  }, [containerRef]);
+  return useMemo(
+    () => ({
+      take: () => {
+        const isMarked = markRef.current;
+        markRef.current = false;
+        return isMarked;
+      },
+    }),
+    [],
+  );
+}
+
+/**
  * A push/pop navigator: UINavigationController's transitions, back button
  * and back swipes, on the compositor.
  *
@@ -829,6 +886,7 @@ export function NavigationStack<T>({
   const t = useTranslator();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const platformTraversal = usePlatformAnimatedTraversal(containerRef);
   const [registry] = useState<Registry>(() => new Map());
   // The last input decides whether a moved focus shows its ring.
   const {ref: trackModality, readModality} = useInteractionModalityTracking();
@@ -1399,6 +1457,29 @@ export function NavigationStack<T>({
     const release = releaseRef.current;
     releaseRef.current = null;
     pendingFocusRef.current = null;
+    // The platform already animated this traversal: the stack applies it at
+    // once, so the screen does not move twice.
+    if (release == null && platformTraversal.take()) {
+      runningRef.current = {id, done: true};
+      if (transition.kind === 'pop') {
+        setView(current =>
+          current.transition.id === id ? {...current, leaving: null} : current,
+        );
+        if (under != null) {
+          settle(under, 'top');
+          pendingFocusRef.current = {popped: top, revealed: under};
+        }
+      } else {
+        if (under != null) {
+          settle(under, 'covered');
+        }
+        settle(top, 'top');
+        focusAfter('push', top);
+      }
+      backControl.animator.set({opacity: 1});
+      backChevron.animator.set({opacity: 1});
+      return;
+    }
     const at = performance.now();
     let promise: Promise<boolean>;
     if (transition.kind === 'push') {
@@ -1483,6 +1564,7 @@ export function NavigationStack<T>({
     view.transition.id,
     animateProgress,
     focusAfter,
+    platformTraversal,
     layersOf,
     readClearBars,
     setProgress,
