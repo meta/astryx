@@ -87,7 +87,10 @@ import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
-import {useResolvedOptionality} from '../hooks/useResolvedRequired';
+import {
+  resolveSearchTriggerRequired,
+  useResolvedOptionality,
+} from '../hooks/useResolvedRequired';
 import {
   useFieldInputStyling,
   type FieldInputBaseProps,
@@ -112,7 +115,6 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
-import {useSearchTriggerRequired} from '../Selector/useSearchTriggerRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -1229,17 +1231,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const descriptionId = useId();
   const statusMessageId = useId();
   const fieldLabelId = useId();
-  const {ariaRequired, requiredDescriptionId, requiredDescription} =
-    useSearchTriggerRequired({
-      hasSearch,
-      isReadOnly: isEffectivelyReadOnly,
-      isRequired: isEffectivelyRequired,
-      isLabelRequiredMarkerShown,
-      isInInputGroup: inputGroup != null,
-      ariaLabel: (rest as {'aria-label'?: string})['aria-label'],
-      ariaLabelledBy: ariaLabelledByProp,
-      requiredLabel: t('@astryx.field.required'),
-    });
+  const requiredDescriptionId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -2542,12 +2534,25 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
   const callerProps = withholdCallerHandlers(rest, isDisabled);
+  const {ariaRequired, hasRequiredDescription} = resolveSearchTriggerRequired({
+    hasSearch,
+    isReadOnly: isEffectivelyReadOnly,
+    isRequired: isEffectivelyRequired,
+    showsRequiredMarker: isLabelRequiredMarkerShown,
+    isInInputGroup: inputGroup != null,
+    ariaLabel: (rest as {'aria-label'?: string})['aria-label'],
+    ariaLabelledBy: ariaLabelledByProp,
+  });
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [ariaDescribedByProp, ariaDescribedBy, requiredDescriptionId]
+      [
+        ariaDescribedByProp,
+        ariaDescribedBy,
+        hasRequiredDescription ? requiredDescriptionId : null,
+      ]
         .filter(Boolean)
         .join(' ') || undefined,
     'aria-labelledby': triggerLabelledBy,
@@ -2724,7 +2729,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             {t('@astryx.input.readOnly')}
           </VisuallyHidden>
         )}
-        {requiredDescription}
+        {hasRequiredDescription && (
+          <VisuallyHidden id={requiredDescriptionId}>
+            {t('@astryx.field.required')}
+          </VisuallyHidden>
+        )}
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
