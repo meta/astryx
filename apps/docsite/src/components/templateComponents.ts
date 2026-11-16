@@ -90,6 +90,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/login-split/page'),
   'login-sso': () =>
     import('../../../../packages/cli/assets/templates/pages/login-sso/page'),
+  lookup: () =>
+    import('../../../../packages/cli/assets/templates/pages/lookup/page'),
   'mixed-gallery': () =>
     import('../../../../packages/cli/assets/templates/pages/mixed-gallery/page'),
   'payment-form': () =>

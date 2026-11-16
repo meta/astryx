@@ -5622,6 +5622,11 @@
       "aliases": []
     },
     {
+      "name": "template-lookup",
+      "path": "templates/lookup",
+      "aliases": []
+    },
+    {
       "name": "template-messaging-shell",
       "path": "templates/messaging-shell",
       "aliases": []

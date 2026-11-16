@@ -788,6 +788,7 @@
     "/templates/login-split/",
     "/templates/login-sso/",
     "/templates/login/",
+    "/templates/lookup/",
     "/templates/messaging-shell/",
     "/templates/mixed-gallery/",
     "/templates/payment-form/",
