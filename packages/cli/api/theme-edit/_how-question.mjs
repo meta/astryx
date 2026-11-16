@@ -879,11 +879,21 @@ const boxIn = c => {
 function shadowIn(c) {
   const one =
     '(?:inset\\s+)?-?\\d*\\.?\\d+(?:px)?\\s+-?\\d*\\.?\\d+(?:px)?(?:\\s+-?\\d*\\.?\\d+(?:px)?){0,2}\\s+(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\\([^)]*\\)|[a-z]+)';
-  return (
+  const found =
     new RegExp(`${one}(?:\\s*[,\u2e34]\\s*${one})*`)
       .exec(c)?.[0]
-      .replace(/\u2e34/g, ',') ?? null
-  );
+      .replace(/\u2e34/g, ',') ?? null;
+  // ("5px 16px padding": lengths before a word that is no color are no
+  // shadow.)
+  const last = found ? /([a-z]+)$/.exec(found)?.[1] : null;
+  if (
+    last &&
+    last !== 'transparent' &&
+    last !== 'currentcolor' &&
+    !parseColor(last)
+  )
+    return null;
+  return found;
 }
 
 /** A length tied to a height word ("40px tall", "height 40px"). @param {string} c */
@@ -4574,6 +4584,22 @@ export function draftAnswer(ctx, env, question) {
       (_m, w, what) =>
         `${String(what).replace(/s$/, '')} ${w ?? '1px'} solid var(--color-border-emphasized)`,
     )
+    // ("make the cards brighter": a part's fill brighter is lighter; with
+    // no part, "brighter" is the colors' vividness, read by the vibrancy
+    // reader, and a text's brightness is its own.)
+    .replace(/\bbrighter\b/gi, (m, at, whole) => {
+      const clause =
+        String(whole)
+          .slice(0, at + m.length + 40)
+          .split(/[,;.]/)
+          .find((x, i, all) => all.slice(0, i + 1).join(',').length >= at) ??
+        '';
+      return partLexicon(ctx).parts.some(([re]) =>
+        re.test(` ${clause.toLowerCase()} `),
+      ) && !/\b(?:text|colou?rs?|accent|links?|icons?|labels?)\b/i.test(clause)
+        ? 'lighter'
+        : m;
+    })
     // ("rounded-md", "text-sm": Tailwind's sizes by their class names.)
     .replace(/\brounded-(none|sm|md|lg|xl|2xl|3xl|full)\b/gi, (_m, k) =>
       String(k) === 'full'
@@ -17209,6 +17235,15 @@ export function draftAnswer(ctx, env, question) {
                         }),
                       ]
                     : []),
+                  // (The other mode's ring color, said in the same ask, on
+                  // the outline too.)
+                  ...(allRings && other?.color && partner?.mode
+                    ? [
+                        set('--focus-outline-color', other.color, {
+                          mode: partner.mode,
+                        }),
+                      ]
+                    : []),
                   set('box-shadow', value, {
                     on: scopeR,
                     ...(statusWhen ? {when: statusWhen} : {}),
@@ -23991,11 +24026,21 @@ export function draftAnswer(ctx, env, question) {
       tracking: /^letter-spacing$/,
       case: /^text-transform$/,
       italic: /^font-style$/,
+      // (A shadow's reads are its box-shadow's, never its border's.)
+      shadow: /^box-shadow$/,
     })[a];
-    const toks = C.partReads(one(on), group)
+    const all = C.partReads(one(on), group)
       .filter(r => !prop || r.props.some(x => prop.test(x)))
-      .map(r => r.token)
-      .slice(0, 4);
+      .map(r => r.token);
+    // (A shadow's own tokens first: a ring a variant draws in its
+    // box-shadow is no shadow.)
+    const shadowToks = all.filter(t => /^--shadow-/.test(t));
+    if (a === 'shadow' && all.length && !shadowToks.length)
+      return `; ${one(on)} draws no shared shadow of its own (its box-shadow draws only rings, in ${all.slice(0, 2).join(', ')})`;
+    const toks = (a === 'shadow' && shadowToks.length ? shadowToks : all).slice(
+      0,
+      4,
+    );
     return toks.length ? `; ${one(on)} reads ${toks.join(', ')} for it` : '';
   }
 
@@ -26296,23 +26341,44 @@ export function draftAnswer(ctx, env, question) {
       if (!ink || !bgTok || !/^--color-/.test(bgTok)) continue;
       // (A see-through fill, a secondary button's wash, shows the page
       // under it.)
-      /** @param {'light' | 'dark'} m */
-      const ground = m => {
-        const raw = String(current(bgTok, m) ?? '');
+      /** @param {string} tok @param {'light' | 'dark'} m */
+      const groundOf = (tok, m) => {
+        const raw = String(current(tok, m) ?? '');
         return alphaOf(raw) < 1
           ? parseColor(String(current('--color-background-body', m) ?? ''))
           : parseColor(raw);
       };
+      // (With no status named, the text reaches every status: each one's
+      // resting fill, a banner's, is measured, and the text goes to a mode
+      // only if it reads on all of them there. A tone variant, a blue card,
+      // pairs its own text and is not measured.)
+      const restFills = inks[0].when
+        ? [bgTok]
+        : [
+            ...new Set([
+              bgTok,
+              ...fills
+                .filter(
+                  r =>
+                    /^--color-/.test(r.token) &&
+                    r.when.length > 0 &&
+                    r.when.every(w => /^(?:status|type)=/.test(w.trim())),
+                )
+                .map(r => r.token),
+            ]),
+          ];
+      /** @param {'light' | 'dark'} m */
+      const failing = m =>
+        restFills
+          .map(tok => groundOf(tok, m))
+          .find(g => g && ratio(ink, g) < 3) ?? null;
       const reads = /** @type {Array<'light' | 'dark'>} */ ([
         'light',
         'dark',
-      ]).filter(m => {
-        const g = ground(m);
-        return !g || ratio(ink, g) >= 3;
-      });
+      ]).filter(m => !failing(m));
       if (reads.length !== 1) continue;
       const other = reads[0] === 'light' ? 'dark' : 'light';
-      const g = ground(other);
+      const g = failing(other);
       for (const st of inks) st.mode = reads[0];
       d.text = `${d.text}, in ${reads[0]} mode only: ${on} is ${g ? hex(g.slice(0, 3)) : 'light'} in ${other} mode, where ${inks[0].value} would not read; for both modes, give ${on} a background too`;
     }
@@ -26443,6 +26509,25 @@ export function draftAnswer(ctx, env, question) {
         text: `the ${status} look is the ${dial} color (now ${current(`--color-${status === 'danger' ? 'error' : status}`)}): every ${status} banner, badge and toast follows it; set it to a color that sits with the rest, set ${env.slug} ${dial} <color>`,
         options: [],
         lookup: `${HOW} ${dial}`,
+      });
+    }
+  }
+  // ("rounded photos", "bigger images"): a photo is the app's own image,
+  // no part of the theme's; written for the whole theme it would change
+  // what was never asked, so it is said, with the parts that show an
+  // image.
+  {
+    const photo = /\b(photos?|images?|pictures?|thumbnails?|pics)\b/.exec(
+      q,
+    )?.[1];
+    if (photo && !partsSeen.length) {
+      const holders = [...ctx.project.target.keys()].filter(k =>
+        /avatar|image|thumbnail|media/.test(k),
+      );
+      result.splice(0, result.length, {
+        text: `no part is called "${photo}": a photo is your app's own image, which the theme does not style${holders.length ? `; the parts that show one are ${holders.slice(0, 5).join(', ')}, which take a change by name ("rounder ${holders[0]}")` : ''}; nothing is written`,
+        options: [],
+        lookup: `${HOW} --list parts`,
       });
     }
   }
