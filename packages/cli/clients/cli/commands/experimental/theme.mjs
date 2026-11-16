@@ -1808,6 +1808,8 @@ export function registerExperimentalTheme(group, program) {
               const afterValue = new Set();
               /** An option's value before words that may be extra. @type {Record<string, string>} */
               const extendedFrom = {};
+              /** The option the name was typed with (`--theme`), if any. @type {string | null} */
+              let nameOption = null;
               for (let i = from + 1; from >= 0 && i < argv.length; i++) {
                 const w = argv[i];
                 if (w === '--') {
@@ -1823,6 +1825,13 @@ export function registerExperimentalTheme(group, program) {
                 }
                 if (w.startsWith('-')) {
                   const flag = w.split('=')[0];
+                  // The name typed as an option (`--theme t2`, `--name t2`):
+                  // new takes it as its first word.
+                  if (/^--?(theme|name)$/i.test(flag)) {
+                    nameOption = flag;
+                    open = null;
+                    continue;
+                  }
                   if (valueFlags.has(flag) && !w.includes('=')) i += 1;
                   open = dialFlags.has(flag) ? camel(flag) : null;
                   continue;
@@ -1905,7 +1914,9 @@ export function registerExperimentalTheme(group, program) {
                   const word = String(w)
                     .trim()
                     .toLowerCase()
-                    .replace(/[:=]+$/, '');
+                    .replace(/[:=]+$/, '')
+                    // A key in quotes (`"like"`, `'accent'`) is that key.
+                    .replace(/^(["'])(.*)\1$/, '$2');
                   if (!/^[a-z][a-z-]*$/.test(word)) return null;
                   if (word === 'like' || word === 'base') return 'like';
                   if (dialFlags.has(`--${word}`)) return camel(`--${word}`);
@@ -1943,14 +1954,32 @@ export function registerExperimentalTheme(group, program) {
                     return entries.every(([k]) => dialOf(k))
                       ? entries.map(([k, v]) => [k, String(v)])
                       : null;
+                  // `key=value`, `key: value`, keys and values in quotes or
+                  // not (`"like": "neutral"`), in either order (`red=accent`,
+                  // `stone=like`), as set reads a pair swapped; `like` is
+                  // never a value (`neutral=like` is the base neutral).
+                  const unquote = (/** @type {string} */ x) =>
+                    x.trim().replace(/^(["'])(.*)\1$/, '$2');
                   const byColon = w
                     .split(/\s*;\s*/)
-                    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x.trim()));
-                  if (byColon.length && byColon.every(m => m && dialOf(m[1])))
-                    return byColon.map(m => [
-                      /** @type {RegExpExecArray} */ (m)[1],
-                      /** @type {RegExpExecArray} */ (m)[2].trim(),
-                    ]);
+                    .map(x =>
+                      /^((["'])[a-z-]+\2|[a-z0-9#(][^=:]*?)\s*[=:]\s*(.+)$/i.exec(
+                        x.trim(),
+                      ),
+                    );
+                  /** @type {Array<[string, string]>} */
+                  const read = [];
+                  // (No pair at all: the `dial value` items below.)
+                  for (const m of byColon.some(Boolean) ? byColon : []) {
+                    if (!m) return null;
+                    const [k, v] = [unquote(m[1]), unquote(m[3])];
+                    if (dialOf(v) === 'like' && !dialOf(k)?.startsWith('like'))
+                      read.push([v, k]);
+                    else if (dialOf(k)) read.push([k, v]);
+                    else if (dialOf(v) && !/\s/.test(v)) read.push([v, k]);
+                    else return null;
+                  }
+                  if (read.length) return read;
                   // `'accent red'`, `'accent red, corners pill'`.
                   if (!/\s/.test(w.trim())) return null;
                   const items = w
@@ -2114,7 +2143,11 @@ export function registerExperimentalTheme(group, program) {
                 lines = await linesFor();
               }
               throw new AstryxError(
-                `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
+                // (Only the name typed as an option, nothing extra: say that.)
+                nameOption &&
+                  !(nameWord ? [...intoValues, ...words] : extra).join('')
+                  ? `${nameOption} is no option of new: the theme name is new's first word. Nothing was changed.`
+                  : `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
                 [
                   ...lines,
                   ...later.map(([thing, value]) => ({

@@ -920,7 +920,9 @@ async function newTheme(
     // A file name, the app copy's export (tTheme), camelCase or spaces
     // (BrandDark, "Brand Dark") name the theme they read as: when it is
     // here already, that is said, never a numbered second copy offered.
-    const typed = String(name ?? '');
+    // The name typed as an option (`--theme=t2`, `--name=t2`) is that name.
+    const asOption = /^--?(?:theme|name)=(.+)$/i.exec(String(name ?? ''));
+    const typed = asOption ? asOption[1] : String(name ?? '');
     const path_ = /[\\/]/.test(typed);
     const readings = themeNameReadings(typed);
     const present = readings.find(n =>
