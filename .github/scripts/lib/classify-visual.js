@@ -618,14 +618,21 @@ const EXPRESSION_START = new Set([
  * reading the file's syntax, never a value's shape:
  *
  * - the arguments of `stylex.create(...)` and the other stylex style calls,
- *   of `defineTheme(...)` and `defineSyntaxTheme(...)`, and of
- *   `element.animate(...)`;
+ *   of `defineTheme(...)` and `defineSyntaxTheme(...)`, of
+ *   `element.animate(...)` and the motion system's `handle.play(...)`, and of
+ *   a `stylex.create` dynamic style (`sheet.size(width)`);
  * - the objects after the first argument of `Object.assign(<x>.style, ...)`;
+ * - a spread onto an intrinsic JSX element (`<svg {...svgProps}>`);
  * - the value of a JSX `style`, `xstyle` or `<name>Style` attribute, and of
  *   an object property with such a name;
- * - an object bound to a name whose type, `as` or `satisfies` names a style
- *   type (`CSSProperties`, `StyleXStyles`, ...), or whose name is used inside
- *   another style context of the file.
+ * - an object or function body bound to a name whose type, `as` or
+ *   `satisfies` names a style type (`CSSProperties`, `StyleXStyles`, ...), or
+ *   whose name is read inside another style context of the file; a name
+ *   bound to a call's result passes that on to the function it calls.
+ *
+ * Not a style context: an object, named or inline, on a component prop whose
+ * name is not style-named (a chart's `tick={...}`), and style values a helper
+ * returns to another file.
  *
  * A small lexer reads the file, comments, strings, template literals, regular
  * expressions, type parameters and JSX text included, so a quote in JSX text
@@ -1079,64 +1086,96 @@ function styleContextLines(source, jsx) {
   if (stack.length > 0 || contexts.length > 0) return null;
 
   // A named object or function is style when its type says so, or when its
-  // name is read inside another style context (or as a style property's
-  // value); a name bound to a call's result passes that on to the function.
-  // Marking one can mark another that it reads: a work list follows each
-  // newly marked range to the names read in it, so every reference is
-  // looked at a bounded number of times.
-  const linesOf = new Map();
+  // name is read as style outside its own lines (inside another style
+  // context, or as a style property's value); a name bound to a call's
+  // result passes that on to the function it calls. Marking one can mark
+  // another that it reads. Per name, the lowest and highest line it is read
+  // as style decide every binding of it at once (`min < from || max > to`),
+  // and its unmarked bindings wait in two lists sorted by `from` and by
+  // `to`, so each binding is marked or passed over once: the marking takes
+  // time near linear in the file.
   const namesAt = new Map();
+  const byName = new Map();
+  const stateOf = name => {
+    let state = byName.get(name);
+    if (state == null) {
+      state = {
+        min: Infinity,
+        max: -Infinity,
+        waiting: [],
+        byFrom: [],
+        byTo: [],
+      };
+      byName.set(name, state);
+    }
+    return state;
+  };
   for (const {name, line: at} of references) {
-    if (!linesOf.has(name)) linesOf.set(name, []);
-    linesOf.get(name).push(at);
     if (!namesAt.has(at)) namesAt.set(at, new Set());
     namesAt.get(at).add(name);
+    if (covered.has(at) || styleValueLines.has(at)) {
+      const state = stateOf(name);
+      state.min = Math.min(state.min, at);
+      state.max = Math.max(state.max, at);
+    }
   }
   const bindingsOf = new Map();
   for (const binding of bindings) {
     if (!bindingsOf.has(binding.name)) bindingsOf.set(binding.name, []);
     bindingsOf.get(binding.name).push(binding);
+    stateOf(binding.name).waiting.push(binding);
   }
-  const resultsOf = new Map();
+  // A call result waits like a binding of its name over its own line; when
+  // it is used as style, the function it calls is marked.
   for (const result of callResults) {
-    if (!resultsOf.has(result.name)) resultsOf.set(result.name, []);
-    resultsOf.get(result.name).push(result);
+    stateOf(result.name).waiting.push({
+      from: result.line,
+      to: result.line,
+      calls: result.calls,
+    });
   }
-  const usedAsStyle = (name, from, to) =>
-    (linesOf.get(name) ?? []).some(
-      at =>
-        (at < from || at > to) && (covered.has(at) || styleValueLines.has(at)),
-    );
-  const marked = new Set();
+  for (const state of byName.values()) {
+    // Popped from the end: the largest `from` first, the smallest `to` first.
+    state.byFrom = [...state.waiting].sort((x, y) => x.from - y.from);
+    state.byTo = [...state.waiting].sort((x, y) => y.to - x.to);
+  }
+  const done = new Set();
   const pending = [];
-  // Names to look at again: every name read where a style context lies.
-  const queue = [...new Set(references.map(reference => reference.name))];
-  const markBinding = binding => {
-    if (marked.has(binding)) return;
-    marked.add(binding);
-    for (let at = binding.from; at <= binding.to; at += 1) {
-      if (covered.has(at)) continue;
-      covered.add(at);
-      for (const name of namesAt.get(at) ?? []) pending.push(name);
+  const markLine = at => {
+    if (covered.has(at)) return;
+    covered.add(at);
+    for (const name of namesAt.get(at) ?? []) {
+      const state = stateOf(name);
+      if (at < state.min || at > state.max) {
+        state.min = Math.min(state.min, at);
+        state.max = Math.max(state.max, at);
+        pending.push(name);
+      }
     }
   };
-  for (const binding of bindings) if (binding.typed) markBinding(binding);
-  const seen = new Set();
-  while (queue.length > 0 || pending.length > 0) {
-    const name = pending.length > 0 ? pending.pop() : queue.pop();
-    for (const binding of bindingsOf.get(name) ?? []) {
-      if (!marked.has(binding) && usedAsStyle(name, binding.from, binding.to)) {
-        markBinding(binding);
+  const settle = entry => {
+    if (done.has(entry)) return;
+    done.add(entry);
+    if (entry.calls != null) {
+      for (const binding of bindingsOf.get(entry.calls) ?? []) {
+        if (done.has(binding)) continue;
+        done.add(binding);
+        for (let at = binding.from; at <= binding.to; at += 1) markLine(at);
       }
+      return;
     }
-    for (const result of resultsOf.get(name) ?? []) {
-      if (seen.has(result) || !usedAsStyle(name, result.line, result.line)) {
-        continue;
-      }
-      seen.add(result);
-      for (const binding of bindingsOf.get(result.calls) ?? []) {
-        markBinding(binding);
-      }
+    for (let at = entry.from; at <= entry.to; at += 1) markLine(at);
+  };
+  for (const binding of bindings) if (binding.typed) settle(binding);
+  pending.push(...byName.keys());
+  while (pending.length > 0) {
+    const state = byName.get(pending.pop());
+    const {byFrom, byTo} = state;
+    while (byFrom.length > 0 && byFrom[byFrom.length - 1].from > state.min) {
+      settle(byFrom.pop());
+    }
+    while (byTo.length > 0 && byTo[byTo.length - 1].to < state.max) {
+      settle(byTo.pop());
     }
   }
   return covered;

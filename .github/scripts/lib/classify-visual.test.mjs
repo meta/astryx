@@ -947,7 +947,20 @@ describe('CSS-named keys count only in a style context', () => {
     expect(covered.has(20)).toBe(false);
   });
 
-  it('marks a long chain of named objects in time linear in the file', () => {
+  it('marks many bindings of one name, read many times, in time near linear in the file', () => {
+    const source = [
+      ...Array.from({length: 20000}, () => '{ const s = {width: 1}; }'),
+      ...Array.from({length: 125000}, () => 'f(s);'),
+      'const styles = stylex.create({x: s});',
+    ].join('\n');
+    const started = performance.now();
+    const covered = styleContextLines(source, false);
+    expect(covered.has(1)).toBe(true);
+    // A scan of every read per binding took tens of seconds on this input.
+    expect(performance.now() - started).toBeLessThan(10_000);
+  });
+
+  it('marks a long chain of named objects in time near linear in the file', () => {
     const count = 20000;
     const source = [
       ...Array.from(
