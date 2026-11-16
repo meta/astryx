@@ -1150,6 +1150,52 @@ function blockDuringPush(page: Page, ms: number) {
   });
 }
 
+test('a push whose commit blocks the main thread starts from its first frame', async ({
+  page,
+}) => {
+  // A heavy screen blocks the main thread in the task that pushes it (here
+  // for 300 ms, right after the stack mounts it). The push starts when that
+  // task ends, so its first frames show it near where it starts. Dated
+  // before the block, it would show almost all of its travel at once.
+  const {driver, width} = await openStack(page, 'settings');
+  await page.evaluate(() => {
+    const observer = new MutationObserver(() => {
+      if (
+        document.querySelector('[data-navigation-screen="screen-General"]') ==
+        null
+      ) {
+        return;
+      }
+      observer.disconnect();
+      const until = performance.now() + 300;
+      while (performance.now() < until) {
+        // Hold the main thread, as a heavy commit does.
+      }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  // The second frame after the block: the push has run for about a frame.
+  const x = await page.evaluate(
+    () =>
+      new Promise<number>(resolve => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const pushed = document.querySelector(
+              '[data-navigation-screen="screen-General"]',
+            );
+            const value =
+              pushed == null ? 'none' : getComputedStyle(pushed).translate;
+            resolve(value === 'none' ? 0 : parseFloat(value));
+          }),
+        );
+      }),
+  );
+  // Critically damped from the trailing edge: about 70 % of the width is
+  // still to travel after 33 ms; under 1 % after the 300 ms block.
+  expect(Math.abs(x) / width).toBeGreaterThan(0.5);
+});
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
