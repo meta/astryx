@@ -268,7 +268,13 @@ those contracts.
   component reports a change through an internal, non-exported function that
   takes the `useAnimatedLayout` handle, so the handle stays member-free, and
   each moving element is one the page already renders, except a swap's one
-  transient copy of the old content (`spec:AST-105` FR8). Two Core components hold their own handle
+  transient copy of the old content (`spec:AST-105` FR8).
+  `motion/scrollOffsets.ts` reads a subtree's scroll offsets and restores
+  them. The transient copy and AppShell's hidden regions both use it to keep
+  scroll across a change that drops it (a clone that carries none;
+  `display: none` under Activity). It stays apart from `transientCopy`
+  because this invariant confines the copy mechanism itself to the swap and
+  the layer's exit copy. Two Core components hold their own handle
   for their own change: AppShell's content area and the SideNav rail, during a
   side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
   FR6), each making its copy through the swap. A resize controller also holds

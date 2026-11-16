@@ -45,6 +45,7 @@
 
 import {usePresentationHold} from '../Layer/presentationHold';
 import {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -66,6 +67,12 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {Heading} from '../Heading/Heading';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from '../AppShell/appShellDrawerFocus';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {focusForLastInputTemporarily} from '../utils/focusReturn';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -377,16 +384,42 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
  *
  * Focus is left alone when there was no real opener (activeElement was <body>)
  * or the opener has since left the DOM: focusing <body> would blur whatever a
- * router moved focus to, and a detached node cannot take focus.
+ * router moved focus to, and a detached node cannot take focus. Inside
+ * AppShell, an opener removed because the drawer is empty sends focus to main.
  */
 function closeAndRestoreFocus(
   dialog: HTMLDialogElement,
   openerRef: RefObject<HTMLElement | null>,
+  shellFocus: AppShellDrawerFocus | null,
 ): void {
   dialog.close();
   const opener = openerRef.current;
   openerRef.current = null;
-  if (!opener || opener === document.body || !opener.isConnected) {
+  if (!opener || opener === document.body) {
+    return;
+  }
+  // An opener that is still connected but hidden, such as the menu button of
+  // a navigation region the app hid, cannot take focus. Inside AppShell, a
+  // menu button removed because the drawer has nothing left to show is gone
+  // for the same reason. In both cases focus goes to main.
+  const isHidden =
+    opener.isConnected &&
+    (opener.closest('[inert]') != null ||
+      (typeof opener.checkVisibility === 'function' &&
+        !opener.checkVisibility()));
+  const isRemovedByHiding =
+    !opener.isConnected && shellFocus?.isDrawerEmpty() === true;
+  if (isHidden || isRemovedByHiding) {
+    const main =
+      shellFocus?.main() ??
+      opener.ownerDocument.querySelector<HTMLElement>('[role="main"], main');
+    // A plain <main> has no tab stop. It gets one until focus leaves it.
+    if (main != null) {
+      focusForLastInputTemporarily(main);
+    }
+    return;
+  }
+  if (!opener.isConnected) {
     return;
   }
   opener.focus();
@@ -504,6 +537,9 @@ export function MobileNav({
   const t = useComponentTranslator();
   // Read from AppShell context as fallback
   const appShellMobile = useAppShellMobile();
+  // Read when the drawer closes, from a timer or a teardown.
+  const shellFocus = use(AppShellDrawerFocusContext);
+  const shellFocusRef = useCommittedRef(shellFocus);
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
   // Share the id from AppShell context so the toggle's aria-controls resolves to
   // this drawer; fall back to a locally generated id when used standalone.
@@ -630,7 +666,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
-        closeAndRestoreFocus(dialog, triggerElementRef);
+        closeAndRestoreFocus(dialog, triggerElementRef, shellFocusRef.current);
         releasePresentation();
       }, resolveCloseDelay(dialog));
     } else {
@@ -649,7 +685,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
     };
-  }, [isOpen, releasePresentation]);
+  }, [isOpen, releasePresentation, shellFocusRef]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -670,10 +706,12 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       if (dialog?.open) {
-        closeAndRestoreFocus(dialog, triggerElementRef);
+        // A committed value, not a DOM node: teardown reads the latest one.
+        // eslint-disable-next-line @eslint-react/exhaustive-deps
+        closeAndRestoreFocus(dialog, triggerElementRef, shellFocusRef.current);
       }
     };
-  }, []);
+  }, [shellFocusRef]);
 
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isOpen,
