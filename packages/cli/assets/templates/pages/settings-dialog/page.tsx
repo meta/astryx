@@ -92,6 +92,7 @@ import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {Token} from '@astryxdesign/core/Token';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VStack} from '@astryxdesign/core/VStack';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowDownOnSquareIcon,
   ArrowDownTrayIcon,
@@ -1979,6 +1980,7 @@ function LanguagePanel({settings, update}: PanelProps) {
 
 function PrivacyPanel({settings, update}: PanelProps) {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <VStack gap={5}>
       <SettingsCard title="Visibility">
@@ -2060,9 +2062,32 @@ function PrivacyPanel({settings, update}: PanelProps) {
           title="Delete my account"
           description="Permanent, and it takes the workspace with it."
           icon={TrashIcon}
-          control={<Button label="Delete" variant="destructive" size="sm" />}
+          control={
+            <Button
+              label="Delete"
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                confirm.show({
+                  title: 'Delete your account?',
+                  description:
+                    "This demo won't delete anything. In your app, this would permanently delete your account and the workspace with it.",
+                  actionLabel: 'Delete account',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: your account would be deleted here',
+                      uniqueID: 'delete-account',
+                    });
+                  },
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
+      {confirm.element}
     </VStack>
   );
 }
