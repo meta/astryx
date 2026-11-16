@@ -125,7 +125,6 @@ async function searchCatalog(options) {
  * another entry's name is not a match (_named-keywords.mjs). Only search's own
  * comparisons set it; build never does, so build reads every keyword.
  *
- * @param {string} query
  * `readyTemplatesOnly` leaves every page template that is not ready yet out
  * of the entries search ranks, as if it were absent: it takes no place, moves
  * no order and adds nothing to `matchCount`. Only build sets it; search itself

@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from '../build.mjs';
+import {loadTemplates} from '../_adapter.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -143,5 +144,31 @@ describe('a not-ready page template', () => {
     expect(await names()).toContain('tally');
     fx.write({tally: {...TALLY, isReady: false}});
     expect(await names()).not.toContain('tally');
+  }, 120_000);
+
+  it('is not named for an idea that names a ready template sharing its word', async () => {
+    const fx = project({
+      tally: {...TALLY, isReady: false},
+      'tally-sheet': {
+        description: 'A sheet of tallies with a total per row.',
+        keywords: ['tally sheet'],
+        isReady: true,
+      },
+    });
+    made.push(fx.dir);
+    for (const idea of ['tally-sheet', 'TallySheet']) {
+      const kit = await kitOf(idea, fx.dir);
+      expect(kit.start?.reason).not.toContain('`tally`');
+    }
+  }, 120_000);
+
+  it("keeps a ready template's own reason when its id holds a not-ready template's name", async () => {
+    const {pages, notReadyPages} = await loadTemplates(REPO);
+    for (const {name} of notReadyPages) {
+      for (const page of pages.filter(p => p.name.split('-').includes(name))) {
+        const kit = await kitOf(page.name, REPO);
+        expect(kit.start?.reason).not.toContain(`\`${name}\` isn't ready yet`);
+      }
+    }
   }, 120_000);
 });

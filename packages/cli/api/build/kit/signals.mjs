@@ -126,6 +126,29 @@ function blockScore(r) {
 }
 
 /**
+ * The not-ready page template the idea names and search matches directly, or
+ * null: the one case where build's reason names a template it does not start
+ * from. Search for the kit leaves not-ready templates out, so only an idea
+ * that names one outright pays for a search that keeps them.
+ * @param {string} query the caller's idea
+ * @param {{name: string}[]} notReady the project's not-ready page templates
+ * @param {() => Promise<SearchResultEntry[]>} searchAll search's results with every template
+ * @param {(r: SearchResultEntry) => boolean} pageMatch
+ * @returns {Promise<string | null>}
+ */
+async function namedNotReady(query, notReady, searchAll, pageMatch) {
+  /** @param {{name: string}} t */
+  const named = t =>
+    namedOutright([t.name], readNames(query, [{name: t.name}]), [t])[0];
+  const names = new Set(notReady.filter(named).map(t => t.name));
+  if (names.size === 0) return null;
+  const found = (await searchAll()).find(
+    r => names.has(r.name) && pageMatch(r) && r.score >= PAGE_DIRECT,
+  );
+  return found?.name ?? null;
+}
+
+/**
  * Build's signals for one request (see {@link KitSignals}).
  *
  * @param {string} query what you're building (e.g. "analytics dashboard")
@@ -151,17 +174,19 @@ export async function kitSignals(query, options = {}) {
   // with a neighbour-letter swap in a word of six or more letters as that template's own words
   // (readNames), as the page ranker does, so such a name matches by name.
   const searched = wantsPages ? readNames(query, catalog) : query;
+  const searchOptions = {
+    cwd,
+    type,
+    // Search wider than the surfaced kit so a flood of doc matches cannot
+    // bury the page templates past the cutoff; the caller's `limit` still
+    // caps the kit below. A non-positive or non-integer limit is passed
+    // through unchanged so search rejects it (ERR_INVALID_ARGUMENT).
+    limit: Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit,
+  };
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
       await search(searched, {
-        cwd,
-        type,
-        // Search wider than the surfaced kit so a flood of doc matches cannot
-        // bury the page templates past the cutoff; the caller's `limit` still
-        // caps the kit below. A non-positive or non-integer limit is passed
-        // through unchanged so search rejects it (ERR_INVALID_ARGUMENT).
-        limit:
-          Number.isInteger(limit) && limit > 0 ? Math.max(limit, 200) : limit,
+        ...searchOptions,
         // Build starts only from ready page templates, so it reads search as
         // if a template not ready yet were absent: such a template takes no
         // place, moves no order and adds nothing to the count.
@@ -195,12 +220,15 @@ export async function kitSignals(query, options = {}) {
     r.score >= PAGE_FLOOR &&
     covers(r);
   const matchedPages = results.filter(pageMatch).slice(0, 3);
-  // Search leaves not-ready templates out, so the reason that names one the
-  // idea asks for compares the idea with their names directly.
-  const namedUnready =
-    templates.notReadyPages.find(
-      t => namedOutright([t.name], readNames(query, [t]), [t])[0],
-    )?.name ?? null;
+  const namedUnready = await namedNotReady(
+    query,
+    templates.notReadyPages,
+    async () =>
+      /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
+        await search(searched, searchOptions)
+      ).data.results,
+    pageMatch,
+  );
   const searchedBlocks = results.filter(
     r => r.domain === 'template' && r.kind === 'block',
   );
