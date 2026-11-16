@@ -70,14 +70,14 @@ touch. The recipe styles paint from that attribute.
 ## Boundaries and invariants
 
 - **INV1 — One engine.** The page press controller writes the pressed state
-  of every press in Core. Tracking a held pointer across a group keeps the
-  owners `architecture:interaction-modality` INV13 names: the action-group
+  of a single press in Core. Across a group, the owners
+  `architecture:interaction-modality` INV13 names write it: the action-group
   tracker for `family:action-groups` members, reached through
   `useGroupPressTracking`, and `module:DropdownMenu/useMenuPress` for menus
   and Selector's and MultiSelector's options. They are this record's group and
-  menu profiles. A press held through a drag is a profile of the engine. A
-  component adds no press attribute, tracker, timer, or tint variable of its
-  own.
+  menu profiles. A press held through a drag is a profile of the engine. No
+  other code writes a pressed state, and a component adds no press attribute,
+  tracker, timer, or tint variable of its own.
 - **INV2 — Three recipes.** Every pressable Core surface uses one recipe from
   the table above, and its record names the recipe. The recipes are exports of
   the private press modules; they add no module and no public API.
@@ -159,7 +159,7 @@ touch. The recipe styles paint from that attribute.
 | INV1      | Review: no new press attribute, tracker, or tint variable outside the recipe modules                                                                                            | A component writes its own pressed state                                                                                                                |
 | INV2      | Each pressable component record names its recipe                                                                                                                                | A record restates press rules without a recipe                                                                                                          |
 | INV3      | `pressFeedback.test.ts`; a browser test that a point inside a caller's stretched target still hits during a press                                                               | A tap during a press misses its target, or layout shifts                                                                                                |
-| INV4      | Computed release durations follow the theme's exit tokens and tempo on every recipe                                                                                             | A fixed duration, or two surfaces of one recipe that cancel the same drift differently                                                                  |
+| INV4      | Computed release durations follow the theme's exit tokens and tempo on every recipe                                                                                             | A fixed duration, or two surfaces of one recipe and one profile that cancel the same drift differently                                                  |
 | INV5      | A mouse press test per recipe asserts the press attribute, not `:active`                                                                                                        | A mouse press paints with no shared release fade                                                                                                        |
 | INV6      | Size report: the engine core is on first load; optional profiles within INV10                                                                                                   | The engine core moves off first load, or an unused profile exceeds INV10                                                                                |
 | INV7      | A press on a nested control in a row and in a card, for finger, pen, and mouse                                                                                                  | A press from any pointer on a nested control paints the container, or a press on the row's own action, delegated control, or box does not paint the row |
