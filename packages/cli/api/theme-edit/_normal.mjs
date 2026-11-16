@@ -1420,10 +1420,40 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
 export function readsTyped(line) {
   const read = readsTypedValue(line);
   if (read === true || !line.scope?.on) return read;
-  const rest = withoutScopeWords(String(line.typed), line.scope);
-  return rest != null && rest !== String(line.typed).trim()
-    ? readsTypedValue({...line, typed: rest}) === true || read
-    : read;
+  const typed = String(line.typed).trim();
+  const on = String(line.scope.on).toLowerCase();
+  const typedThing = String(line.typedThing ?? '').toLowerCase();
+  const esc = (/** @type {string} */ x) =>
+    x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The part typed in the setting's place (`card padding 20px`): the
+  // line's --on carries the part, and its setting the name typed first in
+  // the value, so the rest is the value read.
+  const partFirst =
+    typedThing &&
+    [
+      typedThing,
+      typedThing.replace(/e?s$/, ''),
+      typedThing.replace(/s$/, ''),
+    ].includes(on) &&
+    line.thing
+      ? typed.replace(
+          new RegExp(`^${esc(String(line.thing))}\\s*(?:[:=]\\s*|\\s+)`, 'i'),
+          '',
+        )
+      : null;
+  for (const rest of [withoutScopeWords(typed, line.scope), partFirst])
+    if (
+      rest != null &&
+      rest !== typed &&
+      rest.trim() &&
+      readsTypedValue({
+        ...line,
+        typed: rest.replace(/\s*;\s*$/, ''),
+        typedThing: line.thing,
+      }) === true
+    )
+      return true;
+  return read;
 }
 
 /**
