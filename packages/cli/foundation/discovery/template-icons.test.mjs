@@ -7,7 +7,10 @@
  * names or words.
  */
 
-import {describe, expect, it} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {afterAll, describe, expect, it} from 'vitest';
 import {
   iconsNotImported,
   mapTemplateIcons,
@@ -784,7 +787,7 @@ describe("a set that wraps the template's library", () => {
     ]);
   });
 
-  it("keeps every icon from the main set's own library as written", () => {
+  it("maps an icon from the main set's own library through the set, and keeps one the set lacks", () => {
     /** @type {any} */
     const choice = {
       status: 'selected',
@@ -794,17 +797,94 @@ describe("a set that wraps the template's library", () => {
       reason: 'list',
     };
     const {source, icons} = map(SOURCE, DECLARED, choice, [WRAPPER, SET]);
-    expect(source).toBe(SOURCE);
-    expect(icons?.mapped).toEqual([]);
+    // wrapper maps close; the other two stay with the library it wraps, and
+    // never move to a backup.
+    expect(source).toBe(
+      [
+        "import {CloseIcon} from '@acme/wrapper';",
+        "import {FrameGlyph, ScissorsGlyph} from '@acme/library';",
+        '',
+        'export const A = () => <><CloseIcon /><FrameGlyph size={16} /><ScissorsGlyph /></>;',
+        '',
+      ].join('\n'),
+    );
+    expect(icons?.mapped.map(each => [each.source.export, each.by])).toEqual([
+      ['CloseGlyph', 'definition'],
+    ]);
     expect(icons?.placeholder).toEqual([]);
     expect(icons?.kept.map(each => each.export)).toEqual([
-      'CloseGlyph',
       'FrameGlyph',
       'ScissorsGlyph',
     ]);
     expect(icons?.kept[0].reason).toBe(
       'it already comes from @acme/library, which @acme/wrapper/wrapper wraps',
     );
+  });
+
+  describe('a library that exports one icon under two names', () => {
+    const packageDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-wrapped-alias-'),
+    );
+    afterAll(() => fs.rmSync(packageDir, {recursive: true, force: true}));
+    const library = path.join(packageDir, 'node_modules', '@acme', 'library');
+    fs.mkdirSync(library, {recursive: true});
+    fs.writeFileSync(
+      path.join(library, 'package.json'),
+      JSON.stringify({name: '@acme/library', type: 'module', main: 'index.js'}),
+    );
+    fs.writeFileSync(
+      path.join(library, 'index.js'),
+      [
+        'function Frame() { return null; }',
+        'function Scissors() { return null; }',
+        'export {Frame, Frame as FrameGlyph, Scissors as ScissorsGlyph};',
+        '',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(packageDir, 'wrapper.generated.js'),
+      "export {FrameGlyph as FrameIcon} from '@acme/library';\n",
+    );
+    const READ = /** @type {any} */ ({
+      ...WRAPPER,
+      packageDir,
+      data: {
+        ...WRAPPER.data,
+        generated: './wrapper.generated.js',
+        icons: [
+          ...WRAPPER.data.icons,
+          {id: 'frame', export: 'FrameIcon', words: ['frame']},
+        ],
+      },
+    });
+
+    it("maps the other name to the set's export when both read one declaration", () => {
+      /** @type {any} */
+      const choice = {
+        status: 'selected',
+        set: READ,
+        configured: 'wrapper',
+        reason: 'one set',
+      };
+      const {source, icons} = map(
+        "import {Frame, ScissorsGlyph} from '@acme/library';\nexport const A = () => <><Frame /><ScissorsGlyph /></>;\n",
+        {Frame: 'frame', ScissorsGlyph: 'cut'},
+        choice,
+        [READ],
+      );
+      expect(source).toBe(
+        [
+          "import {FrameIcon} from '@acme/wrapper';",
+          "import {ScissorsGlyph} from '@acme/library';",
+          'export const A = () => <><FrameIcon /><ScissorsGlyph /></>;',
+          '',
+        ].join('\n'),
+      );
+      expect(icons?.mapped.map(each => [each.source.export, each.by])).toEqual([
+        ['Frame', 'wrapped'],
+      ]);
+      expect(icons?.kept.map(each => each.export)).toEqual(['ScissorsGlyph']);
+    });
   });
 
   it('still draws a placeholder for an icon from a library no listed set wraps', () => {

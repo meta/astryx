@@ -7,6 +7,8 @@
  * default look, reported; an icon from the main set's own library and an
  * icon a template already imports from a set in the list in another look
  * move to that look; a missing look never moves an icon to a backup.
+ * Without a variant, an icon from the main set's own library moves to the
+ * set's export that re-exports it.
  */
 
 import * as fs from 'node:fs';
@@ -195,13 +197,25 @@ describe("a project variant and the main set's own library", () => {
     ]);
   });
 
-  it('without a variant keeps every icon from that library as written', () => {
-    const {source} = mapTemplateIcons(
+  it("without a variant maps an icon through the main set's map, and keeps one it lacks", () => {
+    const {source, icons} = mapTemplateIcons(
       SOURCE,
       {sets: [WRAPPER, BRAND], choice: chosen([WRAPPER, BRAND])},
       DECLARED,
     );
-    expect(source).toBe(SOURCE);
+    expect(source).toBe(
+      [
+        "import {CloseIcon} from '@acme/wrapper';",
+        "import {FrameGlyph} from '@acme/library';",
+        '',
+        'export const A = () => <><CloseIcon /><FrameGlyph /></>;',
+        '',
+      ].join('\n'),
+    );
+    expect(icons?.mapped.map(each => [each.source.export, each.by])).toEqual([
+      ['CloseGlyph', 'definition'],
+    ]);
+    expect(icons?.kept.map(each => each.export)).toEqual(['FrameGlyph']);
   });
 
   describe('an icon the main set re-exports but does not map', () => {
@@ -265,13 +279,46 @@ describe("a project variant and the main set's own library", () => {
       expect(icons?.kept.map(each => each.export)).toEqual(['FrameGlyph']);
     });
 
-    it('without a variant keeps it as written', () => {
-      const {source} = mapTemplateIcons(
+    it('without a variant moves it to the export that re-exports it, in the look it draws', () => {
+      const {source, icons} = mapTemplateIcons(
         TEMPLATE,
         {sets: [READ, BRAND], choice: chosen([READ, BRAND])},
         {BinGlyph: 'delete', FrameGlyph: 'frame'},
       );
-      expect(source).toBe(TEMPLATE);
+      expect(source).toBe(
+        [
+          "import {BinIcon, FrameIcon} from '@acme/wrapper';",
+          '',
+          'export const A = () => <><BinIcon /><FrameIcon /></>;',
+          '',
+        ].join('\n'),
+      );
+      expect(
+        icons?.mapped.map(each => [
+          each.source.export,
+          each.target.export,
+          each.by,
+          each.variant,
+        ]),
+      ).toEqual([
+        ['BinGlyph', 'BinIcon', 'wrapped', undefined],
+        ['FrameGlyph', 'FrameIcon', 'wrapped', undefined],
+      ]);
+      expect(icons?.kept).toEqual([]);
+
+      const solid = mapTemplateIcons(
+        "import {BinGlyph} from '@acme/library/solid';\nexport const A = () => <BinGlyph />;\n",
+        {sets: [READ, BRAND], choice: chosen([READ, BRAND])},
+        {BinGlyph: 'delete'},
+      );
+      expect(solid.source).toContain(
+        "import {BinSolidIcon} from '@acme/wrapper';",
+      );
+      expect(solid.icons?.mapped[0]).toMatchObject({
+        target: {export: 'BinSolidIcon'},
+        by: 'wrapped',
+      });
+      expect(solid.icons?.mapped[0]).not.toHaveProperty('variant');
     });
   });
 });
