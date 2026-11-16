@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 26;
+const PART_DATA_VERSION = 27;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
