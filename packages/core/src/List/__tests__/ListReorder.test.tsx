@@ -437,6 +437,21 @@ describe('List reorderable', () => {
     expect(handle.textContent).toBe('');
   });
 
+  it('keeps the counts the reorderable-collections record states: 2 elements below a plain row, 11 with reordering', () => {
+    const rows = (reorderable?: Reorderable) => (
+      <List reorderable={reorderable}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const row = () => screen.getByText('Inbox').closest('li') as HTMLElement;
+    expect(row().querySelectorAll('*')).toHaveLength(2);
+    rerender(rows(createReorderable({onReorder: () => {}})));
+    expect(row().querySelectorAll('*')).toHaveLength(11);
+    // The handle, and its grip's wrapper, svg and six dots.
+    expect(handleOf('Inbox').querySelectorAll('*')).toHaveLength(8);
+  });
+
   it("draws the icon registry's drag icon as its grip", () => {
     registerIcons({drag: <svg data-testid="brand-drag" />});
     try {

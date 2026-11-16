@@ -69,9 +69,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
-import {Icon} from '../Icon/Icon';
-import type {IconVariant} from '../Icon/index';
-import {useComponentIcon} from '../Icon/useIcon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {
@@ -485,11 +483,6 @@ export function ListReorderHandle({
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
-  const grip = useComponentIcon(
-    'list-reorder-handle',
-    undefined,
-    GRIP_FALLBACK,
-  );
   const list = use(ListContext);
   const controller = list?.reorder?.session as
     ListReorderController | undefined;
@@ -651,16 +644,13 @@ export function ListReorderHandle({
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>
-      {grip.icon == null ? null : (
-        <Icon
-          icon={grip.icon}
-          // Resolution keeps only a variant the active theme lists.
-          variant={grip.variant as IconVariant | undefined}
-          size={grip.size}
-          color="inherit"
-          xstyle={styles.grip}
-        />
-      )}
+      <ComponentIcon
+        slot="list-reorder-handle"
+        state={undefined}
+        fallback={GRIP_FALLBACK}
+        color="inherit"
+        xstyle={styles.grip}
+      />
     </button>
   );
 }

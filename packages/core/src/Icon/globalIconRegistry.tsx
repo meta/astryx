@@ -114,8 +114,8 @@ export type ExtendedIconName = IconName | (string & {});
  * A complete icon registry: every semantic name mapped to a React node.
  *
  * `drag` is the one name a complete registry may still omit. Requiring it
- * would break registries written before it existed, so it becomes required
- * in the next minor. An omitted `drag` resolves the default artwork, so
+ * at once would break registries written before it existed, so it becomes
+ * required in 0.8.0. An omitted `drag` resolves the default artwork, so
  * resolved registry snapshots are always complete.
  */
 export type IconRegistry = Record<Exclude<IconName, 'drag'>, ReactNode> &
