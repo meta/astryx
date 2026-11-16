@@ -4554,6 +4554,27 @@ export function draftAnswer(ctx, env, question) {
       (_m, w, what) =>
         `${String(what).replace(/s$/, '')} ${w ?? '1px'} solid var(--color-border-emphasized)`,
     )
+    // ("rounded-md", "text-sm": Tailwind's sizes by their class names.)
+    .replace(/\brounded-(none|sm|md|lg|xl|2xl|3xl|full)\b/gi, (_m, k) =>
+      String(k) === 'full'
+        ? 'pill corners'
+        : String(k) === 'none'
+          ? 'square corners'
+          : `${{sm: 2, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24}[String(k)]}px corners`,
+    )
+    .replace(
+      /\btext-(xs|sm|base|lg|xl|2xl)\b/gi,
+      (_m, k) =>
+        `${{xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24}[String(k)]}px text`,
+    )
+    // ("very compact", "very roomy": the far rung.)
+    .replace(/\bvery\s+(?:compact|dense|tight)\b/gi, 'spacing tight')
+    .replace(/\bvery\s+(?:roomy|airy|spacious)\b/gi, 'spacing spacious')
+    // ("tables without vertical borders": no line at a cell's sides.)
+    .replace(
+      /\b(?:without|no)\s+vertical\s+(?:borders?|lines?|dividers?)\b/gi,
+      'border-inline 0',
+    )
     // ("use the system font": the font named, never a part called so.)
     .replace(
       /\b(?:use|using|with|switch to|go with)\s+(?:the|a)\s+(system|serif|sans-serif|sans|monospace|mono|rounded|display)\s+(font|typeface|type)\b/gi,
@@ -6152,9 +6173,17 @@ export function draftAnswer(ctx, env, question) {
     )
     // "the gray text fails contrast": gray text is the secondary text,
     // when no color is typed for it.
+    // ("ghost buttons gray text": a part's gray text is that part's text,
+    // gray.)
     .replace(
       /\b(gr[ae]y|muted) text\b(?![^;,]*(#[0-9a-f]{3}|\brgb|\bhsl))/g,
-      'secondary text',
+      (m, w, _h, at, whole) => {
+        if (/^muted$/i.test(String(w))) return 'secondary text';
+        const before = String(whole).slice(0, at).split(/[,;.]/).at(-1) ?? '';
+        return partLexicon(ctx).parts.some(([re]) => re.test(` ${before} `))
+          ? m
+          : 'secondary text';
+      },
     )
     // "replace the shadow on cards with a border": no shadow, and a border.
     .replace(
@@ -25679,9 +25708,9 @@ export function draftAnswer(ctx, env, question) {
       : `${d.text}: nothing is written: ${[...new Set(why)].join('; ')}`;
     if (!kept.length) delete d.sequence;
   }
-  // "bold white text in the header": a text color typed for a region of
-  // the page (a part filled with the page or surface color, which flips
-  // with the mode), with no fill asked for it, is measured on that fill;
+  // "bold white text in the header", "white text on the primary button":
+  // a text color typed for a part, with no fill asked for it, is measured
+  // on the fill the part shows (the page or surface, or its look's own);
   // where it would not read (under 3:1) in one mode only, it is set for
   // the mode it reads in, and the answer says how to have it in both.
   {
@@ -25706,7 +25735,6 @@ export function draftAnswer(ctx, env, question) {
           st.on &&
           !st.mode &&
           !st.state &&
-          !st.when &&
           (st.thing === 'color' ||
             /^--color-text-(?:primary|secondary)$/.test(st.thing)),
       );
@@ -25715,15 +25743,28 @@ export function draftAnswer(ctx, env, question) {
       if (filled.has(on) || !C.MAP[one(on)] || C.MAP[one(on)]?.media) continue;
       if (inks.some(st => st.value !== inks[0].value)) continue;
       const ink = parseColor(String(inks[0].value ?? ''));
-      const bgTok = restRead(C.partReads(one(on), 'background') ?? []);
-      if (
-        !ink ||
-        (bgTok !== '--color-background-body' &&
-          bgTok !== '--color-background-surface')
-      )
-        continue;
+      // (The fill the part shows under that text: its look's own, a primary
+      // button's accent, else the page or surface it is drawn on.)
+      // (A look the part data reads no fill of its own for, a ghost
+      // button's, shows the page under it.)
+      const fills = C.partReads(one(on), 'background') ?? [];
+      const look = /^variant:([\w-]+)$/.exec(String(inks[0].when ?? ''))?.[1];
+      const ownFill =
+        !look ||
+        fills.some(r => r.when.some(w => w.trim() === `variant=${look}`));
+      const bgTok = ownFill
+        ? restRead(fills, inks[0].when)
+        : '--color-background-body';
+      if (!ink || !bgTok || !/^--color-/.test(bgTok)) continue;
+      // (A see-through fill, a secondary button's wash, shows the page
+      // under it.)
       /** @param {'light' | 'dark'} m */
-      const ground = m => parseColor(String(current(bgTok, m) ?? ''));
+      const ground = m => {
+        const raw = String(current(bgTok, m) ?? '');
+        return alphaOf(raw) < 1
+          ? parseColor(String(current('--color-background-body', m) ?? ''))
+          : parseColor(raw);
+      };
       const reads = /** @type {Array<'light' | 'dark'>} */ ([
         'light',
         'dark',
