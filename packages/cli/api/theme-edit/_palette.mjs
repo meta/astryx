@@ -511,11 +511,20 @@ export const LIFT_PARTS = OFFICIAL.lifted.map(
     /** @type {[string, string, string]} */ ([
       part,
       block,
-      part === 'segmented-control-item'
-        ? '--color-neutral'
-        : '--color-accent-muted',
+      liftGround(part, block),
     ]),
 );
+/**
+ * What a lifted block's secondary text sits on: a card's own fill for a
+ * card colour (the card variant rule lifts it there), the translucent
+ * neutral track under segmented-control labels, else the accent tint.
+ * @param {string} part @param {string} block
+ */
+function liftGround(part, block) {
+  if (part === 'segmented-control-item') return '--color-neutral';
+  const color = part === 'card' ? /^variant:([\w-]+)$/.exec(block)?.[1] : null;
+  return color ? `--color-background-${color}` : '--color-accent-muted';
+}
 /** What each lifted background is, and the parts on it, for notes. */
 const LIFT_GROUNDS =
   /** @type {Record<string, {what: string, parts: string}>} */ ({
@@ -527,6 +536,12 @@ const LIFT_GROUNDS =
       what: 'the neutral track',
       parts: 'segmented-control labels',
     },
+    ...Object.fromEntries(
+      LIFT_PARTS.filter(([part]) => part === 'card').map(([, block, g]) => {
+        const color = block.replace(/^variant:/, '');
+        return [g, {what: `the ${color} card fill`, parts: `${color} cards`}];
+      }),
+    ),
   });
 const BORDER = /** @type {[number, number]} */ ([80, 65]);
 /**
@@ -2752,10 +2767,19 @@ export function mappingRows(dial) {
         ([t, [[l, la], [d, da]]]) =>
           `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
-      ...Object.values(LIFT_GROUNDS).map(
-        g =>
-          `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,
-      ),
+      ...Object.entries(LIFT_GROUNDS)
+        .filter(([g]) => !g.startsWith('--color-background-'))
+        .map(
+          ([, g]) =>
+            `--color-text-secondary on ${g.parts}: the shade nearest the secondary text's that reads at ${TEXT}:1 on ${g.what} and under a hover, as the official theme lifts it`,
+        ),
+      ...(Object.keys(LIFT_GROUNDS).some(g =>
+        g.startsWith('--color-background-'),
+      )
+        ? [
+            `--color-text-secondary on coloured cards: the shade nearest the secondary text's that reads at ${TEXT}:1 on each card's fill, as the official theme lifts it`,
+          ]
+        : []),
     ];
   const word = dial === 'accent' ? null : STATUS_TOKEN[dial];
   if (dial !== 'accent' && !word) return [];

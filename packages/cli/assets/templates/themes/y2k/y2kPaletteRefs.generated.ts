@@ -6,6 +6,10 @@
 // making consumers pay for unused palette stops.
 // prettier-ignore
 export const y2kPaletteRefs = {
+  neutral: {
+    light: {15: '#2d241b', 20: '#382e24', 30: '#4f453b', 35: '#5a5146', 40: '#675d52', 75: '#c4b8a9', 80: '#d1c5b8', 85: '#dfd5c9', 90: '#f1e6db', 95: '#fff6ed', 100: '#ffffff'},
+    dark: {0: '#000000', 5: '#0e0f1a', 10: '#16182b', 15: '#1a1d31', 20: '#1f2238', 25: '#2c3048', 35: '#4a4f6b', 45: '#636889', 70: '#a6acd6', 85: '#d0d4eb', 90: '#dfe2f3', 95: '#edeffc'},
+  },
   purple: {
     light: {25: '#431a88', 40: '#663ebd', 75: '#bbaaff', 85: '#d5cdff'},
     dark: {15: '#2a1159', 75: '#bbaaff', 85: '#d5cdff'},
@@ -13,10 +17,6 @@ export const y2kPaletteRefs = {
   green: {
     light: {30: '#3f4e00', 40: '#546800', 75: '#b5d360', 80: '#c5e17a'},
     dark: {20: '#2a3600', 65: '#95b041', 75: '#b5d263', 80: '#c5e17a'},
-  },
-  neutral: {
-    light: {15: '#2d241b', 20: '#382e24', 30: '#4f453b', 35: '#5a5146', 40: '#675d52', 75: '#c4b8a9', 80: '#d1c5b8', 85: '#dfd5c9', 90: '#f1e6db', 95: '#fff6ed', 100: '#ffffff'},
-    dark: {0: '#000000', 5: '#0e0f1a', 10: '#16182b', 15: '#1a1d31', 20: '#1f2238', 25: '#2c3048', 35: '#4a4f6b', 45: '#636889', 70: '#a6acd6', 85: '#d0d4eb', 90: '#dfe2f3', 95: '#edeffc'},
   },
   orange: {
     light: {30: '#703400', 40: '#904800', 80: '#ffb477', 85: '#ffc89d'},

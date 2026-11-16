@@ -395,37 +395,37 @@ export const neutralTheme = defineTheme({
     },
 
     // Secondary text on a coloured card steps to the nearest neutral stop
-    // that reads at 4.5:1 on that fill in dark mode.
+    // that reads at 4.5:1 on that fill, and under a hover, in dark mode.
     card: {
       base: {
         padding: 'var(--spacing-3)',
       },
       'variant:blue': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:cyan': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:green': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:orange': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:pink': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:purple': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:red': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:teal': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
       'variant:yellow': {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[70]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
       },
     },
 

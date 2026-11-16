@@ -8,9 +8,11 @@
  * 4.5:1 for body text, 3:1 for large text and non-text UI. Card titles,
  * body copy, labels and secondary text are body-size text, so each needs
  * 4.5:1. For every first-party theme and both colour schemes this checks
- * `--color-text-primary` and `--color-text-secondary` against the page
- * (`--color-background-body`), the default card, the muted card and every
- * coloured card fill, with the card variant's own token overrides applied.
+ * `--color-text-primary`, `--color-text-secondary` and link text
+ * (`--color-text-accent`) against the page (`--color-background-body`), the
+ * default card, the muted card and every coloured card fill, with the card
+ * variant's own token overrides applied, and against a nested card and a
+ * text field inside each card.
  *
  * @input The first-party theme objects, through scripts/lib/theme-contrast.
  * @output Fails when a text role reads below its WCAG AA ratio on the page
@@ -30,10 +32,11 @@ import {
 /** WCAG 2.2 AA minimum contrast by role (SC 1.4.3 and 1.4.11). */
 const WCAG_AA = {bodyText: 4.5, largeText: 3, nonText: 3};
 
-/** The text roles drawn on the page and in cards: both body-size text. */
+/** The text roles drawn on the page and in cards, links included: all body-size text. */
 const TEXT_ROLES = {
   '--color-text-primary': WCAG_AA.bodyText,
   '--color-text-secondary': WCAG_AA.bodyText,
+  '--color-text-accent': WCAG_AA.bodyText,
 };
 
 /** Card variants and the fill token Core's Card paints for each. */
@@ -58,6 +61,23 @@ function cardOverrides(theme, variant) {
   return {...card.base, ...card[`variant:${variant}`]};
 }
 
+/**
+ * Surfaces that repaint inside a card, each with the fill Core paints and
+ * the rule of its own that applies there: a nested default card, and a text
+ * field's shell. Tokens a card variant sets reach them unless their own
+ * rule sets them again.
+ */
+const NESTED = {
+  'nested card': {
+    fill: '--color-background-card',
+    own: theme => cardOverrides(theme, 'default'),
+  },
+  'text field': {
+    fill: '--color-background-surface',
+    own: theme => theme.components?.['text-input']?.base ?? {},
+  },
+};
+
 function rows() {
   const out = [];
   for (const [themeName, theme] of Object.entries(FIRST_PARTY_THEMES)) {
@@ -75,6 +95,19 @@ function rows() {
         if (color == null) continue;
         // A see-through fill shows the page under it.
         grounds.push({where: `${variant} card`, tokens, layers: [color, body]});
+        for (const [name, {fill: inner, own}] of Object.entries(NESTED)) {
+          const nested = themeTokens(theme, {
+            ...cardOverrides(theme, variant),
+            ...own(theme),
+          });
+          const innerColor = resolveColor(nested[inner], nested, modeIndex);
+          if (innerColor == null) continue;
+          grounds.push({
+            where: `${name} in a ${variant} card`,
+            tokens: nested,
+            layers: [innerColor, color, body],
+          });
+        }
       }
       for (const {where, tokens, layers} of grounds)
         for (const [role, needs] of Object.entries(TEXT_ROLES)) {

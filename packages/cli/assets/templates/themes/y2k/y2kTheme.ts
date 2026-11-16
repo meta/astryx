@@ -28,6 +28,15 @@ const {
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
+// A surface that repaints inside a card (a nested card, a field) draws
+// the theme's own text and links again: a coloured card's dark ink on its
+// pastel fill must not reach a dark surface inside it.
+const SURFACE_TEXT = {
+  '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
+  '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[70]})`,
+  '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[95]})`,
+};
+
 const y2kSyntax = defineSyntaxTheme({
   name: 'astryx-y2k',
   tokens: {
@@ -367,8 +376,14 @@ export const y2kTheme = defineTheme({
       },
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
-    selector: {'variant:secondary': SECONDARY_SELECTOR},
-    'multi-selector': {'variant:secondary': SECONDARY_SELECTOR},
+    selector: {
+      base: SURFACE_TEXT,
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
+    'multi-selector': {
+      base: SURFACE_TEXT,
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
 
     badge: {
@@ -430,48 +445,68 @@ export const y2kTheme = defineTheme({
 
     // Coloured cards keep their pastel fill in dark mode, so their text
     // takes dark ink there: the nearest neutral stops that read at 4.5:1.
+    'text-input': {base: SURFACE_TEXT},
+    'text-area': {base: SURFACE_TEXT},
+    typeahead: {base: SURFACE_TEXT},
+    tokenizer: {base: SURFACE_TEXT},
+    'number-input': {base: SURFACE_TEXT},
+    'date-input': {base: SURFACE_TEXT},
+    'date-range-input': {base: SURFACE_TEXT},
+    'time-input': {base: SURFACE_TEXT},
+    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
+        ...SURFACE_TEXT,
         borderRadius: '0px',
         padding: 'var(--spacing-3)',
       },
       'variant:blue': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:cyan': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:gray': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:green': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:orange': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:pink': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:purple': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:red': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:teal': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },
       'variant:yellow': {
+        '--color-text-accent': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-primary': `light-dark(${neutral.light[15]}, ${neutral.dark[15]})`,
         '--color-text-secondary': `light-dark(${neutral.light[35]}, ${neutral.dark[35]})`,
       },

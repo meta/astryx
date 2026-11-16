@@ -58,6 +58,13 @@ const SECONDARY_SELECTOR = {
   },
 } as const;
 
+/**
+ * Link text on a cool tinted card. Light: stop 40 of the astryx-oklch-v1
+ * ramp grown from the accent #8C5927 (anchored at its own stop, 45), the
+ * nearest stop that reads at 4.5:1 on those cards. Dark keeps the accent.
+ */
+const LINK_ON_TINT = 'light-dark(#7d4e21, #d4a06a)';
+
 export const chocolateTheme = defineTheme({
   name: 'chocolate',
 
@@ -114,7 +121,10 @@ export const chocolateTheme = defineTheme({
 
     // Text
     '--color-text-primary': ['#4a3520', '#EDE4D4'],
-    '--color-text-secondary': ['#805324', '#c4a882'],
+    // Light: stop 40 of the astryx-oklch-v1 ramp grown from #B88859 (anchored
+    // at its own stop, 60), the nearest stop that reads at 4.5:1 on the page
+    // and on every card.
+    '--color-text-secondary': ['#894d0e', '#c4a882'],
     '--color-text-disabled': ['#C4AC95', '#6b5540'],
     '--color-text-accent': ['#8C5927', '#d4a06a'],
     '--color-on-dark': '#FFFCF7',
@@ -140,7 +150,7 @@ export const chocolateTheme = defineTheme({
     // Icon
     '--color-icon-accent': ['#8C5927', '#d4a06a'],
     '--color-icon-primary': ['#4a3520', '#EDE4D4'],
-    '--color-icon-secondary': ['#805324', '#c4a882'],
+    '--color-icon-secondary': ['#894d0e', '#c4a882'],
     '--color-icon-disabled': ['#C4AC95', '#6b5540'],
 
     // Surface variants
@@ -263,9 +273,29 @@ export const chocolateTheme = defineTheme({
     'multi-selector': {'variant:secondary': SECONDARY_SELECTOR},
     'complex-selector': {'variant:secondary': SECONDARY_BUTTON},
 
+    // Links on the cooler tinted cards step to LINK_ON_TINT, which reads at
+    // 4.5:1 on them; the warm tints already read with the accent.
     card: {
       base: {
         padding: 'var(--spacing-3)',
+      },
+      'variant:blue': {
+        '--color-text-accent': LINK_ON_TINT,
+      },
+      'variant:cyan': {
+        '--color-text-accent': LINK_ON_TINT,
+      },
+      'variant:pink': {
+        '--color-text-accent': LINK_ON_TINT,
+      },
+      'variant:purple': {
+        '--color-text-accent': LINK_ON_TINT,
+      },
+      'variant:red': {
+        '--color-text-accent': LINK_ON_TINT,
+      },
+      'variant:teal': {
+        '--color-text-accent': LINK_ON_TINT,
       },
     },
 

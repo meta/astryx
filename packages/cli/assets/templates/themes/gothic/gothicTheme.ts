@@ -21,6 +21,15 @@ const {blue, cyan, green, neutral, orange, pink, purple, red, teal, yellow} =
 
 const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
+// A surface that repaints inside a card (a nested card, a field) draws
+// the theme's own text and links again: a coloured card's category ink on
+// its pastel fill must not reach a dark surface inside it.
+const SURFACE_TEXT = {
+  '--color-text-primary': neutral.dark[95],
+  '--color-text-secondary': neutral.dark[75],
+  '--color-text-accent': neutral.dark[95],
+};
+
 /**
  * Gothic syntax palette — atmospheric tones drawn from the gothic
  * categorical palette: deep purples (cathedral), blood crimson (tags),
@@ -268,8 +277,14 @@ export const gothicTheme = defineTheme({
       },
     },
     // Secondary selector triggers match the secondary Button (AST-079 FR2).
-    selector: {'variant:secondary': SECONDARY_SELECTOR},
-    'multi-selector': {'variant:secondary': SECONDARY_SELECTOR},
+    selector: {
+      base: SURFACE_TEXT,
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
+    'multi-selector': {
+      base: SURFACE_TEXT,
+      'variant:secondary': SECONDARY_SELECTOR,
+    },
     'complex-selector': {'variant:secondary': SECONDARY_BUTTON},
 
     badge: {
@@ -321,50 +336,70 @@ export const gothicTheme = defineTheme({
       },
     },
 
+    'text-input': {base: SURFACE_TEXT},
+    'text-area': {base: SURFACE_TEXT},
+    typeahead: {base: SURFACE_TEXT},
+    tokenizer: {base: SURFACE_TEXT},
+    'number-input': {base: SURFACE_TEXT},
+    'date-input': {base: SURFACE_TEXT},
+    'date-range-input': {base: SURFACE_TEXT},
+    'time-input': {base: SURFACE_TEXT},
+    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
+        ...SURFACE_TEXT,
         padding: 'var(--spacing-3)',
         borderRadius: 'var(--radius-container)',
       },
       // Categorical variants — flip --color-text-primary so child
       // XDSText labels stay readable against the dusty pastel bg.
       'variant:blue': {
+        '--color-text-accent': 'var(--color-text-blue)',
         '--color-text-primary': 'var(--color-text-blue)',
         '--color-text-secondary': 'var(--color-text-blue)',
       },
       'variant:cyan': {
+        '--color-text-accent': 'var(--color-text-cyan)',
         '--color-text-primary': 'var(--color-text-cyan)',
         '--color-text-secondary': 'var(--color-text-cyan)',
       },
       'variant:gray': {
+        '--color-text-accent': 'var(--color-text-gray)',
         '--color-text-primary': 'var(--color-text-gray)',
         '--color-text-secondary': 'var(--color-text-gray)',
       },
       'variant:green': {
+        '--color-text-accent': 'var(--color-text-green)',
         '--color-text-primary': 'var(--color-text-green)',
         '--color-text-secondary': 'var(--color-text-green)',
       },
       'variant:orange': {
+        '--color-text-accent': 'var(--color-text-orange)',
         '--color-text-primary': 'var(--color-text-orange)',
         '--color-text-secondary': 'var(--color-text-orange)',
       },
       'variant:pink': {
+        '--color-text-accent': 'var(--color-text-pink)',
         '--color-text-primary': 'var(--color-text-pink)',
         '--color-text-secondary': 'var(--color-text-pink)',
       },
       'variant:purple': {
+        '--color-text-accent': 'var(--color-text-purple)',
         '--color-text-primary': 'var(--color-text-purple)',
         '--color-text-secondary': 'var(--color-text-purple)',
       },
       'variant:red': {
+        '--color-text-accent': 'var(--color-text-red)',
         '--color-text-primary': 'var(--color-text-red)',
         '--color-text-secondary': 'var(--color-text-red)',
       },
       'variant:teal': {
+        '--color-text-accent': 'var(--color-text-teal)',
         '--color-text-primary': 'var(--color-text-teal)',
         '--color-text-secondary': 'var(--color-text-teal)',
       },
       'variant:yellow': {
+        '--color-text-accent': 'var(--color-text-yellow)',
         '--color-text-primary': 'var(--color-text-yellow)',
         '--color-text-secondary': 'var(--color-text-yellow)',
       },

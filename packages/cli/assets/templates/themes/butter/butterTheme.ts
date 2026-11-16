@@ -32,6 +32,15 @@ const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 const lightDark = (light: string, dark: string): string =>
   `light-dark(${light}, ${dark})`;
 
+// A surface that repaints inside a card (a nested card, a field) draws
+// the theme's own text and links again: a coloured card's dark ink on its
+// pastel fill must not reach a dark surface inside it.
+const SURFACE_TEXT = {
+  '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
+  '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
+  '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
+};
+
 /** Butter syntax colors resolved through reviewed palette stops. */
 const butterSyntax = defineSyntaxTheme({
   name: 'astryx-butter',
@@ -462,8 +471,11 @@ export const butterTheme = defineTheme({
       },
     },
 
+    'date-range-input': {base: SURFACE_TEXT},
+    'file-input': {base: SURFACE_TEXT},
     card: {
       base: {
+        ...SURFACE_TEXT,
         borderRadius: 'var(--radius-container)',
         padding: 'var(--spacing-4)',
       },
@@ -484,42 +496,52 @@ export const butterTheme = defineTheme({
         '--color-text-secondary': neutral.light[45],
       },
       'variant:blue': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:cyan': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:gray': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:green': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:orange': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:pink': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:purple': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:red': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:teal': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
       'variant:yellow': {
+        '--color-text-accent': accent.light[35],
         '--color-text-primary': neutral.light[15],
         '--color-text-secondary': neutral.light[45],
       },
@@ -582,6 +604,7 @@ export const butterTheme = defineTheme({
     // (icons inherit from --color-{success,warning,error}).
     'text-input': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -590,6 +613,7 @@ export const butterTheme = defineTheme({
     },
     'text-area': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -598,6 +622,7 @@ export const butterTheme = defineTheme({
     },
     'number-input': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -606,6 +631,7 @@ export const butterTheme = defineTheme({
     },
     'date-input': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -614,6 +640,7 @@ export const butterTheme = defineTheme({
     },
     'time-input': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -622,6 +649,7 @@ export const butterTheme = defineTheme({
     },
     selector: {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -631,6 +659,7 @@ export const butterTheme = defineTheme({
     },
     'multi-selector': {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -641,6 +670,7 @@ export const butterTheme = defineTheme({
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
     typeahead: {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
@@ -649,6 +679,7 @@ export const butterTheme = defineTheme({
     },
     tokenizer: {
       base: {
+        ...SURFACE_TEXT,
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
