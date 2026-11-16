@@ -647,7 +647,6 @@ function staleReason(stamps, env) {
   // The environment as it is, never through the run's recording proxy:
   // checking an entry is no read the run's own gathers depend on.
   const real = run?.realEnv ?? process.env;
-  const own = CLI_ROOT + path.sep;
   for (const [name, value] of env) {
     const current = name.startsWith(PRESENCE)
       ? presenceState(real, name.slice(PRESENCE.length))
@@ -660,9 +659,11 @@ function staleReason(stamps, env) {
   }
   for (const [file, state] of stamps) {
     // The CLI's own files are the build id's and the CLI's folder's to stand
-    // for (both are in the entry's key), as for a summary: they are kept
-    // for the code a derived value depends on, never checked one by one.
-    if (file.startsWith(own)) continue;
+    // for (both are in the entry's key), as for a summary (inCliBuild): they
+    // are kept for the code a derived value depends on, never checked one by
+    // one. A package in the node_modules folder inside the CLI's is not part
+    // of the build, and is checked as any other file.
+    if (inCliBuild(file)) continue;
     if (!stillInState(file, state)) {
       return 'a file or folder it read changed';
     }

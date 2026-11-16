@@ -243,6 +243,39 @@ describe.skipIf(!hasModuleHooks || process.platform === 'win32')(
       },
     );
 
+    it("is read back after an in-place edit to one of the CLI's own files, and gathered again after an edit to a package in the CLI's own node_modules", async () => {
+      const own = path.join(FAKE_CLI_ROOT, 'data', 'own.txt');
+      const nested = path.join(
+        FAKE_CLI_ROOT,
+        'node_modules',
+        'dep',
+        'index.js',
+      );
+      fs.mkdirSync(path.dirname(own), {recursive: true});
+      fs.mkdirSync(path.dirname(nested), {recursive: true});
+      fs.writeFileSync(own, 'cli-one');
+      fs.writeFileSync(nested, 'dep-one');
+      const once = () =>
+        cache.recordRun(async () =>
+          cache.persistedGather(
+            ['cli-files-test', 'value'],
+            async () =>
+              `${fs.readFileSync(own, 'utf8')}+${fs.readFileSync(nested, 'utf8')}`,
+            identity,
+          ),
+        );
+      expect(await once()).toBe('cli-one+dep-one');
+      expect(await once()).toBe('cli-one+dep-one');
+      // The build id stands for the CLI's own files: an in-place edit to one
+      // is not seen.
+      fs.writeFileSync(own, 'cli-two');
+      expect(await once()).toBe('cli-one+dep-one');
+      // A package placed in the node_modules folder inside the CLI's is not
+      // part of the build: an edit to it is.
+      fs.writeFileSync(nested, 'dep-two');
+      expect(await once()).toBe('cli-two+dep-two');
+    });
+
     it('is gathered again, then read back, when the entry it builds on is gone', async () => {
       write('base.txt', 'gone-test');
       write('own.txt', 'own');
