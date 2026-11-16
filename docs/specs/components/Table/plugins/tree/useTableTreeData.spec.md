@@ -41,7 +41,7 @@ references:
 | Builder impact          | Callers opt in with row identity text; expansion state and verbs stay separate.                                                                             |
 | Compatibility/readiness | Additive optional API; existing tree state, data and control semantics remain. Implementation release verification is separate.                             |
 | Review checks           | Reject index/column-derived names, new visible content or stale names after a label/locale update.                                                          |
-| Governing rules         | Table owns aggregate composition; internationalization and React runtime own their shared mechanisms; this module covers naming only.                       |
+| Governing rules         | Table owns aggregate composition; internationalization and React runtime own their shared mechanisms; this module covers naming and row position.           |
 
 This table is a review projection; the body below is authoritative.
 
