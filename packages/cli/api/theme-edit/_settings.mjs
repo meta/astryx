@@ -8880,13 +8880,12 @@ async function buildThemeSteps(ctx, slug, data) {
     // The preview's and the sheets' pictures (a section's, `sheet-inputs.png`,
     // included), in each mode: none shows the look this build makes.
     const pictures = fs.existsSync(f.dir)
-      ? fs
-          .readdirSync(f.dir)
-          .filter(
-            n =>
-              /^(preview(-dark)?|sheet(-[a-z][a-z-]*)?)\.png$/.test(n) &&
-              editorRecorded(cwd, slug, path.join(f.dir, n)),
-          )
+      ? fs.readdirSync(f.dir).filter(
+          n =>
+            // A picture cut from a tall one too (sheet-inputs-2.png).
+            /^(preview(-dark)?|sheet(-[a-z][a-z-]*)?(-\d+)?)\.png$/.test(n) &&
+            editorRecorded(cwd, slug, path.join(f.dir, n)),
+        )
       : [];
     removedPictures = pictures.map(n =>
       path.relative(cwd, path.join(f.dir, n)).split(path.sep).join('/'),
@@ -9038,8 +9037,12 @@ async function buildThemeSteps(ctx, slug, data) {
         )
       : [],
   );
+  // A picture cut from one taken again (sheet-inputs-2.png) is taken again.
   removedPictures = removedPictures.filter(
-    p => !retaken.has(p.slice(p.lastIndexOf('/') + 1)),
+    p =>
+      !retaken.has(
+        p.slice(p.lastIndexOf('/') + 1).replace(/-\d+(?=\.png$)/, ''),
+      ),
   );
   if (removedPictures.length)
     notes = [

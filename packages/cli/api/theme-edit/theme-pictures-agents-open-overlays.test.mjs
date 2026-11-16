@@ -85,7 +85,7 @@ describe('the overlays sheet', () => {
       for (const part of ['DialogHeader', 'DrawerHeader', 'CommandPaletteItem'])
         expect(cells).not.toContain(part);
       expect(SHEET_CSS).toContain(
-        '.cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
+        '.cs-section-overlays .cs-open-group .cs-sheet>.cs-cell{flex-basis:200px}',
       );
     },
     T,
