@@ -43,7 +43,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'Write the page: one `.tsx` file built from Astryx components.',
+            'Start the page from a template: `build` names one, `template` writes it into one `.tsx` file, and you replace its content.',
             'Render it to one HTML file.',
             'Share or upload that file.',
             'To change it, turn the file back into source, edit the source, and render again.',
@@ -53,27 +53,22 @@ export const docs = {
     },
     {
       id: 'write',
-      title: '1. Write the page',
+      title: '1. Start the page from a template',
       content: [
         {
           type: 'prose',
-          text: 'Make a folder and write one file, such as `page.tsx`. Its default export is a React component built from Astryx components. In a folder that is not an Astryx project, the CLI renders the page with its own Astryx, React and StyleX, so the folder needs no package.json and no install.',
-        },
-        {
-          type: 'code',
-          lang: 'tsx',
-          code: "import {VStack} from '@astryxdesign/core/VStack';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {StackItem} from '@astryxdesign/core/Stack';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function Page() {\n  return (\n    <VStack gap={5} padding={6}>\n      <HStack gap={2} vAlign=\"center\">\n        <StackItem size=\"fill\">\n          <Heading level={1}>Project Atlas</Heading>\n        </StackItem>\n        <StackItem size=\"static\">\n          <Badge label=\"At risk\" variant=\"warning\" />\n        </StackItem>\n      </HStack>\n      <Card padding={5}>\n        <Text type=\"body\">38% of traffic is on the new stack.</Text>\n      </Card>\n    </VStack>\n  );\n}",
+          text: 'Do not write the page from scratch. Make a folder for it, and in that folder run `{@command build "<what the page is for>"}`. It names the page template to start from and the blocks the page lacks. Write that template into one file with `{@command template <name> --type page page.tsx}`, and change that file: keep its frame, gaps and padding, and replace its sample content with yours. In a folder that is not an Astryx project, the CLI renders the page with its own Astryx, React and StyleX, so the folder needs no package.json. When the template imports a package, such as an icon set, `build` names the command that installs it in the folder.',
         },
         {
           type: 'prose',
-          text: 'Find a component with `{@command search "progress bar"}` and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting, and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
+          text: 'For a part the template lacks, add the block `build` names with `{@command template <Block>}`, or find a component with `{@command search "progress bar"}`, and read its props with `{@command component ProgressBar}` before you use it. Use components and tokens, not colors or CSS of your own: the page then follows the reader\u2019s light or dark setting, and a viewer that sets Astryx theme variables gives it that viewer\u2019s theme.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: the file runs no script, so every reader, on any screen, gets the one layout that the query\u2019s server answer (false) picks.',
-            'A row runs out of room first. In an HStack, a Badge beside a long heading or text shrinks and cuts off its label. Wrap the badge in `<StackItem size="static">` so it keeps its size, and the text in `<StackItem size="fill">` so the text wraps, as the example does. StackItem comes from `@astryxdesign/core/Stack`.',
+            'A row runs out of room first. In an HStack, a Badge beside a long heading or text shrinks and cuts off its label. Wrap the badge in `<StackItem size="static">` so it keeps its size, and the text in `<StackItem size="fill">` so the text wraps: `<HStack gap={2} vAlign="center"><StackItem size="fill"><Heading level={1}>Project Atlas</Heading></StackItem><StackItem size="static"><Badge label="At risk" variant="warning" /></StackItem></HStack>`. StackItem comes from `@astryxdesign/core/Stack`.',
             'A VStack stretches each child to its full width, so a Badge or Token on a line of its own becomes a bar across the page. Wrap that one item in `<StackItem crossAlignSelf="start">`. Do not give the VStack `hAlign="start"`: it shrinks every child, Cards and Grids too.',
             'A ListItem `label` or `description` that is a string stays on one line and ends in an ellipsis, and the file cannot show the rest. When readers need the whole text, pass an element: `label={<Text type="body">\u2026</Text>}`.',
             'The file cannot scroll a table sideways, because that needs script: a table wider than the screen is cut off at its edge. Inside the example\u2019s `padding={6}`, a 375 px phone leaves about 327 px, so keep a table that phones must show within about 310 px, and put the other columns in a second table or in Cards. A table is as wide as its `pixel()` columns plus, for its `proportional()` columns, the largest floor divided by that column\u2019s share of all the shares: four `proportional(1)` columns at the default 120 px floor need 480 px. So make each share equal its floor, as in `proportional(148, {minWidth: 148})`, or give the columns `pixel()` widths; then the floors add up. A column with no `width` counts as `proportional(1, {minWidth: 60})`, so give every column of a phone table a width.',
