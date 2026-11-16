@@ -2,14 +2,13 @@
 
 'use client';
 
-import {useCallback, useState, type CSSProperties} from 'react';
+import {useSyncExternalStore, type CSSProperties} from 'react';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
-import {Selector} from '@astryxdesign/core/Selector';
 import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -33,11 +32,6 @@ const OUTLINE_ITEMS: OutlineItem[] = [
   {id: 'next-steps', label: 'Next steps', level: 2},
 ];
 
-const OUTLINE_OPTIONS = OUTLINE_ITEMS.map(item => ({
-  value: item.id,
-  label: item.label,
-}));
-
 const outlinePanel: CSSProperties = {
   position: 'sticky',
   top: 24,
@@ -45,20 +39,21 @@ const outlinePanel: CSSProperties = {
   paddingBlockStart: 120,
 };
 
-export default function TechnicalDocumentationPage() {
-  const [activeId, setActiveId] = useState<string | undefined>(
-    OUTLINE_ITEMS[0]?.id,
-  );
-  const isMobile = useMediaQuery('(max-width: 768px)');
+/** Whether the page runs script never changes, so nothing is subscribed. */
+const subscribeToNothing = () => () => {};
 
-  const scrollToId = useCallback((id: string) => {
-    setActiveId(id);
-    const target = document.getElementById(id);
-    if (target != null) {
-      target.scrollIntoView({behavior: 'smooth', block: 'start'});
-      window.history.pushState(null, '', `#${id}`);
-    }
-  }, []);
+export default function TechnicalDocumentationPage() {
+  // Mobile first: the server render and a shared static copy, which run no
+  // script, get one column with the section links on top. That reads well at
+  // every width; once script runs, wide screens move the links to the rail.
+  const isMobile = useMediaQuery('(max-width: 768px)', true);
+  // Copy buttons need script, so they appear once the page runs rather than
+  // sitting in a static copy as buttons that do nothing.
+  const isInteractive = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
 
   return (
     <Layout
@@ -71,7 +66,7 @@ export default function TechnicalDocumentationPage() {
             label="On this page"
             role="complementary"
             style={outlinePanel}>
-            <Outline items={OUTLINE_ITEMS} onActiveIdChange={setActiveId} />
+            <Outline items={OUTLINE_ITEMS} />
           </LayoutPanel>
         )
       }
@@ -83,16 +78,7 @@ export default function TechnicalDocumentationPage() {
               <Text type="supporting" color="secondary">
                 Last updated March 30, 2026
               </Text>
-              {isMobile && (
-                <Selector
-                  label="On this page"
-                  isLabelHidden
-                  options={OUTLINE_OPTIONS}
-                  value={activeId}
-                  onChange={scrollToId}
-                  width="100%"
-                />
-              )}
+              {isMobile && <Outline items={OUTLINE_ITEMS} />}
             </VStack>
 
             <Card>
@@ -106,17 +92,19 @@ export default function TechnicalDocumentationPage() {
                       </Text>
                     </HStack>
                   </StackItem>
-                  <Button
-                    label="Copy prompt"
-                    variant="ghost"
-                    size="sm"
-                    icon={<Icon icon={ClipboardDocumentIcon} />}
-                    onClick={() => {
-                      void navigator.clipboard.writeText(
-                        'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
-                      );
-                    }}
-                  />
+                  {isInteractive && (
+                    <Button
+                      label="Copy prompt"
+                      variant="ghost"
+                      size="sm"
+                      icon={<Icon icon={ClipboardDocumentIcon} />}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(
+                          'Help me get set up with Product Name. Based on my project, do the following: 1. Install @astryxdesign/core and import its precompiled reset.css and astryx.css once at the app entry point. 2. Wrap my app in Theme with a theme package such as @astryxdesign/theme-neutral. 3. Replace one existing component with an Astryx equivalent. After setup, suggest relevant next steps based on my project.',
+                        );
+                      }}
+                    />
+                  )}
                   <DropdownMenu
                     button={{
                       label: 'More options',
@@ -170,6 +158,7 @@ export default function TechnicalDocumentationPage() {
                   Step 1: Install the core package
                 </Text>
                 <CodeBlock
+                  hasCopyButton={isInteractive}
                   code="npm install @astryxdesign/core"
                   language="bash"
                   width="100%"
@@ -185,6 +174,7 @@ export default function TechnicalDocumentationPage() {
                   your app entry point.
                 </Text>
                 <CodeBlock
+                  hasCopyButton={isInteractive}
                   code={`import '@astryxdesign/core/reset.css';
 import '@astryxdesign/core/astryx.css';`}
                   language="tsx"
@@ -196,6 +186,7 @@ import '@astryxdesign/core/astryx.css';`}
                   Step 3: Import your first component
                 </Text>
                 <CodeBlock
+                  hasCopyButton={isInteractive}
                   code={`import { Button } from '@astryxdesign/core/Button';
 
 export default function App() {
@@ -219,6 +210,7 @@ export default function App() {
                 package, import its stylesheet, and wrap your app in Theme.
               </Text>
               <CodeBlock
+                hasCopyButton={isInteractive}
                 code={`import { Theme } from '@astryxdesign/core/theme';
 import { neutralTheme } from '@astryxdesign/theme-neutral/built';
 import '@astryxdesign/theme-neutral/theme.css';
