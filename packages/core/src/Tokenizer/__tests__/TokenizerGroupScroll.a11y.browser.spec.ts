@@ -42,11 +42,28 @@ function tabKey(browserName: string, reverse = false): string {
   return `${browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+' : ''}${reverse ? 'Shift+' : ''}Tab`;
 }
 
+/** The part of Storybook's preview this spec reads: the story render's phase. */
+interface StorybookPreviewWindow extends Window {
+  __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+}
+
 async function mount(page: Page, story: string) {
   await page.setViewportSize({width: 600, height: 400});
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('.astryx-token').first()).toBeVisible();
   await page.evaluate(async () => document.fonts.ready);
+  // A story's play function can scroll the strip, to its end and back to
+  // rest. Wait until it is done, so none of its scrolls land inside a case.
+  const phase = await page
+    .waitForFunction(() => {
+      const render = (window as StorybookPreviewWindow).__STORYBOOK_PREVIEW__
+        ?.currentRender;
+      return render?.phase === 'completed' || render?.phase === 'errored'
+        ? render.phase
+        : false;
+    })
+    .then(async handle => handle.jsonValue());
+  expect(phase, `the ${story} story's play function`).toBe('completed');
 }
 
 // The strip is the row's child that holds the tokens; the end controls are its
