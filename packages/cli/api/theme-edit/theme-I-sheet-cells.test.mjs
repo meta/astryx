@@ -87,9 +87,10 @@ describe('a sheet cell', () => {
   it(
     'gives an empty container sample text',
     async () => {
-      await themeEditShow('t', {cwd});
+      // The containers' own sheet: the whole sheet is not needed.
+      await themeEditShow('t', {cwd, section: 'containers'});
       const html = fs.readFileSync(
-        path.join(cwd, 'themes/t/sheet.html'),
+        path.join(cwd, 'themes/t/sheet-containers.html'),
         'utf8',
       );
       for (const name of ['Section', 'FormLayout']) {

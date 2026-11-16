@@ -55,12 +55,18 @@ afterAll(() => {
 
 describe('show --png', () => {
   it(
-    'takes each family of components on a page of its own',
+    'takes each family of components on a page of its own, and leaves a file of yours at a family page alone',
     async () => {
-      const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
       const dir = path.join(cwd, 'themes/t');
+      // One run for both: a file of yours at one family's page.
+      const mine = path.join(dir, 'sheet-inputs.html');
+      fs.writeFileSync(mine, '<p>mine</p>');
+      const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
+      expect(fs.readFileSync(mine, 'utf8')).toBe('<p>mine</p>');
+      expect(r.data.pictures).not.toContain('themes/t/sheet-inputs.png');
+      expect(r.data.pictureProblem).toContain('themes/t/sheet-inputs.html');
       const sheet = fs.readFileSync(path.join(dir, 'sheet.html'), 'utf8');
-      for (const family of FAMILY_SECTIONS) {
+      for (const family of FAMILY_SECTIONS.filter(f => f !== 'inputs')) {
         const html = fs.readFileSync(
           path.join(dir, `sheet-${family}.html`),
           'utf8',
@@ -86,21 +92,6 @@ describe('show --png', () => {
       expect(r.data.look).toMatch(
         /^open themes\/t\/sheet-actions\.png, .*\(one family of components each\) and themes\/t\/preview\.png/,
       );
-    },
-    T,
-  );
-
-  it(
-    'leaves a file of yours at a family page alone, and names it',
-    async () => {
-      const mine = path.join(cwd, 'themes/t/sheet-inputs.html');
-      fs.writeFileSync(mine, '<p>mine</p>');
-      const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
-      expect(fs.readFileSync(mine, 'utf8')).toBe('<p>mine</p>');
-      expect(r.data.pictures).not.toContain('themes/t/sheet-inputs.png');
-      expect(r.data.pictures).toContain('themes/t/sheet-navigation.png');
-      expect(r.data.pictureProblem).toContain('themes/t/sheet-inputs.html');
-      fs.rmSync(mine);
     },
     T,
   );

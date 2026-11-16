@@ -23,6 +23,12 @@ import {
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 const T = 300_000;
+/**
+ * The section each show here makes: the text measured is the sample page's,
+ * which every show pictures, so the smallest sheet keeps each run to the
+ * sample page, the open states and one short sheet, not every family.
+ */
+const SMALL = 'actions';
 /** @type {string} */
 let cwd;
 /** Why butter could not be installed here, or ''. */
@@ -48,7 +54,7 @@ describe('text the pictures draw cut short', () => {
     async () => {
       await themeEditNew('fresh', {cwd, like: 'neutral'});
       const r = /** @type {any} */ (
-        await themeEditShow('fresh', {cwd, png: true})
+        await themeEditShow('fresh', {cwd, png: true, section: SMALL})
       );
       expect(r.data.pictures).toContain('themes/fresh/preview.png');
       expect(cutNotes(r)).toEqual([]);
@@ -62,7 +68,7 @@ describe('text the pictures draw cut short', () => {
       if (unbuilt) return;
       await themeEditNew('bt', {cwd, like: 'butter'});
       const r = /** @type {any} */ (
-        await themeEditShow('bt', {cwd, png: true})
+        await themeEditShow('bt', {cwd, png: true, section: SMALL})
       );
       expect(r.data.pictures).toContain('themes/bt/preview.png');
       expect(cutNotes(r)).toEqual([]);
@@ -97,7 +103,7 @@ describe('text the pictures draw cut short', () => {
       // Not a picture that failed: the pictures were taken.
       expect(set.data.pictureProblem ?? '').not.toMatch(/cut short/);
       const show = /** @type {any} */ (
-        await themeEditShow('big', {cwd, png: true})
+        await themeEditShow('big', {cwd, png: true, section: SMALL})
       );
       expect(cutNotes(show)).toEqual(notes);
       expect(cutProblems(show.data.openProblems)).toEqual(
@@ -115,7 +121,7 @@ describe('text the pictures draw cut short', () => {
       expect(cutNotes(fixed)).toEqual([]);
       expect(cutProblems(fixed.data.newProblems)).toEqual([]);
       const after = /** @type {any} */ (
-        await themeEditShow('big', {cwd, png: true})
+        await themeEditShow('big', {cwd, png: true, section: SMALL})
       );
       expect(cutProblems(after.data.openProblems)).toEqual([]);
     },
@@ -142,7 +148,9 @@ describe('text the pictures draw cut short', () => {
   it(
     'without pictures, nothing is measured and nothing is said',
     async () => {
-      const r = /** @type {any} */ (await themeEditShow('big', {cwd}));
+      const r = /** @type {any} */ (
+        await themeEditShow('big', {cwd, section: SMALL})
+      );
       expect(r.data.pictures).toEqual([]);
       expect(cutNotes(r)).toEqual([]);
     },
