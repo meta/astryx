@@ -73,7 +73,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT, realDir} from './paths.mjs';
+import {CLI_ROOT, isCliBuildFile, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
@@ -377,12 +377,12 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
   /** @type {{deregister: () => void} | null} */
   let hooks = null;
   // An installed CLI resolves imports between its own modules by path while
-  // the recorder is armed (own-modules.mjs). Registered before the recorder's
-  // hooks, so the recorder still sees each import and each load.
+  // the recorder is armed (own-modules.mjs). Registered just before the
+  // recorder's hooks, so the recorder still sees each import and each load.
   const own =
     withoutRecording(buildId) == null
       ? null
-      : ownModuleHooks(`${pathToFileURL(cliFolder()).href}/`);
+      : ownModuleHooks(`${pathToFileURL(CLI_ROOT).href}/`);
   /** @type {{deregister: () => void} | null} */
   let ownHooks = null;
   /** @param {string | symbol} name */
@@ -1281,10 +1281,7 @@ function summaryStampNow(at, stamp) {
  * @returns {boolean}
  */
 function inCliBuild(file) {
-  const root = CLI_ROOT + path.sep;
-  return (
-    file.startsWith(root) && !file.startsWith(root + 'node_modules' + path.sep)
-  );
+  return isCliBuildFile(file, CLI_ROOT + path.sep, path.sep);
 }
 
 /**

@@ -30,6 +30,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
 
+/**
+ * Whether `target`, a path or a file URL, names one of the CLI's own files:
+ * one inside the CLI's folder, outside the node_modules folder inside it. In
+ * an installed CLI, its build id stands for exactly these files (AST-081 FR7).
+ * @param {string} target
+ * @param {string} root - the CLI's folder in the same form, ending in `sep`
+ * @param {string} sep - the separator of that form
+ * @returns {boolean}
+ */
+export function isCliBuildFile(target, root, sep) {
+  return (
+    target.startsWith(root) && !target.startsWith(`${root}node_modules${sep}`)
+  );
+}
+
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
 
@@ -301,7 +316,9 @@ export function homeFolder() {
  * @returns {boolean}
  */
 export function climbsOut(rel) {
-  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+  return (
+    rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`)
+  );
 }
 
 /**
