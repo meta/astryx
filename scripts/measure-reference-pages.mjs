@@ -9,8 +9,10 @@
  * @output Each reference page's first-load JavaScript, minified and
  *   gzip, its static module graph (modules reached and kept, module depth)
  *   and this build's chunks (count, depth), base against head, with the
- *   deltas. With `--unused-on`, a pass or fail line per named page against
- *   INV10's 0.3 KB limit. `--json` prints the same as JSON
+ *   deltas. `--bundler rolldown` builds each page with Vite (Rolldown) and
+ *   keeps the esbuild sizes beside it. With `--unused-on`, a pass or fail
+ *   line per named page against INV10's 0.3 KB limit, on the sizes of the
+ *   chosen bundler. `--json` prints the same as JSON
  * @position Run by people and review agents with `pnpm size:pages`; not a CI
  *   job. Builds each page with the size report's esbuild options
  *   (.github/scripts/lib/component-size.js), as the import-boundaries check
@@ -74,6 +76,7 @@ const pick = ({
   moduleDepth,
   chunks,
   depth,
+  esbuild,
 }) => ({
   min,
   gzip,
@@ -82,6 +85,7 @@ const pick = ({
   moduleDepth,
   chunks,
   depth,
+  ...(esbuild === undefined ? {} : {esbuild}),
 });
 
 /**
@@ -102,6 +106,14 @@ export function comparePages(base, head, {unusedOn = []} = {}) {
       moduleDepth: head[page].moduleDepth - base[page].moduleDepth,
       chunks: head[page].chunks - base[page].chunks,
       depth: head[page].depth - base[page].depth,
+      ...(head[page].esbuild === undefined
+        ? {}
+        : {
+            esbuild: {
+              min: head[page].esbuild.min - base[page].esbuild.min,
+              gzip: head[page].esbuild.gzip - base[page].esbuild.gzip,
+            },
+          }),
     },
   }));
   const verdicts = unusedOn.map(name => {
@@ -136,9 +148,13 @@ function size({min, gzip}) {
 }
 
 /** The comparison as a Markdown table and one line per verdict. */
-export function formatComparison({pages, verdicts}, {base, head}) {
+export function formatComparison(
+  {pages, verdicts},
+  {base, head, bundler = 'esbuild'},
+) {
+  const built = bundler === 'rolldown' ? ', built by Vite with Rolldown' : '';
   const lines = [
-    `First-load JavaScript per reference page (minified / gzip bytes), ${base} → ${head}:`,
+    `First-load JavaScript per reference page${built} (minified / gzip bytes), ${base} → ${head}:`,
     '',
     '| Page (components) | Base | Head | Change |',
     '| --- | ---: | ---: | ---: |',
@@ -158,7 +174,7 @@ export function formatComparison({pages, verdicts}, {base, head}) {
         `| ${row.page} | ${graph(row.base)} | ${graph(row.head)} | ${signed(row.delta.modules)} / ${signed(row.delta.keptModules)} / ${signed(row.delta.moduleDepth)} |`,
     ),
     '',
-    'Chunks in this build, for reference (first-load chunks / chunk depth; another bundler splits differently):',
+    `Chunks in this build, for reference (first-load chunks / chunk depth; another bundler splits differently):`,
     '',
     '| Page | Base | Head | Change |',
     '| --- | ---: | ---: | ---: |',
@@ -167,6 +183,19 @@ export function formatComparison({pages, verdicts}, {base, head}) {
         `| ${row.page} | ${shape(row.base)} | ${shape(row.head)} | ${signed(row.delta.chunks)} / ${signed(row.delta.depth)} |`,
     ),
   );
+  if (pages.some(row => row.head.esbuild !== undefined)) {
+    lines.push(
+      '',
+      'The same pages built by esbuild with code splitting, for the earlier trend (minified / gzip bytes):',
+      '',
+      '| Page | Base | Head | Change |',
+      '| --- | ---: | ---: | ---: |',
+      ...pages.map(
+        row =>
+          `| ${row.page} | ${size(row.base.esbuild)} | ${size(row.head.esbuild)} | ${signed(row.delta.esbuild.min)} / ${signed(row.delta.esbuild.gzip)} |`,
+      ),
+    );
+  }
   if (verdicts.length > 0) lines.push('');
   for (const verdict of verdicts) {
     lines.push(
@@ -396,13 +425,126 @@ export async function measurePage(distDir, components) {
   };
 }
 
-async function measurePages(distDir, pages) {
+/** Whether `id` is a package the app brings itself (`APP_EXTERNALS`). */
+function isAppExternal(id) {
+  return APP_EXTERNALS.some(pattern =>
+    pattern.endsWith('/*')
+      ? id.startsWith(pattern.slice(0, -1))
+      : id === pattern,
+  );
+}
+
+/**
+ * What a page loads up front in a Rolldown build, from its output chunks:
+ * the entry chunk and the chunks it imports statically, as `min` and `gzip`
+ * bytes, `chunks` and `depth` (breadth-first levels, the entry chunk at 1),
+ * and `keptModules`, the modules with rendered code in those chunks, the
+ * page entry not counted. `import()` targets load later, so they are not
+ * part of it.
+ */
+export function rolldownPageStats(output, entryModule) {
+  const byFile = new Map(
+    output
+      .filter(item => item.type === 'chunk')
+      .map(chunk => [chunk.fileName, chunk]),
+  );
+  const entry = [...byFile.values()].find(chunk => chunk.isEntry);
+  if (entry === undefined)
+    throw new Error('The Rolldown build has no entry chunk.');
+  const level = new Map([[entry.fileName, 1]]);
+  const order = [entry.fileName];
+  for (let index = 0; index < order.length; index += 1) {
+    for (const file of byFile.get(order[index]).imports ?? []) {
+      if (level.has(file) || !byFile.has(file)) continue;
+      level.set(file, level.get(order[index]) + 1);
+      order.push(file);
+    }
+  }
+  const kept = new Set();
+  for (const file of order) {
+    for (const [id, module] of Object.entries(byFile.get(file).modules ?? {})) {
+      if (module.renderedLength > 0 && id !== entryModule) kept.add(id);
+    }
+  }
+  const text = order.map(file => byFile.get(file).code).join('');
+  return {
+    min: Buffer.byteLength(text),
+    gzip: gzipBytes(text),
+    keptModules: kept.size,
+    chunks: order.length,
+    depth: Math.max(...level.values()),
+  };
+}
+
+/**
+ * One page as a production Vite app bundle, built by Rolldown, as a consumer
+ * of the built package ships it.
+ */
+export async function measurePageRolldown(distDir, components) {
+  const {build} = await import('vite');
+  const root = path.dirname(distDir);
+  // The dist resolves Core's own dependencies from the side's root.
+  const modules = path.join(root, 'node_modules');
+  if (!fs.existsSync(modules)) {
+    fs.symlinkSync(path.join(REPO, CORE, 'node_modules'), modules);
+  }
+  const entryModule = path.join(root, '__astryx-reference-page-rolldown__.mjs');
+  fs.writeFileSync(
+    entryModule,
+    components
+      .map(
+        name =>
+          `export {${name}} from ${JSON.stringify(componentModule(distDir, name))};`,
+      )
+      .join('\n'),
+  );
+  const result = await build({
+    root,
+    configFile: false,
+    logLevel: 'silent',
+    mode: 'production',
+    build: {
+      write: false,
+      minify: true,
+      modulePreload: false,
+      rollupOptions: {
+        input: entryModule,
+        external: isAppExternal,
+        preserveEntrySignatures: 'strict',
+      },
+    },
+  });
+  const {output} = Array.isArray(result) ? result[0] : result;
+  return rolldownPageStats(output, entryModule);
+}
+
+/**
+ * Each page's figures. With Rolldown, its build gives the up-front sizes,
+ * kept modules and chunks, and the esbuild figures stay under `esbuild`,
+ * so the esbuild trend stays readable.
+ */
+async function measurePages(distDir, pages, bundler = 'esbuild') {
   const sizes = {};
   for (const [page, components] of Object.entries(pages)) {
-    sizes[page] = {components, ...(await measurePage(distDir, components))};
+    const esbuild = await measurePage(distDir, components);
+    if (bundler === 'esbuild') {
+      sizes[page] = {components, ...esbuild};
+      continue;
+    }
+    const {modules, moduleDepth, ...esbuildBuild} = esbuild;
+    sizes[page] = {
+      components,
+      modules,
+      moduleDepth,
+      ...(await measurePageRolldown(distDir, components)),
+      esbuild: esbuildBuild,
+    };
   }
   return sizes;
 }
+
+/** The bundlers a page can be built with. */
+export const BUNDLERS = ['esbuild', 'rolldown'];
 
 export function parseArgs(argv) {
   const args = {
@@ -411,11 +553,19 @@ export function parseArgs(argv) {
     unusedOn: [],
     extraPages: {},
     json: false,
+    bundler: 'esbuild',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === '--base') args.base = argv[++index];
-    else if (flag === '--head') args.head = argv[++index];
+    else if (flag === '--bundler') {
+      args.bundler = argv[++index];
+      if (!BUNDLERS.includes(args.bundler)) {
+        throw new Error(
+          `--bundler must be one of ${BUNDLERS.join(', ')}, got "${args.bundler}"`,
+        );
+      }
+    } else if (flag === '--head') args.head = argv[++index];
     else if (flag === '--unused-on') {
       args.unusedOn.push(...argv[++index].split(',').filter(Boolean));
     } else if (flag === '--page') {
@@ -426,7 +576,7 @@ export function parseArgs(argv) {
   }
   if (args.base == null) {
     throw new Error(
-      'Usage: pnpm size:pages --base <ref|dist> [--head <ref|dist>] [--unused-on <page,…>] [--page name=A,B] [--json]',
+      'Usage: pnpm size:pages --base <ref|dist> [--head <ref|dist>] [--bundler esbuild|rolldown] [--unused-on <page,…>] [--page name=A,B] [--json]',
     );
   }
   return args;
@@ -443,10 +593,12 @@ async function main(argv) {
     const baseSizes = await measurePages(
       buildCore(args.base, path.join(workDir, 'base')),
       pages,
+      args.bundler,
     );
     const headSizes = await measurePages(
       buildCore(args.head, path.join(workDir, 'head')),
       pages,
+      args.bundler,
     );
     const comparison = comparePages(baseSizes, headSizes, {
       unusedOn: args.unusedOn,
@@ -454,6 +606,7 @@ async function main(argv) {
     const labels = {
       base: args.base,
       head: args.head === '.' ? 'the working tree' : args.head,
+      bundler: args.bundler,
     };
     console.log(
       args.json
