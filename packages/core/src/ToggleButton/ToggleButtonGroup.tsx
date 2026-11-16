@@ -79,13 +79,19 @@ export function useToggleButtonGroup(): ToggleButtonGroupContextValue | null {
 // =============================================================================
 
 const styles = stylex.create({
+  // Members wrap onto more rows when the group is wider than its container,
+  // so their labels keep their width. Each member keeps its own surface, so
+  // every row draws its own ends; DOM and Tab order stay the same. A single
+  // member wider than the container still truncates.
   group: {
     display: 'inline-flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
   },
   vertical: {
     flexDirection: 'column',
+    flexWrap: 'nowrap',
     alignItems: 'stretch',
   },
   // While the group tracks presses, its hit layer is the root's `::before`,
