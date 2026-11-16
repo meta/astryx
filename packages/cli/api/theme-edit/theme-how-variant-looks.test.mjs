@@ -91,15 +91,33 @@ describe('a color asked of every variant', () => {
     T,
   );
   it(
-    'a text color skips the variants it would vanish on',
+    'a text color goes to each variant only in the modes it reads in there',
     async test => {
       needsBases(test);
       const r = await answer('buttons with white text');
+      // (White reads on the primary fill in light mode, and on the ghost's
+      // page in dark mode only.)
       expect(r.first).toContain(
-        "color '#ffffff' --on button --when variant:primary",
+        "color '#ffffff' --on button --when variant:primary --mode light",
       );
-      for (const c of r.first) expect(c).not.toMatch(/variant:ghost/);
-      expect(r.texts[0]).toMatch(/ghost keeps its own text/);
+      expect(r.first).toContain(
+        "color '#ffffff' --on button --when variant:ghost --mode dark",
+      );
+      for (const c of r.first) expect(c).toMatch(/ --mode (?:light|dark)$/);
+      expect(r.texts[0]).toMatch(/only in the mode it reads in/);
+      // (Its own fill given beside it, the text is measured on that fill;
+      // a variant kept out of the fill keeps its own.)
+      const gold = await answer('gold buttons with black text');
+      expect(gold.first).toContain(
+        "color '#000000' --on button --when variant:primary",
+      );
+      expect(gold.first).not.toContain("color '#000000' --on button");
+      expect(gold.first.join('\n')).not.toMatch(
+        /color '#000000' --on button --when variant:destructive --mode light/,
+      );
+      // (A badge's see-through fill is read over the page.)
+      for (const c of (await answer('badges with dark text')).first)
+        expect(c).toMatch(/--when variant:/);
     },
     T,
   );

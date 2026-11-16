@@ -6614,6 +6614,16 @@ export function draftAnswer(ctx, env, question) {
     // show a thick outline", "only in dark mode and only on cards, darker
     // background", "buttons only, a bit rounder").
     if (c.state) return 'inherit';
+    // ("…, never use pure black for text": a rule of its own, said with
+    // its own verb, about no part: the theme's; "never make them bold"
+    // points back.)
+    if (
+      /^(?:never|don'?t|do not|avoid)\s+(?:use|using|make|give|have|go)\b/.test(
+        c.text,
+      ) &&
+      !/\b(?:it|its|them|they|their|those|these)\b/.test(c.text)
+    )
+      return 'theme';
     if (
       clauses[clauses.indexOf(c) - 1] === before &&
       !before.colors.length &&
@@ -19503,7 +19513,8 @@ export function draftAnswer(ctx, env, question) {
                       parts: inner.map(x => x.k),
                       from: inner[0].tok,
                       to: down.t,
-                      by: 2 * (now - Number(down.v)),
+                      // (Rounded as a length is said: no float tail.)
+                      by: Math.round(2 * (now - Number(down.v)) * 100) / 100,
                     }
                   : null;
               })()
@@ -25133,45 +25144,134 @@ export function draftAnswer(ctx, env, question) {
           continue;
         const ink = parseColor(String(st.value ?? ''));
         if (!ink || alphaOf(String(st.value)) < 1) continue;
-        // (A resting fill in the same answer is the look the text sits on;
-        // a fill in another state, "filled blue on hover", is not.)
-        if (
-          o.some(
+        // (A resting fill in the same answer is the look the text sits on,
+        // for the variants it reaches; a fill in another state, "filled
+        // blue on hover", is not.)
+        /** The fill this answer gives a variant at rest, if any. @param {string} v */
+        const givenFill = v =>
+          o.find(
             x =>
               x !== st &&
               x.on === st.on &&
               !x.state &&
-              /^background/.test(x.thing),
-          )
-        )
-          continue;
+              /^background/.test(x.thing) &&
+              (!x.when || x.when === `variant:${v}`),
+          ) ?? null;
         const variants = C.variantValues(one(st.on)).variant ?? [];
-        if (variants.length < 2 || !variants.includes('primary')) continue;
+        if (variants.length < 2) continue;
+        // ("badges #26272b with #d0d6e0 text": the text asked with a fill
+        // goes where that fill goes, its pair, never to the variants the
+        // fill keeps apart.)
+        const pairedTo = o
+          .filter(
+            x =>
+              x !== st &&
+              x.on === st.on &&
+              !x.state &&
+              /^background/.test(x.thing) &&
+              /^variant:/.test(String(x.when ?? '')),
+          )
+          .map(x => String(x.when));
+        if (pairedTo.length) {
+          o.splice(
+            i,
+            1,
+            ...[...new Set(pairedTo)].map(w => ({...st, when: w})),
+          );
+          continue;
+        }
         const fills = (C.partReads(one(st.on), 'background') ?? []).filter(
           r => /^--color-/.test(r.token) && !/overlay|tint/.test(r.token),
         );
-        const mode = /** @type {'light' | 'dark'} */ (st.mode ?? 'light');
-        const lost = variants.filter(v => {
+        // (Each mode the theme draws: a text color that reads on a
+        // variant's fill in one mode only is that mode's; text needs 4.5:1.)
+        const modes = /** @type {Array<'light' | 'dark'>} */ (
+          st.mode
+            ? [st.mode]
+            : modal
+              ? ['light', 'dark']
+              : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+        );
+        /** The modes a variant's text reads in. @param {string} v */
+        const readsIn = v => {
           const r = fills.find(x =>
             x.when.some(w => w.trim() === `variant=${v}`),
           );
-          const f = parseColor(
-            String(current(r?.token ?? '--color-background-body', mode) ?? ''),
-          );
-          return !!f && ratio(ink, f) < 3;
-        });
-        if (!lost.length || lost.length === variants.length) continue;
+          const given = givenFill(v);
+          return modes.filter(m => {
+            if (given && given.mode && given.mode !== m) return true;
+            // (A see-through fill is read over the page it sits on.)
+            const raw = given
+              ? String(given.value)
+              : String(current(r?.token ?? '--color-background-body', m) ?? '');
+            const f0 = parseColor(raw);
+            const page = parseColor(
+              String(current('--color-background-body', m) ?? ''),
+            );
+            const f =
+              f0 && page && alphaOf(raw) < 1
+                ? compositeOver(f0, alphaOf(raw), page)
+                : f0;
+            return !f || ratio(ink, f) >= 4.5;
+          });
+        };
+        const ok = new Map(variants.map(v => [v, readsIn(v)]));
+        const lost = variants.filter(v => !ok.get(v)?.length);
+        const partial = variants.filter(
+          v =>
+            (ok.get(v)?.length ?? 0) > 0 &&
+            (ok.get(v)?.length ?? 0) < modes.length,
+        );
+        if (
+          (!lost.length && !partial.length) ||
+          lost.length === variants.length
+        )
+          continue;
         o.splice(
           i,
           1,
           ...variants
             .filter(v => !lost.includes(v))
-            .map(v => ({...st, when: `variant:${v}`})),
+            .flatMap(v =>
+              partial.includes(v)
+                ? (ok.get(v) ?? []).map(m => ({
+                    ...st,
+                    when: `variant:${v}`,
+                    mode: m,
+                  }))
+                : [{...st, when: `variant:${v}`}],
+            ),
         );
-        if (!/keep their own text|keeps its own text/.test(d.text))
-          d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would barely show on ${lost.length > 1 ? 'their' : 'its'} fill; give ${lost.length > 1 ? 'them' : 'it'} a fill too to change ${lost.length > 1 ? 'them' : 'it'})`;
+        if (
+          lost.length &&
+          !/keep their own text|keeps its own text/.test(d.text)
+        )
+          d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would not read on ${lost.length > 1 ? 'their' : 'its'} fill; give ${lost.length > 1 ? 'them' : 'it'} a fill too to change ${lost.length > 1 ? 'them' : 'it'})`;
+        if (partial.length && !/only in the mode it reads in/.test(d.text))
+          d.text += ` (${partial.join(', ')}: only in the mode it reads in)`;
       }
     }
+  // ("selected nav items tinted forest green", "a green tint on hover"):
+  // a tint is the color at a low strength over what is beneath, never the
+  // solid color, as the accent's tint is.
+  for (const d of result) {
+    const c = draftClause.get(d);
+    if (!c || !/\b(?:tint(?:ed|s)?|wash(?:ed)?)\b/.test(c.text)) continue;
+    for (const o of d.options)
+      for (const [k, st] of o.entries())
+        if (
+          /^background(?:-color)?$/.test(st.thing) &&
+          parseColor(String(st.value ?? '')) &&
+          alphaOf(String(st.value)) >= 1
+        ) {
+          o[k] = {
+            ...st,
+            value: `color-mix(in srgb, ${st.value} 15%, transparent)`,
+          };
+          if (!/a tint: /.test(d.text))
+            d.text += ` (a tint: ${st.value} at 15% over what is beneath)`;
+        }
+  }
   // A fill given to a part that holds others ("a navy header"): a part
   // inside it whose own resting fill would sit at nearly the same color
   // (a primary button navy on navy) is named, so the answer never hides

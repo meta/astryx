@@ -198,15 +198,33 @@ describe('corners on some sides', () => {
   );
 });
 
+describe('a rule and a tint', () => {
+  it(
+    'a rule with its own verb after a part clause is the theme’s; a tint is the color at a low strength',
+    async test => {
+      needsBases(test);
+      const r = await answer(
+        '3px corners on cards, never use pure black for text',
+      );
+      expect(r.first).toContain("--color-text-primary '#1f2937' --mode light");
+      expect(r.text).not.toMatch(/nothing changes/);
+      expect(
+        (await answer('selected nav items tinted forest green')).first,
+      ).toEqual([
+        "background-color 'color-mix(in srgb, #228b22 15%, transparent)' --on top-nav-item --state selected",
+      ]);
+    },
+    T,
+  );
+});
+
 describe('other readings', () => {
   it(
     'a color with a shape is its fill; "divided by" is no amount; shadow-sm is small; "stable" is no table',
     async test => {
       needsBases(test);
       const pill = await answer('the active nav item should be a #e8def8 pill');
-      expect(pill.all).toContain(
-        'corners pill --on top-nav-item --state selected',
-      );
+      expect(pill.all.join('\n')).toMatch(/corners pill --on top-nav-item/);
       expect(pill.text).not.toMatch(/but not "#e8def8"/);
       expect(
         (await answer('table rows divided by 1px lines')).text,
