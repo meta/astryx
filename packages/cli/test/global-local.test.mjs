@@ -9,7 +9,7 @@
  * @input global-local.shared.mjs
  * @output Vitest tests
  * @position packages/cli/test; the first of three files of the table's rows,
- *   with global-local.rows-16-39 and global-local.rows-40-58
+ *   with global-local.rows-16-39 and global-local.rows-40-59
  */
 
 import {describe, expect, it} from 'vitest';

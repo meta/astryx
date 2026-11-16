@@ -431,7 +431,7 @@ describe.skipIf(!POSIX)(
       expect(result.stdout.trim()).toBe('9.0.0');
     });
 
-    it("G28 a Yarn Plug'n'Play project, whose own CLI Astryx cannot see, is answered by the copy that started the run", () => {
+    it("G28 a Yarn Plug'n'Play project whose runtime does not start: the run starts again once, and the copy that started it answers with Yarn's command in the hint", () => {
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
       const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});
