@@ -14,6 +14,7 @@ import {
   isDefinedTheme,
 } from './defineTheme';
 import {resolveThemeToken} from './tokens';
+import {getRegisteredTheme} from './themeRegistry';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -346,6 +347,21 @@ describe('defineTheme', () => {
     });
     expect(child.tokens).toEqual(fromDefined.tokens);
     expect(child.__inputTokens).toEqual(fromDefined.__inputTokens);
+  });
+
+  it('leaves the theme registered under a plain base name as it was', () => {
+    const real = defineTheme({
+      name: 'registered-base',
+      tokens: {'--color-accent': '#123456'},
+    });
+    defineTheme({
+      name: 'registered-base-child',
+      extends: {
+        name: 'registered-base',
+        tokens: {'--color-accent': '#abcdef'},
+      } as unknown as DefinedTheme,
+    });
+    expect(getRegisteredTheme('registered-base')).toBe(real);
   });
 
   it('passes through string values as-is', () => {

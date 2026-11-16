@@ -828,6 +828,22 @@ export function defineTheme<
 >(
   input: DefineThemeInput<IconVariants, Base>,
 ): ResolvedDefinedTheme<ThemeIconVariant<IconVariants, Base>> {
+  const theme = buildTheme(input);
+  registerTheme(theme);
+  return theme;
+}
+
+/**
+ * The theme defineTheme() returns, not registered: a plain-object base is
+ * built through it so the base never takes the name of a theme registered
+ * for other callers.
+ */
+function buildTheme<
+  const IconVariants extends ReadonlyArray<string> | undefined = undefined,
+  Base extends DefinedTheme | undefined = undefined,
+>(
+  input: DefineThemeInput<IconVariants, Base>,
+): ResolvedDefinedTheme<ThemeIconVariant<IconVariants, Base>> {
   // Pre-seed from the base theme when `extends` is provided (lowest precedence).
   // A base that is not a theme is refused rather than ignored: `extends` used
   // to inherit nothing when its value was undefined, which is what a named
@@ -839,7 +855,7 @@ export function defineTheme<
   // values merge as built values, never as raw input.
   const given: unknown = input.extends;
   const base = isPlainThemeInput(given)
-    ? (defineTheme(given as DefineThemeInput) as DefinedTheme as Base)
+    ? (buildTheme(given as DefineThemeInput) as DefinedTheme as Base)
     : input.extends;
   if ('extends' in input && !isDefinedTheme(base)) {
     throw new Error(
@@ -1004,7 +1020,6 @@ export function defineTheme<
     __axes,
   };
 
-  registerTheme(theme);
   return theme;
 }
 
