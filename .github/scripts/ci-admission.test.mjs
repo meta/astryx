@@ -50,7 +50,10 @@ const preloaded = {
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
-const {WIDE_STEP, WIDEN_STEP, legWidth, widenOf} = preloaded.count;
+const {AT_ONCE_STEP, WIDE_STEP, WIDEN_STEP, legWidth, liveJobs, widenOf} =
+  preloaded.count;
+// The step each leg of a matrix with `max-parallel` runs first.
+const AT_ONCE_MARKER = 'Run at most ${{ strategy.max-parallel }} legs at once';
 // Room's step that names the jobs its run adds at full width.
 const WIDEN_MARKER =
   'Hold ${{ steps.node-legs.outputs.widen }} more jobs at full width';
@@ -689,6 +692,73 @@ describe('peaks', () => {
   });
 });
 
+describe('matrix legs held back', () => {
+  it('names its max-parallel in the first step of every leg of each matrix that has one', () => {
+    const limited = Object.entries(ci.jobs).filter(
+      ([, job]) => job.strategy?.['max-parallel'] != null,
+    );
+    expect(limited.map(([id]) => id).sort()).toEqual(
+      expect.arrayContaining(['swizzle-proof', 'test-node', 'test-ui']),
+    );
+    for (const [id, job] of limited) {
+      const [first] = job.steps;
+      expect(first.name, id).toBe(AT_ONCE_MARKER);
+      expect(first.if, id).toBeUndefined();
+      // Each leg is named `<job> (<index>/<total>)`, which ties it to its
+      // matrix in the count.
+      expect(job.name, id).toMatch(
+        new RegExp(
+          `^${id} \\(\\$\\{\\{ matrix\\.\\w+ \\}\\}/\\$\\{\\{ strategy\\.job-total \\}\\}\\)$`,
+        ),
+      );
+    }
+    expect(
+      AT_ONCE_STEP.test(
+        AT_ONCE_MARKER.replace('${{ strategy.max-parallel }}', '2'),
+      ),
+    ).toBe(true);
+  });
+
+  const leg = (matrix, index, total, status, atOnce) => ({
+    name: `${matrix} (${index}/${total})`,
+    status,
+    steps:
+      status === 'in_progress' && atOnce != null
+        ? [{name: `Run at most ${atOnce} legs at once`, status: 'completed'}]
+        : [],
+  });
+  const matrix = (name, total, running, atOnce) =>
+    Array.from({length: total}, (_, i) =>
+      leg(name, i + 1, total, i < running ? 'in_progress' : 'queued', atOnce),
+    );
+
+  it('counts no more live legs of a matrix than its max-parallel', () => {
+    // Two legs run, six wait for them: the run holds two runners.
+    expect(liveJobs(matrix('test-node', 8, 2, 2))).toBe(2);
+    // At full width every leg runs, and every leg counts.
+    expect(liveJobs(matrix('test-node', 8, 8, 8))).toBe(8);
+    // Fewer live legs than the limit count as they are.
+    expect(liveJobs(matrix('test-ui', 4, 1, 2).slice(0, 1))).toBe(1);
+    // Each matrix by its own limit, beside jobs that are no leg.
+    expect(
+      liveJobs([
+        ...matrix('test-node', 8, 2, 2),
+        ...matrix('test-ui', 4, 2, 2),
+        {name: 'docsite-build', status: 'in_progress', steps: []},
+        {name: 'typecheck', status: 'queued', steps: []},
+        {name: 'build', status: 'completed', steps: []},
+      ]),
+    ).toBe(6);
+  });
+
+  it('counts every live leg of a matrix whose running legs name no limit', () => {
+    // A matrix without max-parallel, or legs not yet past their first step.
+    expect(liveJobs(matrix('pr-interaction', 6, 6))).toBe(6);
+    expect(liveJobs(matrix('test-node', 8, 0, 2))).toBe(8);
+    expect(liveJobs(matrix('test-node', 8, 2))).toBe(8);
+  });
+});
+
 describe('the shared count', () => {
   it("is loaded from the action's own folder, which its checkout holds", () => {
     // A wrong path would start every run without waiting: each admission
@@ -1050,6 +1120,34 @@ describe('ci admission', () => {
     expect((await admit({active: [...prs(4), settled], peak: 13})).looks).toBe(
       1,
     );
+  });
+
+  it('counts the matrix legs max-parallel holds back as holding no runner', async () => {
+    // 4 x 12 live + 18 small = 66. A run with two Node legs running and six
+    // held back holds 2 (88 with a peak of 20: room); counted as 8 live jobs
+    // it would leave none (94).
+    const legs = (atOnce, running) =>
+      Array.from({length: 8}, (_, i) => ({
+        name: `test-node (${i + 1}/8)`,
+        status: i < running ? 'in_progress' : 'queued',
+        steps:
+          i < running
+            ? [
+                {
+                  name: `Run at most ${atOnce} legs at once`,
+                  status: 'completed',
+                },
+              ]
+            : [],
+      }));
+    const tight = admittedRun(70, 0);
+    tight.jobs.push(...legs(2, 2));
+    expect((await admit({active: [...prs(4), tight], peak: 20})).looks).toBe(1);
+    const full = admittedRun(70, 0);
+    full.jobs.push(...legs(8, 8));
+    expect(
+      (await admit({active: [...prs(4), full], peak: 20})).looks,
+    ).toBeGreaterThan(1);
   });
 
   it("admits at once at tonight's load, which the three-minute floor and stale runs counted far over ninety", async () => {

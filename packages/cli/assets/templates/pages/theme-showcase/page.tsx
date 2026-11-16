@@ -73,6 +73,7 @@ import {
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 
 // StackItem has no wrapping basis; Stack has no body variant.
 // LayoutContent has no height cap; keep the message viewport bounded.
@@ -1100,40 +1101,60 @@ function TagsCell({row}: {row: InventoryRow}) {
 
 function ActionsCell() {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
-    <MoreMenu
-      label="Row actions"
-      size="sm"
-      // Demo only: replace these toasts with the calls that perform each action.
-      items={[
-        {
-          label: 'Edit',
-          onClick: () =>
-            showToast({
-              body: 'Demo: edit would happen here',
-              uniqueID: 'row-edit',
-            }),
-        },
-        {
-          label: 'Duplicate',
-          onClick: () =>
-            showToast({
-              body: 'Demo: duplicate would happen here',
-              uniqueID: 'row-duplicate',
-            }),
-        },
-        {
-          label: 'Move to…',
-          onClick: () =>
-            showToast({
-              body: 'Demo: moving the item would happen here',
-              uniqueID: 'row-move-to',
-            }),
-        },
-        {type: 'divider'},
-        {label: 'Delete'},
-      ]}
-    />
+    <>
+      <MoreMenu
+        label="Row actions"
+        size="sm"
+        // Demo only: replace these toasts with the calls that perform each action.
+        items={[
+          {
+            label: 'Edit',
+            onClick: () =>
+              showToast({
+                body: 'Demo: edit would happen here',
+                uniqueID: 'row-edit',
+              }),
+          },
+          {
+            label: 'Duplicate',
+            onClick: () =>
+              showToast({
+                body: 'Demo: duplicate would happen here',
+                uniqueID: 'row-duplicate',
+              }),
+          },
+          {
+            label: 'Move to…',
+            onClick: () =>
+              showToast({
+                body: 'Demo: moving the item would happen here',
+                uniqueID: 'row-move-to',
+              }),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            onClick: () =>
+              confirm.show({
+                title: 'Delete this item?',
+                description: "This demo won't delete anything.",
+                actionLabel: 'Delete',
+                onAction: () => {
+                  confirm.hide();
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: the item would be deleted here',
+                    uniqueID: 'row-delete',
+                  });
+                },
+              }),
+          },
+        ]}
+      />
+      {confirm.element}
+    </>
   );
 }
 

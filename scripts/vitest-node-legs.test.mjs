@@ -141,13 +141,18 @@ describe('the Node leg plan', () => {
     expect(names.indexOf(step.name)).toBeLessThan(
       names.indexOf('Wait for room under the CI ceiling'),
     );
+    // Right after the step that names its max-parallel limit for admission's
+    // count, before any setup.
     const legs = ci.jobs['test-node'];
-    expect(legs.steps[0]).toMatchObject({
+    expect(legs.steps[0].name).toBe(
+      'Run at most ${{ strategy.max-parallel }} legs at once',
+    );
+    expect(legs.steps[1]).toMatchObject({
       name: 'Stop when the Node legs do not fit their budget',
       if: "needs.room.outputs.node-fits != 'true'",
       env: {REASON: '${{ needs.room.outputs.node-reason }}'},
     });
-    expect(legs.steps[0].run).toContain('exit 1');
+    expect(legs.steps[1].run).toContain('exit 1');
     expect(room.outputs['node-fits']).toBe(
       '${{ steps.node-legs.outputs.fits }}',
     );
