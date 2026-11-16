@@ -10,7 +10,7 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, indicatorLines, pillDrawnRadios} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -22,6 +22,7 @@ import {
   themeFiles,
 } from './_settings.mjs';
 import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   COLOR_IN_VALUE,
   alphaOf,
@@ -62,6 +63,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
+ * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -238,6 +240,66 @@ export async function howTheme(ctx, cwd, name) {
             : null;
       return measureFit(ctx, base, was, now, intent, steps, visible);
     },
+    /**
+     * What a part shows for a property at rest after the steps (built in
+     * memory, nothing written): its own rule, else what Core declares at
+     * rest, every var() written out from the part's tokens.
+     * @param {Step[]} steps
+     * @param {string} part
+     * @param {string} prop
+     */
+    valueAfter(steps, part, prop) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null;
+      }
+      const now = compileTheme(ctx, d, base);
+      const toks = ownTokens(now, base);
+      const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
+      /** @type {Record<string, any>} */
+      const rules = {
+        ...(base.components?.[part]?.base ?? {}),
+        ...(now.components?.[part]?.base ?? {}),
+      };
+      const at = ctx.C.MAP?.[part]?.at?.[prop] ?? {};
+      const rest =
+        Object.entries(/** @type {Record<string, string>} */ (at)).find(
+          ([k]) =>
+            !/[\s:]/.test(k) &&
+            k
+              .split(',')
+              .every(x =>
+                /^(?:variant=(?:default|primary|standard)|size=md|elevation=none|always)$|^$/.test(
+                  x,
+                ),
+              ),
+        )?.[1] ?? Object.values(at)[0];
+      const raw = rules[camel] ?? rules[prop] ?? rest;
+      if (raw == null) return null;
+      /** @param {'light' | 'dark'} m */
+      const scoped = m => {
+        /** @type {Record<string, string>} */
+        const t = {...toks[m]};
+        for (const [k, v] of Object.entries(rules))
+          if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+        return t;
+      };
+      // (A private variable Core sets nowhere at rest shows its fallback.)
+      /** @param {'light' | 'dark'} m */
+      const shown = m => {
+        let v = String(raw);
+        for (let i = 0; i < 4; i++)
+          v = resolveIn(v, scoped(m), m).replace(
+            /var\(\s*--_[\w-]+\s*,\s*((?:[^()]|\([^()]*\))*)\)/g,
+            '$1',
+          );
+        return v.trim();
+      };
+      return {light: shown('light'), dark: shown('dark')};
+    },
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
       const d = JSON.parse(JSON.stringify(theme));
@@ -289,6 +351,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
+ * @property {boolean} [fainter] the question makes something fainter, less visible or more see-through ("less visible", "half as visible", "more transparent"): no border, outline, ring or shadow gets stronger anywhere
  */
 
 /** A camelCase property as CSS writes it. @param {string} k */
@@ -411,6 +474,244 @@ function shadowStrength(v) {
     );
 }
 
+/** The line properties the way of a line is measured on. */
+const LINE_PROPS =
+  /^(?:border(?:-(?:top|right|bottom|left))?-width|outline-width|box-shadow)$/;
+
+/**
+ * A line's strength as it renders: a width in px, or a shadow's summed
+ * alpha.
+ * @param {string} prop
+ * @param {string} v resolved value
+ */
+function lineStrength(prop, v) {
+  const x = String(v ?? '').trim();
+  if (!x || /^(?:none|hidden|0|0px|initial|unset)$/.test(x)) return 0;
+  if (prop === 'box-shadow') return shadowStrength(x);
+  if (/\b(?:none|hidden)\b/.test(x)) return 0;
+  const kw = /\b(thin|medium|thick)\b/.exec(x)?.[1];
+  if (kw) return {thin: 1, medium: 3, thick: 5}[kw] ?? 1;
+  const m = /(-?\d*\.?\d+)(px|rem|em)?/.exec(x);
+  if (!m) return 0;
+  return Number(m[1]) * (m[2] === 'rem' || m[2] === 'em' ? 16 : 1);
+}
+
+/**
+ * The value a compiled theme gives one look of a part (a render Core
+ * draws, `variant=default,size=md :focus-within`): its most specific rule
+ * that matches, in that state, with the custom properties those rules set.
+ * @param {any} compiled
+ * @param {string} part
+ * @param {string} render
+ * @param {string} prop
+ * @returns {{value: string | undefined, tokens: Record<string, string>}}
+ */
+function ruleValue(compiled, part, render, prop) {
+  const rules = /** @type {Record<string, any>} */ (
+    compiled?.components?.[part] ?? {}
+  );
+  const [head, ...rest] = String(render).split(' ');
+  const attrs =
+    head.startsWith(':') || head === 'always' ? [] : head.split(',');
+  const state = (head.startsWith(':') ? [head, ...rest] : rest).join(' ');
+  const matching = Object.keys(rules)
+    .filter(
+      w =>
+        w === 'base' ||
+        w.split(',').every(kv => attrs.includes(kv.replace(':', '='))),
+    )
+    .sort(
+      (x, y) =>
+        (x === 'base' ? 0 : x.split(',').length) -
+        (y === 'base' ? 0 : y.split(',').length),
+    );
+  const camel = (/** @type {string} */ k) =>
+    k.replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
+  /** @type {Record<string, string>} */
+  const tokens = {};
+  /** @type {string | undefined} */
+  let value;
+  const side = /^border-(top|right|bottom|left)-width$/.exec(prop)?.[1];
+  for (const w of matching) {
+    const layers = [rules[w], ...(state ? [rules[w]?.[state]] : [])];
+    for (const r of layers) {
+      if (!r || typeof r !== 'object') continue;
+      for (const [k, v] of Object.entries(r))
+        if (k.startsWith('--') && typeof v === 'string') tokens[k] = v;
+      const own =
+        r[camel(prop)] ??
+        (side ? (r[camel(`border-${side}`)] ?? r.borderWidth) : undefined) ??
+        (/^border(?:-[a-z]+)?-width$/.test(prop) ? r.border : undefined) ??
+        (prop === 'outline-width' ? r.outline : undefined);
+      if (typeof own === 'string' || typeof own === 'number')
+        value = String(own);
+    }
+  }
+  return {value, tokens};
+}
+
+/**
+ * Why a step moves a line against the way asked, or null: every look Core
+ * draws of each part the steps reach (a token step reaches every part that
+ * reads the token), before and after, in each mode.
+ * @param {any} C
+ * @param {any} was
+ * @param {any} now
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} tw
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} tn
+ * @param {Step[]} steps
+ * @param {MeasureIntent} intent
+ * @param {'light' | 'dark' | null} visible
+ * @returns {string | null}
+ */
+function lineWay(C, was, now, tw, tn, steps, intent, visible) {
+  const fainter = Boolean(intent.fainter) || intent.zero;
+  // (A dial set to a named look, "the buttons dial, outline", draws that
+  // look's lines: a line it adds is the look asked.)
+  const namedLook = steps.some(
+    st =>
+      !st.on &&
+      !/^--/.test(String(st.thing)) &&
+      !/^(?:more|less)$/.test(String(st.value ?? '')),
+  );
+  const changedTokens = new Set(
+    [...new Set([...Object.keys(tw.light), ...Object.keys(tn.light)])].filter(
+      t => tw.light[t] !== tn.light[t] || tw.dark[t] !== tn.dark[t],
+    ),
+  );
+  /** @type {Set<string>} */
+  const parts = new Set(
+    steps
+      .map(st => st.on)
+      .filter(Boolean)
+      .flatMap(x => FAMILIES[String(x)] ?? [String(x)]),
+  );
+  if (changedTokens.size)
+    for (const [part, info] of Object.entries(C.MAP ?? {}))
+      for (const [prop, byRender] of Object.entries(
+        /** @type {any} */ (info)?.at ?? {},
+      ))
+        if (
+          LINE_PROPS.test(prop) &&
+          Object.values(/** @type {Record<string, string>} */ (byRender)).some(
+            v =>
+              [...String(v).matchAll(/var\(\s*(--[a-z0-9-]+)/g)].some(m =>
+                changedTokens.has(m[1]),
+              ),
+          )
+        )
+          parts.add(part);
+  for (const part of parts) {
+    const at = /** @type {Record<string, Record<string, string>>} */ (
+      C.MAP?.[part]?.at ?? {}
+    );
+    // Every look Core draws of the part; a part that draws no line at all
+    // has one plain look with none.
+    const renders = new Set(
+      Object.values(at)
+        .flatMap(x => Object.keys(x ?? {}))
+        .filter(r => !/::/.test(r)),
+    );
+    if (!renders.size) renders.add('always');
+    const props = new Set([
+      ...Object.keys(at).filter(p => LINE_PROPS.test(p)),
+      'border-top-width',
+      'box-shadow',
+    ]);
+    for (const prop of props)
+      for (const render of renders) {
+        // (A look in a state Core writes nothing new for shows its plain
+        // look's value: a popover's shadow while focused.)
+        const head = render.startsWith(':') ? 'always' : render.split(' ')[0];
+        const coreOf = (/** @type {string} */ pr) =>
+          at[pr]?.[render] ?? at[pr]?.[head] ?? at[pr]?.always;
+        const core =
+          coreOf(prop) ??
+          (prop === 'border-top-width' ? coreOf('border-width') : undefined);
+        const a = ruleValue(was, part, render, prop);
+        const b = ruleValue(now, part, render, prop);
+        const rawA = a.value ?? core ?? '0';
+        const rawB = b.value ?? core ?? '0';
+        if (
+          rawA === rawB &&
+          JSON.stringify(a.tokens) === JSON.stringify(b.tokens) &&
+          !/var\(/.test(rawA)
+        )
+          continue;
+        // (A border whose style is none or hidden draws nothing, whatever
+        // its width.)
+        const styled = (/** @type {any} */ c, /** @type {string} */ raw) => {
+          if (prop === 'box-shadow' || prop.startsWith('outline')) return true;
+          const side =
+            /^border-(top|right|bottom|left)-width$/.exec(prop)?.[1] ?? '';
+          const st =
+            ruleValue(
+              c,
+              part,
+              render,
+              side ? `border-${side}-style` : 'border-style',
+            ).value ??
+            /\b(?:solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)\b/.exec(
+              raw,
+            )?.[0] ??
+            coreOf(side ? `border-${side}-style` : 'border-style') ??
+            coreOf('border-style');
+          // (A border with no style is none: CSS's initial style.)
+          if (/^(?:none|hidden)$/.test(String(st ?? 'none').trim()))
+            return false;
+          // (A transparent border draws nothing either.)
+          const colorProp = side ? `border-${side}-color` : 'border-color';
+          const col =
+            ruleValue(c, part, render, colorProp).value ??
+            coreOf(colorProp) ??
+            coreOf('border-color') ??
+            '';
+          return !/^\s*transparent\s*$/.test(
+            resolveIn(String(col), {...tw.light}, 'light'),
+          );
+        };
+        const drawnA = styled(was, rawA);
+        const drawnB = styled(now, rawB);
+        for (const mode of /** @type {const} */ (['light', 'dark'])) {
+          if (visible && mode !== visible) continue;
+          const x = !drawnA
+            ? 0
+            : lineStrength(
+                prop,
+                resolveIn(rawA, {...tw[mode], ...a.tokens}, mode),
+              );
+          const y = !drawnB
+            ? 0
+            : lineStrength(
+                prop,
+                resolveIn(rawB, {...tn[mode], ...b.tokens}, mode),
+              );
+          const look = render === 'always' ? '' : ` (${render})`;
+          const what =
+            prop === 'box-shadow' ? 'shadow' : prop.replace(/-width$/, '');
+          // (A removal keeps what an except pins in a state, and a group's
+          // state look that drew nothing may take a fainter line: only the
+          // looks at rest are held to an added line; a stronger one is
+          // held everywhere.)
+          const atRest = !/(?:^|\s):/.test(render);
+          if (fainter && y > x + 1e-6 && (atRest || (intent.fainter && x > 0)))
+            return `it would ${x ? 'strengthen' : 'add'} a ${what} on ${part}${look} in ${mode} mode, which the question makes fainter`;
+          // (A shadow asked stronger may be new on a look that drew none.)
+          if (
+            !fainter &&
+            !namedLook &&
+            prop !== 'box-shadow' &&
+            x === 0 &&
+            y > 0 &&
+            b.value !== undefined
+          )
+            return `it would add a ${what} on ${part}${look} in ${mode} mode, where Core draws none`;
+        }
+      }
+  }
+  return null;
+}
+
 /**
  * A shadow as it renders: each color written in one form (hex with its
  * alpha), so two spellings of the same shadow compare equal.
@@ -447,19 +748,28 @@ function painted(v, toks, mode) {
 }
 
 /**
- * A color's HSL saturation, 0 to 1, or null when it does not read.
+ * How colorful a color looks: its OKLCH chroma, the measure the palette
+ * generator's vibrancy moves, or null when it does not read. (HSL
+ * saturation rates a pale yellow near full and a deeper, more colorful one
+ * lower.)
  * @param {string | number[] | null} v a color, or its RGB
  */
 function saturationOf(v) {
   const rgb = Array.isArray(v) ? v : v == null ? null : parseColor(v);
   if (!rgb) return null;
-  const [r, g, b] = rgb.map(x => x / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const d = max - min;
-  return d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const hexOf = rgb
+    .slice(0, 3)
+    .map(x =>
+      Math.round(Math.max(0, Math.min(255, x)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
+  return hexToOklch(`#${hexOf}`).C;
 }
+
+/** The chroma change, per color, too small to count as a move. */
+const CHROMA_STEP = 0.005;
 
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
@@ -659,6 +969,20 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
     }
   }
+  // The way of a line, in every look Core draws: an ask that makes
+  // something fainter, or removes it, never adds or strengthens a border,
+  // outline, ring or shadow anywhere; a way asked of a line or a shadow
+  // never adds one to a look that drew none (a card variant with no
+  // border, a table row whose cells draw the dividers).
+  const lineAsk =
+    Boolean(intent.fainter) ||
+    intent.zero ||
+    (Boolean(intent.dir) &&
+      intent.families.some(f => f === 'border' || f === 'shadow'));
+  if (lineAsk) {
+    const why = lineWay(C, was, now, tw, tn, steps, intent, visible);
+    if (why) return why;
+  }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
   // A shadow ask is answered only by a shadow that looks different: an
   // opaque color written with alpha ff, or clamped there, is no change.
@@ -682,6 +1006,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       .filter(Boolean)
       .flatMap(x => members(String(x))),
   ]);
+  // A radio mark the editor keeps round on a Core that draws its circle
+  // with the pill token, and its dot: a zero radius ask leaves them.
+  const radios = new Set(
+    pillDrawnRadios(C).flatMap(m => [m, ...(C.MAP[m]?.contains ?? [])]),
+  );
+  // An indicator line's thickness (a tab's underline height) is the
+  // width of a line it draws, as a border's is.
+  const lineSide = new Map(indicatorLines(C).map(x => [x.part, x.side]));
   for (const part of touched) {
     // A whole kept part is checked above, not as a subject.
     if (keeps.some(k => k.part === part && !k.prefix)) continue;
@@ -727,9 +1059,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           ) &&
           steps.some(x => x.thing === st.thing && familyOf(x.thing) !== fam),
       );
+      // An indicator line's thickness is also the width of a line it
+      // draws: a border ask reaches it.
+      const lineWidth =
+        lineSide.get(part) === prop && intent.families.includes('border');
       if (
         intent.families.length &&
         !intent.families.includes(fam) &&
+        !lineWidth &&
         !typedHere &&
         !sameToken
       )
@@ -738,6 +1075,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         if (visible && mode !== visible) continue;
         const after = v[mode];
         const before = o?.[mode] ?? null;
+        if (intent.zero && fam === 'radius' && radios.has(part)) continue;
         if (
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
@@ -966,7 +1304,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       }
       if (
         n &&
-        (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
+        (intent.saturation === 'more'
+          ? x < y - CHROMA_STEP * n
+          : x > y + CHROMA_STEP * n)
       )
         return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
       const wash = (/** @type {Record<string, string>} */ t) =>
@@ -979,7 +1319,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       if (
         wa != null &&
         wb != null &&
-        (intent.saturation === 'more' ? wa < wb - 0.02 : wa > wb + 0.02)
+        (intent.saturation === 'more'
+          ? wa < wb - CHROMA_STEP
+          : wa > wb + CHROMA_STEP)
       )
         return `the accent wash (--color-accent-muted) would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode, as it paints over the page`;
     }

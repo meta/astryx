@@ -123,6 +123,7 @@ const RUNTIME_DEPS = [
   '@babel/plugin-transform-typescript',
   '@babel/plugin-transform-react-jsx',
   'commander',
+  'css-tree',
   'globals',
   'ignore',
   'jiti',

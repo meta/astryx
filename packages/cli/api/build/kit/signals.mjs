@@ -32,6 +32,7 @@ import {ideaKind} from './kind.mjs';
 import {pickStart, rankPages} from './rank.mjs';
 import {pickFit} from './weights.mjs';
 import {readNames} from './words.mjs';
+import {namedOutright} from './weights.mjs';
 import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
 
 /** A page at/above this score is a confident direct match. */
@@ -183,15 +184,30 @@ export async function kitSignals(query, options = {}) {
     return (coverage?.matched ?? 0) / total >= PAGE_COVERAGE;
   };
 
-  const matchedPages = results
-    .filter(
-      r =>
-        r.domain === 'template' &&
-        r.kind !== 'block' &&
-        r.score >= PAGE_FLOOR &&
-        covers(r),
-    )
-    .slice(0, 3);
+  // Build starts only from ready page templates, so only search's ready page
+  // matches steer the start: a template not ready yet is no direct match, does
+  // not hold back the shell lift, and is never listed. The one exception is
+  // the reason: when the idea names a not-ready template that search matched
+  // directly, the reason says it is not ready yet.
+  /** @param {SearchResultEntry} r */
+  const isReady = r =>
+    catalog.some(t => t.name === r.name && t.package === r.package);
+  const pageMatches = results.filter(
+    r =>
+      r.domain === 'template' &&
+      r.kind !== 'block' &&
+      r.score >= PAGE_FLOOR &&
+      covers(r),
+  );
+  const matchedPages = pageMatches.filter(isReady).slice(0, 3);
+  const top = pageMatches[0];
+  const namedUnready =
+    top &&
+    !isReady(top) &&
+    top.score >= PAGE_DIRECT &&
+    namedOutright([top.name], readNames(query, [{name: top.name}]), [top])[0]
+      ? top.name
+      : null;
   const searchedBlocks = results.filter(
     r => r.domain === 'template' && r.kind === 'block',
   );
@@ -216,9 +232,18 @@ export async function kitSignals(query, options = {}) {
    * `start`, which always scaffolds. Copied rather than mutated: these entries
    * come from `search()` and are not this function's to modify.
    */
-  const pages = directMatch
-    ? matchedPages
-    : matchedPages.map(page => ({
+  // The kit names only page templates build could start from: a match the
+  // catalog holds as not ready is left out of the surfaced list, and the
+  // response's `directMatch` and `--skeleton` describe that list. The start
+  // is still chosen from every match (chooseStart).
+  const startable = matchedPages.filter(page =>
+    catalog.some(t => t.name === page.name && t.package === page.package),
+  );
+  const shownDirect =
+    directMatch && startable[0]?.name === matchedPages[0]?.name;
+  const pages = shownDirect
+    ? startable
+    : startable.map(page => ({
         ...page,
         command: `${page.command} --skeleton`,
       }));
@@ -260,6 +285,7 @@ export async function kitSignals(query, options = {}) {
         catalog,
         query,
         placeOf,
+        namedUnready,
       )
     : null;
   // Name the ranker's next two templates beside the start: the reader judges
@@ -311,7 +337,7 @@ export async function kitSignals(query, options = {}) {
     query: String(query).trim(),
     idea: searched,
     matchCount,
-    directMatch,
+    directMatch: shownDirect,
     start,
     pages: pagesKept,
     blocks: blocksKept,

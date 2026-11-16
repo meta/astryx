@@ -84,7 +84,15 @@ describe('one-mode colors on parts whose variants have their own', () => {
     for (const on of parts)
       for (const prop of props) {
         const color = `#ff00${(n++).toString(16).padStart(2, '0')}`;
-        await themeEditSet('p1', prop, color, {cwd, on});
+        // (An outline color on a part that draws no outline, a badge, is
+        // refused: it would never show.)
+        try {
+          await themeEditSet('p1', prop, color, {cwd, on});
+        } catch (e) {
+          if (/draws no outline/.test(String(/** @type {any} */ (e).message)))
+            continue;
+          throw e;
+        }
         set.push([prop, color]);
       }
     const css = cssOf('p1');

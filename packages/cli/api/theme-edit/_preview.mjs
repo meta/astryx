@@ -18,6 +18,8 @@ import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {AstryxError} from '../error.mjs';
+import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   SAMPLE_PAGE,
   SHEET_ORDER,
@@ -39,6 +41,7 @@ import {
   camel,
   folderIsEmpty,
   builtFontWeights,
+  builtItalic,
   fontPackages,
   modesOf,
   shown,
@@ -46,7 +49,7 @@ import {
   APP_COPY_BUILT,
   appCopyNames,
 } from './_settings.mjs';
-import {writeWhole} from './_palette.mjs';
+import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
 import {
@@ -82,6 +85,9 @@ const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
 
 const SELECTION =
   /Select|Checkbox|Radio|Switch|Segmented|Toggle|Slider|Typeahead|Tokenizer/;
+
+/** The overlays the preview's strip draws open, in its order: one of each kind a look styles (a tooltip, a popover, a menu, a select list). */
+const PREVIEW_OVERLAYS = ['Tooltip', 'Popover', 'DropdownMenu', 'Selector'];
 
 /** Props a doc names that open a part's own menu or list. */
 const OPENERS = ['isMenuOpen', 'isDefaultOpen'];
@@ -135,6 +141,11 @@ export function showcaseItems(project, group) {
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
     const info = project.components[name];
+    // On the overlays section's own page, a part of an overlay (a dialog's
+    // header, a command palette's list) shows inside the overlay it belongs
+    // to, never alone beside it: that page stays one or two screens.
+    if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
+      continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -145,22 +156,33 @@ export function showcaseItems(project, group) {
         // tooltip or hover card only once it is mounted. Any other part, as
         // first shown, is shown open with the overlays too when a press
         // opens one from it (the page sees which: _catalog.mjs).
+        // A part of another part that opens a layer of its own (a menu's
+        // submenu, a tab list's overflow menu) is drawn open as any part
+        // is: only an overlay's own parts stay inside it (above).
         ...(info?.opens
-          ? {open: true}
+          ? {open: true, ...(info?.props?.placement ? {anchored: true} : {})}
           : i === 0 && g !== 'overlays'
             ? {
                 openable: true,
                 // A prop its doc names that opens it opens it; else the
-                // drawing's press does.
-                ...(OPENERS.some(p => info?.props?.[p])
+                // drawing's press does. A part that waits after a keystroke
+                // before it searches (a typeahead's `debounceMs`) waits for
+                // none: the drawing types once and reads the list then.
+                ...(OPENERS.some(p => info?.props?.[p]) ||
+                info?.props?.debounceMs
                   ? {
                       openTree: inParent({
                         __element: name,
                         props: {
                           ...v.props,
-                          [/** @type {string} */ (
-                            OPENERS.find(p => info?.props?.[p])
-                          )]: true,
+                          ...(OPENERS.some(p => info?.props?.[p])
+                            ? {
+                                [/** @type {string} */ (
+                                  OPENERS.find(p => info?.props?.[p])
+                                )]: true,
+                              }
+                            : {}),
+                          ...(info?.props?.debounceMs ? {debounceMs: 0} : {}),
                         },
                       }),
                     }
@@ -406,22 +428,43 @@ export function baseFontsSheet(ctx, data) {
  * fonts in every weight it uses: a variable package's one stylesheet
  * (every weight); for a package with a stylesheet per weight, as
  * Fontsource ships them, each weight the theme's build uses that the
- * package has; else its index stylesheet.
+ * package has; else its index stylesheet. When the theme sets italic text,
+ * each with its italic stylesheet the package has.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {string} pkg
  * @returns {string[]}
  */
 export function fontPackageSheets(ctx, slug, pkg) {
-  const index = `${pkg}/index.css`;
+  /** Whether the package has a stylesheet. @param {string} sheet */
+  const has = sheet => {
+    try {
+      ctx.project.req.resolve(sheet);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // Italic text loads the italic face of each sheet beside it, as
+  // Fontsource names them (`400-italic.css`, a variable package's
+  // `wght-italic.css`), where the package has it.
+  const italic = builtItalic(ctx, slug);
+  /** A sheet and, for italic text, its italic one. @param {string} upright @param {string} slanted */
+  const withItalic = (upright, slanted) => [
+    upright,
+    ...(italic && has(slanted) ? [slanted] : []),
+  ];
   const faces = fontPackageWeights(ctx, pkg);
-  if (!faces?.length) return [index];
+  if (!faces?.length)
+    return withItalic(`${pkg}/index.css`, `${pkg}/wght-italic.css`);
   // Each weight the theme uses loads the face CSS font matching shows for
   // it (550 shows the 600 face), once.
   const shown = new Set(
     (builtFontWeights(ctx, slug) ?? [400]).map(w => shownWeight(w, faces)),
   );
-  return faces.filter(w => shown.has(w)).map(w => `${pkg}/${w}.css`);
+  return faces
+    .filter(w => shown.has(w))
+    .flatMap(w => withItalic(`${pkg}/${w}.css`, `${pkg}/${w}-italic.css`));
 }
 
 /**
@@ -444,6 +487,40 @@ export function fontPackageWeights(ctx, pkg) {
     }
   });
   return faces.length ? faces : null;
+}
+
+/**
+ * The weights a font package's index stylesheet loads, read from its own
+ * @font-face rules: each rule's font-weight as a [from, to] span, one
+ * weight (`400`) or a range (`100 900`, a variable face, every weight in
+ * it); a rule with no font-weight is weight 400. Null when the package is
+ * not installed here or its sheet names no face.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} pkg
+ * @returns {Array<[number, number]> | null}
+ */
+export function fontIndexWeights(ctx, pkg) {
+  /** @type {string} */
+  let text;
+  try {
+    text = fs.readFileSync(ctx.project.req.resolve(`${pkg}/index.css`), 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {Array<[number, number]>} */
+  const spans = [];
+  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
+    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
+    const nums = value
+      .trim()
+      .replace(/\bnormal\b/gi, '400')
+      .replace(/\bbold\b/gi, '700')
+      .split(/\s+/)
+      .map(Number);
+    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
+    spans.push([nums[0], nums[1] ?? nums[0]]);
+  }
+  return spans.length ? spans : null;
 }
 
 /**
@@ -603,6 +680,71 @@ function renderKey(project, slug, source, like) {
 }
 
 /**
+ * The stamps the editor writes into every page it makes: the render key
+ * at its end, and a sheet's build.
+ */
+const EDITOR_PAGE_STAMP =
+  /<!-- astryx: (?:render of [0-9a-f]{24} [0-9a-f]{16}|sheet of build [0-9a-f]{16}) -->/;
+
+/**
+ * What is at the name of a page the editor writes in the theme folder
+ * (preview.html, sheet.html, a section's sheet, the open states page) when
+ * it is not the editor's own page: `link`, `folder`, `other` (not a plain
+ * file) or `file` (a file without the editor's stamp). Null when nothing
+ * is there or the page there is the editor's. Something of yours at a
+ * page's name is never written over: it is left as it is, and named.
+ * @param {string} file
+ * @returns {'link' | 'folder' | 'other' | 'file' | null}
+ */
+export function pageInTheWay(file) {
+  const st = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!st) return null;
+  if (st.isSymbolicLink()) return 'link';
+  if (st.isDirectory()) return 'folder';
+  if (!st.isFile()) return 'other';
+  try {
+    return EDITOR_PAGE_STAMP.test(readRegularFile(file, 'utf8'))
+      ? null
+      : 'file';
+  } catch {
+    return 'file';
+  }
+}
+
+/**
+ * Refuse to write a page over a pipe, a device or a socket at its name: a
+ * write renamed into place would replace it, and something of yours at a
+ * page's name is never written over.
+ * @param {string} cwd
+ * @param {string} file
+ * @param {string} page what goes there
+ */
+function refuseOverIrregular(cwd, file, page) {
+  if (pageInTheWay(file) !== 'other') return;
+  throw new AstryxError(
+    `${inTheWayPhrase(shown(cwd, file), 'other', page)}; it is left as it is. Move it, then run the command again.`,
+    [],
+    ERROR_CODES.ERR_WRITE_FAILED,
+  );
+}
+
+/**
+ * What {@link pageInTheWay} found, said: `<file> is a link, and the editor
+ * writes nothing through a link`, `… is a folder, where <page> goes`, `…
+ * is a file the editor did not write, and it is left as it is`.
+ * @param {string} shownFile the file, as shown
+ * @param {'link' | 'folder' | 'other' | 'file'} kind
+ * @param {string} page what goes there (`the open states page`)
+ */
+export function inTheWayPhrase(shownFile, kind, page) {
+  return kind === 'link'
+    ? `${shownFile} is a link, and the editor writes nothing through a link`
+    : kind === 'file'
+      ? `${shownFile} is a file the editor did not write, and it is left as it is`
+      : `${shownFile} is ${kind === 'folder' ? 'a folder' : 'not a plain file'}, where ${page} goes`;
+}
+
+/**
  * Whether `out` is a page rendered from `key` (a no-op show renders
  * nothing again).
  * @param {string} out
@@ -654,13 +796,34 @@ const withRenderKey = (html, key) => {
  */
 function previewInputs(ctx, slug, data) {
   const {project} = ctx;
-  const imports = /** @type {Record<string, string>} */ ({});
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
+  const imports = {};
   for (const n of elementNames(SAMPLE_PAGE)) {
     const spec = importPathOf(project, n);
     if (spec) imports[n] = spec;
   }
+  // Below the sample page, a strip of overlays drawn open (a tooltip, a
+  // popover, a menu, a select list), from the overlays the sheet draws, so
+  // the one picture every look starts from shows them too.
+  const overlays = showcaseItems(project, 'overlays');
+  /** @type {import('./_catalog.mjs').CatalogItem[]} */
+  const strip = [];
+  for (const name of PREVIEW_OVERLAYS) {
+    const it = overlays.items.find(
+      x => x.name === name && (x.open || x.openable),
+    );
+    if (!it) continue;
+    strip.push({
+      ...it,
+      label: '',
+      strip: true,
+      ...(it.openable ? {onlyOpen: true} : {}),
+    });
+    for (const n of elementNames([it.tree, it.openTree ?? it.tree]))
+      if (overlays.imports[n]) imports[n] = overlays.imports[n];
+  }
   const source = pageSource({
-    items: [{name: 'page', label: '', tree: SAMPLE_PAGE}],
+    items: [{name: 'page', label: '', tree: SAMPLE_PAGE}, ...strip],
     imports,
     theme: themeImports(ctx, slug, data, renderDir(project)),
     layout: 'page',
@@ -699,6 +862,7 @@ export async function renderPreview(ctx, slug, data) {
   // Rendered from the same inputs before: the page is as it would be.
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
+  refuseOverIrregular(project.cwd, out, 'the sample page');
   // Written whole and renamed in, never through a link.
   writeWhole(out, withRenderKey(html, key));
   return shown(project.cwd, out);
@@ -723,6 +887,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     imports,
     theme: themeImports(ctx, slug, data, renderDir(project)),
     layout: 'sheet',
+    section: options.group,
     title: `${slug}: every component${options.group ? ` (${options.group})` : ''}`,
   });
   // One section goes to its own file, so the full sheet stays whole.
@@ -748,6 +913,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     templateFiles(imports),
   );
   fs.mkdirSync(path.dirname(out), {recursive: true});
+  refuseOverIrregular(project.cwd, out, 'the sheet');
   // Written whole and renamed in, never through a link.
   writeWhole(out, withRenderKey(html, key));
   return {
@@ -1830,6 +1996,79 @@ export function writeAppCopy(ctx, slug, data) {
   return writeAppCopyAt(ctx.project.cwd, slug, copyFontsCss(ctx, slug, data));
 }
 
+/** What a module file of the theme folder may end with, as a bundler reads it. */
+const LOCAL_MODULE_ENDINGS = ['', '.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx'];
+
+/**
+ * The modules of the theme's own folder its built module imports (an icon
+ * registry beside the theme, and what those import in turn), by their path
+ * in the folder: the copy carries each, as the app's bundler resolves it
+ * (an import without its ending, or a folder's index). `problem` names an
+ * import that leaves the folder, does not resolve, or names a file the
+ * editor writes; the copy is not written then.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{files: Array<{rel: string, file: string}>, problem: string | null}}
+ */
+export function themeLocalModules(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string} */
+  let root;
+  try {
+    root = fs.realpathSync(f.dir);
+  } catch {
+    return {files: [], problem: null};
+  }
+  const own = appCopyNames(slug);
+  /** @type {Map<string, string>} */
+  const found = new Map();
+  /** @param {string} from @param {string} spec */
+  const resolveIn = (from, spec) => {
+    const at = path.resolve(path.dirname(from), spec);
+    for (const c of [
+      ...LOCAL_MODULE_ENDINGS.map(e => `${at}${e}`),
+      ...LOCAL_MODULE_ENDINGS.slice(1).map(e => path.join(at, `index${e}`)),
+    ]) {
+      const st = fs.statSync(c, {throwIfNoEntry: false});
+      if (st?.isFile()) return c;
+    }
+    return null;
+  };
+  /** @param {string} from @returns {string | null} */
+  const walk = from => {
+    /** @type {string[]} */
+    let specs;
+    try {
+      specs = themeFileImports(from);
+    } catch {
+      specs = [];
+    }
+    for (const spec of specs.filter(s => s.startsWith('.'))) {
+      const shownFrom = `themes/${slug}/${path.relative(f.dir, from).split(path.sep).join('/')}`;
+      const file = resolveIn(from, spec);
+      if (!file)
+        return `${shownFrom} imports ${spec}, which is not there, so the copy cannot carry it`;
+      const real = fs.realpathSync(file);
+      if (real !== root && !real.startsWith(root + path.sep))
+        return `${shownFrom} imports ${spec}, a file outside themes/${slug}/, which the copy cannot carry (a local theme imports only files of its own folder); move it into themes/${slug}/`;
+      const rel = path.relative(root, real).split(path.sep).join('/');
+      if (own.has(rel) && rel !== `${slug}.js`)
+        return `${shownFrom} imports ${spec}, a file the editor writes, which the copy cannot carry as a module of its own`;
+      if (rel === `${slug}.js` || found.has(rel)) continue;
+      found.set(rel, real);
+      const deeper = walk(real);
+      if (deeper) return deeper;
+    }
+    return null;
+  };
+  if (!fs.existsSync(f.js)) return {files: [], problem: null};
+  const problem = walk(f.js);
+  return {
+    files: [...found].map(([rel, file]) => ({rel, file})),
+    problem,
+  };
+}
+
 /**
  * The files of a theme's app copy as the editor would write them now, by
  * name; null with no build to copy. Font stylesheets as given, or null for
@@ -1876,6 +2115,14 @@ function appCopyFiles(cwd, slug, fontsCss) {
     [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
     [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
+    // The theme folder's own modules the build imports, as they are, under
+    // the copy's mark (a file there without it is yours, and is left).
+    ...Object.fromEntries(
+      themeLocalModules(cwd, slug).files.map(({rel, file}) => [
+        rel,
+        `${head('//', '')}${fs.readFileSync(file, 'utf8')}`,
+      ]),
+    ),
     // Always there, so the app theme module's import of it holds when the
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
@@ -1945,6 +2192,8 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       const file = path.join(dir, n);
       if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
         continue;
+      // A module of the theme folder may sit in a folder of its own.
+      fs.mkdirSync(path.dirname(file), {recursive: true});
       writeWhole(file, text);
     }
     // A copy's own file this build no longer writes goes; anything else in
@@ -2023,21 +2272,27 @@ export function appCopyBlocker(cwd, slug) {
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
   const rel = path.relative(cwd, dir).split(path.sep).join('/');
-  // The copy carries the built module whole, and a local theme imports
-  // only files of its own folder: a module that imports a file beside it
-  // (an icon registry of the theme's folder) would break in the app.
-  {
-    const built = themeFiles(cwd, slug).js;
-    /** @type {string[]} */
-    let specifiers;
+  // The copy carries the built module whole, with the modules of the theme
+  // folder it imports (an icon registry beside the theme); one it cannot
+  // carry (outside the folder, or not there) keeps the copy as it was.
+  const locals = themeLocalModules(cwd, slug);
+  if (locals.problem) return locals.problem;
+  // A file of yours at a name the copy carries a module to is left alone.
+  for (const {rel: r} of locals.files) {
+    const at = path.join(dir, r);
+    const st = fs.lstatSync(at, {throwIfNoEntry: false});
+    if (!st) continue;
+    if (!st.isFile())
+      return `${rel}/${r} is ${st.isSymbolicLink() ? 'a link' : 'a folder'}, at a name the copy carries themes/${slug}/${r} to, and the editor writes nothing there`;
+    /** @type {string} */
+    let text;
     try {
-      specifiers = themeFileImports(built);
+      text = fs.readFileSync(at, 'utf8');
     } catch {
-      specifiers = [];
+      text = '';
     }
-    const local = specifiers.find(s => s.startsWith('.'));
-    if (local)
-      return `themes/${slug}/${path.basename(built)} imports ${local}, a file beside the theme, which the copy cannot carry (a local theme imports only files of its own folder); import it from a package instead`;
+    if (!text.includes(APP_COPY_MARK))
+      return `${rel}/${r} is a file the editor did not write, at a name the copy carries themes/${slug}/${r} to; move it, then any set or show writes the copy`;
   }
   // Nothing is written through a link on the way from the app to the copy
   // (src/, src/themes/, the copy's folder), as for themes/.

@@ -36,7 +36,11 @@ export const OVERRIDES = [
     {on: 'tab-indicator'},
   ],
   [/\b(status dots?)\b/, {on: 'status-dot'}],
-  [/\b(progress( bar)?( fill)?|loading bar)\b/, {on: 'progress-bar-fill'}],
+  // (Its indicator too: "the progress indicator".)
+  [
+    /\b(progress( bar)?( fill| indicators?)?|loading bar)\b/,
+    {on: 'progress-bar-fill'},
+  ],
   [
     /\b((side ?nav|sidebar)( nav(igation)?)? (links?|items?))\b/,
     {on: 'side-nav-item'},
@@ -66,6 +70,8 @@ export const OVERRIDES = [
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
+  // A radio's dot is its own part (the mark a checked radio shows).
+  [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
   [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],
@@ -76,6 +82,8 @@ export const OVERRIDES = [
   ],
   [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
+  // A sheet is Core's bottom sheet (never a style sheet).
+  [/(?<!\bstyle[\s-]?)\b(?:bottom[\s-]?)?sheets?\b/, {on: 'bottom-sheet'}],
   [/\b(text ?areas?|multi-?line (inputs?|fields?))\b/, {on: 'text-area'}],
   [
     /\b(select (dropdowns?|menus?|box(es)?|inputs?)|selects|dropdowns?|pickers?|select(?! (the|a|an|all|any|one|which|what|it|them)\b))\b/,
@@ -88,7 +96,20 @@ export const OVERRIDES = [
   ],
   // A checkbox is the box itself; the checks group (checkbox and radio)
   // goes by its own name.
-  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checkbox-indicator'}],
+  // A check mark is the mark drawn inside the box, never the box.
+  [
+    /\b(?:checkbox(?:es)?\s+)?(?:check ?marks?|ticks?)\b/,
+    {on: 'checkbox-indicator-check'},
+  ],
+  [/\b(checkbox(es)?)\b/, {on: 'checkbox-indicator'}],
+  // "indicators" alone: the check and radio indicators (the checks group).
+  [/\b(?:check(?:box)?\s+and\s+radio\s+)?indicators?\b/, {on: 'checks'}],
+  // A switch's or toggle's thumb, knob or handle: the thumb, never the
+  // track.
+  [
+    /\b(?:toggle|switch)(?:e?s)?(?:'s)?\s+(?:thumbs?|knobs?|handles?)\b/,
+    {on: 'switch-thumb'},
+  ],
   // "switch off", "switch the buttons to" are the verb, not the part.
   [
     /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
