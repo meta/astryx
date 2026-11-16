@@ -1284,7 +1284,7 @@ export function NavigationStack<T>({
   const runningRef = useRef<{id: number; done: boolean} | null>(null);
   // The clock the last transition's screens run on (their start time), so
   // the back chevron keeps time with them.
-  const startedRef = useRef(0);
+  const startedRef = useRef<number | undefined>(undefined);
   // A pop's focus return, waiting for the commit that drops the leaving
   // screen (until then every screen is `inert` and cannot take focus).
   const pendingFocusRef = useRef<{popped: string; revealed: string} | null>(
@@ -1437,7 +1437,11 @@ export function NavigationStack<T>({
       const values = layersAt(to, width, direction);
       const velocity =
         dp == null ? null : layerVelocities(dp, width, direction);
-      const at = startAt ?? performance.now();
+      // A change from rest takes no start time: the animator starts it at its
+      // commit, so a heavy commit delays the motion and skips none of it. A
+      // finger's release passes its own start, and a retarget continues from
+      // the frame on screen by the animator's own rule.
+      const at = startAt;
       const topLayers = layersOf(top);
       const underLayers = layersOf(under);
       const handles = [];
@@ -1807,7 +1811,6 @@ export function NavigationStack<T>({
         wasRunning ? undefined : programmaticVelocity('pop'),
         false,
         'ride',
-        at,
       );
       fadeBack('pop', under);
     }
