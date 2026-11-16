@@ -78,6 +78,14 @@ beforeAll(async () => {
   });
   await themeEditSet('x', '--color-background-card', '#ffffff', {cwd});
   // An opaque border, one translucent border, and one pinned emphasized.
+  // A dark-only theme with its own page and surface.
+  await themeEditNew('pm', {
+    cwd,
+    like: 'neutral',
+    settings: {mode: 'dark-only'},
+  });
+  await themeEditSet('pm', '--color-background-body', '#0f1014', {cwd});
+  await themeEditSet('pm', '--color-background-surface', '#16181d', {cwd});
   await themeEditNew('b', {cwd, like: 'neutral'});
   await themeEditSet('b', '--color-border', '#000000', {cwd});
   await themeEditNew('t', {cwd, like: 'neutral'});
@@ -117,6 +125,28 @@ describe('the fills made from the surface', () => {
     for (const k of FAMILY)
       if (slug === 'x' && k === '--color-background-card') continue;
       else expect(valueOf(slug, k)[1], k).toBe(plain[k][1]);
+  });
+
+  it('a fill the base keeps between page and surface never passes the page', () => {
+    // Neutral's dark cards, popovers and muted fill are its page's shade:
+    // with a page and a surface set, they stay at the page's lightness or
+    // above, never darker than the page.
+    /** @param {string} hex */
+    const lum = hex => {
+      const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const page = lum(valueOf('pm', '--color-background-body')[1]);
+    const surface = lum(valueOf('pm', '--color-background-surface')[1]);
+    for (const k of [
+      '--color-background-card',
+      '--color-background-popover',
+      '--color-background-muted',
+    ]) {
+      const v = lum(valueOf('pm', k)[1]);
+      expect(v, k).toBeGreaterThanOrEqual(page - 1);
+      expect(v, k).toBeLessThanOrEqual(surface);
+    }
   });
 
   it('a pinned card keeps its color', () => {

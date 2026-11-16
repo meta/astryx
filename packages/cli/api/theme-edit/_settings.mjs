@@ -6913,17 +6913,35 @@ export function compileTheme(ctx, data, base) {
       ? written('--color-background-surface', m)
       : null;
     const baseSurface = baseColor('--color-background-surface', m);
+    // A fill the base theme keeps between its page and its surface (a dark
+    // card the page's own shade) stays between the page and the surface the
+    // theme shows: its step never carries it past the page.
+    const basePage = baseColor('--color-background-body', m);
+    const page =
+      written('--color-background-body', m) ?? basePage ?? baseSurface;
     if (surface && baseSurface)
       for (const k of SURFACE_FAMILY) {
         if (!(k in TOKENS || base[m]?.[k] != null) || pinned(k, m)) continue;
         const from = baseColor(k, m);
         if (!from) continue;
         const [sl, sa, sb] = oklabCoordinates(surface);
-        const step =
-          oklabCoordinates(from)[0] - oklabCoordinates(baseSurface)[0];
+        const [fromL] = oklabCoordinates(from);
+        const [baseSurfaceL] = oklabCoordinates(baseSurface);
+        let l = sl + fromL - baseSurfaceL;
+        if (basePage && page) {
+          const [basePageL] = oklabCoordinates(basePage);
+          const [pageL] = oklabCoordinates(page);
+          const between = (
+            /** @type {number} */ x,
+            /** @type {number} */ a,
+            /** @type {number} */ b,
+          ) => x >= Math.min(a, b) - 1e-6 && x <= Math.max(a, b) + 1e-6;
+          if (between(fromL, basePageL, baseSurfaceL))
+            l = Math.max(Math.min(pageL, sl), Math.min(Math.max(pageL, sl), l));
+        }
         putTok(
           k,
-          oklabCoordinatesToHex([Math.max(0, Math.min(1, sl + step)), sa, sb]),
+          oklabCoordinatesToHex([Math.max(0, Math.min(1, l)), sa, sb]),
           m,
         );
       }
