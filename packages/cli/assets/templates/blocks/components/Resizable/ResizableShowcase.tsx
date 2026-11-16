@@ -20,7 +20,7 @@ export default function ResizableShowcase() {
   });
 
   return (
-    <Card variant="muted" height={280} width={600}>
+    <Card variant="muted" height={280} width={600} maxWidth="100%">
       <Layout
         height="fill"
         start={
