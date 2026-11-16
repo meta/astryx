@@ -4409,7 +4409,9 @@ function drawnAlike(ctx, s, member) {
 /**
  * The parts that draw a part's border: the part itself, or, when it draws
  * none of its own and its edges are the borders of parts inside it (a date
- * and time field's date and time boxes), those parts.
+ * and time field's date and time boxes), those parts. Only pieces that draw
+ * a border of their own are its edges: a top nav's items are rounded but
+ * draw none, so the top nav's border is the bar's own.
  * @param {Ctx} ctx
  * @param {string} part
  * @returns {string[]}
@@ -4417,8 +4419,26 @@ function drawnAlike(ctx, s, member) {
 export function borderParts(ctx, part) {
   const own = ctx.C.MAP[part]?.own ?? {};
   if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
-  const inner = cornerParts(ctx, part).filter(t => t !== part);
+  const inner = cornerParts(ctx, part).filter(
+    t => t !== part && drawsBorder(ctx, t),
+  );
   return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a part's own element draws a border: a border style or width
+ * that is not none or zero.
+ * @param {Ctx} ctx
+ * @param {string} part
+ */
+function drawsBorder(ctx, part) {
+  return Object.entries(ctx.C.MAP[part]?.own ?? {}).some(
+    ([k, r]) =>
+      /^border(?:-(?:top|right|bottom|left))?-(?:style|width)$/.test(k) &&
+      [.../** @type {Iterable<string>} */ (r?.values ?? [])].some(
+        v => !/^(?:none|hidden|0(?:px)?)$/.test(String(v).trim()),
+      ),
+  );
 }
 
 /**
