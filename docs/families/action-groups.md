@@ -83,7 +83,7 @@ today:
 - DateRangeInput's presets, one labeled group of preset buttons;
 - Toolbar's buttons; a field inside a toolbar is skipped;
 - the action rows of Banner and Toast when a row has two or more sibling
-  actions.
+  actions, and Lightbox's Actions part when it holds two or more.
 
 Action rows in a Dialog's footer, a Card's footer, or any `LayoutFooter` get
 the behavior by composing ButtonGroup.
@@ -192,7 +192,7 @@ Selector's and MultiSelector's options FR1–FR5
 | AlertDialog's actions                                                                                | Track the actions only.                                               |
 | ButtonGroup, ToggleButtonGroup, Toolbar                                                              | Track sibling buttons; a field inside is skipped; toggles follow FR4. |
 | DateRangeInput's presets                                                                             | Track the preset buttons only.                                        |
-| Banner and Toast action rows                                                                         | Track only a row with two or more sibling actions.                    |
+| Banner and Toast action rows, and Lightbox's Actions part                                            | Track only a row with two or more sibling actions.                    |
 
 These are required outcomes, not a claim of completed adoption. The excluded
 components listed under the membership rule are not exceptions to approve;
