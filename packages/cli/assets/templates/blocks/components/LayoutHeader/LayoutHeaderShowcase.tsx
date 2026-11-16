@@ -14,8 +14,10 @@ import {
 import {Center} from '@astryxdesign/core/Center';
 import {Heading} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 
 export default function LayoutHeaderShowcase() {
+  const showToast = useToast();
   return (
     <Center width={400}>
       <Layout
@@ -26,10 +28,20 @@ export default function LayoutHeaderShowcase() {
             <HStack gap={2} vAlign="center" hAlign="between">
               <Heading level={4}>Dashboard</Heading>
               <HStack gap={2}>
-                <Button label="Export" variant="secondary">
+                <Button
+                  onClick={() =>
+                    showToast({body: 'Demo: an export would start here'})
+                  }
+                  label="Export"
+                  variant="secondary">
                   Export
                 </Button>
-                <Button label="New Item" variant="primary">
+                <Button
+                  onClick={() =>
+                    showToast({body: 'Demo: a new item form would open here'})
+                  }
+                  label="New Item"
+                  variant="primary">
                   New Item
                 </Button>
               </HStack>
