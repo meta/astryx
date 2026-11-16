@@ -31,6 +31,7 @@ members:
     component:Toolbar,
     component:Banner,
     component:Toast,
+    component:Lightbox,
     component:TopNavMenu,
     component:SideNavHeading,
     component:TopNavHeading,

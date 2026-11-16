@@ -150,7 +150,8 @@ the requirement it misses and the person it affects.
 - A custom item's content and its own input, an action's effect, the Footer's
   content, a loader's URLs, and the file a drag carries.
 - An editing stage inside the viewer: an app's editor opens as its own layer.
-- A page-width mode for tall images: DEC-1's photo viewer fits every image.
+- A page-width mode chosen by an image's shape: a tall image opens fitted, and
+  a caller that knows it is a page starts it at the viewer's width (FR27).
 - New targets for Media, Caption, or Counter; none exist.
 - Shared layer hosting or dismissal policy — owned by
   `architecture:layer-runtime` and `family:overlay-dismissal`.
