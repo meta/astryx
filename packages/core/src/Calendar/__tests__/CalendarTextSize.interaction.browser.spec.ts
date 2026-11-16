@@ -6,7 +6,8 @@
  *   the element sizes stay put, as iOS Dynamic Type does
  * @output Real-browser evidence that a day button grows with its number, so
  *   a day's number stays inside its own tap target and never covers the day
- *   below, and that the default text size keeps the element sizes
+ *   below, that a weekday header grows with its name, and that the default
+ *   text size keeps the element sizes
  * @position Browser proof of Calendar FR2's size clause (AST-102 FR4)
  */
 
@@ -80,6 +81,69 @@ test('an enlarged day number stays inside its day button', async ({page}) => {
   for (const day of days) {
     expect(day.above, day.name).toBeLessThanOrEqual(1);
     expect(day.below, day.name).toBeLessThanOrEqual(1);
+  }
+});
+
+/** Each weekday header's box against its name's glyph box. */
+async function readWeekdays(page: Page) {
+  return page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="grid"] [role="columnheader"]',
+      ),
+    ].map(header => {
+      const range = document.createRange();
+      range.selectNodeContents(header);
+      const name = range.getBoundingClientRect();
+      const box = header.getBoundingClientRect();
+      return {
+        name: header.textContent ?? '',
+        left: box.left,
+        right: box.right,
+        width: box.width,
+        minWidth: parseFloat(getComputedStyle(header).minWidth),
+        nameLeft: name.left,
+        nameRight: name.right,
+      };
+    }),
+  );
+}
+
+test('at the default text size each weekday header keeps its element size', async ({
+  page,
+}) => {
+  await openCalendar(page);
+  const headers = await readWeekdays(page);
+  expect(headers.length).toBe(7);
+  for (const header of headers) {
+    expect(Math.round(header.width), header.name).toBe(
+      Math.round(header.minWidth),
+    );
+  }
+});
+
+test('an enlarged weekday name widens its column and never runs into the next', async ({
+  page,
+}) => {
+  await openCalendar(page);
+  await page.addStyleTag({
+    content: '[role="grid"] [role="columnheader"] { font-size: 24px; }',
+  });
+  const headers = await readWeekdays(page);
+  expect(headers.length).toBe(7);
+  for (const header of headers) {
+    expect(header.nameLeft, header.name).toBeGreaterThanOrEqual(
+      header.left - 0.5,
+    );
+    expect(header.nameRight, header.name).toBeLessThanOrEqual(
+      header.right + 0.5,
+    );
+  }
+  const sorted = [...headers].sort((a, b) => a.left - b.left);
+  for (let i = 1; i < sorted.length; i++) {
+    expect(sorted[i].nameLeft, sorted[i].name).toBeGreaterThanOrEqual(
+      sorted[i - 1].nameRight,
+    );
   }
 });
 

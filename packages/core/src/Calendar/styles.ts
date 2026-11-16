@@ -80,7 +80,9 @@ export const monthGridStyles = stylex.create({
     flex: '1 1 0',
   },
   dayName: {
-    width: sizeVars['--size-element-md'],
+    // A minimum, so a weekday name set larger widens its column instead of
+    // running into the next one.
+    minWidth: sizeVars['--size-element-md'],
     // Restores the small gap the standalone header used to have below it.
     height: `calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']})`,
     paddingBottom: spacingVars['--spacing-1'],
