@@ -41,7 +41,7 @@ const LOCAL_FIELDS = ['_docPath'];
  * Fields a gathered candidate holds only for `build`, which reads them from
  * the gather itself. They never rank, so an index leaves them out.
  */
-const BUILD_FIELDS = ['_category'];
+const BUILD_FIELDS = ['_category', '_notReady'];
 
 /**
  * A component candidate's description as `search` prints it: its inline
