@@ -74,12 +74,8 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   (`spec:AST-039`), and a base that ships none of a kind gives an empty
   answer, not a refusal.
 
-  FR1 gap: in a run whose active base is not Core, `build` still names Core's layout and foundation components, the `hook --list` and
-  `swizzle --list` envelopes name `@astryxdesign/core` as their package, and
-  `doctor` reports Core and Core's themes as missing, and
-  `upgrade --from` reads Core's installed version as its target, so it
-  fails with `ERR_VERSION_DETECT` when the project installs no Core. The integration
-  manifest has no hooks root, so a base cannot ship hook descriptors.
+  FR1 gap: the integration manifest has no hooks root, so a base cannot ship
+  hook descriptors.
 
   FR1 gap: `component --list` at `--detail compact` and `--detail full`
   lists no integration's components, in a run on any base: on a base other
