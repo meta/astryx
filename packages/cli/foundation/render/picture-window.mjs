@@ -39,18 +39,10 @@ function mediaLength(text) {
 /**
  * How the picture's window answers the features a display mode sets: no
  * forced colors (a high-contrast mode), no contrast preference, colors not
- * inverted, a color screen. A bare `(name)` holds when its value is not the
- * feature's off value.
+ * inverted, a color screen. Each is the feature's off value, so a bare
+ * `(name)` never holds in the window.
  */
 const DESKTOP_DISPLAY = Object.freeze({
-  'forced-colors': 'none',
-  'prefers-contrast': 'no-preference',
-  'inverted-colors': 'none',
-  monochrome: '0',
-});
-
-/** The off value of each display feature, which a bare `(name)` does not match. */
-const DISPLAY_OFF = Object.freeze({
   'forced-colors': 'none',
   'prefers-contrast': 'no-preference',
   'inverted-colors': 'none',
@@ -79,10 +71,7 @@ function featureHolds(feature) {
     const display = /** @type {Record<string, string>} */ (DESKTOP_DISPLAY)[
       name
     ];
-    if (display != null)
-      return value == null
-        ? display !== /** @type {Record<string, string>} */ (DISPLAY_OFF)[name]
-        : value.trim() === display;
+    if (display != null) return value != null && value.trim() === display;
     if (name === 'orientation')
       return (
         value == null ||
