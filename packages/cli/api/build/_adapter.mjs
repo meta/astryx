@@ -21,6 +21,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
@@ -29,6 +30,8 @@ import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
+import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
 
 /**
@@ -341,6 +344,21 @@ export function templateSetupNotes(template, cwd) {
     // Best-effort: a read failure does not break the recommendation.
     return [];
   }
+}
+
+/**
+ * Where a page template goes in the project where build ran, quoted for a
+ * printed command: the path `astryx template` names for it from the
+ * project's layout (in a Next app, the App Router folder). Null when that
+ * folder has no package.json, so no project layout is known.
+ *
+ * @param {string} id the template's own id
+ * @param {string} cwd the folder build ran in
+ * @returns {string | null}
+ */
+export function pageDestination(id, cwd) {
+  if (!fs.existsSync(path.join(cwd, 'package.json'))) return null;
+  return quoteCommandArgument(templateDestination(cwd, 'page', id));
 }
 
 /**

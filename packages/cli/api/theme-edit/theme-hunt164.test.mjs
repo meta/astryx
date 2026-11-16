@@ -12,9 +12,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
-import {demoProps, partData} from './_parts.mjs';
+import {demoProps, partData, renderGenerated} from './_parts.mjs';
 import {openProject} from './_project.mjs';
-import {SAMPLE_SOURCE} from './_catalog.mjs';
+import {SAMPLE_SOURCE, pageSource} from './_catalog.mjs';
+import {showcaseItems} from './_preview.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -108,7 +109,8 @@ describe('the open states picture', () => {
       expect(removed).toContain('themes/t/sheet-overlays.png');
       expect(removed).toMatch(/show t --png take new ones$/);
       expect(removed).not.toContain('--section overlays');
-      // A section asked for is its own picture, with no second one.
+      // A section asked for is its own picture in place of sheet.png, and
+      // the open states come with it, as with every --png.
       const section = /** @type {any} */ (
         await themeEditShow('t', {cwd, png: true, section: 'inputs'})
       );
@@ -119,6 +121,8 @@ describe('the open states picture', () => {
       ).toEqual([
         'preview.png',
         'preview-dark.png',
+        'sheet-overlays.png',
+        'sheet-overlays-dark.png',
         'sheet-inputs.png',
         'sheet-inputs-dark.png',
       ]);
@@ -156,6 +160,32 @@ describe('a typeahead in the catalog', () => {
       expect(Object.keys(data.map)).toEqual(
         expect.arrayContaining(['typeahead', 'typeahead-dropdown']),
       );
+    },
+    T,
+  );
+});
+
+describe('a typeahead drawn open', () => {
+  it(
+    'opens its list when the drawing types into it, beside a part that loads the client with the page',
+    async () => {
+      const project = await openProject(cwd);
+      const {items, imports} = showcaseItems(project, 'overlays');
+      // The typeahead's open look, with a toast, whose module loads React
+      // DOM's client as the page loads.
+      const chosen = items.filter(
+        i => i.name === 'Typeahead' || i.name === 'Toast',
+      );
+      expect(chosen.map(i => i.name)).toEqual(
+        expect.arrayContaining(['Typeahead', 'Toast']),
+      );
+      const {markup} = await renderGenerated(
+        project,
+        'typeahead-open.mjs',
+        pageSource({items: chosen, imports, theme: null, layout: 'sheet'}),
+      );
+      expect(markup).toContain('astryx-typeahead-dropdown');
+      expect(markup).toContain('astryx-typeahead-item');
     },
     T,
   );

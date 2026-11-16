@@ -252,6 +252,27 @@ describe('withOtherCommand', () => {
     ).toEqual([own[0], hint]);
   });
 
+  it('counts a declared keyword or synonym equal to the typed name at the folded tier', () => {
+    const own = [
+      {name: 'Plinth', reason: 'x'},
+      {name: 'Quarrel', reason: 'x'},
+      {name: 'Tamsel', reason: 'x'},
+    ];
+    const keywordsOf = (/** @type {{name: string}} */ s) =>
+      s.name === 'Plinth' ? ['zin net', 'base'] : ['zinnet row'];
+    for (const tier of [MATCH_TIER.folded, MATCH_TIER.segment]) {
+      expect(
+        withOtherCommand(own, at(tier), 'Zinnet', {from, keywordsOf}),
+      ).toEqual([own[0], hint, own[1]]);
+    }
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.exact), 'Zinnet', {from, keywordsOf}),
+    ).toEqual([hint, own[0], own[1]]);
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.folded), 'Zinnet', {from}),
+    ).toEqual([hint, own[0], own[1]]);
+  });
+
   it('leaves the hint out when every suggestion matches as well', () => {
     const own = [
       {name: 'zinnet', reason: 'x'},

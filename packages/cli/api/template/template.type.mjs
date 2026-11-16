@@ -78,7 +78,7 @@
  * @property {string} package The npm package that owns the template.
  * @property {object} data
  * @property {string} data.template
- * @property {string} data.outputDir
+ * @property {string} data.outputDir The folder written: relative to the project, or absolute for a scratch copy in the system temp folder.
  * @property {string} data.fileName
  * @property {number} data.filesCopied
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the written file: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.

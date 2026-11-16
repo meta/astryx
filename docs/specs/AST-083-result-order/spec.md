@@ -119,12 +119,16 @@ owns response fields and compatibility.
   over a docs topic; among docs routes, the route with the fewest segments
   wins, then the first in tree order. That command goes right after the last
   suggestion that matches at its tier or a better one, so it goes first when
-  none does. The list never grows: the last suggestion drops, and a command
+  none does; a suggested component whose doc's keywords or search card's
+  synonyms hold the argument (in any case, without spaces and hyphens) matches
+  at folded. The list never grows: the last suggestion drops, and a command
   that would come last is left out. That command is the only suggestion when
   the list is otherwise empty, and, for docs, when no route it suggests shares
   a word with the argument. A component error for an example block keeps its
   suggestions, since its message already names `astryx template`. A name that
-  resolves keeps resolving to the same entry. A component's exact name in
+  resolves keeps resolving to the same entry, except `tag-list`: a keyword in
+  OverflowList's doc and one slip from TabList, it does not resolve, and its
+  list gives OverflowList first, then TabList. A component's exact name in
   another case is that component's: a module that only shares its spelling
   never resolves for it. Which candidates fill a component list and the order
   of every list change only under FR6, measured on the held-out and fresh

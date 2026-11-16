@@ -13,6 +13,7 @@
 
 import {pathToFileURL} from 'node:url';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
+import {PICTURE_WINDOW} from './picture-window.mjs';
 
 const [entry, html, png, mode, executablePath] = process.argv.slice(2);
 try {
@@ -25,7 +26,7 @@ try {
   });
   try {
     const page = await browser.newPage({
-      viewport: {width: 1280, height: 900},
+      viewport: {...PICTURE_WINDOW},
       colorScheme: mode === 'dark' ? 'dark' : 'light',
     });
     // The page loads its own files only: a remote stylesheet, font or image
@@ -36,7 +37,10 @@ try {
         route.abort('blockedbyclient'),
     );
     await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-    await page.screenshot({path: png, fullPage: true});
+    // An overlay drawn open plays its opening animation (a fade-in) as the
+    // page loads: the picture is taken with each animation that ends run
+    // to its end, so it shows the overlay as it looks open.
+    await page.screenshot({path: png, fullPage: true, animations: 'disabled'});
   } finally {
     await browser.close();
   }

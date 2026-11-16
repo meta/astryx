@@ -146,6 +146,7 @@ describe('hunt39: the built definition as truth', () => {
       path.join(pkg, 'built.js'),
       `export const stoneTheme = ${JSON.stringify({
         name: 'stone',
+        __built: true,
         tokens: {
           '--color-syntax-added-marker': 'var(--color-syntax-punctuation)',
         },

@@ -187,8 +187,9 @@ export async function countLook({
       if (waits.some(step => step.status === 'in_progress')) {
         if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});
         // Still waiting for room. A `main` run holds its whole peak, ahead of
-        // this one. A pull-request run holds what it runs: the job that waits
-        // and its Storybook build, which starts beside it. `main` runs queue
+        // this one. A pull-request run holds what it runs: the job that waits,
+        // its Storybook build, which starts beside it, and its superseded-runs
+        // sweep, which starts with the run. `main` runs queue
         // by when they began waiting, both read on GitHub's clock, a tie going
         // to the lower run id: a `main` run that began after this one holds
         // only what it runs, so of two waiting `main` runs exactly one counts

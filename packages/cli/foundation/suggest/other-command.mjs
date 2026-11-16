@@ -16,7 +16,8 @@
  * declared keywords. A better tier wins; inside a tier, commands win in
  * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
  * first, then in tree order. The hint goes right after the command's own
- * suggestions that match at its tier or a better one, and the list never
+ * suggestions that match at its tier or a better one (an own suggestion that
+ * declares the name as a keyword or synonym matches at the folded tier), and the list never
  * grows: the last suggestion drops, and a hint that would come last is left
  * out.
  *
@@ -196,9 +197,11 @@ function bestMatch(command, names, typed) {
 
 /**
  * The hint that names `name`, an entry of `command`, for `from`, at `tier`.
+ * Without `from` (a word that is no command), the reason names the entry's
+ * kind alone.
  * @param {LookupCommand} command
  * @param {string} name
- * @param {LookupCommand} from
+ * @param {LookupCommand | undefined} from
  * @param {number} tier
  * @returns {Found}
  */
@@ -206,7 +209,9 @@ function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
-      reason: `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`,
+      reason: from
+        ? `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`
+        : ENTRY_KIND[command],
     },
     tier,
   };
@@ -244,7 +249,10 @@ export function otherCommand(typed, entries, from) {
  * ({@link MATCH_TIER}), so it goes first when no suggestion does. The list
  * never grows: the last suggestion drops, and a hint that would come last is
  * left out. The hint is the only suggestion when `alone` holds or when the
- * list is empty, since then no suggestion shares a word with the name. For a
+ * list is empty, since then no suggestion shares a word with the name. A
+ * suggestion also matches at the folded tier when one of its `keywordsOf`
+ * folds to the typed name ({@link foldEntryName}): a name the suggestion
+ * declares is as good as its own name without spaces and hyphens. For a
  * near hook or hook keyword hint, a suggestion also matches as well when one
  * of its names is a near name or carries every typed word, and, for a hook
  * keyword hint, when one of its `keywordsOf` has exactly the typed words.
@@ -276,8 +284,14 @@ export function withOtherCommand(
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
   const byHook = found.tier >= MATCH_TIER.near;
+  const wanted = foldEntryName(typed);
+  /** @param {T} suggestion */
+  const declares = suggestion =>
+    found.tier >= MATCH_TIER.folded &&
+    keywordsOf(suggestion).some(keyword => foldEntryName(keyword) === wanted);
   /** @param {T} suggestion */
   const matchesAsWell = suggestion =>
+    declares(suggestion) ||
     namesOf(suggestion).some(
       name =>
         name &&
@@ -311,14 +325,16 @@ export function withOtherCommand(
  * route. A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
- *   from: LookupCommand,
+ *   from?: LookupCommand,
  *   cwd?: string,
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
- * }} context `coreDir` and `integrations` are the ones the lookup found, if
- *   any. `docsRoutes` works out every route `astryx docs` reads in the
- *   project with these integrations; without it, no docs route is a hint
+ * }} context `from` is the lookup command that did not find the name; without
+ *   it, every lookup command is asked. `coreDir` and `integrations` are the
+ *   ones the lookup found, if any. `docsRoutes` works out every route
+ *   `astryx docs` reads in the project with these integrations; without it,
+ *   no docs route is a hint
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -471,7 +487,7 @@ export async function findOtherCommand(
       if (match.tier === MATCH_TIER.exact) break;
     }
   }
-  if (!best && coreDir && !isPath && NEAR_HOOK_FROM.has(from)) {
+  if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
       const {discoverHookKeywords} =
         await import('../discovery/hook-discovery.mjs');

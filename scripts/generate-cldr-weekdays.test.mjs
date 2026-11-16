@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createRequire} from 'node:module';
@@ -8,6 +9,7 @@ import {describe, expect, it} from 'vitest';
 import {
   getGeneratedLocales,
   getGeneratedLocaleSources,
+  localesWithoutData,
   MAX_ABBREVIATED_LENGTH,
   renderGeneratedFile,
   resolveCldrSourceLocale,
@@ -110,5 +112,32 @@ describe('generate-cldr-weekdays', () => {
         readRawCldr(getGeneratedLocaleSources()[locale], 'short'),
       );
     }
+  });
+});
+
+describe('the locale data the generator needs', () => {
+  it('has locale data for every shipped locale on the Node CI runs', () => {
+    expect(localesWithoutData()).toEqual([]);
+  });
+
+  it('exits 1 with a clear message, never a crash, on a Node without locale data', () => {
+    // A small-ICU Node reports no data for any locale but English.
+    const stub =
+      'data:text/javascript,Intl.DateTimeFormat.supportedLocalesOf=l=>l.filter(x=>x==="en")';
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        stub,
+        path.join(ROOT, 'scripts/generate-cldr-weekdays.mjs'),
+        '--check',
+      ],
+      {encoding: 'utf8'},
+    );
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'generate-cldr-weekdays needs a Node build with full ICU data',
+    );
   });
 });
