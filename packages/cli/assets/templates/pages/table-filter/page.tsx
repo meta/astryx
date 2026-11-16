@@ -1315,9 +1315,17 @@ const styles = stylex.create({
     rowGap: 6,
   },
   // Collapses rather than wrapping: clauses that no longer fit fold into the
-  // overflow trigger, so the row is one line at every width.
+  // overflow trigger, so the row is one line down to the narrowest toolbar
+  // that still seats the search box's floor (120) and the folded slot's floor
+  // (44 + READOUT_RESERVE) across its 8px gap. Below that the two cannot share
+  // a line without pushing the readout past the screen edge, so the folded
+  // slot takes a line of its own under the search box.
   filterRow: {
     rowGap: 6,
+    flexWrap: {
+      default: null,
+      '@container toolbar (max-width: 355px)': 'wrap',
+    },
   },
   // This slot is what `observeParent` measures, so its width has to mean "the
   // room the clauses have" and nothing else. Grow is the part that makes that
