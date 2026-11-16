@@ -6467,7 +6467,13 @@ async function changeOnce(
                 x.on &&
                 !x.when &&
                 !x.state &&
-                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)) &&
+                // (The dial's rule on a variant is more specific than the
+                // exact property on the part's plain rule: there the dial
+                // wins, so the exact property does not win everywhere.)
+                !partsOf(ctx, x).some(t =>
+                  writes.has(`${t}\0${x.thing}\0variant`),
+                ),
             ) ?? null
           );
         })()
@@ -7787,7 +7793,14 @@ export async function themeEditShow(theme, options = {}) {
                       x.on &&
                       !x.when &&
                       !x.state &&
-                      partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                      partsOf(ctx, x).some(t =>
+                        writes.has(`${t}\0${x.thing}`),
+                      ) &&
+                      // (Not where the dial writes a variant's own rule,
+                      // which is more specific: the dial wins there.)
+                      !partsOf(ctx, x).some(t =>
+                        writes.has(`${t}\0${x.thing}\0variant`),
+                      ),
                   )
                 : undefined;
               if (exact)
@@ -7942,8 +7955,16 @@ function dialWrites(ctx, data, dial, base) {
   for (const [target, keys] of Object.entries(withDial))
     for (const [key, block] of Object.entries(keys ?? {}))
       for (const [prop, value] of Object.entries(block ?? {}))
-        if (typeof value === 'string' && plain[target]?.[key]?.[prop] !== value)
+        if (
+          typeof value === 'string' &&
+          plain[target]?.[key]?.[prop] !== value
+        ) {
           out.add(`${target}\0${kebab(prop)}`);
+          // (Written on a variant's own rule too: a rule more specific than
+          // the part's plain one.)
+          if (key.startsWith('variant:'))
+            out.add(`${target}\0${kebab(prop)}\0variant`);
+        }
   return out;
 }
 

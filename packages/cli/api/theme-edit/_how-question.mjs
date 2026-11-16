@@ -89,7 +89,7 @@ import {render as renderStep} from './_how-commands.mjs';
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean, unmet?: string}} Draft
  */
 
 /**
@@ -324,7 +324,11 @@ function corrected(w, vocab) {
   const limit = w.length >= 8 ? 2 : 1;
   let best = w;
   let bestD = limit + 1;
+  // (A near miss keeps its first letter, as typing slips do: "buton",
+  // "bordr". A word that differs at its start is another word, "stable"
+  // no "table".)
   for (const v of vocab) {
+    if (v[0] !== w[0]) continue;
     const d = levenshteinDistance(w, v, 2, {swaps: true});
     if (d < bestD) [best, bestD] = [v, d];
   }
@@ -3099,6 +3103,16 @@ function clausesOf(q, partWords) {
         break;
       }
       if (!m) continue;
+      // ("a medical records table view", "the card page": a screen named
+      // by what it shows, never that part.)
+      if (
+        /^\s+(?:views?|pages?|screens?|apps?|dashboards?|layouts?)\b/.test(
+          rest.slice((m.index ?? 0) + m[0].length),
+        )
+      ) {
+        rest = rest.replace(re, ' ');
+        continue;
+      }
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
       // "the error banner": one status of the banner.
@@ -4009,8 +4023,11 @@ export function draftAnswer(ctx, env, question) {
       )?.value ?? '',
     ),
   );
-  // (The words as asked, for the readers that hold the whole question.)
-  const asked0 = String(question).toLowerCase();
+  // (The words as asked, for the readers that hold the whole question;
+  // their case too, which carries tone: an emphatic "SO" in a lowercase
+  // line.)
+  const raw0 = String(question);
+  const asked0 = raw0.toLowerCase();
   // "darkmode", "dark-mode": one spelling of a mode before any clause is
   // read, so every reader that names a mode sees it.
   // One mode grammar: every way of naming a mode is read here as "dark
@@ -5135,8 +5152,12 @@ export function draftAnswer(ctx, env, question) {
   // request, or a thing with a value or a direction; a condition, an
   // indirect question, a double negative or a statement of fact gets the
   // lookup instead. A wrong write is worse than no command.
+  // (A past conditional said inverted, "had we gone with …", is a
+  // hypothetical; a clause timed to an event, "after the review",
+  // "until legal approves", is a later ask, held: never a state word,
+  // "after hovering".)
   const CONDITION =
-    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event)\b/i;
+    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they|we|i|you)|had (?:the|it|they|we|i|you)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event|(?:would|could|should) have (?:been|gone|used|had|looked|made|picked|chosen|kept))\b|^\s*(?:after|until|till|before)\s+(?!(?:hover|hovering|focus|focusing|click|clicking|press|pressing|visiting|being)\b)(?:the|a|an|my|our|their|your|this|that|[a-z]+\s+(?:approves?|reviews?|signs?\s+off|ships?|launch(?:es)?|is\s+done|finish(?:es)?))\b/i;
   const NOT_ASK =
     /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
   const ASK_START =
@@ -5368,11 +5389,55 @@ export function draftAnswer(ctx, env, question) {
     /\b(imagine|picture|pretend|hypothetically|in theory|toying with)\b/i;
   // A tag question ("corners are 10px, eh", "cards have a shadow, right?")
   // asks back about the whole line.
+  // (Any auxiliary with its pronoun, "isn't that so", "doesn't it",
+  // "aren't they right".)
   const TAG =
-    /^(?:eh|right|correct|yeah|huh|no|isn'?t it|aren'?t they|are they|is it|are we|do they|does it|ok|okay|(?:or )?am i (?:wrong|right|mistaken))\s*[?!.]*$/i;
+    /^(?:eh|right|correct|yeah|huh|no|ok|okay|(?:or )?am i (?:wrong|right|mistaken)|(?:is|are|was|were|does|do|did|has|have|isn'?t|aren'?t|wasn'?t|weren'?t|doesn'?t|don'?t|didn'?t|hasn'?t|haven'?t|won'?t|wouldn'?t)\s+(?:it|that|they|this|there|we|those|these)(?:\s+(?:so|right|true))?)\s*[?!.]*$/i;
+  // Tone the case carries: an all-caps intensifier before a judgment
+  // ("SO professional", "TOTALLY readable") in a line otherwise written
+  // in lowercase; and a reply that agrees with a reason ("yes because …").
+  // (Never an emphasis inside an ask, "make it SO much rounder": only a
+  // line with no ask verb, and a judgment, not an amount.)
+  const shouted =
+    /\b(?:SO|SOOO+|TOTALLY|REALLY|VERY|SUPER|SUCH)\s+(?!(?:much|many|more|less|far|way)\b)(?![a-z]+er\b)[a-z]{3,}/.test(
+      raw0,
+    ) &&
+    !segments.some(
+      x =>
+        ASK_START.test(x.toLowerCase()) ||
+        VERB.test(x.toLowerCase().replace(POLITE, '')),
+    ) &&
+    !/\b(?:please|pls)\b/i.test(raw0) &&
+    (raw0.match(/[A-Z]/g) ?? []).length <= 12 &&
+    raw0.replace(/\b[A-Z]{2,}\b/g, '').toLowerCase() ===
+      raw0.replace(/\b[A-Z]{2,}\b/g, '').replace(/^./, ch => ch.toLowerCase());
+  const SARCASTIC_REPLY = /^\s*(?:yes|yeah|yep|sure|oh yes)\b[\s,]+because\b/i;
+  // A question about how the theme is now ("is the shadow still there?"),
+  // with the rest only naming looks, no verb, no request ("cards no
+  // border."): the rest says what the person sees; nothing is asked.
+  const stateQuestion =
+    segments.length > 1 &&
+    segments.some(
+      x =>
+        /\?\s*$/.test(x) &&
+        /^\s*(?:is|are|was|were|does|do|did|has|have)\s+(?!(?:that|it|this|these|those)\b)(?:the|my|our|any|a|an)\b/i.test(
+          x,
+        ),
+    ) &&
+    segments
+      .filter(x => !/\?\s*$/.test(x))
+      .every(
+        x =>
+          !ASK_START.test(x.toLowerCase()) &&
+          !VERB.test(x.toLowerCase().replace(POLITE, '')) &&
+          !/\b(?:please|pls|want|need|would like|make|set|give)\b/i.test(x),
+      );
   const gateAll =
     segments.some(x => TAG.test(x.trim())) ||
     SARCASM.test(question) ||
+    shouted ||
+    SARCASTIC_REPLY.test(question) ||
+    stateQuestion ||
     HYPOTHETICAL.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
@@ -5616,6 +5681,13 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:radius|corners|rounded)[- ](xs|sm|md|lg|xl)\b/gi,
       (_, /** @type {string} */ r) =>
         `corners ${/** @type {Record<string, string>} */ ({xs: '4px', sm: '8px', md: '10px', lg: '12px', xl: '16px'})[r.toLowerCase()]}`,
+    )
+    // ("shadow-sm", "shadow lg": the shadow rungs by their short names,
+    // as the radius ones above.)
+    .replace(
+      /\b(?:drop[- ])?shadow[- ](xs|sm|md|lg|xl|2xl)\b/gi,
+      (_, /** @type {string} */ r) =>
+        `${/** @type {Record<string, string>} */ ({xs: 'small', sm: 'small', md: 'medium', lg: 'large', xl: 'large', '2xl': 'large'})[r.toLowerCase()]} shadow`,
     )
     // "midnight blue": the CSS named color.
     .replace(/\b([a-z]+) ([a-z]+)\b/gi, (m, a, b) =>
@@ -6328,7 +6400,15 @@ export function draftAnswer(ctx, env, question) {
       });
       // ("cards: …": the part's own list, after its colon; the part named
       // before the colon, never "Notion look: serif headings".)
-      const head = /^([^:]+):\s*\S/.exec(c.text)?.[1];
+      // (Its head as asked, too: a reader may have moved words of the
+      // clause, "dialogs: no border" read as "no dialogs border".)
+      const head =
+        /^([^:]+):\s*\S/.exec(c.text)?.[1] ??
+        [...asked0.matchAll(/(?:^|[.;!?\n]\s*)([a-z][a-z' -]{1,40}):\s*\S/g)]
+          .map(m => m[1])
+          .find(h =>
+            h.split(/\s+/).every(w => new RegExp(`\\b${w}\\b`).test(c.text)),
+          );
       if (
         head &&
         c.parts.length &&
@@ -6425,11 +6505,28 @@ export function draftAnswer(ctx, env, question) {
     // A look taken away from the part before ("rounded buttons, no
     // shadow"; never "serif headings, no shadows": a text part's look is
     // its type).
+    // (Only a look the part draws: a focus ring draws no shadow, so
+    // "visible focus ring, no shadows" is the theme's.)
     if (
       c.neg &&
       own.length &&
       !own.includes('text') &&
-      !before.parts.every(p => textOnlyPart(p.on))
+      !before.parts.every(p => textOnlyPart(p.on)) &&
+      before.parts.every(p => {
+        const props = Object.keys(C.MAP[first(p.on)]?.at ?? {});
+        const PROP = /** @type {Record<string, RegExp>} */ ({
+          shadow: /^box-shadow$/,
+          border: /^border(?:-(?:width|style|color))?$/,
+          corners: /radius$/,
+          background: /^background/,
+        });
+        return own.every(
+          a =>
+            !PROP[a] ||
+            props.some(x => PROP[a].test(x)) ||
+            (C.partReads(first(p.on), a) ?? []).length > 0,
+        );
+      })
     )
       return 'inherit';
     // A CSS property named with its value ("card padding-block 20px,
@@ -6768,6 +6865,18 @@ export function draftAnswer(ctx, env, question) {
       })),
     );
   }
+  // ("a #e8def8 pill", "a blue rounded box": a color said with a shape is
+  // the shape's fill, beside its corners.)
+  for (const c of clauses)
+    if (
+      c.parts.length &&
+      c.colors.length &&
+      !c.except &&
+      !c.neg &&
+      c.aspects.length &&
+      c.aspects.every(a => a === 'corners')
+    )
+      c.aspects = [...c.aspects, 'background'];
   // ("make it calmer", "the error toast calmer": its color, the fill it
   // shows.)
   for (const c of clauses)
@@ -6778,16 +6887,67 @@ export function draftAnswer(ctx, env, question) {
   // too, never dropped.
   for (let i = 1; i < clauses.length; i++) {
     const [a, b] = [clauses[i - 1], clauses[i]];
+    // (One color said once or as a word and its value, "gray #6b7280".)
+    const oneColor =
+      b.colors.length === 1 ||
+      (b.colors.length === 2 &&
+        /^\s*(?:and\s+)?[a-z-]+\s+#[0-9a-f]{3,8}\s*$/i.test(b.text) &&
+        colorsIn(b.text.trim().split(/\s+/).slice(-2)[0]).length > 0);
+    /** The color said, its typed value when a word comes with it. */
+    const typedOnly = () => {
+      const typed = /#[0-9a-f]{3,8}\b/i.exec(b.text)?.[0];
+      if (b.colors.length === 2 && typed) b.colors = [typed.toLowerCase()];
+    };
+    // ("inputs: 1px border #79747e, 2px #6750a4 when focused": a length and
+    // a color, or a color, with no look of its own, after the part's line
+    // in the same list, is that line, in its own state.)
+    if (
+      (!b.parts.length ||
+        b.parts.every(x => a.parts.some(y => y.on === x.on))) &&
+      !b.aspects.length &&
+      b.colors.length >= 1 &&
+      // (A line is a width and a color: a bare color, "pink #DB2777",
+      // is read by the readers after.)
+      b.lengths.length > 0 &&
+      oneColor &&
+      a.parts.length &&
+      a.aspects.length === 1 &&
+      a.aspects[0] === 'border' &&
+      !/[;\n.]/.test(b.joint ?? '') &&
+      b.text
+        .trim()
+        .split(/\s+/)
+        .every(
+          w =>
+            colorsIn(w).length > 0 ||
+            /^-?\d*\.?\d+(?:px|rem|em)$/.test(w) ||
+            /^(?:and|when|while|on|if|in|is|are|it'?s|the|focus(?:ed)?|hover(?:ed)?|press(?:ed)?|active|selected|checked|disabled|open)$/i.test(
+              w,
+            ),
+        )
+    ) {
+      typedOnly();
+      b.parts = a.parts.map(x => ({...x}));
+      b.aspects = ['border'];
+      continue;
+    }
     if (
       !b.parts.length &&
       !b.aspects.length &&
-      b.colors.length === 1 &&
-      /^\s*(?:and\s+)?(?:make\s+(?:it|them)\s+)?[a-z#0-9-]+\s*$/i.test(
+      oneColor &&
+      (b.colors.length === 1 ||
+        /^\s*(?:and\s+)?[a-z-]+\s+#[0-9a-f]{3,8}\s*$/i.test(b.text)) &&
+      /^\s*(?:and\s+)?(?:make\s+(?:it|them)\s+)?(?:[a-z-]+\s+)?[a-z#0-9-]+\s*$/i.test(
         b.text,
       ) &&
       a.parts.length &&
-      /\b(?:text|labels?|copy|writing)\b/.test(a.text)
+      /\b(?:text|labels?|copy|writing)\b/.test(a.text) &&
+      // (A word with its value only after a look of the text itself, never
+      // a part named with "text", "text inputs".)
+      (b.colors.length === 1 ||
+        a.aspects.some(x => x === 'text' || TEXT_LOOKS.includes(x)))
     ) {
+      typedOnly();
       b.parts = a.parts.map(x => ({...x}));
       b.aspects = ['text'];
       b.text = `${a.text.replace(/\b(?:bigger|smaller|larger|bolder|fainter|subtler|lighter|darker|\d+(?:\.\d+)?\s?%\s+\w+)\b/g, '').trim()} ${b.text.trim()}`;
@@ -7544,6 +7704,17 @@ export function draftAnswer(ctx, env, question) {
     // ("The icon after the button text": beside a part's text is in it.)
     const preps =
       /\b(inside|within|of|after|before|next to|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?/g;
+    // ("date picker: today's date circled": a label is the place the
+    // words after it are in.)
+    const label = /^\s*([a-z][a-z' -]{1,40}?)\s*:\s*(\S.*)$/i.exec(text);
+    // (Never a screen named by what it shows, "a records table view:".)
+    if (
+      label &&
+      !/\b(?:views?|pages?|screens?|apps?|dashboards?|layouts?)\s*$/i.test(
+        label[1],
+      )
+    )
+      places.push({holderText: label[1], elementText: label[2], by: 'in'});
     for (const m of text.matchAll(preps)) {
       const after = text.slice(/** @type {number} */ (m.index) + m[0].length);
       // (The place runs to the next place said.)
@@ -10530,10 +10701,25 @@ export function draftAnswer(ctx, env, question) {
       clauseNow && !clauseNow.except && d1.options.some(o => o.length)
         ? unreadWords(clauseNow, d1.options)
         : [];
-    const d0 = unread.length
+    // (A color the clause gives to a look of its own that takes a color,
+    // its fill, its text or its line, is read there, whichever answer of
+    // the clause comes first: "a #e8def8 pill".)
+    const unreadHere = unread.filter(
+      w =>
+        !(
+          colorsIn(w.toLowerCase()).length &&
+          clauseNow?.aspects.some(a =>
+            ['background', 'text', 'border'].includes(a),
+          ) &&
+          !d1.options.some(o =>
+            o.some(st => /colou?r|background|border/.test(st.thing)),
+          )
+        ),
+    );
+    const d0 = unreadHere.length
       ? {
           ...d1,
-          text: `read "${clauseNow?.text}" but not ${unread.map(w => `"${w}"`).join(', ')}, so nothing is written: say it in words how reads (a part, what to change, and a value or a way such as darker or more)`,
+          text: `read "${clauseNow?.text}" but not ${unreadHere.map(w => `"${w}"`).join(', ')}, so nothing is written: say it in words how reads (a part, what to change, and a value or a way such as darker or more)`,
           options: [],
           ...(clauseNow?.parts[0]
             ? {lookup: `${HOW} ${clauseNow.parts[0].on}`}
@@ -10669,6 +10855,7 @@ export function draftAnswer(ctx, env, question) {
           ? {modeInValue: true}
           : {}
       ),
+      ...(input.unmet ? {unmet: input.unmet} : {}),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -11115,8 +11302,107 @@ export function draftAnswer(ctx, env, question) {
       }
     }
   }
+  // A subject how does not know ("lozenges: subtle gray background",
+  // "flurbles bold"): a plural noun leading the clause, or its label, that
+  // names no part, look, setting or color. That clause, and the clauses of
+  // its list after it that name no part of their own, write nothing and
+  // name the word: never the whole theme in its place.
+  const subjectKnown = (/** @type {string} */ w) =>
+    lex.vocab.includes(w) ||
+    lex.vocab.includes(singular(w)) ||
+    corrected(w, lex.vocab) !== w ||
+    KEEP.has(w) ||
+    Object.hasOwn(HUES, w) ||
+    aspectsOf(w).length > 0 ||
+    stateWord(w) != null ||
+    colorsIn(w).length > 0 ||
+    lex.parts.some(([re]) => re.test(` ${w} `)) ||
+    /^(?:themes?|everything|everywhere|sites?|apps?|ui|pages?|modes?|colou?rs?|palettes?|brands?|looks?|vibes?|styles?|defaults?|things?|details?|elements?|components?|controls?|surfaces?|items?|words?|letters?|numbers?)$/.test(
+      w,
+    );
+  const unknownSubject = (/** @type {Clause} */ c) => {
+    if (c.parts.length || c.except || c.refused) return null;
+    const t = c.text.toLowerCase().trim();
+    const label = /^([a-z][a-z' -]{1,40}?)\s*:\s*\S/.exec(t)?.[1];
+    const lead =
+      label ??
+      /^(?:the |my |our |all (?:the )?)?([a-z]{3,}s)\b(?=\s+\S)/.exec(t)?.[1];
+    if (!lead) return null;
+    const words = lead
+      .split(/\s+/)
+      .filter(
+        w =>
+          w &&
+          !/^(?:the|my|our|all|every|its|their|this|that|these|those|a|an|and|of|for|in|on)$/.test(
+            w,
+          ),
+      );
+    // (A brand or product as the label, "Airbnb: accent …", is the theme's
+    // look said after it; only a plural noun names things on the page. A
+    // noun followed by what it does, "users complained …", tells; and
+    // people and exclamations name nothing on the page.)
+    const noun = words[words.length - 1] ?? '';
+    const next = label
+      ? ''
+      : (t
+          .slice(t.indexOf(lead) + lead.length)
+          .trim()
+          .split(/\s+/)[0] ?? '');
+    if (
+      /^(?:is|are|was|were|seems?|looks?|feels?|said|says|say|think|thinks|want|wants|need|needs|hate|hates|love|loves|like|likes|keep|keeps|[a-z]+ed)$/.test(
+        next,
+      ) ||
+      /^(?:oops|whoops|yikes|thanks|users?|people|customers?|folks|clients?|guys|devs|designers?|friends?|readers?|visitors?)$/.test(
+        noun,
+      )
+    )
+      return null;
+    if (!/[a-z]{2}[^su]s$/.test(noun) || words.some(subjectKnown)) return null;
+    return lead;
+  };
+  // ("filled blue with white text on hover": a state said at the end of
+  // a with-item is the state of the look it is with, so the fill and its
+  // text are the hover look together, never a resting fill.)
+  for (let i = clauses.length - 1; i >= 1; i--) {
+    const [a, b] = [clauses[i - 1], clauses[i]];
+    if (
+      joinOf.get(b)?.sep === 'with' &&
+      b.state &&
+      !a.state &&
+      !a.except &&
+      a.parts.length &&
+      b.parts.length &&
+      b.parts.every(x => a.parts.some(y => y.on === x.on)) &&
+      (a.colors.length || a.aspects.length) &&
+      new RegExp(`\\b(?:on|when|while)\\s+${b.state}\\w*\\s*$`).test(b.text)
+    )
+      a.state = b.state;
+  }
+  /** The unknown subject a list is held under, until a clause leaves it. */
+  let heldUnder = '';
   for (const c of clauses) {
     clauseNow = c;
+    {
+      const unknown = unknownSubject(c);
+      if (
+        heldUnder &&
+        (unknown ||
+          c.parts.length ||
+          /[;\n.]|\bthen\b/.test(c.joint ?? '') ||
+          /^[a-z][a-z' -]{1,40}:/.test(c.text.trim()))
+      )
+        heldUnder = '';
+      if (unknown) heldUnder = unknown;
+      if (heldUnder) {
+        if (unknown)
+          push({
+            text: `no part is called "${unknown}" here, so nothing is written for "${c.text.trim()}"${clauses.some(x => x !== c && !x.parts.length && x.joint && !/[;\n.]/.test(x.joint)) ? ' or the list after it' : ''}; how --list parts names every part (a part's own name, "badges", "toasts", writes on it)`,
+            options: [],
+            lookup: `${HOW} --list parts`,
+          });
+        continue;
+      }
+    }
     // An element its place has no part of its own for: nothing is written,
     // and the answer says why.
     if (c.refused) {
@@ -13635,10 +13921,12 @@ export function draftAnswer(ctx, env, question) {
     const delta = new RegExp(
       `\\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\\s+(\\d*\\.?\\d+)(px|rem|em)\\b|\\b(\\d*\\.?\\d+)(px|rem|em) (?:${COMPARATIVE})\\b`,
     ).exec(c.text);
+    // ("divided by 1px lines": "by" alone names what does the dividing;
+    // an amount needs a word that changes, "bigger by 2px".)
     if (
       delta &&
       new RegExp(
-        `\\b(by|add|adding|plus|minus|subtract|subtracting|increase|decrease|reduce|${COMPARATIVE})\\b`,
+        `\\b(add|adding|plus|minus|subtract|subtracting|increase|decrease|reduce|${COMPARATIVE})\\b`,
       ).test(c.text)
     ) {
       const unit = delta[2] ?? delta[4];
@@ -14647,6 +14935,9 @@ export function draftAnswer(ctx, env, question) {
       return {
         text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}, so it already uses the base value`,
         options: [],
+        // (What the ask takes for granted, a setting to take back, that the
+        // theme does not have.)
+        unmet: `${what}${on ? ` on ${on}` : ''}`,
       };
     return {
       text: `take back what ${env.slug} sets for ${what}${on ? ` on ${on}` : ''}: undo restores the base value`,
@@ -17032,6 +17323,48 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'corners': {
+        // ("4px top corners", "square bottom corners", "round the left
+        // corners 8px": the corners on those sides only, each its own
+        // longhand, start and end in the writing direction.)
+        {
+          const sides = [
+            ...new Set(
+              [
+                ...c.text.matchAll(
+                  /\b(top|bottom|left|right)\b(?=[\w\s-]*\bcorners?\b)|\bcorners?\b[\w\s-]*?\b(?:on|at|along) (?:the )?(top|bottom|left|right)\b/g,
+                ),
+              ].map(m => m[1] ?? m[2]),
+            ),
+          ];
+          const sidePx = /\b(square|sharp)\b/.test(c.text)
+            ? '0'
+            : (c.lengths.find(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) ?? null);
+          // (A step rounder moves every corner: for some only, a size.)
+          if (on && sides.length && c.dir && !sidePx)
+            return {
+              text: `a step ${c.dir === 'more' ? 'rounder' : 'sharper'} moves every corner of ${on}; for the ${sides.join(' and ')} corners only, give a size ("8px ${sides[0]} corners")`,
+              options: [],
+              lookup: `${HOW} ${on}`,
+            };
+          if (on && sides.length && sidePx && !c.dir) {
+            const LONG = /** @type {Record<string, string[]>} */ ({
+              top: ['start-start', 'start-end'],
+              bottom: ['end-start', 'end-end'],
+              left: ['start-start', 'end-start'],
+              right: ['start-end', 'end-end'],
+            });
+            const corners = [...new Set(sides.flatMap(x => LONG[x]))];
+            return {
+              text: `the ${sides.join(' and ')} corners on ${on}: ${sidePx === '0' ? 'square' : sidePx}, the other corners as they are`,
+              options: [
+                corners.map(k =>
+                  set(`border-${k}-radius`, sidePx, {...f, ...modeOf(c)}),
+                ),
+              ],
+              sequence: corners.length > 1,
+            };
+          }
+        }
         const tall = tallIn(c.text);
         const tied = radiusIn(c.text);
         // "1.5 times bigger": an amount, never a radius.
@@ -20933,7 +21266,11 @@ export function draftAnswer(ctx, env, question) {
           : /\bgradient\b/.test(c.text)
             ? 'gradient'
             : null;
-        if (c.neg && on) {
+        // "no gradient on buttons": the design this theme added, taken
+        // back. "no fill", "no background": see-through, on the part and on
+        // every variant or state of it the theme fills itself (taking a
+        // fill back would bring the base's fill back, the opposite).
+        if (c.neg && on && design) {
           const undos = undo([
             'background',
             'background-image',
@@ -20941,21 +21278,51 @@ export function draftAnswer(ctx, env, question) {
           ]);
           return undos.length
             ? {
-                text: `take back the ${design ?? 'background'} this theme sets${where}`,
+                text: `take back the ${design} this theme sets${where}`,
                 options: undos,
               }
-            : design
-              ? {
-                  text: `${on} has no ${design} this theme sets, so there is nothing to remove`,
-                  options: [],
-                  lookup: `${HOW} ${on}`,
-                }
-              : // "remove the card background": the fill it shows comes from
-                // the base theme; no fill means see-through.
-                {
-                  text: `no background${where || ` on ${on}`}: transparent, so what is behind it shows`,
-                  options: [[set('background-color', 'transparent', f)]],
-                };
+            : {
+                text: `${on} has no ${design} this theme sets, so there is nothing to remove`,
+                options: [],
+                lookup: `${HOW} ${on}`,
+              };
+        }
+        if (c.neg && on) {
+          const ownScoped = env.data.settings.filter(
+            x =>
+              x.on === on &&
+              /^background(?:-color|-image)?$/.test(x.thing) &&
+              (x.when || x.state) &&
+              (!f.when || x.when === f.when) &&
+              (!f.state || x.state === f.state) &&
+              !/^(?:transparent|none)$/i.test(String(x.value).trim()),
+          );
+          const steps = [
+            set('background-color', 'transparent', f),
+            ...ownScoped
+              .filter(
+                (x, i, all) =>
+                  all.findIndex(
+                    y =>
+                      y.when === x.when &&
+                      y.state === x.state &&
+                      y.mode === x.mode,
+                  ) === i,
+              )
+              .map(x =>
+                set('background-color', 'transparent', {
+                  on,
+                  ...(x.when ? {when: x.when} : {}),
+                  ...(x.state ? {state: x.state} : {}),
+                  ...(x.mode ? {mode: x.mode} : {}),
+                }),
+              ),
+          ];
+          return {
+            text: `no background${where || ` on ${on}`}: transparent, so what is behind it shows${ownScoped.length ? `; also where ${env.slug} fills it itself (${[...new Set(ownScoped.map(x => [x.when, x.state].filter(Boolean).join(' ')))].join(', ')})` : ''}`,
+            options: [steps],
+            sequence: steps.length > 1,
+          };
         }
         // "the button gradient darker": the part's own gradient, each color
         // stop stepped that way (angle, stops and positions kept).
@@ -22673,6 +23040,12 @@ export function draftAnswer(ctx, env, question) {
   const clashes = [];
   /** (A step toward a rung said beside the rung.) @type {Step[]} */
   const relDropped = [];
+  /**
+   * Steps a later clause of a sequence replaces ("make it compact, then
+   * make it roomy": the last says where it ends).
+   * @type {Step[]}
+   */
+  const superseded = [];
   for (const {clause, steps} of tops)
     for (const [k, st] of steps.entries()) {
       // A step one clause repeats ("2 steps rounder": the dial stepped
@@ -22743,8 +23116,12 @@ export function draftAnswer(ctx, env, question) {
         prior.clause !== clause &&
         prior.step.value !== st.value &&
         (prior.clause.mode ?? '') === (clause.mode ?? '')
-      )
-        clashes.push([prior.step, st]);
+      ) {
+        // (A later clause said after "then" is the next step of a
+        // sequence: it replaces the earlier value, never contradicts it.)
+        if (/\bthen\b/i.test(clause.joint ?? '')) superseded.push(prior.step);
+        else clashes.push([prior.step, st]);
+      }
       last.delete(key);
       last.set(key, {step: st, clause});
     }
@@ -22873,7 +23250,39 @@ export function draftAnswer(ctx, env, question) {
         }),
       );
   }
-  result.push(...drafts.slice(0, clashes.length ? 0 : undefined));
+  // (A draft whose every step a later "then" clause replaces is not
+  // offered: the sequence ends at the later value.)
+  const replaced = new Set(superseded.map(st => JSON.stringify(st)));
+  const kept = replaced.size
+    ? drafts.filter(
+        d =>
+          !d.options.length ||
+          !d.options.every(o =>
+            o.every(st => replaced.has(JSON.stringify(st))),
+          ),
+      )
+    : drafts;
+  if (replaced.size)
+    for (const d of kept)
+      if (d.options.length && !/replaces the earlier/.test(d.text))
+        d.text += ` (said after "then", this replaces the earlier ${superseded.map(st => `${st.thing} ${st.value}`).join(', ')})`;
+  result.push(...kept.slice(0, clashes.length ? 0 : undefined));
+  // An ask that takes for granted a setting the theme does not have ("…;
+  // also undo the corners" with no corners set) reads a theme other than
+  // this one: the rest of it is said, never written, until the person
+  // sees what the theme has.
+  {
+    const unmet = result.find(d => d.unmet);
+    if (unmet && result.some(d => d !== unmet && d.options.length)) {
+      for (const d of result)
+        if (d !== unmet && d.options.length) {
+          d.text = `${d.text} (held back: the same ask takes back ${unmet.unmet}, which ${env.slug} does not set, so the theme is not as the ask expects; ask for this alone to get it)`;
+          d.options = [];
+        }
+      result.splice(result.indexOf(unmet), 1);
+      result.unshift(unmet);
+    }
+  }
   // A confidence gate: a question, a "tell me", a "but not too" or a typo
   // read as a direction leaves how unsure which way to go; a wrong write is
   // worse than none, so it gives the lookup and asks for the ask.
@@ -24523,8 +24932,16 @@ export function draftAnswer(ctx, env, question) {
           continue;
         const ink = parseColor(String(st.value ?? ''));
         if (!ink || alphaOf(String(st.value)) < 1) continue;
+        // (A resting fill in the same answer is the look the text sits on;
+        // a fill in another state, "filled blue on hover", is not.)
         if (
-          o.some(x => x !== st && x.on === st.on && /^background/.test(x.thing))
+          o.some(
+            x =>
+              x !== st &&
+              x.on === st.on &&
+              !x.state &&
+              /^background/.test(x.thing),
+          )
         )
           continue;
         const variants = C.variantValues(one(st.on)).variant ?? [];
