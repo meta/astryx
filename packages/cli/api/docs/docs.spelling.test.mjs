@@ -90,6 +90,15 @@ function scaffold() {
   writeDoc(docsDir, guide('orchard', 'press-cider', 'Make apple juice'));
   writeDoc(docsDir, guide('orchard', 'store-fruit', 'Keep the harvest'));
   writeDoc(docsDir, guide('cellar', 'fruit-store', 'Keep the harvest cool'));
+  writeDoc(docsDir, {
+    type: 'generic',
+    name: 'barbecue',
+    title: 'Cook over coals',
+    description: 'Cook over coals.',
+    category: 'guide',
+    keywords: ['smoker'],
+    sections: [{title: 'Steps', content: [{type: 'prose', text: 'Steps.'}]}],
+  });
   writeDoc(
     docsDir,
     guide('cellar', 'start-here', 'Set up the racks', [
@@ -178,6 +187,16 @@ describe('a docs miss named by words', () => {
       const error = await read('secateurs');
       expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
       expect(routes(error)[0]).toBe('orchard/prune-trees');
+    },
+    SLOW,
+  );
+
+  it(
+    'suggests an integration topic by a keyword it declares',
+    async () => {
+      const error = await read('smoker');
+      expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+      expect(routes(error)[0]).toBe('barbecue');
     },
     SLOW,
   );

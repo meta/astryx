@@ -490,9 +490,7 @@ async function flatTopicInputs(catalog, {placement = false} = {}) {
   const topics = [];
   for (const entry of catalog.entries()) {
     const aliases = catalog.aliasesOf(entry);
-    let {title, description, category} = entry;
-    /** @type {string[] | undefined} */
-    let keywords;
+    let {title, description, category, keywords} = entry;
     if (
       category === undefined ||
       (!placement && (title == null || description == null))
@@ -502,7 +500,9 @@ async function flatTopicInputs(catalog, {placement = false} = {}) {
         title ??= file.doc?.title;
         description ??= file.doc?.description;
         category ??= file.doc?.category;
-        if (Array.isArray(file.doc?.keywords)) keywords = file.doc.keywords;
+        if (keywords === undefined && Array.isArray(file.doc?.keywords)) {
+          keywords = file.doc.keywords;
+        }
       } catch {
         // A topic that does not load is reported where it is read.
       }

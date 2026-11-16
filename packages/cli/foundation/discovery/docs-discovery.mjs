@@ -95,6 +95,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the doc declares
  * @property {string} [replaces] topic this doc takes the place of
  * @property {string} [extendsTopic] topic this doc merges onto (`extends`)
  */
@@ -109,6 +110,7 @@ export function isGuideRoute(target) {
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string} [replaces] the topic this one took the place of
  * @property {string} [replacedPackage] the package whose topic or guide this
  *   one took the place of
@@ -708,6 +710,7 @@ export async function discoverIntegrationDocs(
       title: parsed.title,
       description: parsed.description,
       category: parsed.category ?? null,
+      ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
       replaces: parsed.replaces,
       extendsTopic: parsed.extends,
       ...(providerId === integration.name ? {} : {providerId}),
@@ -1149,6 +1152,7 @@ export class DocsCatalog {
         title: record.title,
         description: record.description,
         category: record.category,
+        ...(record.keywords ? {keywords: record.keywords} : {}),
         replaces: replaced,
         // The package whose topic it took over: an earlier replacement's, when
         // the topic was already replaced.
@@ -1187,6 +1191,7 @@ export class DocsCatalog {
       title: record.title,
       description: record.description,
       category: record.category,
+      ...(record.keywords ? {keywords: record.keywords} : {}),
       ...(record.providerId ? {providerId: record.providerId} : {}),
       extensions: [],
     });
