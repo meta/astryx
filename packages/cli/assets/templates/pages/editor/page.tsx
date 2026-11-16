@@ -539,27 +539,25 @@ function BlockPreview({
       const items = (props.items as Transaction[]) || [];
       return (
         <Card padding={6} style={cardStyle} onClick={onSelect}>
-          <VStack gap={4}>
-            <HStack gap={3} vAlign="start" hAlign="between">
-              <VStack gap={1}>
-                <Heading level={3}>
-                  {(props.heading as string) || 'Features'}
-                </Heading>
-                {(props.description as string) && (
-                  <Text type="supporting" color="secondary">
-                    {props.description as string}
-                  </Text>
-                )}
-              </VStack>
-              <Button label="View All" variant="secondary" size="sm" />
-            </HStack>
-            <Table
-              data={items}
-              columns={TRANSACTION_COLUMNS}
-              idKey="id"
-              hasHover
-            />
-          </VStack>
+          <HStack gap={3} vAlign="start" hAlign="between" paddingBlockEnd={4}>
+            <VStack gap={1}>
+              <Heading level={3}>
+                {(props.heading as string) || 'Features'}
+              </Heading>
+              {(props.description as string) && (
+                <Text type="supporting" color="secondary">
+                  {props.description as string}
+                </Text>
+              )}
+            </VStack>
+            <Button label="View All" variant="secondary" size="sm" />
+          </HStack>
+          <Table
+            data={items}
+            columns={TRANSACTION_COLUMNS}
+            idKey="id"
+            hasHover
+          />
         </Card>
       );
     }

@@ -699,20 +699,18 @@ function TableCard<T extends {id: string}>({
 }) {
   return (
     <Card>
-      <VStack gap={6}>
-        <HStack hAlign="between" vAlign="center">
-          <Heading level={4}>{title}</Heading>
-          <Link href={linkHref}>{linkLabel}</Link>
-        </HStack>
-        <Table<T>
-          data={data}
-          columns={columns}
-          idKey="id"
-          density="compact"
-          dividers="rows"
-          hasHover
-        />
-      </VStack>
+      <HStack hAlign="between" vAlign="center" paddingBlockEnd={6}>
+        <Heading level={4}>{title}</Heading>
+        <Link href={linkHref}>{linkLabel}</Link>
+      </HStack>
+      <Table<T>
+        data={data}
+        columns={columns}
+        idKey="id"
+        density="compact"
+        dividers="rows"
+        hasHover
+      />
     </Card>
   );
 }
