@@ -462,6 +462,26 @@ export function installFolder(cwd) {
 }
 
 /**
+ * The command that installs the project's dependencies, when the project a
+ * run in `cwd` belongs to lists `name` among the packages its install gets:
+ * a `name` that is not installed then comes from that install, at the version
+ * the project lists, as in a fresh clone, and adding it again would replace
+ * that version. Null when the project lists no `name`, when `cwd` belongs to
+ * no project, and in a folder inside the project whose package.json is not
+ * the project's (see {@link installFolder}), where an install would install
+ * that folder's own packages.
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function listedPackageInstall(cwd, name) {
+  const target = installFolder(cwd);
+  if (target == null || target.moved) return null;
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  return installsPackage(root, name) ? installDependenciesCommand(root) : null;
+}
+
+/**
  * What to tell a run in a folder inside a project whose package.json is not
  * the project's: run from the project's folder, since adding there would make
  * the folder a project of its own (spec AST-081 FR2).
@@ -503,16 +523,9 @@ export function cliInstallAdvice({cwd, core}) {
   if (target.moved) {
     return {root: target.dir, core, command: null, declared: false};
   }
-  const facts = readReleaseFacts(cwd);
-  const root = projectRootOf(facts) ?? cwd;
-  if (installsPackage(root, CLI_PACKAGE)) {
-    return {
-      root,
-      core,
-      command: installDependenciesCommand(root),
-      declared: true,
-    };
-  }
+  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
+  const install = listedPackageInstall(cwd, CLI_PACKAGE);
+  if (install) return {root, core, command: install, declared: true};
   return {root, core, command: addCliCommand(root, core), declared: false};
 }
 

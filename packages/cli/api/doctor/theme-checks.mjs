@@ -1413,34 +1413,40 @@ export async function checkAppThemes(cwd) {
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'fail',
-      message: resolutionProblems
-        .map(problem =>
-          // A theme another command generates is not rebuilt with `theme
-          // build`: its fix names that command, so its message does not.
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
-          ).includes(' theme build ')
-            ? problem.message
-            : problem.message
-                .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
-                .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
-        )
-        .join(' '),
-      fix: resolutionProblems
-        .map(problem =>
-          refreshThemeCommand(
-            state.projectDir,
-            run,
-            available,
-            problem.slug,
-            problem.owner,
+      // Themes that one step fixes, such as installing the project's
+      // dependencies, say it once.
+      message: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            // A theme another command generates is not rebuilt with `theme
+            // build`: its fix names that command, so its message does not.
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ).includes(' theme build ')
+              ? problem.message
+              : problem.message
+                  .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
+                  .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
           ),
-        )
-        .join(' '),
+        ),
+      ].join(' '),
+      fix: [
+        ...new Set(
+          resolutionProblems.map(problem =>
+            refreshThemeCommand(
+              state.projectDir,
+              run,
+              available,
+              problem.slug,
+              problem.owner,
+            ),
+          ),
+        ),
+      ].join(' '),
     });
   } else if (unshippedImports.length > 0) {
     checks.push({

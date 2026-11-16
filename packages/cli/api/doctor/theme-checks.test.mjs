@@ -981,8 +981,10 @@ describe('app-theme doctor checks', () => {
     });
   });
 
-  it("check 1, in a fresh clone that lists the theme package, says to install the project's dependencies", async () => {
-    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'));
+  it("check 1, in a fresh clone that lists the theme packages, says to install the project's dependencies once", async () => {
+    const dir = fs.mkdtempSync(
+      path.join(REPO_ROOT, '.astryx-doctor-fresh-clone-'),
+    );
     dirs.push(dir);
     write(path.join(dir, 'tsconfig.json'), '{}\n');
     write(
@@ -993,6 +995,7 @@ describe('app-theme doctor checks', () => {
         dependencies: {
           '@astryxdesign/core': CLI_VERSION,
           '@astryxdesign/theme-neutral': CLI_VERSION,
+          '@astryxdesign/theme-stone': CLI_VERSION,
         },
       }),
     );
@@ -1001,33 +1004,46 @@ describe('app-theme doctor checks', () => {
       path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
       JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
     );
-    const packageDir = path.join(dir, 'node_modules/@astryxdesign/theme-neutral');
-    write(
-      path.join(packageDir, 'package.json'),
-      JSON.stringify({
-        name: '@astryxdesign/theme-neutral',
-        version: CLI_VERSION,
-        type: 'module',
-        exports: {'./built': './dist/neutral.js', './theme.css': './dist/theme.css'},
-      }),
-    );
-    write(
-      path.join(packageDir, 'dist/neutral.js'),
-      "export const neutralTheme = {name: 'neutral', tokens: {}};\n",
-    );
-    write(
-      path.join(packageDir, 'dist/theme.css'),
-      '[data-astryx-theme="neutral"] { --color-text: black; }\n',
-    );
-    await themeAdd('neutral', {cwd: dir, import: true});
+    const packageDirs = [];
+    for (const slug of ['neutral', 'stone']) {
+      const packageDir = path.join(
+        dir,
+        `node_modules/@astryxdesign/theme-${slug}`,
+      );
+      packageDirs.push(packageDir);
+      write(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: `@astryxdesign/theme-${slug}`,
+          version: CLI_VERSION,
+          type: 'module',
+          exports: {
+            './built': `./dist/${slug}.js`,
+            './theme.css': './dist/theme.css',
+          },
+        }),
+      );
+      write(
+        path.join(packageDir, `dist/${slug}.js`),
+        `export const ${slug}Theme = {name: '${slug}', tokens: {}};\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/theme.css'),
+        `[data-astryx-theme="${slug}"] { --color-text: black; }\n`,
+      );
+      await themeAdd(slug, {cwd: dir, import: true});
+    }
     // The project's dependencies are not installed yet.
-    fs.rmSync(packageDir, {recursive: true});
+    for (const packageDir of packageDirs)
+      fs.rmSync(packageDir, {recursive: true});
 
     const owners = check(await checkAppThemes(dir), 'theme-owners');
     expect(owners).toMatchObject({
       status: 'fail',
-      message:
+      message: [
         'Theme package "@astryxdesign/theme-neutral" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+        'Theme package "@astryxdesign/theme-stone" is not installed, though this project lists it: install the project\'s dependencies with `pnpm install`.',
+      ].join(' '),
       fix: 'pnpm install',
     });
   });

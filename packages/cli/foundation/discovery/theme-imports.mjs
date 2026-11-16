@@ -19,11 +19,8 @@ import {moduleExportSource, moduleExportsName} from './module-exports.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
-import {
-  formatCliCommand,
-  installDependenciesCommand,
-} from '../env/package-manager.mjs';
-import {projectListsPackage} from '../release/project.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
+import {listedPackageInstall} from '../release/notices.mjs';
 import {installCommandFor} from './template-needs.mjs';
 
 export class ThemeImportError extends Error {
@@ -170,14 +167,14 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
     const add = formatCliCommand(`theme add ${theme.slug}`, cwd);
     // A package the app lists but has not installed, as in a fresh clone,
     // comes from installing the app's dependencies, at the version it lists.
-    if (projectListsPackage(cwd, importPackage)) {
-      const install = installDependenciesCommand(cwd);
+    const listed = listedPackageInstall(cwd, importPackage);
+    if (listed) {
       throw new ThemeImportError(
-        `Theme package "${importPackage}" is not installed, though this project lists it: install the project's dependencies with \`${install}\`.`,
+        `Theme package "${importPackage}" is not installed, though this project lists it: install the project's dependencies with \`${listed}\`.`,
         {
           suggestions: [
             {
-              name: install,
+              name: listed,
               reason: `install the packages the project lists, ${importPackage} among them`,
             },
             {name: add, reason: 'add the theme once it is installed'},

@@ -203,21 +203,6 @@ export function installsPackage(dir, name) {
 }
 
 /**
- * Does the Astryx project that `startDir` is in (the package.json that
- * declares an Astryx package, see {@link findDeclaringPackage}) list `name`
- * among the packages its install gets? Then a `name` that is not installed
- * comes from installing the project's dependencies, as in a fresh clone,
- * and adding it again would replace the version the project lists.
- * @param {string} startDir
- * @param {string} name
- * @returns {boolean}
- */
-export function projectListsPackage(startDir, name) {
-  const declaring = findDeclaringPackage(startDir);
-  return declaring != null && installsPackage(declaring.dir, name);
-}
-
-/**
  * The nearest package.json at or above `startDir` that declares the Core or
  * the CLI. The search stops after the first folder that holds
  * version-control metadata, and passes the home folder by unless the run
