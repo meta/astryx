@@ -42,6 +42,22 @@ vi.mock('../../../foundation/fs/paths.mjs', async importOriginal => ({
 /** Each time a compile asks for Babel. */
 const babelAsked = vi.hoisted(() => ({count: 0}));
 
+/** Whether Babel's files read as a reinstall while this process runs left them. */
+const reinstalled = vi.hoisted(() => ({now: false}));
+
+vi.mock('../../../foundation/fs/read-record.mjs', async importOriginal => {
+  const real = /** @type {any} */ (await importOriginal());
+  return {
+    ...real,
+    fileStamp: (/** @type {string} */ file) => {
+      const stamp = real.fileStamp(file);
+      return reinstalled.now && file.includes(`${path.sep}@babel${path.sep}`)
+        ? `${stamp}:reinstalled`
+        : stamp;
+    },
+  };
+});
+
 vi.mock(
   '../../../foundation/runtime/lazy-dependencies.mjs',
   async importOriginal => {
@@ -171,6 +187,7 @@ beforeEach(() => {
   for (const name of fs.readdirSync(STORE)) fs.rmSync(path.join(STORE, name));
   if (savedBabelEnv === undefined) delete process.env.BABEL_ENV;
   else process.env.BABEL_ENV = savedBabelEnv;
+  reinstalled.now = false;
 });
 
 afterAll(() => {
@@ -311,5 +328,23 @@ describe('the JavaScript a theme build compiles', () => {
       );
       expect({part, stamped}).toEqual({part, stamped: true});
     }
+  }, 60_000);
+
+  it('keeps nothing compiled by the Babel this process loaded once a reinstall changes its files', async () => {
+    await sleep(SETTLE_WAIT_MS);
+    build();
+    // Babel is loaded; a reinstall writes new files under it.
+    reinstalled.now = true;
+    fs.writeFileSync(
+      path.join(THEME, 'helper.ts'),
+      HELPER.replace('icon ', 'glyph '),
+    );
+    const after = build();
+    // The kept registry no longer matches Babel's files, and the edited
+    // helper compiles: both with the Babel loaded before the reinstall.
+    expect(after.asked).toBe(2);
+    // Neither is kept under the new files' stamps, so the next build in this
+    // process compiles them again.
+    expect(build().asked).toBe(2);
   }, 60_000);
 });

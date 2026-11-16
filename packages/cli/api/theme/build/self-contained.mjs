@@ -7,7 +7,9 @@
  * JavaScript beside the build, and every local import names its file with
  * its extension. Package imports stay as they are.
  *
- * It reads files only through the `files` reader the theme adapter gives it.
+ * It reads the theme's files only through the `files` reader the theme
+ * adapter gives it. The JavaScript it compiles is kept between runs, under
+ * the stamps of every file of Babel's code that compiled it.
  *
  * @input the built module's carried imports, the theme source, the output
  *   folder, and the adapter's file reader
@@ -322,6 +324,14 @@ function rewriteImports(rewrite) {
 }
 
 /**
+ * Each file of Babel's code this process has run, with its stamp when the
+ * process first found it loaded: the code a compile runs is the code loaded
+ * then, whatever a reinstall writes later.
+ * @type {Map<string, string>}
+ */
+const compilerStamps = new Map();
+
+/**
  * Every file of the code that compiled a module: the modules of
  * `@babel/core` and of the plugins, and each module they required in turn,
  * wherever it is installed.
@@ -347,7 +357,8 @@ function compilerFiles(roots) {
  * files `rewrite` gives. The JavaScript is kept between runs beside the kept
  * gathers (fs/gather-cache.mjs persistedSummary): it is read back while the
  * source, the options, the rewrites and every file of Babel's code that made
- * it are as they were, so a build of an unchanged theme loads no Babel.
+ * it are as they were, so a build of an unchanged theme loads neither
+ * `@babel/core` nor its plugins.
  * @param {LocalModuleFiles} files
  * @param {string} file
  * @param {string} source
@@ -368,6 +379,7 @@ function compileModule(files, file, source, rewrite) {
       }),
     )
     .digest('hex');
+  let current = false;
   return persistedSummary(
     ['theme-module-javascript', key],
     () => {
@@ -381,11 +393,17 @@ function compileModule(files, file, source, rewrite) {
         require.resolve('@babel/core'),
         ...options.plugins.map(([plugin]) => String(plugin)),
       ];
-      return {
-        value: code,
-        stamps: compilerFiles(roots).map(each => [each, fileStamp(each)]),
-      };
+      /** @type {[string, string][]} */
+      const stamps = compilerFiles(roots).map(each => {
+        if (!compilerStamps.has(each))
+          compilerStamps.set(each, fileStamp(each));
+        return [each, /** @type {string} */ (compilerStamps.get(each))];
+      });
+      // Kept only while the files are still those this process loaded: after
+      // a reinstall, the JavaScript is the old Babel's.
+      current = stamps.every(([each, stamp]) => fileStamp(each) === stamp);
+      return {value: code, stamps};
     },
-    {keep: code => code !== ''},
+    {keep: code => current && code !== ''},
   );
 }
