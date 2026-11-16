@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] Top nav and side nav example blocks: Search, Notifications and Profile show a short demo note; Sign in, Get started, Upgrade and the side nav items are links.
+[fix] Five nav example blocks (TopNav showcase, centered navigation, enterprise dashboard and mega menu; SideNav with a header menu): Search, Notifications and Profile show a short demo note, and Sign in, Get started, Upgrade and the header-menu side nav's items are links. Other top and side nav examples are unchanged.
 
 @josephfarina
