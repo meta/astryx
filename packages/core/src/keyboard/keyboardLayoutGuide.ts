@@ -25,19 +25,86 @@ import {
   type KeyboardModel,
   type KeyboardProfile,
   type KeyboardTransition,
+  type KeyboardCurveSchedule,
 } from './keyboardModel';
-import {sharedWeakMap} from '../utils/sharedRealm';
+import {sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
- * Whose keyboard schedule the guide reads: `chromium` where the browser has
- * the VirtualKeyboard API, else null. Without the profile, no surface rides
- * the guide. Chrome reports the keyboard as each slide starts. The profile is
- * a capability, never the user agent. motion/android/keyboard.ts holds the
- * measured timing.
+ * The rules a keyboard schedule gives the guide for focus that moves to a
+ * field the page cannot see.
+ */
+export interface KeyboardFocusRules {
+  /** Focus moved: true when the focused element may keep a keyboard up. */
+  readonly focused: () => boolean;
+  /**
+   * A field lost focus to `next` at `blurAt`: true when the rules decide the
+   * hide later, through the guide's `hide`.
+   */
+  readonly blurred: (next: EventTarget | null, blurAt: number) => boolean;
+  /** Stops anything the rules wait for. */
+  readonly dispose: () => void;
+}
+
+/** The guide's own field check, which a schedule's focus rules use. */
+export interface KeyboardFocusChecks {
+  readonly hidesField: (target: Element) => boolean;
+}
+
+/**
+ * Safari on iOS's keyboard schedule, with the windows it applies to and the
+ * focus rules the guide follows under it.
+ */
+export interface UIKitKeyboardSchedule extends KeyboardCurveSchedule {
+  readonly appliesTo: (win: Window) => boolean;
+  readonly focusRules: (
+    win: Window,
+    hide: (blurAt: number) => void,
+    checks: KeyboardFocusChecks,
+  ) => KeyboardFocusRules;
+}
+
+// Where the guide reads Safari on iOS's schedule. The touch runtime publishes
+// the schedule, and a keyboard rider registers this reader as it attaches
+// (keyboardTarget.ts).
+const uikit = sharedState(
+  'keyboard/keyboard-layout-guide/uikit-schedule',
+  2,
+  (): {read: (() => UIKitKeyboardSchedule | null) | null} => ({read: null}),
+);
+
+/**
+ * Registers how the guide reads Safari on iOS's keyboard schedule; null
+ * forgets it. Until the reader returns a schedule, no surface rides the
+ * keyboard in Safari on iOS, as before the ride.
+ */
+export function registerUIKitKeyboardSchedule(
+  read: (() => UIKitKeyboardSchedule | null) | null,
+): void {
+  uikit.read = read;
+}
+
+const uikitScheduleOf = (): UIKitKeyboardSchedule | null =>
+  uikit.read?.() ?? null;
+
+/**
+ * Whose keyboard schedule the guide reads. `chromium`: the browser has the
+ * VirtualKeyboard API. `uikit`: Safari on iOS or iPadOS, once the touch
+ * runtime gives the guide UIKit's schedule. Otherwise null. Without the
+ * profile, no surface rides the guide. Chrome reports the keyboard as each
+ * slide starts, and Safari reports its show as UIKit's keyboard starts up.
+ * The profile is a capability, never the user agent.
  */
 export function keyboardProfileOf(win: Window): KeyboardProfile | null {
-  return hasVirtualKeyboard(win) ? 'chromium' : null;
+  if (hasVirtualKeyboard(win)) {
+    return 'chromium';
+  }
+  return uikitScheduleOf()?.appliesTo(win) === true ? 'uikit' : null;
 }
+
+// The schedule the guide's model reads under `profile`. Chrome's is the
+// model's own.
+const scheduleOf = (profile: KeyboardProfile | null) =>
+  profile === 'uikit' ? (uikitScheduleOf() ?? undefined) : undefined;
 
 /** A window's keyboard layout guide. */
 export interface KeyboardLayoutGuide {
@@ -130,21 +197,22 @@ const guides = sharedWeakMap<Window, KeyboardLayoutGuide>(
  * blur, and the motion in between. Layout follows the keyboard height
  * itself, and the guide's transitions only time the optional ride on top.
  *
- * The model reads Chrome's measured schedule: Chrome reports each slide just
- * after it starts. A surface rides the guide only where the VirtualKeyboard
- * API reports the keyboard. Focus can move from one field to another through
- * something that brings no keyboard, such as a popover's container. Chrome
- * then reports the keyboard gone for a moment and then back. So a hide
- * reported while a field that just got focus still has it waits until the
- * move settles.
+ * The model reads the profile's schedule. Chrome reports each slide just
+ * after it starts, and Safari reports its show as UIKit's keyboard starts
+ * up. A surface rides the guide only where it has a profile. Focus can move
+ * from one field to another through something that brings no keyboard, such
+ * as a popover's container. Chrome then reports the keyboard gone for a
+ * moment and then back. So a hide reported while a field that just got focus
+ * still has it waits until the move settles.
  *
  * A busy page reads Chrome's reports late, after Gboard's slide. So once a
  * hide predicted from a blur is under way, a report of the keyboard partway
  * down, or still up, starts nothing. Only the report of the keyboard gone
- * confirms the hide. Focus that comes back still turns it around. Focus in a
- * frame, an open shadow host or a custom element can keep up a keyboard the
- * guide cannot see. There the viewport decides, as before. A closed shadow
- * root on a built-in element reads as nothing focused.
+ * confirms the hide. Focus that comes back still turns it around. A field in
+ * a frame, an open shadow host or a custom element can keep up a keyboard
+ * the guide cannot see. So focus that moves there predicts no hide, and the
+ * report decides. A closed shadow root on a built-in element reads as
+ * nothing focused.
  *
  * @example
  * ```
@@ -166,7 +234,10 @@ export function getKeyboardLayoutGuide(win: Window): KeyboardLayoutGuide {
 function createGuide(win: Window): KeyboardLayoutGuide {
   const listeners = new Set<(transition: KeyboardTransition) => void>();
   let profile = keyboardProfileOf(win);
-  let model: KeyboardModel = createKeyboardModel(getKeyboardHeight(win));
+  let model: KeyboardModel = createKeyboardModel(
+    getKeyboardHeight(win),
+    scheduleOf(profile),
+  );
   let verifyTimer: ReturnType<typeof setTimeout> | null = null;
   let detach: (() => void) | null = null;
   // Whether focusing `target` keeps an input view where the keyboard is. On
@@ -220,8 +291,29 @@ function createGuide(win: Window): KeyboardLayoutGuide {
   };
 
   const attach = () => {
-    profile = keyboardProfileOf(win);
-    model = createKeyboardModel(getKeyboardHeight(win));
+    let rules: KeyboardFocusRules | null = null;
+    let synced = false;
+    // The schedule follows the profile, which changes once the touch runtime
+    // registers UIKit's schedule.
+    const sync = () => {
+      const next = keyboardProfileOf(win);
+      if (synced && next === profile) {
+        return;
+      }
+      synced = true;
+      profile = next;
+      model = createKeyboardModel(getKeyboardHeight(win), scheduleOf(profile));
+      rules?.dispose();
+      rules =
+        profile === 'uikit'
+          ? (uikitScheduleOf()?.focusRules(
+              win,
+              blurAt => publish(model.blurred(blurAt)),
+              {hidesField},
+            ) ?? null)
+          : null;
+    };
+    sync();
     // When a field that brings up a keyboard last gained focus.
     let keyboardFocusAt = -Infinity;
     let handoffTimer: ReturnType<typeof setTimeout> | null = null;
@@ -256,16 +348,21 @@ function createGuide(win: Window): KeyboardLayoutGuide {
       return model.report(height, time);
     };
     const onReport = (event: KeyboardHeightEvent) => {
+      sync();
       if (event.type === 'viewport') {
         publish(report(event.height, event.timeStamp));
       } else if (event.type === 'focusin') {
+        const keeps = rules?.focused() ?? false;
         if (keepsInputView(event.target)) {
           keyboardFocusAt = event.timeStamp;
+          publish(model.focused(event.timeStamp));
+        } else if (keeps) {
           publish(model.focused(event.timeStamp));
         }
       } else if (
         keepsInputView(event.target) &&
-        !keepsInputView(event.relatedTarget)
+        !keepsInputView(event.relatedTarget) &&
+        rules?.blurred(event.relatedTarget, event.timeStamp) !== true
       ) {
         publish(model.blurred(event.timeStamp));
       }
@@ -273,6 +370,7 @@ function createGuide(win: Window): KeyboardLayoutGuide {
     const unsubscribe = subscribeKeyboardHeight(win, onReport, {focus: true});
     return () => {
       unsubscribe();
+      rules?.dispose();
       if (handoffTimer != null) {
         clearTimeout(handoffTimer);
         handoffTimer = null;

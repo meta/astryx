@@ -13,12 +13,15 @@
  */
 
 import type {Animator} from '../motion/animator';
+import {timing} from '../motion/uikit/timing';
+import {deepActiveElement} from '../utils/flatTree';
 import {getTouchRuntime} from '../utils/touchRuntime';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {isElement} from '../utils/nodeType';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
-import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
+import {sharedState, sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {
   KEYBOARD_EPSILON,
   claimTapFocus,
@@ -31,7 +34,14 @@ import {
   subscribeKeyboardHeight,
   watchRevealPan,
 } from './keyboardHeight';
-import {getKeyboardLayoutGuide, keyboardProfileOf} from './keyboardLayoutGuide';
+import {
+  bringsUpKeyboard,
+  getKeyboardLayoutGuide,
+  hidesField,
+  keyboardProfileOf,
+  registerUIKitKeyboardSchedule,
+  type UIKitKeyboardSchedule,
+} from './keyboardLayoutGuide';
 import type {KeyboardTransition} from './keyboardModel';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
@@ -460,6 +470,47 @@ function focusedFieldIn(target: Element): HTMLElement | null {
 }
 
 /**
+ * Whether the focused control may keep the keyboard up, read inside open
+ * shadow roots. A frame or a custom element can hold a field the page cannot
+ * see. An open shadow host that has focus itself also counts.
+ */
+export function mayKeepKeyboard(doc: Document): boolean {
+  const target = deepActiveElement(doc);
+  return target != null && (bringsUpKeyboard(target) || hidesField(target));
+}
+
+// Safari on iOS's keyboard schedule, built once from the touch runtime. The
+// riders give it what the page's first load holds, so the runtime's chunk
+// imports none of it.
+const uikit = sharedState(
+  'keyboard/keyboard-target/uikit-schedule',
+  1,
+  (): {built: UIKitKeyboardSchedule | null} => ({built: null}),
+);
+
+function readUIKitSchedule(): UIKitKeyboardSchedule | null {
+  const runtime = getTouchRuntime();
+  if (runtime == null) {
+    return null;
+  }
+  uikit.built ??= runtime.createUIKitKeyboardSchedule({
+    notificationMs: timing.keyboardNotificationMs,
+    mayKeepKeyboard,
+    isElement,
+  });
+  return uikit.built;
+}
+
+/**
+ * Lets the keyboard layout guide read Safari on iOS's keyboard schedule from
+ * the touch runtime once the page has loaded it. A keyboard rider calls it as
+ * it attaches under a coarse pointer.
+ */
+export function followTouchRuntimeKeyboardSchedule(): void {
+  registerUIKitKeyboardSchedule(readUIKitSchedule);
+}
+
+/**
  * Whether `win` keeps fields above a keyboard at all: a top-level document
  * whose visual viewport shrinks for the keyboard, under a coarse primary
  * pointer.
@@ -499,6 +550,7 @@ export function followKeyboard(
   if (!followsKeyboard(win) || (move === 'ride' && getTouchRuntime() == null)) {
     return () => {};
   }
+  followTouchRuntimeKeyboardSchedule();
   const unregister = registerKeyboardTarget(target);
   const stopClaim = refuseFocusReveal(doc, {
     claim: destination =>
@@ -657,7 +709,7 @@ function rideWithKeyboard(
   const animator = runtime.animatorFor(target);
   riddenAnimators.set(target, animator);
   const guide =
-    keyboardProfileOf(win) === 'chromium' ? getKeyboardLayoutGuide(win) : null;
+    keyboardProfileOf(win) != null ? getKeyboardLayoutGuide(win) : null;
   // A ride moves the target while it rides or waits for the keyboard to go.
   // Once it ends, by itself or by a takeover, it never moves the target.
   let state: 'riding' | 'waiting' | 'ended' = 'riding';

@@ -347,8 +347,16 @@ those contracts.
   and Switch work by taps, clicks and keys, with no drag tracking and no slide
   or spring, and a tap under a finger or under Reduce Motion changes them at
   once, with no cross-fade; a bottom sheet still drags, and a drag that closes
-  it takes the stylesheet exit instead of the spring. A gesture in that window
-  does not start the load. The bundler keeps one copy per page however many
+  it takes the stylesheet exit instead of the spring. ChatLayout loads the touch
+  runtime after first paint under a coarse pointer, for the keyboard ride; it
+  adds no gesture, and under a fine pointer it never loads it. The runtime
+  exposes Safari on iOS's keyboard schedule
+  (`keyboard/uikitKeyboardSchedule.ts`): UIKit's keyboard spring and the
+  layout guide's focus rules there. The keyboard riders build it with the
+  duration and focus checks they hold, and register it with the layout guide.
+  No first-load module imports it. The layout guide cannot hold it, since
+  nearly every page loads the guide first. A gesture in that
+  window does not start the load. The bundler keeps one copy per page however many
   components use them. If the runtime's chunk fails to load, the page stays as
   it is before the load: components work by taps, clicks and keys, and no
   gesture retries the load. The loader's `import()` targets

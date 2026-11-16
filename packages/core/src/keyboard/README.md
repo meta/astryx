@@ -132,33 +132,34 @@ that times motion with it. Everything here is internal to
   `dismiss`, which BottomSheet calls from the drag that starts to move the sheet. The hook itself dismisses the keyboard as its target closes. The sheet lays the inset out after its
   content box's children through a functional style (FR3), committed before
   the reveal scrolls into it. Under a coarse primary pointer, where the
-  guide publishes the keyboard's own slide (Gboard's, in Chrome on Android),
-  the sheet rides it (FR8). A reveal during the show scrolls the body at once.
-  In the same commit it sets the content box so the field sits 4 px above the
-  keyboard's top, and the content box then rides the rest of the show's
-  curve. Through the hide the inset stays and the content box rides down to
-  where the body's scroll rests. At rest the inset drops, the scroll is put
+  guide publishes the keyboard's own motion (Gboard's slides in Chrome on
+  Android, UIKit's keyboard spring in Safari on iOS), the sheet rides it
+  (FR8). A reveal during the show scrolls the body at once, and the content
+  box rides the show's curve from where it was drawn. In Chrome, the same
+  commit first sets the content box so the field sits 4 px above the
+  keyboard's top (DEC-6). Through the hide the inset stays and the content box
+  rides down to where the body's scroll rests. At rest the inset drops, the scroll is put
   back and the translate clears in one commit. A busy page reads Chrome's
   report of the keyboard gone after the slide. Until then the content box
   stays where the slide leaves it, and that report commits. Under a fine
   pointer nothing of
   the ride attaches: no guide subscription, and the inset follows the
-  reports. A browser without the VirtualKeyboard API (iOS Safari, Firefox for
-  Android) publishes no slide: iOS Safari reports the keyboard gone about half
-  a second after a blur, once it is down. There, under a coarse pointer, a
-  blur that takes the keyboard down rides the content box to where the body's
-  scroll rests, on UIKit's keyboard spring (`KEYBOARD_SPRING`) from the blur,
-  while the inset stays. The report then drops the inset and puts the scroll
-  back in one commit with the translate, so nothing moves. A report of the
-  keyboard gone with no ride under way, as after a downward dismissal, glides
-  the content to its place on the same spring. A field focused before the
-  keyboard is down rides it back up. Focus moving to a select starts no ride:
-  iOS puts the select's picker where the keyboard was. Nor does focus moving
-  to a field inside an open shadow root, or into a frame or a custom element
-  whose field the page cannot see. A plain control inside an open shadow root
-  rides as any control does. Firefox for Android takes the same path, but
-  reports the hide once, at its end, and the content moves at that report
-  (AST-099 Gap 12). Safari's and Firefox's reveals are unchanged.
+  reports. Safari on iOS reports the keyboard gone about half a second after
+  a blur, once it is down, so there the guide starts the hide at the blur, on
+  UIKit's keyboard spring (`KEYBOARD_SPRING`). Safari's report then drops the
+  inset and puts the scroll back in one commit with the translate, so nothing
+  moves. A report of the keyboard gone with no blur before it, as after a
+  downward dismissal, rides the content to its place on the same spring. A
+  field focused before the keyboard is down rides it back up. Focus moving to
+  a select starts no ride: iOS puts the select's picker where the keyboard
+  was. Nor does focus moving to a field inside an open shadow root, or into a
+  frame or a custom element whose field the page cannot see. A plain control
+  inside an open shadow root rides as any control does. A browser with
+  neither schedule, such as Firefox for Android, publishes no slide. There,
+  under a coarse pointer, a blur that takes the keyboard down rides the
+  content box on UIKit's keyboard spring from the blur while the inset stays,
+  but Firefox reports the hide once, at its end, and the content moves at that
+  report (AST-099 Gap 12). Safari's and Firefox's reveals are unchanged.
 - **When the keyboard goes:** the body's scroll goes back to where it was
   when the keyboard came up, within the range left once the inset drops. A
   field that keeps focus, as after iOS's downward keyboard dismissal, is then
@@ -186,7 +187,8 @@ Each transition is
 CSS px, `start` on the document timeline (dated back to Gboard's start for a
 slide Chrome reported, slightly ahead for a hide that starts after a blur),
 and the curve the keyboard moves on: `curve`, Gboard's slide in Chrome on
-Android, values and no motion role (architecture:react-component-runtime
+Android or UIKit's keyboard spring, cut at the notification's duration, in
+Safari on iOS, values and no motion role (architecture:react-component-runtime
 INV11). `rideKeyboard` moves your element on the compositor from `start` on
 that curve. It lands the element at once when the transition is not animated,
 or when its slide has ended by the call. Hand the translate back to the layout
@@ -264,28 +266,57 @@ keyboard module measures them from the visual viewport, as in every browser
   on focus (1 of 24 when set as the touch lands), and it hides Chromium's bottom
   toolbar on the keyboard's frame (+56 px of layout).
 
+## What the page sees (Safari on iOS)
+
+The guide reads UIKit's keyboard schedule where WebKit on iOS runs
+(`keyboardProfileOf`: the engine's `-webkit-touch-callout` support, never the
+user agent). The schedule (`uikitKeyboardSchedule.ts`) comes with the touch
+runtime, which the page loads after its first paint, so a page that never
+loads it carries none of it. Until it loads, Safari on iOS rides nothing, as
+before. The keyboard riders register it with the guide
+(`followTouchRuntimeKeyboardSchedule`), and give it what the page's first load
+already holds: the notification duration, `mayKeepKeyboard` and `isElement`.
+So the schedule imports only the spring's table and the spring solver. The
+curve is UIKit's own keyboard frame animation, `../motion/uikit/springs.ts`'s
+`KEYBOARD_SPRING` (critically damped), cut at the duration the keyboard
+notifications report (`../motion/uikit/timing.ts`'s `keyboardNotificationMs`).
+
+- Show: Safari sends one `resize` of the visual viewport, as the keyboard
+  starts up. The guide rides UIKit's spring from it. Safari reports the
+  keyboard with its accessory bar in one height, so the guide predicts no
+  second height.
+- Hide: Safari reports the keyboard gone only once it is down. The guide
+  starts the hide at the blur, as a prediction that report confirms. Its
+  check after the spring keeps the hide while Safari still reads the keyboard
+  up. A hide with no blur before it rides from Safari's report.
+- Focus that moves into a frame, a custom element or an open shadow root
+  waits until focus settles there. A field there can keep the keyboard up, so
+  the guide predicts no hide, and turns a predicted hide back up.
+
 ## Consumers
 
 - BottomSheet (`BottomSheet/BottomSheetPanel.tsx`): `useMobileKeyboard`, whose
   inset the content box's `keyboardInset` functional style lays out as the
   content's last box (after its own children, so it adds scroll range in
   Firefox too, which keeps the content box at the body's height); it reveals the
-  focused field in the keyboard report's own event, and in Chrome rides the
-  content box on Gboard's slides (`rideKeyboard`, from the guide's
-  transitions).
+  focused field in the keyboard report's own event, and rides the content box
+  on the keyboard's own motion, Gboard's slides in Chrome and UIKit's spring
+  in Safari on iOS (`rideKeyboard`, from the guide's transitions).
 
 ## Files
 
-| File                     | What it holds                                                                                                         |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `keyboardHeight.ts`      | The keyboard module: the height, its listeners, the focus routes.                                                     |
-| `useMobileKeyboard.ts`   | Keeps a focused field in a target above the keyboard: the inset, the reveal, the ride and the dismiss.                |
-| `keyboardTarget.ts`      | The targets: their registry, a docked or scrolling target, and a field's own path.                                    |
-| `revealBand.ts`          | `distanceIntoBand`: the scroll that brings a box inside a band, shared by the field's and the sheet's reveals.        |
-| `keyboardModel.ts`       | The clock-free core of the guide: transitions from keyboard reports and focus changes.                                |
-| `keyboardLayoutGuide.ts` | One guide per window, fed by the keyboard module: the verification timer, the focus handoff.                          |
-| `rideKeyboard.ts`        | Moves an element with the keyboard on the curve its transition publishes, or at once (tests: `rideKeyboard.test.ts`). |
-| `index.ts`               | Entry point.                                                                                                          |
+| File                       | What it holds                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `keyboardHeight.ts`        | The keyboard module: the height, its listeners, the focus routes.                                                     |
+| `useMobileKeyboard.ts`     | Keeps a focused field in a target above the keyboard: the inset, the reveal, the ride and the dismiss.                |
+| `keyboardTarget.ts`        | The targets: their registry, a docked or scrolling target, and a field's own path.                                    |
+| `revealBand.ts`            | `distanceIntoBand`: the scroll that brings a box inside a band, shared by the field's and the sheet's reveals.        |
+| `keyboardModel.ts`         | The clock-free core of the guide: transitions from keyboard reports and focus changes.                                |
+| `keyboardLayoutGuide.ts`   | One guide per window, fed by the keyboard module: the verification timer, the focus handoff.                          |
+| `rideKeyboard.ts`          | Moves an element with the keyboard on the curve its transition publishes, or at once (tests: `rideKeyboard.test.ts`). |
+| `uikitKeyboardSchedule.ts` | Safari on iOS's schedule, which the touch runtime publishes and the keyboard riders register with the guide.          |
+| `index.ts`                 | Entry point.                                                                                                          |
 
 The timing constants live in `../motion/android/keyboard.ts` (Chrome with
-Gboard).
+Gboard) and in `../motion/uikit/springs.ts` and `../motion/uikit/timing.ts`
+(UIKit's keyboard in Safari on iOS).

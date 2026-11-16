@@ -19,8 +19,7 @@ import type {
   MotionProperty,
   MotionValues,
 } from '../motion/animator';
-import {cubicBezier} from '../motion/bezier';
-import type {KeyboardTransition} from './keyboardModel';
+import {keyboardProgress, type KeyboardTransition} from './keyboardModel';
 
 /** How a ride treats Reduce Motion. */
 export interface RideOptions {
@@ -36,20 +35,28 @@ export interface RideOptions {
  * `transition.start`, or at once when the keyboard jumps.
  *
  * Android's keyboard moves on Gboard's slides up and down
- * (motion/android/keyboard.ts). The transition publishes the slide
- * (`curve`), and the ride plays it. Every ride starts at the transition's
- * start, so content that joins a slide late lands where the keyboard is. A
- * transition that is not animated lands at once, such as a keyboard changing
- * while up. So does a slide that has ended by the call. These values are the
- * keyboard's own motion, with no motion role. The system moves the keyboard
- * on them whatever the page does, so any other curve would leave the element
- * out of step.
+ * (motion/android/keyboard.ts), and iOS's on UIKit's keyboard spring
+ * (motion/uikit/springs.ts, as keyboard/uikitKeyboardSchedule.ts cuts it).
+ * The transition publishes the curve (`curve`), and the ride plays it. Every
+ * ride starts at the transition's start, so content that joins a slide late
+ * lands where the keyboard is. A transition that is not animated lands at
+ * once, such as a keyboard changing while up. So does a slide that has ended
+ * by the call. These values are the keyboard's own motion, with no motion
+ * role. The system moves the keyboard on them whatever the page does, so any
+ * other curve would leave the element out of step.
  *
  * @example
  * ```
  * guide.subscribe(t => rideKeyboard(dock.animator, {y: -lift(t.to)}, t));
  * ```
  */
+// The document timeline's time, the time of the frame in progress.
+function timelineTime(): number | null {
+  const time =
+    typeof document === 'undefined' ? null : document.timeline?.currentTime;
+  return typeof time === 'number' ? time : null;
+}
+
 export function rideKeyboard(
   animator: Animator,
   to: MotionValues,
@@ -67,22 +74,29 @@ export function rideKeyboard(
     animator.set(to);
     return null;
   }
+  // Safari can date the event that reports the keyboard a little after the
+  // frame that dispatches it. A ride dated after that frame waits in its
+  // before phase there, and a block right after the frame then stops it. So
+  // a reported ride starts no later than the document timeline's time. A
+  // predicted hide after a blur starts ahead on purpose, and keeps its start.
+  const start = transition.predicted
+    ? transition.start
+    : Math.min(transition.start, timelineTime() ?? transition.start);
   // Under Reduce Motion nothing travels. The animator's default cross-fades
   // the element to its new place on a touch screen, and elsewhere moves it at
   // once. An entrance lands it at once and fades it in.
   const options = entrance
-    ? {at: transition.start, crossfadeAs: 'entrance' as const}
-    : {at: transition.start};
+    ? {at: start, crossfadeAs: 'entrance' as const}
+    : {at: start};
   const span = transition.curve.durationMs / 1000;
-  const ease = cubicBezier(transition.curve.points);
+  const progress = keyboardProgress(transition.curve);
   const curves: Partial<Record<MotionProperty, MotionCurve>> = {};
   for (const [property, target] of Object.entries(to) as [
     MotionProperty,
     number,
   ][]) {
-    const from = animator.get(property, transition.start);
-    const at = (t: number) =>
-      from + (target - from) * ease(Math.min(1, Math.max(0, t / span)));
+    const from = animator.get(property, start);
+    const at = (t: number) => from + (target - from) * progress(t);
     curves[property] = {
       duration: span,
       at,

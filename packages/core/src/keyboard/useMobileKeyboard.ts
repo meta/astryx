@@ -21,7 +21,6 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import type {Animator, MotionHandle} from '../motion/animator';
 import {getTouchRuntime, useTouchRuntime} from '../utils/touchRuntime';
 import {KEYBOARD_SPRING} from '../motion/uikit/springs';
-import {deepActiveElement} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {isDocument, isNode} from '../utils/nodeType';
@@ -38,18 +37,15 @@ import {
   subscribeKeyboardHeight,
   watchRevealPan,
 } from './keyboardHeight';
-import {
-  bringsUpKeyboard,
-  getKeyboardLayoutGuide,
-  hidesField,
-  keyboardProfileOf,
-} from './keyboardLayoutGuide';
+import {getKeyboardLayoutGuide, keyboardProfileOf} from './keyboardLayoutGuide';
 import type {KeyboardTransition} from './keyboardModel';
 import {
   FIELD_OFFSET,
   drawnOffsetOf,
   followKeyboard,
+  followTouchRuntimeKeyboardSchedule,
   keepFieldAboveKeyboard,
+  mayKeepKeyboard,
   registerKeyboardTarget,
   type KeyboardMove,
 } from './keyboardTarget';
@@ -144,14 +140,6 @@ function overlapOf(bodyBottom: number, obstructionTop: number): number {
 // Under half a pixel is rounding, not a keyboard.
 function isVisualViewportRecovered(): boolean {
   return getKeyboardHeight(window) <= 0.5;
-}
-
-// Whether the focused control may keep the keyboard up, read inside open
-// shadow roots. A frame or a custom element can hold a field the page cannot
-// see. An open shadow host that has focus itself also counts.
-function mayKeepKeyboard(): boolean {
-  const target = deepActiveElement(document);
-  return target != null && (bringsUpKeyboard(target) || hidesField(target));
 }
 
 /**
@@ -264,16 +252,19 @@ export function useMobileKeyboard(
       // two can differ: Chrome 124 added 344 px of range for a 360 px inset.
       let laidOutInset = 0;
       let insetRange = 0;
-      // Where the keyboard layout guide publishes the keyboard's own slide, as
-      // Gboard's in Chrome on Android, the sheet's content rides it. This needs
-      // a coarse primary pointer and Chrome's schedule. Under a fine pointer
-      // nothing of the ride attaches. In a browser without the VirtualKeyboard
-      // API, such as iOS Safari or Firefox for Android, the guide never starts.
-      // There the inset follows the reports. The hook subscribes to the guide
-      // before the keyboard module below, so the guide publishes a report's
-      // transition before the reveal reads it.
+      // The keyboard layout guide publishes the keyboard's own motion: Gboard's
+      // slide in Chrome on Android, UIKit's keyboard spring in Safari on iOS.
+      // There the sheet's content rides it. This needs a coarse primary
+      // pointer and a keyboard schedule. Under a fine pointer nothing
+      // of the ride attaches. In a browser with neither, such as Firefox for
+      // Android, the guide never starts. There the inset follows the reports.
+      // The hook subscribes to the guide before the keyboard module below, so
+      // the guide publishes a report's transition before the reveal reads it.
+      if (isTouch) {
+        followTouchRuntimeKeyboardSchedule();
+      }
       const guide =
-        isTouch && keyboardProfileOf(window) === 'chromium'
+        isTouch && keyboardProfileOf(window) != null
           ? getKeyboardLayoutGuide(window)
           : null;
       const contentAnimator = (): Animator | null => {
@@ -453,14 +444,20 @@ export function useMobileKeyboard(
           safeBottom,
         );
         if (distance > 0) {
+          // Chrome pans the page itself when the control is still below the
+          // keyboard shortly after its report. So in Chrome the control clears
+          // the keyboard in this commit. Safari leaves a claimed control in
+          // place, so it rides the whole way.
           scrollBodyBy(
             distance,
             smoothly,
             ride,
-            Math.max(
-              0,
-              obstructionTop - safeBottom - FIELD_CLEARANCE_AT_REPORT,
-            ),
+            guide?.profile === 'chromium'
+              ? Math.max(
+                  0,
+                  obstructionTop - safeBottom - FIELD_CLEARANCE_AT_REPORT,
+                )
+              : null,
           );
         } else if (distance < 0) {
           scrollBodyBy(distance, smoothly, ride);
@@ -553,7 +550,7 @@ export function useMobileKeyboard(
             if (
               isExpandedRef.current &&
               hasKeyboardLayoutRef.current &&
-              !mayKeepKeyboard()
+              !mayKeepKeyboard(document)
             ) {
               holdThroughUnguidedHide();
             }
@@ -655,11 +652,10 @@ export function useMobileKeyboard(
         return resting;
       };
 
-      // Without the guide, as in iOS Safari and Firefox for Android, nothing
-      // publishes the keyboard's slide down. iOS Safari sends one report once
-      // the keyboard is gone, about half a second after a blur. Under a coarse
-      // primary pointer, the content then moves on UIKit's keyboard spring,
-      // never at once.
+      // Without the guide, as in Firefox for Android, nothing publishes the
+      // keyboard's slide down. Where a browser reports the hide only once the
+      // keyboard is gone, the content then moves on UIKit's keyboard spring,
+      // never at once. This needs a coarse primary pointer.
       const unguidedAnimator = (): Animator | null => {
         const content = body.firstElementChild;
         return ownsFocusTransitions &&
@@ -724,7 +720,7 @@ export function useMobileKeyboard(
             if (
               active instanceof HTMLElement &&
               body.contains(active) &&
-              mayKeepKeyboard()
+              mayKeepKeyboard(document)
             ) {
               hold.release();
               void rideKeyboardSpring(animator, 0);
@@ -1053,7 +1049,9 @@ export function useMobileKeyboard(
         retainKeyboardLayoutRef.current = false;
       };
     },
-    `${isEnabled}|${reservesInset}|${isPageScrollLocked}|${isTouch}|${offset}`,
+    // The touch runtime's load re-attaches the sheet: Safari on iOS's keyboard
+    // schedule comes with it.
+    `${isEnabled}|${reservesInset}|${isPageScrollLocked}|${isTouch}|${offset}|${hasTouchRuntime}`,
   );
   return {inset: keyboardInset, dismiss};
 }

@@ -37,9 +37,16 @@ import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
-import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
+import {
+  getKeyboardLayoutGuide,
+  keyboardProfileOf,
+} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
-import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+import {timing as uikitTiming} from '../motion/uikit/timing';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
 
 // These cases drive touch motion, which comes with the shared touch runtime
 // once the page has loaded it.
@@ -194,6 +201,13 @@ function mockIOSWebKit() {
     maxTouchPoints: {configurable: true, value: 5},
   });
   vi.stubGlobal('navigator', navigatorMock);
+  // WebKit on iOS: the one engine with -webkit-touch-callout. The keyboard
+  // layout guide reads UIKit's keyboard schedule from it.
+  vi.stubGlobal('CSS', {
+    ...globalThis.CSS,
+    supports: (property: string, value?: string) =>
+      property === '-webkit-touch-callout' && value === 'none',
+  });
   mockPrimaryPointer('coarse');
 }
 
@@ -2905,6 +2919,40 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(248);
       });
 
+      it('keeps its room and scroll when the touch runtime loads with the keyboard up', async () => {
+        __resetTouchRuntimeForTest();
+        const subscribe = vi.spyOn(getKeyboardLayoutGuide(window), 'subscribe');
+        try {
+          const {body, content, input, report} = renderChromeSheet({
+            instantScrollBy: true,
+          });
+          const attaches = subscribe.mock.calls.length;
+          act(() => input.focus());
+          report(500);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+          const seen: [number, number][] = [];
+          const observer = new MutationObserver(() =>
+            seen.push([keyboardInsetOf(body), body.scrollTop]),
+          );
+          observer.observe(body, {attributes: true, subtree: true});
+          await act(async () => {
+            await __loadTouchRuntimeForTest();
+          });
+          await afterTheSlide();
+          observer.disconnect();
+          // The runtime's load attached the sheet again.
+          expect(subscribe.mock.calls.length).toBeGreaterThan(attaches);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+          expect(content.style.translate).toBe('');
+          expect(seen.filter(([inset]) => inset !== 348)).toEqual([]);
+        } finally {
+          subscribe.mockRestore();
+          await __loadTouchRuntimeForTest();
+        }
+      });
+
       it('keeps the room through the keyboard\u2019s hide while the content rides down to the scroll from before the keyboard, then drops both at rest', async () => {
         const {body, content, input, report} = renderChromeSheet({
           instantScrollBy: true,
@@ -3121,13 +3169,13 @@ describe('BottomSheet', () => {
       });
     });
 
-    it('subscribes no keyboard layout guide where the keyboard moves on Safari\u2019s schedule, whose transitions the sheet never rides (spec:AST-099 FR8)', () => {
-      // iOS Safari and Firefox for Android have no VirtualKeyboard API, so the
-      // guide has no profile there. The sheet subscribes no guide, and its
-      // room follows the keyboard's reports.
+    it('subscribes no keyboard layout guide where the browser has no keyboard schedule, as Firefox for Android (spec:AST-099 FR8)', () => {
+      // Firefox for Android has neither the VirtualKeyboard API nor UIKit's
+      // keyboard, so the guide has no profile there. The sheet subscribes no
+      // guide, and its room follows the keyboard's reports.
       mockWindowHeight(800);
       const viewport = mockVisualViewport(800);
-      mockIOSWebKit();
+      mockPrimaryPointer('coarse');
       const guide = getKeyboardLayoutGuide(window);
       const subscribe = vi.spyOn(guide, 'subscribe');
       render(
@@ -3680,6 +3728,19 @@ describe('BottomSheet', () => {
     });
 
     describe('in iOS Safari, which reports the keyboard once it is gone (spec:AST-099 FR3)', () => {
+      // jsdom dates events on the epoch clock, but a browser dates them on
+      // performance.now()'s, which the keyboard guide reads them against.
+      let eventTime: {mockRestore: () => void} | null = null;
+      beforeEach(() => {
+        eventTime = vi
+          .spyOn(Event.prototype, 'timeStamp', 'get')
+          .mockImplementation(() => performance.now());
+      });
+      afterEach(() => {
+        eventTime?.mockRestore();
+        eventTime = null;
+      });
+
       // A Tall sheet in iOS Safari: a visual viewport, no keyboard geometry
       // API, and a coarse pointer. Its body, from top 100 to bottom 800, holds
       // 800 px of content and the room after it. A reveal's scroll lands at
@@ -3757,15 +3818,82 @@ describe('BottomSheet', () => {
         act(async () => {
           await new Promise(resolve => requestAnimationFrame(resolve));
         });
+      // A blur to nothing decides the hide on the next task, dated at the blur.
+      const afterTheBlur = async () =>
+        act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        });
       const afterTheHide = async () =>
         act(async () => {
           await new Promise(resolve => setTimeout(resolve, 450));
         });
+      // UIKit's keyboard spring lands at the notification's duration.
+      const afterTheShow = afterTheHide;
+
+      it('rides the content up from Safari\u2019s report on UIKit\u2019s keyboard spring, through the layout guide (spec:AST-099 FR8)', async () => {
+        const guide = getKeyboardLayoutGuide(window);
+        const subscribe = vi.spyOn(guide, 'subscribe');
+        const {body, input, report, drawnTop} = renderIOSSheet();
+        expect(subscribe).toHaveBeenCalled();
+        act(() => input.focus());
+        report(500);
+        const {start, curve} = guide.transition;
+        expect(curve).toMatchObject({
+          durationMs: uikitTiming.keyboardNotificationMs,
+          progress: expect.any(Function),
+        });
+        // The room and the scroll land at the report. The content is drawn
+        // where it was, then rises with the keyboard a little each frame, and
+        // lands where the reveal puts it. No frame jumps.
+        expect(body.scrollTop).toBe(248);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(drawnTop(start)).toBeCloseTo(0, 6);
+        const samples = Array.from({length: 25}, (_, frame) =>
+          drawnTop(start + frame * 16),
+        );
+        for (let frame = 1; frame < samples.length; frame += 1) {
+          const step = (samples[frame] ?? 0) - (samples[frame - 1] ?? 0);
+          expect(step).toBeLessThanOrEqual(0.01);
+          expect(step).toBeGreaterThan(-40);
+        }
+        expect(drawnTop(start + uikitTiming.keyboardNotificationMs)).toBe(-248);
+        await afterTheShow();
+        expect(drawnTop()).toBe(-248);
+        subscribe.mockRestore();
+      });
+
+      it('rides once the touch runtime loads, for a sheet that opened before it', async () => {
+        __resetTouchRuntimeForTest();
+        try {
+          const {input, report, drawnTop} = renderIOSSheet();
+          // Safari on iOS's keyboard schedule comes with the runtime.
+          expect(keyboardProfileOf(window)).toBeNull();
+          await act(async () => {
+            await __loadTouchRuntimeForTest();
+          });
+          expect(keyboardProfileOf(window)).toBe('uikit');
+          act(() => input.focus());
+          report(500);
+          const guide = getKeyboardLayoutGuide(window);
+          const {start} = guide.transition;
+          expect(guide.transition).toMatchObject({kind: 'show', to: 300});
+          // The content rises from where it was drawn, on the keyboard's spring.
+          expect(drawnTop(start)).toBeCloseTo(0, 6);
+          expect(drawnTop(start + 100)).toBeLessThan(-1);
+          expect(drawnTop(start + 100)).toBeGreaterThan(-248);
+          await afterTheShow();
+          expect(drawnTop()).toBe(-248);
+        } finally {
+          await __loadTouchRuntimeForTest();
+        }
+      });
 
       it('rides the content down on the keyboard\u2019s spring from the blur, and the report then moves nothing', async () => {
         const {body, content, input, report, drawnTop} = renderIOSSheet();
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         expect(body.scrollTop).toBe(248);
         expect(keyboardInsetOf(body)).toBe(348);
         expect(drawnTop()).toBe(-248);
@@ -3773,7 +3901,7 @@ describe('BottomSheet', () => {
         // Done: the field loses focus to nothing, and the keyboard goes down.
         const blurAt = performance.now();
         act(() => input.blur());
-        await nextFrame();
+        await afterTheBlur();
         // Sampled every 16 ms through the keyboard's slide, the content moves
         // down a little each frame. It lands where the scroll from before the
         // keyboard draws it. No frame jumps.
@@ -3810,7 +3938,7 @@ describe('BottomSheet', () => {
         report(500);
         const settled = drawnTop();
         act(() => input.blur());
-        await nextFrame();
+        await afterTheBlur();
         expect(drawnTop(performance.now() + 450)).toBe(settled);
         report(800);
         expect(keyboardInsetOf(body)).toBe(0);
@@ -3822,8 +3950,9 @@ describe('BottomSheet', () => {
         });
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         act(() => input.blur());
-        await nextFrame();
+        await afterTheBlur();
         // The cross-fade lands the content on a timer, so the samples are
         // read as the frames pass.
         const animator = animatorFor(content);
@@ -3862,6 +3991,7 @@ describe('BottomSheet', () => {
         });
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         const settled = drawnTop();
         act(() => screen.getByLabelText('Picker').focus());
         await nextFrame();
@@ -3910,6 +4040,7 @@ describe('BottomSheet', () => {
           .appendChild(document.createElement('button'));
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         act(() => button.focus());
         expect(document.activeElement).toBe(host);
         await nextFrame();
@@ -3928,6 +4059,7 @@ describe('BottomSheet', () => {
           .appendChild(document.createElement('button'));
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         // The browser runs the blur's frame after focus settles on the button.
         const frames: FrameRequestCallback[] = [];
         vi.mocked(requestAnimationFrame).mockImplementation(callback => {
@@ -3954,6 +4086,7 @@ describe('BottomSheet', () => {
             renderWithHiddenField(kind);
           act(() => input.focus());
           report(500);
+          await afterTheShow();
           const settled = drawnTop();
           focusHiddenField();
           await nextFrame();
@@ -3967,8 +4100,9 @@ describe('BottomSheet', () => {
         const {body, input, report, drawnTop} = renderIOSSheet();
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         act(() => input.blur());
-        await nextFrame();
+        await afterTheBlur();
         // Focus comes back to the field mid-slide, so the keyboard stays.
         act(() => input.focus());
         await nextFrame();
@@ -3984,8 +4118,9 @@ describe('BottomSheet', () => {
             renderWithHiddenField(kind);
           act(() => input.focus());
           report(500);
+          await afterTheShow();
           act(() => input.blur());
-          await nextFrame();
+          await afterTheBlur();
           // Focus moves to a field inside the holder mid-slide, so the
           // keyboard stays.
           focusHiddenField();
@@ -3996,10 +4131,11 @@ describe('BottomSheet', () => {
         },
       );
 
-      it('glides the content to its new place when the keyboard goes while its field keeps focus, as a downward dismissal leaves it', () => {
+      it('glides the content to its new place when the keyboard goes while its field keeps focus, as a downward dismissal leaves it', async () => {
         const {body, input, report, drawnTop} = renderIOSSheet();
         act(() => input.focus());
         report(500);
+        await afterTheShow();
         expect(drawnTop()).toBe(-248);
         // The clock holds still through the report, so the glide starts at
         // `reportAt` however slowly the test runs.
@@ -4012,12 +4148,18 @@ describe('BottomSheet', () => {
         } finally {
           clock.mockRestore();
         }
-        expect(keyboardInsetOf(body)).toBe(0);
-        expect(body.scrollTop).toBe(0);
         // Drawn where it was at the report, then down on the keyboard's spring:
-        // two frames in, it has hardly moved.
+        // two frames in, it has hardly moved. The room and the scroll stay
+        // through the ride.
+        expect(keyboardInsetOf(body)).toBe(348);
         expect(drawnTop(reportAt + 32)).toBeLessThan(-200);
         expect(drawnTop(reportAt + 450)).toBeCloseTo(0, 0);
+        // Once it lands, the room drops and the scroll goes back with the
+        // translate in one commit, so nothing drawn moves.
+        await afterTheHide();
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(body.scrollTop).toBe(0);
+        expect(drawnTop()).toBeCloseTo(0, 0);
       });
     });
 
