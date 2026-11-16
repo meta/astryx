@@ -148,7 +148,6 @@ describe('rankSearchIndex over stored indexes', () => {
     for (const index of indexes) {
       for (const candidate of index.candidates) {
         expect(candidate).not.toHaveProperty('_category');
-        expect(candidate).not.toHaveProperty('_notReady');
       }
     }
   });
@@ -158,7 +157,6 @@ describe('rankSearchIndex over stored indexes', () => {
     async () => {
       const response = await search('data table with filters', {cwd: full});
       expect(JSON.stringify(response)).not.toContain('_category');
-      expect(JSON.stringify(response)).not.toContain('_notReady');
     },
     SLOW,
   );

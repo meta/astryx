@@ -134,8 +134,6 @@ export async function gatherTemplates(cwd) {
       _displayName: t.name,
       _package: t.package ?? CORE_PACKAGE,
       _kind: t.type, // 'page' | 'block'
-      // A page template not ready yet; build reads search without it.
-      ...(t.type === 'page' && t.isReady === false ? {_notReady: true} : {}),
       _resultName: t.dirName,
       _commandName: commandName,
       ...(t.isReady === false ? {_notReady: /** @type {const} */ (true)} : {}),

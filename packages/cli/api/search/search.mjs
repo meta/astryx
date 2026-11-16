@@ -142,6 +142,9 @@ export async function searchCore(query, options = {}) {
   );
 }
 
+/** @param {any} c a gathered candidate @returns {boolean} */
+const notReadyPage = c => c._notReady === true && c._kind === 'page';
+
 /** @type {WeakMap<object, object>} each gathered catalog without its not-ready page templates */
 const readyOnly = new WeakMap();
 
@@ -155,10 +158,10 @@ const readyOnly = new WeakMap();
  * @returns {T}
  */
 function withoutNotReady(catalog, ready) {
-  if (!ready || !catalog.all.some(c => c._notReady)) return catalog;
+  if (!ready || !catalog.all.some(notReadyPage)) return catalog;
   let narrowed = readyOnly.get(catalog);
   if (!narrowed) {
-    narrowed = {...catalog, all: catalog.all.filter(c => !c._notReady)};
+    narrowed = {...catalog, all: catalog.all.filter(c => !notReadyPage(c))};
     readyOnly.set(catalog, narrowed);
   }
   return /** @type {T} */ (narrowed);
