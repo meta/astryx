@@ -279,11 +279,11 @@ function checkNavIcon(check: Check, icon: NavIconRead, label: string) {
   check(icon.borderRadius === '50%', `${label} radius ${icon.borderRadius}`);
   check(
     same(icon.background, icon.tokens.accent),
-    `${label} background ${icon.background} is not the accent ${icon.tokens.accent}`,
+    `${label} background ${icon.background.join(',')} is not the accent ${icon.tokens.accent.join(',')}`,
   );
   check(
     same(icon.color, icon.tokens.onAccent),
-    `${label} color ${icon.color} is not on-accent ${icon.tokens.onAccent}`,
+    `${label} color ${icon.color.join(',')} is not on-accent ${icon.tokens.onAccent.join(',')}`,
   );
   check(icon.iconBox != null, `${label} has no icon`);
   if (icon.iconBox != null) {

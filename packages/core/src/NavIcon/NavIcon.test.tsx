@@ -16,7 +16,7 @@ import * as stylex from '@stylexjs/stylex';
 import {NavIcon} from './NavIcon';
 
 const overrides = stylex.create({
-  squared: {borderRadius: '4px'},
+  inline: {display: 'inline-flex'},
 });
 
 describe('NavIcon', () => {
@@ -81,11 +81,11 @@ describe('NavIcon host element', () => {
       <NavIcon
         icon={<span>Icon</span>}
         data-testid="nav-icon"
-        xstyle={overrides.squared}
+        xstyle={overrides.inline}
       />,
     );
-    expect(getComputedStyle(screen.getByTestId('nav-icon')).borderRadius).toBe(
-      '4px',
+    expect(getComputedStyle(screen.getByTestId('nav-icon')).display).toBe(
+      'inline-flex',
     );
   });
 
