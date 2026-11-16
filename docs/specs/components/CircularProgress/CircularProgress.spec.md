@@ -10,7 +10,13 @@ approved_by: null
 approved_at: null
 owners: [nynexman4464]
 review_triggers: [public-api, behavior, layout, theming, accessibility]
-verified_by: [packages/lab/src/CircularProgress/CircularProgress.test.tsx]
+verified_by:
+  [
+    packages/lab/src/CircularProgress/CircularProgress.test.tsx,
+    packages/lab/src/CircularProgress/__tests__/CircularProgress.a11y.test.tsx,
+    packages/lab/src/CircularProgress/__tests__/CircularProgress.a11y.chromium.spec.ts,
+    packages/lab/src/CircularProgress/__tests__/CircularProgressMotion.a11y.chromium.spec.ts,
+  ]
 modules: []
 families: []
 design_specs: []
@@ -31,7 +37,7 @@ system_specs: []
 | Behavior                | A determinate ring fills clockwise from the top in proportion to `value / max`, clamped to the track; an indeterminate ring turns as Spinner does. Center content shows inside the ring.                                                       |
 | End-user impact         | A person sees how far along a task or score is as a ring, and assistive technology reads it as a progress bar with its value.                                                                                                                  |
 | Builder impact          | The same value, label and variant vocabulary as ProgressBar, so a product switches between a bar and a ring without relearning the API.                                                                                                        |
-| Compatibility/readiness | Lab. The record describes the lab component as it graduates to core. FR5 gap: no size above 64 px.                                                                                                                                             |
+| Compatibility/readiness | Additive core export with the lab component's API. FR5 gap: no size above 64 px. AR2 gap: the value label is read twice.                                                                                                                       |
 | Review checks           | Reject a ring without an accessible name, a fill outside the track, a determinate value announced on an indeterminate ring, or motion that ignores reduced-motion.                                                                             |
 | Governing rules         | `component:ProgressBar` for the shared value vocabulary; `component:Spinner` for the indeterminate rotation.                                                                                                                                   |
 
@@ -50,7 +56,7 @@ usage lives in `CircularProgress.doc.mjs`.
 - Released default preserved: not yet released in core; lab defaults carry over.
 - Compatibility class: additive (a new core export). Lab keeps its copy until removal.
 - Controlled/uncontrolled behavior: controlled; `value` is the caller's.
-- Migration decision: DEC-1.
+- Migration decision: DEC-1. The core export keeps the lab API, so a caller moves by changing the import.
 
 ## Ownership boundary
 
@@ -68,24 +74,24 @@ usage lives in `CircularProgress.doc.mjs`.
 
 ## Public concepts
 
-| Concept        | Closed values or states                            | Meaning                                                                      | Availability by variant/orientation/state        | Default  | Owner                        | Stability    | Invalid-value behavior           |
-| -------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ | -------- | ---------------------------- | ------------ | -------------------------------- |
-| Size           | `sm` (32 px), `md` (48 px), `lg` (64 px)           | The ring's diameter; each step has its own stroke width.                     | Every state                                      | `md`     | `component:CircularProgress` | experimental | TypeScript rejects other values. |
-| Variant        | `accent`, `success`, `warning`, `error`, `neutral` | The fill's semantic color; themes add variants by module augmentation.       | Determinate and indeterminate                    | `accent` | `component:CircularProgress` | experimental | TypeScript rejects other values. |
-| Center content | `children`, the value label, or nothing            | What shows inside the ring; `children` take precedence over the value label. | Determinate; indeterminate shows `children` only | nothing  | `component:CircularProgress` | experimental | Not applicable                   |
-| Indeterminate  | on, off                                            | Whether the amount is unknown; the ring turns and announces no value.        | Every size and variant                           | off      | `component:Spinner`          | experimental | Not applicable                   |
+| Concept        | Closed values or states                            | Meaning                                                                      | Availability by variant/orientation/state        | Default  | Owner                        | Stability | Invalid-value behavior           |
+| -------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------ | -------- | ---------------------------- | --------- | -------------------------------- |
+| Size           | `sm` (32 px), `md` (48 px), `lg` (64 px)           | The ring's diameter; each step has its own stroke width.                     | Every state                                      | `md`     | `component:CircularProgress` | stable    | TypeScript rejects other values. |
+| Variant        | `accent`, `success`, `warning`, `error`, `neutral` | The fill's semantic color; themes add variants by module augmentation.       | Determinate and indeterminate                    | `accent` | `component:CircularProgress` | stable    | TypeScript rejects other values. |
+| Center content | `children`, the value label, or nothing            | What shows inside the ring; `children` take precedence over the value label. | Determinate; indeterminate shows `children` only | nothing  | `component:CircularProgress` | stable    | Not applicable                   |
+| Indeterminate  | on, off                                            | Whether the amount is unknown; the ring turns and announces no value.        | Every size and variant                           | off      | `component:CircularProgress` | stable    | Not applicable                   |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                    | Basis                       | Draft review state |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------ |
-| FR1 | A determinate ring fills clockwise from the top in proportion to `value / max`. `value` clamps to `[0, max]`; a `max` of 0 or less fills nothing.                      | Current lab behavior        | verify             |
-| FR2 | The fill draws on a full track of the same diameter and stroke width, with rounded ends that never overshoot the track at 0% or 100%.                                  | Current lab behavior        | verify             |
-| FR3 | `hasValueLabel` shows the formatted value in the center (default: the rounded percentage); `formatValueLabel` replaces the format. `children` replace the value label. | Current lab behavior        | verify             |
-| FR4 | `isIndeterminate` turns the ring with Spinner's rotor and its reduced-motion behavior, ignores `value` and `hasValueLabel`, and still shows `children`.                | Current lab behavior; DEC-1 | settled            |
-| FR5 | `size` sets the diameter and stroke width from a fixed scale. FR5 gap: the scale ends at 64 px, so a hero gauge (about 160 px) has no size.                            | Current lab behavior; OQ1   | human decision     |
-| FR6 | `isDisabled` draws the ring and its text in the disabled colors and keeps the value.                                                                                   | Current lab behavior        | verify             |
-| FR7 | The fill color comes from `variant` through theme tokens; a theme adds a variant through `CircularProgressVariantMap`.                                                 | Current lab behavior        | verify             |
+| ID  | Candidate invariant                                                                                                                                                                                               | Basis                     | Draft review state |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ------------------ |
+| FR1 | A determinate ring fills clockwise from the top in proportion to `value / max`. `value` clamps to `[0, max]`; a `max` that is 0, negative or not finite fills nothing and reports 0 of 0.                         | Current lab behavior      | verify             |
+| FR2 | The fill draws on a full track of the same diameter and stroke width, with rounded ends that never overshoot the track at 0% or 100%.                                                                             | Current lab behavior      | verify             |
+| FR3 | `hasValueLabel` (default off) shows the formatted value in the center (default format: the rounded percentage); `formatValueLabel` replaces the format. `children` replace the value label.                       | Current lab behavior      | verify             |
+| FR4 | `isIndeterminate` turns the ring at Spinner's speed and arc, slows it under reduced motion as Spinner does, ignores `value` and `hasValueLabel`, and still shows `children`.                                      | Current lab behavior      | verify             |
+| FR5 | `size` sets the diameter and stroke width from a fixed scale. FR5 gap: the scale ends at 64 px, so a hero gauge (about 160 px) has no size.                                                                       | Current lab behavior; OQ1 | human decision     |
+| FR6 | `isDisabled` draws the ring and its text in the disabled colors and keeps the value. It is visual only: assistive technology hears the label and value, so the label states why (for example, "Upload canceled"). | Current lab behavior      | verify             |
+| FR7 | The fill color comes from `variant` through theme tokens; a theme adds a variant through `CircularProgressVariantMap`.                                                                                            | Current lab behavior      | verify             |
 
 ### Representative states
 
@@ -99,11 +105,15 @@ usage lives in `CircularProgress.doc.mjs`.
 ## Accessibility contract
 
 - **AR1 — A ring is a named progress bar.** The ring has role `progressbar`, is
-  named by `label` (visually hidden by default), and announces `aria-valuenow`,
-  `aria-valuemin`, `aria-valuemax` and `aria-valuetext` when determinate, and
-  none of them when indeterminate.
-- **AR2 — Decoration is hidden.** The SVG track and fill are hidden from
-  assistive technology; center content is read as part of the page.
+  named by `label` (visually hidden by default), and when determinate announces
+  the clamped value as `aria-valuenow`, 0 and the maximum as `aria-valuemin` and
+  `aria-valuemax`, and `formatValueLabel`'s text as `aria-valuetext`. When
+  indeterminate it announces none of them.
+- **AR2 — Each thing is read once.** The track and fill are hidden from
+  assistive technology. Center content sits beside the progress bar element,
+  not inside it, so `children` are read in page order. The value label repeats
+  `aria-valuetext`, so it is hidden from assistive technology. AR2 gap: the
+  value label is exposed, so the value is read twice.
 - **AR3 — Color is not the only signal.** A `variant` that carries status needs
   text nearby, such as the value label, `children` or the label shown.
 
@@ -125,12 +135,14 @@ The component implements design requirements without copying their rationale.
 
 ## Verification map
 
-| Contract | Verification                                                                            | Representative states                           | Mutation or failure expectation                                                         | Audit section                          |
-| -------- | --------------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------- |
-| FR1–FR3  | `CircularProgress.test.tsx`                                                             | 0/50/100%, `max` 0, value label, `children`     | A wrong fill fraction, an overshoot, or a lost label fails                              | `audit:CircularProgress/behavior`      |
-| FR4, AR1 | `CircularProgress.test.tsx`, `CircularProgressMotion.a11y.chromium.spec.ts`             | Indeterminate, reduced motion                   | A value announced while indeterminate, or full-speed motion under reduced motion, fails | `audit:CircularProgress/motion`        |
-| AR1, AR2 | `__tests__/CircularProgress.a11y.test.tsx` and `CircularProgress.a11y.chromium.spec.ts` | Each state in `CircularProgress.a11y.states.ts` | A missing name or value attribute, or an exposed SVG, fails                             | `audit:CircularProgress/accessibility` |
-| FR5      | Pending: OQ1                                                                            | Each size                                       | A size off the scale fails                                                              | None                                   |
+| Contract | Verification                                                                            | Representative states                                  | Mutation or failure expectation                                                               | Audit section                          |
+| -------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1–FR3  | `CircularProgress.test.tsx`                                                             | 0/50/100%, `max` 0, value label, `children`            | A wrong fill fraction, an overshoot, or a lost label fails                                    | `audit:CircularProgress/behavior`      |
+| FR4, AR1 | `CircularProgress.test.tsx`, `CircularProgressMotion.a11y.chromium.spec.ts`             | Indeterminate, reduced motion                          | A value announced while indeterminate, or full-speed motion under reduced motion, fails       | `audit:CircularProgress/motion`        |
+| AR1, AR2 | `__tests__/CircularProgress.a11y.test.tsx` and `CircularProgress.a11y.chromium.spec.ts` | Each state in `CircularProgress.a11y.states.ts`        | A missing name or value attribute, or an exposed SVG, fails                                   | `audit:CircularProgress/accessibility` |
+| FR5      | Pending: OQ1                                                                            | Each size                                              | A size off the scale fails                                                                    | `audit:CircularProgress/behavior`      |
+| FR6, FR7 | `CircularProgress.test.tsx` variant and disabled cases                                  | Each variant; disabled with a value label              | A variant on the wrong token, or a lost value when disabled, fails                            | `audit:CircularProgress/theming`       |
+| AR2, AR3 | `__tests__/CircularProgress.a11y.test.tsx`                                              | Value label; `children`; a status variant with no text | A value read twice, unread `children`, or status by color alone in a documented example fails | `audit:CircularProgress/accessibility` |
 
 ## Decision log
 
