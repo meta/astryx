@@ -956,44 +956,12 @@ function revealFocusedItem(event: React.FocusEvent<HTMLElement>): void {
   ) {
     return;
   }
-  const track = event.currentTarget;
-  const content = track.firstElementChild;
+  const content = event.currentTarget.firstElementChild;
   let item: Element | null = event.target;
   while (item != null && item.parentElement !== content) {
     item = item.parentElement;
   }
-  if (item != null) {
-    scrollClearOfFades(track, item);
-  }
-}
-
-/**
- * Scrolls `track` the least distance that puts `item` inside its scroll
- * padding. The track sets its scroll offset itself: WebKit often drops a
- * scrollIntoView on this track, and its own focus scroll, so the item stays
- * out of view.
- */
-function scrollClearOfFades(track: HTMLElement, item: Element): void {
-  const style = getComputedStyle(track);
-  const trackBox = track.getBoundingClientRect();
-  const itemBox = item.getBoundingClientRect();
-  const visibleLeft =
-    trackBox.left + (parseFloat(style.scrollPaddingLeft) || 0);
-  const visibleRight =
-    trackBox.right - (parseFloat(style.scrollPaddingRight) || 0);
-  let distance = 0;
-  if (itemBox.left < visibleLeft) {
-    distance = itemBox.left - visibleLeft;
-  } else if (itemBox.right > visibleRight) {
-    // An item wider than the visible part keeps its left edge in view.
-    distance = Math.min(
-      itemBox.right - visibleRight,
-      itemBox.left - visibleLeft,
-    );
-  }
-  if (distance !== 0) {
-    track.scrollLeft += distance;
-  }
+  item?.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
 }
 
 /**
