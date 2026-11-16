@@ -17,7 +17,6 @@ export const doc = {
     ClipboardDocumentCheckIcon: 'clipboard',
     FunnelIcon: 'funnel',
     InboxIcon: 'inbox',
-    InformationCircleIcon: 'info',
     MagnifyingGlassIcon: 'search',
     PlusIcon: 'add',
   },
