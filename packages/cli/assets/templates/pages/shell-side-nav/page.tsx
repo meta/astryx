@@ -157,7 +157,8 @@ function ConversationItem({
         label={label}
         href="#"
         isSelected={isSelected}
-        endContent={
+        endContent={<StatusDot variant={status} label={statusLabel} />}
+        actions={
           showMenu ? (
             <MoreMenu
               size="sm"
@@ -182,9 +183,7 @@ function ConversationItem({
                 },
               ]}
             />
-          ) : (
-            <StatusDot variant={status} label={statusLabel} />
-          )
+          ) : null
         }
       />
       {confirm.element}
