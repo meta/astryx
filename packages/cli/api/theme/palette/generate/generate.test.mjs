@@ -75,7 +75,11 @@ describe('themePaletteGenerate', () => {
   });
 
   it('a config keeps the recipe it records', () => {
-    for (const recipe of ['astryx-oklch-v1', 'astryx-oklch-v2']) {
+    for (const recipe of [
+      'astryx-oklch-v1',
+      'astryx-oklch-v2',
+      'astryx-oklch-v3',
+    ]) {
       const cwd = fixture();
       const file = path.join(cwd, 'palette.config.json');
       fs.writeFileSync(
