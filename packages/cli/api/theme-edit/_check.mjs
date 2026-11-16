@@ -4870,6 +4870,38 @@ function checkOne(
         },
       );
   }
+  // A part drawn under an invisible native input (a checkbox's box, a
+  // switch): the input takes the pointer and the focus, so a hover, press
+  // or focus state on the part's own element never applies. Named with the
+  // part that holds the input, where those states land.
+  if (
+    !unset &&
+    s.on &&
+    /^(hover|active|focus|focus-visible|focus-within)$/.test(String(s.state))
+  ) {
+    const all = partsOf(ctx, s);
+    const under = all.filter(t => ctx.C.MAP[t]?.underInput != null);
+    if (under.length && under.length === all.length) {
+      const holders = [
+        ...new Set(under.map(t => ctx.C.MAP[t]?.underInput).filter(Boolean)),
+      ];
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `${under.join(', ')} ${under.length > 1 ? 'are' : 'is'} drawn under an invisible input that takes the pointer and the focus, so --state ${s.state} on ${under.length > 1 ? 'them' : 'it'} would never apply${holders.length ? `; the input is inside ${holders.join(', ')}, where ${s.state} lands` : ''}.`,
+        {
+          // (A token: set on the part with no state, it is what Core reads
+          // when it paints that state from the input, the focus ring's
+          // color or the hover tint; a property would paint at rest.)
+          run: [
+            ...(String(thing).startsWith('--')
+              ? [setLine(slug, thing, v, {...s, state: undefined}, unset)]
+              : []),
+            `${HOW} ${quoteCommandArgument(String(s.on))}`,
+          ],
+        },
+      );
+    }
+  }
   // A part whose styled element is a wrapper (a text input's box) shows
   // focus only through focus-within: focus or focus-visible there would
   // never apply. Named the way `how` names it.

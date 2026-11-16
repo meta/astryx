@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 24;
+const PART_DATA_VERSION = 25;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -59,6 +59,9 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string} [underInput] - drawn under an invisible native input
+ *   laid over it (a checkbox's box), which takes its pointer and focus: the
+ *   part that holds that input (empty when none is themed)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
  * @property {Record<string, string[]>} [held] - the tokens the parts inside it draw with there, at rest, and the properties they set with each
  * @property {string[]} [line] - the properties a line inside it with no target of its own draws (a divider's line), recorded as the part's: a setting on the part's own element does not reach them
@@ -1147,9 +1150,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1176,7 +1179,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       continue;
     }
     if (close) {
-      if (stack.length > 1) stack.pop();
+      if (stack.length > 1) {
+        const done = /** @type {typeof stack[number]} */ (stack.pop());
+        // (A native input laid over its siblings, invisible, takes the
+        // pointer and the focus for them: a checkbox's box draws under
+        // it, so its own :hover or :focus never applies. The part that
+        // holds the input is where those states land.)
+        if (done.input)
+          for (const k of done.kids ?? [])
+            map[k].underInput ??= done.target ?? stack.at(-1)?.target ?? '';
+      }
       continue;
     }
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
@@ -1410,6 +1422,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           ...context,
         ].join(',')
       : parent.cond;
+    if (
+      tag.toLowerCase() === 'input' &&
+      own.some(
+        d =>
+          (d.prop === 'opacity' && /^0(?:\.0+)?$/.test(d.value.trim())) ||
+          (d.prop === 'position' && d.value.trim() === 'absolute'),
+      )
+    )
+      parent.input = true;
+    else if (ownsTarget)
+      // (Into each element it sits in, up to the nearest themed one: the
+      // box inside a wrapper with no box of its own, beside the input.)
+      for (let i = stack.length - 1; i >= 1; i--) {
+        (stack[i].kids ??= []).push(...named.map(c => c.slice(7)));
+        if (stack[i].owns) break;
+      }
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({
         env,
@@ -1418,6 +1446,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         fg,
         bg,
         cond: condHere,
+        owns: ownsTarget,
       });
   }
   // A part that holds other parts (a layout, an outline, a slider's
@@ -1463,6 +1492,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       ),
       contains: [...v.contains],
       tags: [...v.tags],
+      ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),
       ...(v.mediaSides?.size ? {mediaSides: [...v.mediaSides].sort()} : {}),
