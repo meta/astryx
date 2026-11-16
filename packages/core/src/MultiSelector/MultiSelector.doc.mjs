@@ -324,7 +324,7 @@ export const docs = {
           name: 'labelTooltip',
           type: 'string',
           description:
-            'Tooltip text shown by an info icon at the end of the label. No effect inside an InputGroup or with renderTrigger, where MultiSelector renders no label of its own.',
+            "Tooltip text for an info icon at the end of the label; it has no effect inside an InputGroup (set the group's labelTooltip) or with renderTrigger, where MultiSelector renders no label of its own.",
         },
         {
           name: 'isOptional',
@@ -440,7 +440,7 @@ export const docs = {
           name: 'ref',
           type: 'Ref<HTMLElement>',
           description:
-            "Ref to the trigger: the button that carries the combobox role, the accessible name, and the value. With renderTrigger, the caller's control.",
+            "Ref to the trigger button, or with renderTrigger to the caller's control. The trigger shows the value and carries the combobox role, except in an editable field with hasSearch, where the search input is the combobox.",
         },
         {
           name: 'containerXstyle',
@@ -585,7 +585,7 @@ export const docsZh = {
         isRequired: '将字段标记为必填。',
         isLoading: '在触发器中显示加载旋转器。',
         labelTooltip:
-          '标签末尾信息图标显示的工具提示文本。在 InputGroup 内或使用 renderTrigger 时无效，因为此时 MultiSelector 不渲染自己的标签。',
+          '标签末尾信息图标显示的工具提示文本；在 InputGroup 内（请设置该组的 labelTooltip）或使用 renderTrigger 时无效，因为此时 MultiSelector 不渲染自己的标签。',
         indicatorPosition:
           '复选框位于选项行的哪一侧。end 将其推到行的远端，全选行也一样。',
         width:
@@ -608,7 +608,7 @@ export const docsZh = {
         onFocus: '触发器的焦点处理函数，在选择器自身的焦点处理之前运行。',
         onKeyDown:
           '触发器的按键处理函数，在内置键盘模型之后运行；该模型处理并取消的按键不会传给它。',
-        ref: '指向触发器的 ref：承载 combobox 角色、无障碍名称和值的按钮；使用 renderTrigger 时为调用方的控件。',
+        ref: '指向触发按钮的 ref；使用 renderTrigger 时指向调用方的控件。触发按钮显示当前值并承载 combobox 角色；在启用 hasSearch 的可编辑字段中，combobox 角色由搜索输入承载。',
         containerXstyle:
           '字段容器（标签、控件和状态整体）的 StyleX 样式。在 InputGroup 内或 `horizontal-labels` FormLayout 中无效。不接受根级 xstyle、className 和 style。',
         containerClassName: '字段容器的类名，作用目标同 containerXstyle。',
@@ -764,7 +764,7 @@ export const docsDense = {
         isRequired: 'marks required',
         isLoading: 'spinner in trigger',
         labelTooltip:
-          'info-icon tooltip at end of label; no effect in InputGroup or w/ renderTrigger (no own label)',
+          "info-icon tooltip at end of label; no effect in InputGroup (use the group's labelTooltip) or w/ renderTrigger",
         indicatorPosition: 'checkbox edge of option row: start or end',
         width: 'field width (number = px); sizes label, control, status',
         startIcon: 'icon at start of trigger',
@@ -786,7 +786,7 @@ export const docsDense = {
         onFocus: 'trigger focus; runs before built-in focus handling',
         onKeyDown:
           'trigger keys; runs after the built-in keyboard model, skipped for keys it handles and cancels',
-        ref: "trigger element; with renderTrigger, the caller's control",
+        ref: "trigger button; with renderTrigger, the caller's control; w/ hasSearch (editable) the search input is the combobox",
         containerXstyle:
           'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
         containerClassName: 'Class name for the field container.',
