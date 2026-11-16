@@ -9,7 +9,7 @@ export const doc = {
   displayName: 'themePaletteGenerate()',
   summary: 'Generate an author-reviewable palette candidate from JSON input.',
   description:
-    'Runs the recipe the request names: astryx-oklch-v1 when it names none, so a request or config made before v2 keeps its colors, or astryx-oklch-v2, whose pale stops follow the vibrancy and each seed\'s own chroma. New palettes name v2: the theme editor records it in each config it makes, and a new config should too. A config keeps the recipe it records; to pin one, record "recipe": "astryx-oklch-v1" (or v2) in the palette config, against an explicit generation request. ' +
+    'Runs the recipe the request names: astryx-oklch-v1 when it names none, so a request or config made before v2 keeps its colors; astryx-oklch-v2, whose pale stops follow the vibrancy and each seed\'s own chroma; or astryx-oklch-v3, v2 with a dusty seed\'s pale tints kept at or below its own chroma. New palettes name the newest, v3: the theme editor records it in each config it makes, and a new config should too. A config keeps the recipe it records; to pin one, record "recipe": "astryx-oklch-v1" (or v2, v3) in the palette config, against an explicit generation request. ' +
     'It always emits standalone `black` and `white` values that generated TypeScript can import ' +
     'directly into semantic theme tokens; those names are reserved from tonal family IDs. It also ' +
     'defaults family ramps to 21 stops from 0 through 100, repeating exact black and white ' +

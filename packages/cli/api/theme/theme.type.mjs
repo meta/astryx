@@ -237,11 +237,13 @@
 
 /**
  * @typedef {object} TonalPaletteGenerationInput
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} [recipe] The recipe to
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} [recipe] The recipe to
  * run: astryx-oklch-v1 when none is named, so a request or config made
  * before v2 keeps its colors; astryx-oklch-v2 makes pale stops
- * follow the vibrancy and the seed's own chroma. New palettes name v2 (the
- * theme editor records it); a config pins its recipe by naming it.
+ * follow the vibrancy and the seed's own chroma; astryx-oklch-v3 is v2 with
+ * a dusty seed's pale tints kept at or below its own chroma. New palettes
+ * name the newest, v3 (the theme editor records it); a config pins its
+ * recipe by naming it.
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
  * (default) to 100 (most vivid).
@@ -263,7 +265,7 @@
  * @typedef {object} TonalPaletteCandidate
  * @property {1} schemaVersion
  * @property {'candidate'} status
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {'#000000'} black Exact solid black for theme authoring outside a tonal family.
  * @property {'#ffffff'} white Exact solid white for theme authoring outside a tonal family.
  * @property {number[]} stops Canonical order for iterating the palette's stop lookup maps.
@@ -305,7 +307,7 @@
 /**
  * The request as the generator resolved it, with every default filled in.
  * @typedef {object} TonalPaletteNormalizedRequest
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
@@ -322,7 +324,7 @@
  * its request without rerunning generation.
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
- * @property {'astryx-oklch-v1' | 'astryx-oklch-v2'} recipe Recipe that produced the candidate.
+ * @property {'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3'} recipe Recipe that produced the candidate.
  * @property {'palette-generator-v1'} generatorVersion Generator
  * implementation that ran the recipe.
  * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
@@ -341,7 +343,7 @@
  * astryx --json theme palette generate <config>
  * @typedef {object} ThemePaletteGenerateResponse
  * @property {'theme.palette.generate'} type
- * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
+ * @property {{recipe: 'astryx-oklch-v1' | 'astryx-oklch-v2' | 'astryx-oklch-v3', status: 'candidate', familyCount: number, stopCount: number, modes: string[], output: string | null, receipt: string | null, preview: string | null, written: boolean, reason: 'exists' | null, candidate: TonalPaletteCandidate, generationReceipt: TonalPaletteGenerationReceipt}} data
  */
 
 // Make this a module so the @typedefs above are importable as types via
