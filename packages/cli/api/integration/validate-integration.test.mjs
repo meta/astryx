@@ -486,6 +486,42 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     );
   });
 
+  it('scans every file of a package with many generated files', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {manifest: 'export default {};\n'});
+    const generated = path.join(pkgDir, 'src', 'generated');
+    fs.mkdirSync(generated, {recursive: true});
+    for (let index = 0; index < 6_000; index++) {
+      fs.writeFileSync(
+        path.join(generated, `Icon${index}.js`),
+        'export default 1;\n',
+      );
+    }
+    // Sorted after every generated file, so a scan that stops early misses it.
+    fs.mkdirSync(path.join(pkgDir, 'src', 'zz'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'src', 'zz', 'orphan.doc.mjs'),
+      `export default ${JSON.stringify({
+        type: 'generic',
+        name: 'orphan',
+        title: 'Orphan',
+        description: 'Outside every root.',
+        sections: [
+          {title: 'Overview', content: [{type: 'prose', text: 'Orphan.'}]},
+        ],
+      })};\n`,
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    const unreachable = byCode(result.issues, 'unreachable_contribution');
+    expect(unreachable).toHaveLength(1);
+    expect(unreachable[0].message).toContain('src/zz/orphan.doc.mjs');
+    expect(result.issues.filter(issue => issue.severity === 'warning')).toEqual(
+      unreachable,
+    );
+  });
+
   it('never executes unreachable metadata while diagnosing it', async () => {
     const pkgDir = path.join(tmpDir, 'pkg');
     const marker = path.join(tmpDir, 'executed');
