@@ -12,7 +12,7 @@
 
 import {act, lazy, Suspense, type ReactNode} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {hydrateRoot, type Root} from 'react-dom/client';
+import {createRoot, hydrateRoot, type Root} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {Button} from '../Button/Button';
 import {PRESSED_ATTRIBUTE} from './pressFeedback';
@@ -96,6 +96,74 @@ describe('press feedback during partial hydration (AST-013 FR9)', () => {
     fingerDown(menu);
     expect(menu).toHaveAttribute(PRESSED_ATTRIBUTE, 'on');
     fingerUp(menu);
+  });
+});
+
+describe('press feedback on a root with no hydrated element around the surface', () => {
+  it('paints no surface in a still-loading boundary directly under the root', async () => {
+    const tree = (content: ReactNode) => (
+      <>
+        <Button label="Menu" onClick={() => {}} />
+        <Suspense fallback={null}>{content}</Suspense>
+      </>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree(<Late />));
+    document.body.append(container);
+    const LateCode = lazy(async () => {
+      const module = await new Promise<{default: typeof Late}>(() => {});
+      return module;
+    });
+    await act(async () => {
+      root = hydrateRoot(container, tree(<LateCode />));
+    });
+    const [, save] = container.querySelectorAll('button');
+    fingerDown(save);
+    expect(save).not.toHaveAttribute(PRESSED_ATTRIBUTE);
+    fingerUp(save);
+  });
+
+  it('paints no surface in a root whose only content is a still-loading boundary', async () => {
+    const tree = (content: ReactNode) => (
+      <Suspense fallback={null}>{content}</Suspense>
+    );
+    // A hydrated surface elsewhere keeps the controller installed.
+    const other = document.createElement('div');
+    document.body.append(other);
+    const otherRoot = createRoot(other);
+    act(() => otherRoot.render(<Button label="Menu" onClick={() => {}} />));
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree(<Late />));
+    document.body.append(container);
+    const LateCode = lazy(async () => {
+      const module = await new Promise<{default: typeof Late}>(() => {});
+      return module;
+    });
+    await act(async () => {
+      root = hydrateRoot(container, tree(<LateCode />));
+    });
+    const save = container.querySelector('button')!;
+    fingerDown(save);
+    expect(save).not.toHaveAttribute(PRESSED_ATTRIBUTE);
+    fingerUp(save);
+    act(() => otherRoot.unmount());
+  });
+
+  it('paints a surface where React sets no keys around it, as before the check', () => {
+    // An installed controller, then a pressable outside any React root.
+    const other = document.createElement('div');
+    document.body.append(other);
+    const otherRoot = createRoot(other);
+    act(() => otherRoot.render(<Button label="Menu" onClick={() => {}} />));
+    const plain = document.createElement('div');
+    plain.innerHTML =
+      '<button type="button" data-astryx-pressable="">Plain</button>';
+    document.body.append(plain);
+    const button = plain.querySelector('button')!;
+    fingerDown(button);
+    expect(button).toHaveAttribute(PRESSED_ATTRIBUTE, 'on');
+    fingerUp(button);
+    act(() => otherRoot.unmount());
   });
 });
 
