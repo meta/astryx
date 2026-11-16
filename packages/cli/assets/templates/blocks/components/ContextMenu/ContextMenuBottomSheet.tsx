@@ -48,7 +48,7 @@ export default function ContextMenuBottomSheet() {
           flexDirection: 'column',
           gap: '8px',
           padding: '32px',
-          border: '1px solid #d1d5db',
+          border: '1px solid var(--color-border-emphasized)',
           borderRadius: '12px',
         }}>
         <strong>Quarterly plan</strong>
