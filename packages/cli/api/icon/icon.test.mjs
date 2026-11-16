@@ -591,4 +591,62 @@ describe('a word matches whole words (FR6)', () => {
     // Three letters still find a part of a word.
     expect(answer(set, 'ext')).toEqual(['next-page', 'text']);
   });
+
+  it('answers a phrase no icon matches as a whole by the words each icon carries', () => {
+    const set = setOf([
+      {id: 'copy'},
+      {id: 'clipboard'},
+      {id: 'clipboard-copy'},
+      {id: 'house'},
+    ]);
+    const ranked = rankIcons([set], 'copy button clipboard icon');
+    // No icon carries `button`, so it counts for nothing.
+    expect(ranked[0]).toMatchObject({
+      id: 'clipboard-copy',
+      score: 20,
+      reason: 'words "copy", "clipboard"',
+    });
+    expect(answer(set, 'copy button clipboard icon')).toEqual([
+      'clipboard-copy',
+      'clipboard',
+      'copy',
+    ]);
+  });
+
+  it('weighs a word by how few icons carry it, so the glyph outweighs a common word', () => {
+    const set = setOf([
+      {id: 'circle-check'},
+      {id: 'circle-x'},
+      {id: 'circle-plus'},
+      {id: 'info'},
+    ]);
+    expect(answer(set, 'info circle tooltip')[0]).toBe('info');
+    // Equal weights keep the icon whose id asks for fewer other words first.
+    expect(
+      answer(setOf([{id: 'lock-open'}, {id: 'lock'}]), 'lock button'),
+    ).toEqual(['lock', 'lock-open']);
+  });
+
+  it('counts the words of a definition the icon is mapped to, and their plural or singular', () => {
+    const set = setOf([{id: 'trash'}, {id: 'pencil'}, {id: 'stars'}], {
+      delete: 'trash',
+    });
+    expect(answer(set, 'delete row button')).toEqual(['trash']);
+    expect(answer(set, 'star rating widget')).toEqual(['stars']);
+  });
+
+  it('leaves every answered query as it was: word matches come only when nothing else answers', () => {
+    const set = setOf([
+      {id: 'arrow-up-to-line'},
+      {id: 'arrow-up'},
+      {id: 'line'},
+    ]);
+    expect(rankIcons([set], 'arrow up to line')[0]).toMatchObject({
+      id: 'arrow-up-to-line',
+      score: 90,
+    });
+    // One word that nothing answers stays unanswered.
+    expect(answer(set, 'zebra')).toEqual([]);
+    expect(answer(set, 'zebra stripes')).toEqual([]);
+  });
 });

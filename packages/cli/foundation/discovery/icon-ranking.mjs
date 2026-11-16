@@ -12,6 +12,8 @@
  *    40  a partial match: the id or a word contains the query (three
  *        letters or more), or every word of the query starts one of the
  *        icon's words or id parts
+ *    20  a word match: nothing above answers a query of several words, and
+ *        the icon carries one or more of its words (below)
  *
  * A word matches a whole word: a word's plural or singular (`stars` for
  * `star`) is an exact match, while a longer word that only starts with it
@@ -21,6 +23,18 @@
  * whole word are the words that only phrase it (`go`, `the`, `icon`) left
  * out of a query of several words, so `go home` asks for `home` while
  * `arrow up to line` still names `arrow-up-to-line`.
+ *
+ * Agents ask for a glyph in a phrase (`copy button clipboard`), and often no
+ * icon carries every word. When nothing answers a query of several words,
+ * as typed or without its filler words, each icon that carries one or more
+ * of its words is a word match. An icon carries a word when the word, or its
+ * plural or singular, is one of its id parts, a part of one of its words, or
+ * a part of a word of a definition the set maps it for. A word weighs more
+ * the fewer searched icons carry it, so the word that names the glyph
+ * outweighs a common one, and a word no icon carries counts for nothing.
+ * Word matches rank by the weight of the words they carry; equal weights
+ * keep set order, then the icon whose id holds fewer words the query does
+ * not ask for, then id order.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -351,7 +365,9 @@ export function withDefinitionWords(icon, definitions, lookup) {
 /**
  * Every icon in `sets` that answers the query, ranked. The query is
  * scored as typed; when nothing answers it with a whole word (80 and up),
- * it is scored again without its filler words ({@link iconQuery}).
+ * it is scored again without its filler words ({@link iconQuery}); when
+ * nothing answers it either way, a query of several words is ranked by the
+ * words each icon carries ({@link rankWords}).
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
  * @returns {IconMatchEntry[]}
@@ -361,9 +377,99 @@ export function rankIcons(sets, query) {
   const asTyped = rankTerm(sets, typed);
   if (asTyped.some(each => each.score >= 80)) return asTyped;
   const named = iconQuery(query);
-  if (named === typed) return asTyped;
-  const withoutFiller = rankTerm(sets, named);
-  return withoutFiller.length > 0 ? withoutFiller : asTyped;
+  const withoutFiller = named === typed ? asTyped : rankTerm(sets, named);
+  if (withoutFiller.length > 0) return withoutFiller;
+  if (asTyped.length > 0) return asTyped;
+  return named.includes(' ') ? rankWords(sets, named) : [];
+}
+
+/** The score of a word match ({@link rankWords}): below every other tier. */
+const WORD_MATCH_SCORE = 20;
+
+/**
+ * Icons that carry one or more words of a query of several words, best
+ * first. A word weighs the log of how many searched icons there are over how
+ * many carry it, so a rare word counts more than a common one. An icon's
+ * weight is the sum of the weights of the words it carries.
+ * @param {DiscoveredIconSet[]} sets in tie order
+ * @param {string} term lower-case words, filler words left out
+ * @returns {IconMatchEntry[]}
+ */
+function rankWords(sets, term) {
+  const astryx = astryxDefinitionsByName();
+  const words = [...new Set(term.split(' '))];
+  let total = 0;
+  /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], carried: string[], setIndex: number}>} */
+  const hits = [];
+  sets.forEach((set, setIndex) => {
+    const byIcon = definitionsByIcon(set.data);
+    const own = new Map(
+      (set.definitions ?? []).map(each => [each.doc.name, each.doc]),
+    );
+    for (const icon of set.data.icons) {
+      total++;
+      const definitions = byIcon.get(icon.id) ?? [];
+      const terms = iconTerms(
+        withDefinitionWords(
+          icon,
+          definitions,
+          name => astryx.get(name) ?? own.get(name),
+        ),
+      );
+      const carried = words.filter(word =>
+        terms.some(each => each === word || sameWord(each, word)),
+      );
+      if (carried.length > 0) {
+        hits.push({set, icon, definitions, carried, setIndex});
+      }
+    }
+  });
+  /** @type {Map<string, number>} */
+  const carriers = new Map();
+  for (const hit of hits) {
+    for (const word of hit.carried) {
+      carriers.set(word, (carriers.get(word) ?? 0) + 1);
+    }
+  }
+  /** @param {string} word */
+  const weight = word =>
+    Math.log((total + 1) / ((carriers.get(word) ?? 0) + 1));
+  const ranked = hits.map(hit => ({
+    hit,
+    value: hit.carried.reduce((sum, word) => sum + weight(word), 0),
+    unasked: hit.icon.id.split('-').length - hit.carried.length,
+  }));
+  ranked.sort(
+    (a, b) =>
+      b.value - a.value ||
+      a.hit.setIndex - b.hit.setIndex ||
+      a.unasked - b.unasked ||
+      (a.hit.icon.id < b.hit.icon.id
+        ? -1
+        : a.hit.icon.id > b.hit.icon.id
+          ? 1
+          : 0),
+  );
+  return ranked.map(({hit}) => ({
+    ...iconRecord(hit.set, hit.icon, hit.definitions),
+    reason: `words "${hit.carried.join('", "')}"`,
+    score: WORD_MATCH_SCORE,
+  }));
+}
+
+/**
+ * The single words an icon carries: its id parts and the parts of its
+ * words, since a word can hold several (`align end`).
+ * @param {IconSetIcon} icon
+ * @returns {string[]}
+ */
+function iconTerms(icon) {
+  return [
+    ...new Set([
+      ...icon.id.split('-'),
+      ...icon.words.flatMap(word => word.split(/[\s-]+/u)),
+    ]),
+  ].filter(Boolean);
 }
 
 /**

@@ -196,14 +196,22 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
   leads), 60 when the query starts one of its words, 40 for a partial match
-  (three letters or more inside a word). A word's plural or singular is an
+  (three letters or more inside a word), 20 for a word match (below). A word's plural or singular is an
   exact match (`stars` for `star`); a word that only starts with the query
   (`start`) answers only when nothing matches a whole word, and a partial
   match only when nothing scores 60 or more. A query is scored as typed
   first; only when nothing answers it with a whole word are the words that
   only phrase it (`go`, `the`, `icon`) left out of a query of several words,
   so `go home` asks for `home` and `arrow up to line` still names
-  `arrow-up-to-line`. An icon also answers to
+  `arrow-up-to-line`. When nothing answers a query of several words, as
+  typed or without those words, every icon that carries one or more of its
+  words is a word match: the word, or its plural or singular, is one of the
+  icon's id parts, a part of one of its words, or a part of a word of a
+  definition it draws. Word matches rank by the summed weight of the words
+  they carry, where a word weighs the natural log of (the number of searched
+  icons + 1) over (the number that carry it + 1), so a word no icon carries
+  counts for nothing; then by set order, then by fewer id parts the query
+  does not name, then by `id`. An icon also answers to
   the name and words of every definition it draws. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
   name match on the whole id, then on its plural or singular, before one on
