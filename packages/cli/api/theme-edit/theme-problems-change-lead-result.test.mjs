@@ -203,7 +203,7 @@ describe('problems a change makes', () => {
       const r = await cli([...ED, 'set', 't', 'accent', '#FFE600']);
       // The pale yellow also vanishes on the progress and slider tracks it
       // draws a value on: each is a problem, with the fill's nearest color
-      // that reads on that part alone.
+      // that reads, on that part's accent bar alone.
       expect(r.data.newProblems).toEqual(
         expect.arrayContaining([
           {
@@ -218,7 +218,7 @@ describe('problems a change makes', () => {
               /^the progress-bar-fill \(#ffe600\) is [\d.]+:1 on the progress-bar-track/,
             ),
             fix: expect.stringMatching(
-              /set t background-color '#[0-9a-f]{6}' --on progress-bar-fill --mode light$/,
+              /set t background-color '#[0-9a-f]{6}' --on progress-bar-fill --when variant:accent --mode light$/,
             ),
           },
         ]),
