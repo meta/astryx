@@ -806,7 +806,6 @@ export default function FunnelCohortAnalyticsPage() {
 
   return (
     <Layout
-      role="main"
       height="fill"
       padding={4}
       contentWidth={1440}
@@ -853,7 +852,7 @@ export default function FunnelCohortAnalyticsPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={10}>
             <VStack gap={4}>
               {/* KPI row */}

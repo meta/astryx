@@ -733,10 +733,9 @@ export default function DashboardTemplate() {
   const showToast = useToast();
   return (
     <Layout
-      role="main"
       height="fill"
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VisuallyHidden as="h1">Dashboard</VisuallyHidden>
           <VStack gap={6}>
             {/* Active Users Chart */}

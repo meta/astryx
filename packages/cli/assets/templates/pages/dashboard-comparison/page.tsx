@@ -785,7 +785,6 @@ export default function DataDashboardPage() {
 
   return (
     <Layout
-      role="main"
       height="fill"
       contentWidth={1440}
       header={
@@ -836,7 +835,7 @@ export default function DataDashboardPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               <SectionHeading

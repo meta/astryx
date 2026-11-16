@@ -662,10 +662,9 @@ export default function DashboardPortfolioTemplate() {
 
   return (
     <Layout
-      role="main"
       height="fill"
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={6}>
             {/* Page header */}
             <HStack hAlign="between" vAlign="center">

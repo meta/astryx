@@ -1446,7 +1446,6 @@ export default function ServiceHealthMonitorPage() {
 
   return (
     <Layout
-      role="main"
       height="fill"
       style={pageStyle}
       header={
@@ -1503,7 +1502,7 @@ export default function ServiceHealthMonitorPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}

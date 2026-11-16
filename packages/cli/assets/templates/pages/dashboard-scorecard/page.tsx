@@ -771,7 +771,6 @@ export default function ExecutiveReviewPage() {
 
   return (
     <Layout
-      role="main"
       height="fill"
       contentWidth={1440}
       header={
@@ -820,7 +819,10 @@ export default function ExecutiveReviewPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6} xstyle={pageStyles.contentBottomPad}>
+        <LayoutContent
+          role="main"
+          padding={6}
+          xstyle={pageStyles.contentBottomPad}>
           <VStack gap={10}>
             {/* Narrative lives in the end rail; it folds in here when narrow. */}
             {isNarrow && (
