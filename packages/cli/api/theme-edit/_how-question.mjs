@@ -617,6 +617,10 @@ function roleColorsFound(c) {
   return found;
 }
 
+/** The shade words the color reader takes before a color ("deep green"). */
+const SHADE_WORDS =
+  'lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle';
+
 /**
  * Each color a clause writes, with where it starts and whether it is
  * written out (hex, a color function), sorted by where it starts.
@@ -647,8 +651,10 @@ function colorsFound(c) {
       ' '.repeat(m[0].length) +
       c.slice((m.index ?? 0) + m[0].length);
   }
-  const re =
-    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle)\s+)?([a-z]+)\b/g;
+  const re = new RegExp(
+    String.raw`#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(${SHADE_WORDS})\s+)?([a-z]+)\b`,
+    'g',
+  );
   for (const m of c
     .replace(GRAY_STOP, s => ' '.repeat(s.length))
     .matchAll(re)) {
@@ -3011,13 +3017,14 @@ function namedLists(q, partWords, isVariant) {
  * Read a question into clauses.
  * @param {string} q lower-case, translated, corrected
  * @param {Array<[RegExp, PartRef]>} partWords
- * @param {{known: (w: string) => boolean, ask: (w: string) => boolean} | null} [words]
+ * @param {{known: (w: string) => boolean, ask: (w: string) => boolean, value: (w: string) => boolean, verb: (w: string) => boolean} | null} [words]
  *   `known`: whether the editor knows a word as anything (a property,
  *   state, part, value or joining word); `ask`: whether a word asks for a
- *   change or joins one (an aspect, a color, an amount, a direction, a
- *   joining word). A part word right before a word it does not know, with
- *   no asking word after it in the clause, is one half of a compound
- *   subject
+ *   change (an aspect, a color, an amount, a direction, a state); `value`:
+ *   whether a word is a value (a color, a number or length); `verb`:
+ *   whether the reader knows a word as an ask's verb. A part word right
+ *   before a word it does not know is one half of a compound subject,
+ *   unless an asking word follows in the phrase, or a value follows a verb
  * @returns {Clause[]}
  */
 function clausesOf(q, partWords, words = null) {
@@ -3155,26 +3162,30 @@ function clausesOf(q, partWords, words = null) {
       // right before a noun the editor knows as nothing, no property,
       // state, part, value or joining word, is one half of a compound
       // subject, never that part. The clause keeps the compound, which the
-      // unknown-subject guard names. A word the clause asks for something
-      // after, before its next stop, is the ask's verb or a word between the part and what
-      // changes, "links turn red", "the card zorp border", "secondary text
-      // fails contrast on white", never a compound.)
+      // unknown-subject guard names. Before a value, "make the radio
+      // station blue", the word is the ask's verb only if the reader knows
+      // it as one, "links turn red"; before another asking word, before
+      // the next stop, it is a word between the part and what changes, "the
+      // card zorp border", "secondary text fails contrast on white". A
+      // compound that describes the product before a colon, "radio station
+      // app: rounder corners", names nothing: the look after it is the
+      // whole theme's.)
       const tail = rest.slice((m.index ?? 0) + m[0].length);
       const after = /^ ([a-z]+)\b(?!['’(-])/.exec(tail);
-      if (
-        after &&
-        after[1].length >= 3 &&
-        words &&
-        !words.known(after[1]) &&
-        !tail
-          .slice(after[0].length)
-          .split(/[:;,.!?]/)[0]
-          .split(/\s+/)
-          .some(w => w && words.ask(w))
-      ) {
-        compound ??= `${m[0].trim()} ${after[1]}`;
-        rest = `${rest.slice(0, m.index)} ${rest.slice((m.index ?? 0) + m[0].length + after[0].length)}`;
-        continue;
+      if (after && after[1].length >= 3 && words && !words.known(after[1])) {
+        const beyond = tail.slice(after[0].length);
+        const phrase = beyond.split(/[:;,.!?]/)[0];
+        const next = phrase.trim().split(/\s+/)[0] ?? '';
+        const joined =
+          next && words.value(next)
+            ? !words.verb(after[1])
+            : !phrase.split(/\s+/).some(w => w && words.ask(w));
+        if (joined) {
+          if (beyond.slice(phrase.length, phrase.length + 1) !== ':')
+            compound ??= `${m[0].trim()} ${after[1]}`;
+          rest = `${rest.slice(0, m.index)} ${rest.slice((m.index ?? 0) + m[0].length + after[0].length)}`;
+          continue;
+        }
       }
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
@@ -6562,7 +6573,12 @@ export function draftAnswer(ctx, env, question) {
           .join(' and '),
     );
   }
-  const clauses0 = clausesOf(q, lex.parts, {known: knownWord, ask: askWord});
+  const clauses0 = clausesOf(q, lex.parts, {
+    known: knownWord,
+    ask: askWord,
+    value: valueWord,
+    verb: verbWord,
+  });
   // "cream background, terracotta accent, serif headings": a list whose
   // items each ask their own thing is each of them, never the first one's
   // part taking the rest.
@@ -6607,7 +6623,12 @@ export function draftAnswer(ctx, env, question) {
     )
       return [c];
     const each = pieces.map(x =>
-      clausesOf(x, lex.parts, {known: knownWord, ask: askWord}),
+      clausesOf(x, lex.parts, {
+        known: knownWord,
+        ask: askWord,
+        value: valueWord,
+        verb: verbWord,
+      }),
     );
     const asks = each.map(
       cs =>
@@ -6877,6 +6898,8 @@ export function draftAnswer(ctx, env, question) {
       const restClauses = clausesOf(rest, lex.parts, {
         known: knownWord,
         ask: askWord,
+        value: valueWord,
+        verb: verbWord,
       });
       if (
         !restClauses.some(
@@ -6887,6 +6910,8 @@ export function draftAnswer(ctx, env, question) {
       const piece = clausesOf(m[0], lex.parts, {
         known: knownWord,
         ask: askWord,
+        value: valueWord,
+        verb: verbWord,
       });
       clauses.splice(i, 1, ...piece, ...restClauses);
       break;
@@ -7374,6 +7399,8 @@ export function draftAnswer(ctx, env, question) {
         const again = clausesOf(text, lex.parts, {
           known: knownWord,
           ask: askWord,
+          value: valueWord,
+          verb: verbWord,
         });
         if (again.length === 1) {
           if (!again[0].parts.length) again[0].parts = c.parts;
@@ -23166,6 +23193,9 @@ export function draftAnswer(ctx, env, question) {
       // easier", "cards used", "corners rounded".)
       cssProperties().has(w) ||
       cssProperties().has(word) ||
+      // (A shade the color reader takes before a color, "area deep
+      // green".)
+      new RegExp(`^(?:${SHADE_WORDS})$`).test(w) ||
       // (What a part has, "the h3 size", "the header bar", and a word
       // some part's own name or look holds, "the checkbox check mark",
       // "the card surface".)
@@ -23210,6 +23240,22 @@ export function draftAnswer(ctx, env, question) {
         w,
       ),
     );
+  }
+
+  /**
+   * Whether a word is a value: a color, a number or a length.
+   * @param {string} w
+   */
+  function valueWord(w) {
+    return Boolean(parseColor(w) || /^[#\d]/.test(w) || Object.hasOwn(HUES, w));
+  }
+
+  /**
+   * Whether the reader knows a word as an ask's verb ("turn", "make", "is").
+   * @param {string} w
+   */
+  function verbWord(w) {
+    return VERB.test(w) || COPULA.test(w);
   }
 
   /**

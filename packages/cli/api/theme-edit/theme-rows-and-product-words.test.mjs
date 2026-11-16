@@ -96,9 +96,13 @@ describe("a part's rows and a product's words", () => {
     ['make the radio buttons bold', ['radio-indicator'], null],
     ['make the button text bigger', ['button'], null],
     ['make the card border red', ['card'], null],
-    ['radio station app: rounder corners', [], 'radio station'],
-    ['button factory app: rounder corners', [], 'button factory'],
-    ['card game app: rounded corners', [], 'card game'],
+    ['make the links turn red', ['link'], null],
+    ['make the radio station blue', [], 'radio station'],
+    ['make the button factory green', [], 'button factory'],
+    // (A compound that describes the product before a colon names
+    // nothing: the look after it is the whole theme's.)
+    ['radio station app: rounder corners', [], null],
+    ['card game app: rounded corners', [], null],
   ])('%s', async (ask, parts, compound) => {
     // (The bundled theme the cases above made; skipped with them.)
     if (unbuilt) return;
