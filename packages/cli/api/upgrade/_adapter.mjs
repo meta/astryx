@@ -55,6 +55,7 @@ import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {resolveProviders} from '../../foundation/integrations/provider-resolution.mjs';
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
+import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
@@ -561,6 +562,16 @@ export function applyAgentDocsRefresh(plan) {
 }
 
 /**
+ * Core's codemods for the (from, to] range. They ship in the CLI for Core, so
+ * a run whose base is not Core has none.
+ * @param {string} from
+ * @param {string} to
+ */
+async function coreTransformsBetween(from, to) {
+  return currentNonCoreBase() ? [] : getTransformsBetween(from, to);
+}
+
+/**
  * Every registered codemod (oldest→newest) for `upgrade --list`. Registry walk
  * + flatten; nothing is run.
  * @returns {Promise<Array<{name: string, title: string, version: string, pr?: string, optional: boolean}>>}
@@ -568,7 +579,7 @@ export function applyAgentDocsRefresh(plan) {
 export async function collectAllCodemods() {
   const codemods = [];
   const manifests = /** @type {CoreVersionManifest[]} */ (
-    await getTransformsBetween('0.0.0', latestVersion)
+    await coreTransformsBetween('0.0.0', latestVersion)
   );
   for (const {version, transforms} of manifests) {
     for (const {name, meta, optional} of transforms) {
@@ -592,7 +603,7 @@ export async function collectAllCodemods() {
  */
 export async function getCoreVersionManifests(from, to) {
   return /** @type {CoreVersionManifest[]} */ ([
-    ...(await getTransformsBetween(from, to)),
+    ...(await coreTransformsBetween(from, to)),
   ]);
 }
 

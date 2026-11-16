@@ -38,6 +38,7 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -331,7 +332,10 @@ export function registerComponent(program) {
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
         [
-          `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
+          // The example is a Core import, so a run on another base leaves it out.
+          currentNonCoreBase()
+            ? 'Import from the path shown'
+            : `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
           `Usage: ${run} component <name> [name...]`,
         ].join('\n'),
       );
