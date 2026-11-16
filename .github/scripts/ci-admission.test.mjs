@@ -1510,14 +1510,46 @@ describe('ci admission', () => {
           labelers: {'release-critical': 'maintainer'},
           permissions: {maintainer: 'write'},
         });
-        expect(result.outputs).toMatchObject({fits: 'true', looks: '0'});
+        expect(result.outputs).toMatchObject({
+          fits: 'true',
+          looks: '1',
+          wide: 'false',
+        });
         expect(result.outputs.full).toBeUndefined();
-        // It never looks: no listing of runs, no wait.
-        expect(result.looks).toBe(0);
+        // One look, to pick its legs' width; no wait.
+        expect(result.looks).toBe(1);
+        expect(result.lookTimes[0]).toBeLessThan(60_000);
         expect(result.notice.join('\n')).toContain(
           'release-critical: this run starts at once',
         );
       }
+    });
+
+    it('runs its legs at full width when its look finds room for them, and at tight width when CI is full', async () => {
+      const trusted = {
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+        labels: ['release-critical'],
+        labelers: {'release-critical': 'maintainer'},
+        permissions: {maintainer: 'write'},
+        legWidths: '{"test-node": {"tight": 2, "full": 8}}',
+      };
+      const empty = await admit({...trusted, active: []});
+      expect(empty.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      expect(empty.notice.join('\n')).toContain('legs at full width');
+      // An unlabelled run on the same empty CI gets the same width.
+      const unlabelled = await admit({
+        ...trusted,
+        active: [],
+        labels: [],
+        labelers: {},
+      });
+      expect(unlabelled.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      const busy = await admit({...trusted, active: full()});
+      expect(busy.outputs).toMatchObject({fits: 'true', wide: 'false'});
+      expect(busy.notice.join('\n')).toContain('legs at tight width');
     });
 
     it('ignores the label when someone without write access applied it last, or the lookup fails', async () => {
