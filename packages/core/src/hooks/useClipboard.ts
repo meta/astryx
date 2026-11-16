@@ -47,6 +47,19 @@ function clipboardWriteAllowed(): boolean {
 }
 
 /**
+ * The element the copy field goes in: the open dialog that holds focus, else
+ * the document's body. An open modal dialog makes the rest of the page inert,
+ * and an inert field copies nothing while the copy command still reports
+ * success. Focus stays inside the topmost modal dialog while one is open.
+ */
+function copyFieldHost(): HTMLElement {
+  const active = document.activeElement;
+  const dialog =
+    active instanceof Element ? active.closest('dialog[open]') : null;
+  return dialog instanceof HTMLElement ? dialog : document.body;
+}
+
+/**
  * Copy text through a selected, hidden text field and the browser's copy
  * command, which a click can still run where the async Clipboard API is
  * refused. Focus and the selection come back to where they were.
@@ -72,7 +85,7 @@ function copyThroughSelection(text: string): void {
   field.style.insetInlineStart = '-9999px';
   field.style.opacity = '0';
   field.style.pointerEvents = 'none';
-  document.body.append(field);
+  copyFieldHost().append(field);
   let copied: boolean;
   try {
     // The copy command copies what is selected in the focused element.

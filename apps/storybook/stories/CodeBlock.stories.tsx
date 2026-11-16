@@ -1,7 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {Button} from '@astryxdesign/core/Button';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {java} from '@astryxdesign/core/CodeBlock/languages/java';
 import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -517,4 +520,29 @@ export const Excerpt: Story = {
     startLineNumber: 40,
     highlightLines: [42],
   },
+};
+
+// Copy outside a dialog and inside an open modal Dialog. In a frame whose
+// permissions policy does not allow `clipboard-write`, Copy goes through a
+// selection; the modal makes the rest of the page inert, so the selection
+// has to sit inside the dialog for the copy to reach the clipboard.
+function CopyInADialogStory() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      <CodeBlock code="npm install outside" language="bash" />
+      <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        header={<DialogHeader title="Install" onOpenChange={setIsOpen} />}>
+        <CodeBlock code="npm install inside" language="bash" />
+      </Dialog>
+    </div>
+  );
+}
+
+export const CopyInADialog: Story = {
+  name: 'Copy in a dialog',
+  render: () => <CopyInADialogStory />,
 };
