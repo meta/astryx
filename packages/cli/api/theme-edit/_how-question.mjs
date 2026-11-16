@@ -1779,7 +1779,7 @@ export function exactFactor(text) {
   if (/\b\d*\.?\d+(?:px|rem|em)?\s*[x×]\s*\d*\.?\d+\b/.test(t)) return null;
   // "3 times bigger", "2 times smaller", "4 times", "2x", "1.5x", "x2".
   const nTimes =
-    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\b(?:\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower))?/.exec(
+    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\b(?:\s+(bigger|larger|more|wider|taller|thicker|stronger|as|smaller|less|thinner|narrower|fainter|weaker))?/.exec(
       t,
     );
   if (nTimes && Number(nTimes[1]) >= 0 && Number(nTimes[1]) <= 20) {
@@ -9828,6 +9828,27 @@ export function draftAnswer(ctx, env, question) {
         // to pin: said, and no command that would change it anyway.
         const inGroup = (/** @type {string | undefined} */ on) =>
           !on || on === p.on || (FAMILIES[on] ?? []).includes(p.on);
+        // (A part that draws no corners at all, a heading, keeps them as
+        // it is: nothing to keep apart.)
+        const noCorners = (FAMILIES[p.on] ?? [p.on]).every(
+          m =>
+            !(C.partReads(one(m), 'corners') ?? []).length &&
+            !Object.keys(C.MAP[one(m)]?.at?.['border-radius'] ?? {}).length,
+        );
+        if (
+          noCorners &&
+          priorSteps.some(
+            (st, i) =>
+              keep[i] == null &&
+              /^(corners|border-radius|--radius-)/.test(st.thing) &&
+              inGroup(st.on),
+          )
+        ) {
+          said.push(
+            `${name} draws no corners, so the change leaves it as it is`,
+          );
+          continue;
+        }
         if (
           priorSteps.some(
             (st, i) =>
@@ -11170,7 +11191,65 @@ export function draftAnswer(ctx, env, question) {
           prop === 'padding' && !partPropNow(sourceOn, prop)
             ? drawnInside(sourceOn, 'padding')
             : null;
-        const now = partPropNow(sourceOn, prop) ?? inner?.value ?? null;
+        // (The size named on the other part, "the small inputs": its value
+        // in that size, as its rule for that size writes it.)
+        const srcSize = (() => {
+          const at = lex.parts
+            .filter(([, x]) => x.on === sourceOn)
+            .map(([re]) => re.exec(c.text))
+            .filter(m => m != null)
+            .sort(
+              (x, y) =>
+                /** @type {RegExpExecArray} */ (y).index -
+                /** @type {RegExpExecArray} */ (x).index,
+            )[0];
+          if (!at) return null;
+          const w = /([a-z]+)\s+$/.exec(c.text.slice(0, at.index))?.[1];
+          return (
+            /** @type {Record<string, string>} */ ({
+              small: 'sm',
+              sm: 'sm',
+              medium: 'md',
+              md: 'md',
+              large: 'lg',
+              lg: 'lg',
+              big: 'lg',
+            })[w ?? ''] ?? null
+          );
+        })();
+        const srcSized = srcSize
+          ? (Object.entries(
+              C.MAP[one(sourceOn)]?.at?.[prop] ??
+                C.MAP[(FAMILIES[sourceOn] ?? [])[0]]?.at?.[prop] ??
+                {},
+            ).find(
+              ([k]) =>
+                !k.includes(' ') && k.split(',').includes(`size=${srcSize}`),
+            )?.[1] ?? null)
+          : null;
+        const srcLive = srcSized != null ? String(srcSized) : null;
+        // (A size named that the other part writes no value for: said,
+        // never its plain size compared in its place.)
+        if (srcSize && srcSize !== 'md' && srcLive == null) {
+          seenPart(subjectOn);
+          seenPart(sourceOn);
+          push({
+            text: `${sourceOn} in size ${srcSize} has no ${prop} of its own that how can read (only its plain size's), so ${subjectOn} cannot take it; give the value (for example "${prop} 28px on ${subjectOn}")`,
+            options: [],
+          });
+          continue;
+        }
+        const srcShown = srcLive
+          ? /^var\(\s*(--[a-z0-9-]+)\s*\)$/.exec(srcLive)?.[1]
+            ? (resolvedValue(
+                /** @type {string} */ (
+                  /^var\(\s*(--[a-z0-9-]+)\s*\)$/.exec(srcLive)?.[1]
+                ),
+              ) ?? srcLive)
+            : srcLive
+          : null;
+        const now =
+          srcShown ?? partPropNow(sourceOn, prop) ?? inner?.value ?? null;
         // "twice as round as inputs": that amount of the other part's;
         // else the other part's own value, or the token it reads (so the
         // copy follows it).
@@ -11196,7 +11275,10 @@ export function draftAnswer(ctx, env, question) {
             ? scaledBox(now, factor)
             : past
               ? null
-              : (partPropNow(sourceOn, prop, true) ?? inner?.value ?? null);
+              : (srcLive ??
+                partPropNow(sourceOn, prop, true) ??
+                inner?.value ??
+                null);
         if (!value) {
           // Nothing to measure against: said, never a step on both.
           seenPart(subjectOn);
@@ -12579,9 +12661,22 @@ export function draftAnswer(ctx, env, question) {
           : prop === 'border-color'
             ? 'border'
             : 'background';
-      const token = restRead(C.partReads(one(part), group) ?? [], w);
-      if (token) return `var(${token})`;
+      // (Read in that look itself: a look that reads only what the plain
+      // look reads, the ghost button's fill, draws none of its own.)
+      const all = C.partReads(one(part), group) ?? [];
+      const token = restRead(all, w);
+      const plain = restRead(all, '');
+      const own0 = all.some(
+        r =>
+          r.token === token &&
+          r.when.some(wn => wn.split(/\s+/).includes(w.replace(':', '='))),
+      );
+      if (token && (token !== plain || own0)) return `var(${token})`;
     }
+    // (A look named that draws none of that paint, the ghost button's
+    // fill, or one the part does not have, gives nothing: never the plain
+    // look's paint in its place.)
+    if (when) return null;
     return partPropNow(part, prop, true);
   }
   /**
@@ -20255,16 +20350,26 @@ export function draftAnswer(ctx, env, question) {
   // "What color is the page / the header / the primary button": a part
   // that is a surface (it paints, or holds other parts) is its fill; a part
   // that is only text, or words that name the text, its text color.
+  // (The part the question is about, as the clause reads it: "the card
+  // title" is the heading inside the card, "the card's secondary text" the
+  // card's text; else the first part named.)
+  const clauseOwn = (() => {
+    if (clauses.length !== 1) return null;
+    const ps = clauses[0].parts.filter(x => x.on !== 'body');
+    return ps.length === 1 && ps[0].on ? ps[0].on : null;
+  })();
   const asked = (() => {
     const v = valueAsked(question);
     if (v !== 'color' || /\btext\b/i.test(question)) return v;
-    const first = lex.parts
-      .map(([re, x]) => ({
-        at: re.exec(question.toLowerCase())?.index ?? -1,
-        on: x.on,
-      }))
-      .filter(x => x.at >= 0)
-      .sort((x, y) => x.at - y.at)[0]?.on;
+    const first =
+      clauseOwn ??
+      lex.parts
+        .map(([re, x]) => ({
+          at: re.exec(question.toLowerCase())?.index ?? -1,
+          on: x.on,
+        }))
+        .filter(x => x.at >= 0)
+        .sort((x, y) => x.at - y.at)[0]?.on;
     if (!first || textOnlyPart(first)) return v;
     const m = C.MAP[one(first)];
     return !m || m.at?.['background-color'] || (m.contains ?? []).length
@@ -20308,15 +20413,19 @@ export function draftAnswer(ctx, env, question) {
   if (asked) {
     // ("the focus ring of inputs" asks about the inputs: the ring is what
     // is asked, never the focus-ring part.)
-    const named = lex.parts
-      .map(([re, x]) => ({
-        at: re.exec(question.toLowerCase())?.index ?? -1,
-        on: x.on,
-      }))
-      .filter(
-        x => x.at >= 0 && !(asked === 'focus-ring' && x.on === 'focus-ring'),
-      )
-      .sort((x, y) => x.at - y.at)[0]?.on;
+    const named =
+      (clauseOwn && !(asked === 'focus-ring' && clauseOwn === 'focus-ring')
+        ? clauseOwn
+        : null) ??
+      lex.parts
+        .map(([re, x]) => ({
+          at: re.exec(question.toLowerCase())?.index ?? -1,
+          on: x.on,
+        }))
+        .filter(
+          x => x.at >= 0 && !(asked === 'focus-ring' && x.on === 'focus-ring'),
+        )
+        .sort((x, y) => x.at - y.at)[0]?.on;
     // A token set on the part itself (or on its group), as the theme saves
     // it, is what the part shows: "how thick are dividers" after
     // `--border-width 3px --on divider` is 3px, never the theme's own.
@@ -20877,11 +20986,21 @@ export function draftAnswer(ctx, env, question) {
                                   }
                                 : asked === 'color' &&
                                     /\b(?:text|writing|words)\b/.test(qWords)
-                                  ? {
-                                      token: '--color-text-primary',
-                                      what: 'the main text color',
-                                      example: 'text #111827',
-                                    }
+                                  ? // (The secondary, muted or fainter
+                                    // text is its own token.)
+                                    /\b(?:secondary|muted|faint|fainter|subtle|subdued)\s+(?:text|labels?|copy)\b/.test(
+                                      qWords,
+                                    )
+                                    ? {
+                                        token: '--color-text-secondary',
+                                        what: 'the secondary text color',
+                                        example: 'secondary text #4b5563',
+                                      }
+                                    : {
+                                        token: '--color-text-primary',
+                                        what: 'the main text color',
+                                        example: 'text #111827',
+                                      }
                                   : null;
     if (themeAsk?.tokens && !unshown) {
       const listed = themeAsk.tokens
@@ -20921,6 +21040,30 @@ export function draftAnswer(ctx, env, question) {
     // (A value the theme set on the part itself is what it has now, before
     // any token or variant it reads: "how round are the cards now?" after
     // a card radius of 20px is 20px.)
+    // ("what color is the card's secondary text?": the secondary text
+    // token the part's text reads, set on it or the theme's.)
+    const secondaryNow = () => {
+      if (
+        asked !== 'color' ||
+        !/\b(?:secondary|muted|faint|fainter|subtle|subdued)\s+(?:text|labels?|copy)\b/i.test(
+          question,
+        )
+      )
+        return null;
+      const tok = '--color-text-secondary';
+      const shown = (/** @type {'light' | 'dark'} */ m) =>
+        partNow(tok, m) ?? null;
+      const l = shown('light');
+      const d = shown('dark');
+      if (!l && !d) return null;
+      const said =
+        qMode || readMode
+          ? shown(/** @type {'light' | 'dark'} */ (qMode ?? readMode))
+          : l === d || !d
+            ? l
+            : `${l} in light mode, ${d} in dark mode`;
+      return `${said}${qModeSaid} (${tok}, its secondary text)`;
+    };
     const ownNow = () => {
       if (!named || stateWord || vWord) return null;
       const v = partValue(named, asked);
@@ -20929,6 +21072,7 @@ export function draftAnswer(ctx, env, question) {
     const now =
       named && !unshown
         ? (pageNow() ??
+          secondaryNow() ??
           ringNow() ??
           ownNow() ??
           conditionNow() ??
