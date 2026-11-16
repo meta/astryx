@@ -12,7 +12,7 @@
 import {COMMON_STATES} from './_tables.mjs';
 import {baseComponent, modesOf, partsOf} from './_settings.mjs';
 import {borderlessSurfaces, pillParts} from './_check.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {parseColor, ratio, splitTop} from './_color.mjs';
 import {blurScaled} from './_how-question.mjs';
 
 /**
@@ -140,10 +140,10 @@ export function missedSteps(ctx, data, res, base) {
      * does (a theme whose surface stays light in dark mode).
      * @param {string} m @param {string} [ground] the token the text sits on
      */
-    const readableOn = (m, ground = '--color-background-surface') => {
+    const readableOn = (m, ground) => {
       const text = String(res[m]?.['--color-text-primary']);
       const t = parseColor(text);
-      const g = parseColor(String(res[m]?.[ground]));
+      const g = parseColor(String(ground));
       if (!t || !g || ratio(t, g) >= 4.5) return text;
       return ratio([0, 0, 0], g) >= ratio([255, 255, 255], g)
         ? '#000000'
@@ -167,9 +167,24 @@ export function missedSteps(ctx, data, res, base) {
             .filter(Boolean)
             .map((/** @type {string} */ when) => ({when, token: r.token})),
     );
-    /** @param {string[]} ms */
-    const surfaceSteps = ms =>
-      inverted === '--color-background-inverted'
+    /**
+     * @param {string[]} ms
+     * @param {boolean} [inverse] the theme's own inverted surface: in a
+     *   theme that draws both modes, the surface it draws in the other mode
+     *   (dark in light, light in dark), as Core's inverted surface is; in a
+     *   one-mode theme, its surface
+     */
+    const surfaceSteps = (ms, inverse = false) => {
+      /** @param {string} m */
+      const fill = m =>
+        String(
+          res[
+            inverse && modes.length > 1
+              ? /** @type {string} */ (modes.find(x => x !== m))
+              : m
+          ]?.['--color-background-surface'],
+        );
+      return inverted === '--color-background-inverted'
         ? // The inverted surface turns to the theme's surface on this part
           // alone (as the color it is: a part may read the surface token
           // for its text; the lightbox and the scrim keep theirs), with its
@@ -178,7 +193,7 @@ export function missedSteps(ctx, data, res, base) {
           ms.flatMap(m => [
             {
               thing: '--color-background-inverted',
-              value: String(res[m]?.['--color-background-surface']),
+              value: fill(m),
               on: p,
               mode: m,
             },
@@ -187,14 +202,14 @@ export function missedSteps(ctx, data, res, base) {
               : textTokens
             ).map(thing => ({
               thing,
-              value: readableOn(m),
+              value: readableOn(m, fill(m)),
               on: p,
               mode: m,
             })),
             ...(C.MAP[p]?.media || !textTokens.length
               ? otherFills.map((/** @type {any} */ o) => ({
                   thing: 'color',
-                  value: readableOn(m, o.token),
+                  value: readableOn(m, res[m]?.[o.token]),
                   on: p,
                   mode: m,
                   when: o.when,
@@ -208,21 +223,24 @@ export function missedSteps(ctx, data, res, base) {
           ms.flatMap(m => [
             {
               thing: 'background-color',
-              value: String(res[m]?.['--color-background-surface']),
+              value: fill(m),
               on: p,
               mode: m,
             },
             ...(textTokens.length ? textTokens : ['color']).map(thing => ({
               thing,
-              value: readableOn(m),
+              value: readableOn(m, fill(m)),
               on: p,
               mode: m,
             })),
           ]);
+    };
     // The theme's own surfaces changed (its neutral, surface, card or page
     // color), while the part still paints the base's inverted surface: it
     // keeps the base's dark look beside the theme's (a Win98 theme's grey
-    // tooltips). Its line gives it the theme's surface in each mode.
+    // tooltips). Its line gives it the theme's own inverted surface: the
+    // surface the theme draws in the other mode (a cream theme's warm dark
+    // in light), or its surface in a one-mode theme.
     const ownSurfaces = any(
       /^--color-(neutral|background-(body|surface|card))$/,
     );
@@ -246,21 +264,266 @@ export function missedSteps(ctx, data, res, base) {
       const swap = lost.filter(m =>
         standsOut(res[m]?.['--color-background-surface'], m),
       );
-      found.push({
-        kind: 0,
-        part: p,
-        why: lost.length
-          ? `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`
-          : `still the base's dark inverted surface (${inverted}); the theme's surfaces changed`,
-        aspect: 'background',
-        steps: lost.length
-          ? swap.length !== lost.length
-            ? []
-            : surfaceSteps(lost)
-          : surfaceSteps(modes),
+      // (With the surfaces changed, only the modes where the theme's own
+      // inverted surface looks different from the base's: the same side,
+      // dark or light, at nearly the same lightness (under 1.5:1 apart) is
+      // the same look, and a line there changes nothing you see.)
+      const looksNew = modes.filter(m => {
+        const now = parseColor(String(res[m]?.[inverted] ?? ''));
+        const other = modes.length > 1 ? modes.find(x => x !== m) : m;
+        const next = parseColor(
+          String(
+            res[/** @type {string} */ (other)]?.[
+              '--color-background-surface'
+            ] ?? '',
+          ),
+        );
+        if (!now || !next) return true;
+        const side = (/** @type {[number, number, number]} */ c) =>
+          ratio([255, 255, 255], c) >= ratio([0, 0, 0], c);
+        return side(now) !== side(next) || ratio(now, next) >= 1.5;
       });
+      if (lost.length || looksNew.length)
+        found.push({
+          kind: 0,
+          part: p,
+          why: lost.length
+            ? `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`
+            : `still the base's dark inverted surface (${inverted}); the theme's surfaces changed`,
+          aspect: 'background',
+          steps: lost.length
+            ? swap.length !== lost.length
+              ? []
+              : surfaceSteps(lost)
+            : surfaceSteps(looksNew, true),
+        });
+    }
+    // A fill made from a status token the theme's own status color does
+    // not reach (an error toast's inverted red, after the danger color is
+    // set): still the base's red beside the theme's. Its line gives it the
+    // theme's status color in each mode, in the condition it is drawn in.
+    for (const st of Object.keys(STATUS)) {
+      if (
+        !data.settings.some(
+          x => x.source === 'dial' && x.thing === STATUS[st][0] && !x.on,
+        )
+      )
+        continue;
+      const own = new RegExp(`^--color-background-${st}-[\\w-]+$`);
+      for (const r of reads.filter(
+        (/** @type {any} */ r) => own.test(r.token) && !changed(r.token),
+      )) {
+        const cond = r.when
+          .map((/** @type {string} */ w) => /^([\w-]+)=([\w-]+)$/.exec(w))
+          .find(Boolean);
+        const when = cond ? `${cond[1]}:${cond[2]}` : undefined;
+        if (!r.when.includes('') && !when) continue;
+        if (covers(p, FILL)) continue;
+        const ms = modes.filter(
+          m => String(res[m]?.[STATUS[st][1]]) !== String(res[m]?.[r.token]),
+        );
+        if (!ms.length) continue;
+        found.push({
+          kind: 3,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}its fill is still the base's ${st} color (${r.token}), which the theme's ${STATUS[st][0]} color does not reach`,
+          aspect: 'background',
+          steps: ms.map(m => ({
+            thing: r.token,
+            value: String(res[m]?.[STATUS[st][1]]),
+            on: p,
+            ...(when ? {when} : {}),
+            mode: m,
+          })),
+        });
+      }
+    }
+    /** A base literal in a mode: its half of light-dark(). @param {string} v @param {string} m */
+    const literal = (v, m) => {
+      const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
+      const halves = pair ? splitTop(pair[1], ',') : null;
+      const x = (
+        halves?.length === 2 ? halves[m === 'light' ? 0 : 1] : String(v)
+      ).trim();
+      return /^var\(/.test(x) ? null : parseColor(x);
+    };
+    // A role color (the accent, a status color) the base theme takes away
+    // from the part on its own, so the theme's role color never reaches it:
+    // the base points the role token at another one there (stone's and
+    // gothic's info banner reads the categorical blue), or a variant named
+    // for the role draws a color of the base's palette written out (stone's
+    // accent progress fill in its pale blue). Listed once the theme moved
+    // that role, in each mode where it looks different, with a line that
+    // gives the part the theme's role color there.
+    for (const [key, look] of Object.entries(
+      /** @type {Record<string, Record<string, unknown>>} */ (
+        base.components?.[p] ?? {}
+      ),
+    )) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      if (!look || typeof look !== 'object') continue;
+      const when = key === 'base' ? undefined : key;
+      /** @param {string} thing */
+      const covered = thing =>
+        data.settings.some(
+          x =>
+            x.on &&
+            !x.state &&
+            (x.when ?? undefined) === when &&
+            partsOf(ctx, x).includes(p) &&
+            x.thing === thing,
+        );
+      // The role tokens pointed at other tokens on the part, in one line
+      // (a banner's fill and its text).
+      /** @type {Step[]} */
+      const pointed = [];
+      /** @type {string[]} */
+      const names = [];
+      for (const [prop, v] of Object.entries(look)) {
+        if (typeof v !== 'string') continue;
+        const role =
+          /^--color-(on-)?(accent|info|success|warning|error)(-[\w-]+)?$/.exec(
+            prop,
+          );
+        const to = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+        if (!role || !to || to === prop || !changed(prop) || covered(prop))
+          continue;
+        const ms = modes.filter(
+          m => String(res[m]?.[to]) !== String(res[m]?.[prop]),
+        );
+        if (!ms.length) continue;
+        names.push(`${prop} at ${to}`);
+        pointed.push(
+          ...ms.map(m => ({
+            thing: prop,
+            value: String(res[m]?.[prop]),
+            on: p,
+            ...(when ? {when} : {}),
+            mode: m,
+          })),
+        );
+      }
+      if (pointed.length)
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}the base theme points ${names.join(' and ')} there, so the theme's own color does not reach it`,
+          aspect: 'background',
+          steps: pointed,
+        });
+      // A variant named for a role, drawn in a color written out.
+      const named = /^variant:(accent|info|success|warning|error)$/.exec(
+        String(when ?? ''),
+      )?.[1];
+      if (!named) continue;
+      const moved = named === 'accent' ? accent : changed(`--color-${named}`);
+      if (!moved) continue;
+      for (const [prop, thing, side] of /** @type {const} */ ([
+        ['backgroundColor', 'background-color', 'background'],
+        ['color', 'color', 'text'],
+      ])) {
+        const v = look[prop];
+        if (typeof v !== 'string' || /var\(/.test(v) || covered(thing))
+          continue;
+        if (!modes.every(m => literal(v, m) != null)) continue;
+        // Core's own color for that variant, else the role's own token.
+        const core = (ctx.C.partReads(p, side) ?? []).find(
+          (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
+        )?.token;
+        const token =
+          core ??
+          (side === 'text' ? `--color-text-${named}` : `--color-${named}`);
+        if (
+          found.some(
+            x =>
+              x.part === p &&
+              x.steps.some(st => st.thing === thing && st.when === when),
+          )
+        )
+          continue;
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${String(when).replace(':', ' ')}, its ${side === 'text' ? 'text' : 'fill'} is a color of the base theme's palette written out (${v}), which the theme's ${named} color does not reach`,
+          aspect: side === 'text' ? 'text' : 'background',
+          steps: [{thing, value: `var(${token})`, on: p, when}],
+        });
+      }
     }
     if (!accent) continue;
+    // A color the base theme gives the part as its own accent, written as
+    // the color itself rather than the accent token (butter's nav links
+    // and outline buttons in its blue): the accent dial never reaches it.
+    // Listed for each variant (or at rest) whose color, in every mode the
+    // theme draws, is the base's accent there, with a line that points it
+    // at the accent token, where that changes the color built.
+    const baseParts = /** @type {Record<string, Record<string, any>>} */ (
+      base.components?.[p] ?? {}
+    );
+    const ACCENTS = [
+      '--color-accent',
+      '--color-text-accent',
+      '--color-icon-accent',
+    ];
+    for (const [key, look] of Object.entries(baseParts)) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      if (!look || typeof look !== 'object') continue;
+      for (const [prop, thing, token] of /** @type {const} */ ([
+        ['color', 'color', '--color-text-accent'],
+        ['backgroundColor', 'background-color', '--color-accent'],
+        ['borderColor', 'border-color', '--color-accent'],
+      ])) {
+        const v = look[prop];
+        if (typeof v !== 'string') continue;
+        const when = key === 'base' ? undefined : key;
+        const isBaseAccent = modes.every(m => {
+          const c = literal(v, m);
+          return (
+            c != null &&
+            ACCENTS.some(a => {
+              const b = parseColor(String(base[m]?.[a] ?? ''));
+              return b != null && b.every((x, k) => x === c[k]);
+            })
+          );
+        });
+        const moves = modes.some(
+          m => String(res[m]?.[token]) !== String(base[m]?.[token]),
+        );
+        if (
+          !isBaseAccent ||
+          !moves ||
+          data.settings.some(
+            x =>
+              x.on &&
+              !x.state &&
+              (x.when ?? undefined) === when &&
+              partsOf(ctx, x).includes(p) &&
+              (x.thing === thing ||
+                (thing === 'border-color' && /^border$/.test(x.thing))),
+          )
+        )
+          continue;
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}its ${thing === 'color' ? 'text' : thing.replace('-color', '')} is the base theme's own accent (${String(v)}), written as a color, which the accent leaves as it is`,
+          aspect:
+            thing === 'color'
+              ? 'text'
+              : thing === 'border-color'
+                ? 'border'
+                : 'background',
+          steps: [
+            {
+              thing,
+              value: `var(${token})`,
+              on: p,
+              ...(when ? {when} : {}),
+            },
+          ],
+        });
+      }
+    }
     // A status fill still the base's (a banner's, a badge's status
     // variants): the status color generated at the theme's vibrancy (its
     // dial), with the text that reads on it. Only where that changes the
@@ -414,15 +677,14 @@ export function missedSteps(ctx, data, res, base) {
         });
     }
   }
-  // With the theme's own corners at a pill (its element corners as round
-  // as --radius-full), a pill part draws what the corners give: none is
-  // missed, and a line would change nothing.
-  const pillCorners = modes.every(
-    m =>
-      String(res[m]?.['--radius-element']) ===
-      String(res[m]?.['--radius-full']),
+  // A pill part (a switch, an avatar, a badge) stays round under rounded
+  // corners by design, as nearly every look wants: it is missed only when
+  // the theme's corners go square (its element corners at 0), where a
+  // round pill keeps the base's look beside the theme's square one.
+  const squareCorners = modes.every(
+    m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
-  if (corners && !pillCorners)
+  if (corners && squareCorners)
     for (const p of pillParts(C).filter(
       x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
     ))

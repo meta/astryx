@@ -247,6 +247,10 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // css-tree's lexer forgives a last word ending in an old browser hack's
+  // escape (`8px\9`, `none\0`); a browser reads the escape as part of the
+  // word (a unit `px` and a tab), so it drops the value.
+  if (/\\[09]\s*$/.test(value)) return null;
   // A color function holding a variable (color-mix(…, var(--x))) is a
   // color whatever the variable holds: it is matched as one, so a value
   // with many of them is read like the same value with plain colors.

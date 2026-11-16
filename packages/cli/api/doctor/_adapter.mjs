@@ -956,3 +956,30 @@ export function builtIntegrationPackages(target, cwd) {
     if (path.dirname(at) === at) return [];
   }
 }
+
+/**
+ * The install line for the font families a known package loads (an open
+ * font the editor's table names), in the project's package manager, and
+ * whether it loads every family given. A family no known package loads (a
+ * self-hosted face) gets none: its package name would be a guess.
+ * @param {string} projectDir
+ * @param {string[]} families
+ * @returns {Promise<{line: string | null, coversAll: boolean}>}
+ */
+export async function fontPackagesInstallLine(projectDir, families) {
+  const {fontsourceSuggestion} = await import('../theme-edit/_settings.mjs');
+  const {installLine} = await import('../theme-edit/_project.mjs');
+  const known = families.map(family => {
+    const s = fontsourceSuggestion(family);
+    return s?.known ? s.pkg : null;
+  });
+  const packages = [
+    ...new Set(
+      known.filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
+    ),
+  ];
+  return {
+    line: packages.length ? installLine(projectDir, packages) : null,
+    coversAll: known.every(Boolean),
+  };
+}

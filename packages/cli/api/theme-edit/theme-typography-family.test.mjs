@@ -95,6 +95,19 @@ describe('typography values in the theme file', () => {
     }
   };
 
+  it('refuses a heading level written twice, a role given as a value, and a weights that is no block', async () => {
+    const twice = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '300', 1: '800'}}}",
+    );
+    expect(twice.error).toMatch(/1 and 01 are both heading level 1/);
+    const role = await compileTypography("{body: 'Inter' as any}");
+    expect(role.error).toMatch(/typography\.body is a block of fields/);
+    const weights = await compileTypography(
+      "{scale: {base: 16, ratio: 1.25}, heading: {weights: 'bold' as any}}",
+    );
+    expect(weights.error).toMatch(/reads "bold" by its letters as levels/);
+  }, 240_000);
+
   it('takes a heading level Core reads in any spelling, and refuses a weight no browser reads', async () => {
     const level = await compileTypography(
       "{scale: {base: 16, ratio: 1.25}, heading: {weights: {'01': '800'}}}",
