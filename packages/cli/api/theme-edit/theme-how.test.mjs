@@ -1612,8 +1612,8 @@ const QUESTIONS_3 = [
   [
     'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
     {
-      top: /^set q --color-background-body '#fafafa' --mode light && set q --color-text-primary '#171717' --mode light && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
-      adds: /--color-border=#e5e5e5/,
+      top: /^set q --color-background-body '#fafafa' --mode light && set q --color-text-primary '#171717' --mode light && set q --color-border '#e5e5e5' --mode light && set q accent '#0070f3'$/,
+      adds: /--color-border.*#e5e5e5/,
     },
   ],
   [

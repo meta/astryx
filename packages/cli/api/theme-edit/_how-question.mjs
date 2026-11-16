@@ -21755,11 +21755,60 @@ export function draftAnswer(ctx, env, question) {
           /** @type {any} */ ({mode: null, text: question}),
           String(st.value ?? ''),
         );
-        // (A light surface only: a dark header or sidebar in light mode is
-        // a look asked for, its text set with it.)
-        if (m !== 'light') continue;
+        if (!m) continue;
+        // (Dark only for a panel that sits on the page, a card's, a
+        // popover's: a dark header or sidebar in light mode is chrome
+        // asked for as it is.)
+        if (
+          m === 'dark' &&
+          !(C.partReads(one(st.on), 'background') ?? []).some(r =>
+            /^--color-background-(?:card|popover|elevated)$/.test(r.token),
+          )
+        )
+          continue;
+        // (A dark surface with its own text set in the same answer, "a
+        // navy header with white text", is a look asked for in every mode:
+        // its text goes with it.)
+        if (
+          m === 'dark' &&
+          o.some(
+            x =>
+              x !== st &&
+              x.on === st.on &&
+              !x.mode &&
+              (x.thing === 'color' || /^--color-text-/.test(x.thing)),
+          )
+        )
+          continue;
         st.mode = m;
         kept = m;
+        // (Its own text set without a mode goes with it.)
+        for (const x of o)
+          if (
+            x !== st &&
+            x.on === st.on &&
+            !x.mode &&
+            (x.thing === 'color' || /^--color-text-/.test(x.thing))
+          )
+            x.mode = m;
+      }
+    // A clearly light whole-theme border color ("borders #e3e8ee") is the
+    // light mode's: on the dark page it would be a glaring edge on every
+    // card and input, so the dark mode keeps its own.
+    for (const o of d.options)
+      for (const st of o) {
+        if (st.mode || st.on || st.thing !== '--color-border') continue;
+        if (
+          pageModeOf(
+            /** @type {any} */ ({mode: null, text: question}),
+            String(st.value ?? ''),
+          ) !== 'light' ||
+          alphaOf(String(st.value ?? '')) < 1
+        )
+          continue;
+        st.mode = 'light';
+        if (!/a light border/.test(d.text))
+          d.text += ` (a light border, in light mode only: on the dark page it would be a glaring edge, so the dark mode keeps its own; for the dark mode too, set a dark color with --mode dark, or say "in both modes")`;
       }
     if (kept && !/keeps its own/.test(d.text)) {
       const other = kept === 'light' ? 'dark' : 'light';
