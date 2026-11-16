@@ -82,7 +82,7 @@ describe('color dials through the palette generator', () => {
     const config = JSON.parse(read('palette.config.json'));
     expect(config).toEqual({
       // A new palette is made with the newest recipe.
-      recipe: 'astryx-oklch-v2',
+      recipe: 'astryx-oklch-v3',
       modeStrategy: 'light-and-dark',
       families: [
         {
