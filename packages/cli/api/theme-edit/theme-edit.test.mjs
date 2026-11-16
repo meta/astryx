@@ -580,13 +580,16 @@ describe('how on real parts, questions and settings', () => {
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
-    // (A typed text color goes to the mode it reads in: white on the
-    // light info banner is the dark mode's.)
+    // (White does not read on a banner's light-mode fill, any status: it is
+    // written for dark mode, where it reads, and the answer says so.)
     expect(
       commands.some(c =>
-        /editor set t color '#ffffff' --on banner(?: --mode dark)?$/.test(c),
+        c.endsWith("editor set t color '#ffffff' --on banner --mode dark"),
       ),
     ).toBe(true);
+    expect(r.data.results.some(x => /in dark mode only/.test(x.text))).toBe(
+      true,
+    );
     expect(
       r.data.results.some(x => x.text.includes('--when status:info')),
     ).toBe(true);
