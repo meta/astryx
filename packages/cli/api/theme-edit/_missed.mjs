@@ -338,6 +338,118 @@ export function missedSteps(ctx, data, res, base) {
         });
       }
     }
+    /** A base literal in a mode: its half of light-dark(). @param {string} v @param {string} m */
+    const literal = (v, m) => {
+      const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
+      const halves = pair ? splitTop(pair[1], ',') : null;
+      const x = (
+        halves?.length === 2 ? halves[m === 'light' ? 0 : 1] : String(v)
+      ).trim();
+      return /^var\(/.test(x) ? null : parseColor(x);
+    };
+    // A role color (the accent, a status color) the base theme takes away
+    // from the part on its own, so the theme's role color never reaches it:
+    // the base points the role token at another one there (stone's and
+    // gothic's info banner reads the categorical blue), or a variant named
+    // for the role draws a color of the base's palette written out (stone's
+    // accent progress fill in its pale blue). Listed once the theme moved
+    // that role, in each mode where it looks different, with a line that
+    // gives the part the theme's role color there.
+    for (const [key, look] of Object.entries(
+      /** @type {Record<string, Record<string, unknown>>} */ (
+        base.components?.[p] ?? {}
+      ),
+    )) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      if (!look || typeof look !== 'object') continue;
+      const when = key === 'base' ? undefined : key;
+      /** @param {string} thing */
+      const covered = thing =>
+        data.settings.some(
+          x =>
+            x.on &&
+            !x.state &&
+            (x.when ?? undefined) === when &&
+            partsOf(ctx, x).includes(p) &&
+            x.thing === thing,
+        );
+      // The role tokens pointed at other tokens on the part, in one line
+      // (a banner's fill and its text).
+      /** @type {Step[]} */
+      const pointed = [];
+      /** @type {string[]} */
+      const names = [];
+      for (const [prop, v] of Object.entries(look)) {
+        if (typeof v !== 'string') continue;
+        const role =
+          /^--color-(on-)?(accent|info|success|warning|error)(-[\w-]+)?$/.exec(
+            prop,
+          );
+        const to = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+        if (!role || !to || to === prop || !changed(prop) || covered(prop))
+          continue;
+        const ms = modes.filter(
+          m => String(res[m]?.[to]) !== String(res[m]?.[prop]),
+        );
+        if (!ms.length) continue;
+        names.push(`${prop} at ${to}`);
+        pointed.push(
+          ...ms.map(m => ({
+            thing: prop,
+            value: String(res[m]?.[prop]),
+            on: p,
+            ...(when ? {when} : {}),
+            mode: m,
+          })),
+        );
+      }
+      if (pointed.length)
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${when ? `${when.replace(':', ' ')}, ` : ''}the base theme points ${names.join(' and ')} there, so the theme's own color does not reach it`,
+          aspect: 'background',
+          steps: pointed,
+        });
+      // A variant named for a role, drawn in a color written out.
+      const named = /^variant:(accent|info|success|warning|error)$/.exec(
+        String(when ?? ''),
+      )?.[1];
+      if (!named) continue;
+      const moved = named === 'accent' ? accent : changed(`--color-${named}`);
+      if (!moved) continue;
+      for (const [prop, thing, side] of /** @type {const} */ ([
+        ['backgroundColor', 'background-color', 'background'],
+        ['color', 'color', 'text'],
+      ])) {
+        const v = look[prop];
+        if (typeof v !== 'string' || /var\(/.test(v) || covered(thing))
+          continue;
+        if (!modes.every(m => literal(v, m) != null)) continue;
+        // Core's own color for that variant, else the role's own token.
+        const core = (ctx.C.partReads(p, side) ?? []).find(
+          (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
+        )?.token;
+        const token =
+          core ??
+          (side === 'text' ? `--color-text-${named}` : `--color-${named}`);
+        if (
+          found.some(
+            x =>
+              x.part === p &&
+              x.steps.some(st => st.thing === thing && st.when === when),
+          )
+        )
+          continue;
+        found.push({
+          kind: 8,
+          part: p,
+          why: `${String(when).replace(':', ' ')}, its ${side === 'text' ? 'text' : 'fill'} is a color of the base theme's palette written out (${v}), which the theme's ${named} color does not reach`,
+          aspect: side === 'text' ? 'text' : 'background',
+          steps: [{thing, value: `var(${token})`, on: p, when}],
+        });
+      }
+    }
     if (!accent) continue;
     // A color the base theme gives the part as its own accent, written as
     // the color itself rather than the accent token (butter's nav links
@@ -348,15 +460,6 @@ export function missedSteps(ctx, data, res, base) {
     const baseParts = /** @type {Record<string, Record<string, any>>} */ (
       base.components?.[p] ?? {}
     );
-    /** A base literal in a mode: its half of light-dark(). @param {string} v @param {string} m */
-    const literal = (v, m) => {
-      const pair = /^light-dark\((.*)\)$/is.exec(String(v).trim());
-      const halves = pair ? splitTop(pair[1], ',') : null;
-      const x = (
-        halves?.length === 2 ? halves[m === 'light' ? 0 : 1] : String(v)
-      ).trim();
-      return /^var\(/.test(x) ? null : parseColor(x);
-    };
     const ACCENTS = [
       '--color-accent',
       '--color-text-accent',
