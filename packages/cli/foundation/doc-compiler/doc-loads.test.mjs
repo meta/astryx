@@ -464,6 +464,10 @@ const RUNNERS = {
     runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
   },
+  'foundation/fs/loaded-files.mjs': {
+    runs: 'nothing; reads which modules a loaded CommonJS module required, from the require cache, so a kept answer can stamp every file of the code that worked it out',
+    sites: ['createRequire'],
+  },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module and each asset as its URL, process.exit refusing the load, and the timers the module starts let go once it is loaded',
     sites: [
@@ -515,11 +519,12 @@ const RUNNERS = {
     sites: ['child_process.spawn'],
   },
   'foundation/runtime/css-tree.mjs': {
-    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads; reads which of the data files are loaded, from the require cache, to stamp them',
     sites: [
       'require(<computed>)',
       'require(mdn-data/css/properties.json)',
       'require(mdn-data/css/selectors.json)',
+      'require.cache',
     ],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
