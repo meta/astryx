@@ -473,6 +473,26 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     }
   });
 
+  it('declares secondary text and icon on each surface, so a value an app maps on the theme root does not reach it', () => {
+    const mapped = defineTheme({
+      name: 'media-scheme-replay-secondary',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-icon-secondary': ['#666666', '#999999'],
+      },
+    });
+    const mappedCss = generateOnMediaCSS(mapped);
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(mappedCss, surface);
+      expect(declared['--color-text-secondary']).toBe(
+        mapped.tokens['--color-text-secondary'],
+      );
+      expect(declared['--color-icon-secondary']).toBe(
+        mapped.tokens['--color-icon-secondary'],
+      );
+    }
+  });
+
   it('does not re-declare a token whose value ignores the scheme', () => {
     const declared = mediaDeclarations(css, 'dark');
     expect(declared).not.toHaveProperty('--spacing-4');
