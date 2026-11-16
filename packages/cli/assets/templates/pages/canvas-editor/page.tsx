@@ -2155,7 +2155,11 @@ export default function CanvasEditor() {
                               height="max-content"
                               minHeight="100%"
                               xstyle={styles.canvasStage}>
+                              {/* The artboard is a physical coordinate space:
+                                  layers sit at x/y from its top-left corner in
+                                  every reading direction. */}
                               <Card
+                                dir="ltr"
                                 padding={0}
                                 elevation="med"
                                 width={FRAME.width * scale}

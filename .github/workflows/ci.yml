@@ -1066,6 +1066,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
@@ -1239,7 +1245,7 @@ jobs:
       # inside the job limit, at most eight (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
-      # at its first step.
+      # before any setup.
       matrix:
         shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
@@ -1250,6 +1256,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # A Node suite that does not fit its legs fails every leg with room's
       # reason, before any setup, so the run cannot pass on legs that would
       # outrun their job limit.
@@ -1583,6 +1595,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       - uses: actions/checkout@v7
         timeout-minutes: 8
         with:
