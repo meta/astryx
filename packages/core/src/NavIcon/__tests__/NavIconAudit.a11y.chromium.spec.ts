@@ -49,6 +49,8 @@ const NAV_ICON = '#storybook-root .astryx-nav-icon';
 const MIN_ICON_CONTRAST = 3;
 /** Rounding slack for sub-pixel layout, in CSS px. */
 const EPSILON = 0.6;
+/** Tab presses before the walk gives up on wrapping. */
+const MAX_TAB_STOPS = 40;
 
 test.describe.configure({retries: 0});
 
@@ -253,8 +255,9 @@ async function axeRoot(page: Page) {
 }
 
 /**
- * Walks Tab from the top of the page until focus returns to the first stop or
- * leaves the page, and records whether each stop sits inside a NavIcon.
+ * Walks Tab on from the current focus point until focus leaves the page or
+ * returns to its first stop, and records whether each stop sits inside a
+ * NavIcon.
  */
 async function tabStops(page: Page) {
   await page.evaluate(() => {
@@ -292,9 +295,6 @@ const same = (a: number[], b: number[]) =>
   b.length === 4 &&
   a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= 1) &&
   Math.abs(a[3] - b[3]) <= 0.01;
-
-/** Tab presses before the walk gives up on wrapping. */
-const MAX_TAB_STOPS = 40;
 
 /** Checks one container's markup, box, paint, and semantics. */
 function checkNavIcon(check: Check, icon: NavIconRead, label: string) {
@@ -503,11 +503,15 @@ async function runCase(page: Page, item: AuditCase) {
     await frame('rest', {list, ax, axe, overflow});
     await page.keyboard.press('Tab');
     await settle(page);
-    const focusInside = await page.evaluate(
-      sel =>
-        Array.from(document.querySelectorAll(sel)).some(el =>
+    const {focusInside, firstStop} = await page.evaluate(
+      sel => ({
+        focusInside: Array.from(document.querySelectorAll(sel)).some(el =>
           el.matches(':focus, :focus-within'),
         ),
+        firstStop:
+          document.activeElement != null &&
+          document.activeElement !== document.body,
+      }),
       NAV_ICON,
     );
     check(!focusInside, 'Tab focused a NavIcon or its content');
@@ -519,7 +523,10 @@ async function runCase(page: Page, item: AuditCase) {
     );
     check(stops.wrapped, `Tab did not wrap within ${MAX_TAB_STOPS} presses`);
     if (item.group !== 'standalone') {
-      check(stops.list.length > 0, 'the story has no Tab stop to walk');
+      check(
+        firstStop || stops.list.length > 0,
+        'the story has no Tab stop to walk',
+      );
     }
   } catch (error) {
     check(false, `run threw: ${String(error)}`);
