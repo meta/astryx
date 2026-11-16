@@ -6221,12 +6221,20 @@ export function compileTheme(ctx, data, base) {
       if (color) mb.backgroundColor = color;
       return;
     }
-    // A color set in a one-mode theme fills its mode's half only (as a
-    // setting for that mode does), so a region Core draws in the other mode
-    // reads the other half.
-    const mode =
-      s.mode ??
-      (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
+    const onWholeFill = colorOnWholeFill(
+      ctx,
+      data,
+      {...s, thing: prop},
+      target,
+    );
+    if (onWholeFill && s.mode)
+      (ctx.compileNotes ??= []).push(
+        `${target}'s own background is the same in both modes, so its ${s.mode} text color is written for both: a region drawn in the other mode (a lightbox, an overlay) keeps the text on that background`,
+      );
+    const mode = onWholeFill
+      ? undefined
+      : (s.mode ??
+        (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined));
     if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
@@ -9087,6 +9095,38 @@ async function buildThemeSteps(ctx, slug, data) {
 }
 
 /**
+ * Whether a text color in a one-mode theme is written for both modes. It is
+ * when it sits on a rule whose own fill is an image (a gradient), which is
+ * written whole: a region Core draws in the other mode (a lightbox, an
+ * overlay) keeps that fill, so it keeps the text on it too.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {Setting} x
+ * @param {string | null} target the part the color is written on
+ * @returns {boolean}
+ */
+function colorOnWholeFill(ctx, data, x, target) {
+  const own =
+    data.mode === 'light-only'
+      ? 'light'
+      : data.mode === 'dark-only'
+        ? 'dark'
+        : null;
+  if (!own || !target || x.source !== 'property') return false;
+  if (kebab(x.thing) !== 'color' || (x.mode && x.mode !== own)) return false;
+  return data.settings.some(
+    y =>
+      y.source === 'property' &&
+      /^background(-image)?$/.test(kebab(y.thing)) &&
+      !y.mode &&
+      !parseColor(String(y.value).trim()) &&
+      (y.when ?? null) === (x.when ?? null) &&
+      (y.state ?? null) === (x.state ?? null) &&
+      partsOf(ctx, y).includes(target),
+  );
+}
+
+/**
  * The one color mode of a light-only or dark-only theme, from its settings,
  * for the build to write into the built module (`colorModes`); null for a
  * theme with both modes.
@@ -9906,7 +9946,9 @@ export async function contrastProblems(ctx, data, res) {
           x =>
             (!x.state || (inState != null && x.state === inState)) &&
             (!x.when || x.when === w) &&
-            (!x.mode || x.mode === m) &&
+            (!x.mode ||
+              x.mode === m ||
+              colorOnWholeFill(ctx, data, x, p.fg.target)) &&
             test(x),
         ) ?? null;
     /** @param {Setting} x @param {string | null} t */
