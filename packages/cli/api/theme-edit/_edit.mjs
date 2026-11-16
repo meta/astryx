@@ -164,6 +164,7 @@ import {
   storedProblems,
   unknownVarRef,
   STATE_WORDS,
+  partNamed,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
@@ -5843,6 +5844,28 @@ async function changeOnce(
             byValue.slice(0, 5).map(x => ({
               name: `${P} undo ${slug} ${setArgs(x, String(x.value))}`,
               reason: `do this instead: ${thing} is the value of ${describe(x)}`,
+            })),
+            e.code,
+          );
+        // A part named in the setting's place (`undo t card`, `undo t card
+        // padding`): the undo of each setting the theme holds on that part
+        // (the one named after it, when one is), as --on reads it.
+        const partWord =
+          !matches.length && !flags.on ? partNamed(ctx, typed) : null;
+        const after = String(value ?? '')
+          .trim()
+          .toLowerCase();
+        const onPart = partWord
+          ? data.settings.filter(
+              x => x.on === partWord && (!after || x.thing === after),
+            )
+          : [];
+        if (onPart.length)
+          throw new AstryxError(
+            `"${thing}" is a part, not a setting; ${slug} sets ${onPart.map(x => describe(x)).join(', ')}. Nothing was changed.`,
+            onPart.slice(0, 5).map(x => ({
+              name: `${P} undo ${slug} ${undoArgs(x)}`,
+              reason: `do this instead: ${describe({...x, value: '?'}).replace(' = ?', '')}`,
             })),
             e.code,
           );

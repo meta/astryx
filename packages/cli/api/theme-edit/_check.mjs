@@ -4010,6 +4010,34 @@ export function checkSetting(
       );
     }
   }
+  // A part typed in the setting's place, the setting and its value after it
+  // (`set t button background-color '#2563eb'`, `card padding 20px`,
+  // `card 'padding: 20px'`, `buttons background-color red`): the setting
+  // on that part, as --on reads it. (A dial of the same name, `buttons`,
+  // only when what follows is no value of it.)
+  if (!unset && typeof value === 'string' && !flags.on) {
+    const on = partNamed(ctx, thing);
+    const m =
+      /^\s*([a-z-]+|--[a-z0-9-]+)\s*(?::\s*|\s+)(\S[\s\S]*?)\s*;?\s*$/i.exec(
+        value,
+      );
+    const next = m ? m[1].toLowerCase() : '';
+    if (
+      on &&
+      m &&
+      (!DIALS[thing] || !dialValueFits(thing, value)) &&
+      (DIALS[next] || cssProperties().has(next) || next.startsWith('--'))
+    )
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${thing}" is a part, typed in the setting's place; the setting is ${next}, and a value for one part is given with --on ${on}.`,
+        {
+          run: [
+            `${P} set ${slug} ${next} ${quoteCommandArgument(m[2])} --on ${on}${flags.when ? ` --when ${flags.when}` : ''}${flags.state ? ` --state ${flags.state}` : ''}${flags.mode ? ` --mode ${flags.mode}` : ''}`,
+          ],
+        },
+      );
+  }
   // A dial's value that names a part or group, plural included, as a label
   // (`spacing 'buttons: roomy'`, `corners 'cards: pill'`), after `on`
   // (`'pill on card'`) or as its first or last word (`'card pill'`): the
@@ -4457,15 +4485,7 @@ export function checkSetting(
  * @returns {{on: string, value: string, state?: string} | null}
  */
 function partInValue(ctx, text) {
-  /** The part a word names, or null. @param {string} w */
-  const partOf = w => {
-    const word = w.trim().toLowerCase().replace(/\s+/g, '-');
-    return (
-      [word, word.replace(/e?s$/, ''), word.replace(/s$/, '')].find(
-        x => x && (ctx.project.target.has(x) || FAMILIES[x]),
-      ) ?? null
-    );
-  };
+  const partOf = (/** @type {string} */ w) => partNamed(ctx, w);
   const t = text.trim();
   /** @type {Array<[string, string, string?]>} part words, value, state */
   const readings = [];
@@ -4487,6 +4507,23 @@ function partInValue(ctx, text) {
     return {on: found, value: value.trim(), ...(read ? {state: read} : {})};
   }
   return null;
+}
+
+/**
+ * The part or group a word names as --on reads it (a plural is its part:
+ * `cards`, `buttons`), or null. The one reader for a part named inside a
+ * value and a part typed in the setting's place.
+ * @param {any} ctx
+ * @param {string} w
+ * @returns {string | null}
+ */
+export function partNamed(ctx, w) {
+  const word = String(w).trim().toLowerCase().replace(/\s+/g, '-');
+  return (
+    [word, word.replace(/e?s$/, ''), word.replace(/s$/, '')].find(
+      x => x && (ctx.project.target.has(x) || FAMILIES[x]),
+    ) ?? null
+  );
 }
 
 /**
