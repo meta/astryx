@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: `corners rounded` and `corners squared` are offered the `round` and `square` rungs, as the English words say. `rounded` also offers Tailwind's 4px after `round`, but no longer only that: on most bases 4px is sharper than the corners already are.
+[experimental] `astryx experimental theme editor`: `corners rounded` is offered the `round` rung first, as the English word says, then Tailwind's 4px: on most bases 4px alone is sharper than the corners already are.
 
 @josephfarina
