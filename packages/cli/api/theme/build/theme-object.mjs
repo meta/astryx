@@ -64,6 +64,11 @@ export function moduleBindings(ast) {
             source: node.source.value,
             imported: 'default',
           });
+        else if (spec.type === 'ImportNamespaceSpecifier')
+          imports.set(spec.local.name, {
+            source: node.source.value,
+            imported: '*',
+          });
     addDeclaration(node);
     if (node.type === 'ExportNamedDeclaration') {
       addDeclaration(node.declaration);
