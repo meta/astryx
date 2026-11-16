@@ -9,8 +9,9 @@
  *   Storybook, with real keyboard input.
  * @output Browser evidence for `component:BottomSheet` FR11 and FR20 on the
  *   switcher: a flow without its scrim that closes with focus inside returns
- *   focus to its opener, and a switcher removed while its sheet is open
- *   returns focus to the flow's opener, with and without the scrim.
+ *   focus to its opener, and a switcher
+ *   removed while its sheet is open returns focus to the flow's opener, with
+ *   and without the scrim.
  * @position jsdom stubs the dialog methods and implements neither `inert` nor
  *   the browser's own focus return, so only a browser shows where focus ends.
  */
@@ -46,9 +47,26 @@ async function openFromKeyboard(page: Page, story: string): Promise<Locator> {
     exact: true,
   });
   await expect(opener).toBeVisible();
+  if (story === 'no-scrim') {
+    // The story's play function opens the flow without focus. Let that flow
+    // end, so the flow under test opens from the focused opener.
+    await page.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await expect(page.locator('dialog[open]')).toHaveCount(0);
+  }
   await opener.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog')).toBeVisible();
+  // The open has settled once the sheet has taken focus.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('dialog[open]')
+            ?.contains(document.activeElement) === true,
+      ),
+    )
+    .toBe(true);
   return opener;
 }
 
