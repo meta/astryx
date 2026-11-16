@@ -2,25 +2,26 @@
 
 'use client';
 
-import {useSyncExternalStore} from 'react';
+import {useState, useSyncExternalStore} from 'react';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
 // The server markup and the render that hydrates it share one fixed instant,
-// so they match; the browser's clock takes over right after hydration.
+// so they match. After hydration each mount reads the browser's clock once.
 const HYDRATION_NOW = Date.UTC(2026, 0, 1) / 1000;
 const subscribeToNothing = () => () => {};
-let clientNow: number | undefined;
-const getClientNow = () => (clientNow ??= Date.now() / 1000);
-const getHydrationNow = () => HYDRATION_NOW;
+const isHydratingOnClient = () => false;
+const isHydratingOnServer = () => true;
 
 export default function TimestampRelativeFormat() {
-  const now = useSyncExternalStore(
+  const isHydrating = useSyncExternalStore(
     subscribeToNothing,
-    getClientNow,
-    getHydrationNow,
+    isHydratingOnClient,
+    isHydratingOnServer,
   );
+  const [mountNow] = useState(() => Date.now() / 1000);
+  const now = isHydrating ? HYDRATION_NOW : mountNow;
   return (
     <Stack direction="vertical" gap={3}>
       <Text type="supporting" color="secondary">
