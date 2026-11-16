@@ -5,7 +5,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import nodeModule from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {z} from 'zod';
 import {
@@ -449,9 +448,7 @@ describe('importThemeArtifact', () => {
     },
   );
 
-  it.skipIf(
-    typeof (/** @type {any} */ (nodeModule).registerHooks) !== 'function',
-  )(
+  it.skipIf(!hasModuleHooks)(
     'loads an asset a module imports (an icon’s .svg) as its URL, as a bundler gives it',
     async () => {
       write('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>\n');
