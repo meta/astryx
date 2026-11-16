@@ -485,10 +485,10 @@ export async function pictures(project, shots, modes) {
     if (!slug) continue;
     const record = themeFiles(project.cwd, slug).pictures;
     const st = fs.lstatSync(record, {throwIfNoEntry: false});
-    if (st && !st.isFile() && !st.isSymbolicLink())
+    if (st && !st.isFile())
       return {
         files,
-        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move it, then run the command again`,
+        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
       };
   }
   /** Pictures skipped for a link at their name. @type {string[]} */

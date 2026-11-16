@@ -9203,6 +9203,21 @@ export async function contrastProblems(ctx, data, res) {
    */
   const textTokens = (p, m, read) => {
     const t = p.fg.target;
+    // Text on a surface that keeps one side (a caption on a lightbox's
+    // dark island) reads the on-color for that side, in both modes.
+    const g = p.bg.target;
+    const sides = /** @type {string[]} */ (
+      /** @type {any} */ (g ? ctx.C.MAP[g] : null)?.mediaSides ?? []
+    );
+    if (
+      g &&
+      g !== t &&
+      ctx.C.MAP[g]?.media &&
+      !autoMediaPart(ctx, g) &&
+      sides.length === 1 &&
+      /^--color-text-(primary|secondary)$/.test(String(p.fg.tokens[0]))
+    )
+      return [`--color-on-${sides[0]}`];
     if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
       return p.fg.tokens;
     // A surface that follows what is painted behind it (a toast's) takes
@@ -9514,6 +9529,34 @@ export async function contrastProblems(ctx, data, res) {
   // where it is light, so the part's text is measured with the one its side
   // gives, on the part's own fill.
   /** @type {TextPair[]} */
+  /**
+   * A pair of a part drawn with its default props, named by the variant Core
+   * draws it as (a Button is `secondary` unless told otherwise): the one
+   * variant whose fill reads the pair's ground token and whose text reads
+   * its text token. Its fix then reaches that variant, as a setting scoped
+   * to it reaches the button the pair stands for. Any other pair as it is.
+   * @param {TextPair} q
+   * @returns {TextPair}
+   */
+  const defaultVariant = q => {
+    const t = q.fg.target;
+    if (!t || /** @type {any} */ (q).when || q.bg.target !== t) return q;
+    const bgReads = ctx.C.partReads(t, 'background') ?? [];
+    const fgReads = ctx.C.partReads(t, 'color') ?? [];
+    /** @param {Array<{token: string, when: string[]}>} reads @param {string} v */
+    const reads = (reads, v) =>
+      reads.find(r => r.when.includes(`variant=${v}`))?.token;
+    const variants = /** @type {string[]} */ ([
+      ...(ctx.C.MAP[t]?.attrs?.variant ?? []),
+    ]).filter(
+      v =>
+        reads(bgReads, v) === q.bg.tokens[0] &&
+        (reads(fgReads, v) ?? q.fg.tokens[0]) === q.fg.tokens[0],
+    );
+    return variants.length === 1
+      ? /** @type {any} */ ({...q, when: `variant:${variants[0]}`})
+      : q;
+  };
   const mediaPairs = [];
   const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
   // (One pair for each text and side, on the first surface that holds it:
@@ -9529,7 +9572,8 @@ export async function contrastProblems(ctx, data, res) {
     // shows that, not the page.
     const reads = ctx.C.partReads(m, 'background') ?? [];
     const ground = (reads.find(r => r.when.includes('')) ?? reads[0])?.token;
-    for (const q of [...census.pairs, ...variantPairs]) {
+    for (const q0 of [...variantPairs, ...census.pairs]) {
+      const q = defaultVariant(q0);
       const t = q.fg.target;
       if (
         !t ||
@@ -9540,7 +9584,8 @@ export async function contrastProblems(ctx, data, res) {
       )
         continue;
       for (const side of sides) {
-        const k = `${q.text}|${/** @type {any} */ (q).when ?? ''}|${side}`;
+        // (A part's default variant is one with that variant's own pair.)
+        const k = `${t}|${/** @type {any} */ (q).when ?? q.text}|${side}`;
         if (mediaSeen.has(k)) continue;
         mediaSeen.add(k);
         mediaPairs.push(
@@ -9608,7 +9653,7 @@ export async function contrastProblems(ctx, data, res) {
         // text's part turns it the wrong way on the others, so no line
         // fixes this alone.
         const over = /** @type {any} */ (pair).over;
-        if (over) {
+        if (over && !(/** @type {any} */ (pair).mediaOf)) {
           const own = value(pair, 'bg', x.mode);
           const sides = new Set(
             grounds.map(g => {
@@ -9638,26 +9683,17 @@ export async function contrastProblems(ctx, data, res) {
           part && data.settings.some(s => s.on === part && s.only)
             ? ' --only'
             : '';
-        if (drawn) {
-          const onText =
-            drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
-        }
-        // Text inside Core's media surface (a button on an overlay) takes
-        // the surface's text colors: a color on the part itself (its
-        // variant) reaches it there, and reads the same on its fill
-        // everywhere else.
-        // (Text on a toast's own surface takes a color on the toast: a
-        // text token there never reaches it.)
+        // Text inside Core's media surface (a button on a lightbox's dark
+        // island) is drawn in the surface's scheme whatever the page's
+        // mode: a color on its part (its variant) for that mode reaches it
+        // there, and the page's parts in that mode, which sit on a ground of
+        // the same kind. When the part's own fill lets the surface's ground
+        // through (a transparent button) and the same text on the page in
+        // that mode needs the other color, the two grounds disagree: the
+        // surface's own on-color for its side reaches only the text inside
+        // it (unless a color the theme set on the part draws the text).
         const onMedia = /** @type {any} */ (pair).mediaOf;
-        // (On a media surface the part is drawn in the surface's scheme: a
-        // color for that mode reaches it there, and the page's parts in
-        // that mode, which sit on a ground of the same kind.)
         const drawnIn = /** @type {any} */ (pair).drawnIn;
-        // (When the part's own fill lets the surface's ground through (a
-        // transparent button) and the same text on the page in that mode
-        // needs the other color, the two grounds disagree, and no color on
-        // the part fixes both: no line.)
         if (onMedia && drawnIn) {
           const q = /** @type {TextPair} */ (/** @type {any} */ (pair).pageOf);
           const v = q ? value(q, 'bg', drawnIn) : null;
@@ -9677,10 +9713,61 @@ export async function contrastProblems(ctx, data, res) {
             : c && page
               ? compositeOver(c, a, page)
               : page;
-          if (ground && plainOn(ground) !== plainOn(x.ground)) return null;
+          const theirs = drawnBy(pair, drawnIn);
+          if (ground && plainOn(ground) !== plainOn(x.ground)) {
+            if (theirs?.thing === 'color') return null;
+            // (Text the surface draws on its own on-color grounds, a
+            // caption bar, would need that on-color the other way: then the
+            // surface's own ground (its overlay) is what turned, and the
+            // base theme's value for it is the line.)
+            const want = plainOn(x.ground);
+            const bars = census.pairs.some((/** @type {TextPair} */ q) => {
+              if (
+                q.bg.target !== onMedia ||
+                !/^--color-on-/.test(String(q.bg.tokens[0]))
+              )
+                return false;
+              const g = parseColor(String(value(q, 'bg', drawnIn) ?? ''));
+              return g != null && plainOn(g) !== want;
+            });
+            if (!bars)
+              return `${P} set ${slug} --color-on-${drawnIn} ${color} --on ${onMedia}`;
+            const tok = /** @type {any} */ (pair).over?.tokens?.[0];
+            const was = tok ? /** @type {any} */ (base)?.[x.mode]?.[tok] : null;
+            return tok &&
+              was &&
+              was !== res[/** @type {'light' | 'dark'} */ (x.mode)][tok]
+              ? `${P} set ${slug} ${tok} '${was}'${modeFlag(x.mode)}`
+              : null;
+          }
+          if (x.textPart)
+            return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(theirs?.when ?? variant)}${modeFlag(drawnIn)}`;
         }
-        if (x.textPart && (onMedia || autoMediaPart(ctx, x.textPart)))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(drawnIn ?? x.mode)}`;
+        if (drawn) {
+          const onText =
+            drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
+        }
+        // (Text on a toast's own surface takes a color on the toast: a
+        // text token there never reaches it.)
+        if (x.textPart && autoMediaPart(ctx, x.textPart))
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+        // Text on a surface's own ground drawn from its on-color (a
+        // lightbox's caption bar): the ground is what changed, and that
+        // on-color on the surface is the line that reaches it, set to the
+        // color the text reads on.
+        const groundToken = String(pair.bg.tokens?.[0] ?? '');
+        if (
+          x.bgPart &&
+          ctx.C.MAP[x.bgPart]?.media &&
+          !autoMediaPart(ctx, x.bgPart) &&
+          /^--color-on-(dark|light)$/.test(groundToken)
+        ) {
+          const fg = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+          return fg
+            ? `${P} set ${slug} ${groundToken} '${plainOn(fg)}' --on ${x.bgPart}${only(x.bgPart)}`
+            : null;
+        }
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.
         // (Text on a ground part's variants that need opposite text: a color
@@ -11273,8 +11360,14 @@ export function refuseLinks(cwd, slug) {
   // replaced: that one picture is skipped and named (`pictures`), so it
   // refuses nothing here.
   const recorded = readWrittenRecord(cwd, slug);
+  // A link at a page's name (preview.html, the sheets) or at the record of
+  // pictures is left alone the same way: that page or picture is not made,
+  // and the result names it.
   const own = (/** @type {string} */ n) =>
-    (isEditorFile(slug, n, recorded) && !n.endsWith('.png')) ||
+    (isEditorFile(slug, n, recorded) &&
+      !n.endsWith('.png') &&
+      !isEditorPage(n, recorded) &&
+      n !== `${slug}.pictures.json`) ||
     n === `${slug}.theme.ts` ||
     n === 'tokens';
   /** @type {string[]} */

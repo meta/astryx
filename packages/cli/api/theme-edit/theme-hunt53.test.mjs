@@ -3,7 +3,8 @@
 /**
  * @file #11453 follow-up: pictures carry the editor stamp; a picture an
  * older editor took (no record) is adopted only when it is the editor's
- * 1280-pixel window; a link to a file of the user's is left alone; a `new`
+ * 1280-pixel window; a link to a file of the user's (or at a page's name)
+ * is left alone; a `new`
  * refused for its name drops a vibrancy that would change nothing.
  *
  * @position api/theme-edit — tests
@@ -127,17 +128,26 @@ describe('#11453: links in the theme folder', () => {
     fs.symlinkSync('/nonexistent/p.png', path.join(dir, 'preview.png'));
     await themeEditSet('t', 'corners', 'square', {cwd});
     fs.rmSync(path.join(dir, 'preview.png'));
-    // A link at a page the editor writes is named.
-    fs.rmSync(path.join(dir, 'sheet.html'), {force: true});
-    fs.symlinkSync('/nonexistent/s.html', path.join(dir, 'sheet.html'));
+    // A link at a page the editor writes is left alone the same way: that
+    // page is not made, and the result names it.
+    fs.rmSync(path.join(dir, 'preview.html'), {force: true});
+    fs.symlinkSync('/nonexistent/s.html', path.join(dir, 'preview.html'));
+    const r2 = await themeEditSet('t', 'corners', 'pill', {cwd});
+    expect(r2.data.setting.value).toBe('pill');
+    expect(JSON.stringify(r2)).toContain('themes/t/preview.html is a link');
+    expect(fs.readlinkSync(path.join(dir, 'preview.html'))).toBe(
+      '/nonexistent/s.html',
+    );
+    fs.rmSync(path.join(dir, 'preview.html'));
+    // A link at the theme's own source is still named.
+    fs.renameSync(path.join(dir, 't.theme.ts'), path.join(cwd, 't.theme.ts'));
+    fs.symlinkSync(path.join(cwd, 't.theme.ts'), path.join(dir, 't.theme.ts'));
     const err = await refusal(() =>
-      themeEditSet('t', 'corners', 'pill', {cwd}),
+      themeEditSet('t', 'corners', 'round', {cwd}),
     );
-    expect(err.message).toContain(
-      'themes/t/sheet.html is a link to /nonexistent/s.html',
-    );
-    expect(err.run).toEqual(['ls -l themes/t/sheet.html']);
-    fs.rmSync(path.join(dir, 'sheet.html'));
+    expect(err.message).toContain('themes/t/t.theme.ts is a link to');
+    fs.rmSync(path.join(dir, 't.theme.ts'));
+    fs.renameSync(path.join(cwd, 't.theme.ts'), path.join(dir, 't.theme.ts'));
   }, 120_000);
 });
 

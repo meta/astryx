@@ -101,6 +101,7 @@ import {
   nearest,
   negates,
   partsOf,
+  autoMediaPart,
   refuse,
   lengthPx,
   cornersPlain,
@@ -3274,13 +3275,22 @@ function mediaTextRefusal(ctx, slug, s, v) {
   );
   if (!parts.length || held.length !== parts.length) return;
   const part = held[0];
+  // A surface that keeps one side (a lightbox's dark island) draws its
+  // text in the on-color for that side: that token on the part reaches it
+  // there and nowhere else. One that follows its fill (a toast's) takes a
+  // color on the part, written into both on-colors.
+  const sides = /** @type {string[]} */ (
+    /** @type {any} */ (ctx.C.MAP[part])?.mediaSides ?? []
+  );
+  const fixed = !autoMediaPart(ctx, part) && sides.length === 1;
   refuse(
     E.ERR_THEME_NO_EFFECT,
-    `${part}'s text sits on Core's media surface inside it (its inverted surface), which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color token on ${part} never reaches it; set its color on ${part} instead.`,
+    `${part}'s text sits on Core's media surface inside it, which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color token on ${part} never reaches it; ${fixed ? `set --color-on-${sides[0]} on ${part} instead (its surface is always ${sides[0]})` : `set its color on ${part} instead`}.`,
     {
-      // (The flags the command was given carry over: a mode, a variant.)
+      // (The flags the command was given carry over: a variant; a mode
+      // too, except on a surface that draws one side in both modes.)
       run: [
-        `${P} set ${slug} color ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`,
+        `${P} set ${slug} ${fixed ? `--color-on-${sides[0]}` : 'color'} ${quoteCommandArgument(v)} --on ${s.on ?? part}${s.when ? ` --when ${s.when}` : ''}${s.mode && !fixed ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`,
       ],
     },
   );

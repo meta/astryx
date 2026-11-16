@@ -5,8 +5,8 @@
  * measured as that surface draws it, in its own scheme whatever the
  * page's mode: an untouched base ships no problem there, a light-only text
  * color on the page part makes none, a problem there is listed once, and
- * its fix is a color in the surface's scheme that ends the problem; when
- * the same text on the page needs the other color, no line is offered.
+ * its fix is a color in the surface's scheme that ends the problem, and a
+ * light overlay is offered the overlay back.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -106,17 +106,18 @@ describe('a part on a media surface', () => {
   );
 
   it(
-    'offers no line when the page needs the other color, so fixes never cycle',
+    'a light overlay the page reads the other way is offered the overlay, and never cycles',
     async () => {
       await themeEditNew('o', {cwd, like: 'neutral'});
       await themeEditSet('o', '--color-overlay', 'rgba(255,255,255,0.9)', {
         cwd,
       });
-      const media = (await open('o')).filter(p =>
-        / on lightbox /.test(p.problem),
-      );
-      expect(media.length).toBeGreaterThan(0);
-      for (const p of media) expect(p.fix).toBeNull();
+      let left = await open('o');
+      for (let i = 0; i < 6 && left.some(p => p.fix); i++) {
+        await follow(/** @type {string} */ (left.find(p => p.fix)?.fix));
+        left = await open('o');
+      }
+      expect(left).toEqual([]);
     },
     T,
   );

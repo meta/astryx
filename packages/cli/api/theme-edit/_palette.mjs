@@ -1603,6 +1603,8 @@ const writtenRecordFile = (cwd, slug) =>
  */
 export function writeWrittenRecord(cwd, slug, map) {
   const file = writtenRecordFile(cwd, slug);
+  // A link of the user's at the record's name is left as it is.
+  if (fs.lstatSync(file, {throwIfNoEntry: false})?.isSymbolicLink()) return;
   try {
     if (!Object.keys(map).length) fs.rmSync(file, {force: true});
     else {
