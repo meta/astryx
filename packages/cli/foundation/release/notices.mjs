@@ -392,6 +392,17 @@ const ADD = {
 };
 
 /**
+ * The command that installs a project's dependencies, by package manager.
+ * @type {Record<string, string>}
+ */
+const INSTALL = {
+  npm: 'npm install',
+  pnpm: 'pnpm install',
+  yarn: 'yarn install',
+  bun: 'bun install',
+};
+
+/**
  * The command that adds a package to the project of a run in `cwd`, with the
  * project's package manager (spec AST-081 FR12). Null when `cwd` belongs to
  * no project `spec:AST-040` FR9 defines, and in a folder inside the project
@@ -482,20 +493,31 @@ export function projectRelease(dir) {
 }
 
 /**
- * The command that adds the CLI at Core's version, for a run in `cwd` whose
- * Core is `core`, with the project's package manager in the project root.
- * `command` is null in a folder inside the project whose package.json is not
- * the project's (see {@link installFolder}), where the advice is
+ * The command that gives a project with no CLI installed its CLI, for a run in
+ * `cwd` whose Core is `core`, with the project's package manager in the
+ * project root: the command that adds the CLI at Core's version, or, when the
+ * project's package.json declares the CLI already, as a fresh clone's does,
+ * the command that installs the project's dependencies (`declared`). Adding
+ * the CLI again would replace the version the project declares. `command` is
+ * null in a folder inside the project whose package.json is not the
+ * project's (see {@link installFolder}), where the advice is
  * {@link RUN_FROM_PROJECT}. Null when the folder belongs to no project.
  * @param {{cwd: string, core: string}} options
- * @returns {{root: string, core: string, command: string | null} | null}
+ * @returns {{root: string, core: string, command: string | null, declared: boolean} | null}
  */
 export function cliInstallAdvice({cwd, core}) {
   const target = installFolder(cwd);
   if (target == null) return null;
-  if (target.moved) return {root: target.dir, core, command: null};
-  const root = projectRootOf(readReleaseFacts(cwd)) ?? cwd;
-  return {root, core, command: addCliCommand(root, core)};
+  if (target.moved) {
+    return {root: target.dir, core, command: null, declared: false};
+  }
+  const facts = readReleaseFacts(cwd);
+  const root = projectRootOf(facts) ?? cwd;
+  if (facts.declaredCliRange != null) {
+    const install = INSTALL[detectPackageManager(root)] ?? INSTALL.npm;
+    return {root, core, command: install, declared: true};
+  }
+  return {root, core, command: addCliCommand(root, core), declared: false};
 }
 
 /**
