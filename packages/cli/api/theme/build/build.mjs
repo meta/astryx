@@ -124,7 +124,11 @@ import {
   sourceInputField,
   sourceTypography,
 } from './input-fields.mjs';
-import {styleKeyProblems} from './style-keys.mjs';
+import {
+  holdsOnlyVariantMaps,
+  styleKeyProblems,
+  withoutVariantMaps,
+} from './style-keys.mjs';
 import {
   bigIntAsText,
   writtenPrimitives,
@@ -4526,6 +4530,9 @@ export function validateComponentOverridesAgainstRegistry(
       const knownProps = knownComponents.propsByKey[component];
       for (const key of Object.keys(rules)) {
         if (key === 'base') continue;
+        // A wrapper of variant maps (`variants: {variant: {…}}`): the
+        // warning on each map names the keys that write it.
+        if (holdsOnlyVariantMaps(rules[key])) continue;
 
         const pairs = key.split('+');
         for (const pair of pairs) {
@@ -5645,6 +5652,9 @@ async function themeBuildInternal(
     // too. A boxed primitive in a part would be written as JSON text (with
     // its quotes), where a token writes its text: it gets its primitive.
     resolvedTheme = writtenPrimitives(resolvedTheme);
+    // A map of values to blocks in a style block is warned at its line with
+    // the keys that write it; Core would only drop it again.
+    resolvedTheme = withoutVariantMaps(resolvedTheme);
 
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;
