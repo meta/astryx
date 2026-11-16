@@ -204,6 +204,9 @@ export async function startRun({cliRoot, argv, declinedProjectCli}) {
       await handOff(bin, argv, {
         json,
         env: withPnpRuntime(process.env, runtime),
+        // The run started again passes an interrupt on to the CLI it hands
+        // the run to, after the grace.
+        interruptAtOnce: true,
         failure: error =>
           `This CLI could not start with the project's Plug'n'Play runtime (${runtime.file}): ${error.message}.`,
       });
@@ -502,9 +505,16 @@ async function answerInPackageSet(hostEntry, root, {argv, declinedProjectCli}) {
  *   successful run
  * @param {NodeJS.ProcessEnv} [options.env] the environment `bin` gets, when it
  *   is not this run's
+ * @param {boolean} [options.interruptAtOnce] pass an interrupt on at once, not
+ *   after the grace: `bin` is this copy started again, which passes it on to
+ *   the CLI it hands the run to after the grace itself
  * @returns {Promise<never>}
  */
-function handOff(bin, argv, {json, failure, notify = () => {}, env}) {
+function handOff(
+  bin,
+  argv,
+  {json, failure, notify = () => {}, env, interruptAtOnce = false},
+) {
   return new Promise(() => {
     const child = spawn(process.execPath, [bin, ...argv], {
       stdio: 'inherit',
@@ -526,9 +536,20 @@ function handOff(bin, argv, {json, failure, notify = () => {}, env}) {
     // that stops in time. On Windows, Ctrl-C reaches every process in the
     // console and a forwarded SIGINT would end the child abruptly, so this
     // process only outlives it.
+    let interruptWaiting = false;
     const onInterrupt = () => {
       if (process.platform === 'win32' || !running()) return;
+      if (interruptAtOnce) {
+        forward('SIGINT');
+        return;
+      }
+      // One interrupt passed on per grace: a run started again gets a
+      // terminal's Ctrl-C both from the terminal and from the copy that
+      // started it.
+      if (interruptWaiting) return;
+      interruptWaiting = true;
       setTimeout(() => {
+        interruptWaiting = false;
         if (running()) forward('SIGINT');
       }, INTERRUPT_GRACE_MS).unref();
     };

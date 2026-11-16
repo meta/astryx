@@ -22,9 +22,10 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {readReleaseFacts} from './project.mjs';
+import {readReleaseFacts, REPOSITORY_MARKERS} from './project.mjs';
 
 /**
  * A Plug'n'Play runtime: Yarn's `.pnp.cjs`, and the ES module loader Yarn
@@ -36,22 +37,54 @@ import {readReleaseFacts} from './project.mjs';
 
 /**
  * The runtime of the Plug'n'Play project that `dir` is in: the nearest
- * `.pnp.cjs` in `dir` or in a folder above it.
+ * `.pnp.cjs` in `dir` or in a folder above it, within the limits of the
+ * project search (project.mjs): the search ends at a repository's root, and
+ * reads the home folder only when it starts there.
  * @param {string} dir
  * @returns {PnpRuntime | null} null when no folder holds one
  */
 export function findPnpRuntime(dir) {
-  let current = path.resolve(dir);
+  const home = path.resolve(os.homedir());
+  const start = path.resolve(dir);
+  let current = start;
   for (;;) {
     const file = path.join(current, '.pnp.cjs');
-    if (fs.existsSync(file)) {
+    if ((current !== home || current === start) && fs.existsSync(file)) {
       const loader = path.join(current, '.pnp.loader.mjs');
       return {file, loader: fs.existsSync(loader) ? loader : null};
+    }
+    if (REPOSITORY_MARKERS.some(m => fs.existsSync(path.join(current, m)))) {
+      return null;
     }
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
+}
+
+/**
+ * A path as `NODE_OPTIONS` takes it: quoted when it holds white space, as
+ * Yarn quotes it.
+ * @param {string} value
+ * @returns {string}
+ */
+function nodeOptionValue(value) {
+  return /\s/u.test(value) ? JSON.stringify(value) : value;
+}
+
+/**
+ * Do the Node options `nodeOptions` preload `runtime` already, as Yarn writes
+ * them or as {@link withPnpRuntime} does? Quoting doubles each backslash of a
+ * Windows path, so both spellings are read.
+ * @param {string | undefined} nodeOptions
+ * @param {PnpRuntime} runtime
+ * @returns {boolean}
+ */
+export function preloads(nodeOptions, runtime) {
+  const text = String(nodeOptions ?? '');
+  return (
+    text.includes(runtime.file) || text.includes(nodeOptionValue(runtime.file))
+  );
 }
 
 /**
@@ -70,12 +103,13 @@ export function findPnpRuntime(dir) {
 export function runtimeToPreload(cwd, nodeOptions) {
   if (process.versions.pnp) return null;
   const runtime = findPnpRuntime(cwd);
-  if (!runtime || String(nodeOptions ?? '').includes(runtime.file)) {
-    return null;
-  }
+  if (!runtime || preloads(nodeOptions, runtime)) return null;
   const facts = readReleaseFacts(cwd);
   if (!facts.declaringDir || facts.cli || facts.core) return null;
-  const relative = path.relative(path.dirname(runtime.file), facts.declaringDir);
+  const relative = path.relative(
+    path.dirname(runtime.file),
+    facts.declaringDir,
+  );
   return relative.startsWith('..') || path.isAbsolute(relative)
     ? null
     : runtime;
@@ -91,12 +125,10 @@ export function runtimeToPreload(cwd, nodeOptions) {
  * @returns {NodeJS.ProcessEnv}
  */
 export function withPnpRuntime(env, runtime) {
-  /** @param {string} value */
-  const quoted = value => (/\s/u.test(value) ? JSON.stringify(value) : value);
-  const options = [`--require ${quoted(runtime.file)}`];
+  const options = [`--require ${nodeOptionValue(runtime.file)}`];
   if (runtime.loader) {
     options.push(
-      `--experimental-loader ${quoted(pathToFileURL(runtime.loader).href)}`,
+      `--experimental-loader ${nodeOptionValue(pathToFileURL(runtime.loader).href)}`,
     );
   }
   const existing = env.NODE_OPTIONS?.trim();

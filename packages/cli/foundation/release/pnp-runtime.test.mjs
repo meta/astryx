@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {
   findPnpRuntime,
+  preloads,
   runtimeToPreload,
   withPnpRuntime,
 } from './pnp-runtime.mjs';
@@ -24,8 +25,12 @@ import {
 } from '../../test-utils/release-fixtures.mjs';
 import {writePnpRuntime} from '../../test-utils/pnp-fixtures.mjs';
 
+const HOME = process.env.HOME;
+
 afterEach(() => {
   delete process.versions.pnp;
+  if (HOME === undefined) delete process.env.HOME;
+  else process.env.HOME = HOME;
   cleanupFixtures();
 });
 
@@ -59,10 +64,46 @@ describe('findPnpRuntime', () => {
     expect(findPnpRuntime(root)?.loader).toBeNull();
     expect(findPnpRuntime(tempDir('plain'))).toBeNull();
   });
+
+  it("stops at a repository's root, and reads the home folder only when it starts there", () => {
+    const outer = tempDir('outer');
+    writePnpRuntime(outer, {});
+    const repo = path.join(outer, 'repo');
+    fs.mkdirSync(path.join(repo, '.git'), {recursive: true});
+    expect(findPnpRuntime(repo)).toBeNull();
+
+    const home = tempDir('home');
+    process.env.HOME = home;
+    writePnpRuntime(home, {});
+    const app = path.join(home, 'app');
+    fs.mkdirSync(app);
+    expect(findPnpRuntime(app)).toBeNull();
+    expect(findPnpRuntime(home)?.file).toBe(path.join(home, '.pnp.cjs'));
+  });
+});
+
+describe('preloads', () => {
+  it('reads the runtime in Node options as Yarn writes them and as a restart writes them', () => {
+    const posix = {file: '/work/my app/.pnp.cjs', loader: null};
+    expect(preloads(withPnpRuntime({}, posix).NODE_OPTIONS, posix)).toBe(true);
+    expect(preloads('--require /work/app/.pnp.cjs', posix)).toBe(false);
+    expect(preloads(undefined, posix)).toBe(false);
+  });
+
+  it('reads a quoted Windows path, whose backslashes quoting doubles', () => {
+    const windows = {file: 'C:\\Users\\me\\my app\\.pnp.cjs', loader: null};
+    const options = withPnpRuntime({}, windows).NODE_OPTIONS;
+    expect(options).toBe('--require "C:\\\\Users\\\\me\\\\my app\\\\.pnp.cjs"');
+    expect(preloads(options, windows)).toBe(true);
+    const unquoted = {file: 'C:\\Users\\me\\app\\.pnp.cjs', loader: null};
+    expect(preloads('--require C:\\Users\\me\\app\\.pnp.cjs', unquoted)).toBe(
+      true,
+    );
+  });
 });
 
 describe('runtimeToPreload', () => {
-  it('names the runtime of a project that declares Astryx and installs it only through Plug\'n\'Play', () => {
+  it("names the runtime of a project that declares Astryx and installs it only through Plug'n'Play", () => {
     const root = pnpProject();
     const src = path.join(root, 'src');
     fs.mkdirSync(src);

@@ -863,12 +863,18 @@ describe.skipIf(!POSIX)(
          * A project whose own CLI records each interrupt it gets, then stops
          * as `onInterrupt` says.
          * @param {string} onInterrupt
+         * @param {{pnp?: boolean}} [options] a Yarn Plug'n'Play project
          */
-        const stubProject = onInterrupt => {
+        const stubProject = (onInterrupt, {pnp = false} = {}) => {
           const dir = project(tempDir('project'), {
             '@astryxdesign/cli': '9.0.0',
           });
-          const cliDir = path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+          // Under Yarn Plug'n'Play the CLI is outside node_modules, where only
+          // the project's runtime finds it.
+          const cliDir = pnp
+            ? path.join(tempDir('pnp-store'), 'cli')
+            : path.join(dir, 'node_modules', '@astryxdesign', 'cli');
+          if (pnp) writePnpRuntime(dir, {'@astryxdesign/cli': cliDir});
           writeJson(path.join(cliDir, 'package.json'), {
             name: '@astryxdesign/cli',
             version: '9.0.0',
@@ -997,8 +1003,34 @@ describe.skipIf(!POSIX)(
           signal: 'SIGINT',
           alive: false,
         });
+        // In a Plug'n'Play project the copy first starts again with the
+        // project's runtime: the interrupt still reaches the CLI once, after
+        // one grace, and a group's interrupt is not passed on again.
+        const pnpAlone = await interrupt(
+          stubProject(HANDLES, {pnp: true}),
+          'alone',
+        );
+        expect(pnpAlone).toMatchObject({
+          code: 130,
+          signal: null,
+          alive: false,
+          interrupts: 1,
+        });
+        expect(pnpAlone.seconds).toBeGreaterThanOrEqual(5);
+        expect(pnpAlone.seconds).toBeLessThan(9);
+        const pnpGroup = await interrupt(
+          stubProject(HANDLES, {pnp: true}),
+          'group',
+        );
+        expect(pnpGroup).toMatchObject({
+          code: 130,
+          signal: null,
+          alive: false,
+          interrupts: 1,
+        });
+        expect(pnpGroup.seconds).toBeLessThan(5);
       },
-      60_000,
+      90_000,
     );
 
     it("G59 a Yarn Plug'n'Play project, started outside its runtime: the run starts again inside it once, and the project's own CLI answers", () => {
@@ -1013,7 +1045,10 @@ describe.skipIf(!POSIX)(
         name: '@astryxdesign/core',
         version: '9.0.0',
       });
-      const packages = {'@astryxdesign/cli': cli.dir, '@astryxdesign/core': core};
+      const packages = {
+        '@astryxdesign/cli': cli.dir,
+        '@astryxdesign/core': core,
+      };
       const app = project(tempDir('pnp-app'), {
         '@astryxdesign/core': '9.0.0',
         '@astryxdesign/cli': '9.0.0',
@@ -1031,7 +1066,9 @@ describe.skipIf(!POSIX)(
       // The project's CLI prints the command Yarn runs it with.
       const docs = run(global.bin, ['docs', 'getting-started'], {cwd: app, pc});
       expect(docs.status).toBe(0);
-      expect(docs.stdout).toContain('yarn astryx docs getting-started <section>');
+      expect(docs.stdout).toContain(
+        'yarn astryx docs getting-started <section>',
+      );
       expect(docs.stdout).not.toContain('yarn dlx');
 
       // A runtime that does not start: the copy that started the run
