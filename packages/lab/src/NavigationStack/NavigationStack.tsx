@@ -777,16 +777,19 @@ type TransitionClock = {at?: number; start?: 'next-frame'};
  */
 function transitionClock(
   releasedAt: number | undefined,
-  view: Window | null | undefined,
+  isInputTask: boolean,
 ): TransitionClock {
   if (releasedAt != null) {
     return {at: releasedAt};
   }
-  return isInInputTask(view) ? {start: 'next-frame'} : {};
+  return isInputTask ? {start: 'next-frame'} : {};
 }
 
-/** The page is dispatching an input event (a pointer, a key, a touch) now. */
-function isInInputTask(view: Window | null | undefined): boolean {
+/**
+ * The page is dispatching an input event (a pointer, a key, a touch) now.
+ * The fallback for a push the app starts outside the stack's own handlers.
+ */
+function isDispatchingInput(view: Window | null | undefined): boolean {
   if (view == null) {
     return false;
   }
@@ -997,6 +1000,9 @@ export function NavigationStack<T>({
   // The clock the last transition's screens run on (their start), so the
   // back chevron keeps time with them.
   const startedRef = useRef<TransitionClock>({});
+  // A click or key press in the stack is being handled in this task
+  // (rememberActivation).
+  const inputTaskRef = useRef(false);
   // A pop's focus return, waiting for the commit that drops the leaving
   // screen (until then every screen is `inert` and cannot take focus).
   const pendingFocusRef = useRef<{popped: string; revealed: string} | null>(
@@ -1153,7 +1159,8 @@ export function NavigationStack<T>({
         dp == null ? null : layerVelocities(dp, width, direction);
       const clock = transitionClock(
         releasedAt,
-        containerRef.current?.ownerDocument.defaultView,
+        inputTaskRef.current ||
+          isDispatchingInput(containerRef.current?.ownerDocument.defaultView),
       );
       const topLayers = layersOf(top);
       const underLayers = layersOf(under);
@@ -1593,6 +1600,13 @@ export function NavigationStack<T>({
   // from the container's own capture handlers. A press on a control's label or
   // icon remembers the control itself.
   const rememberActivation = useCallback((event: SyntheticEvent) => {
+    // A transition this click or key starts runs in its task: React commits
+    // it before the task ends, and the next task clears the mark.
+    inputTaskRef.current = true;
+    const view = containerRef.current?.ownerDocument.defaultView;
+    view?.setTimeout(() => {
+      inputTaskRef.current = false;
+    }, 0);
     const {target} = event;
     if (isElement(target)) {
       // The scroller is focusable while it overflows, but it is not a
