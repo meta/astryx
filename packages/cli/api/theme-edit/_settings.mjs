@@ -4572,6 +4572,36 @@ function aloneFallbacks(family) {
   return ['system-ui', 'sans-serif'];
 }
 
+/** A family name without its quotes. @param {string} family */
+const unquoteFamily = family => family.replace(/^["']|["']$/g, '');
+
+/**
+ * The fallbacks for the kind of font an installed Fontsource package says
+ * its family is (its metadata's category): serif ones for a serif, monospace
+ * ones for a monospace. Null when the package is not installed, or its kind
+ * is sans-serif or one with no generic fallback of its own.
+ * @param {Ctx} ctx
+ * @param {string} family
+ * @returns {string | null}
+ */
+function installedKindFallbacks(ctx, family) {
+  const pkg = fontsourcePackageOf(family);
+  if (!pkg) return null;
+  try {
+    const dir = path.dirname(ctx.project.req.resolve(pkg));
+    const {category} = JSON.parse(
+      fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'),
+    );
+    return category === 'serif'
+      ? 'Georgia, serif'
+      : category === 'monospace'
+        ? 'ui-monospace, monospace'
+        : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Spacing in a font family name as CSS reads a bare name: every Unicode
  * space (a no-break space, a thin space, a tab) is one space, a run of them
@@ -6744,6 +6774,15 @@ export function compileTheme(ctx, data, base) {
             f.fallbacks = stack.slice(stack.indexOf(',') + 1).trim();
             break;
           }
+        // A family typed alone whose Fontsource package is installed takes
+        // the fallbacks of the kind the package names (Lora is a serif).
+        if (
+          !s.value.includes(',') &&
+          !FONTS[s.value] &&
+          !OPEN_FONTS[s.value] &&
+          f.fallbacks === aloneFallbacks(unquoteFamily(f.family)).join(', ')
+        )
+          f.fallbacks = installedKindFallbacks(ctx, f.family) ?? f.fallbacks;
         theme.typography ??= {};
         for (const r of s.on ? [s.on] : ['body', 'heading'])
           theme.typography[r] = {

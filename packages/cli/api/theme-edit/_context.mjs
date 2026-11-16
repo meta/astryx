@@ -902,6 +902,23 @@ export function themeImageNotes(ctx, slug) {
 }
 
 /**
+ * The open fonts a set's families name whose package is not installed, each
+ * with the line that installs it: until then the pictures and the app draw
+ * the next font in the stack.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Array<{family: string, run: string[]}>}
+ */
+export function fontsNotLoaded(ctx, data) {
+  return fontPackages(ctx, data)
+    .filter(p => !p.installed)
+    .map(p => ({
+      family: p.family,
+      run: [installLine(ctx.project.cwd, [p.pkg])],
+    }));
+}
+
+/**
  * Font notes for the families the theme builds: the import line for an
  * open font, the install line when its package is missing, and a warning
  * for a family no package loads, naming the closest open font.
