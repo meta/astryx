@@ -9359,9 +9359,16 @@ export async function contrastProblems(ctx, data, res) {
         conds.size === 1 ? /^([\w-]+)=([\w-]+)$/.exec([...conds][0]) : null;
       if (one) return `${one[1]}:${one[2]}`;
     }
+    // (Only variants the part is drawn in: a rule shared with its group
+    // can name a variant the part does not take, which `--when` refuses.)
+    const takes = new Set(
+      /** @type {string[]} */ ([...(ctx.C.MAP[t]?.attrs?.variant ?? [])]),
+    );
     /** @param {string[]} when */
     const atRest = when =>
-      when.map(w => /^variant=([\w-]+)$/.exec(w)?.[1]).filter(v => v != null);
+      when
+        .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+        .filter(v => v != null && takes.has(v));
     const reading = new Set(
       ctx.C.partReads(t, 'text')
         .filter(r => r.token === token)
@@ -9473,10 +9480,21 @@ export async function contrastProblems(ctx, data, res) {
     if (ofBase(p, 'fg', m) != null) return null;
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
-    return latest(
+    const viaGround = latest(
       x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
       /** @type {any} */ (p).groundWhen ?? when,
     );
+    if (viaGround) return viaGround;
+    // A token set on the region the text and its ground sit in (a top
+    // bar's text color) reaches it the same way, as CSS inherits it.
+    const region = /** @type {any} */ (p).over?.target ?? null;
+    return region && region !== around && region !== own
+      ? latest(
+          x =>
+            x.source === 'token' && tokens.includes(x.thing) && on(x, region),
+          null,
+        )
+      : null;
   };
   /**
    * The mode a side of a pair is drawn in: the scheme of Core's media
@@ -9837,8 +9855,54 @@ export async function contrastProblems(ctx, data, res) {
       // The fix sets what draws the text: the setting that wins in CSS,
       // where one does, else the text token where the text sits.
       fix: (() => {
-        const color = `'${plainOn(x.ground)}'`;
         const pair = /** @type {TextPair} */ (x.pair);
+        // Secondary text (a placeholder, a caption) stays secondary: its
+        // own color moved toward black or white just far enough to read at
+        // 4.5:1, not the plain black or white of primary text.
+        // (It reads on every ground that text sits on there: a token set on
+        // a part reaches its text on each of the part's grounds.)
+        const fgNow = parseColor(String(value(pair, 'fg', x.mode) ?? ''));
+        const secondary =
+          fgNow &&
+          /^--color-text-(secondary|placeholder)/.test(
+            String(pair.fg.tokens?.[0]),
+          );
+        const page = parseColor(
+          String(
+            res[/** @type {'light' | 'dark'} */ (x.mode)][
+              '--color-background-body'
+            ],
+          ),
+        );
+        const groundsThere = secondary
+          ? [
+              x.ground,
+              .../** @type {TextPair[]} */ (
+                /** @type {any} */ (ctx).parts.pairs
+              )
+                .filter(
+                  q =>
+                    (q.bg.target === x.bgPart || q.fg.target === x.textPart) &&
+                    q.fg.tokens[0] === pair.fg.tokens[0],
+                )
+                .map(q => {
+                  const v = String(value(q, 'bg', x.mode) ?? '');
+                  const c = parseColor(v);
+                  const a = alphaOf(v);
+                  return c && a < 1 && page ? compositeOver(c, a, page) : c;
+                })
+                .filter(g => g != null && plainOn(g) === plainOn(x.ground)),
+            ]
+          : [];
+        const color = `'${
+          secondary
+            ? nearestReading(
+                /** @type {[number, number, number]} */ (fgNow),
+                /** @type {Array<[number, number, number]>} */ (groundsThere),
+                4.5,
+              )
+            : plainOn(x.ground)
+        }'`;
         // Text in the top bar sits over each of the bar's grounds (its
         // variants): when they need opposite text, one color set on the
         // text's part turns it the wrong way on the others, so no line
@@ -9937,7 +10001,26 @@ export async function contrastProblems(ctx, data, res) {
         if (drawn) {
           const onText =
             drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
-          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
+          // A setting that reaches the text's part through its group (a
+          // color on date-input, which every input takes) cannot name a
+          // variant only the text's part has: that variant is scoped on
+          // the text's own part instead.
+          const v = drawn.when ?? (onText ? variant : null);
+          const name = /^variant:([\w-]+)$/.exec(String(v ?? ''))?.[1];
+          if (
+            name &&
+            !drawn.when &&
+            drawn.on &&
+            x.textPart &&
+            drawn.on !== x.textPart &&
+            ![
+              .../** @type {string[]} */ (
+                /** @type {any} */ (ctx.C.MAP[drawn.on])?.attrs?.variant ?? []
+              ),
+            ].includes(name)
+          )
+            return `${P} set ${slug} ${drawn.thing} ${color} --on ${x.textPart}${only(x.textPart)}${when(v)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(v)}${modeFlag(x.mode)}`;
         }
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
@@ -9998,6 +10081,11 @@ export async function contrastProblems(ctx, data, res) {
                 return g ? plainOn(g) : '';
               }),
           ).size;
+        // Text over a region's ground (a button in the top bar): a token on
+        // the region reaches its text there, and nowhere else.
+        const region = /** @type {any} */ (pair).over?.target;
+        if (token && region && !onMedia)
+          return `${P} set ${slug} ${token} ${color} --on ${region}${only(region)}${modeFlag(x.mode)}`;
         const mixed =
           token &&
           x.bgPart &&
@@ -10077,12 +10165,46 @@ function plainOn(rgb) {
 }
 
 /**
+ * How much fainter than the base's own hairline (its contrast times this)
+ * a theme's border token must be to count as no longer showing: a hairline
+ * a little lighter or darker than the base's (a clone's #e3e8ee) is the
+ * same design.
+ */
+const HAIRLINE_STEP = 0.9;
+
+/**
+ * A color moved toward black or white (whichever stands out on the
+ * grounds) just far enough to reach a contrast on each: the nearest color
+ * that reads, so a muted gray stays a gray.
+ * @param {[number, number, number]} from
+ * @param {Array<[number, number, number]>} grounds the first decides black or white
+ * @param {number} need
+ * @returns {string}
+ */
+function nearestReading(from, grounds, need) {
+  const to = plainOn(grounds[0]);
+  const end = /** @type {[number, number, number]} */ (parseColor(to));
+  for (let i = 0; i <= 100; i++) {
+    const c = /** @type {[number, number, number]} */ (
+      from.map((v, k) => Math.round(v + ((end[k] - v) * i) / 100))
+    );
+    if (grounds.every(g => ratio(c, g) >= need)) return hex(c);
+  }
+  return to;
+}
+
+/**
  * Border contrast problems this theme caused: a border color it sets (a
  * border token for the whole theme, or a part's own border) below 3:1
  * against what the border sits on (the part's background, else the page)
  * in a mode, where the base theme's border there was not as low. A border
  * below 3:1 does not show as an edge (a control's edge needs 3:1, WCAG
- * 1.4.11).
+ * 1.4.11): a part's own border counts on controls only (a card's or a
+ * divider's is decoration). The border token for the whole theme, where
+ * the base's own is a hairline under 3:1 (its edge comes from elsewhere, a
+ * fill), is held to that hairline instead: a problem only when it is
+ * clearly fainter than the base's ({@link HAIRLINE_STEP}). The fix is the
+ * nearest color that reaches 3:1.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
@@ -10092,12 +10214,43 @@ function plainOn(rgb) {
 function borderContrastProblems(ctx, data, res, base) {
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
-  /** The fix color for a border on a ground, or null. @param {string} ground @param {string} page */
-  const fixOn = (ground, page) => {
+  /**
+   * The fix color for a border on a ground, or null: the border's own color
+   * moved toward black or white (whichever stands out on the ground) just
+   * far enough to reach 3:1, so a faint gray edge becomes the nearest gray
+   * that shows, not black.
+   * @param {string} ground @param {string} page @param {string} [border]
+   */
+  const fixOn = (ground, page, border) => {
     const p = parseColor(page);
     const g0 = parseColor(ground);
     if (!p || !g0) return null;
-    return plainOn(compositeOver(g0, alphaOf(ground), p));
+    const g = compositeOver(g0, alphaOf(ground), p);
+    const b0 = border ? parseColor(border) : null;
+    if (!b0) return plainOn(g);
+    return nearestReading(
+      compositeOver(b0, alphaOf(String(border)), g),
+      [g],
+      3,
+    );
+  };
+  /**
+   * Whether a part is a control (it takes input: Core draws it disabled,
+   * or as a button): its edge is how it is found, and needs 3:1 (WCAG
+   * 1.4.11). A container's border (a card's hairline) is decoration, and a
+   * faint one is a choice.
+   * @param {string} t
+   */
+  const control = t => {
+    const rec = /** @type {any} */ (ctx.C.MAP[t]);
+    return Boolean(
+      rec &&
+      ('disabled' in (rec.attrs ?? {}) ||
+        [...(rec.tags ?? [])].some(
+          (/** @type {string} */ g) =>
+            g === 'button' || g === 'input' || g === 'select',
+        )),
+    );
   };
   /** A value as one color in a mode: its half of light-dark(), a token read. @param {string} v @param {'light' | 'dark'} m @param {Record<string, string>} tokens */
   const inMode = (v, m, tokens) => {
@@ -10178,8 +10331,16 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
           basePage,
         );
-        if (now != null && now < 3 && (was == null || was > now)) {
-          const color = fixOn(page, page);
+        if (
+          now != null &&
+          now < 3 &&
+          (was == null || (was >= 3 ? was > now : now < was * HAIRLINE_STEP))
+        ) {
+          const color = fixOn(
+            page,
+            page,
+            inMode(res[mode][x.thing], mode, res[mode]),
+          );
           add(
             `border|${x.thing}|${mode}`,
             `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
@@ -10202,7 +10363,7 @@ function borderContrastProblems(ctx, data, res, base) {
         : colorOfBorder(String(x.value));
       if (!color) continue;
       const border = inMode(color, mode, res[mode]);
-      for (const t of partsOf(ctx, x)) {
+      for (const t of partsOf(ctx, x).filter(control)) {
         const own = [...data.settings]
           .reverse()
           .find(
@@ -10238,7 +10399,7 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
         );
         if (now != null && now < 3 && (was == null || was > now)) {
-          const color = fixOn(ground || page, page);
+          const color = fixOn(ground || page, page, border);
           add(
             `border|${x.thing}|${t}|${mode}`,
             `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,

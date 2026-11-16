@@ -140,10 +140,10 @@ export function missedSteps(ctx, data, res, base) {
      * does (a theme whose surface stays light in dark mode).
      * @param {string} m @param {string} [ground] the token the text sits on
      */
-    const readableOn = (m, ground = '--color-background-surface') => {
+    const readableOn = (m, ground) => {
       const text = String(res[m]?.['--color-text-primary']);
       const t = parseColor(text);
-      const g = parseColor(String(res[m]?.[ground]));
+      const g = parseColor(String(ground));
       if (!t || !g || ratio(t, g) >= 4.5) return text;
       return ratio([0, 0, 0], g) >= ratio([255, 255, 255], g)
         ? '#000000'
@@ -167,9 +167,24 @@ export function missedSteps(ctx, data, res, base) {
             .filter(Boolean)
             .map((/** @type {string} */ when) => ({when, token: r.token})),
     );
-    /** @param {string[]} ms */
-    const surfaceSteps = ms =>
-      inverted === '--color-background-inverted'
+    /**
+     * @param {string[]} ms
+     * @param {boolean} [inverse] the theme's own inverted surface: in a
+     *   theme that draws both modes, the surface it draws in the other mode
+     *   (dark in light, light in dark), as Core's inverted surface is; in a
+     *   one-mode theme, its surface
+     */
+    const surfaceSteps = (ms, inverse = false) => {
+      /** @param {string} m */
+      const fill = m =>
+        String(
+          res[
+            inverse && modes.length > 1
+              ? /** @type {string} */ (modes.find(x => x !== m))
+              : m
+          ]?.['--color-background-surface'],
+        );
+      return inverted === '--color-background-inverted'
         ? // The inverted surface turns to the theme's surface on this part
           // alone (as the color it is: a part may read the surface token
           // for its text; the lightbox and the scrim keep theirs), with its
@@ -178,7 +193,7 @@ export function missedSteps(ctx, data, res, base) {
           ms.flatMap(m => [
             {
               thing: '--color-background-inverted',
-              value: String(res[m]?.['--color-background-surface']),
+              value: fill(m),
               on: p,
               mode: m,
             },
@@ -187,14 +202,14 @@ export function missedSteps(ctx, data, res, base) {
               : textTokens
             ).map(thing => ({
               thing,
-              value: readableOn(m),
+              value: readableOn(m, fill(m)),
               on: p,
               mode: m,
             })),
             ...(C.MAP[p]?.media || !textTokens.length
               ? otherFills.map((/** @type {any} */ o) => ({
                   thing: 'color',
-                  value: readableOn(m, o.token),
+                  value: readableOn(m, res[m]?.[o.token]),
                   on: p,
                   mode: m,
                   when: o.when,
@@ -208,21 +223,24 @@ export function missedSteps(ctx, data, res, base) {
           ms.flatMap(m => [
             {
               thing: 'background-color',
-              value: String(res[m]?.['--color-background-surface']),
+              value: fill(m),
               on: p,
               mode: m,
             },
             ...(textTokens.length ? textTokens : ['color']).map(thing => ({
               thing,
-              value: readableOn(m),
+              value: readableOn(m, fill(m)),
               on: p,
               mode: m,
             })),
           ]);
+    };
     // The theme's own surfaces changed (its neutral, surface, card or page
     // color), while the part still paints the base's inverted surface: it
     // keeps the base's dark look beside the theme's (a Win98 theme's grey
-    // tooltips). Its line gives it the theme's surface in each mode.
+    // tooltips). Its line gives it the theme's own inverted surface: the
+    // surface the theme draws in the other mode (a cream theme's warm dark
+    // in light), or its surface in a one-mode theme.
     const ownSurfaces = any(
       /^--color-(neutral|background-(body|surface|card))$/,
     );
@@ -257,7 +275,7 @@ export function missedSteps(ctx, data, res, base) {
           ? swap.length !== lost.length
             ? []
             : surfaceSteps(lost)
-          : surfaceSteps(modes),
+          : surfaceSteps(modes, true),
       });
     }
     if (!accent) continue;
@@ -414,15 +432,14 @@ export function missedSteps(ctx, data, res, base) {
         });
     }
   }
-  // With the theme's own corners at a pill (its element corners as round
-  // as --radius-full), a pill part draws what the corners give: none is
-  // missed, and a line would change nothing.
-  const pillCorners = modes.every(
-    m =>
-      String(res[m]?.['--radius-element']) ===
-      String(res[m]?.['--radius-full']),
+  // A pill part (a switch, an avatar, a badge) stays round under rounded
+  // corners by design, as nearly every look wants: it is missed only when
+  // the theme's corners go square (its element corners at 0), where a
+  // round pill keeps the base's look beside the theme's square one.
+  const squareCorners = modes.every(
+    m => Number.parseFloat(String(res[m]?.['--radius-element'] ?? '')) === 0,
   );
-  if (corners && !pillCorners)
+  if (corners && squareCorners)
     for (const p of pillParts(C).filter(
       x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
     ))

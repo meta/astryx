@@ -153,8 +153,9 @@ describe('problems a change makes', () => {
       const border = after.find((/** @type {any} */ p) =>
         p.problem.startsWith('the border --color-border'),
       );
+      // (The nearest color that shows, not plain white.)
       expect(border.fix).toMatch(
-        / set t --color-border '#ffffff' --mode dark$/,
+        / set t --color-border '#[0-9a-f]{6}' --mode dark$/,
       );
       expect((await follow(border.fix)).error).toBeUndefined();
       expect((await cli([...ED, 'show', 't'])).data.openProblems).toEqual([]);
@@ -163,7 +164,7 @@ describe('problems a change makes', () => {
   );
 
   it(
-    'a border on a part gets a fix on that part, and following it clears it',
+    'a border on a control gets a fix on that part, and following it clears it',
     async () => {
       const r = await cli([
         ...ED,
@@ -172,18 +173,20 @@ describe('problems a change makes', () => {
         'border-color',
         '#f4f4f4',
         '--on',
-        'card',
+        'text-input',
+        '--only',
       ]);
       const problem = r.data.newProblems.find((/** @type {any} */ p) =>
-        p.problem.startsWith('the border on card'),
+        p.problem.startsWith('the border on text-input'),
       );
       expect(problem.fix).toMatch(
-        / set t border-color '#000000' --on card --mode light$/,
+        / set t border-color '#[0-9a-f]{6}' --on text-input --only --mode light$/,
       );
       expect((await follow(problem.fix)).error).toBeUndefined();
       expect(
         (await cli([...ED, 'show', 't'])).data.openProblems.filter(
-          (/** @type {any} */ p) => p.problem.startsWith('the border on card'),
+          (/** @type {any} */ p) =>
+            p.problem.startsWith('the border on text-input'),
         ),
       ).toEqual([]);
     },

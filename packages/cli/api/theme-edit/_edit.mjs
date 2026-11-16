@@ -6571,6 +6571,29 @@ async function changeOnce(
     !ctx.unchecked
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
+          // A mode's own setting under one the theme sets for every mode:
+          // that one still draws the other modes, which this does not
+          // change.
+          ...(() => {
+            if (!s.mode) return [];
+            const whole = data.settings.find(
+              x =>
+                x !== s &&
+                !x.mode &&
+                x.source === s.source &&
+                x.thing === s.thing &&
+                (x.on ?? null) === (s.on ?? null) &&
+                (x.when ?? null) === (s.when ?? null) &&
+                (x.state ?? null) === (s.state ?? null),
+            );
+            if (!whole) return [];
+            const others = modesOf(data).filter(m => m !== s.mode);
+            return others.length
+              ? [
+                  `your setting for every mode (${describe(whole)}) still draws ${others.join(' and ')}; to keep it for ${s.mode} only, take that one back (this one stays): ${P} undo ${slug} ${undoArgs(whole)}`,
+                ]
+              : [];
+          })(),
         ]
       : []),
     // A card's content takes one radius from Core, whatever its corners.
@@ -6851,7 +6874,7 @@ async function changeOnce(
       `${pinned ? 'the page background keeps the color you set for it' : "the page background follows it too, at the official theme's page shade of this gray"}${
         modes.includes('light')
           ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
-          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#f8fafc')}`
+          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#111111')}`
       }`,
     );
   }

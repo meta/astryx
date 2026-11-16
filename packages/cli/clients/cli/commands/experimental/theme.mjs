@@ -609,11 +609,12 @@ function changeBlocks(r) {
         ]
       : []),
     // The parts the theme's own changes still do not reach, counted near
-    // the top, so a head of the output keeps it; show lists each.
+    // the top, so a head of the output keeps it; show names the first ones
+    // with their lines, and show --json lists each.
     ...(missed
       ? [
           record({
-            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+            missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach (show lists the first with their lines; show --json lists each)`,
           }),
         ]
       : []),
@@ -757,7 +758,16 @@ function showBlocks(d) {
     openProblems.length
       ? [
           section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+            `openProblems: ${openProblems.length} the theme has now${(() => {
+              const fixable = openProblems.filter(
+                (/** @type {any} */ p) => p.fix,
+              ).length;
+              return fixable === openProblems.length
+                ? '; each fix line fixes one'
+                : fixable
+                  ? `; ${fixable} with a fix line that fixes it, the rest with none (no one line fixes those alone)`
+                  : '; none has a fix line (no one line fixes these alone)';
+            })()}`,
           ),
           ...problemList(openProblems),
         ]

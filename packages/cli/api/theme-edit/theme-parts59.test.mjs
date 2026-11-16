@@ -132,9 +132,11 @@ describe('a border the theme sets', () => {
     expect(JSON.stringify(inputs.data)).toMatch(
       /the border on text-input \(#000000\) is 1\.\d+:1 on its background \S+ in dark; a border needs 3:1/,
     );
-    const token = await themeEditSet('b', '--color-border', '#000000', {cwd});
+    // (A border token is held to the base's own hairline: one as dark as
+    // the dark page no longer shows.)
+    const token = await themeEditSet('b', '--color-border', '#1b1b1b', {cwd});
     expect(JSON.stringify(token.data)).toMatch(
-      /the border --color-border \(#000000\) is 1\.\d+:1 on the page in dark/,
+      /the border --color-border \(#1b1b1b\) is 1(\.\d+)?:1 on the page in dark/,
     );
     // A border as low as the base theme's own is not the theme's doing.
     await themeEditNew('b2', {cwd, like: 'neutral'});
