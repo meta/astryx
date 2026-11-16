@@ -9,8 +9,8 @@
  *   cancelled, so the browser sends no click to the control beneath, also
  *   past the click guard's window. When the touchstart was not cancelable,
  *   the compatibility mouse events and click that follow still reach nothing.
- * @position Unit evidence for module:DropdownMenu/useMenuPress and the click
- *   guard (overlay-dismissal FR11). The browser half is
+ * @position Unit evidence for module:DropdownMenu/useMenuPress FR5 and the
+ *   click guard (spec:AST-094 FR21, FR26). The browser half is
  *   __tests__/DropdownMenuPickTapThrough.interaction.browser.spec.ts
  */
 
@@ -115,7 +115,7 @@ function SortMenu() {
   );
 }
 
-describe("DropdownMenu: a finger's pick in a submenu (overlay-dismissal FR11)", () => {
+describe("DropdownMenu: a finger's pick in a submenu (spec:AST-094 FR21, FR26)", () => {
   beforeEach(() => {
     __resetMenuPressForTest();
     vi.stubGlobal(

@@ -792,7 +792,7 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     expect(fireTouch(row('A'), 'touchend', 0).defaultPrevented).toBe(true);
   });
 
-  it('cancels the touchend of a tap whose row leaves the document before it, where the window never hears it (overlay-dismissal FR11)', () => {
+  it('cancels the touchend of a tap whose row leaves the document before it, where the window never hears it (FR5, spec:AST-094 FR21, FR26)', () => {
     const onSelect = vi.fn();
     render(<Harness onSelect={onSelect} />);
     const picked = row('A');
@@ -805,7 +805,7 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
   });
 
-  it('after a touchstart that was not cancelable, also swallows the compatibility mousedown, mouseup and click that WebKit still sends after the cancelled touchend in a Home Screen web app (spec:AST-094 FR19)', () => {
+  it('after a touchstart that was not cancelable, also swallows the compatibility mousedown, mouseup and click that WebKit still sends after the cancelled touchend in a Home Screen web app (FR5, spec:AST-094 FR21, FR26)', () => {
     const onSelect = vi.fn();
     const onOutside = vi.fn();
     render(<Harness onSelect={onSelect} />);

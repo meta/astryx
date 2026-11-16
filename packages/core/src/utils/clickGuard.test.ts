@@ -313,7 +313,7 @@ describe('clickGuard', () => {
     expect(isClickGuardArmed(document)).toBe(false);
   });
 
-  it("armed with the touch's target, cancels that touch's touchend after the target leaves the document, where the window never hears it (overlay-dismissal FR11)", () => {
+  it("armed with the touch's target, cancels that touch's touchend after the target leaves the document, where the window never hears it (spec:AST-094 FR21)", () => {
     const target = button();
     armClickGuard(document, {
       staysInstalled: true,
@@ -353,7 +353,7 @@ describe('clickGuard', () => {
     expect(click(target).defaultPrevented).toBe(true);
   });
 
-  it('armed after a touchstart that was not cancelable, stays armed after the cancelled touchend and takes the compatibility mousedown, mouseup and click that WebKit still sends in a Home Screen web app (spec:AST-094 FR19)', () => {
+  it('armed after a touchstart that was not cancelable, stays armed after the cancelled touchend and takes the compatibility mousedown, mouseup and click that WebKit still sends in a Home Screen web app (spec:AST-094 FR21)', () => {
     const target = button();
     const onPage = vi.fn();
     for (const type of ['mousedown', 'mouseup', 'click']) {
@@ -385,7 +385,7 @@ describe('clickGuard', () => {
     }
   });
 
-  it('armed after a touchstart that was not cancelable, keeps a full window from the cancelled touchend, and the next pointerdown disarms it', () => {
+  it("armed after a touchstart that was not cancelable, keeps a full window from the cancelled touchend; after it, and after the next pointerdown, a tap's mouse events and click reach the page", () => {
     vi.useFakeTimers();
     const target = button();
     armClickGuard(document, {
@@ -399,6 +399,17 @@ describe('clickGuard', () => {
     expect(isClickGuardArmed(document)).toBe(true);
     vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
     expect(isClickGuardArmed(document)).toBe(false);
+    // A real tap after the window acts.
+    const onPage = vi.fn();
+    window.addEventListener('click', onPage);
+    try {
+      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+      expect(mouse('mouseup', target).defaultPrevented).toBe(false);
+      expect(click(target).defaultPrevented).toBe(false);
+      expect(onPage).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener('click', onPage);
+    }
     armClickGuard(document, {
       cancelsTouchEnd: true,
       touchStartCancelable: false,
