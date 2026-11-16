@@ -37,7 +37,7 @@ export function registerExperimentalRender(group, program) {
     fn: renderFn,
     action: async (
       /** @type {string | undefined} */ file,
-      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean}} */ options,
+      /** @type {{out?: string, reverse?: boolean, title?: string, overwrite?: boolean, interactive?: boolean}} */ options,
     ) => {
       const json = program.opts().json || false;
       /** @type {Awaited<ReturnType<typeof renderApi>>} */
@@ -49,6 +49,7 @@ export function registerExperimentalRender(group, program) {
           reverse: options.reverse ?? false,
           title: options.title,
           overwrite: options.overwrite ?? false,
+          interactive: options.interactive ?? false,
         });
       } catch (e) {
         const err = /** @type {import('../../../../api/error.mjs').AstryxError} */ (e);
@@ -73,6 +74,7 @@ export function registerExperimentalRender(group, program) {
             images: d.images,
             files: d.files.join(', '),
             stylesheets: d.stylesheets.join(', ') || 'none',
+            ...(d.scriptBytes === undefined ? {} : {script: `${kb(d.scriptBytes)} (${d.scriptModules} modules)`}),
           }),
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
@@ -105,6 +107,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.renderedBy ? {renderedBy: d.renderedBy} : {}),
           ...(d.packages ? {packages: d.packages.join(', ') || 'none'} : {}),
           ...(d.title === undefined ? {} : {title: d.title}),
+          ...(d.interactive ? {interactive: true} : {}),
           ...(d.edited === undefined ? {} : {edited: d.edited}),
           ...(d.stylesEdited === undefined ? {} : {stylesEdited: d.stylesEdited}),
         }),
@@ -143,7 +146,7 @@ export function registerExperimentalRender(group, program) {
         ...(d.mode === 'embedded'
           ? [
               text(
-                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
+                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}${d.interactive ? ' --interactive' : ''}`,
               ),
             ]
           : []),

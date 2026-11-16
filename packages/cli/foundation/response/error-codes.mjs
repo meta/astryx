@@ -102,6 +102,7 @@
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
  *   | 'ERR_RENDER_NEWER_FORMAT'
+ *   | 'ERR_RENDER_INTERACTIVE'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -294,8 +295,9 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_RENDER_NO_DEFAULT_EXPORT: 'ERR_RENDER_NO_DEFAULT_EXPORT',
   /**
-   * The page imports a package that is not installed where the page is.
-   * Nothing was written.
+   * The page imports a package that is not installed where the page is, or
+   * `render --interactive` finds no esbuild it can use (an optional peer of
+   * the CLI). Nothing was written.
    */
   ERR_RENDER_MISSING_DEPENDENCY: 'ERR_RENDER_MISSING_DEPENDENCY',
   /**
@@ -341,6 +343,13 @@ export const ERROR_CODES = Object.freeze({
    * wrote the file, which reads it.
    */
   ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
+  /**
+   * `render --interactive` could not build the page's script for the
+   * browser: a module the page loads needs Node (`fs`, `path`), or cannot be
+   * found or compiled for the browser. Nothing was written. The message
+   * names the module.
+   */
+  ERR_RENDER_INTERACTIVE: 'ERR_RENDER_INTERACTIVE',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

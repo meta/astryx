@@ -16,7 +16,7 @@ export const doc = {
   summary:
     'Render a page to one self-contained HTML file, or turn one back into a page',
   description:
-    "Renders the page's default export with the project's own Astryx components and writes ONE static HTML file that needs nothing beside it: no script runs and nothing loads from the network, so it opens anywhere, including a sandboxed frame with a strict content security policy, and follows the viewer's light or dark scheme. The page's own StyleX compiles, only the Core CSS rules the page uses are inlined, local images become data: URIs, and the page's source is embedded. Warnings name anything that may not look as meant, such as a component that did not render the text it was given (ListItem takes label=, not children). The file opens with a plain note for whoever opens it next: the CLI version and render format that made it, the page's path, the files it carries, the packages it rendered with, and the exact commands that give the page back and render it again. To make a page to share, follow `astryx docs cli/experimental/share-a-page` first: it lists the layouts that go wrong on a phone in a file that runs no script. --reverse (the way back, or unrender) writes the embedded source back byte for byte and names any text someone changed in the HTML after the render, with the file and line that hold the old text; a file with Astryx markup but no embedded source is rebuilt from its components (text and layout only, as a starting point); any other HTML is refused. Experimental: it may change or be removed in a patch release.",
+    "Renders the page's default export with the project's own Astryx components and writes ONE static HTML file that needs nothing beside it: no script runs and nothing loads from the network, so it opens anywhere, including a sandboxed frame with a strict content security policy, and follows the viewer's light or dark scheme. The page's own StyleX compiles, only the Core CSS rules the page uses are inlined, local images become data: URIs, and the page's source is embedded. Warnings name anything that may not look as meant, such as a component that did not render the text it was given (ListItem takes label=, not children). The file opens with a plain note for whoever opens it next: the CLI version and render format that made it, the page's path, the files it carries, the packages it rendered with, and the exact commands that give the page back and render it again. With --interactive, the file also carries the page's own script, built by esbuild (an optional peer of the CLI, installed where the page is or beside it; the render names the install command when it is missing): the file still paints its markup first, then the script draws the live page, so buttons, tabs and other controls work. It is still one file that loads nothing from the network and runs no eval, but larger, and its note says it runs a script. To make a page to share, follow `astryx docs cli/experimental/share-a-page` first: it lists the layouts that go wrong on a phone in a file that runs no script. --reverse (the way back, or unrender) writes the embedded source back byte for byte and names any text someone changed in the HTML after the render, with the file and line that hold the old text; a file with Astryx markup but no embedded source is rebuilt from its components (text and layout only, as a starting point); any other HTML is refused. Experimental: it may change or be removed in a patch release.",
   fn: 'render',
   args: [{name: 'file', param: 'file', required: false}],
   options: [
@@ -38,6 +38,12 @@ export const doc = {
         "The page's title (default: its first top-level heading, else the file name)",
     },
     {
+      flag: '--interactive',
+      param: 'options.interactive',
+      description:
+        "Carry the page's own script too, so its buttons, tabs and other controls work in the file: still one file, with no network and no dependency, but larger (React and the page's modules)",
+    },
+    {
       flag: '--overwrite',
       param: 'options.overwrite',
       description:
@@ -54,6 +60,10 @@ export const doc = {
       cli: 'astryx experimental render src/app/page.tsx --out page.html',
     },
     {
+      label: 'Render a page whose controls work in the file',
+      cli: 'astryx experimental render page.tsx --interactive',
+    },
+    {
       label: 'Give it back',
       cli: 'astryx experimental render --reverse page.html --out page.tsx',
     },
@@ -64,7 +74,7 @@ export const doc = {
     {code: 0, when: 'the file was written (warnings included)'},
     {
       code: 1,
-      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, crashes Node, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, a file in a newer render format than this CLI reads, or HTML that is not an Astryx page',
+      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, crashes Node, or takes over 60 seconds; with --interactive, no esbuild in the range the CLI declares, or a page whose script needs Node; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, a file in a newer render format than this CLI reads, or HTML that is not an Astryx page',
     },
   ],
   related: ['template', 'build'],

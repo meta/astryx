@@ -146,10 +146,14 @@
     "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "*"
+    "@astryxdesign/core": "*",
+    "esbuild": ">=0.25.0 <1.0.0"
   },
   "peerDependenciesMeta": {
     "@astryxdesign/core": {
+      "optional": true
+    },
+    "esbuild": {
       "optional": true
     }
   },
@@ -161,6 +165,7 @@
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",
+    "esbuild": "catalog:",
     "lucide-react": "^1.66.0",
     "recharts": "^3.10.1"
   }

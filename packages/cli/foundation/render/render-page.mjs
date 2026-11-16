@@ -32,6 +32,8 @@ import {
 } from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
+import {ROOT_ID} from './client-bundle.mjs';
+import {CLI_DIR, esbuildMissing, findEsbuild} from './esbuild-peer.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
@@ -65,6 +67,8 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
+ * @property {number} [scriptBytes] - With `interactive`: bytes of the page's script.
+ * @property {number} [scriptModules] - With `interactive`: the modules the page's script holds.
  */
 
 /** An error carrying a render error code. */
@@ -670,7 +674,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean, interactive?: boolean, esbuild?: string}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -878,7 +882,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, interactive?: boolean, esbuildFrom?: string[]}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -887,7 +891,14 @@ const SCHEME_CSS =
  *   With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
- *   the page rendered with, and the markup as rendered.
+ *   the page rendered with, and the markup as rendered. With `interactive`,
+ *   the file also carries the page's script (client-bundle.mjs): it draws
+ *   the page over its markup in the browser, so the page's controls work.
+ *   The markup sits in one element the script draws into, and the stylesheet
+ *   keeps the rules any of the page's modules can use, not only the markup's.
+ *   esbuild builds the script; it is an optional peer, found from each folder
+ *   of `esbuildFrom` in turn (default: the page's folder, then the CLI's),
+ *   and the render refuses before it runs the page when there is none.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -899,8 +910,18 @@ export async function renderPage(entry, options = {}) {
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
+  /** @type {string | undefined} */
+  let esbuild;
+  if (options.interactive) {
+    const found = findEsbuild(options.esbuildFrom ?? [dir, CLI_DIR]);
+    if (!found || 'older' in found) {
+      const {message, install} = esbuildMissing(found, dir);
+      throw new RenderError('ERR_RENDER_MISSING_DEPENDENCY', message, {package: 'esbuild', ...(install ? {install} : {})});
+    }
+    esbuild = found.main;
+  }
   const message = await runPage(
-    {entry, root, scope, served, openLayers: options.openLayers === true},
+    {entry, root, scope, served, openLayers: options.openLayers === true, interactive: options.interactive === true, esbuild},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );
@@ -1009,6 +1030,11 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
+  /** The page's script, with `interactive`. @type {string | null} */
+  const script = typeof message.script === 'string' ? message.script : null;
+  // The script draws what the markup does not show yet (a menu as it opens,
+  // the next tab), so the rules every class name it holds needs stay too.
+  const kept = script ? new Set([...used, ...(script.match(/[A-Za-z_][\w-]*/g) ?? [])]) : used;
   // A page that draws elements in a state (hovered, focused, pressed) marks
   // them; its stylesheet then applies those states' rules to them too.
   const states = markup.includes(' data-astryx-state="');
@@ -1030,7 +1056,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, used, {states}), 'css', {
+        return inlineAssets(cutCss(own, kept, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1289,7 +1315,11 @@ export async function renderPage(entry, options = {}) {
       ? decodeAttr(heading)
       : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
-  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const style = `<style>${SCHEME_CSS}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  // With a script, the markup sits in the one element the script draws into,
+  // which takes no box of its own.
+  const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
+  const scriptTag = script ? `<script>${script}</script>\n` : '';
   let html;
   if (options.output) {
     // The charset and generator metas come first: a browser reads the
@@ -1329,6 +1359,7 @@ export async function renderPage(entry, options = {}) {
         .filter(([name]) => !isServedPackage(name, []))
         .map(([name, version]) => `${name}@${version}`),
       ...(options.title === undefined ? {} : {title: options.title}),
+      ...(script ? {interactive: true} : {}),
     };
     // The file each alias import named, for the files the page carries, so a
     // reverse where no alias names it still finds the file.
@@ -1352,11 +1383,12 @@ export async function renderPage(entry, options = {}) {
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
+      ...(script ? {interactive: true} : {}),
       markup: {
-        sha256: sha256(asParsed(markup)),
+        sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),
         text: Buffer.from(
-          JSON.stringify({title, runs: textRuns(markup)}),
+          JSON.stringify({title, runs: textRuns(body)}),
         ).toString('base64'),
       },
     };
@@ -1364,15 +1396,15 @@ export async function renderPage(entry, options = {}) {
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n${scriptTag}</body></html>\n`;
   } else {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded)}${scriptTag}</body></html>\n`;
   }
   return {
     html,
@@ -1389,5 +1421,6 @@ export async function renderPage(entry, options = {}) {
     ]).size,
     warnings,
     fromSet: message.fromSet ?? [],
+    ...(script ? {scriptBytes: Buffer.byteLength(script), scriptModules: message.scriptModules ?? 0} : {}),
   };
 }
