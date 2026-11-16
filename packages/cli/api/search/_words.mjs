@@ -22,6 +22,9 @@ export function stem(w) {
       break;
     }
   }
+  // A long noun made with -ation reads as its root: "documentation" is
+  // "document".
+  if (s.length >= 10 && s.endsWith('ation')) s = s.slice(0, -5);
   return s;
 }
 

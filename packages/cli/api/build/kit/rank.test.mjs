@@ -499,6 +499,16 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     expect(shellFor('an app frame with top navigation')).toBe('frame-top');
   });
 
+  it('reads a document idea as the documentation page it names', () => {
+    const pages = [
+      page('guide', 'Documentation - Guide', 'A reference article.'),
+      page('grid', 'Table - Basic', 'A list of records.'),
+    ];
+    const [top] = rankPages('a project document', pages);
+    expect(top.name).toBe('guide');
+    expect(top.hits).toBeGreaterThan(0);
+  });
+
   it('starts an edit of an existing page or part from the app shell', async () => {
     for (const idea of [
       'add a sparkline column to the existing incidents table',
