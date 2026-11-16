@@ -81,6 +81,8 @@ describe('color dials through the palette generator', () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const config = JSON.parse(read('palette.config.json'));
     expect(config).toEqual({
+      // A new palette is made with the newest recipe.
+      recipe: 'astryx-oklch-v2',
       modeStrategy: 'light-and-dark',
       families: [
         {
@@ -358,7 +360,9 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'vibrancy', '60', {cwd}),
     );
     expect(none.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(none.run[0]).toContain('set p accent');
+    // No stock color is offered: the color is the user's to pick.
+    expect(none.run.join(' ')).not.toMatch(/#7c3aed/);
+    expect(none.run[0]).toMatch(/how accent|set p accent/);
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const before = read('tokens/p.palette.ts');
     const r = await themeEditSet('p', 'vibrancy', '80', {cwd});
@@ -450,13 +454,21 @@ describe('color dials through the palette generator', () => {
     expect((await ask('brand color #7c3aed')).commands).toContain(
       `set ${theme} accent '#7c3aed'`,
     );
+    // (Core's own blue is as colorful as sRGB lets it be: a vibrancy moves
+    // it no further, and seeding it draws its text a deeper, less colorful
+    // shade, which the answer says instead of offering a change that dulls
+    // it.)
     const more = await ask('make it more colorful');
-    expect(more.commands).toContain(`set ${theme} vibrancy more`);
+    expect(`${more.commands}\n${more.text}`).toMatch(
+      new RegExp(`set ${theme} vibrancy (?:more|\\d+)|would get duller`),
+    );
     // A theme whose colors are all grays has no color to take out, and
     // says so instead of suggesting a change that does nothing.
+    // (Or the first vibrancy, in steps of 10, at which the accents it
+    // shows are less saturated than now; or refused when none is.)
     const less = await ask('less saturated');
     expect(`${less.commands}\n${less.text}`).toMatch(
-      new RegExp(`set ${theme} vibrancy less|is a gray`),
+      new RegExp(`set ${theme} vibrancy (?:less|\\d+)|is a gray|accent wash`),
     );
     // Explanations name the commands in words and pick no color.
     expect((await ask('dark mode colors')).text).toContain('--mode dark');
@@ -759,17 +771,18 @@ describe('every color decision is generator config', () => {
     );
   });
 
-  it('writes one mode for a one-mode theme and keeps the author fields the dials do not own', () => {
+  it('writes both modes for a one-mode theme too and keeps the author fields the dials do not own', () => {
+    // A one-mode theme keeps both halves: its mode is the one the app's
+    // <Theme> is given, and a region Core draws in the other mode (a toast,
+    // a lightbox) reads the other half.
     const light = plan([{thing: 'accent', value: '#60a5fa'}], {
       mode: 'light-only',
     });
-    expect(light.config.modeStrategy).toBe('light-only');
+    expect(light.config.modeStrategy).toBe('light-and-dark');
     expect(
       Object.keys(/** @type {any} */ (light.candidate.palette.accent)),
-    ).not.toContain('dark');
-    expect(light.pal.tokens['--color-accent'].dark).toEqual(
-      light.pal.tokens['--color-accent'].light,
-    );
+    ).toContain('dark');
+    expect(light.pal.tokens['--color-accent'].dark.color).toBeTruthy();
     const authored = {
       modeStrategy: 'light-only',
       neutralProfile: 'warm-v1',
@@ -1077,14 +1090,14 @@ describe('every color decision is generator config', () => {
       ],
       {
         config: {
-          darkChromaTaper: {edgeMultiplier: 0.5},
+          notes: 'brand colors from the style guide',
           neutralProfile: 'warm-v1',
           families: [],
         },
       },
     );
     const notes = pal.notes.join(' ');
-    expect(notes).toContain('does not read darkChromaTaper');
+    expect(notes).toContain('does not read notes');
     expect(notes).toContain('neutralProfile warm-v1 changes nothing here');
     expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
       'is outside the colors every screen shows (sRGB)',
@@ -1210,7 +1223,6 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', "accent '#64748b'"],
       ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
       ['destructive', "danger '#64748b'"],
@@ -1226,10 +1238,11 @@ describe('color settings, refused well', () => {
           : `astryx experimental theme editor set p ${rest}`,
       );
     }
+    // A hex a digit short: no digit is made up.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
+    ).toBe('astryx experimental theme editor how accent');
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );
@@ -1592,7 +1605,7 @@ describe('fonts some systems ship, and part properties by their grammar', () => 
     expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
     const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
     expect(gill.data.notes.join(' ')).toContain(
-      '"Gill Sans" ships only on macOS',
+      '"Gill Sans" ships only on Apple platforms (macOS, iOS and iPadOS)',
     );
     const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
     fs.mkdirSync(pkgDir, {recursive: true});
@@ -1717,7 +1730,7 @@ describe('colors and type, final checks', () => {
   });
 });
 
-describe('chaos round 4', () => {
+describe('cases', () => {
   it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
     for (const v of ['serif !important', 'Foo /* x */']) {
       const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
@@ -1742,14 +1755,17 @@ describe('chaos round 4', () => {
       ).toBe('ERR_THEME_BAD_VALUE');
   });
 
-  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+  it('keeps both halves when a theme becomes one-mode, and says where its mode goes', async () => {
+    // The theme's colors stay as they were; its mode is the one the app's
+    // <Theme> is given.
     await themeEditNew('m', {cwd});
     await themeEditSet('m', 'accent', '#0d9488', {cwd});
     const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
-    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    expect(dark.data.changedTokens).toEqual([]);
+    expect(dark.data.notes.join(' ')).toContain('mode="dark"');
     await themeEditUndo('m', {cwd, thing: 'mode'});
     const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
-    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    expect(light.data.notes.join(' ')).toContain('mode="light"');
     fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
   });
 
@@ -1833,7 +1849,7 @@ describe('a palette an earlier editor wrote', () => {
       fs
         .readFileSync(ts, 'utf8')
         .replace(
-          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          /"--color-accent": \[\s*palette\.accent\.light\[[\d.]+\],\s*palette\.accent\.dark\[[\d.]+\],?\s*\],/,
           '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
         )
         .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
@@ -1904,9 +1920,10 @@ describe('colors final-3', () => {
 
   it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
     for (const [family, note] of [
-      ['Ubuntu', 'is not a system font'],
+      ['Acme Sans', 'is not a system font'],
+      ['Ubuntu', 'ships only on Linux'],
       ['Segoe UI', 'ships only on Windows'],
-      ['Menlo', 'ships only on macOS'],
+      ['Monaco', 'ships only on macOS'],
     ]) {
       const r = await themeEditSet('p', 'font', family, {cwd});
       expect(r.data.notes.join(' '), family).toContain(note);
@@ -1920,10 +1937,10 @@ describe('colors final-3', () => {
     expect(v.run?.[0] ?? JSON.stringify(v)).toContain('--font-family-body');
     const geist = await themeEditSet('p', 'font', 'geist-sans', {cwd});
     expect(geist.data.setting.value).toBe('geist');
-    const medium = await refusal(() =>
-      themeEditSet('p', 'text-size', 'Medium', {cwd}),
-    );
-    expect(JSON.stringify(medium)).toContain('text-size medium');
+    // A dial's own word in any case is that word.
+    const medium = await themeEditSet('p', 'text-size', 'Medium', {cwd});
+    expect(medium.data.setting.value).toBe('medium');
+    await themeEditUndo('p', {cwd, thing: 'text-size'});
     await themeEditUndo('p', {cwd, thing: 'font'});
   });
 
@@ -1985,12 +2002,13 @@ describe('colors10', () => {
   it('leaves the theme build its own font list, and names commands for a font step', async () => {
     const {collectUnloadedFonts} =
       await import('../theme/build/font-warning.mjs');
-    // As the build has always read it: Ubuntu warns, Roboto does not.
+    // As the build has always read it: a family no system ships warns,
+    // Roboto (and Ubuntu, a Linux interface font) does not.
     expect(
       collectUnloadedFonts({
-        tokens: {'--font-family-body': 'Ubuntu, Roboto, sans-serif'},
+        tokens: {'--font-family-body': 'Acme Sans, Ubuntu, Roboto, sans-serif'},
       }),
-    ).toEqual(['Ubuntu']);
+    ).toEqual(['Acme Sans']);
     const step = await refusal(() => themeEditSet('p', 'font', 'more', {cwd}));
     expect(step.code).toBe('ERR_THEME_BAD_VALUE');
     expect(step.run.length).toBeGreaterThan(0);
@@ -2087,11 +2105,10 @@ describe('colors10, final-4', () => {
 
 describe('colors11: refusals name a command that works', () => {
   it('reads a dial typed in other letters as the dial', async () => {
-    const r = await refusal(() => themeEditSet('p', 'Font', 'inter', {cwd}));
-    expect(r.message).toContain('The dial for that is font');
-    expect(r.run).toContain(
-      r.run.find(x => / set p font inter$/.test(x)) ?? 'missing',
-    );
+    // One thing-name reader: a dial name in other letters is the dial.
+    const r = await themeEditSet('p', 'Font', 'inter', {cwd});
+    expect(r.data.setting.thing).toBe('font');
+    await themeEditUndo('p', {cwd});
   });
 
   it('splits a font shorthand on a part into commands that work', async () => {
@@ -2125,15 +2142,17 @@ describe('colors11: refusals name a command that works', () => {
         themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
       );
       expect(r.run.length, prop).toBeGreaterThan(0);
+      // A color it can read from the value, else what the property
+      // takes: never a stock color the value did not hold.
       expect(r.run[0], prop).toMatch(
-        new RegExp(` set p ${prop} \\S+ --on card$`),
+        new RegExp(`( set p ${prop} \\S+ --on card| how ${prop})$`),
       );
     }
   });
 });
 
 describe('colors12', () => {
-  it('splits a per-mode part color at its own comma, in either order', async () => {
+  it('keeps a per-mode part color whole in its own mode block, in either order', async () => {
     for (const [first, second] of [
       [
         ['dark', 'rgb(0, 0, 255)'],
@@ -2158,9 +2177,17 @@ describe('colors12', () => {
       });
       const [light, dark] =
         first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
-      expect(read('p.settings.ts')).toContain(
-        JSON.stringify(`light-dark(${light}, ${dark})`),
-      );
+      // Each mode's color, commas and all, in that mode's block.
+      const src = read('p.settings.ts');
+      for (const [m, v] of [
+        ['light', light],
+        ['dark', dark],
+      ])
+        expect(src).toMatch(
+          new RegExp(
+            `"@${m}": \\{\\s*"backgroundColor": ${JSON.stringify(v).replace(/[()[\]{}.*+?^$|\\]/g, '\\$&')}`,
+          ),
+        );
       for (const m of ['light', 'dark'])
         await themeEditUndo('p', {
           cwd,
@@ -2283,7 +2310,8 @@ describe('colors14', () => {
         themeEditSet('p', prop, value, {cwd, on: 'card'}),
       );
       expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
-      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+      // A negative is no size of the other sign: how, never its positive.
+      expect(bad.run[0], prop).toMatch(new RegExp(` how ${prop}$`));
     }
     await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
@@ -2384,9 +2412,13 @@ describe('colors15', () => {
   });
 
   it('suggests the headings word meant, the font a role keeps, and text sizes the dial takes', async () => {
+    // A word in any case is the word itself.
+    for (const value of ['BOLD', 'Tight']) {
+      const r = await themeEditSet('p', 'headings', value, {cwd});
+      expect(r.data.setting.value, value).toBe(value.toLowerCase());
+      await themeEditUndo('p', {cwd, thing: 'headings'});
+    }
     for (const [value, word] of [
-      ['BOLD', 'bold'],
-      ['Tight', 'tight'],
       ['700', 'bold'],
       ['800', 'heavy'],
       ['900', 'heavy'],
@@ -2585,8 +2617,11 @@ describe('colors17', () => {
     );
     expect(none.code).toBe('ERR_THEME_NO_EFFECT');
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    expect(
+      (await themeEditSet('p', 'vibrancy', 'MORE', {cwd})).data.setting.value,
+    ).toMatch(/^\d+$/);
+    await themeEditUndo('p', {cwd, thing: 'vibrancy'});
     for (const [value, want] of [
-      ['MORE', 'more'],
       ['70%', '70'],
       ['7e1', '70'],
     ]) {
@@ -2631,7 +2666,7 @@ describe('colors17', () => {
   });
 });
 
-describe('hunt22', () => {
+describe('cases', () => {
   it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
     await themeEditNew('h22', {cwd, mode: 'dark-only'});
     const fresh = await refusal(() =>
@@ -2750,7 +2785,8 @@ describe('parts24', () => {
       JSON.stringify((await themeEditShow('p', {cwd})).data),
     ).not.toContain('padding-top');
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'button'});
-  });
+    // (Twenty-six edits, each with its checks.)
+  }, 120_000);
 
   it('keeps a background on variants when a blend mode comes later', async () => {
     const {findOverrides} = await import('./_settings.mjs');
@@ -2838,8 +2874,8 @@ describe('parts28', () => {
         expect(sides[k], `${value} ${k}`).toBe(v);
       expect(JSON.stringify(sides), value).not.toMatch(/: \+|"\+"/);
       if (value === '4px 8px 12px 16px') {
-        const ltr = cardSides('.astryx-card:dir(ltr)');
-        const rtl = cardSides('.astryx-card:dir(rtl)');
+        const ltr = cardSides('.astryx-card:where(:dir(ltr))');
+        const rtl = cardSides('.astryx-card:where(:dir(rtl))');
         expect([ltr['-inline-start'], ltr['-inline-end']]).toEqual([
           '16px',
           '8px',
@@ -2953,13 +2989,15 @@ describe('parts30', () => {
       /--astryx-card-padding[a-z-]*:\s*initial/,
     );
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('p', 'padding', 'inherit', {cwd, on: 'card'}),
-        )
-      ).code,
-    ).toBe('ERR_THEME_BAD_VALUE');
+    // inherit leaves it to Core's default too (parts40), and says so.
+    const inherit = await themeEditSet('p', 'padding', 'inherit', {
+      cwd,
+      on: 'card',
+    });
+    expect(inherit.data.notes.join(' ')).toMatch(
+      /inherit means card's own default padding from Core/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
   });
 
   it('keeps a variant margin side and a variant radius over the lifted base values', async () => {
@@ -3076,10 +3114,10 @@ describe('parts33', () => {
     const box = blockOf('.astryx-dropdown-menu');
     expect(box).not.toMatch(/--_dropdown-menu-padding:\s*5px/);
     // Each direction gets its own side, off the whole-box variable.
-    expect(blockOf('.astryx-dropdown-menu:dir(ltr)')).toMatch(
+    expect(blockOf('.astryx-dropdown-menu:where(:dir(ltr))')).toMatch(
       /padding-left:\s*5px/,
     );
-    expect(blockOf('.astryx-dropdown-menu:dir(rtl)')).toMatch(
+    expect(blockOf('.astryx-dropdown-menu:where(:dir(rtl))')).toMatch(
       /padding-right:\s*5px/,
     );
     await themeEditUndo('p', {
@@ -3109,12 +3147,12 @@ describe('parts34', () => {
     return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
   };
 
-  it('pads the composer box through its variable, and refuses what paints its wrapper', async () => {
-    await themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'});
-    const box = blockOf('.astryx-chat-composer');
-    expect(box).toMatch(/--_chat-composer-padding:\s*5px/);
-    expect(box).not.toMatch(/(^|[;{\s])padding:\s*5px/);
-    await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+  it("refuses a composer padding (parts39: only Core's private variable reaches the box), and what paints its wrapper", async () => {
+    const pad = await refusal(() =>
+      themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'}),
+    );
+    expect(pad.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(pad.run[0]).toMatch(/how chat-composer$/);
     for (const [prop, value, when] of [
       ['background', '#f3f4f6'],
       ['box-shadow', 'none'],
@@ -3144,10 +3182,10 @@ describe('r19 (1) / parts35: a card physical side is its side in each direction'
       const at = css.indexOf(`${sel} {`);
       return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
     };
-    expect(rule('.astryx-card:dir(ltr)')).toMatch(
+    expect(rule('.astryx-card:where(:dir(ltr))')).toMatch(
       /--astryx-card-padding-inline-start:\s*20px/,
     );
-    expect(rule('.astryx-card:dir(rtl)')).toMatch(
+    expect(rule('.astryx-card:where(:dir(rtl))')).toMatch(
       /--astryx-card-padding-inline-end:\s*20px/,
     );
     expect(rule('.astryx-card')).not.toMatch(/(^|[;{\s])padding-left:/);
@@ -3166,7 +3204,7 @@ describe('r19b (1): a card physical side beside other sides', () => {
       if (first) await themeEditSet('p', first[0], first[1], {cwd, on: 'card'});
       await themeEditSet('p', 'padding-left', value, {cwd, on: 'card'});
       const css = read('p.css');
-      const at = css.indexOf('.astryx-card:dir(ltr) {');
+      const at = css.indexOf('.astryx-card:where(:dir(ltr)) {');
       const body = css.slice(at, css.indexOf('}', at));
       expect(body, value).toContain(
         `--astryx-card-padding-inline-start: ${want};`,
@@ -3218,9 +3256,10 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
         on: 'dropdown-menu',
       });
       await themeEditSet('p', later, value, {cwd, on: 'dropdown-menu'});
-      expect(blockOf('.astryx-dropdown-menu:dir(ltr)'), later).not.toMatch(
-        /padding-left:\s*5px/,
-      );
+      expect(
+        blockOf('.astryx-dropdown-menu:where(:dir(ltr))'),
+        later,
+      ).not.toMatch(/padding-left:\s*5px/);
       await themeEditUndo('p', {cwd, thing: later, on: 'dropdown-menu'});
       await themeEditUndo('p', {
         cwd,
@@ -3238,7 +3277,7 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
     expect(blockOf('.astryx-card')).toMatch(
       /--astryx-card-padding-inline-start:\s*6px/,
     );
-    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
       /--astryx-card-padding-inline-end:\s*20px/,
     );
     await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
@@ -3247,13 +3286,13 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
     );
     await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
     await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
-    expect(blockOf('.astryx-card:dir(ltr)')).toMatch(
+    expect(blockOf('.astryx-card:where(:dir(ltr))')).toMatch(
       /--astryx-card-padding-inline-start:\s*20px/,
     );
-    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
       /--astryx-card-padding-inline-start:\s*6px/,
     );
-    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
       /--astryx-card-padding-inline-end:\s*20px/,
     );
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
@@ -3269,7 +3308,7 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
     expect(blockOf('.astryx-context-menu')).toMatch(
       /(^|[;{\s])padding-left:\s*20px/,
     );
-    expect(blockOf('.astryx-context-menu:dir(ltr)')).toMatch(
+    expect(blockOf('.astryx-context-menu:where(:dir(ltr))')).toMatch(
       /padding-left:\s*6px/,
     );
     await themeEditUndo('p', {
@@ -3305,7 +3344,7 @@ describe('parts35: one padding model', () => {
         new RegExp(`--astryx-card-padding-${k}:\\s*8px`),
       );
     // Same weight as the base's direction rules, and after them.
-    expect(at(muted)).toBeGreaterThan(at('.astryx-card:dir(rtl)'));
+    expect(at(muted)).toBeGreaterThan(at('.astryx-card:where(:dir(rtl))'));
     await themeEditUndo('p', {
       cwd,
       thing: 'padding',
@@ -3325,10 +3364,11 @@ describe('parts35: one padding model', () => {
       cwd,
       on: 'dropdown-menu',
     });
+    // The base's direction rule keeps the base's weight (:where), so the
+    // state's rule out-ranks it wherever it comes.
     const css0 = read('p.css');
-    expect(css0.indexOf('.astryx-dropdown-menu:dir(ltr) {')).toBeLessThan(
-      css0.indexOf('.astryx-dropdown-menu:hover'),
-    );
+    expect(css0).toContain('.astryx-dropdown-menu:where(:dir(ltr)) {');
+    expect(css0).toContain('.astryx-dropdown-menu:hover');
     await themeEditUndo('p', {
       cwd,
       thing: 'padding-inline-start',
@@ -3366,8 +3406,10 @@ describe('parts35: one padding model', () => {
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
   });
 
-  it('takes one length as the chat composer padding, a variable or math too', async () => {
-    for (const value of ['4px 8px', '0', 'inherit', '50%', '12'])
+  it('refuses every chat composer padding (parts39), whatever its value', async () => {
+    // The box reads its padding only from a variable of Core's own, which a
+    // theme cannot set; a padding property would pad the wrapper.
+    for (const value of ['4px', '4px 8px', 'var(--spacing-3)', 'max(4px, 1vw)'])
       expect(
         (
           await refusal(() =>
@@ -3375,30 +3417,7 @@ describe('parts35: one padding model', () => {
           )
         ).code,
         value,
-      ).toBe('ERR_THEME_BAD_VALUE');
-    const twelve = await refusal(() =>
-      themeEditSet('p', 'padding', '12', {cwd, on: 'chat-composer'}),
-    );
-    expect(twelve.run[0]).toMatch(/padding 12px --on chat-composer$/);
-    for (const value of [
-      'var(--spacing-3)',
-      'calc(var(--spacing-2) + 2px)',
-      'max(4px, 1vw)',
-      'clamp(4px, 1vw, 12px)',
-      'min(8px, var(--spacing-3))',
-    ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
-    }
-    const keeps = await refusal(() =>
-      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
-        cwd,
-        on: 'chat-composer',
-      }),
-    );
-    expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
-    );
+      ).toBe('ERR_THEME_NO_EFFECT');
   });
 });
 
@@ -3451,7 +3470,6 @@ describe('parts36', () => {
     for (const [prop, on] of [
       ['padding', 'segmented-control'],
       ['padding', 'dropdown-menu'],
-      ['padding', 'chat-composer'],
       ['padding-inline', 'item'],
     ])
       expect(
@@ -3469,17 +3487,24 @@ describe('parts36', () => {
       'calc(var(--spacing-2) + 2px)',
       'max(4px, 1vw)',
     ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+      await themeEditSet('p', 'padding', value, {
+        cwd,
+        on: 'segmented-control',
+      });
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on: 'segmented-control',
+      });
     }
     const keeps = await refusal(() =>
       themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
         cwd,
-        on: 'chat-composer',
+        on: 'segmented-control',
       }),
     );
     expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+      /padding 'var\(--spacing-2\)' --on segmented-control$/,
     );
   });
 
@@ -3606,10 +3631,12 @@ describe('parts38', () => {
     await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
     const css = read('p.css');
     for (const dir of ['ltr', 'rtl']) {
-      const card = css.indexOf(`.astryx-card:dir(${dir}) {`);
-      const clickable = css.indexOf(`.astryx-clickable-card:dir(${dir}) {`);
+      const card = css.indexOf(`.astryx-card:where(:dir(${dir})) {`);
+      const clickable = css.indexOf(
+        `.astryx-clickable-card:where(:dir(${dir})) {`,
+      );
       expect(clickable, dir).toBeGreaterThan(card);
-      expect(ruleOf(`.astryx-clickable-card:dir(${dir})`), dir).toMatch(
+      expect(ruleOf(`.astryx-clickable-card:where(:dir(${dir}))`), dir).toMatch(
         /--astryx-card-padding-inline-start:\s*7px/,
       );
     }

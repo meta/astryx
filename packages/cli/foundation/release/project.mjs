@@ -157,7 +157,14 @@ export function findProjectCli(startDir) {
 }
 
 /** Version-control metadata that marks a repository's root. */
-const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
+export const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
+
+/** The dependency fields whose packages an install gets. */
+const INSTALLED_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+];
 
 /**
  * The Astryx ranges a package.json declares, from any dependency field.
@@ -168,12 +175,7 @@ function declaredRanges(pkg) {
   /** @type {{core: string | null, cli: string | null}} */
   const out = {core: null, cli: null};
   if (!pkg || typeof pkg !== 'object') return out;
-  for (const field of [
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'peerDependencies',
-  ]) {
+  for (const field of [...INSTALLED_FIELDS, 'peerDependencies']) {
     const deps = pkg[field];
     if (!deps || typeof deps !== 'object') continue;
     if (out.core === null && typeof deps[CORE_PACKAGE_NAME] === 'string') {
@@ -184,6 +186,20 @@ function declaredRanges(pkg) {
     }
   }
   return out;
+}
+
+/**
+ * Does the package.json in `dir` list `name` among the packages its install
+ * gets? A peer dependency does not count: some package managers never install
+ * peers.
+ * @param {string} dir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function installsPackage(dir, name) {
+  const pkg = readJson(path.join(dir, 'package.json'));
+  if (!pkg || typeof pkg !== 'object') return false;
+  return INSTALLED_FIELDS.some(field => typeof pkg[field]?.[name] === 'string');
 }
 
 /**

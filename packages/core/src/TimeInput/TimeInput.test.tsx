@@ -1372,4 +1372,112 @@ describe('TimeInput rejected entries', () => {
       ]);
     });
   });
+
+  describe('entryErrorBehavior', () => {
+    const min = '14:00' as ISOTimeString;
+    const signals = (container: HTMLElement, input: HTMLElement) => ({
+      status: statusText(container),
+      isInvalid: input.getAttribute('aria-invalid') === 'true',
+      isStyledInvalid: /\.inputInvalid\b/.test(input.className),
+    });
+    const clean = {status: null, isInvalid: false, isStyledInvalid: false};
+    const shown = {
+      status: 'Invalid time',
+      isInvalid: true,
+      isStyledInvalid: true,
+    };
+
+    it.each(['blur', 'Enter'] as const)(
+      'under blur-or-enter, shows and reports no sign of 1:30 PM before a 2 PM minimum while typing, and every sign together, announced once, at %s',
+      async commit => {
+        const onEntryErrorChange = vi.fn();
+        const {container} = render(
+          field({
+            hourFormat: '12h',
+            min,
+            entryErrorBehavior: 'blur-or-enter',
+            onEntryErrorChange,
+          }),
+        );
+        for (const text of ['1', '1:3', '1:30', '1:30 P', '1:30 PM']) {
+          expect(signals(container, type(text))).toEqual(clean);
+        }
+        expect(onEntryErrorChange).not.toHaveBeenCalled();
+
+        const input = type('1:30 PM', commit);
+        expect(signals(container, input)).toEqual(shown);
+        expect(onEntryErrorChange).toHaveBeenCalledExactlyOnceWith({
+          kind: 'outOfRange',
+          text: '1:30 PM',
+          value: '13:30',
+        });
+        await expectAnnounced(['Invalid time']);
+
+        // A still-wrong edit keeps it; an accepted time clears it at once.
+        expect(signals(container, type('1:45 PM'))).toEqual(shown);
+        expect(onEntryErrorChange).toHaveBeenCalledOnce();
+        expect(signals(container, type('2:15 PM'))).toEqual(clean);
+        expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+        await expectAnnounced(['Invalid time']);
+      },
+    );
+
+    it('under blur-or-enter, shows unreadable text at Enter or blur, as under complete', () => {
+      const {container} = render(field({entryErrorBehavior: 'blur-or-enter'}));
+      expect(signals(container, type('25:00'))).toEqual(clean);
+      expect(signals(container, type('25:00', 'blur'))).toEqual(shown);
+      expect(signals(container, type(''))).toEqual(clean);
+    });
+
+    it.each([undefined, 'complete'] as const)(
+      'with entryErrorBehavior %s, shows 1:30 PM before a 2 PM minimum while typing',
+      entryErrorBehavior => {
+        const {container} = render(
+          field({hourFormat: '12h', min, entryErrorBehavior}),
+        );
+        expect(signals(container, type('1:30 PM'))).toEqual(shown);
+      },
+    );
+
+    it.each([
+      ['complete', 'at once'],
+      ['blur-or-enter', 'at Enter'],
+    ] as const)(
+      'under %s, shows a native edit before the minimum %s, and clears it at once',
+      (entryErrorBehavior, moment) => {
+        const waits = moment === 'at Enter';
+        const {container} = render(
+          field({min, presentation: 'native', entryErrorBehavior}),
+        );
+        const input =
+          container.querySelector<HTMLInputElement>('input[type="time"]');
+        if (input == null) {
+          throw new Error('no native time control');
+        }
+        fireEvent.focus(input);
+        fireEvent.change(input, {target: {value: '13:00'}});
+        expect(input.getAttribute('aria-invalid') === 'true').toBe(!waits);
+        fireEvent.keyDown(input, {key: 'Enter'});
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(statusText(container)).toBe('Invalid time');
+        fireEvent.change(input, {target: {value: '15:00'}});
+        expect(input).not.toHaveAttribute('aria-invalid');
+      },
+    );
+
+    it('shows a held native edit at once when the field switches to complete', () => {
+      const native = (entryErrorBehavior: 'complete' | 'blur-or-enter') =>
+        field({min, presentation: 'native', entryErrorBehavior});
+      const {container, rerender} = render(native('blur-or-enter'));
+      const input = container.querySelector('input[type="time"]');
+      if (input == null) {
+        throw new Error('no native time control');
+      }
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '13:00'}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      rerender(native('complete'));
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    });
+  });
 });

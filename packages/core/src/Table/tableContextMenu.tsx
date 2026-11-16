@@ -123,6 +123,20 @@ function LazyTableContextMenu({
 }
 
 /**
+ * Whether `actions` give a cell a context menu: a getter, or a non-empty array.
+ * Cells read it to style the menu's trigger, and `wrapInTableContextMenu` to
+ * decide whether to wrap, so the two always agree.
+ */
+export function hasTableContextActions(
+  actions: TableContextActions | undefined,
+): actions is NonNullable<TableContextActions> {
+  return (
+    typeof actions === 'function' ||
+    (Array.isArray(actions) && actions.length > 0)
+  );
+}
+
+/**
  * Wrap a table element (a header cell's content or a body cell) in a right-click
  * context menu rendering the aggregated `actions`. Accepts a static array or a
  * getter (resolved lazily on open). When there are no actions the element is
@@ -146,7 +160,7 @@ export function wrapInTableContextMenu(
       />
     );
   }
-  if (!actions || actions.length === 0) {
+  if (!hasTableContextActions(actions)) {
     return element;
   }
   // item (it looked like "ascending" was always selected). Focus moves only

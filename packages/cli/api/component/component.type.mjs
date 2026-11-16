@@ -180,6 +180,7 @@
  * @property {string} description
  * @property {boolean} isShowcase
  * @property {string} category
+ * @property {boolean} isReady Whether the block is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**

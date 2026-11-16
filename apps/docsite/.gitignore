@@ -15,8 +15,10 @@ public/vendor/
 
 # Work folder of scripts/generate-landing-template-previews.mjs
 .landing-template-previews/
-# Landing preview pages that earlier builds wrote for frames
+# Landing template preview pages that the build writes for the templates card frames
 public/landing/template-previews/
+# Landing preview markup for a client-side navigation to the homepage
+public/landing-previews.json
 
 # Vercel stages both static apps and deployment identity during builds, never in source control.
 public/storybook/

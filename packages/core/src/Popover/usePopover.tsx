@@ -97,6 +97,19 @@ const styles = stylex.create({
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
   // Focus trap container. Shared :focus-visible styling keeps semantic focus
   // placement independent of pointer/keyboard indication.
@@ -391,6 +404,11 @@ export interface InternalPopoverOptions extends UsePopoverOptions {
    */
   getOpener?: () => HTMLElement | null;
   /**
+   * useLayer's `onOpenPendingChange`: true when a `show()` that the layer
+   * accepted starts to wait for a valid anchor, false when that wait ends.
+   */
+  onOpenPendingChange?: (isPending: boolean) => void;
+  /**
    * The owner decides what a touch outside that pans does to the popover.
    * Otherwise a light-dismiss popover keeps such a pan from dismissing it
    * (useLayer's `watchesOutsidePans`).
@@ -469,6 +487,7 @@ function usePopoverImplementation(
     restoreFocusTo,
     getOpener,
     ownsOutsidePan = false,
+    onOpenPendingChange,
   } = options;
 
   const t = useComponentTranslator();
@@ -509,6 +528,7 @@ function usePopoverImplementation(
     watchesOutsidePans:
       hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
     writesEntranceSide,
+    onOpenPendingChange,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
@@ -598,7 +618,13 @@ function usePopoverImplementation(
       const activeElement = (
         triggerElementRef.current?.ownerDocument ?? document
       ).activeElement as HTMLElement | null;
-      const opener = getOpenerRef.current?.() ?? activeElement;
+      const focused = getOpenerRef.current?.() ?? activeElement;
+      // Initial focus can move inside before a controlled popover's sync runs
+      // show() again. That call keeps the element that opened the popover.
+      const opener =
+        focused != null && contentRef.current?.contains(focused) === true
+          ? openerRef.current
+          : focused;
       openerRef.current =
         opener != null && !contentRef.current?.contains(opener) ? opener : null;
       const focusWithinEvent = () => {

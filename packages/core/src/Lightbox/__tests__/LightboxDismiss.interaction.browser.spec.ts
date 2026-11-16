@@ -138,7 +138,7 @@ async function openViewer(
   page: Page,
   story: keyof typeof STORIES = 'plain',
 ): Promise<Viewer> {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), STORIES[story].id);
@@ -725,7 +725,7 @@ test(
 test("reopening at the dismissed photo's neighbour shows that photo", async ({
   page,
 }) => {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), 'core-lightbox--gallery');
@@ -796,8 +796,10 @@ test('a caller that keeps the viewer open gets the photo, the backdrop and the c
 });
 
 test('a photo dragged to dismiss draws above its caption', async ({page}) => {
-  // Without zoom the caption sits right under the photo. So the drag carries
-  // the photo over it while the caption still shows, faded.
+  // The caption sits in its band under the photo's row. Held sideways, a
+  // landscape photo fills the row's height, so the drag carries it over the
+  // caption at once, while the caption still shows.
+  await page.setViewportSize({width: 874, height: 402});
   const v = await openViewer(page);
   const caption = v.dialog.locator('[data-lightbox-caption]');
   await expect(caption).toBeVisible();
@@ -910,12 +912,12 @@ for (const story of ['zoom', 'gallery'] as const) {
   });
 }
 
-test('a caption comes back under the photo once a drag to close springs back', async ({
+test('a caption stays in its band through a drag to close that springs back', async ({
   page,
 }) => {
-  // A 3:1 panorama leaves the stage free space below the fitted photo, so
-  // the caption moves up under it.
-  await page.route('https://picsum.photos/**', async route =>
+  // A 3:1 panorama leaves free space between the fitted photo and the
+  // caption's band. The band keeps its place through the drag.
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(3000, 1000),
@@ -939,15 +941,15 @@ test('a caption comes back under the photo once a drag to close springs back', a
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
   const caption = dialog.getByText('A winding path through the forest');
-  const gap = async () => {
-    const photo = await img.boundingBox();
+  const place = async () => {
     const below = await caption.boundingBox();
-    if (photo == null || below == null) {
-      throw new Error('no photo or caption');
+    if (below == null) {
+      throw new Error('no caption');
     }
-    return Math.round(below.y - (photo.y + photo.height));
+    return {x: Math.round(below.x), y: Math.round(below.y)};
   };
-  await expect.poll(gap).toBe(0);
+  await expect(caption).toBeVisible();
+  const before = await place();
   const box = await img.boundingBox();
   if (box == null) {
     throw new Error('no photo');
@@ -965,7 +967,7 @@ test('a caption comes back under the photo once a drag to close springs back', a
       ),
   );
   await expect(dialog).toBeVisible();
-  await expect.poll(gap).toBe(0);
+  await expect.poll(place).toEqual(before);
 });
 
 test("while the controls fade with a drag, a tap on Close still reaches it, above a gallery's pages", async ({

@@ -93,6 +93,8 @@ export type NativeTimeSegmentProps = {
    * it. The owner ends it when `value` changes.
    */
   onRejectedChange: (isRejected: boolean) => void;
+  /** Runs at Enter and blur, which show a rejection that waits for them. */
+  onCommit: () => void;
   /** The rejection message that no shown status announces. */
   alertMessage: string;
   /**
@@ -129,12 +131,14 @@ export function NativeTimeSegment({
   ariaDescribedBy,
   isRejected,
   onRejectedChange,
+  onCommit,
   alertMessage,
   controlProps,
 }: NativeTimeSegmentProps) {
   const {
     onFocus: onFocusProp,
     onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
     ...inputProps
   } = controlProps ?? {};
   const locale = useLocale();
@@ -283,7 +287,17 @@ export function NativeTimeSegment({
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, isRejected]);
+    onCommit();
+  }, [commitValue, nativeValue, isRejected, onCommit]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        onCommit();
+      }
+    },
+    [onCommit],
+  );
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {
@@ -330,6 +344,7 @@ export function NativeTimeSegment({
           onChange={handleChange}
           onFocus={chainEventHandlers(handleFocus, onFocusProp)}
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
           step={60}

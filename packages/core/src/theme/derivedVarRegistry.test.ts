@@ -142,6 +142,7 @@ const STRUCTURAL_VARS = new Set([
   // not inherit them. Runtime state, never authored by a theme.
   '--_sheet-scrim-opacity',
   '--_sheet-scrim-duration',
+  '--_sheet-scrim-easing',
 ]);
 
 /**
@@ -329,6 +330,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // publication beside container().
   '--_container-corner-block-start',
   '--_container-corner-block-end',
+  // The container-padding record's block-edge bleed: a padding publisher
+  // gives its block padding only to a direct first or last Table.
+  '--_container-bleed-block-start',
+  '--_container-bleed-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

@@ -129,6 +129,14 @@ export const docs = {
         "Called each time the field's rejection of typed text changes, and with null when the rejection ends. A rejection starts only at Enter or blur. kind is 'unreadable' (text that is not a number), 'fractional' (a fraction when isIntegerOnly), or 'outOfRange' (any number while min is above max); text is the typed text; value is the number it names, for 'fractional' and 'outOfRange'. It also runs when an edit makes the text valid or empty, when a new value, min, max, or isIntegerOnly changes or ends the rejection, and when disabling the field drops the text, and never twice for the same rejection; it reports null when the field unmounts while a rejection stands. Pass an error status with a message to word the rejection yourself.",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the field shows its own entry error: typed text it rejects, as onEntryErrorChange reports it. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. A typed number is complete only at Enter or blur, so 'complete' and 'blur-or-enter' behave the same: the message, aria-invalid, the invalid styling, the announcement, and the onEntryErrorChange report appear together at Enter or blur, never while a person types, and an edit that makes the text valid or empty clears the error at once. Set it to match the other fields of a form; the field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
+    },
+    {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
@@ -456,6 +464,14 @@ export const docsZh = {
         "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。拒绝只在按 Enter 或失焦时开始。kind 为 'unreadable'（不是数字的文本）、'fractional'（启用 isIntegerOnly 时的小数）或 'outOfRange'（min 大于 max 时的任何数字）；text 为输入的文本；value 为文本所指的数字，用于 'fractional' 和 'outOfRange'。编辑使文本有效或为空时、新的 value、min、max 或 isIntegerOnly 改变或结束拒绝时、禁用字段丢弃文本时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。传入带消息的 error 状态即可自行措辞拒绝消息。",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "字段何时显示自身的输入错误：即字段拒绝的输入文本，也就是 onEntryErrorChange 报告的拒绝。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。输入的数字只有在按 Enter 或失焦时才算完整，因此 'complete' 和 'blur-or-enter' 的行为相同：消息、aria-invalid、无效样式、播报和 onEntryErrorChange 报告都在按 Enter 或失焦时一起出现，输入过程中从不出现；使文本有效或清空文本的编辑会立即清除错误。可将其设为与表单中其他字段一致；字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
+    },
+    {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
@@ -772,6 +788,8 @@ export const docsDense = {
       "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
     onEntryErrorChange:
       "(error|null) on each typed-rejection change, starting only at Enter/blur: kind 'unreadable'|'fractional' (isIntegerOnly)|'outOfRange' (min > max), text, value (fractional/outOfRange); also on an edit to valid/empty, new value/min/max/isIntegerOnly, disable; never twice for one rejection; null on unmount mid-rejection; word it via an error status w/ message",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when the field's own rejection shows (not when validation runs; not React Aria validationBehavior; never changes status). A typed number is complete only at Enter/blur, so both values behave the same: message, aria-invalid, styling, announcement and onEntryErrorChange report wait for Enter/blur; valid or emptied text clears at once. Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     min: 'Minimum value allowed.',

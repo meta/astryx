@@ -28,6 +28,10 @@ import {
   gatherThemes,
 } from './_gather-templates.mjs';
 import {componentsInSource} from '../../foundation/discovery/template-adapter.mjs';
+import {
+  keptStoredCatalog,
+  storedSearchCatalog,
+} from '../../foundation/discovery/stored-search-catalog.mjs';
 
 export {componentKeywords} from './_gather-components.mjs';
 
@@ -106,6 +110,20 @@ async function gatherDomains(options) {
     requireSearchCoreDir,
     cwd,
   );
+  const found = coreDir == null ? null : storedSearchCatalog(coreDir, cwd);
+  const stored = found && storedCatalog(found.value, DOMAINS.filter(wants));
+  if (found && stored) {
+    const result = {
+      ...stored,
+      searchedComponents: wants('component'),
+      outside:
+        stored.all.some(c => c.domain === 'theme') && isOutsideProject(cwd),
+      coreSkipped,
+      coreSkippedCode,
+    };
+    fromStore.set(result, {pm: found.pm, domains: DOMAINS.filter(wants)});
+    return result;
+  }
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component')
       ? gatherComponents(/** @type {string} */ (coreDir), cwd)
@@ -154,6 +172,14 @@ const GATHER_CODEC = {
    * @returns {any}
    */
   encode(gathered) {
+    // A catalog read from the store written at publish is kept as a
+    // reference to it: the run's stamps hold every file the store's check
+    // read, so a run that finds them unchanged reads the store as it is.
+    const reference = fromStore.get(gathered);
+    if (reference) {
+      const {all: _all, components: _components, ...rest} = gathered;
+      return {...rest, [FROM_STORE]: reference};
+    }
     const position = new Map(
       gathered.all.map((/** @type {any} */ c, /** @type {number} */ i) => [
         c,
@@ -189,6 +215,15 @@ const GATHER_CODEC = {
    * @returns {any}
    */
   decode(stored) {
+    const reference = stored[FROM_STORE];
+    if (reference) {
+      const {[FROM_STORE]: _, ...rest} = stored;
+      const value = storedCatalog(
+        keptStoredCatalog(reference.pm),
+        reference.domains,
+      );
+      return value && {...rest, ...value};
+    }
     const all = stored.all.map((/** @type {any} */ c) => {
       const stored = c.weakKeywords?.[DERIVED];
       if (stored === undefined) return c;
@@ -231,6 +266,56 @@ const GATHER_CODEC = {
     };
   },
 };
+
+/** Every domain a catalog gathers, as candidates name them. */
+const DOMAINS = ['component', 'hook', 'doc', 'template', 'theme'];
+
+/**
+ * Gathered catalogs read from the catalog stored at publish, each with the
+ * package manager its docs spell commands for and the domains it holds.
+ * @type {WeakMap<object, {pm: string, domains: string[]}>}
+ */
+const fromStore = new WeakMap();
+
+/** The key a kept gather's reference to the stored catalog sits under. */
+const FROM_STORE = '\0fromStore';
+
+/**
+ * The catalog stored at publish, decoded, with only the candidates of
+ * `domains`; null when there is none or it does not decode to a catalog's
+ * shape.
+ * @param {unknown} encoded
+ * @param {string[]} domains
+ * @returns {{all: Candidate[], components: Candidate[]} | null}
+ */
+function storedCatalog(encoded, domains) {
+  if (encoded == null) return null;
+  try {
+    const value = GATHER_CODEC.decode(encoded);
+    if (!GATHER_CODEC.valid(value)) return null;
+    return {
+      all: value.all.filter((/** @type {Candidate} */ c) =>
+        domains.includes(c.domain),
+      ),
+      components: domains.includes('component') ? value.components : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A full gathered catalog (every domain) in the plain form the catalog stored
+ * at publish holds (scripts/generate-search-catalog.mjs): the kept gather's
+ * form, with each page template's derived component names read now, so the
+ * store names no file.
+ * @param {Awaited<ReturnType<typeof gatherCandidates>>} gathered
+ * @returns {unknown}
+ */
+export function encodeStoredCatalog(gathered) {
+  for (const c of gathered.all) void c.weakKeywords;
+  return GATHER_CODEC.encode(gathered);
+}
 
 /** The key a stored template's derived component names sit under. */
 const DERIVED = '\0derived';

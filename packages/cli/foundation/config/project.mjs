@@ -45,6 +45,7 @@ import {
   resolveInstalledIntegrationDir,
 } from '../integrations/integrations.mjs';
 import {loadAutolinkCandidates} from '../integrations/autolink.mjs';
+import {missingDeclaredDependency} from '../integrations/missing-dependency.mjs';
 import {
   computerInstallRoots,
   loadComputerIntegrations,
@@ -131,6 +132,13 @@ const ISSUES_CODEC = {
 };
 
 export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
+
+/**
+ * The project each folder last loaded in this process, with the hosted run
+ * it loaded in (null outside one).
+ * @type {Map<string, {project: Project, run: unknown}>}
+ */
+const LAST_LOADED = new Map();
 
 /**
  * Extract a human-readable message from an unknown thrown value.
@@ -641,7 +649,20 @@ export class Project {
       core,
     });
     PROVIDER_LEDGERS.set(project, resolution.ledger);
+    LAST_LOADED.set(path.resolve(cwd), {project, run: hostedRun()});
     return project;
+  }
+
+  /**
+   * The project this process last loaded for `cwd` in the current hosted run
+   * (or outside any), or undefined: a reader that only needs what the run
+   * already loaded does not load it again.
+   * @param {string} [cwd]
+   * @returns {Project | undefined}
+   */
+  static lastLoaded(cwd = process.cwd()) {
+    const last = LAST_LOADED.get(path.resolve(cwd));
+    return last && last.run === hostedRun() ? last.project : undefined;
   }
 
   /**
@@ -1087,6 +1108,7 @@ export class Project {
         sets,
         this.#config.experimental?.iconSet,
         withdrawn,
+        this.#config.experimental?.iconVariant,
       );
       return {sets: orderIconSets(sets, choice), withdrawn, choice};
     });
@@ -1198,36 +1220,13 @@ export class Project {
         const pkg = this.#pkgLabel(integration);
         if (!integration?.docs) continue;
         try {
-          const {records, errors, namespaces, guides} =
-            await discoverIntegrationDocs(integration);
-          for (const e of errors) {
-            this.#pushIssue(pkg, {
-              code: 'invalid_doc',
-              severity: 'error',
-              message: e.message,
-            });
-          }
           // Any unusable doc withdraws the whole package's topics, matching
-          // how a bad template withdraws its package's templates: a partial
-          // docs contribution is the state where a `replaces` silently does
-          // nothing and a reader gets the topic it was meant to replace.
-          if (errors.length > 0) {
-            for (const e of errors) {
-              catalog.addIssue({
-                package: integration.name ?? pkg,
-                message: e.message,
-              });
-            }
-            continue;
-          }
-          for (const record of records) {
-            const issue = catalog.add(record);
-            if (issue) this.#pushIssue(pkg, issue);
-          }
-          catalog.addTreeInputs({
-            namespaces: namespaces.map(input => ({...input, rank})),
-            guides: guides.map(input => ({...input, rank})),
-          });
+          // how a bad template withdraws its package's templates.
+          const issues = catalog.addDiscovered(
+            await discoverIntegrationDocs(integration),
+            {package: integration.name ?? pkg, rank},
+          );
+          for (const issue of issues) this.#pushIssue(pkg, issue);
         } catch (err) {
           this.#pushIssue(pkg, {
             code: 'invalid_doc',
@@ -1350,6 +1349,41 @@ export class Project {
     for (const integration of this.#loadedIntegrations) {
       await this.#collectIssues(integration);
     }
+    // An installed dependency whose manifest could not be loaded for want of
+    // a package leaves no loaded record, so nothing above sees it: report it
+    // here, as a package named in astryx.config that fails to load is.
+    for (const failed of this.#unloadedDependencies()) {
+      this.#pushIssue(failed.spec, {
+        code: 'integration_error',
+        severity: 'error',
+        message: failed.error,
+      });
+    }
+  }
+
+  /**
+   * The installed dependencies, linked without a config entry, whose manifest
+   * could not be loaded because a package that the importing package requires
+   * (a dependency or a required peer) is missing, with the load error. That is a broken install, which the
+   * project can fix by installing again; a dependency's own packaging bug (a
+   * manifest that throws, does not validate, or imports what it does not
+   * declare) stays out of the project's issues, since the project cannot fix
+   * it.
+   * @returns {Array<{spec: string, error: string}>}
+   */
+  #unloadedDependencies() {
+    return [...(PROVIDER_LEDGERS.get(this)?.values() ?? [])].flatMap(entry =>
+      entry.outcome === 'load-failed' &&
+      entry.candidate.source === 'autolinked' &&
+      missingDeclaredDependency(entry.error ?? '') != null
+        ? [
+            {
+              spec: entry.candidate.spec ?? entry.label,
+              error: entry.error ?? 'its manifest could not be loaded',
+            },
+          ]
+        : [],
+    );
   }
 
   /**
@@ -1362,8 +1396,11 @@ export class Project {
   async issues() {
     // Each issue these passes find belongs to an integration, because Core's
     // templates and components declare no replacement. A project with no
-    // integration skips them.
-    if (this.#loadedIntegrations.length > 0) {
+    // integration skips them (one whose manifest failed to load counts).
+    if (
+      this.#loadedIntegrations.length > 0 ||
+      this.#unloadedDependencies().length > 0
+    ) {
       // A function of the files the passes read and of the issues already
       // found (which the key holds): the kept gather stamps the files, so a
       // later run with every one unchanged reads the whole list back and
@@ -1381,6 +1418,7 @@ export class Project {
             integration => integration.__packageDir ?? integration.name ?? null,
           ),
           Boolean(this.#config.experimental?.iconSet),
+          this.#unloadedDependencies(),
           before,
         ],
         async () => {

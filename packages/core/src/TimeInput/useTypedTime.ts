@@ -6,8 +6,9 @@
  * @file useTypedTime.ts
  * @input Provider locale, a time field's hour format, seconds, bounds, the
  *   caller's status, the shared time parser, Field/useEntryErrorReport for
- *   the rejection status, alert and report, and Field/useValueReplacesEntry
- *   for when a new value replaces the kept draft
+ *   the rejection status, alert and report, Field/useValueReplacesEntry for
+ *   when a new value replaces the kept draft, and the field's resolved entry
+ *   error behavior
  * @output useTypedTime, the typed-time draft and its rejection that TimeInput
  *   and DateTimeInput's time segment share, and TimeInputEntryError
  * @position TimeInput helper hook; used by TimeInput and DateTimeInput
@@ -15,6 +16,7 @@
 
 import {useCallback, useState} from 'react';
 import type {InputStatus} from '../Field/types';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   isSameEntryError,
   useEntryErrorReport,
@@ -49,7 +51,10 @@ interface Draft {
   /** The time the text names, when the field accepts it. */
   time: ISOTimeString | null;
   rejection: TimeInputEntryError | null;
-  /** A complete rejected time shows its rejection while the person types. */
+  /**
+   * Under `'complete'`, a complete rejected time shows its rejection while the
+   * person types.
+   */
   isComplete: boolean;
 }
 
@@ -74,13 +79,24 @@ export interface UseTypedTimeOptions {
   /** The caller's status. */
   status?: InputStatus;
   onEntryErrorChange?: (error: TimeInputEntryError | null) => void;
+  /**
+   * Under `'blur-or-enter'`, typing and native edits reveal no rejection:
+   * only Enter or blur does. An edit that the field accepts or empties still
+   * clears a revealed rejection at once.
+   */
+  entryErrorBehavior: EntryErrorBehavior;
 }
 
+/** The rejection of a native control: none, waiting for a commit, or shown. */
+type SurfaceRejection = 'none' | 'held' | 'shown';
+
 /**
- * The typed draft of a time field and its rejection. A rejection shows once
- * the draft is complete, or at Enter or blur, and stays through edits that
- * leave the draft rejected or unfinished. A native control's rejection, set
- * through `setSurfaceRejected`, shows the same way and is never reported.
+ * The typed draft of a time field and its rejection. A rejection shows at
+ * Enter or blur, or under `'complete'` once the draft is complete, and stays
+ * through edits that leave the draft rejected or unfinished. A native
+ * control's rejection, set through `setSurfaceRejected`, shows at once under
+ * `'complete'` and at `commitSurface` under `'blur-or-enter'`. It is never
+ * reported.
  * `handleChange` and `commit` return the time for the owner to commit:
  * `undefined` for emptied text, null for none.
  */
@@ -97,7 +113,9 @@ export function useTypedTime({
   isStatusAnnounced,
   status,
   onEntryErrorChange,
+  entryErrorBehavior,
 }: UseTypedTimeOptions) {
+  const revealsComplete = entryErrorBehavior === 'complete';
   const locale = useLocale();
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   // How the draft was last committed. After blur, a hidden input carries the
@@ -109,7 +127,8 @@ export function useTypedTime({
   // not complete keeps it.
   const [keptRejection, setKeptRejection] =
     useState<TimeInputEntryError | null>(null);
-  const [isSurfaceRejected, setSurfaceRejected] = useState(false);
+  const [surfaceRejection, setSurfaceRejection] =
+    useState<SurfaceRejection>('none');
   // The time that typing last committed, so its echo through `value` keeps
   // the draft.
   const [lastCommitted, setLastCommitted] = useState<{
@@ -157,8 +176,8 @@ export function useTypedTime({
   // of a time that typing committed keeps the draft.
   const isNewValue = useValueReplacesEntry(value, keptCommits);
   const isEcho = lastCommitted !== null && value === lastCommitted.time;
-  if (isNewValue && isSurfaceRejected) {
-    setSurfaceRejected(false);
+  if (isNewValue && surfaceRejection !== 'none') {
+    setSurfaceRejection('none');
   }
   if (isNewValue && !isEcho) {
     setLastCommitted(null);
@@ -172,8 +191,8 @@ export function useTypedTime({
     if (isDisabled && pendingInput !== null) {
       drop();
     }
-    if (isDisabled && isSurfaceRejected) {
-      setSurfaceRejected(false);
+    if (isDisabled && surfaceRejection !== 'none') {
+      setSurfaceRejection('none');
     }
   }
   // A rejection belongs to the surface that showed it. A switch between the
@@ -181,8 +200,8 @@ export function useTypedTime({
   const [hadTypedField, setHadTypedField] = useState(hasTypedField);
   if (hasTypedField !== hadTypedField) {
     setHadTypedField(hasTypedField);
-    if (isSurfaceRejected) {
-      setSurfaceRejected(false);
+    if (surfaceRejection !== 'none') {
+      setSurfaceRejection('none');
     }
   }
   if (!hasTypedField && pendingInput !== null) {
@@ -191,7 +210,8 @@ export function useTypedTime({
 
   const draft = pendingInput !== null ? readDraft(pendingInput) : EMPTY_DRAFT;
   const freshRejection =
-    draft.rejection != null && (committedBy != null || draft.isComplete)
+    draft.rejection != null &&
+    (committedBy != null || (revealsComplete && draft.isComplete))
       ? draft.rejection
       : null;
   if (draft.rejection == null) {
@@ -208,7 +228,10 @@ export function useTypedTime({
     isLocked || draft.rejection == null
       ? null
       : (freshRejection ?? keptRejection);
-  const isSurfaceRejectionShown = !isLocked && isSurfaceRejected;
+  const isSurfaceRejectionShown =
+    !isLocked &&
+    (surfaceRejection === 'shown' ||
+      (revealsComplete && surfaceRejection === 'held'));
   const isRejected = entryError != null || isSurfaceRejectionShown;
 
   // A caller error with a message always shows in place of the field's own
@@ -236,7 +259,7 @@ export function useTypedTime({
       setPendingInput(text);
       setCommittedBy(null);
       const next = readDraft(text);
-      if (next.rejection == null || next.isComplete) {
+      if (next.rejection == null || (revealsComplete && next.isComplete)) {
         reportIfEditable(next.rejection);
       }
       if (next.time == null || next.time === value) {
@@ -245,7 +268,7 @@ export function useTypedTime({
       setLastCommitted({time: next.time});
       return next.time;
     },
-    [isDisabled, readDraft, reportIfEditable, value],
+    [isDisabled, readDraft, revealsComplete, reportIfEditable, value],
   );
 
   const reset = useCallback(() => {
@@ -279,6 +302,23 @@ export function useTypedTime({
     [pendingInput, isDisabled, readDraft, reportIfEditable, value, reset],
   );
 
+  // An edit that stays rejected keeps a shown rejection.
+  const setSurfaceRejected = useCallback(
+    (isRejected: boolean) =>
+      setSurfaceRejection(prev => {
+        if (!isRejected) {
+          return 'none';
+        }
+        return revealsComplete || prev === 'shown' ? 'shown' : 'held';
+      }),
+    [revealsComplete],
+  );
+  const commitSurface = useCallback(() => {
+    if (!isDisabled) {
+      setSurfaceRejection(prev => (prev === 'held' ? 'shown' : prev));
+    }
+  }, [isDisabled]);
+
   return {
     pendingInput,
     /** A rejection is revealed: it sets `aria-invalid`. */
@@ -286,6 +326,8 @@ export function useTypedTime({
     /** A native control's rejection shows: a locked field hides it. */
     isSurfaceRejectionShown,
     setSurfaceRejected,
+    /** Shows a native control's rejection that waits, at Enter or blur. */
+    commitSurface,
     fieldStatus,
     /** The rejection message that no shown status announces. */
     alertMessage,

@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 19,
+    "matchCount": 20,
     "results": [
       {
         "domain": "component",
@@ -14,6 +14,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "createSwipe",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Swipe",
+        "command": "astryx hook createSwipe",
         "mentions": []
       },
       {
@@ -138,6 +149,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template AlertDialogDeleteConfirmation --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -150,6 +162,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -162,6 +175,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PopoverConfirmAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -174,6 +188,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToastAction --type block",
+        "isReady": true,
         "mentions": []
       },
       {
@@ -186,6 +201,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template useContainerRevealHookUsage --type block",
+        "isReady": true,
         "mentions": []
       },
       {

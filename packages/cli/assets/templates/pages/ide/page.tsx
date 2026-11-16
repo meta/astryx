@@ -16,6 +16,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -31,6 +32,12 @@ import {
 const styles: Record<string, CSSProperties> = {
   contentFill: {
     height: '100%',
+  },
+  // The editor's and terminal's scrollbars end where the properties panel
+  // handle's grab zone begins, so the zone never covers them. The gap sits on
+  // the scrolling items, so the terminal's divider still meets the panel's.
+  besideEndHandle: {
+    paddingInlineEnd: 'var(--spacing-2)',
   },
   terminalWrapper: {
     minHeight: 0,
@@ -196,6 +203,7 @@ const HISTORY_ITEMS = [
 
 export default function ResizableWorkspacePage() {
   const [activeFile, setActiveFile] = useState('Counter.tsx');
+  const showToast = useToast();
   const [activeTermTab, setActiveTermTab] = useState('terminal');
   const [activePropertiesTab, setActivePropertiesTab] = useState('properties');
   const fileTree = useMemo(() => buildFileTree(setActiveFile), []);
@@ -275,7 +283,16 @@ export default function ResizableWorkspacePage() {
                   content={
                     <LayoutContent padding={0}>
                       <Stack direction="vertical" style={styles.contentFill}>
-                        <StackItem size="fill" style={styles.editorArea}>
+                        <StackItem
+                          size="fill"
+                          style={
+                            isMobile
+                              ? styles.editorArea
+                              : {
+                                  ...styles.editorArea,
+                                  ...styles.besideEndHandle,
+                                }
+                          }>
                           <CodeBlock
                             code={EDITOR_CODE}
                             language="typescript"
@@ -319,7 +336,14 @@ export default function ResizableWorkspacePage() {
                             </TabList>
                             <StackItem
                               size="fill"
-                              style={styles.terminalWrapper}>
+                              style={
+                                isMobile
+                                  ? styles.terminalWrapper
+                                  : {
+                                      ...styles.terminalWrapper,
+                                      ...styles.besideEndHandle,
+                                    }
+                              }>
                               <CodeBlock
                                 code={TERMINAL_OUTPUT}
                                 language="bash"
@@ -408,16 +432,37 @@ export default function ResizableWorkspacePage() {
                                       label="Format Document"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: `Demo: ${activeFile} would be formatted here`,
+                                          uniqueID: 'format',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Go to Definition"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: the definition would open here',
+                                          uniqueID: 'go-to-definition',
+                                        })
+                                      }
                                     />
                                     <Button
                                       label="Find References"
                                       size="sm"
                                       variant="secondary"
+                                      onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
+                                        showToast({
+                                          body: 'Demo: references would be listed here',
+                                          uniqueID: 'find-references',
+                                        })
+                                      }
                                     />
                                   </Stack>
                                 </Stack>

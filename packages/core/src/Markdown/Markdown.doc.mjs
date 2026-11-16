@@ -53,7 +53,7 @@ const anatomy = [
     name: 'Image',
     required: false,
     description:
-      'Block image or unsafe-URL fallback; a custom image renderer replaces a safe default image.',
+      'Block image, or its alternative text in brackets when the image URL is empty; a custom image renderer replaces a default image that has a URL. An unsafe URL renders as the source text instead.',
   },
 ];
 
@@ -112,7 +112,7 @@ export const docs = {
       name: 'onLinkClick',
       type: '(href: string, event: MouseEvent) => void | false',
       description:
-        'Handler for link clicks. Return false to prevent the default navigation behavior. Link destinations in the markdown follow the shared navigation rule described on the Link `href` prop, and Markdown also rejects every data: URL in a link or an image: a rejected destination renders as plain text and never reaches this handler or a custom link renderer.',
+        'Handler for link clicks. Return false to prevent the default navigation behavior. Link destinations in the markdown follow the shared navigation rule described on the Link `href` prop, and Markdown also rejects every data: URL in a link or an image: a rejected destination renders as plain text and never reaches this handler or a custom link renderer. A custom link renderer replaces the default link and does not receive this handler.',
     },
     {
       name: 'sources',
@@ -342,6 +342,16 @@ export const docs = {
         guidance: false,
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Create them in client code. parseMarkdownAst can run plugins on the server, but it returns a parsed tree, and Markdown renders only a source string.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize what a custom renderer, a plugin renderer, or components.math returns. Markdown passes them inert text and parsed nodes; each renderer owns its own output and its accessible semantics.',
       },
     ],
   },
@@ -645,7 +655,8 @@ export const docsZh = {
     {
       name: 'onLinkClick',
       type: '(href: string, event: MouseEvent) => void | false',
-      description: '链接点击处理器。返回 false 可阻止默认导航行为。',
+      description:
+        '链接点击处理器。返回 false 可阻止默认导航行为。自定义 link 渲染器会替换默认链接，且不会收到此处理器。',
     },
     {
       name: 'sources',
@@ -881,6 +892,16 @@ export const docsZh = {
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
       },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Create them in client code. parseMarkdownAst can run plugins on the server, but it returns a parsed tree, and Markdown renders only a source string.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize what a custom renderer, a plugin renderer, or components.math returns. Markdown passes them inert text and parsed nodes; each renderer owns its own output and its accessible semantics.',
+      },
     ],
   },
 };
@@ -983,6 +1004,16 @@ export const docsDense = {
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
       },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown; function-bearing entries cannot cross the client boundary. Create them in client code.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize custom, plugin, or math renderer output; each renderer owns its output and semantics.',
+      },
     ],
   },
   propDescriptions: {
@@ -993,13 +1024,13 @@ export const docsDense = {
     isStreaming:
       'Incremental parse + fade-in for streamed chunks. Default: false.',
     onLinkClick:
-      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href), and every data: link or image URL is also dropped; rejected ones render as text.',
+      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href), and every data: link or image URL is also dropped; rejected ones render as text. A custom link renderer does not receive it.',
     sources:
       'Record<string, MarkdownSource>. Citation sources by ID. [id]/【id】 markers render as chips.',
     citationStyle:
       "'label'|'number'. label=chip w/ title+icon, number=compact badge. Default: 'label'.",
     contentWidth:
-      'number|string. Max width for prose (headings, paragraphs, lists). Tables/code unconstrained.',
+      'number|string. Max width for prose (headings, paragraphs, lists). Tables/code unconstrained. Default: 680.',
     contentAlign:
       "'start'|'center'. Prose alignment when contentWidth < container. Default: 'start'.",
     plugins:

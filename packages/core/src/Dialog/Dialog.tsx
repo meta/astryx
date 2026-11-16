@@ -217,6 +217,10 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
@@ -315,12 +319,23 @@ const styles = stylex.create({
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
     padding: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: 0,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: 'none',
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     display: 'flex',
     flexDirection: 'column',
     height: 'fit-content',

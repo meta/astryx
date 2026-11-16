@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
+import {LAYER_SIDE_CASES} from './__tests__/layerEntranceSide.fixture';
 import {
   LAYER_ENTER_GAP_PROPERTY,
   LAYER_ENTER_ORIGIN_PROPERTY,
@@ -22,65 +23,18 @@ const box = (left: number, top: number, width: number, height: number) => ({
 const trigger = box(300, 400, 100, 32);
 
 describe('layerEntranceSide', () => {
-  it('starts a layer below its trigger one step up, from its top edge', () => {
-    expect(layerEntranceSide(box(250, 436, 200, 150), trigger)).toEqual({
-      x: 0,
-      y: -1,
-      originX: 100,
-      originY: 0,
-      gap: 4,
-    });
-  });
-
-  it('starts a layer above its trigger one step down, from its bottom edge', () => {
-    expect(layerEntranceSide(box(300, 246, 200, 150), trigger)).toEqual({
-      x: 0,
-      y: 1,
-      originX: 50,
-      originY: 150,
-      gap: 4,
-    });
-  });
-
-  it('gives a layer to the right over a few pixels of its trigger a side and no room', () => {
-    expect(layerEntranceSide(box(396, 400, 160, 200), trigger)).toEqual({
-      x: -1,
-      y: 0,
-      originX: 0,
-      originY: 16,
-      gap: 0,
-    });
-  });
-
-  it('starts a layer to the left one step right, from its right edge', () => {
-    expect(layerEntranceSide(box(136, 300, 160, 200), trigger)).toEqual({
-      x: 1,
-      y: 0,
-      originX: 160,
-      originY: 116,
-      gap: 4,
-    });
-  });
-
-  it('keeps the origin on the facing edge when the trigger center is past the layer', () => {
-    expect(layerEntranceSide(box(380, 436, 200, 150), trigger)).toMatchObject({
-      originX: 0,
-      originY: 0,
-    });
-    expect(layerEntranceSide(box(100, 436, 200, 150), trigger)).toMatchObject({
-      originX: 200,
-    });
-  });
-
-  it('scales a layer over its trigger about the trigger center, without a step', () => {
-    expect(layerEntranceSide(box(275, 386, 250, 168), trigger)).toEqual({
-      x: 0,
-      y: 0,
-      originX: 75,
-      originY: 30,
-      gap: 0,
-    });
-  });
+  it.each(LAYER_SIDE_CASES)(
+    'a layer $name steps and scales from its meeting point',
+    ({layer, trigger: anchor, step, origin, gap}) => {
+      expect(layerEntranceSide(layer, anchor)).toEqual({
+        x: step.x,
+        y: step.y,
+        originX: origin.x,
+        originY: origin.y,
+        gap,
+      });
+    },
+  );
 
   it('caps the step at the room between a layer and its trigger', () => {
     // A tall tooltip 4 px beside its trigger: an 8 px step would start it

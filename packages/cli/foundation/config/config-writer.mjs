@@ -1,10 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Write one string field, or one list of strings, in a project's
- * astryx.config.
+ * @file Write string fields, or lists of strings, in a project's
+ * astryx.config, or remove them, in one write.
  *
- * The field is a top-level key or a dotted path into nested object literals
+ * A field is a top-level key or a dotted path into nested object literals
  * (`experimental.iconSet`); a missing object on the path is created.
  *
  * Edits the default-exported object literal in place (comments and other
@@ -19,9 +19,9 @@
  * `ERR_CODEMOD_PROTECTED` naming the protecting declaration, and an unreadable
  * protection source fails with `ERR_CODEMOD_PROTECTION_SOURCE`.
  *
- * @input A project directory, a field name, and its value: a string or a
- *   list of strings
- * @output The config file written and the value it replaced
+ * @input A project directory and fields: each a name and its value, a string,
+ *   a list of strings, or null to remove it
+ * @output The config file written and the values it replaced
  * @position packages/cli/foundation/config — read by `astryx experimental icon use`
  */
 
@@ -154,40 +154,104 @@ export function setConfigString(projectDir, key, value) {
  * @returns {{file: string, created: boolean, previous: string | string[] | null, changed: boolean}}
  */
 export function setConfigValue(projectDir, key, value) {
-  const keys = key.split('.');
-  const leaf = /** @type {string} */ (keys[keys.length - 1]);
+  const result = setConfigValues(projectDir, [[key, value]]);
+  return {...result, previous: result.previous[0] ?? null};
+}
+
+/**
+ * The sentence that tells a person to make the edits by hand: `Set
+ * "experimental.iconSet: 'glyphs'"`, with each further edit after `and`.
+ * @param {ReadonlyArray<readonly [string, string | readonly string[] | null]>} fields
+ */
+function byHand(fields) {
+  const edits = fields
+    .map(([key, value]) =>
+      value == null ? `remove "${key}"` : `set "${key}: ${written(value)}"`,
+    )
+    .join(' and ');
+  return edits[0].toUpperCase() + edits.slice(1);
+}
+
+/**
+ * The nested objects of a new config: each key's value, or the object a
+ * dotted path opens.
+ * @typedef {Map<string, string | readonly string[] | ConfigTree>} ConfigTree
+ */
+
+/**
+ * The text of a new astryx.config.mjs that sets the fields: each key on a
+ * path opens one nested object (`experimental: {`), shared by the fields
+ * under it.
+ * @param {ReadonlyArray<readonly [string, string | readonly string[]]>} fields
+ */
+function newConfigText(fields) {
+  /** @type {ConfigTree} */
+  const tree = new Map();
+  for (const [key, value] of fields) {
+    const keys = key.split('.');
+    let node = tree;
+    for (const each of keys.slice(0, -1)) {
+      let child = node.get(each);
+      if (!(child instanceof Map)) {
+        child = new Map();
+        node.set(each, child);
+      }
+      node = child;
+    }
+    node.set(/** @type {string} */ (keys[keys.length - 1]), value);
+  }
+  /** @param {ConfigTree} node @param {number} depth @returns {string} */
+  const render = (node, depth) =>
+    [...node]
+      .map(([name, value]) =>
+        value instanceof Map
+          ? `${'  '.repeat(depth)}${name}: {\n${render(value, depth + 1)}${'  '.repeat(depth)}},\n`
+          : `${'  '.repeat(depth)}${name}: ${written(value)},\n`,
+      )
+      .join('');
+  return `export default {\n${render(tree, 1)}};\n`;
+}
+
+/**
+ * Set several fields of the project's astryx.config in one write. Each value
+ * is a string, a list of strings, or `null`, which removes the field; a
+ * field the config does not set needs no removal. Either every field is
+ * written or, when one cannot be, none is.
+ * @param {string} projectDir
+ * @param {ReadonlyArray<readonly [string, string | readonly string[] | null]>} fields
+ *   each a top-level key or a dotted path (`experimental.iconSet`), and its
+ *   value
+ * @returns {{file: string, created: boolean, previous: Array<string | string[] | null>, changed: boolean}}
+ *   `previous`: each field's value before the write, in the order given
+ */
+export function setConfigValues(projectDir, fields) {
   const existing = CONFIG_BASENAMES.map(name =>
     path.join(projectDir, name),
   ).find(file => fs.existsSync(file));
+  /** @type {Array<readonly [string, string | readonly string[]]>} */
+  const set = [];
+  for (const [key, value] of fields) {
+    if (value != null) set.push([key, value]);
+  }
   if (!existing) {
     const file = path.join(projectDir, 'astryx.config.mjs');
+    const previous = fields.map(() => null);
+    if (set.length === 0)
+      return {file, created: false, previous, changed: false};
     assertWritable(projectDir, file);
-    // Each key on the path opens one nested object: `experimental: {`.
-    const open = keys
-      .slice(0, -1)
-      .map((each, depth) => `${'  '.repeat(depth + 1)}${each}: {\n`)
-      .join('');
-    const close = keys
-      .slice(0, -1)
-      .map((_, depth) => `${'  '.repeat(depth + 1)}},\n`)
-      .reverse()
-      .join('');
-    writeAtomically(
-      file,
-      `export default {\n${open}${'  '.repeat(keys.length)}${leaf}: ${written(value)},\n${close}};\n`,
-    );
-    return {file, created: true, previous: null, changed: true};
+    writeAtomically(file, newConfigText(set));
+    return {file, created: true, previous, changed: true};
   }
   assertWritable(projectDir, existing);
   const source = fs.readFileSync(existing, 'utf-8');
   const j = loadJscodeshift().withParser('tsx');
   const ast = j(source);
-  let object = findManifestObject(j, ast);
+  const root = findManifestObject(j, ast);
   const refuse = () =>
     new Error(
-      `Could not update ${path.basename(existing)} safely: its default export is not a static object literal. Set "${key}: ${written(value)}" in it yourself.`,
+      `Could not update ${path.basename(existing)} safely: its default export is not a static object literal. ${byHand(fields)} in it yourself.`,
     );
-  if (!object) throw refuse();
+  if (!root) throw refuse();
   // A spread on the path can hold the same keys: a key added beside it would
   // shadow the spread's whole object and drop what it sets, so nothing is
   // written there (`{...base}` may set `experimental.xle`).
@@ -195,43 +259,73 @@ export function setConfigValue(projectDir, key, value) {
   const assertNoSpread = (holder, where) => {
     if (holder.properties.some((/** @type {any} */ each) => isSpread(each))) {
       throw new Error(
-        `Could not update ${path.basename(existing)} safely: ${where} spreads another object (\`...\`), whose keys a written "${key}" could replace. Set "${key}: ${written(value)}" in it yourself.`,
+        `Could not update ${path.basename(existing)} safely: ${where} spreads another object (\`...\`), whose keys a written ${fields.map(([key]) => `"${key}"`).join(' or ')} could replace. ${byHand(fields)} in it yourself.`,
       );
     }
   };
-  assertNoSpread(object, 'its default export');
-  for (const each of keys.slice(0, -1)) {
-    const holder = object.properties.find((/** @type {any} */ property) =>
-      propertyNamed(property, each),
-    );
-    if (!holder) {
-      const created = j.objectExpression([]);
-      object.properties.push(j.objectProperty(j.identifier(each), created));
-      object = created;
-      continue;
-    }
-    const nested = unwrapManifestExpression(holder.value);
-    if (!j.ObjectExpression.check(nested)) throw refuse();
-    assertNoSpread(nested, `its "${each}" object`);
-    object = nested;
-  }
-  const property = object.properties.find((/** @type {any} */ each) =>
-    propertyNamed(each, leaf),
-  );
-  const node =
+  /** @param {string | readonly string[]} value */
+  const nodeOf = value =>
     typeof value === 'string'
       ? j.stringLiteral(value)
       : j.arrayExpression(value.map(each => j.stringLiteral(each)));
-  /** @type {string | string[] | null} */
-  let previous = null;
-  if (property) {
-    previous = literalValue(property.value);
-    if (sameValue(previous, value)) {
-      return {file: existing, created: false, previous, changed: false};
+  /** @type {Array<string | string[] | null>} */
+  const previous = [];
+  let changed = false;
+  for (const [key, value] of fields) {
+    const keys = key.split('.');
+    const leaf = /** @type {string} */ (keys[keys.length - 1]);
+    let object = root;
+    assertNoSpread(object, 'its default export');
+    let absent = false;
+    for (const each of keys.slice(0, -1)) {
+      const holder = object.properties.find((/** @type {any} */ property) =>
+        propertyNamed(property, each),
+      );
+      if (!holder) {
+        // A field the config does not reach is already removed.
+        if (value == null) {
+          absent = true;
+          break;
+        }
+        const created = j.objectExpression([]);
+        object.properties.push(j.objectProperty(j.identifier(each), created));
+        object = created;
+        continue;
+      }
+      const nested = unwrapManifestExpression(holder.value);
+      if (!j.ObjectExpression.check(nested)) throw refuse();
+      assertNoSpread(nested, `its "${each}" object`);
+      object = nested;
     }
-    property.value = node;
-  } else {
-    object.properties.push(j.objectProperty(j.identifier(leaf), node));
+    if (absent) {
+      previous.push(null);
+      continue;
+    }
+    const at = object.properties.findIndex((/** @type {any} */ each) =>
+      propertyNamed(each, leaf),
+    );
+    const property = at === -1 ? null : object.properties[at];
+    const before = property ? literalValue(property.value) : null;
+    previous.push(before);
+    if (value == null) {
+      if (property) {
+        object.properties.splice(at, 1);
+        changed = true;
+      }
+      continue;
+    }
+    if (property) {
+      if (sameValue(before, value)) continue;
+      property.value = nodeOf(value);
+    } else {
+      object.properties.push(
+        j.objectProperty(j.identifier(leaf), nodeOf(value)),
+      );
+    }
+    changed = true;
+  }
+  if (!changed) {
+    return {file: existing, created: false, previous, changed: false};
   }
   let next = ast.toSource({quote: 'single', reuseWhitespace: true});
   if (source.endsWith('\n') && !next.endsWith('\n')) next += '\n';

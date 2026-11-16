@@ -2,6 +2,8 @@ Usage: astryx [options] [command]
 
 <text>
 
+<text>
+
 Options:
   -V, --version                     <text>
   --zh                              <text>

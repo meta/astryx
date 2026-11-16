@@ -29,6 +29,7 @@ import {
   records,
 } from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {build as buildApi} from '../../../api/build/build.mjs';
@@ -185,6 +186,16 @@ export function registerBuild(program) {
       // blocks and components share one command line in their heading; the
       // JSON and --verbose carry everything.
       const verbose = Boolean(options.verbose);
+      /**
+       * A template record names an unready template `<name> (not ready)`.
+       * @template {{name: string, isReady?: boolean}} T
+       * @param {T} item
+       * @returns {T}
+       */
+      const tagged = item =>
+        item.isReady === false
+          ? {...item, name: markNotReady(item.name, false)}
+          : item;
       /** @type {import('../formatters/index.mjs').RecordOptions} */
       const full = {
         fields: [
@@ -243,7 +254,7 @@ export function registerBuild(program) {
             }`,
           ),
           record(
-            start,
+            tagged(start),
             verbose
               ? {
                   fields: [
@@ -251,6 +262,7 @@ export function registerBuild(program) {
                     'package',
                     'displayName',
                     'description',
+                    'fit',
                     'command',
                   ],
                   format: {command: formatCliCommand},
@@ -266,7 +278,7 @@ export function registerBuild(program) {
               `If the layout is wrong, scaffold one of these instead. All page templates: ${formatCliCommand('template --list --type page')}`,
             ),
             records(
-              start.alternatives,
+              start.alternatives.map(tagged),
               verbose
                 ? full
                 : brief(['name', 'package', 'description', 'command']),
@@ -284,10 +296,10 @@ export function registerBuild(program) {
                 'Page templates keyword search matched, best first.',
               )
             : text(
-                `Keyword search matched these page templates: ${pages.map(p => `${p.name} (${p.package})`).join(', ')}.`,
+                `Keyword search matched these page templates: ${pages.map(p => `${markNotReady(p.name, p.isReady)} (${p.package})`).join(', ')}.`,
               ),
         );
-        if (verbose) out.push(records(pages, full));
+        if (verbose) out.push(records(pages.map(tagged), full));
       }
       if (blocks.length) {
         out.push(
@@ -296,7 +308,7 @@ export function registerBuild(program) {
             `Ready-made sections for parts the template lacks${more(blocks)}. Print one: ${formatCliCommand('template <name>')}`,
           ),
           records(
-            shown(blocks),
+            shown(blocks.map(tagged)),
             verbose ? full : brief(['name', 'package', 'description']),
           ),
         );
