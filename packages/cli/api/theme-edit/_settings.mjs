@@ -126,6 +126,7 @@ import {
   readRegularFile,
   readWrittenRecord,
   writeWrittenRecord,
+  familyRamp,
 } from './_palette.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -11609,17 +11610,37 @@ function placeholderProblems(ctx, data, res, base) {
       });
       continue;
     }
-    // The nearest color, toward black or white (whichever stands out on
-    // the page), that shows on the page and the surface at the peak.
-    const end = /** @type {[number, number, number]} */ (
-      parseColor(plainOn(page))
+    // The theme's own gray nearest the placeholder's color that shows on
+    // the page and the surface at the peak; else the nearest shade of the
+    // placeholder's own color, darker or lighter (whichever stands out on
+    // the page), with its hue and colorfulness kept.
+    const lab = (/** @type {string} */ x) => oklabCoordinates(x);
+    const [l0, ca, cb] = lab(hex(c0));
+    const grays = Object.values(
+      familyRamp(ctx.project.cwd, data.name, data, base, 'neutral')?.[m] ?? {},
+    )
+      .filter(x => parseColor(String(x)))
+      .map(x => {
+        const [l, a1, b1] = lab(String(x));
+        return {x: String(x), d: Math.hypot(l - l0, a1 - ca, b1 - cb)};
+      })
+      .sort((p, q) => p.d - q.d);
+    let fix = /** @type {string | null} */ (
+      grays.find(
+        g =>
+          worst(/** @type {[number, number, number]} */ (parseColor(g.x))) >=
+          PLACEHOLDER_SHOWS,
+      )?.x ?? null
     );
-    let fix = /** @type {string | null} */ (null);
-    for (let i = 0; i <= 100 && !fix; i++) {
-      const c = /** @type {[number, number, number]} */ (
-        c0.map((x, k) => Math.round(x + ((end[k] - x) * i) / 100))
-      );
-      if (worst(c) >= PLACEHOLDER_SHOWS) fix = hex(c);
+    const away = plainOn(page) === '#000000' ? -1 : 1;
+    for (let i = 1; i <= 100 && !fix; i++) {
+      const shade = oklabCoordinatesToHex([
+        Math.max(0, Math.min(1, l0 + (away * i) / 200)),
+        ca,
+        cb,
+      ]);
+      const c = /** @type {[number, number, number]} */ (parseColor(shade));
+      if (worst(c) >= PLACEHOLDER_SHOWS) fix = shade;
     }
     out.push({
       key: `placeholder|${m}`,
