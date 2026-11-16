@@ -701,6 +701,101 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     }
   });
 
+  it('aliases a reference however its var() call is spelled', () => {
+    for (const call of [
+      'var( --color-background-muted)',
+      'VAR(--color-background-muted)',
+    ]) {
+      const spelled = defineTheme({
+        name: 'media-scheme-replay-alias-spelling',
+        tokens: {
+          '--color-text-secondary': ['#555555', '#aaaaaa'],
+          '--color-border': `color-mix(in srgb, var(--color-text-secondary) 50%, ${call})`,
+        },
+      });
+      const css = generateOnMediaCSS(spelled);
+      expect(css).toContain(
+        '--_theme-root-color-background-muted: var(--color-background-muted);',
+      );
+      expect(mediaDeclarations(css, 'dark')['--color-border']).toBe(
+        'color-mix(in srgb, var(--color-text-secondary) 50%, var(--_theme-root-color-background-muted))',
+      );
+    }
+  });
+
+  it('aliases references to a token a rule makes the surface inherit', () => {
+    const inheriting = defineTheme({
+      name: 'media-scheme-replay-rule-inherit',
+      tokens: {
+        '--color-border-emphasized': ['#111111', '#eeeeee'],
+        '--color-border':
+          'color-mix(in srgb, var(--color-border-emphasized) 50%, #ffffff)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {width: {below: 'lg'}},
+            // The surface's own accent is unset in the theme, so under this
+            // rule the surface cannot re-declare the emphasized border.
+            value: {
+              tokens: {'--color-border-emphasized': 'var(--color-accent)'},
+            },
+          },
+        ],
+      },
+    });
+    const css = generateOnMediaCSS(inheriting);
+    const narrow = (query: string) => query.includes('width');
+    expect(
+      surfaceValueWhen(css, 'dark', '--color-border-emphasized', narrow),
+    ).toBe('inherit');
+    expect(surfaceValueWhen(css, 'dark', '--color-border', narrow)).toBe(
+      'color-mix(in srgb, var(--_theme-root-color-border-emphasized) 50%, #ffffff)',
+    );
+    expect(surfaceValueWhen(css, 'dark', '--color-border', () => false)).toBe(
+      'color-mix(in srgb, var(--color-border-emphasized) 50%, #ffffff)',
+    );
+  });
+
+  it('aliases references to a token two overlapping rules make the surface inherit', () => {
+    const overlapping = defineTheme({
+      name: 'media-scheme-replay-overlap-inherit',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-text-secondary)',
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-border': 'var(--color-border-emphasized)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-accent': '#ff0000'}},
+          },
+          {
+            when: {width: {below: 'lg'}},
+            value: {
+              tokens: {'--color-border-emphasized': 'var(--color-accent)'},
+            },
+          },
+        ],
+      },
+    });
+    const css = generateOnMediaCSS(overlapping);
+    const both = (query: string) =>
+      query.includes('prefers-contrast') || query.includes('width');
+    const emphasized = surfaceValueWhen(
+      css,
+      'dark',
+      '--color-border-emphasized',
+      both,
+    );
+    expect(emphasized).toBe('inherit');
+    expect(surfaceValueWhen(css, 'dark', '--color-border', both)).toBe(
+      'var(--_theme-root-color-border-emphasized)',
+    );
+  });
+
   it("keeps a reference's fallback on the root alias", () => {
     const withFallback = defineTheme({
       name: 'media-scheme-replay-alias-fallback',
