@@ -59,8 +59,8 @@
  * nested focus traps and two overlapping dismiss paths are not progressive
  * disclosure. If the detail is too large to expand in place, it belongs on a
  * page. The one exception is an `AlertDialog` that confirms a destructive
- * action, such as deleting the account: it asks one question, closes before
- * the action runs, and Escape closes only the alert, never this dialog.
+ * action, such as deleting the account: it asks one question, and Escape
+ * closes only the alert, never this dialog.
  */
 
 import {Button} from '@astryxdesign/core/Button';
