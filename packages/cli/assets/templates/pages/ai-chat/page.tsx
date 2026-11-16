@@ -174,17 +174,27 @@ The refresh path is covered end to end:
 
 // Artifact subviews
 
+/**
+ * Copies the document and confirms with a toast, for the desktop toolbar and
+ * the narrow-screen menu alike.
+ */
+function useCopyDocument() {
+  const showToast = useToast();
+  const {copy} = useClipboard({announce: 'Copied'});
+  return () =>
+    void copy(ARTIFACT_CONTENT).then(isCopied =>
+      showToast({
+        body: isCopied ? 'Copied' : 'Could not copy the document',
+        uniqueID: 'copy',
+      }),
+    );
+}
+
 // Header actions: version menu, copy, share. Pass `onClose` for the desktop
 // close button. A fragment so each control is a direct child of the toolbar.
 function ArtifactActions({onClose}: {onClose?: () => void}) {
   const showToast = useToast();
-  const {copy} = useClipboard({announce: 'Copied'});
-  const copyDocument = () =>
-    void copy(ARTIFACT_CONTENT).then(isCopied => {
-      if (isCopied) {
-        showToast({body: 'Copied', uniqueID: 'copy'});
-      }
-    });
+  const copyDocument = useCopyDocument();
   return (
     <>
       <DropdownMenu
@@ -250,13 +260,7 @@ function ArtifactActions({onClose}: {onClose?: () => void}) {
 // Mobile variant: the actions collapse into an overflow menu.
 function MobileArtifactActions() {
   const showToast = useToast();
-  const {copy} = useClipboard({announce: 'Copied'});
-  const copyDocument = () =>
-    void copy(ARTIFACT_CONTENT).then(isCopied => {
-      if (isCopied) {
-        showToast({body: 'Copied', uniqueID: 'copy'});
-      }
-    });
+  const copyDocument = useCopyDocument();
   return (
     <MoreMenu
       label="Document actions"
