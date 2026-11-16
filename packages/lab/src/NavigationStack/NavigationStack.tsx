@@ -1337,6 +1337,16 @@ export function NavigationStack<T>({
       if (container == null || !isFocusLost(container)) {
         return;
       }
+      // Nor from the screen now on top: focus a person moved into it before
+      // the transition settled (a tap on its field mid-push) stays there.
+      const target = revealed ?? key;
+      const active = container.ownerDocument.activeElement;
+      const topCard = [
+        ...container.querySelectorAll<HTMLElement>('[data-navigation-screen]'),
+      ].find(card => card.getAttribute('data-navigation-screen') === target);
+      if (topCard != null && active != null && topCard.contains(active)) {
+        return;
+      }
       // The moved focus shows its ring by the last input, as Core's overlays
       // do. After a key it shows; after a tap it does not.
       const modality = readModality();
@@ -1356,7 +1366,6 @@ export function NavigationStack<T>({
       }
       // Else the screen now on top (the one pushed, or the one revealed): its
       // visible title, the large title while it shows, else the bar's.
-      const target = revealed ?? key;
       const layers = layersOf(target);
       const large = layers?.largeTitleElement;
       const title =
