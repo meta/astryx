@@ -2260,7 +2260,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...changeFields(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
-            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/sheet-<family>.png (one family of components each: actions, inputs, selection, navigation, feedback, data, containers), preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and sheet.png (every component, too tall to read whole) from real components; open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, open) and a picture of each family of components the theme sets a part of (sheet-actions.png, the buttons, while it sets none) from real components, and --section <family> --png pictures any other family (actions, inputs, selection, navigation, feedback, data, containers); open the family pictures, preview.png and sheet-overlays.png and check them against the request`,
           ],
         ),
     }),

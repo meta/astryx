@@ -149,6 +149,46 @@ function withSampleContent(project, name, props) {
 }
 
 /**
+ * The section of the theme-building page a component sits in; a part with
+ * no category of its own sits with its parent.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function familyOf(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf
+    ? project.components[info.subComponentOf]
+    : null;
+  return groupOf(name, info?.category || parent?.category || '');
+}
+
+/**
+ * The sections of the theme-building page whose parts the theme's settings
+ * set on their own (`--on badge`): the components that part names a class
+ * of, each in its section. A setting for the whole theme (a color, the
+ * corners) sets no section here: the sample page and the open states show
+ * it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function touchedFamilies(project, data) {
+  const parts = new Set(
+    (data.settings ?? []).flatMap(s => (s.on ? [s.on] : [])),
+  );
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const [name, info] of Object.entries(project.components)) {
+    if (!info.targets.some(t => parts.has(t.className.replace(/^astryx-/, ''))))
+      continue;
+    const family = familyOf(project, name);
+    if (family) out.add(family);
+  }
+  return [...out];
+}
+
+/**
  * Items of the theme-building page: each component once per variant
  * (overlays open), the sample page, and template pages
  * whose packages the project has.
@@ -160,14 +200,7 @@ export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
-  const groupFor = name => {
-    const info = project.components[name];
-    // A part with no category of its own sits with its parent.
-    const parent = info?.subComponentOf
-      ? project.components[info.subComponentOf]
-      : null;
-    return groupOf(name, info?.category || parent?.category || '');
-  };
+  const groupFor = name => familyOf(project, name);
   for (const name of Object.keys(project.components)) {
     const g = groupFor(name);
     if (!g) continue;

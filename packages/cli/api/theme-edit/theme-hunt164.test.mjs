@@ -75,8 +75,6 @@ describe('the open states picture', () => {
         'preview-dark.png',
         'sheet-overlays.png',
         'sheet-overlays-dark.png',
-        'sheet.png',
-        'sheet-dark.png',
       ]);
       const changed = /** @type {any} */ (
         await themeEditSet('t', 'corners', 'square', {cwd, png: true})

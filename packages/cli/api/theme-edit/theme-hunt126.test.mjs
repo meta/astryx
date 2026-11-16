@@ -22,7 +22,7 @@ import {
   themeEditPreviewAdd,
 } from './theme-edit.mjs';
 import {recordWritten} from './_settings.mjs';
-import {context, FAMILY_SECTIONS} from './_context.mjs';
+import {context} from './_context.mjs';
 import {pageSource} from './_catalog.mjs';
 import {showcaseItems} from './_preview.mjs';
 import {copiesLine} from './_project.mjs';
@@ -182,20 +182,12 @@ describe('a picture run that stops part way', () => {
     try {
       const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
       expect(r.data.pictures).toEqual(['themes/t/preview.png']);
-      // Every other picture is named, the families' included.
-      const notTaken = [
-        'preview-dark',
-        'sheet-overlays',
-        'sheet-overlays-dark',
-        ...FAMILY_SECTIONS.flatMap(f => [`sheet-${f}`, `sheet-${f}-dark`]),
-        'sheet',
-        'sheet-dark',
-      ]
-        .map(n => `themes/t/${n}.png`)
-        .join(', ');
-      expect(r.data.pictureProblem).toContain(
-        `themes/t/preview.png was taken, but ${notTaken} were not: `,
+      // Every other picture is named: the dark one, the open states and the
+      // families after them. The full sheet is not pictured.
+      expect(r.data.pictureProblem).toMatch(
+        /^themes\/t\/preview\.png was taken, but themes\/t\/preview-dark\.png, themes\/t\/sheet-overlays\.png, themes\/t\/sheet-overlays-dark\.png, themes\/t\/sheet-[a-z]+\.png, .* were not: /,
       );
+      expect(r.data.pictureProblem).not.toContain('themes/t/sheet.png');
       expect(r.data.pictureProblem).toMatch(/crashed on start 2/);
       expect(r.data.pictureProblem).not.toMatch(/No picture was taken/);
     } finally {

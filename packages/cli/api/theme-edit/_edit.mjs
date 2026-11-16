@@ -211,6 +211,7 @@ import {
   appCopyStale,
   copyFontsCss,
   writeAppCopy,
+  touchedFamilies,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 /** The preview command, as a person runs it. */
@@ -243,6 +244,8 @@ import {
   stampSheet,
   lookAtPictures,
   familyPages,
+  FAMILY_SECTIONS,
+  FAMILY_OVERVIEW,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {readThemeState} from '../../foundation/config/theme-state.mjs';
@@ -7209,9 +7212,7 @@ export async function themeEditShow(theme, options = {}) {
   }
   const ctx = await context(cwd);
   // show --png takes its sheet too, after any build it makes.
-  ctx.takesPictures = png
-    ? {sheet: section ? `sheet-${section}` : 'sheet'}
-    : null;
+  ctx.takesPictures = png ? {sheet: section ? `sheet-${section}` : null} : null;
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.
   holdAfterBuild(ctx);
@@ -7430,14 +7431,15 @@ export async function themeEditShow(theme, options = {}) {
   const sheetFile = section
     ? path.join(f.dir, `sheet-${section}.html`)
     : f.sheet;
-  /** @type {Array<{html: string, png: string, kind: 'link' | 'file' | 'other', page: string}>} */
+  /** @type {Array<{html: string, png: string | null, kind: 'link' | 'file' | 'other', page: string}>} */
   const leftPages = noPages
     ? []
     : [
         {html: f.preview, png: f.previewPng, page: 'the sample page'},
         {
           html: sheetFile,
-          png: section ? path.join(f.dir, `sheet-${section}.png`) : f.sheetPng,
+          // The full sheet is not photographed.
+          png: section ? path.join(f.dir, `sheet-${section}.png`) : null,
           page: section ? `the ${section} sheet` : 'the sheet',
         },
       ].flatMap(x => {
@@ -7467,13 +7469,24 @@ export async function themeEditShow(theme, options = {}) {
   if (!noPages && !left(sheetFile)) stampSheet(sheetFile, theme, cwd);
   // The full sheet is too tall to read whole: --png also takes each family
   // of components on a page of its own, cut from it.
+  // Each takes a browser run, so --png pictures the families the theme sets
+  // a part of (the buttons when it sets none); --section <family> takes any
+  // other, and sheet.html holds every component.
+  const touched = touchedFamilies(ctx.project, data).filter(f =>
+    FAMILY_SECTIONS.includes(f),
+  );
   const families =
     png && !noPages && !section && !left(sheetFile)
-      ? familyPages(sheetFile, theme, cwd)
+      ? familyPages(
+          sheetFile,
+          theme,
+          cwd,
+          touched.length ? touched : [FAMILY_OVERVIEW],
+        )
       : {pages: [], problems: []};
   const leftWords = leftPages.map(
     x =>
-      `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
+      `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png && x.png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
   );
   const modes = modesOf(data);
   // The open states (every overlay drawn open) beside the sample page: the
@@ -7508,13 +7521,17 @@ export async function themeEditShow(theme, options = {}) {
             {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
             ...(open && !('problem' in open) ? [open] : []),
             ...families.pages.map(({html, png: out}) => ({html, png: out})),
-            // A section is photographed from its own sheet.
-            section
-              ? {
-                  html: path.join(f.dir, `sheet-${section}.html`),
-                  png: path.join(f.dir, `sheet-${section}.png`),
-                }
-              : {html: f.sheet, png: f.sheetPng},
+            // A section is photographed from its own sheet. The full sheet,
+            // every component, is too tall to read whole and slow to take:
+            // it is not photographed.
+            ...(section
+              ? [
+                  {
+                    html: path.join(f.dir, `sheet-${section}.html`),
+                    png: path.join(f.dir, `sheet-${section}.png`),
+                  },
+                ]
+              : []),
           ].filter(x => !left(x.html)),
           modes,
         )

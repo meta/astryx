@@ -437,8 +437,11 @@ describe('set --png and the pictures it took again (#10)', () => {
   it(
     'names as removed only the pictures it did not take again, with the show that takes them',
     async () => {
-      await themeEditShow('t', {cwd, png: true});
-      expect(fs.existsSync(path.join(dir, 'sheet.png'))).toBe(true);
+      // A family's picture, which a change with --png does not take again.
+      const family = 'actions';
+      await themeEditShow('t', {cwd, png: true, section: family});
+      const picture = path.join(dir, `sheet-${family}.png`);
+      expect(fs.existsSync(picture)).toBe(true);
       try {
         const set = /** @type {any} */ (
           await themeEditSet('t', 'corners', 'square', {cwd, png: true})
@@ -448,17 +451,19 @@ describe('set --png and the pictures it took again (#10)', () => {
         const removed = set.data.notes.find((/** @type {string} */ n) =>
           n.startsWith('removed '),
         );
-        expect(removed).toMatch(
-          /^removed themes\/t\/sheet-dark\.png, themes\/t\/sheet\.png: pictures of t as it was before this build; .+ show t --png take new ones$/,
-        );
+        expect(removed).toContain(`themes/t/sheet-${family}.png`);
         expect(removed).not.toContain('preview');
         expect(removed).not.toContain('sheet-overlays');
-        const line = /before this build; (.+ show t --png) take new ones$/.exec(
-          removed,
-        )?.[1];
+        const lines = /before this build; (.+) take new ones$/
+          .exec(removed)?.[1]
+          .split(' and ');
+        const line = lines?.find(l =>
+          l.endsWith(`show t --png --section ${family}`),
+        );
+        expect(line).toBeTruthy();
         const again = await cli(argsOf(String(line)));
         expect(again.error).toBeUndefined();
-        expect(fs.existsSync(path.join(dir, 'sheet.png'))).toBe(true);
+        expect(fs.existsSync(picture)).toBe(true);
       } finally {
         await themeEditUndo('t', {cwd});
       }

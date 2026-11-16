@@ -1260,6 +1260,13 @@ export async function openStatesPage(ctx, slug, data) {
 }
 
 /**
+ * The family `show --png` pictures when the theme's settings set no part of
+ * its own (a fresh theme, or only theme-wide settings): the buttons, an
+ * overview of the theme's controls beside the sample page.
+ */
+export const FAMILY_OVERVIEW = 'actions';
+
+/**
  * The families of components with a picture of their own beside the full
  * sheet, which is too tall to read whole: each section of the sheet but the
  * overlays (the open states page shows them) and the pages (the sample page
@@ -1280,9 +1287,10 @@ export const FAMILY_SECTIONS = Object.freeze(
  * @param {string} sheet the full sheet, as written
  * @param {string} slug
  * @param {string} cwd
+ * @param {readonly string[]} [only] the families to make; every one by default
  * @returns {{pages: Array<{html: string, png: string, family: string}>, problems: string[]}}
  */
-export function familyPages(sheet, slug, cwd) {
+export function familyPages(sheet, slug, cwd, only = FAMILY_SECTIONS) {
   /** @type {Array<{html: string, png: string, family: string}>} */
   const pages = [];
   /** @type {string[]} */
@@ -1300,7 +1308,7 @@ export function familyPages(sheet, slug, cwd) {
   const before = text.slice(0, starts[0].at);
   const after = text.slice(end);
   for (const [i, {family, at}] of starts.entries()) {
-    if (!FAMILY_SECTIONS.includes(family)) continue;
+    if (!FAMILY_SECTIONS.includes(family) || !only.includes(family)) continue;
     const html = path.join(path.dirname(sheet), `sheet-${family}.html`);
     const png = path.join(path.dirname(sheet), `sheet-${family}.png`);
     const inWay = pageInTheWay(html);
