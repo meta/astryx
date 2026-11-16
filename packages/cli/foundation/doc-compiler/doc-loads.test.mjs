@@ -519,11 +519,12 @@ const RUNNERS = {
     sites: ['child_process.spawn'],
   },
   'foundation/runtime/css-tree.mjs': {
-    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads; reads which of the data files are loaded, from the require cache, to stamp them',
     sites: [
       'require(<computed>)',
       'require(mdn-data/css/properties.json)',
       'require(mdn-data/css/selectors.json)',
+      'require.cache',
     ],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
