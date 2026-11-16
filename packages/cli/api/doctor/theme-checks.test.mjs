@@ -1366,6 +1366,62 @@ describe('app-theme doctor checks', () => {
     180_000,
   );
 
+  it.skipIf(process.platform === 'win32')(
+    "check 6 through a CLI installed for the computer, which has no Core: reads the input with the project's Core",
+    async () => {
+      const home = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'astryx-doctor-home-'),
+      );
+      dirs.push(home);
+      const g = globalCli('npm', CLI_VERSION, {root: home, withoutCore: true});
+      const {dir, packageDir} = await fixture(undefined, {root: os.tmpdir()});
+      const projectCore = path.join(dir, 'node_modules/@astryxdesign/core');
+      fs.rmSync(projectCore, {recursive: true, force: true});
+      fs.symlinkSync(path.join(REPO_ROOT, 'packages/core'), projectCore, 'dir');
+      write(
+        path.join(packageDir, 'themes/ocean/oceanTheme.ts'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const oceanTheme = defineTheme({name: 'ocean', tokens: {}});\n",
+      );
+      const privateCheck = () => {
+        const result = spawnSync(
+          process.execPath,
+          [g.bin, 'doctor', '--json'],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            timeout: 120_000,
+            env: {
+              PATH: path.dirname(process.execPath),
+              HOME: home,
+              USERPROFILE: home,
+              XDG_CACHE_HOME: path.join(home, '.cache'),
+              XDG_CONFIG_HOME: path.join(home, '.config'),
+              npm_config_registry: 'http://127.0.0.1:9/',
+              npm_config_update_notifier: 'false',
+              NO_COLOR: '1',
+            },
+          },
+        );
+        return JSON.parse(result.stdout).data.checks.find(
+          c => c.id === 'theme-private-variables',
+        );
+      };
+
+      expect(privateCheck()).toMatchObject({status: 'pass'});
+
+      // A fresh clone: no Core to load the input with.
+      fs.rmSync(projectCore, {recursive: true, force: true});
+      expect(privateCheck()).toEqual({
+        id: 'theme-private-variables',
+        label: 'Private theme variables',
+        status: 'info',
+        message:
+          "The project's Core isn't installed, so theme inputs were not checked for private variables. Install the project's dependencies, then run doctor again.",
+      });
+    },
+    180_000,
+  );
+
   it('check 6 ignores private variables generated from guaranteed component properties', async () => {
     const {dir, packageDir} = await fixture([
       {
