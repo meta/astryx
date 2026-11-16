@@ -3582,7 +3582,7 @@ describe('parts37', () => {
     }
   });
 
-  it('refuses at the next set a hand edit that set would refuse', async () => {
+  it('names at the next set a hand edit that set takes with no effect', async () => {
     await themeEditNew('h37', {cwd});
     const file = path.join(cwd, 'themes', 'h37', 'h37.settings.json');
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -3593,11 +3593,12 @@ describe('parts37', () => {
       on: 'chat-composer',
     });
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
-    const r = await refusal(() =>
-      themeEditSet('h37', 'corners', 'pill', {cwd}),
-    );
-    expect(r.message).toContain('4px 8px');
-    expect(r.run.join(' ')).toMatch(/undo h37 padding --on chat-composer/);
+    // One set takes with no effect there opens the theme (as an earlier
+    // editor may have saved it): the next set names it, with its undo.
+    const r = await themeEditSet('h37', 'corners', 'pill', {cwd});
+    const said = r.data.notes.join(' ');
+    expect(said).toContain('4px 8px');
+    expect(said).toMatch(/undo h37 padding --on chat-composer/);
     fs.rmSync(path.join(cwd, 'themes', 'h37'), {recursive: true, force: true});
   });
 

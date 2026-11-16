@@ -807,7 +807,7 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
- * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads)
+ * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string, noEffect?: boolean}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads; `noEffect`: refused as it never shows where it is saved)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
   // The setting the command replaces (its thing in the same scope); a
@@ -822,7 +822,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         (s.when ?? '') === (skip.when ?? '') &&
         (s.state ?? '') === (skip.state ?? '') &&
         (s.mode ?? '') === (skip.mode ?? '');
-  /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} */
+  /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string, noEffect?: boolean}>} */
   const found = [];
   const TOKENS = ctx.project.core.tokenDefaults;
   // Where each saved setting applies names a real part, group, state and
@@ -955,6 +955,8 @@ export function storedProblems(ctx, slug, data, skip = '') {
           e instanceof Error
             ? e.message.replace(/ Nothing was changed\.$/, '')
             : String(e),
+        // Refused for having no effect where it is saved: it never shows.
+        ...(e.code === E.ERR_THEME_NO_EFFECT ? {noEffect: true} : {}),
       });
     }
   }

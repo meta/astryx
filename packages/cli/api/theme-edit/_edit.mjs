@@ -2877,8 +2877,13 @@ async function swappedOrder(e, sub, words, options) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
  */
-function refuseStoredTokens(ctx, slug, data, skip) {
-  const bad = storedProblems(ctx, slug, data, skip);
+function refuseStoredTokens(
+  ctx,
+  slug,
+  data,
+  skip,
+  bad = storedProblems(ctx, slug, data, skip).filter(b => !b.noEffect),
+) {
   if (!bad.length) return;
   // A repair offers only the value it holds, cleaned: never a stock value
   // the saved setting did not hold.
@@ -2991,6 +2996,47 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
+ * Saved settings the editor no longer takes because they do not do there
+ * what was meant (a color on a part an element inside it paints over, a
+ * line-height its items set themselves: refused with no effect): the theme
+ * still opens. Each is kept in the file and built as an earlier editor
+ * built it, so nothing anyone sees changes, and named in a note with the
+ * lines that clear it (the undo and set's repair, as a refusal of it gives
+ * them). Any other saved damage stops the command, with its lines, as
+ * before.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} cwd
+ * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
+ * @returns {Promise<string[]>} the notes
+ */
+async function leaveOutStored(ctx, slug, data, cwd, skip) {
+  // Any other saved damage stops the command, with its lines.
+  refuseStoredTokens(ctx, slug, data, skip);
+  const quiet = storedProblems(ctx, slug, data, skip).filter(b => b.noEffect);
+  if (!quiet.length) return [];
+  /** @type {string[]} */
+  let lines = [];
+  try {
+    refuseStoredTokens(ctx, slug, data, skip, quiet);
+  } catch (e) {
+    const repaired = await savedDamageRefusal(e, slug, cwd, {ctx, data});
+    lines = (
+      repaired instanceof AstryxError ? (repaired.suggestions ?? []) : []
+    )
+      .map(x => x.name)
+      .filter(n => n.startsWith(`${P} `));
+  }
+  const what = quiet
+    .map(b => `${describe(b.setting)} (${b.why.replace(/\.+$/, '')})`)
+    .join('; ');
+  return [
+    `${slug}.settings.json holds what this editor no longer takes, as it does not do there what was meant: ${what}. ${quiet.length === 1 ? 'It is' : 'They are'} kept and built as an earlier editor built ${quiet.length === 1 ? 'it' : 'them'}, so the theme opens as it was${lines.length ? `; to clear ${quiet.length === 1 ? 'it' : 'them'}: ${lines.join(', then ')}` : ''}`,
+  ];
+}
+
+/**
  * For `compile`: a refusal of what the settings file holds, with the lines
  * every command gives it (the undo and set's repair).
  * @param {AstryxError} e
@@ -3015,6 +3061,7 @@ export async function editorStoredRefusal(root, slug) {
   try {
     seen.ctx = await context(root);
     seen.data = loadTheme(root, slug);
+    // A saved setting that never shows never stops a build (leaveOutStored).
     refuseStoredTokens(seen.ctx, slug, seen.data);
     return null;
   } catch (e) {
@@ -5403,15 +5450,16 @@ async function changeOnce(
   ctx.takesPictures = png ? {sheet: null} : null;
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
-  if (sub !== 'undo') {
-    refuseStoredTokens(ctx, slug, data, {
-      thing,
-      on: options.on,
-      when: options.when,
-      state: options.state,
-      mode: options.mode,
-    });
-  }
+  if (sub !== 'undo')
+    fieldNotes.push(
+      ...(await leaveOutStored(ctx, slug, data, cwd, {
+        thing,
+        on: options.on,
+        when: options.when,
+        state: options.state,
+        mode: options.mode,
+      })),
+    );
   const flags = {
     on: options.on,
     when: options.when,
@@ -7513,7 +7561,7 @@ export async function themeEditShow(theme, options = {}) {
   // A saved value or scope set refuses gets set's lines (the undo and the
   // repair), as a change does.
   try {
-    refuseStoredTokens(ctx, theme, data);
+    rebuiltNotes.push(...(await leaveOutStored(ctx, theme, data, cwd)));
   } catch (e) {
     throw await savedDamageRefusal(e, theme, cwd, {ctx, data});
   }
@@ -9597,9 +9645,15 @@ async function undoTheme(theme, options) {
   }
   // The checks that need this Core too (a token's type, a part, a state,
   // a name that is no token or property): what they refuse is left out of
-  // the step, with the same note, so the build stays valid.
+  // the step, with the same note, so the build stays valid. One refused
+  // only as doing nothing there is kept, as every command keeps it
+  // (leaveOutStored).
   {
-    const bad = new Set(storedProblems(ctx, theme, prev).map(p => p.setting));
+    const bad = new Set(
+      storedProblems(ctx, theme, prev)
+        .filter(p => !p.noEffect)
+        .map(p => p.setting),
+    );
     if (bad.size) {
       leftOut = [...leftOut, ...prev.settings.filter(s => bad.has(s))];
       prev = {...prev, settings: prev.settings.filter(s => !bad.has(s))};
