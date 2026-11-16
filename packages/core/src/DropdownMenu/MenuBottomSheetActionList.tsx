@@ -28,6 +28,14 @@ import {visibleText} from '../utils/accessibleName';
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
 
+/** Whether the document can hit-test a point (jsdom cannot). */
+function canHitTestByPoint(): boolean {
+  return (
+    typeof document !== 'undefined' &&
+    typeof document.elementFromPoint === 'function'
+  );
+}
+
 /**
  * The element a press at a point resolves in the sheet. ListItem renders its
  * action as a direct child of its `li`, with the icon and the end content
@@ -36,22 +44,12 @@ const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
  * keeps its own press. A row that holds other rows, as a section does, has no
  * action of its own.
  */
-function canHitTestByPoint(): boolean {
-  return (
-    typeof document !== 'undefined' &&
-    typeof document.elementFromPoint === 'function'
-  );
-}
-
 function sheetElementAtPoint(
   list: HTMLElement | null,
   x: number,
   y: number,
 ): Element | null {
   const doc = list?.ownerDocument ?? document;
-  if (typeof doc.elementFromPoint !== 'function') {
-    return null;
-  }
   const element = elementAtMenuPoint(list, doc, x, y);
   if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
     return element;

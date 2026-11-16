@@ -238,6 +238,19 @@ describe('MenuBottomSheetActionList', () => {
       expect(onSelect).not.toHaveBeenCalled();
     });
 
+    it('a press on the list outside every row, or on no element, runs no row', () => {
+      const {onSelect} = renderRows(ROWS);
+      press(screen.getByRole('list'), 'touch');
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: () => null,
+      });
+      const duplicate = screen.getByRole('button', {name: /Duplicate/});
+      fireEvent.pointerDown(duplicate, touch());
+      fireEvent.pointerUp(duplicate, touch());
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
     it('a press on a section heading or a divider runs no row', () => {
       const {onSelect, row} = renderRows([
         {
