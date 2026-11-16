@@ -80,6 +80,7 @@ import {
   rowPressLayerStyles,
 } from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {setPressLayerBox} from '../utils/pressLayerBox';
 import type {ButtonVariantMap} from './index';
 import {
   registerEnglishFallback,
@@ -941,6 +942,13 @@ export function Button({
     }
   };
 
+  // Where a press starts decides the box its layer takes when a caller makes
+  // the Button static (utils/pressLayerBox.ts). A caller's handler still runs.
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    setPressLayerBox(e.currentTarget, e.clientX, e.clientY, e.pointerType);
+    props.onPointerDown?.(e);
+  };
+
   // A disabled button cancels Enter and Space, its activation keys. Other
   // keys, such as Escape and the arrows, still reach the caller's handler.
   const handleKeyDown = buttonDisabled
@@ -1041,6 +1049,7 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          controlPressLayerStyles.rowTint,
           // The content wrapper's `::after` carries the touch band, so the
           // button's own `::before` (the touch press) and `::after` (a
           // caller's decoration) stay as they are.
@@ -1147,6 +1156,7 @@ export function Button({
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
+        onPointerDown={handlePointerDown}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
       </LinkComponent>
@@ -1172,6 +1182,7 @@ export function Button({
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
+        onPointerDown={handlePointerDown}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
       </button>

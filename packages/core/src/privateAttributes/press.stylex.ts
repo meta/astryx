@@ -74,8 +74,12 @@ const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
 const hoverImage = `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`;
 const pressedImage = `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']})`;
+/** A control's own `:active` tint, which a press on its row turns off. */
+const ownPressedImage = `var(--_press-own-tint, ${pressedImage})`;
 /** The overlay's paint, read back off the element (its gradient layer). */
 const pressedOverlayImage = 'var(--_press-paint-image)';
+/** The controller's paint on a control, which a press on its row turns off. */
+const ownOverlayImage = `var(--_press-own-tint, ${pressedOverlayImage})`;
 
 /**
  * The overlay's strength release (interactionOverlay.stylex.ts), restated so
@@ -385,12 +389,61 @@ export const controlPressLayerStyles = stylex.create({
    * would make the control that pseudo-element's containing block. It would
    * then shrink to the control, and a tap on the ancestor would miss. So the
    * hint names opacity, which keeps the layer and makes no containing block.
+   * The layer then has the containing block's box, unless a press began on a
+   * static control's own box. Then the control holds that box as the layer's
+   * inset (utils/pressLayerBox.ts). The layer reads it only while a press is
+   * on or fading, so a caller's own `::before` keeps its styles at rest.
    * With any other pointer nothing here applies.
    */
   control: {
     willChange: {
       default: null,
       [COARSE]: {default: null, [PRESSED_ANY]: 'opacity'},
+    },
+    // The whole property, with `cellOnImage`'s conditions. Under any other
+    // pointer, a press that began on the row outside a static control is the
+    // row's (`rowTint`). The control's own tint yields to it.
+    backgroundImage: {
+      default: null,
+      [ENABLED]: {
+        default: null,
+        ':active': {default: ownPressedImage, [COARSE]: 'none'},
+        [HOVER_HOVER]: {
+          default: null,
+          ':hover': hoverImage,
+          ':active': ownPressedImage,
+        },
+        [PRESSED_ON]: {default: ownOverlayImage, [COARSE]: 'none'},
+        [PRESSED_FADING]: {default: ownOverlayImage, [COARSE]: 'none'},
+      },
+    },
+    '::before': {
+      // The whole property, with `rowPressLayerStyles.cell`'s conditions.
+      inset: {
+        default: null,
+        [COARSE]: {
+          default: null,
+          [PRESSED_ANY]: 'var(--_press-layer-inset, 0)',
+        },
+      },
+    },
+  },
+  /**
+   * The row's tint under any pointer but a coarse primary one, on the
+   * control's content wrapper. It shows while a press that began on the row
+   * outside a static control is held (utils/pressLayerBox.ts). The wrapper is
+   * static too, so its `::before` has the row's box. Without that press, its
+   * content makes no box.
+   */
+  rowTint: {
+    borderRadius: 'inherit',
+    '::before': {
+      content: {default: 'var(--_press-row-tint)', [COARSE]: 'none'},
+      position: 'absolute',
+      inset: 0,
+      borderRadius: 'inherit',
+      backgroundImage: pressedImage,
+      pointerEvents: 'none',
     },
   },
 });

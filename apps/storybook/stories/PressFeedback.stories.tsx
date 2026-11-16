@@ -219,7 +219,7 @@ export const ButtonCoveringItsRow: Story = {
     docs: {
       description: {
         story:
-          "A row whose whole box is a Button's tap target: the Button stays static with no transform, so its `::after` covers the row. Under a finger, a tap anywhere on the row, the line under the Button included, activates the Button once, through its press and its release.",
+          "A row whose whole box is a Button's tap target: the Button stays static with no transform, so its `::after` covers the row. Under a finger, a tap anywhere on the row, the line under the Button included, activates the Button once, through its press and its release. A press on the Button tints the Button, and a press elsewhere on the row tints the row.",
       },
     },
   },
