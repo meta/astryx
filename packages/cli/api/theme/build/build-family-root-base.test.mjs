@@ -159,6 +159,68 @@ describe('a family whose root extends a base the family does not select', () => 
     );
   });
 
+  it('the receipt names the base package the root extends', async () => {
+    writeBasePackage();
+    write(
+      'fam/ocean.ts',
+      `${I}import {baseTheme} from '@fixture/base-theme';\nexport const ocean = defineTheme({extends: baseTheme, name: 'ocean', tokens: {}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `${I}import {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', tokens: {}});\n`,
+    );
+    const r = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(r.err).toBeUndefined();
+    expect(r.result.data.base).toEqual({
+      theme: 'base',
+      package: '@fixture/base-theme',
+      export: 'baseTheme',
+    });
+  });
+
+  it('a base package that is not installed fails naming the package and the theme, writing nothing', async () => {
+    write(
+      'fam/ocean.ts',
+      `${I}import {baseTheme} from '@fixture/base-theme';\nexport const ocean = defineTheme({extends: baseTheme, name: 'ocean', tokens: {}});\n`,
+    );
+    write(
+      'fam/ocean-calm.ts',
+      `${I}import {ocean} from './ocean.ts';\nexport default defineTheme({extends: ocean, name: 'ocean-calm', tokens: {}});\n`,
+    );
+    const r = await captured(() =>
+      themeBuildFamily(
+        ['fam/ocean.ts', 'fam/ocean-calm.ts'],
+        {familyKey: 'k'},
+        {cwd: dir},
+      ),
+    );
+    expect(r.err?.code).toBe('ERR_THEME_LOAD');
+    expect(r.err.message).toContain('Failed to load theme from fam/ocean.ts');
+    expect(r.err.message).toContain('@fixture/base-theme');
+    expect(r.err.suggestions?.[0]?.name).toContain('@fixture/base-theme');
+    expect(fs.existsSync(path.join(dir, 'fam/k.css'))).toBe(false);
+  });
+
+  it('a base the package does not export fails naming it, never building without the base', async () => {
+    writeBasePackage();
+    write(
+      'fam/ocean.ts',
+      `import {nopeTheme} from '@fixture/base-theme';\nexport const ocean = {name: 'ocean', extends: nopeTheme, tokens: {}};\n`,
+    );
+    const r = await captured(() => themeBuild('fam/ocean.ts', {}, {cwd: dir}));
+    expect(r.err?.code).toBe('ERR_THEME_LOAD');
+    expect(r.err.message).toContain(
+      `Theme "ocean" extends nopeTheme from '@fixture/base-theme', which is undefined`,
+    );
+    expect(fs.existsSync(path.join(dir, 'fam/ocean.css'))).toBe(false);
+  });
+
   it('a non-root member whose base is not selected is refused naming that base', async () => {
     writeBasePackage();
     write(

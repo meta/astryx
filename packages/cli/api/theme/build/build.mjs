@@ -3686,8 +3686,9 @@ export async function validateThemePrivateInputs(
 function extractRegistryInfo(filePath, field) {
   const content = fs.readFileSync(filePath, 'utf8');
   const defineIndex = content.indexOf('defineTheme(');
-  if (defineIndex < 0) return null;
-  const themeSource = content.slice(defineIndex);
+  // A plain-object theme writes its fields with no defineTheme() call.
+  if (defineIndex < 0 && field !== 'extends') return null;
+  const themeSource = content.slice(Math.max(defineIndex, 0));
   const explicit = themeSource.match(
     new RegExp(`${field}:\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=[,}])`),
   );
@@ -5461,6 +5462,22 @@ async function themeBuildInternal(
     // Core's media-surface rules. A theme with no tokens is raw input too,
     // whatever it carries (a resolved theme always has its tokens).
     const resolved = isDefinedTheme(themeDef);
+    // A base the source imports and extends that resolved to nothing (an
+    // export the package does not have) is refused naming it, never built as
+    // a theme with no base.
+    if (
+      !resolved &&
+      Object.hasOwn(themeDef, 'extends') &&
+      themeDef.extends === undefined
+    ) {
+      const written = extractRegistryInfo(filePath, 'extends');
+      if (written)
+        throw new AstryxError(
+          `Theme "${themeDef.name}" extends ${written.exportName} from '${written.importPath}', which is undefined: '${written.importPath}' does not export ${written.exportName}, so the theme would build without its base. Import the base theme that package exports, or install the version that exports ${written.exportName}.`,
+          undefined,
+          ERROR_CODES.ERR_THEME_LOAD,
+        );
+    }
     const needsResolution =
       !resolved ||
       INPUT_ONLY_FIELDS.some(field => themeDef[field] !== undefined) ||
@@ -6803,8 +6820,21 @@ async function buildFamily(
   // registries it inherits (icons, indicators, slot functions).
   /** @type {Map<string, {binding: string, importLine: string}>} */
   const rootBases = new Map();
+  /** The receipt's account of that base. @type {{theme: string, package: string | null, export: string | null} | null} */
+  let familyBase = null;
   for (const member of members) {
     if (!member.unselectedBase) continue;
+    const written = extractRegistryInfo(member.filePath, 'extends');
+    familyBase = {
+      theme: member.unselectedBase,
+      package:
+        written &&
+        !written.importPath.startsWith('.') &&
+        !path.isAbsolute(written.importPath)
+          ? packageOfSpecifier(written.importPath)
+          : null,
+      export: written?.exportName ?? null,
+    };
     const inherits = [
       themeIconEntries(member.sourceParent),
       member.sourceParent?.indicators,
@@ -7054,6 +7084,19 @@ Or load the same stylesheet natively:
       outputs,
       warnings,
       notices,
+      // The base the family's root extends that the family does not select:
+      // a requirement of the outputs (an installed package the app keeps).
+      ...(familyBase ? {base: familyBase} : {}),
     },
   };
+}
+
+/**
+ * The package a bare import specifier names: `@scope/name/sub` is
+ * `@scope/name`, `name/sub` is `name`.
+ * @param {string} specifier
+ */
+function packageOfSpecifier(specifier) {
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }

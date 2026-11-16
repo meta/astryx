@@ -50,8 +50,11 @@ replacement uses one aggregate output trio so consumers never assemble the famil
   member's parent MUST also be selected. The root MAY extend a theme the family
   does not select: its CSS, export and declaration carry that base as the root's
   standalone build does, and the module imports a package base for the
-  registries the root inherits from it. A root base that is a local file and
-  supplies registries is refused, naming the base to select. Duplicate names or
+  registries the root inherits from it. That package is a requirement: when it is
+  not installed, or does not export the base the root imports, the build fails
+  naming the package and the theme, and never builds the root without its base. A
+  root base that is a local file and supplies registries is refused, naming the
+  base to select. Duplicate names or
   identities, missing ancestors, and cycles MUST fail before family output is
   published, a missing ancestor named with the member whose base it is. Descendants at
   any depth are valid; a family is not limited to one root and its direct children.
@@ -67,7 +70,10 @@ replacement uses one aggregate output trio so consumers never assemble the famil
   `data.name`, and it establishes no second output-directory convention. The key uses
   the existing safe lower-kebab filename rules. Family mode composes with `--check`,
   and is refused with `--watch` and `--out`; other options retain the owning build's
-  existing semantics. It adds no response field or error code; any future response
+  existing semantics. It adds no error code. Its receipt adds one field, `base`
+  (`{theme, package, export}`), only when the root extends a theme the family does
+  not select; `package` names the installed package the base comes from, a
+  requirement of the outputs, or is null for a local file. Any other response
   change follows `spec:AST-017`.
 
 ### Observable family behavior
