@@ -96,7 +96,7 @@ export default function LoginTwoColumn() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <style>{LOGIN_SPLIT_CSS}</style>
       <VStack gap={4} width="100%">
         <div style={cardWrap}>
@@ -127,7 +127,7 @@ export default function LoginTwoColumn() {
                       ) : (
                         <VStack gap={4} hAlign="stretch" width="100%">
                           <VStack gap={1}>
-                            <Text type="display-1" as="h2">
+                            <Text type="display-1" as="h1">
                               Welcome back
                             </Text>
                             <Text type="body" color="secondary" size="sm">

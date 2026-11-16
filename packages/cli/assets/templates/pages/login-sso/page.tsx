@@ -97,14 +97,14 @@ export default function LoginSSO() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <Card padding={8} width="100%" maxWidth={400}>
         <VStack gap={4} hAlign="stretch">
           {/* ── Step 1: Email entry ── */}
           {step === 'email' && (
             <>
               <VStack gap={1} hAlign="center">
-                <Text type="display-1" as="h2">
+                <Text type="display-1" as="h1">
                   Welcome back
                 </Text>
                 <Text type="body" color="secondary" size="sm">
@@ -220,7 +220,7 @@ export default function LoginSSO() {
           {step === 'password-fallback' && (
             <>
               <VStack gap={1} hAlign="center">
-                <Text type="display-1" as="h2">
+                <Text type="display-1" as="h1">
                   Welcome back
                 </Text>
                 <Text type="body" color="secondary" size="sm">

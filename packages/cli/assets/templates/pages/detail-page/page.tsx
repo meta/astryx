@@ -609,7 +609,12 @@ function TimelineSection() {
 function PanelContent() {
   return (
     <VStack gap={4}>
-      <Collapsible trigger={<Heading level={4}>Notes</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={2}>
+            Notes
+          </Heading>
+        }>
         <Text type="body">
           Customer is a repeat buyer — 3rd order this quarter. Prefers snow and
           oat glazes. Requested gift wrapping for the mug set. Ships to a
@@ -619,7 +624,12 @@ function PanelContent() {
           </Link>
         </Text>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Customer</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={2}>
+            Customer
+          </Heading>
+        }>
         <MetadataList>
           <MetadataListItem label="Name">Jane Doe</MetadataListItem>
           <MetadataListItem label="Address">
@@ -632,7 +642,12 @@ function PanelContent() {
           </MetadataListItem>
         </MetadataList>
       </Collapsible>
-      <Collapsible trigger={<Heading level={4}>Fraud Analysis</Heading>}>
+      <Collapsible
+        trigger={
+          <Heading level={4} accessibilityLevel={2}>
+            Fraud Analysis
+          </Heading>
+        }>
         <VStack gap={1}>
           <ProgressBar
             label="Risk level"

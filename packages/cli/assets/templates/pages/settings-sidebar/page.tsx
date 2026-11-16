@@ -259,7 +259,7 @@ export default function SettingsSecurityTemplate() {
 
   const navList = (
     <VStack gap={4} style={sideNavPadding}>
-      <Heading level={2} style={sideNavHeading}>
+      <Heading level={2} accessibilityLevel={1} style={sideNavHeading}>
         Account settings
       </Heading>
       <List density="spacious">
@@ -306,7 +306,11 @@ export default function SettingsSecurityTemplate() {
       <Layout
         height="fill"
         style={fillViewport}
-        content={<LayoutContent padding={2}>{navList}</LayoutContent>}
+        content={
+          <LayoutContent role="main" padding={2}>
+            {navList}
+          </LayoutContent>
+        }
       />
     );
   }
@@ -324,7 +328,7 @@ export default function SettingsSecurityTemplate() {
         )
       }
       content={
-        <LayoutContent padding={4}>
+        <LayoutContent role="main" padding={4}>
           <VStack gap={0}>
             {/* Mobile detail view: a back button sits beside the section title
                 (the per-section headings below are hidden on mobile). Toolbar's
