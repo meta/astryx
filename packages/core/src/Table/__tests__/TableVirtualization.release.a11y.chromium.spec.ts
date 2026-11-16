@@ -124,17 +124,38 @@ test('records column-windowing range-plus-commit and no-op scroll timing at 1,00
     await frames(page, 3);
     const region = page.getByRole('group', {name: 'Release columns'});
     await expect(region).toHaveCount(1);
+    const table = page.getByRole('table', {name: 'Release columns'});
+    // The header row's mounted cells, by full-table position.
+    async function mountedColumns() {
+      return table.evaluate(node =>
+        Array.from((node as HTMLTableElement).rows[0].cells)
+          .filter(cell => cell.getAttribute('aria-hidden') !== 'true')
+          .map(cell => Number(cell.getAttribute('aria-colindex'))),
+      );
+    }
     async function scrollColumns(left: number) {
       await region.evaluate((node, left) => {
         node.scrollLeft = left;
       }, left);
       await frames(page, 3);
     }
+    // The proof times a column-windowed Table: all 1,001 columns are counted,
+    // and only a bounded run of them mounts (module PR1: the pinned column and
+    // at most ceil(740 / 120) + 1 + 4 + 1 windowed columns).
+    await expect(table).toHaveAttribute('aria-colcount', '1001');
+    const mountedAtStart = await mountedColumns();
+    expect(mountedAtStart.length).toBeGreaterThan(1);
+    expect(mountedAtStart.length).toBeLessThanOrEqual(14);
     // Each range step moves one column pitch, so one column enters and one
-    // leaves.
+    // leaves. The first step starts one pitch before the first sample.
+    await scrollColumns(9 * COLUMN_PITCH);
+    const firstWindowed: number[] = [];
     await page.evaluate(() => window.__rowRelease.startRangeProbe());
     for (let sample = 0; sample < SAMPLES; sample++) {
       await scrollColumns((10 + sample) * COLUMN_PITCH);
+      firstWindowed.push(
+        Math.min(...(await mountedColumns()).filter(index => index > 1)),
+      );
     }
     const rangeCommit = await page.evaluate(() =>
       window.__rowRelease.stopRangeProbe(),
@@ -191,6 +212,15 @@ test('records column-windowing range-plus-commit and no-op scroll timing at 1,00
     expect
       .soft(rangeCommit.length, 'column range-plus-commit samples')
       .toBeGreaterThanOrEqual(SAMPLES);
+    // Every range step moved the window by exactly one column.
+    expect
+      .soft(
+        firstWindowed
+          .slice(1)
+          .map((index, step) => index - firstWindowed[step]),
+        'first windowed column per range step',
+      )
+      .toEqual(Array.from({length: SAMPLES - 1}, () => 1));
     expect
       .soft(noopScroll.length, 'column no-op scroll samples')
       .toBeGreaterThanOrEqual(SAMPLES);
