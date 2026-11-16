@@ -9,6 +9,7 @@
  * @position api/theme-edit — checks over the part data
  */
 
+import {CUSTOM_PROPERTY} from '../theme/build/written-values.mjs';
 import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -1888,7 +1889,10 @@ function checkTypedValue(
     }
   // A var() naming a design token must name one of the same kind; the
   // app's own variables are its business.
-  const ref = /^var\(\s*(--[a-z0-9-]+)\s*(,.*)?\)$/i.exec(value.trim());
+  const ref = new RegExp(
+    String.raw`^var\(\s*(${CUSTOM_PROPERTY})\s*(,.*)?\)$`,
+    'i',
+  ).exec(value.trim());
   if (ref) {
     if (ref[1] in TOKENS && typeOf(ref[1]) !== type && type !== 'other')
       refuse(
@@ -1958,7 +1962,10 @@ function checkTypedValue(
       if (k !== 'other' && !ofKind.has(k)) ofKind.set(k, t);
     }
     for (const m of value.matchAll(
-      /var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi,
+      new RegExp(
+        String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*(?:,[^()]*)?\)`,
+        'gi',
+      ),
     )) {
       const token = m[1];
       if (!(token in TOKENS)) continue;
@@ -2271,7 +2278,9 @@ function checkCycle(
             '',
         );
   const refs = (/** @type {string} */ v) =>
-    [...v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(m => m[1]);
+    [
+      ...v.matchAll(new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'gi')),
+    ].map(m => m[1]);
   /** @type {string[]} */
   const path = [];
   const seen = new Set();
@@ -4210,7 +4219,9 @@ export function checkSetting(
  * @param {Record<string, unknown>} TOKENS
  */
 function fallbackVarTypo(v, TOKENS) {
-  for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*,/gi)) {
+  for (const [, name] of v.matchAll(
+    new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*,`, 'gi'),
+  )) {
     if (name in TOKENS || name.startsWith('--_')) continue;
     const near = nearest(name, Object.keys(TOKENS)).filter(n =>
       typoNear(name, n),
@@ -7579,7 +7590,10 @@ function tokenKindMismatch(ctx, prop, v) {
   // `var(--x)px`) is wrong around the token, never for the token's kind.
   if (!matchValue(prop, v)) return null;
   for (const ref of varReferences(v)) {
-    const m = /^var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)$/i.exec(ref.text);
+    const m = new RegExp(
+      String.raw`^var\(\s*(${CUSTOM_PROPERTY})\s*(?:,[^()]*)?\)$`,
+      'i',
+    ).exec(ref.text);
     if (!m) continue;
     const token = m[1];
     if (!ctx.C.isToken(token)) continue;
@@ -7648,7 +7662,12 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
   // it. Named with the repaired form when there is one.
   for (const m of v.matchAll(/var\(\s*([^,)]*?)\s*(?=[,)]|$)/gi)) {
     const raw = m[1];
-    if (/^--[a-z0-9_][a-z0-9_-]*$/i.test(raw)) continue;
+    // A name after the dashes, as CSS reads one (`--café` included).
+    if (
+      new RegExp(String.raw`^${CUSTOM_PROPERTY}$`).test(raw) &&
+      !raw.startsWith('---')
+    )
+      continue;
     const bare = raw.replace(/^-+/, '');
     const repaired = /^[a-z0-9][a-z0-9_-]*$/i.test(bare) ? `--${bare}` : null;
     return {
@@ -7661,7 +7680,7 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
     };
   }
   for (const [ref, name, comma] of v.matchAll(
-    /var\(\s*(--[a-z0-9-]+)\s*(,)?/gi,
+    new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*(,)?`, 'gi'),
   )) {
     if (name in TOKENS || name.startsWith('--_') || reads?.has(name)) continue;
     // A fallback always gives a value: never "reads nothing" (a likely

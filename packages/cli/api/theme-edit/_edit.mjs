@@ -175,6 +175,7 @@ import {
 } from '../../foundation/config/theme-private-vars.mjs';
 import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
 import {
+  CUSTOM_PROPERTY,
   customPropertyCycle,
   cycleProblem,
 } from '../theme/build/written-values.mjs';
@@ -3230,7 +3231,9 @@ async function ownTokenProblems(ctx, slug, data) {
     // A var() of a custom property the theme's own page sets reads the
     // text it gives: the property must take that text there.
     if (typeof value === 'string')
-      for (const m of value.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/gi)) {
+      for (const m of value.matchAll(
+        new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*\)`, 'gi'),
+      )) {
         const text = ownText.get(m[1]);
         if (
           text === undefined ||
@@ -3287,7 +3290,9 @@ async function ownTokenProblems(ctx, slug, data) {
   /** @param {unknown} node @param {number} depth */
   const collectReads = (node, depth) => {
     if (typeof node === 'string')
-      for (const m of node.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g))
+      for (const m of node.matchAll(
+        new RegExp(String.raw`var\(\s*(${CUSTOM_PROPERTY})`, 'g'),
+      ))
         readVars.add(m[1]);
     else if (node && typeof node === 'object' && depth < 24)
       for (const v of Object.values(node)) collectReads(v, depth + 1);
@@ -3641,7 +3646,10 @@ async function ownTokenProblems(ctx, slug, data) {
           // A part variable that defaults to a design token takes what
           // that token takes.
           const reads = own
-            ? /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(own.default)?.[1]
+            ? new RegExp(
+                String.raw`^var\(\s*(${CUSTOM_PROPERTY})\s*\)$`,
+                'i',
+              ).exec(own.default)?.[1]
             : undefined;
           if (reads && reads in known) {
             const loc = where(at.join('.'), k);
