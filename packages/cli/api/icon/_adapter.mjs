@@ -46,8 +46,11 @@ export {
 export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
 export {
   ICON_USE_ORDER_COMMAND,
+  NO_ICON_SET_NEXT,
+  iconLookExport,
   iconSetLook,
   iconUseCommand,
+  missingIconLook,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 export {

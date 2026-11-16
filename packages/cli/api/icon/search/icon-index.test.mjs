@@ -106,8 +106,17 @@ async function both(cwd, query, options = {}) {
 }
 
 describe('rankIconIndex answers as icon() does where the index was made', () => {
-  it('for every query, with and without a project set', async () => {
-    for (const config of [{}, {experimental: {iconSet: 'lines'}}]) {
+  it('for every query, with and without a project set and look', async () => {
+    for (const config of [
+      {},
+      {experimental: {iconSet: 'lines'}},
+      {
+        experimental: {
+          iconSet: ['glyphs', 'lines'],
+          iconVariant: 'solid',
+        },
+      },
+    ]) {
       const cwd = multiSetProject(config);
       const index = JSON.parse(JSON.stringify(await exportIconIndex({cwd})));
       const list = queries();

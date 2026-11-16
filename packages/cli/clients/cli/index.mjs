@@ -19,7 +19,10 @@ import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
+import {
+  mayHaveIntegrations,
+  mayLoadUnlistedIntegrations,
+} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
@@ -196,6 +199,13 @@ export const JSON_SUPPORTED = new Set([
  * (`component`, `search`, `docs`, `template`, `doctor`, …) and would miss
  * `--version`, `--help`, `theme *`, `blog`, and every parse error.
  *
+ * An integration no config lists loads too: the project itself, or an
+ * installed dependency that ships a manifest (autolinked). Where the project
+ * carries one, the gate opens with no config or whatever the config says,
+ * from the same file checks that decide the load before each command. Otherwise a config with neither word, such as
+ * one a CLI command creates, would report a missed handler that every
+ * command records anyway.
+ *
  * Measured cost of that second word, on an integration whose manifest is
  * TypeScript (the expensive case — jiti): ~50ms added to `astryx --version`,
  * and nothing at all to a command that was going to load the project anyway.
@@ -211,17 +221,18 @@ export const JSON_SUPPORTED = new Set([
  */
 export async function loadProjectDebugHandler() {
   try {
-    const configPath = findConfigPath(process.cwd());
-    if (!configPath) return;
-    const text = fs.readFileSync(configPath, 'utf-8');
-    if (!text.includes('debug') && !text.includes('integrations')) {
-      debug.noteConfigGateSkipped();
+    const cwd = process.cwd();
+    const configPath = findConfigPath(cwd);
+    const text = configPath ? fs.readFileSync(configPath, 'utf-8') : '';
+    const named = text.includes('debug') || text.includes('integrations');
+    if (!named && !mayLoadUnlistedIntegrations(cwd)) {
+      if (configPath) debug.noteConfigGateSkipped();
       return;
     }
-    // Only now: a run in a folder with no such config never loads the project
+    // Only now: a run where no handler can come from never loads the project
     // module and its discovery.
     const {Project} = await import('../../foundation/config/project.mjs');
-    await Project.load(process.cwd());
+    await Project.load(cwd);
   } catch {
     // A broken config is the command's problem to report, not ours.
   }

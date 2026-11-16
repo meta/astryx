@@ -11,9 +11,13 @@
  *   integrations installed beside the running CLI load, spec AST-081 FR12),
  *   so no configured, self-resolved, autolinked or computer-level integration
  *   can load.
+ *   `mayLoadUnlistedIntegrations(cwd)`: whether the project itself, or an
+ *   installed dependency, ships an integration manifest.
  * @position Read by clients/cli/index.mjs, which loads the project before
  *   help and before each command only where an integration can load (to read
- *   the commands integrations declare), and by foundation/fs/gather-cache.mjs:
+ *   the commands integrations declare), and before parsing where an
+ *   unlisted integration may contribute a debug handler; and by
+ *   foundation/fs/gather-cache.mjs:
  *   `component`, `template`, `theme`, `discover` and `docs` record a run only
  *   for what is worth keeping where
  *   an integration can load (its kept check results, and template
@@ -37,6 +41,19 @@ import {MANIFEST_BASENAMES} from './manifest-paths.mjs';
 export function mayHaveIntegrations(cwd) {
   const root = findPackageRoot(cwd) ?? cwd;
   if (findPresentFiles(root, CONFIG_BASENAMES).length > 0) return true;
+  return mayLoadUnlistedIntegrations(cwd) || isOutsideProject(cwd);
+}
+
+/**
+ * Whether the project carries an integration that no Astryx config lists:
+ * the project is an integration itself, or declares an installed dependency
+ * that ships an integration manifest (autolinked). Such an integration
+ * loads, and may contribute a `debug` handler, whatever the config says.
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+export function mayLoadUnlistedIntegrations(cwd) {
+  const root = findPackageRoot(cwd) ?? cwd;
   if (findPresentFiles(root, MANIFEST_BASENAMES).length > 0) return true;
   for (const {name} of readDeclaredDependencies(root)) {
     const installed = resolveInstalledPackageDir(name, root);
@@ -47,5 +64,5 @@ export function mayHaveIntegrations(cwd) {
       return true;
     }
   }
-  return isOutsideProject(cwd);
+  return false;
 }

@@ -479,6 +479,14 @@ export const ICON_USE_ORDER_COMMAND =
   'astryx experimental icon use <main> --backup <set>';
 
 /**
+ * What to do when no icon set is installed: no command can list sets to
+ * install, since discover reads icon sets only in a project that already
+ * chose one. The finder, `--list`, and `use` print the same words.
+ */
+export const NO_ICON_SET_NEXT =
+  'Install a package that ships an icon set, then run `astryx experimental icon use <set>`. To make your own set, read `astryx docs cli/experimental/icon-sets`.';
+
+/**
  * The `experimental icon use` command for a main set, its backups in order,
  * and the project's look. `use` writes the whole choice, so a printed
  * command that left out a backup or the look would remove it.
@@ -503,6 +511,45 @@ export function iconSetLook(set, variant) {
   return (set.data.variants ?? []).includes(variant)
     ? variant
     : (set.data.default?.variant ?? null);
+}
+
+/**
+ * The export that draws an icon in a look: the icon's variant of that name
+ * when it has one, else its own export, which draws the set's default look.
+ * Template mapping and `experimental icon <words>` both use it.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{module: string, export: string}}
+ */
+export function iconLookExport(icon, set, variant) {
+  const module = icon.module ?? set.data.module;
+  if (variant && variant !== set.data.default?.variant) {
+    const entry = (icon.variants ?? []).find(each => each.variant === variant);
+    if (entry) {
+      return {module: entry.module ?? module, export: entry.export};
+    }
+  }
+  return {module, export: icon.export};
+}
+
+/**
+ * What an icon draws when it does not have the look asked for: that look,
+ * and the set's default look it draws instead (null for a set with one
+ * look). Undefined when the icon has the look, or when none is asked for.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+export function missingIconLook(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
 }
 
 /**

@@ -12,6 +12,7 @@
 import {
   astryxIconDefinitions,
   ICON_USE_ORDER_COMMAND,
+  NO_ICON_SET_NEXT,
   iconSetKey,
   iconSetLook,
   loadIconSets,
@@ -47,7 +48,9 @@ export async function iconList({cwd}) {
         ? {
             next: `${sets.length} icon sets are installed and none is your main set: run \`${ICON_USE_ORDER_COMMAND}\`.`,
           }
-        : {}),
+        : sets.length === 0
+          ? {next: NO_ICON_SET_NEXT}
+          : {}),
       sets: sets.map(set => {
         const rank = order.indexOf(set);
         const mapped = new Set(Object.keys(set.data.map ?? {}));

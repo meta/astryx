@@ -220,6 +220,34 @@ export function registerExperimentalIcon(group, program) {
       }
       if (result.type === 'icon.search') {
         const {query: q, matchCount, matches} = result.data;
+        if (result.data.next) {
+          const definitions = result.data.definitions ?? [];
+          const builtIn = definitions.filter(each => each.builtIn);
+          const others = definitions.filter(each => !each.builtIn);
+          emit(
+            text(`No icon set is installed, so no icon matches "${q}".`),
+            ...(builtIn.length > 0
+              ? [
+                  text(
+                    "Core draws these names with no set; pass one to a component's icon prop:",
+                  ),
+                  list(
+                    builtIn.map(each => `${each.name}: ${each.description}`),
+                  ),
+                ]
+              : []),
+            ...(others.length > 0
+              ? [
+                  text(
+                    'Icon definitions that match; an icon set draws them once one is installed:',
+                  ),
+                  list(others.map(each => `${each.name}: ${each.description}`)),
+                ]
+              : []),
+            text(`[next] ${result.data.next}`),
+          );
+          return answered;
+        }
         if (matches.length === 0) {
           emit(
             text(`No icons match "${q}".`),
@@ -233,11 +261,17 @@ export function registerExperimentalIcon(group, program) {
               ? `Icons for "${q}" (${matches.length} of ${matchCount})`
               : `Icons for "${q}" (${matches.length})`,
           ),
-          // The import draws the icon's default look; its other variants
-          // are named with their exports and read with `icon <set>/<id>`.
+          // The import draws the project's look where the icon has it, else
+          // its default look; its other variants are named with their
+          // exports and read with `icon <set>/<id>`.
           records(
-            matches.map(({variants, ...match}) => ({
+            matches.map(({variants, look, ...match}) => ({
               ...match,
+              ...(look
+                ? {
+                    look: `no ${look.asked} look; draws ${look.used ?? 'its one look'}`,
+                  }
+                : {}),
               ...(variants.length > 0
                 ? {
                     variant: variants
@@ -252,6 +286,7 @@ export function registerExperimentalIcon(group, program) {
                 'id',
                 'package',
                 'import',
+                'look',
                 'words',
                 'definitions',
                 'variant',
@@ -315,7 +350,9 @@ export function registerExperimentalIcon(group, program) {
           ...(variant ? {variant} : {}),
           reason,
         }),
-        ...(next ? [text(`[warn] ${next}`)] : []),
+        ...(next
+          ? [text(`${sets.length === 0 ? '[next]' : '[warn]'} ${next}`)]
+          : []),
         ...(sets.length > 0
           ? [
               records(
@@ -359,7 +396,10 @@ export function registerExperimentalIcon(group, program) {
               ),
             ]
           : []),
-        text(`Find one: ${run} experimental icon <words>`),
+        // With no set, the finder has nothing to find: `next` says what to do.
+        ...(sets.length > 0
+          ? [text(`Find one: ${run} experimental icon <words>`)]
+          : []),
       );
       return answered;
     },
