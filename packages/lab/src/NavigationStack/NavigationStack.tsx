@@ -308,9 +308,12 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
   },
+  // Each card is a stacking context at rest, as a transform makes it during a
+  // transition. So screen content with any z-index stays under the bar.
   card: {
     position: 'absolute',
     inset: 0,
+    isolation: 'isolate',
     overflow: 'hidden',
     backgroundColor: colorVars['--color-background-body'],
   },
