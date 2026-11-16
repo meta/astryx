@@ -131,6 +131,11 @@ describe('rankIconIndex answers as icon() does where the index was made', () => 
       ['close', {set: 'broken'}],
       ['close', {set: 'nope'}],
       ['close', {limit: 0}],
+      ['close', {limit: null}],
+      ['close', {limit: 1.5}],
+      ['', {}],
+      [/** @type {any} */ (undefined), {}],
+      [/** @type {any} */ (7), {}],
     ])) {
       const {direct, stored} = await both(cwd, query, options);
       expect(stored, `${query} ${JSON.stringify(options)}`).toEqual(direct);
@@ -201,6 +206,14 @@ describe('rankIconIndex refuses what it cannot rank', () => {
     await expect(
       rankIconIndex('close', index, {limit: 1.5}),
     ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+  });
+
+  it('a query that names one icon, which icon() reads as that icon', async () => {
+    const index = await exportIconIndex({cwd: multiSetProject()});
+    await expect(rankIconIndex('glyphs/trash', index)).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringMatching(/names one icon/u),
+    });
   });
 
   it('exportIconIndex refuses a package that is not a name', async () => {

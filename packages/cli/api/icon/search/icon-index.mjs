@@ -15,10 +15,14 @@ import {cliVersion} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {loadIconSets} from '../_adapter.mjs';
+import {
+  REFERENCE_RE,
+  checkIconLimit,
+  checkIconQueryType,
+  requireIconTerm,
+} from '../_options.mjs';
+import {DEFAULT_ICON_LIMIT} from '../icon.mjs';
 import {rankIconSets} from './search.mjs';
-
-/** The default `limit` for `rankIconIndex`, the same as `icon()`'s. */
-const DEFAULT_LIMIT = 10;
 
 /**
  * The part of a set the ranking reads, as plain JSON. Paths into the folder
@@ -73,7 +77,8 @@ export async function exportIconIndex(options = {}) {
 
 /**
  * Ranks stored icon indexes with `icon`'s own ranking. An index made in one
- * folder answers as `icon(query)` does there. The sets of every index are
+ * folder answers a word search as `icon(query)` does there; a `<set>/<id>`
+ * query, which `icon()` reads as one icon, is refused. The sets of every index are
  * ranked together as one list, in the order the indexes are given; equal
  * scores keep that order. Every index must come from this CLI's version,
  * since the ranking reads the sets' shape.
@@ -89,25 +94,16 @@ export async function exportIconIndex(options = {}) {
  * @returns {Promise<import('../icon.type.mjs').IconSearchResponse>}
  */
 export async function rankIconIndex(query, indexes, options = {}) {
-  const {set, limit = DEFAULT_LIMIT} = options;
-  if (typeof query !== 'string') {
+  const {set} = options;
+  const limit = options.limit ?? DEFAULT_ICON_LIMIT;
+  checkIconQueryType(query);
+  const term = (query ?? '').trim();
+  requireIconTerm(term);
+  checkIconLimit(limit);
+  if (REFERENCE_RE.test(term)) {
     throw new AstryxError(
-      `Invalid icon query: ${String(query)}`,
+      `"${term}" names one icon; rankIconIndex() ranks words. Read one icon with icon().`,
       [],
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  if (query.trim() === '') {
-    throw new AstryxError(
-      'An icon query is required',
-      [],
-      ERROR_CODES.ERR_MISSING_ARGUMENT,
-    );
-  }
-  if (!Number.isInteger(limit) || limit <= 0) {
-    throw new AstryxError(
-      `Invalid limit "${limit}". Must be a positive integer.`,
-      undefined,
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
@@ -135,5 +131,5 @@ export async function rankIconIndex(query, indexes, options = {}) {
     sets.push(...index.sets);
     withdrawn.push(...(index.withdrawn ?? []));
   }
-  return rankIconSets(sets, withdrawn, query.trim(), {set, limit});
+  return rankIconSets(sets, withdrawn, term, {set, limit});
 }
