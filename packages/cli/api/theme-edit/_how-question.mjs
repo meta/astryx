@@ -614,7 +614,7 @@ function colorsFound(c) {
       c.slice((m.index ?? 0) + m[0].length);
   }
   const re =
-    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|darker|dark|subtle|soft)\s+)?([a-z]+)\b/g;
+    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|darker|dark|deep|rich|subtle|soft)\s+)?([a-z]+)\b/g;
   for (const m of c
     .replace(GRAY_STOP, s => ' '.repeat(s.length))
     .matchAll(re)) {
@@ -638,10 +638,30 @@ function colorsFound(c) {
         soft: 'pale',
         lighter: 'light',
         darker: 'dark',
+        deep: 'dark',
+        rich: 'dark',
       })[m[1] ?? ''] ?? m[1];
     const word = m[2];
     if (shade && SHADED[shade]?.[word]) {
       found.push([m.index ?? 0, SHADED[shade][word]]);
+      continue;
+    }
+    // (A shade of a hue the table has no shade for: the hue mixed toward
+    // black, or toward white.)
+    const base = shade && HUES[word] ? parseColor(HUES[word]) : null;
+    // (A hue already that dark, "dark brown", is itself.)
+    if (
+      base &&
+      (shade === 'light' ||
+        shade === 'pale' ||
+        (shade === 'dark' && Math.max(...base.slice(0, 3)) > 150))
+    ) {
+      const to = shade === 'dark' ? 0 : 255;
+      const k = shade === 'dark' ? 0.4 : shade === 'light' ? 0.75 : 0.88;
+      found.push([
+        m.index ?? 0,
+        hex(base.slice(0, 3).map(v => Math.round(v + (to - v) * k))),
+      ]);
       continue;
     }
     if (HUES[word])
@@ -3765,6 +3785,56 @@ export function draftAnswer(ctx, env, question) {
       '$2 more $1',
     )
     .replace(/\b([a-z]{3,}er)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi, '$2% $1')
+    // ("the warning color darker so it reads on the page": what it is read
+    // on is the ground, never the thing changed; "readable" says the
+    // purpose.)
+    .replace(
+      /[,;]?\s*\b(?:so|so that|until)\s+(?:it|they|its text|the text)\s+(?:reads?|shows?|stands? out|is readable|are readable|pops?|is visible|are visible|passes|pass)\b(?:\s+(?:better|clearly|well))?(?:\s+(?:on|against|over)\s+(?:the\s+|a\s+)?[a-z]+)?/gi,
+      ' readable',
+    )
+    // ("when inputs are focused, a 2px ring": a ring said of the focused
+    // state is the focus ring, on the parts focused.)
+    .replace(
+      /\bwhen\s+(?:the\s+)?([a-z][a-z -]*?)\s+(?:are|is|get|gets)\s+focused\s*,?\s*(?:give\s+them\s+|show\s+)?(?:a|an)?\s*((?:[^,;.]*?\s)?)rings?\b/gi,
+      'focus ring on $1 $2',
+    )
+    .replace(
+      /\b(?<!focus(?:-visible|-within)?[\s-])rings?\b/gi,
+      (m, _at, whole) =>
+        /\bfocus(?:ed|ing)?\b/i.test(String(whole)) &&
+        !/\bfocus\s+rings?\b/i.test(String(whole))
+          ? 'focus ring'
+          : m,
+    )
+    // ("large text", "small type": the text's size the way said.)
+    // ("small text" names the supporting text, never a way.)
+    .replace(
+      /\b(large|big|huge)\s+(text|type|print|lettering)\b(?!\s+(?:bigger|smaller|larger|on|in|for)\b)/gi,
+      'larger $2',
+    )
+    // ("grayscale", "black and white only, no color": no color in the
+    // generated colors, the vibrancy dial at 0.)
+    .replace(
+      /\b(?:gr[ae]yscale|monochrome|black[- ]and[- ]white(?:\s+only)?|colou?rless|no colou?rs?(?:\s+at\s+all)?)\b/gi,
+      'vibrancy 0',
+    )
+    // ("so readers see which page they are on": why it is asked, never a
+    // part to change.)
+    .replace(
+      /[,;]?\s*\bso\s+(?:that\s+)?(?:readers|users|people|you|they|we|visitors|customers)\s+(?:can\s+)?(?:see|know|tell|notice|find|spot)\b[^,;.]*/gi,
+      ' ',
+    )
+    // ("make text more readable", "easier to read": the text larger.)
+    .replace(
+      /\b(?:make\s+)?(?:the\s+)?text\s+(?:more\s+readable|easier\s+to\s+read)\b|\bmore\s+readable\s+text\b/gi,
+      'larger text',
+    )
+    // ("a theme that works in dark mode": a theme with both modes, which it
+    // has; never an ask scoped to dark.)
+    .replace(
+      /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:both\s+)?(?:dark|light)(?:\s+(?:and|&)\s+(?:dark|light))?\s+modes?\b/gi,
+      ' ',
+    )
     // ("almost square", "nearly square": a rung short of square, the
     // small corners.)
     .replace(
@@ -4518,6 +4588,14 @@ export function draftAnswer(ctx, env, question) {
     // ("a calm, dark theme": a look said for the theme, its mode, is an
     // ask of its own.)
     if (/\b(?:dark|light)-only (?:theme|look|ui|interface|design)\b/i.test(x))
+      return true;
+    // ("the app should open in dark mode by default": the mode it shows
+    // first, an ask about the theme.)
+    if (
+      /\b(?:opens?|starts?|launch(?:es)?|loads?)\s+(?:up\s+)?in\s+(?:dark|light)\b|\b(?:dark|light)(?:\s+mode)?\s+by\s+default\b/i.test(
+        x,
+      )
+    )
       return true;
     // ("light only", "dark only", "no dark mode": the theme's mode;
     // "a right-to-left app": a question about the theme, answered.)
@@ -5641,7 +5719,8 @@ export function draftAnswer(ctx, env, question) {
   const namesAPart = clauses.some(c => c.parts.length > 0);
   for (let i = clauses.length - 1; i >= 0 && !paintsAPart && !namesAPart; i--) {
     const c = clauses[i];
-    if (c.parts.length || c.colors.length !== 1 || c.except) continue;
+    if (c.parts.length || !c.colors.length || c.colors.length > 2 || c.except)
+      continue;
     if (
       /\b(?:success|warning|danger|error|info|neutral|accent|brand|page|background|text|border)\b/.test(
         c.text,
@@ -5650,9 +5729,10 @@ export function draftAnswer(ctx, env, question) {
       continue;
     if (
       !lookSaid &&
-      !/^\s*(?:a|an|the)?\s*(?:(?:light|dark|deep|bright|pale|soft)\s+)?[a-z-]+\s*[.!]?\s*$/.test(
-        c.text,
-      )
+      (c.colors.length > 1 ||
+        !/^\s*(?:a|an|the)?\s*(?:(?:light|dark|deep|rich|bright|pale|soft)\s+)?[a-z-]+\s*[.!]?\s*$/.test(
+          c.text,
+        ))
     )
       continue;
     const paints = c.aspects.some(a =>
@@ -5661,20 +5741,57 @@ export function draftAnswer(ctx, env, question) {
       ),
     );
     if (paints) continue;
-    const word = Object.keys(HUES).find(
-      w =>
-        HUES[w] === c.colors[0] &&
-        new RegExp(`\\b${w}\\b`).test(c.text) &&
-        !/^(?:white|black|gray|grey|charcoal|cream|beige|ivory|sand)$/.test(w),
-    );
-    if (!word) continue;
-    const accent = clausesOf(`${word} accent`, lex.parts);
-    if (accent.length !== 1) continue;
-    if (!c.aspects.length && !c.dir) clauses.splice(i, 1, ...accent);
+    // (Each color by what it is: a light, quiet one, sand or a warm
+    // gray, is the neutral the grays are made from; a strong one the
+    // accent; white and black name neither.)
+    /** @type {Clause[]} */
+    const dials = [];
+    let accentTaken = false;
+    // (Only colors said by name: a typed value continues the ask before
+    // it, "their brand blue, #0057ff".)
+    const named = colorsFound(c.text)
+      .filter(x => !x[2])
+      .map(x => x[1]);
+    if (colorsFound(c.text).some(x => x[2])) continue;
+    for (const color of named) {
+      const rgb = parseColor(color);
+      if (!rgb) continue;
+      const hi = Math.max(...rgb.slice(0, 3));
+      const lo = Math.min(...rgb.slice(0, 3));
+      if (hi - lo < 12 && (lo > 235 || hi < 20)) continue;
+      const quiet = hi - lo < 64 && hi > 120;
+      if (!quiet && accentTaken) continue;
+      const dial = clausesOf(
+        `${quiet ? 'neutral' : 'accent'} ${color}`,
+        lex.parts,
+      );
+      if (dial.length !== 1) continue;
+      if (!quiet) accentTaken = true;
+      dials.push(...dial);
+    }
+    if (!dials.length) continue;
+    if (!c.aspects.length && !c.dir) clauses.splice(i, 1, ...dials);
     else {
       c.colors = [];
-      clauses.splice(i + 1, 0, ...accent);
+      clauses.splice(i + 1, 0, ...dials);
     }
+  }
+  // "make the brown content area deep green": a color said before the part,
+  // with another after it, says how the part looks now; the one after is
+  // the color asked.
+  for (const c of clauses) {
+    if (!c.parts.length || c.colors.length < 2) continue;
+    const at = Math.min(
+      ...c.parts.flatMap(p =>
+        lex.parts
+          .filter(([, x]) => x.on === p.on)
+          .map(([re]) => re.exec(c.text)?.index ?? Infinity),
+      ),
+    );
+    if (!Number.isFinite(at)) continue;
+    const found = colorsFound(c.text);
+    const after = found.filter(([i]) => i > at).map(([, v]) => v);
+    if (after.length && found.some(([i]) => i < at)) c.colors = after;
   }
   // "the error toast is too bright red; make it calmer", "the violet
   // buttons feel a bit loud": a complaint says how a part looks now, its
@@ -5723,6 +5840,36 @@ export function draftAnswer(ctx, env, question) {
       clauses[i].parts = clauses[i - 1].parts.map(x => ({...x}));
       // (Its look, read later, follows: "the error toast … make it".)
       carriedParts.push([clauses[i - 1], clauses[i]]);
+    }
+  // ("table header text uppercase 12px": a length said with a text look,
+  // its case or weight, is the text's size too, never dropped.)
+  for (const [ci, c] of [...clauses.entries()].reverse())
+    if (
+      c.lengths.some(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) &&
+      /\b(?:text|labels?|font|type|letters)\b/.test(c.text) &&
+      c.aspects.some(a =>
+        ['case', 'weight', 'italic', 'tracking', 'family'].includes(a),
+      ) &&
+      !c.aspects.some(a =>
+        [
+          'fontsize',
+          'spacing',
+          'border',
+          'corners',
+          'shadow',
+          'size',
+          'leading',
+          'tracking',
+        ].includes(a),
+      )
+    ) {
+      // (Its own ask beside the look, so both run in turn.)
+      clauses.splice(ci + 1, 0, {
+        ...c,
+        parts: c.parts.map(x => ({...x})),
+        aspects: ['fontsize'],
+      });
+      c.lengths = [];
     }
   // ("make it calmer", "the error toast calmer": its color, the fill it
   // shows.)
@@ -14793,11 +14940,24 @@ export function draftAnswer(ctx, env, question) {
       }
       const pageMode = pageModeOf(c, String(color));
       const pm = pageMode ? {mode: pageMode} : {};
+      // (The main panel, drawn over the page with a fill of its own, shows
+      // that fill: the second line paints it with the frame, so the page
+      // looks the color asked.)
+      const panelRead = C.MAP['layout-content']
+        ? restRead(C.partReads('layout-content', 'background') ?? [], '')
+        : null;
+      const panel =
+        panelRead && panelRead !== '--color-background-body' ? panelRead : null;
       return {
-        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
+        text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}${panel ? `; the main panel (layout-content) draws ${panel} over it, so the second line paints the frame and the main panel too` : ''}`,
         options: [
           [set('--color-background-body', color, pm)],
-          [set('background', color, {on: 'app-shell', ...pm})],
+          [
+            set('background', color, {on: 'app-shell', ...pm}),
+            ...(panel
+              ? [set('background-color', color, {on: 'layout-content', ...pm})]
+              : []),
+          ],
         ],
       };
     }
@@ -16532,7 +16692,9 @@ export function draftAnswer(ctx, env, question) {
           !color &&
           !c.lengths[0] &&
           /\b(darker|lighter|darken|lighten)\b/.test(c.text) &&
-          !/\b(thick|thin|width|wider)/.test(c.text)
+          !/\b(thick|thin|width|wider)/.test(c.text) &&
+          // (One side's, "the bottom edge darker", is that side's below.)
+          !/\b(top|bottom|left|right)\b/.test(c.text)
         ) {
           const lighter = /\blight(er|en)?\b/.test(noMode(c.text));
           const amount = colorAmount(c.text, 0.2);
@@ -16682,6 +16844,56 @@ export function draftAnswer(ctx, env, question) {
             : null);
         const side = /\b(top|bottom|left|right)\b/.exec(c.text)?.[1];
         const prop = side ? `border-${side}` : 'border';
+        // "inputs should have only a bottom border": no border on the other
+        // sides, then that side's.
+        if (
+          side &&
+          (/\bonly\s+(?:a\s+|the\s+|one\s+)?(?:top|bottom|left|right)\b/.test(
+            c.text,
+          ) ||
+            /\b(?:top|bottom|left|right)\s+(?:border|edge|line)\s+only\b/.test(
+              c.text,
+            ))
+        )
+          return {
+            text: `only a ${side} border${where}: no border on its other sides, then the ${side} one`,
+            options: [
+              [
+                set('border', 'none', f),
+                set(
+                  prop,
+                  `${width ?? '1px'} ${style ?? 'solid'} ${color ?? keptColor}`,
+                  f,
+                ),
+              ],
+            ],
+            sequence: true,
+          };
+        // "a slightly darker bottom edge": that side's color only, its own
+        // line color mixed darker (or lighter), in every mode.
+        if (side && !color && !c.lengths.length) {
+          const darker = /\bdarker\b/.test(c.text);
+          const lighter = /\blighter\b/.test(c.text);
+          if (darker || lighter) {
+            const share = /\b(slightly|a bit|a little|a touch)\b/.test(c.text)
+              ? 85
+              : /\b(much|way|a lot)\b/.test(c.text)
+                ? 60
+                : 75;
+            return {
+              text: `a ${darker ? 'darker' : 'lighter'} ${side} border${where}: the line color it reads (${keptColor}) mixed ${100 - share}% toward ${darker ? 'black' : 'white'} on that side only, in every mode`,
+              options: [
+                [
+                  set(
+                    `border-${side}-color`,
+                    `color-mix(in srgb, ${keptColor} ${share}%, ${darker ? 'black' : 'white'})`,
+                    f,
+                  ),
+                ],
+              ],
+            };
+          }
+        }
         // A border the part draws at rest: a width other than 0 and a style
         // other than none (a button's 0px border is no line).
         // (Every side's, and only the variant asked when one is.)
@@ -17320,8 +17532,24 @@ export function draftAnswer(ctx, env, question) {
         )?.[0];
         // A step ("bolder", "a bit lighter") moves one rung from the
         // headings rung the theme sets, never back to a fixed one.
-        const ownRung = ownDial('headings');
+        // ("a bit lighter" with no rung set: one rung from the rung the
+        // theme's headings show now.)
+        const aBit = /\b(?:a bit|slightly|a little|a touch|somewhat)\b/.test(
+          c.text,
+        );
         const rungs = Object.keys(HEADING_WEIGHTS);
+        const ownRung =
+          ownDial('headings') ??
+          (aBit
+            ? rungs.find(
+                r =>
+                  String(
+                    HEADING_WEIGHTS[
+                      /** @type {keyof typeof HEADING_WEIGHTS} */ (r)
+                    ],
+                  ) === String(current('--text-heading-1-weight') ?? ''),
+              )
+            : undefined);
         const stepAsk =
           !typedW &&
           !c.neg &&
@@ -18535,44 +18763,62 @@ export function draftAnswer(ctx, env, question) {
           );
           /** @type {string[]} */
           const missed = [];
-          const steps = perMode(
-            read,
-            thing,
-            flags,
-            (now, m) => {
-              const grounds = groundTokens.map(g => String(current(g, m)));
-              const ink = parseColor(now);
-              const meets =
-                ink &&
-                grounds.every(g => {
-                  const under = parseColor(g);
-                  return (
-                    under &&
-                    ratio(
-                      /** @type {[number, number, number]} */ (
-                        compositeOver(ink, alphaOf(now), under)
-                      ),
-                      under,
-                    ) >= target
-                  );
-                });
-              if (meets) return null;
-              const v = inkAtRatio(now, grounds, target);
-              if (!v) missed.push(m);
-              return v;
-            },
-            c,
+          // ("all text at least 7:1": every text color of the theme, the
+          // main, the secondary and the accent text, each measured.)
+          const everyText =
+            !on &&
+            !roleTok &&
+            /\b(?:all|every|each)\s+(?:the\s+|of\s+the\s+)?text\b|\btext\s+everywhere\b/.test(
+              c.text,
+            );
+          const reads = everyText
+            ? [
+                '--color-text-primary',
+                '--color-text-secondary',
+                '--color-text-accent',
+              ]
+            : [read];
+          const steps = reads.flatMap(rd =>
+            perMode(
+              rd,
+              everyText ? rd : thing,
+              flags,
+              (now, m) => {
+                const grounds = groundTokens.map(g => String(current(g, m)));
+                const ink = parseColor(now);
+                const meets =
+                  ink &&
+                  grounds.every(g => {
+                    const under = parseColor(g);
+                    return (
+                      under &&
+                      ratio(
+                        /** @type {[number, number, number]} */ (
+                          compositeOver(ink, alphaOf(now), under)
+                        ),
+                        under,
+                      ) >= target
+                    );
+                  });
+                if (meets) return null;
+                const v = inkAtRatio(now, grounds, target);
+                if (!v) missed.push(m);
+                return v;
+              },
+              c,
+            ),
           );
           const against = groundTokens.join(' and ');
+          const readSaid = reads.join(', ');
           if (missed.length)
             return {
-              text: `no text color made from the one the text${where} reads (${read}) measures ${target}:1 against ${against} in ${missed.join(' and ')} mode; name a color instead ("${on ?? 'text'} color #595959")`,
+              text: `no text color made from the one the text${where} reads (${readSaid}) measures ${target}:1 against ${against} in ${[...new Set(missed)].join(' and ')} mode; name a color instead ("${on ?? 'text'} color #595959")`,
               options: [],
             };
           return {
             text: steps.length
-              ? `the text${where}: ${read} moved the least that measures ${target}:1 against ${against}${on === 'link' ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}`
-              : `the text${where} (${read}) already measures ${target}:1 against ${against}: nothing to change`,
+              ? `the text${where}: ${readSaid} moved the least that measures ${target}:1 against ${against}${on === 'link' ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}${everyText ? '; the text a part draws on its own fill (a button or badge label) is measured on that fill: name the part ("button text 7:1")' : ''}`
+              : `the text${where} (${readSaid}) already measures ${target}:1 against ${against}: nothing to change${everyText ? '; the text a part draws on its own fill (a button or badge label) is measured on that fill: name the part ("button text 7:1")' : ''}`,
             options: steps.length ? [steps] : [],
             sequence: steps.length > 1,
           };
@@ -19873,6 +20119,27 @@ export function draftAnswer(ctx, env, question) {
         )
         .replace(/[^a-z]+/g, ' ')
         .trim();
+    // "the app opens in dark mode by default": the mode the app shows
+    // first is set where it renders the theme; the theme keeps both.
+    if (
+      /\b(?:opens?|starts?|launch(?:es)?|loads?|boots?)\s+(?:up\s+)?in\s+(dark|light)(?:\s+mode)?\b|\b(dark|light)(?:\s+mode)?\s+by\s+default\b|\bdefaults?\s+to\s+(dark|light)\b/.test(
+        t,
+      ) &&
+      !c.parts.length &&
+      !c.colors.length
+    ) {
+      const w =
+        /\b(dark|light)\b/.exec(
+          t.replace(
+            /^.*?\b(?=(?:opens?|starts?|launch|loads?|boots?|dark|light|defaults?)\b)/,
+            '',
+          ),
+        )?.[1] ?? 'dark';
+      return {
+        text: `the mode the app shows first is set where it renders the theme: <Theme mode="${w}"> (its default, "system", follows the device), and the theme keeps both modes for the switch; for a theme that is only ever ${w}, the line below: mode ${w}-only`,
+        options: [[set('mode', `${w}-only`)]],
+      };
+    }
     if (
       onlyModes &&
       /\bdark[- ]?(mode|theme)? only\b|\bonly dark\b|\bdark-only\b|\bdark by default\b|\bdefault(s)? to dark\b|\balways dark\b|\b(?:no|without (?:a )?)light mode\b/.test(
@@ -19969,7 +20236,12 @@ export function draftAnswer(ctx, env, question) {
         /\bless (desaturat\w*|muted|dull|washed|pastel|gr[ae]y\w*)\b/.test(t)
           ? false
           : dim.test(t) || (/\bless\b/.test(t) && !/\bmore\b/.test(t));
-      const step = set('vibrancy', less ? 'less' : 'more');
+      // (A number said is the vibrancy itself: "vibrancy 0", grayscale.)
+      const said = /\bvibrancy\s+(\d{1,3})\b/.exec(t)?.[1];
+      const step = set(
+        'vibrancy',
+        said != null && Number(said) <= 100 ? said : less ? 'less' : 'more',
+      );
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       // A color dial counts when the step changes the shades made from it
       // (a warm gray has a little hue to take out), as set measures it.
@@ -19993,6 +20265,20 @@ export function draftAnswer(ctx, env, question) {
         mode: null,
         saturation: less ? 'less' : 'more',
       });
+      if (hasColor && said != null) {
+        const vibNow = Number(
+          [...env.data.settings].reverse().find(x => x.thing === 'vibrancy')
+            ?.value ?? 50,
+        );
+        return {
+          text: `${help}: vibrancy ${said}${Number(said) === 0 ? ', every generated color a gray' : ''}.`,
+          options: [[step]],
+          intent: {
+            ...vibIntent,
+            saturation: Number(said) < vibNow ? 'less' : 'more',
+          },
+        };
+      }
       if (hasColor)
         return {
           text: `${help}; ${less ? 'less' : 'more'} steps it by 10.`,
@@ -20060,11 +20346,15 @@ export function draftAnswer(ctx, env, question) {
       }
       // No color to change, and none was asked for: never pick one.
       return {
-        text: less
-          ? `${help}, and every color ${env.slug} has is a gray, so there is no color to take out.`
-          : `${help}, and every color ${env.slug} has is a gray, so there is nothing to saturate yet. Set a color first: how accent shows how.`,
+        text:
+          less || (said != null && Number(said) === 0)
+            ? `${help}, and every color ${env.slug} has is a gray, so there is no color to take out.`
+            : `${help}, and every color ${env.slug} has is a gray, so there is nothing to saturate yet. Set a color first: how accent shows how.`,
         options: [],
-        lookup: less ? `${HOW} colors` : `${HOW} accent`,
+        lookup:
+          less || (said != null && Number(said) === 0)
+            ? `${HOW} colors`
+            : `${HOW} accent`,
       };
     }
     if (
@@ -20430,6 +20720,24 @@ export function draftAnswer(ctx, env, question) {
           lookup: `${HOW} ${dial}`,
         };
       color = shift(seedNow, lighter ? 0.2 : -0.2);
+      // ("darker so it reads on the page": on, step by step, until the
+      // color stands 3:1 against the light page, as a mark must.)
+      if (/\breadable\b/.test(c.text) && color && !lighter) {
+        const page = parseColor(
+          String(current('--color-background-body', 'light') ?? '#ffffff'),
+        );
+        let k = 0.2;
+        while (
+          page &&
+          color &&
+          parseColor(color) &&
+          ratio(/** @type {number[]} */ (parseColor(color)), page) < 3 &&
+          k < 0.9
+        ) {
+          k += 0.1;
+          color = shift(seedNow, -k);
+        }
+      }
       // The dark half the editor generates from that seed can move the
       // other way; the dark token is stepped the asked way from its own
       // value, in the same answer.
@@ -22417,7 +22725,7 @@ export function draftAnswer(ctx, env, question) {
     result.some(d => d.options.some(o => o.length))
   ) {
     const STOP =
-      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone)$/;
+      /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich)$/;
     const notTaken = [
       ...new Set(
         (q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).filter(
