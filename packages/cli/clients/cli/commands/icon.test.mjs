@@ -11,6 +11,15 @@ import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+
+/** The no-set next step as text prints it: each command as the CLI picks it. */
+const textNext = () =>
+  `[next] Install a package that ships an icon set, then run \`${formatCliCommand('astryx experimental icon use <set>')}\`. To make your own set, read \`${formatCliCommand('astryx docs cli/experimental/icon-sets')}\`.`;
+
+/** The same next step in JSON, with bare commands. */
+const JSON_NEXT =
+  'Install a package that ships an icon set, then run `astryx experimental icon use <set>`. To make your own set, read `astryx docs cli/experimental/icon-sets`.';
 
 /** @type {string} */
 let tmp;
@@ -112,10 +121,7 @@ describe('astryx experimental icon with no icon set installed', () => {
       "Core draws these names with no set; pass one to a component's icon prop:",
     );
     expect(res.stdout).toMatch(/- close: /);
-    expect(res.stdout).toContain(
-      '[next] Install a package that ships an icon set, then run `astryx experimental icon use <set>`.',
-    );
-    expect(res.stdout).toContain('astryx docs cli/experimental/icon-sets');
+    expect(res.stdout).toContain(textNext());
     expect(res.stdout).not.toContain('--list');
 
     const json = JSON.parse(
@@ -127,7 +133,7 @@ describe('astryx experimental icon with no icon set installed', () => {
       matches: [],
       reason: 'No icon set is installed.',
       definitions: [{name: 'delete', builtIn: false}],
-      next: expect.stringContaining('astryx experimental icon use <set>'),
+      next: JSON_NEXT,
     });
     const text = await runCli(['experimental', 'icon', 'delete'], bare);
     expect(text.stdout).toContain(
@@ -163,33 +169,49 @@ describe('astryx experimental icon with no icon set installed', () => {
   it('--list gives the same next step and never points back at the finder', async () => {
     const res = await runCli(['experimental', 'icon', '--list'], bare);
     expect(res.code).toBe(0);
-    expect(res.stdout).toContain(
-      '[next] Install a package that ships an icon set',
-    );
+    expect(res.stdout).toContain(textNext());
     expect(res.stdout).not.toContain('experimental icon <words>');
     const json = JSON.parse(
       (await runCli(['experimental', 'icon', '--list', '--json'], bare)).stdout,
     );
     expect(json.data).toMatchObject({
       status: 'none',
-      next: expect.stringContaining('astryx experimental icon use <set>'),
+      next: JSON_NEXT,
     });
   });
 
-  it('use and --set say no set is installed and how to get one', async () => {
+  it('use, --set, and <set>/<id> say no set is installed and how to get one', async () => {
     for (const args of [
       ['experimental', 'icon', 'use', 'outline'],
       ['experimental', 'icon', 'close', '--set', 'outline'],
+      ['experimental', 'icon', 'outline/x'],
     ]) {
       const json = await runCli([...args, '--json'], bare);
       expect(json.code).toBe(1);
       const body = JSON.parse(json.stdout);
       expect(body.code).toBe('ERR_NOT_FOUND');
-      expect(body.error).toContain('no icon set is installed');
-      expect(body.error).toContain('astryx experimental icon use <set>');
+      expect(body.error).toBe(
+        'No icon set named "outline": no icon set is installed.',
+      );
+      expect(body.suggestions).toEqual([
+        {
+          name: 'astryx experimental icon use <set>',
+          reason: 'after you install a package that ships an icon set',
+        },
+        {
+          name: 'astryx docs cli/experimental/icon-sets',
+          reason: 'make your own icon set',
+        },
+      ]);
       const text = await runCli(args, bare);
       expect(text.code).toBe(1);
       expect(text.stderr).toContain('no icon set is installed');
+      expect(text.stderr).toContain(
+        formatCliCommand('astryx experimental icon use <set>'),
+      );
+      expect(text.stderr).toContain(
+        formatCliCommand('astryx docs cli/experimental/icon-sets'),
+      );
     }
   });
 

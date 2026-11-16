@@ -52,6 +52,7 @@ import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
+import {noIconSetNext} from '../../../../foundation/discovery/icon-set-discovery.mjs';
 
 /** How many missing icons an `add --all` receipt names in text. */
 const MISSING_SHOWN = 10;
@@ -244,7 +245,9 @@ export function registerExperimentalIcon(group, program) {
                   list(others.map(each => `${each.name}: ${each.description}`)),
                 ]
               : []),
-            text(`[next] ${result.data.next}`),
+            text(
+              `[next] ${noIconSetNext(command => formatCliCommand(command))}`,
+            ),
           );
           return answered;
         }
@@ -351,7 +354,13 @@ export function registerExperimentalIcon(group, program) {
           reason,
         }),
         ...(next
-          ? [text(`${sets.length === 0 ? '[next]' : '[warn]'} ${next}`)]
+          ? [
+              text(
+                sets.length === 0
+                  ? `[next] ${noIconSetNext(command => formatCliCommand(command))}`
+                  : `[warn] ${next}`,
+              ),
+            ]
           : []),
         ...(sets.length > 0
           ? [

@@ -16,7 +16,7 @@ import {
   importLine,
   loadIconSets,
   missingIconLook,
-  NO_ICON_SET_NEXT,
+  noIconSetNext,
 } from '../_adapter.mjs';
 import {
   answeringMatches,
@@ -185,7 +185,7 @@ function noIconSet(query, limit) {
         builtIn: doc.builtIn === true,
         description: doc.description,
       })),
-      next: NO_ICON_SET_NEXT,
+      next: noIconSetNext(),
     },
   };
 }

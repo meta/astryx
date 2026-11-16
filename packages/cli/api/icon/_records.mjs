@@ -24,7 +24,7 @@ export {
   rankIcons,
   scoreIcon,
 } from './_adapter.mjs';
-import {NO_ICON_SET_NEXT} from './_adapter.mjs';
+import {ICON_SET_GUIDE_COMMAND, ICON_USE_COMMAND} from './_adapter.mjs';
 
 /** @typedef {import('../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
@@ -75,8 +75,14 @@ export function unusableSet(sets, withdrawn, selector) {
   if (reason == null && sets.length === 0) {
     return withdrawn.length === 0
       ? new AstryxError(
-          `No icon set named "${selector}": no icon set is installed. ${NO_ICON_SET_NEXT}`,
-          [],
+          `No icon set named "${selector}": no icon set is installed.`,
+          [
+            {
+              name: ICON_USE_COMMAND,
+              reason: 'after you install a package that ships an icon set',
+            },
+            {name: ICON_SET_GUIDE_COMMAND, reason: 'make your own icon set'},
+          ],
           ERROR_CODES.ERR_NOT_FOUND,
         )
       : new AstryxError(
