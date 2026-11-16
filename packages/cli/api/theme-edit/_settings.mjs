@@ -5111,8 +5111,37 @@ export function roleReach(ctx, data, base) {
           ['color', 'text'],
         ])) {
           const v = look[prop];
-          if (typeof v !== 'string' || /var\(/.test(v)) continue;
-          if (!modes.every(m => literal(v, m) != null)) continue;
+          if (typeof v !== 'string') continue;
+          // A token of another family (stone's info badge on the
+          // categorical blue): the role token the base theme gives that same
+          // color takes its place, so the look stays and follows the role.
+          const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
+          if (ref) {
+            if (new RegExp(`-${named}(-|$)`).test(ref)) continue;
+            const same = (/** @type {string} */ k) =>
+              modes.filter(
+                m =>
+                  base?.[m]?.[k] != null &&
+                  String(base[m][k]).toLowerCase() ===
+                    String(base?.[m]?.[ref] ?? '').toLowerCase(),
+              ).length;
+            const pick = (
+              side === 'text'
+                ? [
+                    `--color-on-${named}-muted`,
+                    `--color-text-${named}`,
+                    `--color-on-${named}`,
+                  ]
+                : [`--color-${named}-muted`, `--color-${named}`]
+            )
+              .map(k => ({k, n: same(k)}))
+              .filter(x => x.n > 0)
+              .sort((x, y) => y.n - x.n)[0]?.k;
+            if (pick) {
+              add(prop, `var(${pick})`);
+              continue;
+            }
+          } else if (!modes.every(m => literal(v, m) != null)) continue;
           const core = (ctx.C.partReads(part, side) ?? []).find(
             (/** @type {any} */ r) => r.when.includes(`variant=${named}`),
           )?.token;
