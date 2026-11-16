@@ -79,6 +79,9 @@ const LIFECYCLE_FLAGS = new Set([
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 
+/** The days a sample date and range of days stand on. */
+const SAMPLE_DAYS = {start: '2026-01-12', end: '2026-01-16'};
+
 /**
  * A sample value for a required prop the doc declares, from its type: the
  * component's name for text, false for a flag, the first value of a union,
@@ -104,6 +107,10 @@ function sampleOf(name, type) {
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  // A date, and a range of days (a calendar's in range): fixed days, so
+  // the part data reads the same whatever day it is drawn on.
+  if (t === 'ISODateString') return SAMPLE_DAYS.start;
+  if (t === 'DateRange') return {...SAMPLE_DAYS};
   // A value the type lets be null (a file input's chosen file): none
   // chosen, when nothing plainer stands for it.
   if (/(^|\|)\s*null\s*(\||$)/.test(type)) return null;
@@ -307,7 +314,17 @@ export function catalogVariants(project, name, cap, opts = {}) {
       info.props?.[k] &&
       !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
   ))
-    for (const v of values[p] ?? [])
+    for (const v of values[p] ?? []) {
+      // A value kind the look names (a calendar's `range` mode, whose value
+      // is a DateRange): a sample of that kind, so what Core draws for it
+      // (the days in the range) is read too.
+      const kind = String(info.props?.value?.type ?? '')
+        .split('|')
+        .map(x => x.trim())
+        .find(x =>
+          new RegExp(`${v[0]?.toUpperCase() ?? ''}${v.slice(1)}$`).test(x),
+        );
+      const sample = kind ? sampleOf(name, kind) : undefined;
       variants.push({
         label: v,
         // A status like `{type: 'error', message?: string}` takes the
@@ -315,8 +332,10 @@ export function catalogVariants(project, name, cap, opts = {}) {
         props: {
           ...base,
           [p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v,
+          ...(sample != null && /^[a-z]/.test(v) ? {value: sample} : {}),
         },
       });
+    }
   // The states the doc names that a prop sets: checked (a boolean value)
   // and disabled. The label says the state shown.
   const states = new Set(info.targets.flatMap(t => t.states ?? []));

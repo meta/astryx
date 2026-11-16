@@ -14381,6 +14381,41 @@ export function draftAnswer(ctx, env, question) {
     const where = on
       ? ` on ${on}${f.when ? ` (${f.when.replace(':', ' ')})` : ''}${f.state ? ` when ${f.state}` : ''}`
       : ' for the whole theme';
+    // A part drawn inside an overlay that paints its edge for it (a
+    // typeahead's list, inside the popover it opens in): the shadow or the
+    // border is the overlay's, so the answer points there, saying that a
+    // change on it reaches every one of those overlays; nothing is written.
+    if (on && !FAMILIES[on] && (a === 'shadow' || a === 'border')) {
+      const props =
+        a === 'shadow'
+          ? ['box-shadow']
+          : ['border', 'border-color', 'border-width', 'border-style'];
+      const rec = C.MAP[one(on)];
+      const holder =
+        rec && !props.some(x => rec.own?.[x] || rec.at?.[x])
+          ? Object.keys(C.MAP)
+              .filter(
+                k =>
+                  k !== one(on) &&
+                  (C.MAP[k].contains ?? []).includes(one(on)) &&
+                  props.some(x => C.MAP[k].own?.[x]) &&
+                  ctx.project.components[
+                    String(ctx.project.target.get(k)?.component ?? '')
+                  ]?.category === 'Overlay',
+              )
+              .sort(
+                (x, y) =>
+                  (C.MAP[x].contains ?? []).length -
+                  (C.MAP[y].contains ?? []).length,
+              )[0]
+          : undefined;
+      if (holder)
+        return {
+          text: `${on} draws no ${a} of its own: the ${holder} it opens in draws it, and a change on ${holder} reaches every ${holder}; nothing is written. To change every ${holder}'s ${a}, set it --on ${holder}`,
+          options: [],
+          lookup: `${HOW} ${holder}`,
+        };
+    }
     /**
      * What a part has now for a property in this clause's state or variant
      * ("on hover"): that scope's own setting, else the plain one.
