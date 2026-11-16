@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Keep single-line Text and Heading truncation from splitting words when wrapping is restored
+[feat] Change the single-line Text and Heading truncation default from `break-all` to `break-word`; pass `wordBreak="break-all"` to opt into splitting inside words
 
 @bezabyte
