@@ -220,4 +220,11 @@ describe('a page from a description', () => {
     const r = await themeEditPreviewAdd(CONCERT, {cwd, theme: 't'});
     expect(r.data.added.length).toBe(1);
   }, 240_000);
+
+  it('is added from a closest start build gives no fit for', async () => {
+    // The page pick scores no table template, so build reports no fit: no
+    // signal, never a loose one.
+    const r = await themeEditPreviewAdd('a table of orders', {cwd, theme: 't'});
+    expect(r.data.added.length).toBe(1);
+  }, 240_000);
 });

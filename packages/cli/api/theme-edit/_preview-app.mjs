@@ -3715,8 +3715,9 @@ async function rankedPages(
   // build itself starts from the app shell ("checkout"). Otherwise a page is
   // added only when build is sure of its start: never from the app shell,
   // nor from a page its page pick gives less than a clear fit.
-  // Only a start the page pick chose is judged by its fit: a direct match
-  // stands on search's own match ("a login page").
+  // A closest start is judged by its fit, when build gives one: a direct
+  // match stands on search's own match ("a login page"), and a start on a
+  // template the page pick does not score has no fit to judge.
   const loose =
     !!start &&
     start.basis === 'closest' &&
