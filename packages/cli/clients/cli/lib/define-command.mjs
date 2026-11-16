@@ -325,11 +325,13 @@ export function addDocHelp(cmd, doc) {
   )
     cmd.addHelpText('before', () => {
       const lead = (doc.examples ?? [])
+        .filter(({cli}) => exampleShown(cmd, cli))
         .slice(0, FIRST)
         .flatMap(({label, cli}) => [
           ...(label ? [`  # ${label}`] : []),
           `  ${formatCliCommand(cli)}`,
         ]);
+      if (lead.length === 0) return '';
       return `${text(['Start here:', ...lead].join('\n')).toString()}\n`;
     });
   addExitCodesHelp(cmd, doc.exitCodes);

@@ -559,6 +559,9 @@ describe('a project whose only base is not Core', () => {
       expect(rootText).not.toContain('theme build reports');
       const rootJson = astryx(['--json', 'help'], dir).json();
       expect(JSON.stringify(rootJson.data)).not.toContain('experimental theme editor');
+      const themeLab = astryx(['experimental', 'theme', '--help'], dir).stdout;
+      expect(themeLab).not.toContain('experimental theme editor');
+      expect(themeLab).not.toContain('experimental theme preview');
       const experimentalJson = astryx(['experimental', '--help', '--json'], dir).json();
       expect(JSON.stringify(experimentalJson.data.subcommands)).not.toContain('editor set');
       const themeJson = astryx(['theme', '--help', '--json'], dir).json();
