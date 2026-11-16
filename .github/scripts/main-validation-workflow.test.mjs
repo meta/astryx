@@ -21,19 +21,51 @@ const TIP = 'a'.repeat(40);
 const OLDER = 'b'.repeat(40);
 
 describe('main validation legs', () => {
-  it.each([
-    ['test-ui', 6],
-    ['test-node', 6],
-  ])('%s runs %i legs at once, each inside the job budget', (lane, legs) => {
-    const job = workflow.jobs[lane];
-    expect(job.strategy.matrix.shard).toEqual(
-      Array.from({length: legs}, (_, index) => index + 1),
-    );
-    // No hold: every leg starts when the run does.
+  /** Every leg starts when the run does, inside the job budget. */
+  const expectUnheld = job => {
     expect(job.strategy['max-parallel']).toBeUndefined();
     expect(job.strategy['fail-fast']).toBe(false);
     expect(job['timeout-minutes']).toBe(15);
     expect(job['runs-on']).toBe('ubuntu-latest');
+  };
+
+  it('test-ui runs 6 legs at once, each inside the job budget', () => {
+    const job = workflow.jobs['test-ui'];
+    expect(job.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
+    expectUnheld(job);
+  });
+
+  it('test-node runs the legs main-commit plans from the recorded times, at most twelve, each inside the job budget', () => {
+    const job = workflow.jobs['test-node'];
+    expect(job.strategy.matrix.shard).toBe(
+      "${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}",
+    );
+    expectUnheld(job);
+    const commit = workflow.jobs['main-commit'];
+    expect(commit.outputs['node-shards']).toBe(
+      '${{ steps.node-legs.outputs.shards }}',
+    );
+    const plan = commit.steps.find(step => step.id === 'node-legs');
+    // Main's Node legs run the swizzle proof's slices too: `--main`.
+    expect(plan).toMatchObject({
+      if: "github.event_name != 'push'",
+      'continue-on-error': true,
+      'working-directory': '.ci-admission',
+      run: 'node scripts/vitest-node-legs.mjs plan --main --github-output',
+    });
+    // The sparse checkout holds the planner and what it reads.
+    const checkout = commit.steps.find(
+      step => step.with?.path === '.ci-admission',
+    );
+    expect(checkout.with['sparse-checkout'].split('\n')).toEqual(
+      expect.arrayContaining(['scripts/lib', '.github/scripts/lib']),
+    );
+    // Planned before the run waits for room, so the legs it starts are the
+    // legs it planned.
+    const names = commit.steps.map(step => step.name);
+    expect(names.indexOf(plan.name)).toBeLessThan(
+      names.indexOf('Wait for room under the CI ceiling'),
+    );
   });
 });
 
