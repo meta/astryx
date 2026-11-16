@@ -113,7 +113,12 @@ describe('renderComputerAgentText', () => {
       expect(text).toContain(
         'Use it when you build or change UI, pick components, or style or theme an app.',
       );
-      expect(text).toContain("Start with `astryx search '<what you need>'`.");
+      expect(text).toContain(
+        'To make a page, run `astryx build "<what the page is for>"` first, as the WORKFLOW below says.',
+      );
+      expect(text).toContain(
+        "Start with `astryx search '<what you need>'` for anything else.",
+      );
     }
   });
 

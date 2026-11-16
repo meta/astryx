@@ -465,9 +465,10 @@ works on is `spec:AST-040` FR9's.
   - Every agent text a release prints or writes names only the command name FR5
     picks for its surface. The computer-level text is its own short text: it
     tells an agent that Astryx is on the computer, when it is relevant, and to
-    start with `astryx search`; it names no version, no release-specific
-    command or prop, and only entry points every release keeps (`search`,
-    `docs`, `component`, and the like), so an older copy never misleads.
+    start a page with `astryx build` and anything else with `astryx search`;
+    it names no version, no release-specific command or prop, and only entry
+    points every release keeps (`search`, `docs`, `component`, and the like),
+    so an older copy never misleads.
     It also gives the build route the project agent docs give, through their
     shared workflow wording: work in a project folder, new or existing, adding
     `@astryxdesign/core` and `@astryxdesign/cli`, or, where the project already
