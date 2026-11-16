@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {fireEvent, render, screen} from '@testing-library/react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, describe, expect, it, vi, beforeEach} from 'vitest';
 import {Text} from '../Text/Text';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type {DropdownMenuOption} from './DropdownMenu';
@@ -31,6 +31,36 @@ function renderList() {
     />,
   );
 }
+
+// The touch sheet resolves a press by its point. jsdom has no
+// elementFromPoint, so a point resolves to the element the pointer event is
+// dispatched on.
+let pointerTarget: Element | null = null;
+const POINTER_TYPES = [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'pointercancel',
+];
+function recordPointerTarget(event: Event) {
+  pointerTarget = event.target instanceof Element ? event.target : null;
+}
+beforeEach(() => {
+  for (const type of POINTER_TYPES) {
+    document.addEventListener(type, recordPointerTarget, true);
+  }
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: () => pointerTarget,
+  });
+});
+afterEach(() => {
+  for (const type of POINTER_TYPES) {
+    document.removeEventListener(type, recordPointerTarget, true);
+  }
+  Reflect.deleteProperty(document, 'elementFromPoint');
+  pointerTarget = null;
+});
 
 describe('MenuBottomSheetActionList', () => {
   it('a cancelled finger clears the row it lit in the sheet\u2019s action list; a mouse keeps its highlight (spec:AST-094 FR28, spec:AST-017 FR59)', () => {

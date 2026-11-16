@@ -20,8 +20,8 @@ import {
   MENU_PRESS_LONG_PRESS_MS,
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
+  elementAtMenuPoint,
   useMenuPress,
-  useMenuPressInternal,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 import {holdInput, isInputShield} from '../Layer/inputHold';
@@ -285,7 +285,7 @@ describe('useMenuPress — an input hold over the menu', () => {
   });
 });
 
-describe('useMenuPressInternal — wholeRowSelector', () => {
+describe('useMenuPress — a hitTest that maps the rest of a row to its item', () => {
   afterEach(() => {
     Reflect.deleteProperty(document, 'elementFromPoint');
   });
@@ -293,21 +293,42 @@ describe('useMenuPressInternal — wholeRowSelector', () => {
   const ACTION = 'button:not(:disabled)';
 
   /**
+   * The point lookup a Core sheet builds: the menu's own lookup, then a point
+   * in a row's content resolves to the row's own item, its direct child.
+   */
+  function rowItemAt(menu: HTMLElement | null, x: number, y: number) {
+    const element = elementAtMenuPoint(menu, document, x, y);
+    if (element == null || element.closest(ACTION) != null) {
+      return element;
+    }
+    const row = element.closest('li');
+    for (const child of row?.children ?? []) {
+      if (child.matches(ACTION)) {
+        return child;
+      }
+    }
+    return element;
+  }
+
+  /**
    * Rows whose action is a part of the row, beside an icon, as a list row
    * renders them. A section row holds rows of its own.
    */
   function RowList({
     onSelect,
-    wholeRowSelector,
-    isPublic = false,
+    hasRowLookup = true,
   }: {
     onSelect: (label: string) => void;
-    wholeRowSelector?: string;
-    isPublic?: boolean;
+    hasRowLookup?: boolean;
   }) {
     const menuRef = useRef<HTMLUListElement>(null);
-    const usePress = isPublic ? useMenuPress : useMenuPressInternal;
-    const press = usePress({menuRef, itemSelector: ACTION, wholeRowSelector});
+    const press = useMenuPress({
+      menuRef,
+      itemSelector: ACTION,
+      hitTest: hasRowLookup
+        ? (x, y) => rowItemAt(menuRef.current, x, y)
+        : undefined,
+    });
     const actionRow = (label: string, isDisabled = false) => (
       <li key={label} data-testid={`row-${label}`}>
         <span data-testid={`icon-${label}`}>*</span>
@@ -340,18 +361,22 @@ describe('useMenuPressInternal — wholeRowSelector', () => {
     );
   }
 
-  function press(element: Element) {
+  function pointAt(element: Element) {
     Object.defineProperty(document, 'elementFromPoint', {
       configurable: true,
       value: () => element,
     });
+  }
+
+  function press(element: Element) {
+    pointAt(element);
     fireEvent.pointerDown(element, touch());
     fireEvent.pointerUp(element, touch());
   }
 
   it('a press on the rest of a row picks that row’s own item', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} wholeRowSelector="li" />);
+    render(<RowList onSelect={onSelect} />);
     press(screen.getByTestId('icon-B'));
     expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
     onSelect.mockClear();
@@ -363,25 +388,19 @@ describe('useMenuPressInternal — wholeRowSelector', () => {
   });
 
   it('a finger that moves onto the rest of a row highlights the row’s item', () => {
-    render(<RowList onSelect={() => {}} wholeRowSelector="li" />);
+    render(<RowList onSelect={() => {}} />);
     const a = screen.getByRole('button', {name: 'A'});
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: () => a,
-    });
+    pointAt(a);
     fireEvent.pointerDown(a, touch());
     const icon = screen.getByTestId('icon-B');
-    Object.defineProperty(document, 'elementFromPoint', {
-      configurable: true,
-      value: () => icon,
-    });
+    pointAt(icon);
     fireEvent.pointerMove(icon, touch());
     expect(screen.getByRole('button', {name: 'B'})).toHaveFocus();
   });
 
   it('picks nothing for a row with no enabled item, even with a control in its content, a row around other rows, or content outside every row', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} wholeRowSelector="li" />);
+    render(<RowList onSelect={onSelect} />);
     press(screen.getByTestId('icon-Off'));
     press(screen.getByTestId('row-Off'));
     press(screen.getByRole('heading', {name: 'Section'}));
@@ -389,16 +408,9 @@ describe('useMenuPressInternal — wholeRowSelector', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('the public useMenuPress takes no row lookup, even from an untyped caller', () => {
+  it('without the row lookup, a press beside a row’s item picks nothing, as before', () => {
     const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} wholeRowSelector="li" isPublic />);
-    press(screen.getByTestId('icon-B'));
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-
-  it('without it, a press beside a row’s item picks nothing, as before', () => {
-    const onSelect = vi.fn();
-    render(<RowList onSelect={onSelect} />);
+    render(<RowList onSelect={onSelect} hasRowLookup={false} />);
     press(screen.getByTestId('icon-B'));
     expect(onSelect).not.toHaveBeenCalled();
     press(screen.getByRole('button', {name: 'B'}));

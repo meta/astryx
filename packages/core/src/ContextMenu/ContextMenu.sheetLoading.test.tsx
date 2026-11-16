@@ -11,7 +11,7 @@
  *   sheet's modules.
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -51,6 +51,36 @@ async function settle() {
     await new Promise(resolve => setTimeout(resolve, 50));
   });
 }
+
+// The touch sheet resolves a press by its point. jsdom has no
+// elementFromPoint, so a point resolves to the element the pointer event is
+// dispatched on.
+let pointerTarget: Element | null = null;
+const POINTER_TYPES = [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'pointercancel',
+];
+function recordPointerTarget(event: Event) {
+  pointerTarget = event.target instanceof Element ? event.target : null;
+}
+beforeEach(() => {
+  for (const type of POINTER_TYPES) {
+    document.addEventListener(type, recordPointerTarget, true);
+  }
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: () => pointerTarget,
+  });
+});
+afterEach(() => {
+  for (const type of POINTER_TYPES) {
+    document.removeEventListener(type, recordPointerTarget, true);
+  }
+  Reflect.deleteProperty(document, 'elementFromPoint');
+  pointerTarget = null;
+});
 
 describe('ContextMenu sheet loading', () => {
   it('opens a popover menu without loading the sheet action list', async () => {

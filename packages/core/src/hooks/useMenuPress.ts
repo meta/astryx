@@ -6,8 +6,8 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, useMenuPressInternal (with the internal whole-row
- *   lookup), the marker attributes and the activation mark
+ * @output useMenuPress, the marker attributes, the activation mark and
+ *   elementAtMenuPoint (internal: the point lookup a caller's hitTest builds on)
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -152,26 +152,38 @@ const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 let isModelActivation = false;
 
 /**
- * The item that `element`'s whole row acts through: the direct child of that
- * row that matches `itemSelector`. A control inside the row's content is not
- * that item. A row that holds other rows, as a section does, has no item of
- * its own.
+ * The element under a viewport point, as a menu's press resolves it. Internal:
+ * the hooks entry point does not export it. A Core menu's `hitTest` calls it
+ * first, so that a hit test keeps the menu's own lookup. `doc` must have
+ * `elementFromPoint`.
  */
-function findRowAction(
-  element: Element,
-  itemSelector: string,
-  wholeRowSelector: string,
-): HTMLElement | null {
-  const wholeRow = element.closest(wholeRowSelector);
-  if (wholeRow == null) {
-    return null;
+export function elementAtMenuPoint(
+  menu: HTMLElement | null,
+  doc: Document,
+  x: number,
+  y: number,
+): Element | null {
+  // Hit-test in the menu's own tree: inside a shadow root the document
+  // answers with the shadow host, never the row under the pointer.
+  const tree = menu?.getRootNode();
+  const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
+    tree != null &&
+    tree !== doc &&
+    typeof (tree as ShadowRoot).elementFromPoint === 'function'
+      ? (tree as ShadowRoot)
+      : doc;
+  const element = scope.elementFromPoint(x, y);
+  if (isInputShield(element) && typeof scope.elementsFromPoint === 'function') {
+    // An input hold's shield covers the viewport while the menu enters. It
+    // keeps new input away, but the press in flight still reaches the row
+    // under it. So the hit test sees through that shield only.
+    return (
+      scope
+        .elementsFromPoint(x, y)
+        .find(candidate => !isInputShield(candidate)) ?? null
+    );
   }
-  for (const child of wholeRow.children) {
-    if (child.matches(itemSelector)) {
-      return child as HTMLElement;
-    }
-  }
-  return null;
+  return element;
 }
 
 /**
@@ -251,7 +263,7 @@ export interface UseMenuPressOptions {
  * The options the model runs on: the public ones, plus the touch model the
  * hook picks from the delay and the scroll-view probe.
  */
-interface MenuPressConfig extends UseMenuPressInternalOptions {
+interface MenuPressConfig extends UseMenuPressOptions {
   /**
    * How a finger on the trigger opens the menu and picks from it.
    * `'pointer'`: after `longPressDelayMs`, and the opening press follows the
@@ -266,22 +278,6 @@ interface MenuPressConfig extends UseMenuPressInternalOptions {
    * the content-touch delay.
    */
   isInScrollView?: (control: Element) => boolean;
-}
-
-/**
- * The options of {@link useMenuPressInternal}: the public options and the
- * internal `wholeRowSelector`.
- */
-export interface UseMenuPressInternalOptions extends UseMenuPressOptions {
-  /**
-   * Selector matching a whole row whose item (the `itemSelector` match) is
-   * only a part of it. An example is a list row's action with an icon beside
-   * it. A pointer over the rest of that row (its icon, end content or padding)
-   * then picks the row's item. That item is the direct child of the row that
-   * matches `itemSelector`. If no direct child matches, the pointer picks no
-   * item.
-   */
-  wholeRowSelector?: string;
 }
 
 export interface UseMenuPressReturn {
@@ -434,20 +430,6 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
-  // The whole-row lookup is internal: an untyped caller's `wholeRowSelector`
-  // does not reach the model.
-  const {wholeRowSelector: _wholeRowSelector, ...options} =
-    input as UseMenuPressInternalOptions;
-  return useMenuPressInternal(options);
-}
-
-/**
- * useMenuPress, with the options internal to Core's menus. The hooks entry
- * point does not export it.
- */
-export function useMenuPressInternal(
-  input: UseMenuPressInternalOptions,
-): UseMenuPressReturn {
   // The touch model is the hook's own: an untyped caller's `touchModel` does
   // not reach the model.
   const {touchModel: _touchModel, ...publicOptions} = input as MenuPressConfig;
@@ -520,36 +502,14 @@ export function useMenuPressInternal(
 
   const resolvePoint = useCallback(
     (event: PointerEvent): ResolvedPoint => {
-      const {menuRef, triggerRef, itemSelector, wholeRowSelector, hitTest} =
-        optionsRef.current;
+      const {menuRef, triggerRef, itemSelector, hitTest} = optionsRef.current;
       const menu = menuRef.current;
       const doc = getDocument();
       let element: Element | null;
       if (hitTest != null) {
         element = hitTest(event.clientX, event.clientY);
       } else if (typeof doc.elementFromPoint === 'function') {
-        // Hit-test in the menu's own tree: inside a shadow root the document
-        // answers with the shadow host, never the row under the pointer.
-        const tree = menu?.getRootNode();
-        const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
-          tree != null &&
-          tree !== doc &&
-          typeof (tree as ShadowRoot).elementFromPoint === 'function'
-            ? (tree as ShadowRoot)
-            : doc;
-        element = scope.elementFromPoint(event.clientX, event.clientY);
-        if (
-          isInputShield(element) &&
-          typeof scope.elementsFromPoint === 'function'
-        ) {
-          // An input hold's shield covers the viewport while the menu enters.
-          // It keeps new input away, but the press in flight still reaches the
-          // row under it. So the hit test sees through that shield only.
-          element =
-            scope
-              .elementsFromPoint(event.clientX, event.clientY)
-              .find(candidate => !isInputShield(candidate)) ?? null;
-        }
+        element = elementAtMenuPoint(menu, doc, event.clientX, event.clientY);
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
@@ -562,9 +522,6 @@ export function useMenuPressInternal(
       let row: HTMLElement | null = null;
       if (isInMenu && element != null) {
         row = element.closest<HTMLElement>(itemSelector);
-        if (row == null && wholeRowSelector != null) {
-          row = findRowAction(element, itemSelector, wholeRowSelector);
-        }
         if (row != null && !isInMenuTree(row, root)) {
           row = null;
         }

@@ -16,7 +16,7 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {useMenuPressInternal} from '../hooks/useMenuPress';
+import {elementAtMenuPoint, useMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -27,11 +27,38 @@ import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
+
 /**
- * ListItem renders its action as a child of its `li`, with the icon and the end
- * content beside the action, not in it.
+ * The element a press at a point resolves in the sheet. ListItem renders its
+ * action as a direct child of its `li`, with the icon and the end content
+ * beside the action, not in it. So a point anywhere in a row (its icon, end
+ * content or padding) is that row's action. A control in the row's content
+ * keeps its own press. A row that holds other rows, as a section does, has no
+ * action of its own.
  */
-const SHEET_WHOLE_ROW_SELECTOR = 'li';
+function sheetElementAtPoint(
+  list: HTMLElement | null,
+  x: number,
+  y: number,
+): Element | null {
+  const doc = list?.ownerDocument ?? document;
+  if (typeof doc.elementFromPoint !== 'function') {
+    return null;
+  }
+  const element = elementAtMenuPoint(list, doc, x, y);
+  if (element == null || element.closest(SHEET_ROW_SELECTOR) != null) {
+    return element;
+  }
+  const row = element.closest('li');
+  if (row != null) {
+    for (const child of row.children) {
+      if (child.matches(SHEET_ROW_SELECTOR)) {
+        return child;
+      }
+    }
+  }
+  return element;
+}
 
 const styles = stylex.create({
   // The row under a held finger is the highlight; the browser's held-press
@@ -82,10 +109,10 @@ export function MenuBottomSheetActionList({
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  const menuPress = useMenuPressInternal({
+  const menuPress = useMenuPress({
     menuRef: listRef,
     itemSelector: SHEET_ROW_SELECTOR,
-    wholeRowSelector: SHEET_WHOLE_ROW_SELECTOR,
+    hitTest: (x, y) => sheetElementAtPoint(listRef.current, x, y),
   });
 
   // `rowPath` names the row within the whole list: an index alone restarts in
