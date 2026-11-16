@@ -35,10 +35,10 @@ describe('main validation legs', () => {
     expectUnheld(job);
   });
 
-  it('test-node runs the legs main-commit plans from the recorded times, at most eight, each inside the job budget', () => {
+  it('test-node runs the legs main-commit plans from the recorded times, at most twelve, each inside the job budget', () => {
     const job = workflow.jobs['test-node'];
     expect(job.strategy.matrix.shard).toBe(
-      "${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}",
+      "${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}",
     );
     expectUnheld(job);
     const commit = workflow.jobs['main-commit'];

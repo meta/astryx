@@ -116,10 +116,10 @@ jobs:
           path: .ci-admission
           persist-credentials: false
 
-      # The Node legs the unit run needs, planned from the recorded times as a
-      # pull request's are (spec:AST-030 FR22), with the swizzle proof's
-      # slices, which run in Main's Node legs. A plan that cannot run leaves
-      # test-node at its widest, eight legs.
+      # The unit run's Node legs, from the recorded times: as many as shorten
+      # the slowest leg, at most twelve (spec:AST-030 FR22, DEC-17), with the
+      # swizzle proof's slices, which run in Main's Node legs. A plan that
+      # cannot run leaves test-node at its widest, twelve legs.
       - name: Plan the Node legs
         id: node-legs
         if: github.event_name != 'push'
@@ -134,8 +134,8 @@ jobs:
         with:
           # A push runs only the fast checks (main-commit, sync-exports,
           # typecheck, test); a dispatched unit run holds every leg: six UI
-          # legs and at most eight Node legs beside the other lanes.
-          peak: ${{ github.event_name == 'push' && 4 || 16 }}
+          # legs and at most twelve Node legs beside the other lanes.
+          peak: ${{ github.event_name == 'push' && 4 || 20 }}
           main: true
           # It waits for room, up to its own job's limit, looking about every
           # four minutes, and never yields to a pull-request run.
@@ -173,11 +173,10 @@ jobs:
   # Both Vitest lanes split into legs that all run at once, with no
   # max-parallel hold: a validation of main may cost more runner-minutes to
   # finish sooner, so the release train can re-check a fix within minutes
-  # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
-  # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
-  # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
-  # its own) sets the floor, and more legs would not move it. `test` joins the
-  # legs.
+  # (spec:AST-030 FR22, DEC-17). Six UI legs bring every UI leg near the
+  # typecheck lane (~5 minutes). test-node runs as many legs as shorten its
+  # slowest leg, at most twelve, which main-commit plans from the recorded
+  # times. `test` joins the legs.
   # The unit lanes run the full suites only in a dispatched run (about hourly,
   # from main-heavy-lanes.yml; spec:AST-030 FR21), never on a push.
   test-ui:
@@ -213,9 +212,9 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      # The legs main-commit planned from the recorded times; at most eight.
+      # The legs main-commit planned from the recorded times; at most twelve.
       matrix:
-        shard: ${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
+        shard: ${{ fromJSON(needs.main-commit.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
