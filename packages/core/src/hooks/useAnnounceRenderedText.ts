@@ -151,7 +151,8 @@ export function renderedText(element: HTMLElement, exclude?: string): string {
  * Announces when the element appears and whenever its rendered text changes,
  * or only when it appears for an occasion with `isOncePerOccasion`.
  * Pass `isShown: false` for every state where the element is not on screen —
- * including while loading — and the hook stays silent and re-arms.
+ * including while loading — and the hook stays silent and re-arms. With
+ * `isOncePerOccasion`, only a new occasion re-arms it.
  *
  * @param ref - The element whose rendered text to speak
  * @param isShown - Whether that element is currently on screen
