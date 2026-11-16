@@ -230,6 +230,12 @@ describe('withOtherCommand', () => {
         pinned: 1,
       }),
     ).toEqual([list[0], hint, list[1]]);
+    expect(
+      withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {
+        from,
+        pinned: 0,
+      }),
+    ).toEqual(withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {from}));
     const one = [{name: 'a', reason: 'x'}];
     expect(
       withOtherCommand(one, at(MATCH_TIER.exact), 'Zinnet', {

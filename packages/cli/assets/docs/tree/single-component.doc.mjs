@@ -94,66 +94,44 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "Each keyword is what a builder types when they need it and not another, before they know its name. Use two kinds: another name for the whole component, as another library calls it (`accordion` for a collapsible section), and the job in the builder's words (`expand and collapse`, `are you sure`). `{@command search}` ranks a match on a component's name or keywords above one in its description. `{@command component}` never opens a component by a keyword: typing one as a name lists that component first among the suggestions.",
+          text: "Each keyword is what a person types to reach this component, and no other one, before they learn its name. Use two kinds: another name for the whole component, as another library names it, and the job in the person's own words. `{@command search}` ranks a match on a component's name or keywords above any other match. `{@command component}` never opens a component by a keyword: typing one as a name gives that component first in its answer.",
         },
         {
-          type: 'table',
-          headers: [
-            'For a made-up Ribbon, a dismissible strip across the top of the page',
-            'Why',
-          ],
-          rows: [
-            [
-              'Keep `announcement bar`, `site banner`',
-              'Other names for the same component',
-            ],
-            [
-              'Keep `maintenance notice`, `page-wide message`',
-              'The job, in the words a builder types',
-            ],
-            [
-              'Drop `message`, `status`, `info`',
-              'Generic: many components fit, so the word pulls Ribbon into unrelated searches',
-            ],
-            [
-              'Drop `compact`, `sticky`, `success`',
-              'A feature, prop, or variant value, not the component',
-            ],
-            [
-              'Drop `toast`, `dialog`',
-              "Another component's name or job: a search for it should find that component",
-            ],
-            ['Drop `ribbon`', 'Its own name already matches'],
-            [
-              'Drop `header`, `metric`',
-              'A place the component is used, not what it is',
-            ],
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'For a made-up Zorblet, keep `glimmer flange`: another name for the same component.',
+            'Keep `flarp a quandle`: the job, in the words a person types.',
+            'Leave out `blip`: generic, many components fit it.',
+            'Leave out `wobbly`: a feature, not the component itself.',
+            "Leave out `frobnitz`: another component's name or job.",
+            'Leave out `zorblet`: its own name already matches.',
+            'Leave out `snorkel`: a place the component is used, not what it is.',
           ],
         },
         {
           type: 'list',
           style: 'ordered',
           items: [
-            'Start from the current list. Keep every entry that passes, and change only what fails.',
-            'First-answer test: if someone typed only this word, this component should be the first answer. If another component is the right answer, the word belongs to that component, or to none.',
-            'A single word is fine when only this component answers it (`snackbar`). For the job, prefer a two-word phrase: builders type phrases, and generic single words collide.',
-            'When two components want the same word, it goes to the one whose doc says it is that thing. A doc\'s "use X instead" line settles it. When neither owns the word, drop it from both.',
-            'A feature phrase is still a feature (`copy button`, `line numbers`). Keep it only when that feature is the reason to pick this component over every other one.',
-            'Aim for three to eight keywords, best first. An earlier keyword wins a tie, and every keyword you add or drop can reorder ties for other words.',
-            'Add the words builders actually type, as well as removing wrong ones. When no component fits a need, leave it unfilled; do not attach it to the nearest component.',
-            'Every word of a phrase also matches alone in search. A phrase must not hold a word that, on its own, belongs to another component.',
-            'A dropped word moves its search results and suggestions to the components that still declare it. Check who comes first for every word you drop.',
-            'Every keyword must be true according to the doc. "Similar" is not "the same": a meter is not a progress bar.',
+            'Begin with the current keywords. Keep every one that passes, and change only what fails.',
+            'If someone typed only this word, this component should be the first answer. If another component is the right answer, the word belongs to that component, or to none.',
+            'A single word is fine when only this component answers it. For the job, prefer two words: generic single words collide.',
+            'When two components want the same word, it goes to the one that says it is that thing. When neither owns the word, leave it out of both.',
+            'Aim for three to eight keywords, best first. An earlier keyword wins a tie, and each keyword you add or take out can change who wins a tie for other words.',
+            'Add the words people actually type. When no component fits a need, leave it unfilled.',
+            'Each word of a two-word keyword also matches alone. Neither word should belong to another component on its own.',
+            'A word you take out hands its answers to the components that still declare it. Check who comes first for it.',
+            'Each keyword must be true of what the component does. Similar is not the same.',
           ],
         },
         {
           type: 'prose',
-          text: 'Check each added and dropped word. Search should give the component first for a keyword, or in the top three for a phrase that fits two components, and the main words of other components should still find them first. A keyword typed as a component name should list the component first:',
+          text: 'Check each added and removed word:',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '{@command search "announcement bar" --type component}\n{@command component "site banner"}',
+          code: '{@command search "glimmer flange" --type component}\n{@command component "glimmer flange"}',
         },
       ],
     },
