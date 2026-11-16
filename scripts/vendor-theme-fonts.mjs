@@ -8,7 +8,8 @@
  * faces from the Fontsource packages, copies their woff2 files and licenses
  * into the theme's `fonts/` folder, and writes `fonts.css`: local
  * `@font-face` rules with `font-display: swap`, so a page draws at once and
- * never waits on a network. Run it after changing a theme's fonts.
+ * never waits on a network. Run it after changing a theme's fonts, then
+ * format the written stylesheets: `pnpm prettier --write packages/themes/*/fonts.css`.
  * @input packages/themes/<theme>/fonts.google.css; the Fontsource packages,
  *   fetched with `npm pack`
  * @output packages/themes/<theme>/fonts.css and fonts/
