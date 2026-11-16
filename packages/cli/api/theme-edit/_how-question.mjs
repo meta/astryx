@@ -2448,6 +2448,22 @@ function aspectsOf(text) {
 }
 
 /** Font names a question can name, as words. */
+/**
+ * A font preset's whole stack as a CSS value (`ui-monospace, "SF Mono",
+ * Menlo, Consolas, monospace`), an open font's with its fallbacks, or a
+ * family name as written, quoted when it holds a space.
+ * @param {string} font
+ */
+function presetStack(font) {
+  return FONTS[font]
+    ? `${FONTS[font][0].includes(' ') ? `"${FONTS[font][0]}"` : FONTS[font][0]}, ${FONTS[font][1]}`
+    : OPEN_FONTS[font]
+      ? `"${OPEN_FONTS[font].family}", ${OPEN_FONTS[font].fallbacks}`
+      : /[\s,]/.test(font) && !font.includes(',')
+        ? `"${font}"`
+        : font;
+}
+
 const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
   .filter(k => !['system', 'serif', 'mono', 'rounded', 'comic'].includes(k))
   .map(k => k.replace(/-/g, ' '))
@@ -15226,13 +15242,7 @@ export function draftAnswer(ctx, env, question) {
         // set font --on body moves the heading font too in this release, so
         // the body alone takes its token.
         if (p.role === 'body' && env.bodyFontReachesHeadings) {
-          const stack = FONTS[font]
-            ? `${FONTS[font][0].includes(' ') ? `"${FONTS[font][0]}"` : FONTS[font][0]}, ${FONTS[font][1]}`
-            : OPEN_FONTS[font]
-              ? `"${OPEN_FONTS[font].family}", ${OPEN_FONTS[font].fallbacks}`
-              : /[\s,]/.test(font) && !font.includes(',')
-                ? `"${font}"`
-                : font;
+          const stack = presetStack(font);
           return {
             text: 'the body font alone: --font-family-body (font --on body also changes the headings in this release)',
             options: [[set('--font-family-body', stack)]],
@@ -17388,8 +17398,11 @@ export function draftAnswer(ctx, env, question) {
             [
               set(
                 'font-family',
-                // A stack given with the family ("Inter, sans-serif") whole.
-                (g => (g ? `${family}, ${g[1]}` : family))(
+                // A stack given with the family ("Inter, sans-serif") whole;
+                // else a preset's whole stack, so a system without its first
+                // family (ui-monospace is only on Apple systems) shows the
+                // next one of its kind.
+                (g => (g ? `${family}, ${g[1]}` : presetStack(font)))(
                   /,\s*(serif|sans-serif|monospace|system-ui|cursive)\b/.exec(
                     c.text,
                   ),

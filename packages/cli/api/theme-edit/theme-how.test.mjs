@@ -1991,7 +1991,9 @@ const QUESTIONS_F = [
   ['Source Sans 3 font', {top: /^set q font 'Source Sans 3'$/}],
   [
     'boutons sans-serif font',
-    {top: /^set q font-family system-ui --on button$/},
+    {
+      top: /^set q font-family 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' --on button$/,
+    },
   ],
   [
     'IBM Carbon: square corners, IBM Plex Sans, accent #0f62fe',
