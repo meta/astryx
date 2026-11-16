@@ -81,6 +81,13 @@ export interface GestureTouch {
   y: number;
   /** Timestamp of the latest position. */
   time: number;
+  /**
+   * The latest event's positions at the times they came with, oldest first,
+   * ending with the current one. The arena's clock never runs back, so it
+   * holds a late input's `time` and filters `samples`; it does not change
+   * these.
+   */
+  inputSamples: TouchSample[];
   readonly startX: number;
   readonly startY: number;
   readonly startTime: number;

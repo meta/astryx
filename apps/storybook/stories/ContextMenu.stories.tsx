@@ -647,3 +647,212 @@ export const BottomSheetSubmenu: Story = {
     }
   },
 };
+
+const touchStyles = stylex.create({
+  demo: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '12px',
+  },
+  card: {
+    width: '200px',
+    height: '120px',
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '12px',
+    backgroundColor: '#e5e7eb',
+    color: '#374151',
+    userSelect: 'none',
+  },
+});
+
+export const TouchLongPress: Story = {
+  name: 'Touch / long press',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Where the primary pointer is coarse (a touch screen), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. Once the menu is up, the same finger may slide onto an action without lifting: lifting over an action picks it, and lifting over no action leaves the menu open. The last action picked shows below the card. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back to its size. While the menu is up, the page still scrolls: a touch outside the menu closes it as it begins to pan. The card returns to its size when the menu closes.',
+      },
+    },
+  },
+  render: () => <TouchLongPressDemo />,
+};
+
+/** The touch story's menu, and the last action it picked. */
+function TouchLongPressDemo() {
+  const [lastAction, setLastAction] = useState<string | null>(null);
+  const pick = (label: string) => () => setLastAction(label);
+  return (
+    <div {...stylex.props(touchStyles.demo)}>
+      <ContextMenu
+        data-testid="touch-context-menu"
+        label="Photo actions"
+        items={[
+          {label: 'Copy', icon: ClipboardIcon, onClick: pick('Copy')},
+          {label: 'Share', icon: ShareIcon, onClick: pick('Share')},
+          {
+            label: 'Save to Files',
+            icon: ArrowDownTrayIcon,
+            onClick: pick('Save to Files'),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: pick('Delete'),
+          },
+        ]}>
+        <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+      </ContextMenu>
+      <p data-testid="touch-context-menu-last">
+        {lastAction == null ? 'No action yet' : `Last action: ${lastAction}`}
+      </p>
+    </div>
+  );
+}
+
+const layoutStyles = stylex.create({
+  page: {
+    display: 'grid',
+    gap: '24px',
+  },
+  pair: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+  },
+  block: {
+    padding: '12px',
+    borderRadius: '12px',
+    backgroundColor: '#f3f4f6',
+  },
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '8px 16px',
+    backgroundColor: '#f3f4f6',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '40px 1fr',
+    gridTemplateRows: 'auto auto',
+    columnGap: '12px',
+    rowGap: '4px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  swatch: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    backgroundColor: '#9ca3af',
+    gridRow: '1 / 3',
+  },
+  tall: {
+    height: '160px',
+    padding: '8px',
+    backgroundColor: '#f3f4f6',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: '8px',
+    backgroundColor: '#d1d5db',
+  },
+});
+
+const LAYOUTS = ['block', 'row', 'grid'] as const;
+
+function TallContent() {
+  return <div {...stylex.props(layoutStyles.fill)}>Fills the trigger</div>;
+}
+
+function LayoutContent() {
+  return (
+    <>
+      <div {...stylex.props(layoutStyles.swatch)} />
+      <span>Quarterly report</span>
+      <span>Edited today</span>
+    </>
+  );
+}
+
+export const TouchTriggerLayouts: Story = {
+  name: 'Touch / trigger layouts',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The press grows only the trigger’s own visual, an inner box that lays the children out as the trigger would. Each trigger here sits beside a plain box with the same style, and both lay out the same, a set-height trigger with a full-height child too.',
+      },
+    },
+  },
+  render: () => (
+    <div {...stylex.props(layoutStyles.page)}>
+      {LAYOUTS.map(layout => (
+        <div key={layout} {...stylex.props(layoutStyles.pair)}>
+          <ContextMenu
+            data-testid={`layout-${layout}`}
+            label="Report actions"
+            triggerXstyle={layoutStyles[layout]}
+            items={[
+              {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+              {label: 'Share', icon: ShareIcon, onClick: () => {}},
+            ]}>
+            <LayoutContent />
+          </ContextMenu>
+          <div
+            data-testid={`layout-${layout}-reference`}
+            {...stylex.props(layoutStyles[layout])}>
+            <LayoutContent />
+          </div>
+        </div>
+      ))}
+      <div {...stylex.props(layoutStyles.pair)}>
+        <ContextMenu
+          data-testid="layout-tall"
+          label="Report actions"
+          triggerXstyle={layoutStyles.tall}
+          items={[
+            {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+            {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          ]}>
+          <TallContent />
+        </ContextMenu>
+        <div
+          data-testid="layout-tall-reference"
+          {...stylex.props(layoutStyles.tall)}>
+          <TallContent />
+        </div>
+      </div>
+    </div>
+  ),
+};
+
+export const TouchLongPressPopover: Story = {
+  name: 'Touch / long press, presentation="popover"',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth and no iOS timeline. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
+      },
+    },
+  },
+  render: () => (
+    <ContextMenu
+      data-testid="touch-context-menu"
+      label="Photo actions"
+      presentation="popover"
+      items={[
+        {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+        {label: 'Share', icon: ShareIcon, onClick: () => {}},
+        {label: 'Save to Files', icon: ArrowDownTrayIcon, onClick: () => {}},
+      ]}>
+      <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+    </ContextMenu>
+  ),
+};

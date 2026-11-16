@@ -123,6 +123,7 @@
     "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts": 29.9,
     "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts": 4.1,
     "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts": 2.2,
+    "packages/core/src/ContextMenu/__tests__/ContextMenuLongPress.interaction.browser.spec.ts": 58.3,
     "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts": 4.2,
     "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts": 8.5,
     "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts": 12.1,

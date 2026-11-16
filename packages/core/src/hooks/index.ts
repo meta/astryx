@@ -45,7 +45,11 @@ export {
   MENU_PRESS_MARKER,
   isMenuPressActivation,
 } from './useMenuPress';
-export type {UseMenuPressOptions, UseMenuPressReturn} from './useMenuPress';
+export type {
+  MenuPressContinuation,
+  UseMenuPressOptions,
+  UseMenuPressReturn,
+} from './useMenuPress';
 export {menuPressStep, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 export type {
   MenuPressEffect,
