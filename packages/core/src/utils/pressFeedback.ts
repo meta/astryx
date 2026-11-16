@@ -405,15 +405,46 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
   }
   const found = target.closest(`[${PRESSABLE_ATTRIBUTE}]`);
   // A held surface (an open swipe row) is read as a disabled one: it takes
-  // the press and paints nothing (privateAttributes/pressHeld.stylex.ts).
+  // the press and paints nothing (privateAttributes/pressHeld.stylex.ts). So
+  // is server markup that React has not hydrated yet.
   if (
     !(found instanceof HTMLElement) ||
     found.matches(DISABLED) ||
-    isPressHeld(found)
+    isPressHeld(found) ||
+    isAwaitingHydration(found)
   ) {
     return null;
   }
   return found;
+}
+
+/**
+ * Whether the element is server markup inside a React root that React has not
+ * hydrated yet, such as a Suspense boundary whose code is still loading. React
+ * keeps its props on each element it owns, under an own key that starts with
+ * `__reactProps$`, and marks its root's container with `__reactContainer$`.
+ * An attribute written on such markup does not match the server's markup when
+ * the boundary hydrates. An element outside any React root is not awaiting
+ * hydration.
+ */
+function isAwaitingHydration(element: Element): boolean {
+  if (hasOwnKeyStartingWith(element, '__reactProps$')) {
+    return false;
+  }
+  for (
+    let ancestor = element.parentElement;
+    ancestor != null;
+    ancestor = ancestor.parentElement
+  ) {
+    if (hasOwnKeyStartingWith(ancestor, '__reactContainer$')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasOwnKeyStartingWith(element: Element, prefix: string): boolean {
+  return Object.keys(element).some(key => key.startsWith(prefix));
 }
 
 /**
