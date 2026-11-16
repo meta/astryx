@@ -774,8 +774,17 @@ function useSurfaceWidth() {
 const INTERACTIVE_WITHIN_ROW =
   'button, input, a, label, dialog, [role="checkbox"], [role="button"], [role="menuitem"]';
 
-function isRowItself(event: {target: EventTarget | null}): boolean {
-  return !(event.target as HTMLElement | null)?.closest(INTERACTIVE_WITHIN_ROW);
+// Only a control inside this row counts: the page itself may sit inside a
+// dialog or a link, and those ancestors are not the row's own controls.
+function isRowItself(event: {
+  target: EventTarget | null;
+  currentTarget: EventTarget | null;
+}): boolean {
+  const control = (event.target as HTMLElement | null)?.closest(
+    INTERACTIVE_WITHIN_ROW,
+  );
+  const row = event.currentTarget as HTMLElement;
+  return !control || control === row || !row.contains(control);
 }
 
 // ============= ROW ACTIONS =============
