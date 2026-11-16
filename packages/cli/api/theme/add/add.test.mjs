@@ -12,6 +12,7 @@ import {
   parseThemeModuleRecord,
 } from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 
@@ -257,12 +258,15 @@ describe('themeAdd', () => {
     try {
       fs.mkdirSync(path.join(app, 'src'));
       fs.writeFileSync(path.join(app, 'package.json'), '{"name":"app"}\n');
+      fs.writeFileSync(path.join(app, 'package-lock.json'), '{}\n');
+      // With no Core in the app, the theme comes at the release of the CLI
+      // that answers, whose Core it brings as its peer.
       await expect(themeAdd('butter', {cwd: app})).rejects.toMatchObject({
         message: expect.stringContaining(
           'The app imports butter from it, so install it, then add the theme',
         ),
         suggestions: [
-          {name: expect.stringMatching(/@astryxdesign\/theme-butter$/)},
+          {name: `npm install @astryxdesign/theme-butter@${CLI_VERSION}`},
           {name: expect.stringMatching(/ theme add butter$/)},
         ],
       });
