@@ -1014,12 +1014,16 @@ function ReceivedCell({
             label={`${action.label} — ${item.subject}`}
             tooltip={action.label}
             icon={<Icon icon={action.icon} size="sm" />}
-            onClick={() =>
-              // Demo only: replace this toast with the call that performs the action.
-              showToast({
-                body: `Demo: ${action.label} would run on “${item.subject}” here`,
-                uniqueID: `${action.id}-${item.id}`,
-              })
+            onClick={
+              // A delete needs a confirm step, which this demo does not have.
+              action.id === 'delete'
+                ? undefined
+                : () =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would run on “${item.subject}” here`,
+                      uniqueID: `${action.id}-${item.id}`,
+                    })
             }
           />
         ))}
@@ -1369,12 +1373,16 @@ function ConversationPane({
       label={`${action.label} — ${conversation.subject}`}
       tooltip={action.label}
       icon={<Icon icon={action.icon} size="sm" />}
-      onClick={() =>
-        // Demo only: replace this toast with the call that performs the action.
-        showToast({
-          body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
-          uniqueID: `${action.id}-${conversation.id}`,
-        })
+      onClick={
+        // A delete needs a confirm step, which this demo does not have.
+        action.id === 'delete'
+          ? undefined
+          : () =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
+                uniqueID: `${action.id}-${conversation.id}`,
+              })
       }
     />
   ));
@@ -2528,12 +2536,16 @@ export default function SupportInboxTemplate() {
                               variant="ghost"
                               size="sm"
                               icon={<Icon icon={action.icon} size="sm" />}
-                              onClick={() =>
-                                // Demo only: replace this toast with the call that performs the action.
-                                showToast({
-                                  body: `Demo: ${action.label} would run on the selected conversations here`,
-                                  uniqueID: `bulk-${action.id}`,
-                                })
+                              onClick={
+                                // A delete needs a confirm step, which this demo does not have.
+                                action.id === 'delete'
+                                  ? undefined
+                                  : () =>
+                                      // Demo only: replace this toast with the call that performs the action.
+                                      showToast({
+                                        body: `Demo: ${action.label} would run on the selected conversations here`,
+                                        uniqueID: `bulk-${action.id}`,
+                                      })
                               }
                             />
                           ))}

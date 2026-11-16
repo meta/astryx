@@ -726,7 +726,7 @@ function getColumns({
             {
               label: 'Delete issue',
               icon: TrashIcon,
-              onClick: () => onDemo(task, 'deleting'),
+              onClick: () => {},
             },
           ]}
         />
