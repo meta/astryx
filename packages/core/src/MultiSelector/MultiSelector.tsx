@@ -18,8 +18,6 @@
  */
 
 import React, {
-  lazy,
-  Suspense,
   use,
   useCallback,
   useEffect,
@@ -111,8 +109,7 @@ import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
-import {useIsHydrating} from '../hooks/useIsHydrating';
-import type {SelectorBottomSheetProps} from '../Selector/SelectorBottomSheet';
+import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -1104,36 +1101,6 @@ function filterOptionsByQuery(
   return items.filter(item => optionMatchesQuery(item, query));
 }
 
-// One import promise, shared by the preload and the lazy element: the sheet
-// presentation loads its chunk as soon as it is active, so the first press
-// does not wait for the network, while nothing of the sheet is rendered until
-// a press (`architecture:component-style-authoring` INV7).
-const loadSelectorBottomSheet = async () =>
-  import('../Selector/SelectorBottomSheet');
-const LazySelectorBottomSheet = lazy(async () =>
-  loadSelectorBottomSheet().then(module => ({
-    default: module.SelectorBottomSheet,
-  })),
-);
-
-/**
- * Hosts the lazily loaded sheet. Renders nothing on the server or in the
- * render that hydrates server HTML: a lazy component that has not loaded yet
- * would leave server markup incomplete and abort hydration. The closed sheet
- * has no visible markup, so it first renders right after hydration.
- */
-function SelectorSheetHost(props: SelectorBottomSheetProps) {
-  const isHydrating = useIsHydrating();
-  if (isHydrating) {
-    return null;
-  }
-  return (
-    <Suspense fallback={null}>
-      <LazySelectorBottomSheet {...props} />
-    </Suspense>
-  );
-}
-
 /**
  * A multi-select dropdown component with checkboxes for choosing
  * multiple items from a list of options.
@@ -1543,14 +1510,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     },
   });
   const {popover} = surface;
-
-  // Preload the sheet's chunk when the bottom-sheet presentation is active, so
-  // the first press opens without waiting for the network; nothing renders.
-  useEffect(() => {
-    if (surface.activePresentation === 'bottom-sheet') {
-      void loadSelectorBottomSheet();
-    }
-  }, [surface.activePresentation]);
   const hideSurface = surface.hide;
   const isSurfaceOpen = surface.isOpen;
 
@@ -2536,14 +2495,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   if (surface.activePresentation === 'bottom-sheet') {
     if (!isEffectivelyReadOnly || surface.isSheetPresented) {
       selectionSurface = (
-        <SelectorSheetHost
+        <SelectorBottomSheet
           isOpen={surface.isSheetOpen}
           onOpenChange={surface.onSheetOpenChange}
           finalFocusRef={triggerRef}
           initialFocusRef={hasSearch ? searchRef : listboxRef}
           label={label}>
           {panelContent}
-        </SelectorSheetHost>
+        </SelectorBottomSheet>
       );
     }
   } else if (!isEffectivelyReadOnly) {

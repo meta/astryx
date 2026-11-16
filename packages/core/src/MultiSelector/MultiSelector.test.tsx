@@ -84,6 +84,7 @@ function politeRegion(): HTMLElement | null {
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
   await import('../Selector/SelectorBottomSheet');
+  await import('../Selector/SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -155,6 +156,7 @@ function expectSilentBusySpinner() {
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
   await import('../Selector/SelectorBottomSheet');
+  await import('../Selector/SelectorBottomSheetFrame');
 });
 
 describe('MultiSelector', () => {

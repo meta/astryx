@@ -77,6 +77,7 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
   await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 beforeEach(() => {
@@ -304,6 +305,7 @@ function expectSilentBusySpinner() {
 beforeAll(async () => {
   await import('../BottomSheet/BottomSheet');
   await import('./SelectorBottomSheet');
+  await import('./SelectorBottomSheetFrame');
 });
 
 describe('Selector', () => {
@@ -397,7 +399,7 @@ describe('Selector', () => {
 
   it('uses content-hugging height without extra bottom content padding', () => {
     const source = readFileSync(
-      'packages/core/src/Selector/SelectorBottomSheet.tsx',
+      'packages/core/src/Selector/SelectorBottomSheetFrame.tsx',
       'utf8',
     );
 
