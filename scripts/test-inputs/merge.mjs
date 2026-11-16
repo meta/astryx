@@ -6,8 +6,11 @@
  *   more Node legs (one folder per leg), the checkout they ran in and its
  *   commit.
  * @output The record: for each test file, the repository folders whose files
- *   it read or probed for (`folders`), the folders it listed (`listed`: a
- *   change anywhere under one can change what it sees), the package trees
+ *   it read (`folders`), the folders it listed (`listed`: a change anywhere
+ *   under one can change what it sees), the folders it checked as a whole
+ *   (`checked`: they matter only by being there), the paths it probed for
+ *   and found missing (`probed`: they matter once they exist), the package
+ *   trees
  *   whose build it
  *   read (`trees`), and what it did that the record cannot see (`unseen`).
  * @position Main's full unit run merges its legs' lines with it and keeps the
@@ -21,7 +24,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {folderOf} from './select.mjs';
 
-export const RECORD_VERSION = 2;
+export const RECORD_VERSION = 3;
 
 /** Each owner's lines, joined. */
 function byOwner(lines) {
@@ -122,6 +125,8 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
     visiting.add(owner);
     const folders = new Set();
     const listedFolders = new Set();
+    const checked = new Set();
+    const probed = new Set();
     const trees = new Set();
     const unseen = new Set(entry.unseen);
     const add = (target, listed) => {
@@ -146,6 +151,8 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
         const from = inputsOf(step[0], step[1], visiting);
         for (const value of from.folders) folders.add(value);
         for (const value of from.listed) listedFolders.add(value);
+        for (const value of from.checked) checked.add(value);
+        for (const value of from.probed) probed.add(value);
         for (const value of from.trees) trees.add(value);
         if (pkg != null) {
           if (from.unseen.length > 0) trees.add(`${pkg}/`);
@@ -162,14 +169,18 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
       // Outside the checkout: a fixture the test made from what it read, or
       // the system.
       if (rel == null) return;
+      // A listing changes with anything under the folder; a folder checked
+      // as a whole (its `stat`) only when it comes or goes.
       if (listed) listedFolders.add(rel);
+      else if (trackedDirs.has(rel) && !tracked.has(rel)) checked.add(rel);
       else folders.add(folderOf(rel));
     };
-    // A probe of a missing path: creating it changes what the test sees.
+    // A path probed for and missing: what the test sees changes when it
+    // comes to exist.
     for (const target of entry.probes) {
       const rel = relative(target);
       if (rel != null && !rel.split('/').includes('node_modules')) {
-        folders.add(folderOf(rel));
+        probed.add(rel);
       }
     }
     for (const target of entry.reads) add(target, false);
@@ -178,6 +189,8 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
     const result = {
       folders: [...folders].sort(),
       listed: [...listedFolders].sort(),
+      checked: [...checked].sort(),
+      probed: [...probed].sort(),
       trees: [...trees].sort(),
       unseen: [...unseen].sort(),
     };
@@ -225,6 +238,8 @@ export function mergeLegs(legs, commit) {
       tests[test] = {
         folders: idOf(inputs.folders),
         listed: idOf(inputs.listed),
+        checked: idOf(inputs.checked),
+        probed: idOf(inputs.probed),
         trees: inputs.trees,
         unseen: inputs.unseen,
       };
@@ -246,6 +261,8 @@ export function expandRecord(record) {
       ...entry,
       folders: record.sets[entry.folders],
       listed: record.sets[entry.listed],
+      checked: record.sets[entry.checked],
+      probed: record.sets[entry.probed],
     };
   }
   return {commit: record.commit, tests};

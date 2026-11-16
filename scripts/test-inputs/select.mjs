@@ -50,12 +50,27 @@ export const folderOf = file => {
 };
 
 /**
+ * Whether a path, or anything under it, is among `files`.
+ * @param {string[]} files
+ * @returns {(path: string) => boolean}
+ */
+export function presentIn(files) {
+  const present = new Set(['.']);
+  for (const file of files) {
+    for (let at = file; at !== '.' && !present.has(at); at = folderOf(at)) {
+      present.add(at);
+    }
+  }
+  return target => present.has(target);
+}
+
+/**
  * Why a test runs, or null when no changed path is one of its inputs.
  * @param {string} test
  * @param {{folders: string[], listed: string[], trees: string[], unseen: string[]} | undefined} entry
  * @param {string[]} changed
  */
-export function whyTestRuns(test, entry, changed) {
+export function whyTestRuns(test, entry, changed, present = () => true) {
   if (entry == null) return 'it has no record';
   if (entry.unseen.length > 0)
     return `its record cannot see all it reads (it ${entry.unseen[0]})`;
@@ -70,6 +85,10 @@ export function whyTestRuns(test, entry, changed) {
     const tree = entry.trees.find(root => file.startsWith(root));
     if (tree != null) return `it reads what is built from ${tree}`;
   }
+  const gone = entry.checked.find(dir => !present(dir));
+  if (gone != null) return `it checks ${gone}, which is gone`;
+  const come = entry.probed.find(target => present(target));
+  if (come != null) return `it looked for ${come}, which now exists`;
   return null;
 }
 
@@ -79,8 +98,10 @@ export function whyTestRuns(test, entry, changed) {
  * @param {string[]} tests
  * @param {{tests: Record<string, {folders: string[], listed: string[], trees: string[], unseen: string[]}>}} record
  * @param {string[]} changed
+ * @param {(path: string) => boolean} [present] whether a repository path,
+ *   or anything under it, exists in the tree under test
  */
-export function selectByInputs(tests, record, changed) {
+export function selectByInputs(tests, record, changed, present) {
   const everything = changeThatRunsEveryTest(changed);
   if (everything != null) {
     return {run: [...tests], skipped: [], reason: `${everything} changed`};
@@ -88,7 +109,7 @@ export function selectByInputs(tests, record, changed) {
   const run = [];
   const skipped = [];
   for (const test of tests) {
-    if (whyTestRuns(test, record.tests[test], changed) == null)
+    if (whyTestRuns(test, record.tests[test], changed, present) == null)
       skipped.push(test);
     else run.push(test);
   }

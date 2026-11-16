@@ -25,7 +25,7 @@ import {
   loadTemplates,
   loadWeights,
   pageDestination,
-  requireBuildCoreDir,
+  buildCoreContentDir,
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind, nameTerms} from './kind.mjs';
@@ -159,7 +159,7 @@ export async function kitSignals(query, options = {}) {
   const {cwd = process.cwd(), type, limit = 60} = options;
   // A kit is built from Core's components, hooks, and templates. An open
   // search without core covers the docs alone, so the kit asks for core here.
-  if (type !== 'doc') coreDirOrThrow(requireBuildCoreDir, cwd);
+  if (type !== 'doc') coreDirOrThrow(buildCoreContentDir, cwd);
   // search()'s JSDoc @returns widens results to object[]; the SearchResponse
   // shape is the contract (api/search/search.type.mjs). Cast locally rather than
   // tightening the search @returns (a separate follow-up).

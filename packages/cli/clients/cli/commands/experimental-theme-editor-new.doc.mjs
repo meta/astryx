@@ -28,6 +28,7 @@ export const doc = {
     {
       flag: '--like <theme>',
       param: 'options.like',
+      names: 'theme',
       description:
         'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter; or none, for Astryx defaults (the same as leaving it out)',
     },
@@ -149,6 +150,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.targets', 'themes.compile'],
   notes: [
     {
       type: 'prose',

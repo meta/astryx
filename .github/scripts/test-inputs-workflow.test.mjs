@@ -4,7 +4,7 @@
  * @file The test-inputs record in CI: Main records and keeps it, one job
  *   picks it for a pull request, the Node legs narrow their file-reading tests
  *   by it, and Main names a failed test a merged pull request left out
- *   (scripts/test-inputs, spec:AST-030 FR13, DEC-30).
+ *   (scripts/test-inputs, spec:AST-030 FR13, DEC-31).
  * @input ci.yml, deploy.yml, vitest.config.ts, test-inputs-pick.cjs and
  *   skipped-test-alarm.cjs with a stubbed GitHub API.
  * @output The wiring each part needs, the record a pull request picks, and the
@@ -60,8 +60,12 @@ describe("Main's record", () => {
     const merge = stepNamed(after, 'Merge the legs into the record');
     expect(merge.if).toBe("needs.test-node.result == 'success'");
     expect(merge.run).toContain('scripts/test-inputs/merge.mjs --out');
+    // Kept only for the commit the run was dispatched on, the commit pull
+    // requests find it by.
     const keep = stepNamed(after, 'Keep the record for pull requests');
-    expect(keep.if).toBe("needs.test-node.result == 'success'");
+    expect(keep.if).toBe(
+      "needs.test-node.result == 'success' && needs.main-commit.outputs.sha == github.sha",
+    );
     expect(keep.with.name).toBe(RECORD_ARTIFACT);
   });
 
@@ -109,6 +113,9 @@ describe("a pull request's selection", () => {
       "needs.node-test-inputs.outputs.record == 'true'",
     );
     const run = stepNamed(legs, 'Run this shard of the Node tests').run;
+    expect(run).toContain(
+      '--record-commit "$RUNNER_TEMP/node-test-inputs/commit.txt"',
+    );
     expect(run).toContain(
       'if [ -f "$RUNNER_TEMP/node-test-inputs/record.json" ]; then',
     );

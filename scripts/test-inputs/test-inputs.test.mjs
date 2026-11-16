@@ -17,9 +17,11 @@ import path from 'node:path';
 
 import {afterAll, describe, expect, it} from 'vitest';
 
+import {reachedThrough} from '../../.github/scripts/fs-guard-tests.mjs';
 import {expandRecord, mergeLeg, mergeLegs, readLines} from './merge.mjs';
 import {
   changeThatRunsEveryTest,
+  presentIn,
   selectByInputs,
   whyTestRuns,
 } from './select.mjs';
@@ -219,6 +221,8 @@ describe('the merged record', () => {
         'packages/core/src/Button',
       ],
       listed: ['packages/core/src'],
+      checked: [],
+      probed: [],
       trees: ['packages/core/'],
       unseen: [],
     });
@@ -230,12 +234,32 @@ describe('the merged record', () => {
     expect(tests['scripts/nothing.test.mjs']).toEqual({
       folders: [],
       listed: [],
+      checked: [],
+      probed: [],
       trees: [],
       unseen: [],
     });
     expect(Object.keys(tests).some(owner => owner.startsWith('step:'))).toBe(
       false,
     );
+  });
+
+  it('records a stat of a checkout folder as checked and a probe of a missing path as probed', () => {
+    const tests = mergeLeg(
+      [
+        line('a.test.mjs', {
+          reads: ['/repo/packages/core/src'],
+          probes: ['/repo/packages/cli/api/theme-edit/missing.json'],
+        }),
+      ],
+      {root, tracked, ignored},
+    );
+    expect(tests['a.test.mjs']).toMatchObject({
+      folders: [],
+      listed: [],
+      checked: ['packages/core/src'],
+      probed: ['packages/cli/api/theme-edit/missing.json'],
+    });
   });
 
   it("never lets a test's own write to a checkout file hide that it read it", () => {
@@ -253,10 +277,19 @@ describe('the merged record', () => {
 
   it('keeps each distinct folder set once and spells it out again on reading', () => {
     const leg = {
-      'a.test.mjs': {folders: ['x'], listed: [], trees: [], unseen: []},
+      'a.test.mjs': {
+        folders: ['x'],
+        listed: [],
+        checked: [],
+        probed: [],
+        trees: [],
+        unseen: [],
+      },
       'b.test.mjs': {
         folders: ['x'],
         listed: [],
+        checked: [],
+        probed: [],
         trees: ['packages/core/'],
         unseen: [],
       },
@@ -268,6 +301,8 @@ describe('the merged record', () => {
     ).toEqual({
       folders: ['x'],
       listed: [],
+      checked: [],
+      probed: [],
       trees: ['packages/core/'],
       unseen: [],
     });
@@ -281,24 +316,32 @@ describe('selection by recorded inputs', () => {
       'packages/cli/api/theme-edit/theme-values.test.mjs': {
         folders: ['packages/cli/api/theme-edit', 'packages/core/src/Button'],
         listed: [],
+        checked: [],
+        probed: [],
         trees: ['packages/core/'],
         unseen: [],
       },
       'packages/cli/api/docs/docs.test.mjs': {
         folders: ['packages/cli/assets/templates/blocks'],
         listed: [],
+        checked: [],
+        probed: [],
         trees: [],
         unseen: [],
       },
       'packages/cli/test/icon-set-doc-pointers.test.mjs': {
         folders: [],
         listed: ['packages/cli/api/icon'],
+        checked: [],
+        probed: [],
         trees: [],
         unseen: [],
       },
       'scripts/check-knowledge.test.mjs': {
         folders: [],
         listed: [],
+        checked: [],
+        probed: [],
         trees: [],
         unseen: ['runs git'],
       },
@@ -318,6 +361,45 @@ describe('selection by recorded inputs', () => {
       'packages/cli/test/icon-set-doc-pointers.test.mjs',
     ]);
     expect(run).toContain('packages/cli/api/docs/docs.test.mjs');
+  });
+
+  it('runs a test that checks a folder when the folder is gone, and one that looked for a path when it exists', () => {
+    const checker = {
+      folders: [],
+      listed: [],
+      checked: ['packages/cli/api/theme/fixtures'],
+      probed: ['packages/cli/api/theme/cache.json'],
+      trees: [],
+      unseen: [],
+    };
+    const present = presentIn([
+      'packages/cli/api/theme/fixtures/a.json',
+      'packages/cli/api/theme/index.mjs',
+    ]);
+    expect(
+      whyTestRuns('x.test.mjs', checker, ['README.md'], present),
+    ).toBeNull();
+    // Every file under the checked folder removed: the folder is gone.
+    expect(
+      whyTestRuns(
+        'x.test.mjs',
+        checker,
+        ['packages/cli/api/theme/fixtures/a.json'],
+        presentIn(['packages/cli/api/theme/index.mjs']),
+      ),
+    ).toMatch(/checks packages\/cli\/api\/theme\/fixtures, which is gone/);
+    // The path it looked for now exists.
+    expect(
+      whyTestRuns(
+        'x.test.mjs',
+        checker,
+        ['packages/cli/api/theme/cache.json'],
+        presentIn([
+          'packages/cli/api/theme/fixtures/a.json',
+          'packages/cli/api/theme/cache.json',
+        ]),
+      ),
+    ).toMatch(/looked for packages\/cli\/api\/theme\/cache\.json/);
   });
 
   it('runs a test that lists a folder when the change adds a file anywhere under it', () => {
@@ -379,5 +461,32 @@ describe('selection by recorded inputs', () => {
     expect(
       changeThatRunsEveryTest(['packages/core/src/Button/Button.tsx']),
     ).toBeNull();
+  });
+});
+
+describe('paths changed since the record', () => {
+  const sources = {
+    'packages/cli/api/a.test.mjs':
+      "import {helper} from './helper.mjs';\nimport fs from 'node:fs';",
+    'packages/cli/api/helper.mjs': 'export const helper = () => 1;',
+    'packages/cli/api/b.test.mjs':
+      "import {x} from '@scope/lib';\nimport fs from 'node:fs';",
+    'packages/cli/api/c.test.mjs': "import fs from 'node:fs';",
+    'packages/lib/package.json': '{"name": "@scope/lib"}',
+    'packages/lib/src/index.ts': 'export const x = 1;',
+  };
+  const files = Object.keys(sources);
+  const read = file => sources[file];
+
+  it('reach a test through its import closure or a workspace package it imports', () => {
+    // The record holds no module Vitest transforms, so these run whatever
+    // the record says.
+    expect(
+      reachedThrough(files, read, ['packages/cli/api/helper.mjs']),
+    ).toEqual(['packages/cli/api/a.test.mjs']);
+    expect(reachedThrough(files, read, ['packages/lib/src/index.ts'])).toEqual([
+      'packages/cli/api/b.test.mjs',
+    ]);
+    expect(reachedThrough(files, read, ['README.md'])).toEqual([]);
   });
 });

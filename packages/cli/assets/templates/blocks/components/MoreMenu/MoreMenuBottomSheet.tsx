@@ -20,7 +20,7 @@ export default function MoreMenuBottomSheet() {
         gap: '16px',
         width: 'min(100%, 360px)',
         padding: '16px',
-        border: '1px solid #d1d5db',
+        border: '1px solid var(--color-border-emphasized)',
         borderRadius: '12px',
       }}>
       <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>

@@ -43,7 +43,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expandRecord} from '../../scripts/test-inputs/merge.mjs';
-import {selectByInputs} from '../../scripts/test-inputs/select.mjs';
+import {presentIn, selectByInputs} from '../../scripts/test-inputs/select.mjs';
 
 const TEST_FILE = /\.test\.(?:tsx?|mjs|cjs|js)$/;
 const FILE_MODULE = String.raw`(?:fs|fs\/promises|fs-extra|child_process|typescript|ts-morph|@babel\/core|esbuild|vite|rollup|eslint|prettier|glob|fast-glob|tinyglobby|globby|execa|cross-spawn)`;
@@ -89,7 +89,7 @@ function resolve(from, specifier, tracked) {
  *
  * @param {string[]} files tracked repository paths
  * @param {(file: string) => string} read the file's source
- * @param {(source: string, specifiers: {raw: string, joined: string}[]) => boolean} matches
+ * @param {(source: string, specifiers: {raw: string, joined: string}[], file: string) => boolean} matches
  */
 function testsWhoseClosure(files, read, matches) {
   const tracked = new Set(files);
@@ -110,7 +110,7 @@ function testsWhoseClosure(files, read, matches) {
         ? path.posix.normalize(path.posix.join(path.posix.dirname(file), raw))
         : raw,
     }));
-    let result = matches(source, specifiers);
+    let result = matches(source, specifiers, file);
     if (!result) {
       for (const {raw} of specifiers) {
         if (!raw.startsWith('.')) continue;
@@ -170,6 +170,34 @@ export function changedWorkspacePackages(files, read, changedFiles) {
     if (owner != null) changed.set(owner.name, owner);
   }
   return [...changed.values()];
+}
+
+/**
+ * The tests whose import closure (relative imports) holds one of `paths`, or
+ * that import a workspace package one of `paths` belongs to, by name or a path
+ * into its `dist/`.
+ *
+ * @param {string[]} files tracked repository paths
+ * @param {(file: string) => string} read
+ * @param {string[]} paths
+ */
+export function reachedThrough(files, read, paths) {
+  const changed = new Set(paths);
+  const packages = changedWorkspacePackages(files, read, paths);
+  return testsWhoseClosure(
+    files,
+    read,
+    (_source, specifiers, file) =>
+      changed.has(file) ||
+      specifiers.some(({raw, joined}) =>
+        packages.some(
+          pkg =>
+            raw === pkg.name ||
+            raw.startsWith(`${pkg.name}/`) ||
+            joined.startsWith(`${pkg.dir}/dist/`),
+        ),
+      ),
+  );
 }
 
 /**
@@ -472,17 +500,47 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       } catch (error) {
         console.error(`Every file-reading test runs: ${error.message}.`);
       }
-      const changed = [
-        ...new Set([
-          ...changedFiles,
-          ...read(process.argv[sinceFlag + 1])
-            .split('\n')
-            .filter(Boolean),
-        ]),
-      ];
+      // `--record-commit <file>`: the commit the picker chose the record for.
+      // A record of another commit narrows nothing.
+      const commitFlag = process.argv.indexOf('--record-commit');
+      const pickedCommit =
+        commitFlag === -1 ? null : read(process.argv[commitFlag + 1]).trim();
+      if (
+        record != null &&
+        pickedCommit != null &&
+        record.commit !== pickedCommit
+      ) {
+        console.error(
+          `Every file-reading test runs: the record is of ${record.commit.slice(0, 12)}, not ${pickedCommit.slice(0, 12)}.`,
+        );
+        record = null;
+      }
+      const sinceRecord = read(process.argv[sinceFlag + 1])
+        .split('\n')
+        .filter(Boolean);
+      const changed = [...new Set([...changedFiles, ...sinceRecord])];
       narrow = guards => {
         if (record == null) return guards;
-        const {run, skipped, reason} = selectByInputs(guards, record, changed);
+        const selected = selectByInputs(
+          guards,
+          record,
+          changed,
+          presentIn(files),
+        );
+        const {reason} = selected;
+        // The record holds no module Vitest itself transforms, so a guard
+        // whose import closure reaches a path changed since the record, or
+        // a workspace package such a path belongs to, runs too: a pull
+        // request's own changes reach the module graph through --changed.
+        const reached = new Set(
+          sinceRecord.length === 0
+            ? []
+            : reachedThrough(files, read, sinceRecord),
+        );
+        const run = guards.filter(
+          test => selected.run.includes(test) || reached.has(test),
+        );
+        const skipped = guards.filter(test => !run.includes(test));
         console.error(
           reason
             ? `Every file-reading test runs: ${reason}.`

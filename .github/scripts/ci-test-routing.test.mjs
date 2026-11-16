@@ -257,7 +257,7 @@ describe.each(Object.entries(WORKFLOWS))(
             '  # inputs the change reaches (scripts/test-inputs).',
             '  INPUTS=()',
             '  if [ -f "$RUNNER_TEMP/node-test-inputs/record.json" ]; then',
-            '    INPUTS=(--inputs "$RUNNER_TEMP/node-test-inputs/record.json" --since-record "$RUNNER_TEMP/node-test-inputs/since-record.txt" --skipped "$RUNNER_TEMP/node-skipped-tests.txt")',
+            '    INPUTS=(--inputs "$RUNNER_TEMP/node-test-inputs/record.json" --since-record "$RUNNER_TEMP/node-test-inputs/since-record.txt" --record-commit "$RUNNER_TEMP/node-test-inputs/commit.txt" --skipped "$RUNNER_TEMP/node-skipped-tests.txt")',
             '  fi',
             '  .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json" "${INPUTS[@]}"',
             '  mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"',

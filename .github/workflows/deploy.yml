@@ -248,7 +248,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # After the Node legs (scripts/test-inputs, spec:AST-030 FR13, DEC-30):
+  # After the Node legs (scripts/test-inputs, spec:AST-030 FR13, DEC-31):
   # when they all passed, merges their lines into this commit's test-inputs
   # record and keeps it for pull requests (a failed leg may not have recorded
   # all its files' inputs); when one failed, names any pull request merged
@@ -286,7 +286,9 @@ jobs:
           node --max-old-space-size=7168 scripts/test-inputs/merge.mjs --out "$RUNNER_TEMP/record/record.json" "$RUNNER_TEMP"/legs/*
 
       - name: Keep the record for pull requests
-        if: needs.test-node.result == 'success'
+        # Pull requests find the record by this run's commit, so it is kept
+        # only when the run tested that commit.
+        if: needs.test-node.result == 'success' && needs.main-commit.outputs.sha == github.sha
         uses: actions/upload-artifact@v7
         with:
           name: node-test-inputs
