@@ -215,3 +215,18 @@ describe('a base or setting typed with its own quotes', () => {
     T,
   );
 });
+
+describe('show with the theme typed as an option', () => {
+  it(
+    'show --theme t offers show t, and it runs',
+    async () => {
+      const r = await cli([...ED, 'show', '--theme', 't']);
+      expect(r.error).toBeDefined();
+      expect(r.error).toContain("the theme is show's first word");
+      expect(names(r)[0]).toMatch(/ show t$/);
+      const followed = await cli([...ED, 'show', 't']);
+      expect(followed.error).toBeUndefined();
+    },
+    T,
+  );
+});

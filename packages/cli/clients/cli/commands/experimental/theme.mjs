@@ -1436,6 +1436,22 @@ function previewExtraWords(sub, doc, head) {
  * @param {{png?: boolean, section?: string}} o the options read
  */
 function showStray(name, rest, o) {
+  // The theme typed as an option (`show --theme t`), as set and undo read
+  // it: the show on that theme, never its help alone.
+  const asOption = /^--?(?:theme|name)$/i.test(String(name));
+  if (asOption && rest.length) {
+    const theme = String(rest[0]);
+    return strayRefusal(
+      'show',
+      showDoc,
+      `${EDITOR} show`,
+      {
+        option: String(name),
+        note: "the theme is show's first word",
+      },
+      `${EDITOR} show ${quoteCommandArgument(theme)}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
+    );
+  }
   const stray = rest.map(String).find(w => w.startsWith('-'));
   if (stray == null) return null;
   // An option the one reader names never comes here (readOptions reads
