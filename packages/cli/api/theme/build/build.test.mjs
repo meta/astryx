@@ -1024,7 +1024,8 @@ describe('themeBuild() — extends', () => {
   }
 
   /** A base theme with geometry, elevation and a component override. */
-  const BASE_SOURCE = `export const brandTheme = {
+  const BASE_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+  export const brandTheme = defineTheme({
     name: 'ext-base',
     tokens: {
       '--radius-element': '6px',
@@ -1034,7 +1035,7 @@ describe('themeBuild() — extends', () => {
     components: {
       switch: {base: {backgroundColor: 'var(--color-border-emphasized)'}},
     },
-  };\n`;
+  });\n`;
 
   /**
    * The child names its base with a plain relative specifier, exactly as a

@@ -433,8 +433,9 @@ works on is `spec:AST-040` FR9's.
     names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
     compile cache of the CLI's own modules in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
     written from that run, used only while it is a real folder the user owns
-    and others cannot open, never where the system has no user ids, and off
-    when `NODE_DISABLE_COMPILE_CACHE` is set;
+    and others cannot open, never where the system has no user ids, off
+    when `NODE_DISABLE_COMPILE_CACHE` is set, and neither made nor used when
+    Node already has a compile cache in use (`NODE_COMPILE_CACHE`);
   - the per-user configuration directory of the platform, for the documented
     settings of the computer-level agent text and the per-user state file,
     `astryx/state.json`, which holds what the update check found and when

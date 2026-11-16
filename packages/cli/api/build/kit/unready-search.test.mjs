@@ -81,6 +81,14 @@ describe('a not-ready template search ranks first', () => {
     }
   });
 
+  it('still names a not-ready template the idea names when another ranks above it', async () => {
+    const plain = await startOf('an incident console page');
+    injected = {...unready, name: 'status-wall', displayName: 'Status Wall'};
+    const steered = await startOf('an incident console page');
+    expect(steered.start).toEqual(plain.start);
+    expect(JSON.stringify(steered)).not.toContain('status-wall');
+  });
+
   it('names it in the reason only when the idea names it', async () => {
     const plain = await startOf('an incident console page');
     injected = unready;
