@@ -187,6 +187,17 @@ export function servingRootPackages() {
   }
 }
 
+/**
+ * The packages besides Astryx, React and StyleX that a page outside a project
+ * takes from the package set: the integrations the host approves, and the
+ * other packages its set declares ({@link servingRootPackages}), such as the
+ * icon library templates import. Empty with no hosted run.
+ * @returns {string[]}
+ */
+export function hostedPagePackages() {
+  return [...(active?.integrations ?? []), ...servingRootPackages()];
+}
+
 /** Forget the hosted run. Tests only. */
 export function _resetHostedRun() {
   active = null;
