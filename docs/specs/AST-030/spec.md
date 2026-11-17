@@ -754,11 +754,10 @@ the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
 The nightly perf lane is the one scheduled measurement outside them (FR18).
 
-FR20's deferral for every author and FR16's three-run cap per author (DEC-31)
-are not yet enforced by the CI workflows: today the deferral covers only the
-shared agent login and starts the heavy suites when a pull request is marked
-ready, and a run over an author's running pull requests is turned away at its
-longest wait.
+Current-state gap: the CI workflows defer the heavy suites only for the shared
+agent login and start them when a pull request is marked ready, and they turn
+a run away at its longest wait; FR20 and FR16's three-run cap (DEC-31) state
+the required behavior.
 
 ## Verification
 
@@ -1509,8 +1508,8 @@ Most heavy runs are on heads that never merge, and a few authors' runs can
 hold most of CI's room while approved pull requests wait. Two rules answer
 that. First, for every author, the heavy suites run only at
 the heads that decide a merge: the first head whose review and spec gates
-pass, and the pre-merge re-run; marking ready, opening and reopening no longer
-start them, and typecheck and lint still run on every push (FR20, amending
+pass, and the pre-merge re-run; marking ready, opening and reopening start
+none of them, and typecheck and lint run on every push (FR20, amending
 DEC-14). Second, an author has at most three pull-request CI runs active at
 once, engineering owners included, which FR16's owner exemption no longer
 covers; a run over that cap waits for one of that author's own runs to finish
