@@ -4,7 +4,9 @@
  * @file Static JavaScript module export inspection.
  *
  * Proves a runtime export without executing package code. Local ESM re-exports
- * are followed recursively; unresolved or unparsable modules fail closed. A
+ * are followed recursively, and so is a re-export of the package's own name,
+ * through its `exports` as Node resolves it; unresolved or unparsable modules
+ * fail closed. A
  * check that must fail only what it proves asks for a verdict: an export is
  * present (followed to its declaration, `const` aliases included), proved
  * absent, or unknown with the reason.
@@ -70,18 +72,62 @@ const PARSE_OPTIONS = /** @type {any} */ ({
 });
 
 /**
+ * The most modules whose text and tree are kept; the least recently used go
+ * first. The modules one command reads again are few: a package entry, the
+ * barrels it re-exports and a set's own modules stay kept while they are
+ * read. A library of tens of thousands of icon modules reads each one once
+ * or twice in a row, so they pass through, and memory stays flat however
+ * many modules a library has.
+ */
+const MAX_KEPT_MODULES = 256;
+
+/**
  * Modules parsed in this process, by path, reused while the file is unchanged:
- * one command can ask about the same module more than once.
+ * one command can ask about the same module more than once. Most recently
+ * used last.
  * @type {Map<string, {stamp: string, ast: any}>}
  */
 const parsedModules = new Map();
 
 /**
  * Module texts read in this process, by path, reused while the file is
- * unchanged.
+ * unchanged. Most recently used last.
  * @type {Map<string, {stamp: string, text: string}>}
  */
 const moduleTexts = new Map();
+
+/**
+ * The kept entry of `file` while its stamp is `stamp`, marked most recently
+ * used.
+ * @template {{stamp: string}} T
+ * @param {Map<string, T>} kept
+ * @param {string} file
+ * @param {string} stamp
+ * @returns {T | undefined}
+ */
+function keptEntry(kept, file, stamp) {
+  const entry = kept.get(file);
+  if (entry?.stamp !== stamp) return undefined;
+  kept.delete(file);
+  kept.set(file, entry);
+  return entry;
+}
+
+/**
+ * Keep `entry` for `file`; past {@link MAX_KEPT_MODULES}, the least recently
+ * used entry goes.
+ * @template T
+ * @param {Map<string, T>} kept
+ * @param {string} file
+ * @param {T} entry
+ */
+function keepEntry(kept, file, entry) {
+  kept.delete(file);
+  kept.set(file, entry);
+  if (kept.size > MAX_KEPT_MODULES) {
+    kept.delete(/** @type {string} */ (kept.keys().next().value));
+  }
+}
 
 /**
  * A file's identity for these caches: size and mtime, plus ctime and inode,
@@ -96,20 +142,20 @@ function fileStamp(file) {
 /** @param {string} file */
 function moduleText(file) {
   const stamp = fileStamp(file);
-  const cached = moduleTexts.get(file);
-  if (cached?.stamp === stamp) return cached.text;
+  const cached = keptEntry(moduleTexts, file, stamp);
+  if (cached) return cached.text;
   const text = fs.readFileSync(file, 'utf-8');
-  moduleTexts.set(file, {stamp, text});
+  keepEntry(moduleTexts, file, {stamp, text});
   return text;
 }
 
 /** @param {string} file */
 function parseModule(file) {
   const stamp = fileStamp(file);
-  const cached = parsedModules.get(file);
-  if (cached?.stamp === stamp) return cached.ast;
+  const cached = keptEntry(parsedModules, file, stamp);
+  if (cached) return cached.ast;
   const ast = babelParser().parse(moduleText(file), PARSE_OPTIONS);
-  parsedModules.set(file, {stamp, ast});
+  keepEntry(parsedModules, file, {stamp, ast});
   return ast;
 }
 
@@ -303,8 +349,9 @@ export function resolveLocalModule(specifier, fromFile, options = {}) {
 
 /**
  * The file a re-export's specifier names, from the file that writes it: a
- * relative path, or an installed package (its `exports` map honored, else
- * its `module` or `main`), found through node_modules from that file. Only
+ * relative path, the package that holds the file by its own name, or an
+ * installed package (its `exports` map honored, else its `module` or
+ * `main`), found through node_modules from that file. Only
  * the icon-set readers follow packages; every other reader in this module
  * uses {@link resolveLocalModule}, which follows relative paths alone.
  * @param {unknown} specifier
@@ -318,16 +365,65 @@ function resolveModuleOrPackage(specifier, fromFile) {
 }
 
 /**
+ * A bare specifier split into its package name and its subpath (`.` or
+ * `./rest`).
+ * @param {string} specifier
+ */
+function splitPackageSpecifier(specifier) {
+  const parts = specifier.split('/');
+  const count = specifier.startsWith('@') ? 2 : 1;
+  const rest = parts.slice(count).join('/');
+  return {
+    name: parts.slice(0, count).join('/'),
+    subpath: rest ? `./${rest}` : '.',
+  };
+}
+
+/**
+ * How a bare specifier names the package that holds `fromFile`, as Node
+ * resolves it: the nearest package.json above the file is its package, and a
+ * package that declares `exports` imports itself by its own name through that
+ * map, before any node_modules lookup. Null when the specifier names another
+ * package; otherwise `target` is the file the map gives, or null when the map
+ * does not export that subpath.
+ * @param {string} specifier a bare package specifier, with an optional subpath
+ * @param {string} fromFile
+ * @returns {{target: string | null} | null}
+ */
+function resolveSelfReference(specifier, fromFile) {
+  if (specifier.startsWith('node:') || specifier.startsWith('/')) return null;
+  const {name, subpath} = splitPackageSpecifier(specifier);
+  let dir = path.dirname(fromFile);
+  for (;;) {
+    const manifest = path.join(dir, 'package.json');
+    if (isFileOnDisk(manifest)) {
+      /** @type {Record<string, any>} */
+      let pkg;
+      try {
+        pkg = JSON.parse(moduleText(manifest));
+      } catch {
+        return null;
+      }
+      if (pkg?.name !== name || pkg.exports === undefined) return null;
+      return {target: inspectPackageExport(pkg, dir, subpath).target};
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
  * @param {string} specifier a bare package specifier, with an optional subpath
  * @param {string} fromFile
  * @returns {string | null}
  */
 function resolvePackageModule(specifier, fromFile) {
   if (specifier.startsWith('node:') || specifier.startsWith('/')) return null;
-  const parts = specifier.split('/');
-  const count = specifier.startsWith('@') ? 2 : 1;
-  const name = parts.slice(0, count).join('/');
-  const rest = parts.slice(count).join('/');
+  const self = resolveSelfReference(specifier, fromFile);
+  if (self) return self.target;
+  const {name, subpath} = splitPackageSpecifier(specifier);
+  const rest = subpath === '.' ? '' : subpath.slice(2);
   // Node's own resolution: every ancestor's node_modules, no depth cap.
   const packageDir = findInstalledPackage(
     path.dirname(fromFile),
@@ -345,8 +441,7 @@ function resolvePackageModule(specifier, fromFile) {
     return null;
   }
   if (pkg.exports !== undefined) {
-    return inspectPackageExport(pkg, packageDir, rest ? `./${rest}` : '.')
-      .target;
+    return inspectPackageExport(pkg, packageDir, subpath).target;
   }
   const entry = rest || pkg.module || pkg.main || 'index';
   const base = path.join(packageDir, entry);
@@ -375,13 +470,11 @@ function resolvePackageModule(specifier, fromFile) {
  */
 export function moduleParseFailure(file) {
   /** @type {Set<string>} */
-  const seen = new Set();
+  const seen = new Set([file]);
   /** @type {string[]} */
   const queue = [file];
-  while (queue.length > 0) {
-    const next = /** @type {string} */ (queue.shift());
-    if (seen.has(next)) continue;
-    seen.add(next);
+  for (let at = 0; at < queue.length; at++) {
+    const next = queue[at];
     let ast;
     try {
       ast = parseModule(next);
@@ -398,7 +491,10 @@ export function moduleParseFailure(file) {
           continue;
         }
         const target = resolveLocalModule(specifier, next);
-        if (target) queue.push(target);
+        if (target && !seen.has(target)) {
+          seen.add(target);
+          queue.push(target);
+        }
       }
     }
   }
@@ -832,7 +928,7 @@ function exportOriginsOf(file, read) {
  * only when every export the module writes was read and none binds it, and
  * `unknown`, with the first reason, when some export could not be read: a
  * re-export from another package or from a specifier that resolves to no
- * file, a destructured binding, a namespace, an ambient or const enum
+ * file (the package's own name resolves through its `exports`), a destructured binding, a namespace, an ambient or const enum
  * declaration, `export =`, CommonJS exports, or a file that does not parse.
  * @param {string} file
  * @param {string} exportName
@@ -879,13 +975,16 @@ export function moduleExportVerdict(file, exportName, seen = new Set()) {
    * @returns {boolean} true when it proves the export
    */
   const follow = (specifier, imported, what) => {
-    if (!specifier.startsWith('.')) {
+    const self = specifier.startsWith('.')
+      ? null
+      : resolveSelfReference(specifier, file);
+    if (!specifier.startsWith('.') && !self) {
       unknown.push(
         `${shown} re-exports ${what} from "${specifier}", another package this check does not read.`,
       );
       return false;
     }
-    const target = resolveLocalModule(specifier, file);
+    const target = self ? self.target : resolveLocalModule(specifier, file);
     if (!target) {
       unknown.push(
         `${shown} re-exports ${what} from "${specifier}", which resolves to no file this check can read.`,
@@ -1682,26 +1781,15 @@ export function aliasedOrigin(origin, seen = new Set(), unwrap) {
 }
 
 /**
- * Where the value each `<Name prop={value}>` element of a module passes is
- * declared, one entry per element, read without running anything. `Name` is
- * a runtime import of `name` from one of `sources` (renames included). The
- * value is followed with {@link aliasedOrigin} (passing `unwrap`) from the
- * module-scope binding it names, through local files and installed packages.
- * An entry is null when the value is not an identifier or its origin cannot
- * be proved (a parameter or an import that does not resolve gives the
- * module's own name, and a member or a default import gives null). An element
- * without `prop` gives no entry.
- * @param {string} file
- * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
- * @returns {Array<{file: string, name: string} | null>}
+ * Each `<Name …>` element of a parsed module, where `Name` is a runtime
+ * import of `name` from one of `sources` (renames included). A type-only
+ * import names no element.
+ * @param {any} ast
+ * @param {ReadonlySet<string>} sources
+ * @param {string} name
+ * @returns {any[]}
  */
-export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
-  let ast;
-  try {
-    ast = parseModule(file);
-  } catch {
-    return [];
-  }
+function importedElements(ast, sources, name) {
   /** @type {Set<string>} */
   const locals = new Set();
   for (const node of ast.program.body) {
@@ -1723,15 +1811,52 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
     }
   }
   if (locals.size === 0) return [];
+  return nodesOfType(ast.program, 'JSXOpeningElement').filter(
+    (/** @type {any} */ element) =>
+      element.name?.type === 'JSXIdentifier' && locals.has(element.name.name),
+  );
+}
+
+/**
+ * Whether a module renders `<Name>`, a runtime import of `name` from one of
+ * `sources` (renames included), read without running anything. An import
+ * that is never rendered, or a type-only one, is not.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string}} element
+ * @returns {boolean}
+ */
+export function rendersElement(file, {sources, name}) {
+  try {
+    return importedElements(parseModule(file), sources, name).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where the value each `<Name prop={value}>` element of a module passes is
+ * declared, one entry per element, read without running anything. `Name` is
+ * a runtime import of `name` from one of `sources` (renames included). The
+ * value is followed with {@link aliasedOrigin} (passing `unwrap`) from the
+ * module-scope binding it names, through local files and installed packages.
+ * An entry is null when the value is not an identifier or its origin cannot
+ * be proved (a parameter or an import that does not resolve gives the
+ * module's own name, and a member or a default import gives null). An element
+ * without `prop` gives no entry.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
+ * @returns {Array<{file: string, name: string} | null>}
+ */
+export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
+  let ast;
+  try {
+    ast = parseModule(file);
+  } catch {
+    return [];
+  }
   /** @type {Array<{file: string, name: string} | null>} */
   const origins = [];
-  for (const element of nodesOfType(ast.program, 'JSXOpeningElement')) {
-    if (
-      element.name?.type !== 'JSXIdentifier' ||
-      !locals.has(element.name.name)
-    ) {
-      continue;
-    }
+  for (const element of importedElements(ast, sources, name)) {
     const attribute = (element.attributes ?? []).find(
       (/** @type {any} */ item) =>
         item.type === 'JSXAttribute' && item.name?.name === prop,

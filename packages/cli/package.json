@@ -2,7 +2,7 @@
   "name": "@astryxdesign/cli",
   "version": "0.7.17",
   "displayName": "CLI",
-  "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
+  "description": "The Astryx CLI: scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",
@@ -126,6 +126,7 @@
   "dependencies": {
     "@babel/core": "7.29.7",
     "@babel/parser": "7.29.8",
+    "@babel/plugin-transform-react-jsx": "7.29.7",
     "@babel/plugin-transform-typescript": "7.29.7",
     "@babel/types": "7.29.8",
     "@csstools/css-syntax-patches-for-csstree": "1.1.6",

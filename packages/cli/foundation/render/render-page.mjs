@@ -670,7 +670,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -701,8 +701,22 @@ export function segmenterWarning() {
   };
 }
 
-/** A CSS `url()`, its reference in the second group. */
-export const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/;
+/**
+ * A CSS `url()` as CSS reads it: a quoted reference may hold parentheses
+ * and the other quote (`url("./a(1).png")`); an unquoted one holds neither.
+ * Read its reference with {@link cssUrlRef}.
+ */
+export const CSS_URL =
+  /url\(\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^'"()\s]+))\s*\)/;
+
+/**
+ * The reference a {@link CSS_URL} match names.
+ * @param {RegExpMatchArray} m
+ * @returns {string}
+ */
+export function cssUrlRef(m) {
+  return m.groups?.dq ?? m.groups?.sq ?? m.groups?.bare ?? '';
+}
 
 /**
  * What a local file reference of a page or stylesheet names: nothing to
@@ -713,7 +727,10 @@ export const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/;
  * @param {string} ref as written in src, poster or url()
  * @param {{dir: string, root: string}} at the folder it is relative to,
  *   and the project root (for `/` paths, `public/` first)
- * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file', ref: string, file: string} | {kind: 'file', ref: string, file: string}}
+ * A reference is URL text: it names the file its percent-escapes decode to
+ * (`a%20b.png` is "a b.png"), as a browser and the app's bundler read it.
+ * A file that cannot be read (no permission) is `unreadable`.
+ * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
  */
 export function assetRef(ref, at) {
   const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
@@ -721,10 +738,18 @@ export function assetRef(ref, at) {
   if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
     return null;
   if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean};
-  if (!isAssetPath(clean)) return null;
-  const candidates = clean.startsWith('/')
-    ? [path.join(at.root, 'public', clean), path.join(at.root, clean)]
-    : [path.resolve(at.dir, clean)];
+  /** @type {string} */
+  let named;
+  try {
+    named = decodeURIComponent(clean);
+  } catch {
+    // A % that starts no escape is the character itself.
+    named = clean;
+  }
+  if (!isAssetPath(named)) return null;
+  const candidates = named.startsWith('/')
+    ? [path.join(at.root, 'public', named), path.join(at.root, named)]
+    : [path.resolve(at.dir, named)];
   const found = candidates.find(c => fs.existsSync(c));
   if (!found) return {kind: 'missing', ref: clean};
   /** @type {fs.Stats | undefined} */
@@ -734,9 +759,13 @@ export function assetRef(ref, at) {
   } catch {
     return {kind: 'missing', ref: clean};
   }
-  return st.isFile()
-    ? {kind: 'file', ref: clean, file: found}
-    : {kind: 'not-file', ref: clean, file: found};
+  if (!st.isFile()) return {kind: 'not-file', ref: clean, file: found};
+  try {
+    fs.accessSync(found, fs.constants.R_OK);
+  } catch {
+    return {kind: 'unreadable', ref: clean, file: found};
+  }
+  return {kind: 'file', ref: clean, file: found};
 }
 
 /**
@@ -744,7 +773,9 @@ export function assetRef(ref, at) {
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>}} ctx
+ * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean}} ctx
+ *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
+ *   as it is and named, as a missing one is, rather than refused
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
@@ -763,7 +794,7 @@ function inlineAssets(text, kind, ctx) {
       }
       return null;
     }
-    if (named.kind === 'missing' || named.kind === 'not-file') {
+    if (named.kind !== 'file') {
       const key = `missing:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
@@ -772,12 +803,32 @@ function inlineAssets(text, kind, ctx) {
           message:
             named.kind === 'missing'
               ? `${clean} was not found next to the page, so it is left as is and will not show.`
-              : `${clean} is not a regular file (a pipe, a device or a folder), so it is not read and will not show.`,
+              : named.kind === 'unreadable'
+                ? `${clean} cannot be read (no permission), so it is left as is and will not show.`
+                : `${clean} is not a regular file (a pipe, a device or a folder), so it is not read and will not show.`,
         });
       }
       return null;
     }
     const found = named.file;
+    // A stylesheet's file too large to carry, where the caller names such
+    // files itself (the theme editor's own pages): left as it is, as a
+    // missing one is.
+    if (
+      kind === 'css' &&
+      ctx.leaveLargeStyleAssets &&
+      (fs.statSync(found, {throwIfNoEntry: false})?.size ?? 0) > MAX_ASSET_BYTES
+    ) {
+      const key = `large:${clean}`;
+      if (!ctx.counted.has(key)) {
+        ctx.counted.add(key);
+        ctx.warnings.push({
+          code: 'missing-asset',
+          message: `${clean} is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file, so it is left as is and will not show.`,
+        });
+      }
+      return null;
+    }
     ctx.counted.add(`file:${found}`);
     // A relative path names a file that is part of the page: carry it.
     if (!clean.startsWith('/')) ctx.localAssets.add(found);
@@ -785,8 +836,10 @@ function inlineAssets(text, kind, ctx) {
   };
   /** @param {string} value */
   const urls = value =>
-    value.replace(new RegExp(CSS_URL.source, 'g'), (whole, q, ref) => {
-      const uri = resolveRef(ref);
+    value.replace(new RegExp(CSS_URL.source, 'g'), (whole, ...rest) => {
+      const uri = resolveRef(
+        cssUrlRef(/** @type {any} */ ({groups: rest.at(-1)})),
+      );
       return uri ? `url("${uri}")` : whole;
     });
   if (kind === 'css') return urls(text);
@@ -845,12 +898,15 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
- *   project.
- *   With `output`, the file describes itself: notes at its top and end name
+ *   project; `openLayers`: the overlays the page shows or opens are drawn
+ *   and added after its markup (layers.mjs), for reading what they paint;
+ *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is
+ *   left out and named in the warnings, not refused (for a caller that
+ *   names such files itself). With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
  *   the page rendered with, and the markup as rendered.
@@ -866,7 +922,7 @@ export async function renderPage(entry, options = {}) {
   /** @type {RenderWarning[]} */
   const warnings = [];
   const message = await runPage(
-    {entry, root, scope, served},
+    {entry, root, scope, served, openLayers: options.openLayers === true},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );
@@ -942,6 +998,7 @@ export async function renderPage(entry, options = {}) {
     warnings,
     counted: new Set(),
     localAssets: /** @type {Set<string>} */ (new Set()),
+    leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
@@ -975,6 +1032,9 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
+  // A page that draws elements in a state (hovered, focused, pressed) marks
+  // them; its stylesheet then applies those states' rules to them too.
+  const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
   try {
@@ -993,7 +1053,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, used), 'css', {
+        return inlineAssets(cutCss(own, used, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1057,7 +1117,11 @@ export async function renderPage(entry, options = {}) {
   // The file runs no script, so a media query the page asks in JavaScript
   // keeps the answer it got on the server, whatever the reader's screen.
   const screenQueries = [
-    ...new Set(/** @type {{call: string}[]} */ (message.screenQueries ?? []).map(q => q.call)),
+    ...new Set(
+      /** @type {{call: string}[]} */ (message.screenQueries ?? []).map(
+        q => q.call,
+      ),
+    ),
   ];
   if (screenQueries.length > 0) {
     warnings.push({

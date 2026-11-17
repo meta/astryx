@@ -374,7 +374,7 @@ describe('doctor outside a project (own)', () => {
         latest,
       });
     expect(at(null).message).toBe(
-      "Update check: none recorded here, so the newest release is not known. Only a copy installed for the computer checks, in the background once a day after a command; a project's own copy changes only when the project upgrades it, and a tool that runs its own copy chooses its release.",
+      "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     );
     expect(at('1.3.0').message).toContain('1.3.0 is newer than 1.2.0');
     expect(at('1.2.0').message).toContain('No newer release is known');

@@ -46,6 +46,7 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
+  ICON_EXPORT_NAME_RE,
   discoverIconSetDirectory,
   hasLicenseNotice,
   licenseNoticeFix,
@@ -241,7 +242,7 @@ function checkContract(set, packageName, pkg, unchecked) {
   };
   /** @param {string} name @param {string} what */
   const checkName = (name, what) => {
-    if (!/^[A-Z][A-Za-z0-9]*Icon$/u.test(name)) {
+    if (!ICON_EXPORT_NAME_RE.test(name)) {
       issues.push(
         issueWarning(
           ICON_EXPORT_NAME,

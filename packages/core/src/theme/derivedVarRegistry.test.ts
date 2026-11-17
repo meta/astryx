@@ -330,6 +330,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // publication beside container().
   '--_container-corner-block-start',
   '--_container-corner-block-end',
+  // The container-padding record's block-edge bleed: a padding publisher
+  // gives its block padding only to a direct first or last Table.
+  '--_container-bleed-block-start',
+  '--_container-bleed-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
@@ -373,6 +377,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_avatar-group-overlap',
   '--_field-status-overlap',
   '--_codeblock-gutter-width',
+  // The page's direction, read with :dir(rtl) on the block root so the
+  // gutter mirrors; a theme has no direction to set.
+  '--_codeblock-direction',
   '--_tab-indicator-bottom',
   // Hit-area outset on a ::after overlay, and whether that overlay is
   // generated at all — `inset` and `content` on a pseudo-element are not
