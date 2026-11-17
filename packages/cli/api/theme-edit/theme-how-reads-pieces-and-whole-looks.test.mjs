@@ -9,7 +9,8 @@
  * button") takes that variant's look, written for its own variant only,
  * never a reset; the default is the variant the part has when none is
  * given. A part's own piece taken away is not drawn; a whole part taken
- * away is the app's call. A display heading sizes from its display token.
+ * away is the app's call. A display heading sizes from its display token; display headings are
+ * every display look.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -521,6 +522,19 @@ describe('a display heading', () => {
         'set t font-size 60px --on heading --when type:display-1',
       );
       expect(lines).toContain('set t --text-display-1-size 60px');
+    },
+    T,
+  );
+
+  it(
+    'said in the plural, is every display look the heading draws',
+    async () => {
+      const lines = first(await answer('heavy display headings'));
+      expect(lines).toEqual([
+        'set t font-weight 800 --on heading --when type:display-1',
+        'set t font-weight 800 --on heading --when type:display-2',
+        'set t font-weight 800 --on heading --when type:display-3',
+      ]);
     },
     T,
   );

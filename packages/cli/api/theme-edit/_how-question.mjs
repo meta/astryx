@@ -2675,7 +2675,7 @@ export function exactFactor(text) {
 }
 
 /**
- * @typedef {{on: string, when?: string, role?: string, level?: string, missing?: string}} PartRef
+ * @typedef {{on: string, when?: string, role?: string, level?: string, missing?: string, plural?: boolean}} PartRef
  */
 
 /**
@@ -3148,7 +3148,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @typedef {object} Clause
  * @property {string} text
  * @property {string} [joint] - the words that joined the clause to the one before ("with", "and", ",", ";")
- * @property {Array<{on: string, when?: string, role?: string, level?: string, missing?: string}>} parts
+ * @property {Array<{on: string, when?: string, role?: string, level?: string, missing?: string, plural?: boolean}>} parts
  * @property {string[]} aspects
  * @property {boolean} neg
  * @property {'more' | 'less' | null} dir
@@ -4029,6 +4029,9 @@ function clausesOf(q, partWords, words = null) {
       }
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
+      // (A look of the part said in the plural, "display headings": read
+      // below as every look of its numbered family.)
+      if (p.when && /s$/.test(m[0].trim())) p.plural = true;
       // "the error banner": one status of the banner.
       const status =
         /\b(error|danger|warning|success|info)\s+(banners?|alerts?|notices?)\b/.exec(
@@ -8229,6 +8232,41 @@ export function draftAnswer(ctx, env, question) {
     );
     return asks.every(Boolean) ? each.flat() : [c];
   });
+  // ("display headings": a numbered look of a part said in the plural is
+  // every look of that numbered family the part draws, display-1 to
+  // display-3: the values its prop takes, as its component's doc types
+  // them, and any more Core's data saw it drawn in. Each is its own clause,
+  // so the answer runs them all in order; said once, it is the first.)
+  clauses.splice(
+    0,
+    clauses.length,
+    ...clauses.flatMap(c => {
+      const p = c.parts.find(x => x.plural && /-\d+$/.test(x.when ?? ''));
+      const m = p && /^([\w-]+):(.+)-\d+$/.exec(p.when ?? '');
+      if (!p || !m) return [c];
+      const typed = partComponentDocs(ctx, p.on).flatMap(d =>
+        [
+          ...String(d.doc.props?.[m[1]]?.type ?? '').matchAll(
+            /'([\w-]+)'/g,
+          ),
+        ].map(x => x[1]),
+      );
+      const values = [
+        ...new Set([
+          ...typed,
+          .../** @type {string[]} */ (C.MAP[p.on]?.attrs?.[m[1]] ?? []),
+        ]),
+      ]
+        .filter(v => v.startsWith(`${m[2]}-`) && /-\d+$/.test(v))
+        .sort();
+      return values.length > 1
+        ? values.map(v => ({
+            ...c,
+            parts: c.parts.map(x => (x === p ? {...x, when: `${m[1]}:${v}`} : x)),
+          }))
+        : [c];
+    }),
+  );
   /** The aspects each clause names in its own words. @type {WeakMap<Clause, string[]>} */
   const ownAspects = new WeakMap();
   for (const c of clauses) ownAspects.set(c, [...c.aspects]);
