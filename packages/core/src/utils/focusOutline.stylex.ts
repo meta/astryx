@@ -7,9 +7,10 @@
  * @position Internal utility for consistent keyboard focus outlines across core components
  */
 
-// Every ring in core and lab comes from here, except Switch's: its condition
-// is a component-scoped ancestor marker, which cannot be shared without
-// leaking focus state. A component may override only the offset. The values
+// Every ring in core and lab comes from here or from the internal variants in
+// focusOutlineInternal.stylex.ts, except Switch's: its condition is a
+// component-scoped ancestor marker, which cannot be shared without leaking
+// focus state. A component may override only the offset. The values
 // come from the `--focus-outline-*` tokens, so a theme restyles every ring at
 // once. The `:focus-visible` condition is not themeable, so a theme cannot
 // show the ring to pointer users.
@@ -202,16 +203,6 @@ export const focusOutlineStyles = stylex.create({
       ':focus-visible': FOCUS_OUTLINE_OFFSET,
     },
   },
-  /**
-   * Rings only from the variables an ancestor publishes with
-   * {@link focusOutlineStyles.publishFocusVisibleVars}, never from focus on a
-   * descendant: for a row with no action of its own, whose inner controls ring
-   * themselves. One focus move shows one ring.
-   */
-  published: {
-    outline: 'var(--_focus-outline, none)',
-    outlineOffset: 'var(--_focus-outline-offset, 0)',
-  },
   focusWithinOrPublished: {
     outline: {
       default: 'var(--_focus-outline, none)',
@@ -253,7 +244,6 @@ export const focusOutlineProps = {
   publishFocusVisibleVars: makeFocusOutlineProps(
     focusOutlineStyles.publishFocusVisibleVars,
   ),
-  published: makeFocusOutlineProps(focusOutlineStyles.published),
   focusWithinOrPublished: makeFocusOutlineProps(
     focusOutlineStyles.focusWithinOrPublished,
   ),

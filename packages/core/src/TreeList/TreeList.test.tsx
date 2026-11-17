@@ -19,6 +19,7 @@ import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {FOCUS_OUTLINE, focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {focusOutlineInternalStyles} from '../utils/focusOutlineInternal.stylex';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -437,7 +438,7 @@ describe('TreeList', () => {
       getComputedStyle(second).getPropertyValue('--_focus-outline').trim(),
     ).toBe(FOCUS_OUTLINE);
     const ringClasses = stylex
-      .props(focusOutlineStyles.published)
+      .props(focusOutlineInternalStyles.published)
       .className!.split(' ');
     for (const cls of ringClasses) {
       expect(row.className.split(' ')).toContain(cls);
@@ -475,7 +476,7 @@ describe('TreeList', () => {
     // The classes the focus-inside ring adds over the published one carry
     // its `:has(:focus-visible)` branch; a plain row must not compose them.
     const published = stylex
-      .props(focusOutlineStyles.published)
+      .props(focusOutlineInternalStyles.published)
       .className!.split(' ');
     const focusInside = stylex
       .props(focusOutlineStyles.focusWithinOrPublished)

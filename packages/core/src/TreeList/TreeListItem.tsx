@@ -27,6 +27,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {focusOutlineInternalStyles} from '../utils/focusOutlineInternal.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -754,7 +755,8 @@ export function TreeListItem({
               : // A plain row has no action, but it is still a tab stop in the
                 // tree's roving focus, so it draws the focus ring when the
                 // treeitem itself has focus.
-                focusOutlineProps.published(
+                stylex.props(
+                  focusOutlineInternalStyles.published,
                   styles.contentWrapper,
                   styles.publishedFocusLift,
                   densityStyles[density],
