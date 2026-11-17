@@ -36,12 +36,20 @@ const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
   holdEntranceInput: entranceHold,
 }));
-// Counts the input holds that are up. jsdom hit-tests nothing, so no shield
-// is drawn.
+// Counts the presentation holds that are up. jsdom hit-tests nothing, so no
+// shield is drawn. An open menu's `'outside'` scope holds nothing on the menu,
+// so it is left out (DropdownMenuOutsideTap.test.tsx covers it).
 const inputHolds = vi.hoisted(() => ({up: 0}));
 vi.mock('../Layer/inputHold', async importOriginal => ({
   ...(await importOriginal<typeof InputHold>()),
-  holdInput: (_layer: Element, {until}: InputHold.InputHoldOptions) => {
+  holdInput: (
+    _layer: Element,
+    options: InputHold.InputHoldOptions | InputHold.OutsideInputHoldOptions,
+  ) => {
+    if (options.scope === 'outside') {
+      return () => {};
+    }
+    const {until} = options;
     inputHolds.up += 1;
     let isUp = true;
     const end = () => {
