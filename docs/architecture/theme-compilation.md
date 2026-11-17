@@ -246,14 +246,17 @@ Platform-specific details stay inside that compiler.
   pseudo-class overrides, and pseudo-elements) as rules that match only where
   the element's color mode is that mode. Outside media surfaces the theme
   root's `data-theme` decides. Under a root mode other than `light` or `dark`
-  and no Theme that forces one, a block follows the scheme the page draws in,
-  which the root Theme writes to `<html>` as `data-astryx-scheme`: a block
-  applies where the reader's preference (`prefers-color-scheme`) is its mode
-  and `<html>` names no other scheme. So on a page that names no scheme, which
-  draws light, a `@dark` block applies for no reader once the root Theme has
-  mounted. Before that, at the first paint of a server-rendered page, the
-  reader's preference decides alone. Under a Theme that forces a mode, a
-  system root follows the reader's preference. Inside the theme's media
+  and no Theme that forces one, a block follows the scheme the page draws in.
+  When the page draws in one scheme, the root Theme names it on `<html>` in a
+  private attribute (`architecture:public-component-api` INV23), and a block
+  applies where that scheme is its mode, whatever the reader prefers. While
+  no scheme is named, a block applies where the reader's preference
+  (`prefers-color-scheme`) is its mode: on a page that follows the reader,
+  and at the first paint of a server-rendered page, before the root Theme
+  mounts. So on a page that names no scheme, which draws light, once the
+  root Theme has mounted the `@light` block applies for every reader and the
+  `@dark` block for none. Under a Theme that forces a mode, a system root
+  follows the reader's preference. Inside the theme's media
   surfaces the nearest surface decides: a block applies where the closest
   media surface around the element is of its mode, so a light surface inside
   a dark one takes only the light block. This holds for up to five surfaces

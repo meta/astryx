@@ -133,7 +133,7 @@ describe('Theme', () => {
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
   });
 
-  it('syncs the scheme the root provider draws in to <html>, and removes it on unmount', () => {
+  it('names the scheme the root provider draws in on <html> when its mode or the page decides it, and removes it on unmount', () => {
     for (const mode of ['dark', 'light'] as const) {
       const {unmount} = render(
         <Theme theme={testTheme} mode={mode}>
@@ -148,18 +148,57 @@ describe('Theme', () => {
         false,
       );
     }
-    // A system root with no scheme on the page and no dark preference: light.
-    render(
+    // A system root on a page whose scheme the engine does not report leaves
+    // the reader's preference to decide, and a nested Theme never writes it.
+    const nested = render(
       <Theme theme={testTheme} mode="system">
         <Theme theme={testTheme} mode="dark">
           <span>child</span>
         </Theme>
       </Theme>,
     );
-    // A nested Theme never writes it.
-    expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
-      'light',
+    expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+      false,
     );
+    nested.unmount();
+    // A system root on a page that names no scheme draws light, and on a
+    // page that names both the reader's preference decides.
+    const real = window.getComputedStyle.bind(window);
+    let rootScheme = 'normal';
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = real(element, pseudo);
+        if (element === document.documentElement) {
+          Object.defineProperty(style, 'colorScheme', {
+            configurable: true,
+            get: () => rootScheme,
+          });
+        }
+        return style;
+      },
+    );
+    try {
+      const page = render(
+        <Theme theme={testTheme} mode="system">
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
+        'light',
+      );
+      page.unmount();
+      rootScheme = 'light dark';
+      render(
+        <Theme theme={testTheme} mode="system">
+          <span>child</span>
+        </Theme>,
+      );
+      expect(document.documentElement.hasAttribute('data-astryx-scheme')).toBe(
+        false,
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('removes data-theme from <html> when root provider unmounts', () => {

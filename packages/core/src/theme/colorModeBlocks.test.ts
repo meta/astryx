@@ -31,11 +31,18 @@ describe('color-mode blocks', () => {
     expect(out).toContain(
       `:is(.astryx-button):where(:scope[data-theme="dark"] *)${outsideSurfaces} {`,
     );
-    // A system root under no forced mode follows the reader's preference
-    // until the root Theme names the page's scheme on <html>; then a page in
-    // the other scheme takes no block.
+    // A system root under no forced mode draws in the scheme the root Theme
+    // names on <html>, whatever the reader prefers; while none is named, the
+    // reader's preference decides.
+    const unforcedSystem = `:is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]):not(:is([data-theme="light"], [data-theme="dark"]) *) *)${outsideSurfaces}`;
     expect(out).toContain(
-      `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]):not(:is([data-theme="light"], [data-theme="dark"]) *) *)${outsideSurfaces}:where(html:not([data-astryx-scheme="light"]) *) {`,
+      `\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *) {`,
+    );
+    expect(out).not.toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html[data-astryx-scheme="dark"] *)`,
+    );
+    expect(out).toContain(
+      `@media (prefers-color-scheme: dark) {\n  ${unforcedSystem}:where(html:not([data-astryx-scheme]) *) {`,
     );
     // Under a forced mode, a system root follows the reader's preference.
     expect(out).toContain(

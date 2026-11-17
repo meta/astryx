@@ -371,12 +371,28 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
  * else light), or null when the reader's preference decides. With `watch` false it reads nothing and subscribes to nothing. Server
  * rendering reads null, so it resolves the OS preference as before.
  */
-function useRootScheme(watch: boolean): 'light' | 'dark' | null {
+export function useRootScheme(watch: boolean): 'light' | 'dark' | null {
   return useSyncExternalStore(
     watch ? subscribeRootScheme : subscribeNoop,
     watch ? getRootSchemeSnapshot : getNullThemeSnapshot,
     getNullThemeSnapshot,
   );
+}
+
+/**
+ * The scheme a Theme of `mode` draws in: `light` or `dark` as forced, else
+ * the scheme the page draws in (the root's, else its color-scheme meta), else
+ * the reader's preference. With `watchRoot` false it reads the preference
+ * alone and subscribes to no document change.
+ */
+function useResolvedScheme(
+  mode: ThemeMode,
+  watchRoot: boolean,
+): 'light' | 'dark' {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const forced = mode === 'light' || mode === 'dark';
+  const rootScheme = useRootScheme(!forced && watchRoot);
+  return forced ? mode : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
 }
 
 /**
@@ -463,22 +479,6 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  * }
  * ```
  */
-/**
- * The scheme a Theme of `mode` draws in: `light` or `dark` as forced, else
- * the scheme the page draws in (the root's, else its color-scheme meta), else
- * the reader's preference. With `watchRoot` false it reads the preference
- * alone and subscribes to no document change.
- */
-export function useResolvedScheme(
-  mode: ThemeMode,
-  watchRoot: boolean,
-): 'light' | 'dark' {
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const forced = mode === 'light' || mode === 'dark';
-  const rootScheme = useRootScheme(!forced && watchRoot);
-  return forced ? mode : (rootScheme ?? (prefersDark ? 'dark' : 'light'));
-}
-
 export function useTheme(): UseThemeReturn {
   const ctx = use(ThemeContext);
   const systemScheme = use(SystemSchemeContext);

@@ -51,6 +51,10 @@ import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
+import {
+  ROOT_SCHEME_UNNAMED,
+  rootSchemeIs,
+} from '../privateAttributes/scheme';
 
 /**
  * Theme @scope selectors.
@@ -1477,18 +1481,18 @@ function generateComponentRules(
             `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
             wrap,
           );
-          // A system root under no forced mode draws in the page's scheme:
-          // the reader's preference decides until the root Theme names the
-          // scheme on <html>, and from then on a page in the other scheme
-          // takes no block. Under a forced mode a system root follows the
-          // reader's preference.
+          // A system root under no forced mode draws in the page's scheme.
+          // The root Theme names it on <html> when the page draws in one;
+          // while none is named, the reader's preference decides. Under a
+          // forced mode a system root follows the reader's preference.
           const system = `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
           const forcedAround = `:is([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`;
-          const other = name === 'dark' ? 'light' : 'dark';
           const preference = (rule: string) =>
             wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`);
+          const unforcedSystem = `${inside(`${system}:not(${forcedAround} *)`)}${outsideSurfaces}`;
+          modeEmit(`${unforcedSystem}:where(${rootSchemeIs(name)} *)`, wrap);
           modeEmit(
-            `${inside(`${system}:not(${forcedAround} *)`)}${outsideSurfaces}:where(html:not([${ROOT_SCHEME_ATTR}="${other}"]) *)`,
+            `${unforcedSystem}:where(${ROOT_SCHEME_UNNAMED} *)`,
             preference,
           );
           modeEmit(
@@ -1514,8 +1518,6 @@ function generateComponentRules(
 
 /** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
 const THEME_MODE_ATTR = 'data-theme';
-/** The scheme the root Theme draws in, which it syncs onto `<html>`. */
-const ROOT_SCHEME_ATTR = `data-${dataAttrNamespace}-scheme`;
 
 /**
  * How many media surfaces of alternating modes, one inside another, a

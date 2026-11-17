@@ -192,10 +192,11 @@ export type TokenValue = string | [light: string, dark: string];
  * pseudo-class overrides) that applies only where the element's color mode is
  * that mode: the mode a `Theme` sets with `light` or `dark`, or a `MediaTheme`
  * surface. Under a `system` Theme a block follows the scheme the page draws
- * in, as the theme's colors do, once the root Theme has mounted; before that,
- * at the first paint of a server-rendered page, the reader's preference
- * decides. Under a Theme that forces a mode, a `system` Theme's block follows
- * the reader's preference.
+ * in, as the theme's colors do: on a page that draws in one scheme, once the
+ * root Theme has mounted, that scheme's block applies whatever the reader
+ * prefers. On a page that follows the reader, and at the first paint of a
+ * server-rendered page, the reader's preference decides. Under a Theme that
+ * forces a mode, a `system` Theme's block follows the reader's preference.
  * Inside media surfaces the nearest
  * surface decides, so a light `MediaTheme` inside a dark one takes only the
  * light block, for up to five surfaces of alternating modes nested one in

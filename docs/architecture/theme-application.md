@@ -112,8 +112,8 @@ standard width map.
   `useTheme` under a provider reads its theme and mode from context. Shared
   document observers exist for no-provider consumers (the root's mode and theme
   name) and for consumers that resolve `system` under no forced Theme (the
-  root's scheme, INV7), the root `system` Theme among them, which writes the
-  scheme it resolves to `<html>` as `data-astryx-scheme`. Each is created for
+  root's scheme, INV7), the root `system` Theme among them, which names the
+  page's scheme on `<html>` when the page draws in one. Each is created for
   its first consumer and disconnected after its last. A consumer under a Theme that forces `light` or
   `dark` creates none.
 - **INV7 — System follows the scheme the page resolves, and so does any
