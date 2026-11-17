@@ -32,4 +32,13 @@ describe('dashboard scorecard template contract', () => {
     ].find(match => /minWidth:\s*330\b/.test(match[1]));
     expect(trends?.[1]).toMatch(/\bmax:\s*4\b/);
   });
+
+  it('keeps a gap between a trend value and its change on a narrow card', () => {
+    // A spread row with no gap lets the value and "vs prior" touch once the
+    // card is too narrow to spread them apart.
+    const header = source.match(
+      /<HStack([^>]*)>\s*<HStack gap=\{2\}>\s*<Heading level=\{3\}>\{trend\.title\}/,
+    );
+    expect(header?.[1]).toMatch(/\bgap=\{\d+\}/);
+  });
 });

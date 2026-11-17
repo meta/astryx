@@ -537,7 +537,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
   return (
     <Card padding={5}>
       <VStack gap={6}>
-        <HStack hAlign="between" vAlign="center">
+        <HStack gap={3} hAlign="between" vAlign="center">
           <HStack gap={2}>
             <Heading level={3}>{trend.title}</Heading>
             <Heading level={3} color="secondary">
