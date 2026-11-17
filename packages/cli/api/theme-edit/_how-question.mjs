@@ -2289,7 +2289,9 @@ const lexicons = new WeakMap();
  * borders", "remove the border and the shadow").
  */
 const REMOVAL_VERBS =
-  '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip|nix|scrap|take away|take off)(?: all the| the| all| any)?';
+  // ("strip the shadows" takes them away; "one bordered strip", a strip
+  // said last, is a noun.)
+  '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip(?!\\s*(?:$|[,.;:!?]))|nix|scrap|take away|take off)(?: all the| the| all| any)?';
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /** The things a removal can take away. */
 const REMOVABLE =
@@ -28496,6 +28498,15 @@ export function draftAnswer(ctx, env, question) {
     const lines = [
       ...named.map(w => `"${w}"`),
       ...(clauses.length > 1 ? silent.map(c => `"${c.text.trim()}"`) : []),
+      // (An ask of one clause no answer took at all, "pagination pages in
+      // one bordered strip", is named in its own words.)
+      ...(clauses.length === 1 &&
+      !result.length &&
+      !named.length &&
+      clauses[0].aspects.length &&
+      silent.length
+        ? [`"${raw0.trim()}"`]
+        : []),
     ];
     if (lines.length)
       result.push({

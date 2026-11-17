@@ -307,6 +307,14 @@ const ROWS = [
       never: /background-color .* --on button/,
     },
   ],
+  [
+    'a strip said as a noun takes nothing away',
+    {
+      q: 'pagination pages in one bordered strip',
+      says: /not used: "pagination pages in one bordered strip"/,
+      never: /border-width 0/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
