@@ -4,7 +4,7 @@
 /**
  * @file MarkdownListBounds.a11y.chromium.spec.ts
  * @input Uses the Core/Markdown Default story, given a paragraph followed by
- *   unordered, ordered, and nested lists through its `children` arg
+ *   unordered, ordered, nested, and task lists through its `children` arg
  * @output Real-Chromium evidence that each Markdown list stays inside the
  *   column its paragraphs fill, so a list never widens a phone-width page
  * @position Browser evidence for Markdown's list geometry; listEdge.test.tsx
@@ -31,6 +31,9 @@ const MARKDOWN = [
   '',
   '1. First numbered item',
   '2. Second numbered item',
+  '',
+  '- [x] A finished task',
+  '- [ ] An open task',
 ].join('\n');
 
 let storybook: StaticServer;
@@ -103,7 +106,7 @@ for (const dir of ['ltr', 'rtl'] as const) {
         pageWidth: document.documentElement.scrollWidth,
       };
     });
-    expect(geometry.lists.length).toBe(2);
+    expect(geometry.lists.length).toBe(3);
     for (const list of geometry.lists) {
       expect(list.left).toBeGreaterThanOrEqual(geometry.column.left - 0.5);
       expect(list.right).toBeLessThanOrEqual(geometry.column.right + 0.5);

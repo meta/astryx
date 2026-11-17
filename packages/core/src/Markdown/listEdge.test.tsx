@@ -2,7 +2,7 @@
 
 /**
  * @file listEdge.test.tsx
- * @input Markdown ordered, unordered, and nested lists
+ * @input Markdown ordered, unordered, nested, and task lists
  * @output Unit proof that Markdown's lists use List's `flush` edge, so a
  *   list fits its column instead of stepping out past both edges
  * @position Markdown regression test; real-browser widths are in
@@ -25,6 +25,7 @@ describe('Markdown lists fit their column', () => {
     ['unordered', '- one\n- two'],
     ['ordered', '1. one\n2. two'],
     ['nested', '- one\n  1. inner\n  2. inner\n- two'],
+    ['task', '- [x] done\n- [ ] open'],
   ])('%s list rows are flush', (_, markdown) => {
     const {container} = render(<Markdown>{markdown}</Markdown>);
     const edges = rowEdges(container);
