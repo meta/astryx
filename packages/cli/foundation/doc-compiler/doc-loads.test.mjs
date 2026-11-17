@@ -363,7 +363,7 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/bases/core-docs.mjs': {
-    runs: "docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run",
+    runs: 'docs discovery, to name the built-in docs a run on a base other than Core leaves out, only in such a run',
     sites: ['import(../discovery/docs-discovery.mjs)'],
   },
   'foundation/config/project.mjs': {

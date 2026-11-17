@@ -89,7 +89,7 @@ describe('collectDocInputs over what this repo ships', () => {
     expect(new Set(inputs.map(input => input.id)).size).toBe(inputs.length);
   }, 120_000);
 
-  it('reads the installed-icon-set section once, as the set package\'s extension of icons, where the project has an icon set', async () => {
+  it("reads the installed-icon-set section once, as the set package's extension of icons, where the project has an icon set", async () => {
     const cwd = writeIconSetProject(tmpDir);
     const {inputs, problems} = await collectDocInputs(await Project.load(cwd));
     expect(problems).toEqual([]);
