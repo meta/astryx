@@ -896,8 +896,9 @@ function BurndownChart() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            // Sized to the widest tick label, so the chart edge does not clip it.
-            width="auto"
+            // Holds the widest tick label ("320 pts") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={64}
             unit=" pts"
           />
           <Tooltip

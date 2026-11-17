@@ -524,8 +524,9 @@ function ActiveUsersChart() {
             }}
             axisLine={false}
             tickLine={false}
-            // Sized to the widest tick label, so the chart edge does not clip it.
-            width="auto"
+            // Holds the widest tick label ("120") at the touch type size
+            // without a layout pass, so the chart edge does not clip it.
+            width={40}
           />
           <Tooltip
             content={<ChartTooltip />}
