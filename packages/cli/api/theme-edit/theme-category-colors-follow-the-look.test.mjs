@@ -322,3 +322,59 @@ describe('status roles follow the look', () => {
     );
   }, 240_000);
 });
+
+describe('code colors and the overlay follow the look', () => {
+  const ROLES = [
+    'keyword',
+    'string',
+    'comment',
+    'number',
+    'function',
+    'type',
+    'variable',
+    'operator',
+    'constant',
+    'tag',
+    'attribute',
+    'property',
+    'punctuation',
+  ];
+
+  it('grows each syntax role readable on the code background and the page', async () => {
+    await themeEditNew('code', {cwd, like: 'neutral'});
+    await themeEditSet('code', 'neutral', '#6b778c', {cwd});
+    const r = /** @type {any} */ (
+      await themeEditSet('code', 'accent', '#c2410c', {cwd})
+    );
+    for (const [i, mode] of /** @type {const} */ ([
+      'light',
+      'dark',
+    ]).entries()) {
+      const page = halves('code', '--color-background-body')[i];
+      const ground = halves('code', '--color-syntax-background')[i];
+      for (const role of ROLES) {
+        const c = halves('code', `--color-syntax-${role}`)[i];
+        expect(contrast(c, ground), `${mode} ${role}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+        expect(
+          contrast(c, page),
+          `${mode} ${role} on the page`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // The scrim is the neutral's, see-through.
+    expect(css('code')).toMatch(
+      /--color-overlay: light-dark\(#[0-9a-f]{6}80, #[0-9a-f]{6}cc\)/,
+    );
+    expect(r.data.changedTokens.join('\n')).toMatch(
+      /^code colors and the overlay: \d+ values moved with the look$/m,
+    );
+  }, 240_000);
+
+  it('lets a syntax color set by hand win', async () => {
+    await themeEditSet('code', '--color-syntax-keyword', '#123456', {cwd});
+    await themeEditSet('code', 'accent', '#b91c1c', {cwd});
+    expect(css('code')).toMatch(/--color-syntax-keyword: #123456/);
+  }, 240_000);
+});
