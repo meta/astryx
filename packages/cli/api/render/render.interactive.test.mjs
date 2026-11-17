@@ -288,7 +288,7 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
-  it('reads each image the page imports from the embedded source, so the script holds no copy of it', async () => {
+  it('reads each imported image the embedded source carries from it, so the script holds no copy, and keeps a copy of one the source leaves out', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       'base64',
