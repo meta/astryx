@@ -396,6 +396,26 @@ describe('BaseTypeahead option actions', () => {
       expect(activeElementOf(input)).toBe(row);
     });
 
+    it('forgets a reached action when the list closes, so Escape then ArrowDown lands on the option cell', async () => {
+      const onPin = vi.fn();
+      const onChange = vi.fn();
+      render(<Field source={officeSource(onPin)} onChange={onChange} />);
+      const {user, input} = await openFor('o');
+      await screen.findByRole('grid', {hidden: true});
+      await user.keyboard('{Home}{ArrowRight}');
+      expect(input.getAttribute('aria-activedescendant')).toMatch(/-action$/);
+
+      await user.keyboard('{Escape}');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      await user.keyboard('{ArrowDown}');
+      await screen.findByRole('grid', {hidden: true});
+      const row = activeElementOf(input);
+      expect(row).toHaveAttribute('role', 'row');
+      await user.keyboard('{Enter}');
+      expect(onPin).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalled();
+    });
+
     it('gives the option cell back when the pointer highlights a row after the keys reached an action', async () => {
       const onPin = vi.fn();
       const onChange = vi.fn();

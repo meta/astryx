@@ -756,7 +756,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const [isOnAction, setIsOnAction] = useState(false);
   // Up, Down, Home and End set the row; only a grid row has an action to
   // reach, so the check needs no grid test of its own.
-  const isGridRowReached = gridRow === highlightedIndex;
+  const isGridRowReached =
+    highlightedIndex >= 0 && gridRow === highlightedIndex;
   const isActionCellActive = isGridRowReached && isOnAction;
   // Bumped whenever the rows are replaced rather than appended to, so the
   // highlighted-row scroll runs for a new list but not when a later list for
@@ -1161,6 +1162,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
+    // A list that shows again starts on no reached row, so no reached cell
+    // either: only a key move to a row reaches it again (moveToRow).
+    setGridRow(-1);
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     dismiss();
@@ -2550,9 +2554,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           !isDialogMenu &&
           highlightedIndex >= 0 &&
           highlightedIndex < results.length
-            ? isActionCellActive
-              ? `${getItemId(highlightedIndex)}-action`
-              : getItemId(highlightedIndex)
+            ? getItemId(highlightedIndex) +
+              (isActionCellActive ? '-action' : '')
             : undefined
         }
         aria-autocomplete="list"
