@@ -29,6 +29,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -94,6 +95,11 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {attachScrollKeyboardDelegation} from '../hooks/scrollKeyboardDelegation';
 import {observeMainOverflow} from './observeMainOverflow';
 import {
+  unreadShellProps,
+  unreadWidthStyle,
+  unreadWideOnlyProps,
+} from '../privateAttributes/appShellUnread.stylex';
+import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
@@ -128,6 +134,12 @@ const ActivityWrapper = HasActivity
  * this never turns into a race decided by browser timer-firing order.
  */
 const ACTIVITY_HIDE_BUFFER_MS = 50;
+
+// The server render and the hydration render read `false`; every later render
+// reads `true`. Nothing changes after that, so nothing is watched.
+const subscribeToNothing = () => () => {};
+const readOnClient = () => true;
+const readOnServer = () => false;
 
 // =============================================================================
 // Types
@@ -194,8 +206,10 @@ export interface MobileNavConfig {
 
   /**
    * SSR hint: whether the initial render should assume mobile layout.
-   * Seeds the breakpoint state so the server-rendered HTML matches
-   * the client on mobile devices, avoiding a layout flash. Ignored when
+   * Seeds the breakpoint state so the server-rendered HTML is the phone
+   * layout, menu toggle included. Without it, the server-rendered wide
+   * layout still paints without its inline side nav below the breakpoint,
+   * and the toggle arrives when the page's script runs. Ignored when
    * `breakpoint` is `none`, which is always non-mobile.
    *
    * Derive from the User-Agent header or a device-detection cookie
@@ -406,7 +420,7 @@ const styles = stylex.create({
   mainElevatedCorner: {
     borderStartStartRadius: {
       default: null,
-      ':focus-visible': radiusVars['--radius-page'],
+      ':focus-visible': `var(--_app-shell-page-corner, ${radiusVars['--radius-page']})`,
     },
   },
   // While main scrolls its overflowing content it is a keyboard stop, and
@@ -423,7 +437,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     backgroundColor: colorVars['--color-background-surface'],
-    borderStartStartRadius: radiusVars['--radius-page'],
+    borderStartStartRadius: `var(--_app-shell-page-corner, ${radiusVars['--radius-page']})`,
     pointerEvents: 'none',
   },
   contentWrapper: {
@@ -622,25 +636,34 @@ export function AppShell({
   // Mobile nav open state (controlled + uncontrolled)
   // =========================================================================
   const activeWidthBreakpoints = activeTheme?.__adaptations?.widthBreakpoints;
-  const breakpointQuery =
+  const breakpointWidth =
     sideNavBreakpoint === 'none'
+      ? null
+      : (activeWidthBreakpoints?.[sideNavBreakpoint] ??
+        DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]);
+  const breakpointQuery =
+    breakpointWidth == null
       ? '(width < 0px)'
-      : `(width < ${
-          activeWidthBreakpoints?.[sideNavBreakpoint] ??
-          DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
-        }px)`;
+      : `(width < ${breakpointWidth}px)`;
+  const isMobileOnServer =
+    breakpointWidth != null && mobileNavConfig?.defaultIsMobile === true;
+  const isBelowBreakpointNow = useMediaQuery(breakpointQuery, isMobileOnServer);
+  const hasReadWindow = useSyncExternalStore(
+    subscribeToNothing,
+    readOnClient,
+    readOnServer,
+  );
   // The client's first answer can differ from the server's. That correction
   // is an urgent update, and it changes the mobile context above the page.
   // React answers an urgent update above content it has not hydrated by
   // rendering that content again in place of its server HTML. A deferred
   // value takes the client's answer in a transition, which waits for that
   // content to hydrate.
-  const isBelowBreakpoint = useDeferredValue(
-    useMediaQuery(
-      breakpointQuery,
-      sideNavBreakpoint === 'none' ? false : mobileNavConfig?.defaultIsMobile,
-    ),
+  const layoutWidth = useDeferredValue(
+    !hasReadWindow ? 'unread' : isBelowBreakpointNow ? 'mobile' : 'wide',
   );
+  const isBelowBreakpoint =
+    layoutWidth === 'unread' ? isMobileOnServer : layoutWidth === 'mobile';
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen = mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
 
@@ -851,6 +874,13 @@ export function AppShell({
   // Determine if sideNav should show as overlay (mobile) or inline
   // =========================================================================
   const showSideNavInline = hasSideNav && !isBelowBreakpoint;
+  // Until the shell reads the window, a phone can be showing the server's wide
+  // layout. CSS then hides the inline side nav and flattens the elevated
+  // corner below the breakpoint, so the first paint matches the phone layout.
+  const unreadWidth =
+    layoutWidth === 'unread' && showSideNavInline ? breakpointWidth : null;
+  const sideNavWideOnlyProps =
+    unreadWidth == null ? undefined : unreadWideOnlyProps(unreadWidth);
 
   // Mobile nav rendering modes:
   // 1. ReactNode shorthand — user provided <MobileNav> directly
@@ -1114,6 +1144,7 @@ export function AppShell({
       hasDivider={navHasDividers}
       isScrollable={isFill}
       {...themeProps('app-shell-sidenav', {variant})}
+      {...(isAuto ? undefined : sideNavWideOnlyProps)}
       xstyle={[
         navAreaStyle,
         isAuto && stickyBgStyle,
@@ -1125,7 +1156,9 @@ export function AppShell({
 
   const sideNavContent =
     sideNavPanel != null && isAuto ? (
-      <div {...stylex.props(styles.sideNavSticky)}>{sideNavPanel}</div>
+      <div {...sideNavWideOnlyProps} {...stylex.props(styles.sideNavSticky)}>
+        {sideNavPanel}
+      </div>
     ) : (
       sideNavPanel
     );
@@ -1319,6 +1352,7 @@ export function AppShell({
         {...rest}
         ref={useMergedRefs(ref, shellRef)}
         data-testid={dataTestId}
+        {...(unreadWidth == null ? undefined : unreadShellProps(unreadWidth))}
         {...mergeProps(
           themeProps('app-shell', {variant}),
           stylex.props(
@@ -1397,6 +1431,7 @@ export function AppShell({
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>
+        {unreadWidth != null && unreadWidthStyle(unreadWidth)}
       </div>
     </AppShellMobileContext>
   );

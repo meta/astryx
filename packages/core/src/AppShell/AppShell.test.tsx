@@ -629,6 +629,150 @@ describe('AppShell', () => {
   );
 
   // ===========================================================================
+  // First paint before the shell reads the window (FR19)
+  // ===========================================================================
+
+  describe('first paint before the shell reads the window', () => {
+    // React hoists the rule into the document head, so render a document.
+    function serverHtml(app: React.ReactElement): string {
+      return renderToString(
+        <html>
+          <head />
+          <body>{app}</body>
+        </html>,
+      );
+    }
+
+    function unreadRule(html: string): string | undefined {
+      return /<style[^>]*>([\s\S]*?)<\/style>/.exec(html)?.[1];
+    }
+
+    it('hides the inline side nav below the breakpoint with CSS in the server HTML', () => {
+      const html = serverHtml(
+        <AppShell
+          variant="elevated"
+          topNav={<TopNav heading="App" />}
+          sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+      const host = document.createElement('div');
+      host.innerHTML = html;
+
+      const shell = host.querySelector('.astryx-app-shell');
+      expect(shell?.getAttribute('data-astryx-app-shell-unread')).toBe(
+        'shell-768',
+      );
+      const panel = host.querySelector('.astryx-layout-panel');
+      expect(panel?.getAttribute('data-astryx-app-shell-unread')).toBe(
+        'wide-only-768',
+      );
+      expect(unreadRule(html)).toBe(
+        '@media (width < 768px) {' +
+          '[data-astryx-app-shell-unread="wide-only-768"] { display: none; }' +
+          '[data-astryx-app-shell-unread="shell-768"] { --_app-shell-page-corner: 0px; }' +
+          '}',
+      );
+    });
+
+    it("uses the nearest theme's width for the named breakpoint", () => {
+      const theme = defineTheme({
+        name: 'unread-width-theme',
+        adaptations: {widthBreakpoints: {lg: 1100}},
+      });
+      const html = serverHtml(
+        <Theme theme={theme}>
+          <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+            <div>Content</div>
+          </AppShell>
+        </Theme>,
+      );
+
+      expect(html).toContain('data-astryx-app-shell-unread="shell-1100"');
+      expect(unreadRule(html)).toContain('@media (width < 1100px)');
+    });
+
+    it.each([
+      ['an SSR hint that renders the phone layout', {defaultIsMobile: true}],
+      ['breakpoint none', {breakpoint: 'none' as const}],
+    ])('adds no CSS for %s', (_case, mobileNav) => {
+      const html = serverHtml(
+        <AppShell sideNav={<TestSideNav />} mobileNav={mobileNav}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(html).not.toContain('data-astryx-app-shell-unread');
+      expect(unreadRule(html)).toBeUndefined();
+    });
+
+    it('adds no CSS without a side nav', () => {
+      const html = serverHtml(
+        <AppShell topNav={<TopNav heading="App" />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(html).not.toContain('data-astryx-app-shell-unread');
+      expect(unreadRule(html)).toBeUndefined();
+    });
+
+    it('marks nothing on a render that reads the window first', () => {
+      const {container} = render(
+        <AppShell sideNav={<TestSideNav />}>
+          <div>Content</div>
+        </AppShell>,
+      );
+
+      expect(
+        container.querySelector('[data-astryx-app-shell-unread]'),
+      ).toBeNull();
+    });
+
+    it.each([
+      ['below the breakpoint', true],
+      ['at or above the breakpoint', false],
+    ])(
+      'drops the marks once hydration reads the window %s',
+      async (_case, isBelow) => {
+        const app = (
+          <AppShell sideNav={<TestSideNav />}>
+            <div>Content</div>
+          </AppShell>
+        );
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        host.innerHTML = renderToString(app);
+        expect(
+          host.querySelector('[data-astryx-app-shell-unread="shell-768"]'),
+        ).not.toBeNull();
+
+        mockMql = createMockMatchMedia(isBelow);
+        vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+        let root: ReturnType<typeof hydrateRoot> | undefined;
+        try {
+          await act(async () => {
+            root = hydrateRoot(host, app);
+          });
+
+          expect(
+            host.querySelector('[data-astryx-app-shell-unread]'),
+          ).toBeNull();
+          // Below the breakpoint the shell is in its mobile layout (the
+          // drawer is mounted); otherwise the side nav stays inline.
+          expect(host.querySelector('dialog') != null).toBe(isBelow);
+          expect(host.querySelector('.astryx-layout-panel') != null).toBe(
+            !isBelow,
+          );
+        } finally {
+          act(() => root?.unmount());
+          host.remove();
+        }
+      },
+    );
+  });
+
+  // ===========================================================================
   // Mobile overlay (default MobileNav wrapping sideNav)
   // ===========================================================================
 
