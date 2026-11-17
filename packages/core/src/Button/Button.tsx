@@ -26,14 +26,12 @@ import {
   useState,
   useTransition,
   type ReactNode,
-  type RefObject,
 } from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {useUndescribedTrigger} from '../Text/TruncationTooltip';
-import {isElement} from '../utils/nodeType';
+import {useCutTextOnKeyboardFocus} from '../Text/TruncationTooltip';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {
   colorVars,
@@ -772,32 +770,6 @@ function addsNoName(node: ReactNode): boolean {
   return typeof label !== 'string' || label.trim() === '';
 }
 
-/** Whether a box clips its content (the label, or a wrapper inside it). */
-function overflows(element: Element): boolean {
-  const box =
-    element.clientWidth ||
-    (element instanceof HTMLElement ? element.offsetWidth : 0);
-  return box > 0 && element.scrollWidth > box;
-}
-
-/** Whether an element is left out of what a reader sees. */
-function isHiddenCopy(element: Element): boolean {
-  return element.closest('[hidden], [aria-hidden="true"]') != null;
-}
-
-/**
- * Whether a label is cut: its box, or a visible box inside it, clips its
- * text. A hidden copy (ToggleButton's bold-width reservation) does not count.
- */
-function isLabelCut(label: HTMLElement): boolean {
-  return (
-    overflows(label) ||
-    [...label.querySelectorAll('*')].some(
-      element => !isHiddenCopy(element) && overflows(element),
-    )
-  );
-}
-
 /**
  * Whether a caller's Tooltip already describes the Button. Its tooltip
  * replaces the cut-label one, so one tooltip shows at one spot.
@@ -810,42 +782,6 @@ function hasCallerTooltip(button: HTMLElement): boolean {
       button.ownerDocument.getElementById(id)?.getAttribute('role') ===
         'tooltip',
   );
-}
-
-/** The label a reader sees: hidden and `aria-hidden` copies are left out. */
-function visibleLabelText(label: HTMLElement): string {
-  let text = '';
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent ?? '';
-    } else if (
-      node instanceof Element &&
-      !node.hasAttribute('hidden') &&
-      node.getAttribute('aria-hidden') !== 'true'
-    ) {
-      node.childNodes.forEach(walk);
-    }
-  };
-  walk(label);
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-/**
- * The tooltip for a cut label: the label in full, with no description. It is
- * open while it is mounted; `onHide` closes it (Escape).
- */
-function CutLabelTooltip({
-  anchorRef,
-  label,
-  onHide,
-}: {
-  anchorRef: RefObject<HTMLElement | null>;
-  label: string;
-  onHide: () => void;
-}): ReactNode {
-  const tooltip = useTooltip({placement: 'above', isOpen: true, onHide});
-  useUndescribedTrigger(tooltip.ref, anchorRef);
-  return tooltip.renderTooltip(label);
 }
 
 /**
@@ -998,32 +934,16 @@ export function Button({
   });
 
   // A label cut short by its row shows in full in a tooltip when keyboard
-  // focus reaches the Button. The label is measured then, never at rest, and
-  // a caller's own tooltip replaces it. A hover shows nothing.
+  // focus reaches the Button; a caller's own tooltip replaces it.
   const buttonRef = useRef<HTMLElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
-  const [cutLabel, setCutLabel] = useState<string | null>(null);
   const canShowCutLabel = !isIconOnly && tooltip == null;
-  const showCutLabel = (event: React.FocusEvent<HTMLElement>) => {
-    const labelEl = labelRef.current;
-    const buttonEl = buttonRef.current;
-    if (
-      !canShowCutLabel ||
-      labelEl == null ||
-      buttonEl == null ||
-      !isElement(event.target) ||
-      !event.target.matches(':focus-visible')
-    ) {
-      return;
-    }
-    const text = visibleLabelText(labelEl);
-    const isCut =
-      text !== '' && !hasCallerTooltip(buttonEl) && isLabelCut(labelEl);
-    setCutLabel(isCut ? text : null);
-  };
-  // Focus leaving, Escape, or a press on the Button closes it, as a press
-  // closes the Button's own tooltip.
-  const hideCutLabel = () => setCutLabel(null);
+  const cutLabel = useCutTextOnKeyboardFocus({
+    anchorRef: buttonRef,
+    measureRef: labelRef,
+    isEnabled: canShowCutLabel,
+    isSuppressed: hasCallerTooltip,
+  });
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
@@ -1257,9 +1177,12 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
-        onPointerDown={composeEventHandlers(props.onPointerDown, hideCutLabel)}
-        onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
-        onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1285,9 +1208,12 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
-        onPointerDown={composeEventHandlers(props.onPointerDown, hideCutLabel)}
-        onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
-        onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          cutLabel.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, cutLabel.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1301,11 +1227,11 @@ export function Button({
     <>
       {element}
       {tooltip ? tooltipHook.renderTooltip(tooltip) : null}
-      {canShowCutLabel && cutLabel != null ? (
-        <CutLabelTooltip
+      {canShowCutLabel && cutLabel.cutText != null && cutLabel.Tooltip ? (
+        <cutLabel.Tooltip
           anchorRef={buttonRef}
-          label={cutLabel}
-          onHide={hideCutLabel}
+          content={cutLabel.cutText}
+          onHide={cutLabel.hide}
         />
       ) : null}
     </>

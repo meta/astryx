@@ -4,15 +4,15 @@
  * @file Button.truncationTooltip.test.tsx
  * @input Uses vitest, @testing-library/react, Button
  * @output Unit tests for the tooltip that shows a Button's label when it is cut
- * @position Testing; validates that a truncated label shows in full on hover
- *   and keyboard focus, adds no duplicate description, and that a label that
- *   fits shows no tooltip
+ * @position Testing; validates that a cut label shows in full on keyboard
+ *   focus only, adds no duplicate description, and that a label that fits
+ *   shows no tooltip
  *
  * SYNC: When Button.tsx changes, update tests to match new behavior
  */
 
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Button} from './Button';
 import {Tooltip} from '../Tooltip/Tooltip';
 import {ToggleButton} from '../ToggleButton/ToggleButton';
@@ -54,6 +54,12 @@ function withOverflow(
 }
 
 let restore: (() => void) | null = null;
+
+// Focus counts as keyboard focus only after a key press: the modality reader
+// is shared across the document, so each test starts from a keyboard press.
+beforeEach(() => {
+  fireEvent.keyDown(document.body, {key: 'Tab'});
+});
 
 afterEach(() => {
   restore?.();
