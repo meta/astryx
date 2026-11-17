@@ -55,9 +55,8 @@ import {
   addBaseHelpText,
   baseHelpSettings,
   checkRun,
-  commandAvailable,
-  helpBase,
   runResolution,
+  servedSubcommands,
 } from './lib/base-gate.mjs';
 import {commandPath} from './lib/command-path.mjs';
 import {scanRootArgs} from './lib/root-args.mjs';
@@ -829,9 +828,7 @@ export async function createProgram({argv} = {}) {
       // The suggestions name only what the run's base serves, so its
       // integrations load first.
       await loadProjectOnce();
-      const names = actionCommand.commands
-        .filter(child => commandAvailable(child, helpBase()))
-        .map(child => child.name());
+      const names = servedSubcommands(actionCommand).map(child => child.name());
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.

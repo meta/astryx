@@ -50,11 +50,7 @@ const NO_ACTION_OF_THEIR_OWN = [];
  * separately below.
  * @type {string[]}
  */
-const RECORD_FOR_THEMSELVES = [
-  // A renamed command's old name: hidden, it records no result set and fails
-  // naming the new name (clients/cli/lib/renamed-commands.mjs).
-  'experimental render',
-];
+const RECORD_FOR_THEMSELVES = [];
 
 /**
  * Every command in the program, depth first, with its fully qualified name.

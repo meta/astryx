@@ -52,7 +52,45 @@ describe('experimental export is the name', () => {
     expect(stdout + stderr).toMatch(/experimental export page\.tsx/u);
   });
 
-  it.each(['render', 'export', 'share', 'bundle', 'snapshot'])(
+  it('the moved error keeps the options before it and quotes each word', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      '--base',
+      '@astryxdesign/core',
+      'experimental',
+      'render',
+      'my page.tsx',
+      '--out',
+      'my page.html',
+    ]);
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).suggestions[0].name).toBe(
+      "astryx --json --base @astryxdesign/core experimental export 'my page.tsx' --out 'my page.html'",
+    );
+  });
+
+  it('help for the old name answers the moved error', async () => {
+    const {status, stdout, stderr} = await runCli([
+      'help',
+      'experimental',
+      'render',
+    ]);
+    expect(status).toBe(1);
+    expect(stdout + stderr).toMatch(/is now experimental export/u);
+  });
+
+  it.each([[[]], [['--json']]])(
+    'an unknown experimental word never lists the old name (%j)',
+    async flags => {
+      for (const word of ['rendr', 'nope']) {
+        const {stdout, stderr} = await runCli([...flags, 'experimental', word]);
+        expect(stdout + stderr).toMatch(/experimental export/u);
+        expect(stdout + stderr).not.toMatch(OLD);
+      }
+    },
+  );
+
+  it.each(['render', 'export', 'share', 'bundle', 'snapshot', 'standalone'])(
     'an unknown `astryx %s` names experimental export',
     async word => {
       const {status, stdout, stderr} = await runCli([word]);

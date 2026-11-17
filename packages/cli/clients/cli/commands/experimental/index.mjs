@@ -7,14 +7,11 @@
  * experiment registers its own subcommand here.
  */
 
-import {
-  NO_RESULT_SET,
-  recordCommandResult,
-} from '../../../../foundation/debug/index.mjs';
+import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {cliError, themeGroupUnknownSubcommand} from '../../lib/cli-error.mjs';
-import {defineCommand, markReportsResult} from '../../lib/define-command.mjs';
+import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
 import {registerExperimentalExport} from './export.mjs';
@@ -51,20 +48,40 @@ export function registerExperimental(program) {
   registerExperimentalExport(experimental, program);
   registerExperimentalTheme(experimental, program);
   for (const [old, renamed] of Object.entries(RENAMED_EXPERIMENTAL)) {
-    // Hidden, and never runs the command: the old name's line fails and
-    // names the new one, whatever options follow it, in text and in JSON.
-    const command = experimental
-      .command(old, {hidden: true})
+    // Hidden, and never runs the command: the old name's line, and its help,
+    // fail and name the new one, whatever options follow it, in text and in
+    // JSON.
+    const answer = () => renamedAnswer(old, renamed, process.argv.slice(2));
+    const command = defineCommand(experimental, renamedDoc(old, renamed), {
+      hidden: true,
+      action: answer,
+    })
       .helpOption(false)
       .allowUnknownOption()
-      .allowExcessArguments()
-      .argument('[words...]')
-      .action(() => {
-        recordCommandResult(NO_RESULT_SET);
-        return renamedAnswer(old, renamed, process.argv.slice(2));
-      });
-    markReportsResult(command);
+      .allowExcessArguments();
+    command.help = answer;
   }
+}
+
+/**
+ * The CommandDoc of a renamed command's old name: hidden, so no help or
+ * manifest shows it.
+ * @param {string} old
+ * @param {string} renamed
+ * @returns {import('@astryxdesign/cli/authoring').CommandDoc}
+ */
+function renamedDoc(old, renamed) {
+  return {
+    type: 'command',
+    name: `experimental ${old}`,
+    displayName: `astryx experimental ${old}`,
+    namespace: 'cli/commands',
+    stability: 'experimental',
+    summary: `The old name of experimental ${renamed}`,
+    description: `The old name of experimental ${renamed}. It runs nothing: it fails and names the run with ${renamed}.`,
+    args: [{name: 'words', variadic: true, required: false}],
+    exitCodes: [{code: 1, when: 'always: the command has a new name'}],
+  };
 }
 
 /**
