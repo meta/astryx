@@ -97,12 +97,15 @@ export const monthGridStyles = stylex.create({
   weekNumberHeader: {
     width: sizeVars['--size-element-md'],
   },
+  // A column is never narrower than its widest cell, the weekday name
+  // included, so columns that share too little width overflow instead of
+  // running one name into the next.
   daysGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
+    gridTemplateColumns: 'repeat(7, minmax(min-content, 1fr))',
   },
   daysGridWithNumbers: {
-    gridTemplateColumns: 'auto repeat(7, 1fr)',
+    gridTemplateColumns: 'auto repeat(7, minmax(min-content, 1fr))',
   },
   weekNumber: {
     width: sizeVars['--size-element-md'],
