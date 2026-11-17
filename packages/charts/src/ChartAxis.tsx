@@ -64,6 +64,26 @@ const styles = stylex.create({
 const TICK_SIZE = 6;
 
 /**
+ * Keeps at most `cap` ticks: every `step`-th tick from the first, plus the last
+ * tick. The last tick is the end of the data (often the newest value), so it
+ * must keep its label. It replaces the kept tick before it when that tick sits
+ * closer than one step, so labels never come closer than the step allows.
+ */
+function thinTicks<T>(ticks: T[], cap: number): T[] {
+  if (ticks.length <= cap) {
+    return ticks;
+  }
+  if (cap < 2) {
+    return ticks.slice(0, Math.max(0, cap));
+  }
+  const step = Math.ceil(ticks.length / cap);
+  const last = ticks.length - 1;
+  const kept = ticks.filter((_, i) => i % step === 0 && last - i >= step);
+  kept.push(ticks[last]);
+  return kept;
+}
+
+/**
  * Chart axis. Always draws tick labels; the axis edge line and tick marks
  * are independently toggleable. Pair with `<ChartGrid>` for grid lines.
  *
@@ -157,7 +177,7 @@ export function ChartAxis({
     // axes don't smear into an unreadable blur: width ÷ widest-label for
     // horizontal (e.g. 30 daily categories), height ÷ line-height for vertical
     // (e.g. a categorical y-axis on a horizontal bar chart). Labels are then
-    // evenly skipped down to the cap.
+    // thinned down to the cap; the first and last labels stay.
     let cap = maxTicks;
     if (cap == null && allTicks.length > 1) {
       if (isHorizontal && width > 0) {
@@ -173,8 +193,7 @@ export function ChartAxis({
       }
     }
     if (cap && allTicks.length > cap) {
-      const step = Math.ceil(allTicks.length / cap);
-      allTicks = allTicks.filter((_, i) => i % step === 0);
+      allTicks = thinTicks(allTicks, cap);
     }
 
     return allTicks;

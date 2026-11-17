@@ -50,6 +50,7 @@ export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
       ? Math.max(0, options.strokeWidth)
       : 2;
   const dots = options.dots ?? false;
+  const dotRadius = 3;
 
   const seriesDef: SeriesDef = {
     type: 'line',
@@ -57,7 +58,7 @@ export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
     dataKeys: [dataKey],
     color,
     label: options.label ?? dataKey,
-    layout: {},
+    layout: dots ? {xOverhang: dotRadius} : {},
 
     resolve(ctx) {
       const {data, xKey, xScale, yScale} = ctx;
@@ -105,7 +106,7 @@ export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
                   key={p.dataIndex}
                   cx={p.px}
                   cy={p.py}
-                  r={3}
+                  r={dotRadius}
                   fill={strokeColor}
                 />
               ))}

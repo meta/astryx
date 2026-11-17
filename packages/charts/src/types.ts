@@ -132,6 +132,13 @@ export interface SeriesDef {
      * the (now unused) linear y-domain.
      */
     yBandKey?: string;
+    /**
+     * How far, in CSS pixels, the mark draws past a point's x position (a
+     * dot's radius). The layout pass insets a linear x range by the largest
+     * value, so marks at the first and last x draw whole inside the clipped
+     * plot. Band scales already center points inside their bands.
+     */
+    xOverhang?: number;
   };
   /**
    * Resolve pixel positions for each data point.
