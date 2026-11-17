@@ -443,7 +443,9 @@ function KpiTile({kpi}: {kpi: Kpi}) {
           {kpi.label}
         </Text>
         <HStack gap={3}>
-          <Heading level={1}>{kpi.value}</Heading>
+          <Heading level={1} accessibilityLevel={2}>
+            {kpi.value}
+          </Heading>
           <HStack gap={1} vAlign="center">
             <Icon
               icon={kpi.delta >= 0 ? ArrowUpIcon : ArrowDownIcon}
@@ -589,7 +591,9 @@ function FunnelSteps({segment}: {segment: Segment}) {
               {step.label}
             </Text>
             <HStack gap={2} vAlign="center">
-              <Heading level={2}>{step.conv.toFixed(1)}%</Heading>
+              <Heading level={2} accessibilityLevel={3}>
+                {step.conv.toFixed(1)}%
+              </Heading>
               <Token
                 size="sm"
                 color={leaky ? 'red' : 'green'}
@@ -848,7 +852,7 @@ export default function FunnelCohortAnalyticsPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={10}>
             <VStack gap={4}>
               {/* KPI row */}
@@ -892,27 +896,29 @@ export default function FunnelCohortAnalyticsPage() {
                 hint="Signup week × weeks since signup"
               />
               <Card padding={6}>
-                <VStack gap={8}>
-                  <Table<CohortRow>
-                    data={cohortRows}
-                    columns={cohortColumns}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                  />
-                  <HStack gap={4} vAlign="center" wrap="wrap">
-                    <Text type="supporting" color="secondary">
-                      Retention:
-                    </Text>
-                    <HStack gap={2} vAlign="center">
-                      <Token size="sm" color="red" label="< 32%" />
-                      <Token size="sm" color="orange" label="32–40%" />
-                      <Token size="sm" color="yellow" label="40–50%" />
-                      <Token size="sm" color="teal" label="50–70%" />
-                      <Token size="sm" color="green" label="≥ 70%" />
-                    </HStack>
+                <Table<CohortRow>
+                  data={cohortRows}
+                  columns={cohortColumns}
+                  idKey="id"
+                  density="balanced"
+                  dividers="rows"
+                />
+                <HStack
+                  gap={4}
+                  vAlign="center"
+                  wrap="wrap"
+                  paddingBlockStart={8}>
+                  <Text type="supporting" color="secondary">
+                    Retention:
+                  </Text>
+                  <HStack gap={2} vAlign="center">
+                    <Token size="sm" color="red" label="< 32%" />
+                    <Token size="sm" color="orange" label="32–40%" />
+                    <Token size="sm" color="yellow" label="40–50%" />
+                    <Token size="sm" color="teal" label="50–70%" />
+                    <Token size="sm" color="green" label="≥ 70%" />
                   </HStack>
-                </VStack>
+                </HStack>
               </Card>
             </VStack>
           </VStack>

@@ -17,7 +17,7 @@ import {useToast} from '@astryxdesign/core/Toast';
 export default function CardWithInnerLayout() {
   const showToast = useToast();
   return (
-    <Card width={380}>
+    <Card width={380} maxWidth="100%">
       <Layout
         header={
           <LayoutHeader hasDivider>

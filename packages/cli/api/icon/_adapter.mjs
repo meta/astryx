@@ -46,8 +46,10 @@ export {
 export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
 export {
   ICON_USE_ORDER_COMMAND,
+  iconLookExport,
   iconSetLook,
   iconUseCommand,
+  missingIconLook,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
@@ -85,6 +87,11 @@ export {
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
 export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+export {
+  ICON_SET_GUIDE_COMMAND,
+  ICON_USE_COMMAND,
+  noIconSetNext,
+} from '../../foundation/text/icon-set-next.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
 export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 

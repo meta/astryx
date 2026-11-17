@@ -232,7 +232,8 @@ works on is `spec:AST-040` FR9's.
   integrations (FR12), and any integration a programmatic host approves (FR1).
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
-  command that needs Core answers from the carried Core: the
+  command that needs Core answers from the carried Core when the run's base is
+  Core (`spec:AST-114` FR2): the
   `@astryxdesign/core` release equal to the answering CLI, beside it, carried by
   its door (FR1), or kept in the per-user cache, where a copy that carries none
   installs it the first time a command needs it. The global copy also installs
@@ -416,7 +417,8 @@ works on is `spec:AST-040` FR9's.
     package packs (for `integration check` and `doctor integration validate`
     in the package's own folder), the locale and time zone a run's debug
     record names (on Linux, kept by any command that delivers a debug
-    record), the CLI's own docs tree, and doctor's
+    record), the CLI's own docs tree, each stored doc's checked contents,
+    keyed by its text, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
