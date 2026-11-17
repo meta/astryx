@@ -304,6 +304,45 @@ describe('markProviderConflicts', () => {
   });
 });
 
+describe('the message for a package set aside', () => {
+  /** @param {string} name @param {boolean} declares */
+  const pkg = (name, declares) => ({
+    name,
+    version: '1.0.0',
+    providerId: '@acme/widgets',
+    __spec: name,
+    __declaredKeys: declares ? ['providerId', 'components'] : ['components'],
+  });
+  /** @param {any} first @param {any} second */
+  const messageOf = (first, second) =>
+    markProviderConflicts([first, second])[1].__providerConflict.message;
+
+  it('says to keep one dependency when both manifests declare the ID', () => {
+    expect(
+      messageOf(pkg('@acme/widgets', true), pkg('@acme/widgets-legacy', true)),
+    ).toBe(
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim provider ID "@acme/widgets". ' +
+        '@acme/widgets@1.0.0 loads first and is used; @acme/widgets-legacy@1.0.0 contributes nothing. ' +
+        'Both manifests declare it, so they are one integration installed under two names: ' +
+        'keep one of the two dependencies.',
+    );
+  });
+
+  it('says to change a providerId unless both manifests declare it', () => {
+    for (const [first, second] of [
+      [pkg('@acme/widgets', false), pkg('@acme/renamed', true)],
+      [pkg('@acme/widgets', true), pkg('@acme/renamed', false)],
+      [pkg('@acme/widgets', false), pkg('@acme/renamed', false)],
+    ]) {
+      expect(messageOf(first, second)).toBe(
+        '@acme/renamed@1.0.0 and @acme/widgets@1.0.0 both claim provider ID "@acme/widgets". ' +
+          '@acme/widgets@1.0.0 loads first and is used; @acme/renamed@1.0.0 contributes nothing ' +
+          'until one package changes its providerId.',
+      );
+    }
+  });
+});
+
 describe('Project.load keeps a ledger', () => {
   /**
    * @param {string} dir node_modules key
