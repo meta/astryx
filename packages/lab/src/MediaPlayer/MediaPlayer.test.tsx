@@ -315,6 +315,48 @@ describe('VideoPlayer', () => {
     expect(bar()).toHaveAttribute('data-visible', 'true');
   });
 
+  it('lets a mouse that leaves the player hide the controls after a click gave the timeline focus', async () => {
+    // A browser can draw a focus ring after this click, such as after
+    // autoplay. The last input decides the hold, not the ring.
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? this === document.activeElement
+        : matches.call(this, selector);
+    });
+    const user = userEvent.setup();
+    const {player, video, container} = renderVideoPlayer();
+    fakePlayback(video, {duration: 60});
+    act(() => {
+      void video.play();
+    });
+    const bar = () => container.querySelector('[data-visible]');
+    await user.click(screen.getByRole('slider', {name: 'Seek'}));
+    expect(screen.getByRole('slider', {name: 'Seek'})).toHaveFocus();
+    fireEvent.pointerLeave(player, {pointerType: 'mouse'});
+    expect(bar()).toHaveAttribute('data-visible', 'false');
+  });
+
+  it('holds the controls while keyboard focus is inside the player', async () => {
+    const user = userEvent.setup();
+    const {player, video, container} = renderVideoPlayer();
+    fakePlayback(video, {duration: 60});
+    act(() => {
+      void video.play();
+    });
+    await user.keyboard('{Tab}');
+    await user.tab();
+    expect(player.contains(document.activeElement)).toBe(true);
+    fireEvent.pointerLeave(player, {pointerType: 'mouse'});
+    expect(container.querySelector('[data-visible]')).toHaveAttribute(
+      'data-visible',
+      'true',
+    );
+  });
+
   it('keeps the controls visible while paused', () => {
     vi.useFakeTimers();
     const {video, container} = renderVideoPlayer();
@@ -506,6 +548,37 @@ describe('MediaTimeSlider', () => {
     act(() => reply.focus());
     await user.keyboard('{ArrowRight}{PageUp}');
     expect(playback.getCurrentTime()).toBe(20);
+  });
+
+  it('leaves shortcut keys pressed on a button in a marker popover to that button', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaTimeSlider
+          markers={[
+            {
+              time: 20,
+              label: 'Lin: hold on this',
+              content: <button type="button">Reply</button>,
+            },
+          ]}
+        />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video')!;
+    const playback = fakePlayback(video, {duration: 60});
+    await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
+    expect(playback.getCurrentTime()).toBe(20);
+    const reply = screen.getByRole('button', {name: 'Reply', hidden: true});
+    act(() => reply.focus());
+    await user.keyboard('{ArrowRight}{ArrowLeft}jl5{ArrowUp}{ArrowDown}mk');
+    expect(playback.getCurrentTime()).toBe(20);
+    expect(video.volume).toBe(1);
+    expect(video.muted).toBe(false);
   });
 
   it('draws a dot for each marker once the duration is known', () => {

@@ -59,6 +59,13 @@ export interface MediaPlayerContextValue {
   setScrubTime: (time: number | null) => void;
 }
 
+/**
+ * Marks the content of a timeline marker's popover. That content belongs to
+ * the page, such as a comment thread, so its keys never reach the player's
+ * shortcuts.
+ */
+export const MARKER_CONTENT_ATTRIBUTE = 'data-media-marker-content';
+
 export const MediaPlayerContext = createContext<MediaPlayerContextValue | null>(
   null,
 );

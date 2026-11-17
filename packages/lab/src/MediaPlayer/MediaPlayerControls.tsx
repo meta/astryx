@@ -59,6 +59,7 @@ import {
   DEFAULT_PLAYBACK_RATES,
   formatClock,
   formatSpokenTime,
+  MARKER_CONTENT_ATTRIBUTE,
   useMediaPlaybackTime,
   useMediaPlayerContext,
   useMediaSelector,
@@ -198,6 +199,10 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
+  },
+  // Marks the popover content without a box of its own.
+  markerContent: {
+    display: 'contents',
   },
   markerDot: {
     width: TIMELINE_MARKER_SIZE,
@@ -682,7 +687,13 @@ function MarkerButton({
   const popover = (
     <Popover
       label={marker.label}
-      content={marker.content}
+      content={
+        <div
+          {...{[MARKER_CONTENT_ATTRIBUTE]: ''}}
+          {...stylex.props(styles.markerContent)}>
+          {marker.content}
+        </div>
+      }
       placement="above"
       alignment="center"
       width={MARKER_POPOVER_WIDTH}

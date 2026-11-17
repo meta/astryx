@@ -30,6 +30,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useAnnounce, useMergedRefs} from '@astryxdesign/core/hooks';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
+import {useInteractionModalityTracking} from '@astryxdesign/core/internal/touch';
 import {
   composeEventHandlers,
   focusOutlineProps,
@@ -38,6 +39,7 @@ import {
 } from '@astryxdesign/core/utils';
 import {
   DEFAULT_PLAYBACK_RATES,
+  MARKER_CONTENT_ATTRIBUTE,
   MediaPlayerContext,
   formatSpokenTime,
   type MediaControlsHold,
@@ -86,6 +88,17 @@ export interface MediaPlayerProps extends Omit<
   onError?: (error: MediaPlayerError) => void;
   /** Ref to the root element, which also goes fullscreen. */
   ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Whether the target sits in a timeline marker's popover. Its events reach the
+ * player through the React tree, also from a portal.
+ */
+function isInMarkerContent(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(`[${MARKER_CONTENT_ATTRIBUTE}]`) != null
+  );
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -265,7 +278,14 @@ export function MediaPlayer({
     (element: HTMLDivElement | null) => store.attachContainer(element),
     [store],
   );
-  const mergedRef = useMergedRefs(ref, containerRef, attachContainer);
+  // The last input decides whether focus inside the player holds the controls.
+  const {ref: trackModality, readModality} = useInteractionModalityTracking();
+  const mergedRef = useMergedRefs(
+    ref,
+    containerRef,
+    attachContainer,
+    trackModality,
+  );
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const visibility = useControlsVisibility(store);
   const {wakeControls, markTouch, holdControls, hideControls, toggleControls} =
@@ -336,7 +356,7 @@ export function MediaPlayer({
       return;
     }
     const target = event.target as HTMLElement;
-    if (isEditableTarget(target)) {
+    if (isEditableTarget(target) || isInMarkerContent(target)) {
       return;
     }
     const isOnControl =
@@ -505,8 +525,13 @@ export function MediaPlayer({
     }
   };
 
+  // Focus that a pointer gives, such as a click on the timeline, does not hold
+  // the controls, so a mouse that leaves the player still hides them.
   const handleFocus = (event: FocusEvent<HTMLDivElement>) => {
-    holdControls('focus', isFocusVisible(event.target));
+    holdControls(
+      'focus',
+      readModality() === 'keyboard' && isFocusVisible(event.target),
+    );
   };
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
