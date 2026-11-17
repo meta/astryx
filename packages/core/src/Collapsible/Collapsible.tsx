@@ -30,7 +30,6 @@
 import {
   use,
   useCallback,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -373,7 +372,7 @@ export function Collapsible({
       ? {isOpen: controlledIsOpen, onOpenChange}
       : {defaultIsOpen: defaultIsOpen ?? true, onOpenChange};
 
-  const {isOpen, toggle} = useCollapsible({
+  const {isOpen, toggle, contentProps} = useCollapsible({
     isCollapsible: collapsibleConfig,
     value,
   });
@@ -510,8 +509,9 @@ export function Collapsible({
   const isChevronAtStart = position === 'start';
 
   // Links the trigger to the region it shows/hides so assistive tech can move
-  // from the button to its controlled content (disclosure pattern).
-  const contentId = useId();
+  // from the button to its controlled content (disclosure pattern). The hook
+  // owns the id, so a Collapsible takes one generated id from the page.
+  const contentId = contentProps.id;
   const hasChildren = !hasLazyMount || isOpen || isExiting;
   const body =
     presentation != null ? (

@@ -10,7 +10,7 @@
  */
 
 import {beforeEach, describe, it, expect, vi} from 'vitest';
-import {useEffect} from 'react';
+import {useEffect, useId, type ReactNode} from 'react';
 import {render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
@@ -745,5 +745,39 @@ describe('Collapsible lazy mount', () => {
     rerender(example(false));
     expect(screen.queryByRole('button', {name: 'Inside'})).toBeNull();
     expect(screen.getByRole('button', {name: 'Details'})).toHaveFocus();
+  });
+});
+
+describe('generated ids', () => {
+  function IdProbe() {
+    return <span data-testid="id-probe">{useId()}</span>;
+  }
+
+  /** How many ids `children` takes from the page, read from two probes. */
+  function idsTakenBy(children: ReactNode): number {
+    const {unmount} = render(
+      <>
+        <IdProbe />
+        {children}
+        <IdProbe />
+      </>,
+    );
+    const probes = screen
+      .getAllByTestId('id-probe')
+      .map(probe => /([0-9a-z]+)[^0-9a-z]*$/i.exec(probe.textContent ?? ''));
+    const before = probes.at(0);
+    const after = probes.at(-1);
+    unmount();
+    return (
+      Number.parseInt(after?.[1] ?? '', 32) -
+      Number.parseInt(before?.[1] ?? '', 32) -
+      1
+    );
+  }
+
+  it('takes one id per Collapsible, so the ids after it keep their values', () => {
+    expect(idsTakenBy(<Collapsible trigger="Details">Body</Collapsible>)).toBe(
+      idsTakenBy(<IdProbe />),
+    );
   });
 });

@@ -4,7 +4,7 @@
 
 /**
  * @file Banner.tsx
- * @input Uses React useState/useRef/useId, useCollapsible, Button, Icon (with registry string names), StyleX
+ * @input Uses React useState/useRef, useCollapsible, Button, Icon (with registry string names), StyleX
  * @output Exports Banner component, BannerProps, BannerStatus, BannerContainer types
  * @position Core implementation; consumed by index.ts, tested by Banner.test.tsx
  *
@@ -50,7 +50,7 @@
  * - /packages/cli/assets/templates/blocks/components/Banner/ (showcase blocks)
  */
 
-import {useId, useRef, useState, type ReactNode} from 'react';
+import {useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {Button} from '../Button';
@@ -559,6 +559,7 @@ export function Banner({
     isEnabled: isCollapsible,
     isOpen: isExpanded,
     toggle: handleToggleExpand,
+    contentProps: collapsibleContent,
   } = useCollapsible({
     isCollapsible: collapsible !== false && {
       ...collapsibleConfig,
@@ -575,7 +576,7 @@ export function Banner({
   // (disclosure pattern). The region is conditionally rendered, so aria-controls
   // below is set only while it's mounted to avoid a dangling reference. A
   // non-collapsible banner has no toggle, so neither end of the link is used.
-  const contentId = useId();
+  const contentId = collapsibleContent.id;
   const defaultIconName = defaultIconNames[status];
   const iconColor = statusIconColor[status];
   const hasChildren = isRenderable(children);
