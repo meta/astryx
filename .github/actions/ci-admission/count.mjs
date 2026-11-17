@@ -119,7 +119,7 @@ export function liveJobs(jobs) {
 // prettier-ignore
 const ESTIMATE = {
   '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 21 + widenOf(jobs)),
-  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
+  '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 20),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
 };

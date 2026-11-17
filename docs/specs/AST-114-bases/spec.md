@@ -74,12 +74,8 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   (`spec:AST-039`), and a base that ships none of a kind gives an empty
   answer, not a refusal.
 
-  FR1 gap: in a run whose active base is not Core, `build` still names Core's layout and foundation components, the `hook --list` and
-  `swizzle --list` envelopes name `@astryxdesign/core` as their package, and
-  `doctor` reports Core and Core's themes as missing, and
-  `upgrade --from` reads Core's installed version as its target, so it
-  fails with `ERR_VERSION_DETECT` when the project installs no Core. The integration
-  manifest has no hooks root, so a base cannot ship hook descriptors.
+  FR1 gap: the integration manifest has no hooks root, so a base cannot ship
+  hook descriptors.
 
   FR1 gap: `component --list` at `--detail compact` and `--detail full`
   lists no integration's components, in a run on any base: on a base other
@@ -335,6 +331,13 @@ before any work when the package is not a base the run can read (FR2).
   `ERR_BASE_AMBIGUOUS`; INV21's adapter seam reaches a base adapter only
   through the check; INV30's package set holds the active base in Core's
   place.
+- `architecture:cli-surface` INV28: the `hook --list` and `swizzle --list`
+  envelopes name the run's active base as their `package`, and `build`'s
+  `frame` and `foundation` are empty in a run on another base (FR1).
+- `spec:AST-040`: FR11's upgrade target is the installed version of the
+  run's active base, so a project on another base needs no Core; such a run
+  checks no copied composition and keeps the agent-docs version `init`
+  writes (FR1).
 - `spec:AST-017`: FR14's commands and options appear in help unless the
   active base does not serve them, and the manifest lists them all with
   `available` (FR7); `--base` meets FR15 with the matrix above.

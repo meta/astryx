@@ -28,15 +28,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | `SyntaxTheme` with a required `theme` (a syntax preset or a `defineSyntaxTheme()` result) and `children`.                      |
-| Behavior                | Applies one syntax highlighting theme to the code components inside it through CSS variables on a wrapper and through context. |
-| End-user impact         | Code blocks inside share one set of syntax colors.                                                                             |
-| Builder impact          | None.                                                                                                                          |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact.                         |
-| Review checks           | Reject a lost syntax variable or a wrapper without the theme name.                                                             |
-| Governing rules         | `architecture:theme-authoring-contract`; `architecture:theme-application` INV1.                                                |
+| Area                    | Contract                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `SyntaxTheme` with a required `theme` (a syntax preset or a `defineSyntaxTheme()` result) and `children`.                                                       |
+| Behavior                | Applies one syntax highlighting theme to the code components inside it through CSS variables on a wrapper and through context.                                  |
+| End-user impact         | Code blocks inside share one set of syntax colors.                                                                                                              |
+| Builder impact          | None.                                                                                                                                                           |
+| Compatibility/readiness | No API change. The syntax theme hook resolves the nearest Theme's effective mode (FR2), so canvas colors match the code blocks under a forced or host-set mode. |
+| Review checks           | Reject a lost syntax variable or a wrapper without the theme name.                                                                                              |
+| Governing rules         | `architecture:theme-authoring-contract`; `architecture:theme-application` INV1.                                                                                 |
 
 This table is a review projection; the body below is authoritative.
 
@@ -58,12 +58,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Canvas colors can disagree with a forced mode.** The syntax theme hook
-  picks light or dark from the operating system's `prefers-color-scheme`, not
-  from the nearest Theme's mode. Under `<Theme mode="dark">` on a light system,
-  a canvas painter using the hook gets light colors while code blocks paint the
-  dark side; `architecture:theme-application` INV1 has descendants read the
-  nearest provider (FR2).
+No known implementation gap.
 
 ## Ownership boundary
 
@@ -85,10 +80,10 @@ No component-local concept beyond the consumer props.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | SyntaxTheme renders one block `div` wrapper carrying `data-astryx-syntax-theme` with the theme's name and, as inline custom properties, every syntax token the definition carries. Presets and `defineSyntaxTheme()` fill every diff slot; only a hand-built definition missing a slot leaves it to the CSS default.                                                                                                                                                                                           | Current source and tests |
-| FR2 | Descendants read the syntax theme through context. The syntax theme hook resolves each token for the nearest Theme's effective mode (`architecture:theme-application` INV1); unset marker slots take the theme's own punctuation, and unset `added` and `removed` derive from the page theme. Implementation gap: the hook reads the operating system's `prefers-color-scheme` instead, so under a Theme with a forced mode it can resolve the other side from the wrapper's variables (Current-state impact). | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                            | Basis                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | SyntaxTheme renders one block `div` wrapper carrying `data-astryx-syntax-theme` with the theme's name and, as inline custom properties, every syntax token the definition carries. Presets and `defineSyntaxTheme()` fill every diff slot; only a hand-built definition missing a slot leaves it to the CSS default. | Current source and tests |
+| FR2 | Descendants read the syntax theme through context. The syntax theme hook resolves each token for the nearest Theme's effective mode (`architecture:theme-application` INV1); unset marker slots take the theme's own punctuation, and unset `added` and `removed` derive from the page theme.                        | Current source and tests |
 
 ### Allowed variation
 

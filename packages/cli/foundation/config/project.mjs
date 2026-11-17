@@ -59,10 +59,10 @@ import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {resolveProviders} from '../integrations/provider-resolution.mjs';
 import {
   recordBaseCandidates,
-  requestedBase,
   resolveBase,
   splitForBase,
 } from '../bases/resolve.mjs';
+import {requestedBase} from '../bases/state.mjs';
 import {coreBase} from '../bases/core.mjs';
 import {
   setProject as setDebugProject,

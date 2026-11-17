@@ -22,12 +22,15 @@ import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
 import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
+import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
   installAgentDocs,
   renderAgentDocsBlock,
   agentDocsTargetDir,
+  readAgentDocTexts,
+  agentDocChange,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
 import {listTemplates} from '../../template/template.mjs';
@@ -89,6 +92,20 @@ function sameFolder(a, b) {
 }
 
 /**
+ * One receipt line for one agent-doc file.
+ * @param {import('../init.type.mjs').InitDocsChange} change
+ * @returns {string}
+ */
+function changeLine({path: shown, change, from, to}) {
+  const version = to ? ` (Astryx ${to})` : '';
+  if (change === 'removed') return `${shown}: Astryx block removed, another agent file holds it`;
+  if (change === 'created') return `${shown} created${version}`;
+  if (change === 'unchanged') return `${shown} already current${version}, nothing changed`;
+  if (from && to && from !== to) return `${shown} updated (Astryx ${from} -> ${to})`;
+  return `${shown} updated${version}`;
+}
+
+/**
  * Install the agent-docs block; records the outcome (or soft error) on `data`.
  * Mirrors the CLI's historical soft-error policy: a PathSafetyError surfaces its
  * precise message and flags a non-zero exit; any other failure prints the
@@ -124,6 +141,7 @@ async function applyAgents(cwd, options, invocation, data) {
     // With explicit paths, installAgentDocs checks each file's own folder.
     if (!paths) assertAgentDocsTarget(targetDir);
     const renderedBlock = await renderAgentDocsBlock(root);
+    const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
     /** @type {string[]} */
     const skipped = [];
     const files = installAgentDocs(targetDir, {
@@ -144,7 +162,16 @@ async function applyAgents(cwd, options, invocation, data) {
             path.relative(cwd, path.join(targetDir, rel)).split(path.sep).join('/'),
           );
     data.docsWritten = written;
-    logger.log(`[ok] AI agent docs installed -> ${written.join(', ')}`);
+    const after = readAgentDocTexts(targetDir, files);
+    // The receipt names each file from the project root; the line names it
+    // from where init ran, as docsWritten does.
+    data.docsChanges = files.map(rel => ({
+      path: path.relative(root, path.join(targetDir, rel)).split(path.sep).join('/'),
+      ...agentDocChange(before.get(rel) ?? null, after.get(rel) ?? null),
+    }));
+    data.docsChanges.forEach((change, i) => {
+      logger.log(`[ok] AI agent docs: ${changeLine({...change, path: written[i]})}`);
+    });
     // A file 0.7.1 did not write (GEMINI.md, or a project-root file when init
     // runs below the root) that resolves outside the project is left as it
     // is, reported in docsError with one note; the exit code stays 0. A file
@@ -325,6 +352,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
       mode: 'features',
       features,
       docsWritten: [],
+      docsChanges: [],
       docsError: null,
       theme: false,
       themeTemplate: null,
@@ -353,6 +381,7 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     mode: 'default',
     features: ['agents'],
     docsWritten: [],
+    docsChanges: [],
     docsError: null,
     theme: false,
     themeTemplate: null,

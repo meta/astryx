@@ -89,7 +89,7 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     handleVersionJsonPreflight,
   } = await import('./index.mjs');
   // The base every project load reads, the one in createProgram included.
-  const {setRequestedBase} = await import('../../foundation/bases/resolve.mjs');
+  const {setRequestedBase} = await import('../../foundation/bases/state.mjs');
   const {scanRootArgs} = await import('./lib/root-args.mjs');
   const base = scanRootArgs(
     process.argv.slice(2),
