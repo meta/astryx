@@ -488,6 +488,8 @@ export const butterTheme = defineTheme({
     '--radius-element': '0.5rem', // 8px
     '--radius-container': '0.75rem', // 12px
     '--radius-page': '1.5rem',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
     '--radius-full': '9999px',
 
     // =========================================================================

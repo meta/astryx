@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import {defineTheme} from './defineTheme';
 import {expandRadiusScale} from './expandRadiusScale';
+import {generateThemeRules} from './generateThemeRules';
+import {resolveThemeTokens} from './tokens';
+import {radiusDefaults} from './tokens.stylex';
 
 describe('expandRadiusScale', () => {
   it('generates default scale', () => {
@@ -11,7 +15,7 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('8px');
     expect(tokens['--radius-container']).toBe('12px');
     expect(tokens['--radius-page']).toBe('28px');
-    expect(tokens['--radius-chat']).toBe('28px');
+    expect(tokens['--radius-chat']).toBe('12px');
     expect(tokens['--radius-full']).toBe('9999px');
   });
 
@@ -21,7 +25,7 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('12px');
     expect(tokens['--radius-container']).toBe('18px');
     expect(tokens['--radius-page']).toBe('42px');
-    expect(tokens['--radius-chat']).toBe('42px');
+    expect(tokens['--radius-chat']).toBe('18px');
   });
 
   it('multiplier 0 produces all zeros', () => {
@@ -55,5 +59,55 @@ describe('expandRadiusScale', () => {
     expect(tokens['--radius-element']).toBe('12px');
     expect(tokens['--radius-container']).toBe('18px');
     expect(tokens['--radius-page']).toBe('42px');
+  });
+});
+
+describe('--radius-chat', () => {
+  const css = (config: Parameters<typeof defineTheme>[0]) =>
+    generateThemeRules(defineTheme(config)).join('\n');
+
+  it('defaults to the container radius', () => {
+    expect(radiusDefaults['--radius-chat']).toBe('var(--radius-container)');
+    expect(
+      resolveThemeTokens(defineTheme({name: 'ChatPlain'}), {mode: 'light'}),
+    ).toMatchObject({'--radius-chat': '12px'});
+  });
+
+  it('is declared again in a theme scope that sets --radius-container, so a nested theme follows its own value', () => {
+    const theme = defineTheme({
+      name: 'ChatContainer',
+      tokens: {'--radius-container': '18px'},
+    });
+    expect(css(theme)).toContain('--radius-chat: var(--radius-container);');
+    expect(resolveThemeTokens(theme, {mode: 'light'})).toMatchObject({
+      '--radius-chat': '18px',
+    });
+  });
+
+  it('takes the container step from a radius scale', () => {
+    const scaled = css({name: 'ChatScale', radius: {base: 4, multiplier: 1.5}});
+    expect(scaled).toContain('--radius-chat: 18px;');
+    expect(scaled).not.toContain('--radius-chat: var(--radius-container);');
+  });
+
+  it('keeps a value the theme sets or inherits, and is not declared by a theme with no radius', () => {
+    const base = defineTheme({
+      name: 'ChatPinned',
+      tokens: {'--radius-container': '12px', '--radius-chat': '28px'},
+    });
+    expect(css(base)).not.toContain('--radius-chat: var(--radius-container);');
+
+    const child = defineTheme({
+      name: 'ChatPinnedChild',
+      extends: base,
+      tokens: {'--radius-container': '8px'},
+    });
+    expect(css(child)).toContain('--radius-chat: 28px;');
+    expect(css(child)).not.toContain('--radius-chat: var(--radius-container);');
+    expect(resolveThemeTokens(child, {mode: 'light'})).toMatchObject({
+      '--radius-chat': '28px',
+    });
+
+    expect(css({name: 'ChatNoRadius'})).not.toContain('--radius-chat');
   });
 });
