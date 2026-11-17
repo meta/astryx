@@ -519,6 +519,9 @@ export const y2kTheme = defineTheme({
     // weight + primary text color for emphasis. Hover/active keep the neutral
     // overlay from the base styles.
     'top-nav-item': {
+      // Secondary text on a pressed item over the lavender page takes the
+      // stop that reads there, as on a selected row.
+      base: {'--color-text-secondary': LIFTED_ON_PAGE},
       selected: {
         backgroundColor: 'transparent',
         ':hover': {
