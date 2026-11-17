@@ -140,6 +140,10 @@ const animationBase = {
 /**
  * Shared entry animation styles for layer-based components.
  *
+ * Apply them to the layer element or its direct child: the side the layer
+ * lands on reaches only those, and a deeper element plays its placement's
+ * default side.
+ *
  * Keyed by LayerPlacement ('above' | 'below' | 'start' | 'end')
  * for easy lookup: `layerAnimations[placement]`.
  *

@@ -161,18 +161,22 @@ describe('registerLayerEntranceProperties', () => {
     expect(() => registerLayerEntranceProperties()).not.toThrow();
   });
 
-  it('finds the properties registered by a second copy, and rethrows anything else', () => {
+  it('never throws: a second copy finds them registered, and any other failure warns', () => {
     vi.stubGlobal('CSS', {
       registerProperty: () => {
         throw new DOMException('registered', 'InvalidModificationError');
       },
     });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(() => registerLayerEntranceProperties()).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
     vi.stubGlobal('CSS', {
       registerProperty: () => {
-        throw new DOMException('bad syntax', 'SyntaxError');
+        throw new TypeError('unexpected');
       },
     });
-    expect(() => registerLayerEntranceProperties()).toThrow('bad syntax');
+    expect(() => registerLayerEntranceProperties()).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

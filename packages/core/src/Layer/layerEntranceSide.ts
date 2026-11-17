@@ -15,6 +15,7 @@
  * - /packages/core/src/Popover/popoverSurfaceFrame.ts
  */
 
+import {devWarn} from '../utils/devWarning';
 import {settledBox} from './settledBox';
 
 /** A horizontal step toward the anchor: -1 left, 0, or 1 right. */
@@ -140,11 +141,12 @@ export function readLayerEntranceSide(
 /**
  * Registers the side properties as not inherited, so a write restyles the
  * layer alone and not every element inside it. Each element that runs the
- * entrance inherits them from its parent explicitly (layerAnimations). It
- * runs once, as this module loads, before any layer shows. Without
+ * entrance inherits them from its parent explicitly (layerAnimations).
+ * useLayer calls it as its module loads, before any layer shows. Without
  * `CSS.registerProperty` (a server, an older browser) the properties
- * inherit, and the entrance is the same. A second copy of this module on the
- * page finds them registered.
+ * inherit, and the entrance is the same. It never throws: a name another
+ * copy registered first is expected, and any other failure costs only the
+ * restyle saving, so it warns in development.
  */
 export function registerLayerEntranceProperties(): void {
   if (
@@ -162,18 +164,19 @@ export function registerLayerEntranceProperties(): void {
     try {
       CSS.registerProperty({name, syntax: '*', inherits: false});
     } catch (error) {
-      // A name registered before, by another copy or the page, throws this.
       if (
         !(error instanceof DOMException) ||
         error.name !== 'InvalidModificationError'
       ) {
-        throw error;
+        devWarn(
+          'Layer',
+          `could not register ${name}; its writes restyle the layer's content.`,
+          error,
+        );
       }
     }
   }
 }
-
-registerLayerEntranceProperties();
 
 const px = (value: number) => `${Math.round(value * 1000) / 1000}px`;
 

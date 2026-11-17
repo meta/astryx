@@ -3701,6 +3701,12 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const layer = container.querySelector<HTMLElement>('[popover]')!;
     reads.mockClear();
     await user.click(container.querySelector('button')!);
+    // The side is written in the next animation frame, before its paint.
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
     const layerReads = reads.mock.contexts.filter(context => context === layer);
     expect(layerReads).toHaveLength(1);
     expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('-1');
@@ -4406,6 +4412,12 @@ describe('show() anchor readiness (#5398)', () => {
   let observers: {disconnected: boolean}[] = [];
   let intersections: {disconnected: boolean; callback: () => void}[] = [];
   let animations: unknown[] = [];
+  // The frame that writes the entrance side before the first paint is not a
+  // wait for the trigger's box.
+  const framesBesidesEntranceSide = () =>
+    frames.filter(
+      frame => frame != null && frame.name !== 'writeEntranceSideOnFrame',
+    );
 
   const originalRect = Element.prototype.getBoundingClientRect;
   const originalClientRects = Element.prototype.getClientRects;
@@ -4550,7 +4562,7 @@ describe('show() anchor readiness (#5398)', () => {
 
     expect(getByTestId('state')).toHaveTextContent('open');
     expect(observers).toHaveLength(0);
-    expect(frames).toHaveLength(0);
+    expect(framesBesidesEntranceSide()).toHaveLength(0);
   });
 
   it('opens at once for a trigger that renders an empty box (a ContextMenu cursor anchor)', () => {
@@ -4571,7 +4583,7 @@ describe('show() anchor readiness (#5398)', () => {
     fireEvent.click(getByTestId('a'));
     expect(getByTestId('state')).toHaveTextContent('closed');
     // The runtime polls nothing (INV12): no frame is queued while it waits.
-    expect(frames).toHaveLength(0);
+    expect(framesBesidesEntranceSide()).toHaveLength(0);
 
     // The trigger gains a box; the observer signal sees it and starts the
     // settle frame, and only after that does the layer open.
@@ -4857,7 +4869,7 @@ describe('show() anchor readiness (#5398)', () => {
     // The commit after the press runs within the press. It finds the dialog
     // still closed, so the layer opens there, with no frame.
     expect(getByTestId('state')).toHaveTextContent('open');
-    expect(frames).toHaveLength(0);
+    expect(framesBesidesEntranceSide()).toHaveLength(0);
     expect(getByTestId('dialog')).not.toHaveAttribute('open');
   });
 
@@ -4897,7 +4909,7 @@ describe('show() anchor readiness (#5398)', () => {
     // one for the open that commit decided. No frame runs before it.
     expect(getByTestId('state')).toHaveTextContent('open');
     expect(renders - rendersBefore).toBe(3);
-    expect(frames).toHaveLength(0);
+    expect(framesBesidesEntranceSide()).toHaveLength(0);
   });
 
   it('keeps the settle wait when a controlled layer calls show() again as its dialog opens', async () => {

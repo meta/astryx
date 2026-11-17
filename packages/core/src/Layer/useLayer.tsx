@@ -48,6 +48,7 @@ import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
 import {
   layerEntranceSide,
   readLayerEntranceSide,
+  registerLayerEntranceProperties,
   writeLayerEntranceSide,
 } from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
@@ -81,6 +82,11 @@ import {
   isShownAsPopover,
 } from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
+
+// The entrance side properties restyle only the layer when they change
+// (layerEntranceSide.ts). Registered here, as this module loads, so the
+// call stays wherever a layer can show.
+registerLayerEntranceProperties();
 
 const styles = stylex.create({
   // The software keyboard's block-size cap, on the layer's own element. Every
@@ -678,24 +684,40 @@ function keepAnchorClear(
 
 /**
  * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
- * stand when it left the layer in place; otherwise the side is read here,
- * after the placement. Only an anchored layer has a side.
+ * stand when it left the layer in place; otherwise the side is read after
+ * the placement. Only an anchored layer has a side.
+ *
+ * The write waits for the next animation frame, which runs before that
+ * frame's style pass and paint, so the entrance still starts from the side.
+ * A write in the show's own task would leave style dirty for the reads that
+ * follow it there (moving focus in, measuring touch targets), and each
+ * would restyle the layer once more.
  */
 function writeEntranceSide(
   layer: HTMLElement,
   trigger: HTMLElement | null,
   boxes: AnchorBoxes | null,
 ): void {
-  if (trigger == null || !layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
-    writeLayerEntranceSide(layer, null);
+  const anchor =
+    trigger != null && layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)
+      ? trigger
+      : null;
+  const known =
+    anchor != null && boxes != null
+      ? layerEntranceSide(boxes.layer, boxes.anchor)
+      : null;
+  const writeEntranceSideOnFrame = () => {
+    writeLayerEntranceSide(
+      layer,
+      anchor == null ? null : (known ?? readLayerEntranceSide(layer, anchor)),
+    );
+  };
+  const view = layer.ownerDocument.defaultView;
+  if (view == null) {
+    writeEntranceSideOnFrame();
     return;
   }
-  writeLayerEntranceSide(
-    layer,
-    boxes == null
-      ? readLayerEntranceSide(layer, trigger)
-      : layerEntranceSide(boxes.layer, boxes.anchor),
-  );
+  view.requestAnimationFrame(writeEntranceSideOnFrame);
 }
 
 /**

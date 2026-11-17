@@ -618,6 +618,9 @@ describe('useTooltip — teardown', () => {
     const {unmount} = render(<Harness delay={0} />);
     fireEvent.mouseEnter(trigger());
     tick(0);
+    // One frame on: the layer writes its entrance side in the frame after it
+    // shows.
+    tick(16);
 
     fireEvent.mouseLeave(trigger());
     expect(vi.getTimerCount()).toBe(1);
