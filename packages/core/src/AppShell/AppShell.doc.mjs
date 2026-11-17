@@ -183,6 +183,10 @@ export const docs = {
     },
   ],
   playground: {
+    // The phone layout (the menu button in the top bar, the open drawer):
+    // the theme editor's census renders it, so a theme reaches the parts
+    // only that layout draws.
+    phone: {mobileNav: {defaultIsMobile: true, isOpen: true}},
     defaults: {
       variant: 'surface',
       contentPadding: 4,
