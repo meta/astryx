@@ -73,6 +73,12 @@ describe('the recorder', () => {
       const done = child => new Promise(resolve => child.on('exit', resolve));
       await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: []}));
       await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: [], env: {PATH: process.env.PATH}}));
+      // A recorded Node child stopped by a signal writes no lines of its own.
+      const {spawn} = await import('node:child_process');
+      const host = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      host.kill('SIGKILL');
+      await done(host);
     `;
     execFileSync(process.execPath, ['--input-type=module', '-e', script], {
       env: {
@@ -101,7 +107,12 @@ describe('the recorder', () => {
     expect(all('unseen').sort()).toEqual([
       'forks forked.mjs without its recorder',
       'runs true',
+      `stops ${path.basename(process.execPath)} before it writes its record`,
     ]);
+    // Every line is a whole file; no part file is left behind.
+    expect(fs.readdirSync(out).some(name => name.endsWith('.part'))).toBe(
+      false,
+    );
     expect(all('reads')).toContain(path.join(work, 'fork-read.txt'));
     // The Node child read the file too, under the same owner.
     expect(

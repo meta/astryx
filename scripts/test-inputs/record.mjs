@@ -7,10 +7,11 @@
  *   tests). Nothing is recorded while either is unset.
  * @output One JSON line per owner and process (one with empty lists too, so
  *   a test file that touches nothing still has its line) in
- *   `$ASTRYX_TEST_INPUTS_DIR/<pid>.jsonl`: the paths read or probed, the
- *   folders listed, the paths written, and whether the process did something
- *   whose reads it cannot see (a process that is not Node, a shell command, a
- *   worker thread).
+ *   `$ASTRYX_TEST_INPUTS_DIR/<pid>.<n>.jsonl`, one file per line, renamed
+ *   into place whole: the paths read or probed, the folders listed, the paths
+ *   written, and whether the process did something whose reads it cannot see
+ *   (a process that is not Node, a shell command, a worker thread, a Node
+ *   child stopped by a signal before it wrote its own lines).
  * @position Preloaded with `--import` into every Node process of a recording
  *   run: the processes a recorded process starts inherit it through
  *   NODE_OPTIONS. Main's full unit run records; scripts/test-inputs/merge.mjs
@@ -38,6 +39,27 @@ if (OUT && !globalThis.__astryxTestInputs) {
   const realDirs = new Map();
   const {realpathSync} = fs;
   const owner = () => process.env.ASTRYX_TEST_INPUTS_FOR;
+  // Each line is its own file, written whole and then renamed into place, so
+  // a process killed while writing leaves no cut-short line. These are the
+  // functions before the wrappers below, so writing a line records nothing.
+  const {writeFileSync, renameSync} = fs;
+  let lineCount = 0;
+  const writeLine = (who, entry) => {
+    const file = path.join(OUT, `${process.pid}.${lineCount++}.jsonl`);
+    writeFileSync(
+      `${file}.part`,
+      `${JSON.stringify({
+        for: who,
+        reads: [],
+        probes: [],
+        lists: [],
+        writes: [],
+        unseen: [],
+        ...entry,
+      })}\n`,
+    );
+    renameSync(`${file}.part`, file);
+  };
   const preload = `--import=${SELF}`;
   // A worker thread loads the recorder only from the preload this process
   // started with; a process that imported it at run time passes none on.
@@ -241,17 +263,42 @@ if (OUT && !globalThis.__astryxTestInputs) {
     rest.find(
       arg => arg != null && typeof arg === 'object' && !Array.isArray(arg),
     ) ?? {};
+  // A recorded Node child writes its lines when it exits. One stopped by a
+  // signal (a host killed once it answered) writes none, so its owner cannot
+  // see what it read. The owner is the one when the child started: a test
+  // may have ended by the time it stops.
+  const stoppedBefore = program =>
+    `stops ${program} before it writes its record`;
+  const watchStop = (who, program, child) => {
+    child?.on?.('exit', (_code, signal) => {
+      if (signal) writeLine(who, {unseen: [stoppedBefore(program)]});
+    });
+    return child;
+  };
+  const syncStop = (program, run) => {
+    try {
+      const result = run();
+      if (result?.signal) unseen.add(stoppedBefore(program));
+      return result;
+    } catch (error) {
+      if (error?.signal) unseen.add(stoppedBefore(program));
+      throw error;
+    }
+  };
   for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync']) {
     const original = childProcess[name];
     childProcess[name] = function (file, ...rest) {
-      if (owner()) {
-        const options = optionsOf(rest);
-        const program = path.basename(String(file));
-        if (options.shell) unseen.add('runs a shell command');
-        else if (!isNodeProgram(String(file))) unseen.add(`runs ${program}`);
-        else if (!recorded(options.env))
-          unseen.add(`runs ${program} without its recorder`);
-      }
+      const who = owner();
+      if (!who) return original.call(this, file, ...rest);
+      const options = optionsOf(rest);
+      const program = path.basename(String(file));
+      if (options.shell) unseen.add('runs a shell command');
+      else if (!isNodeProgram(String(file))) unseen.add(`runs ${program}`);
+      else if (!recorded(options.env))
+        unseen.add(`runs ${program} without its recorder`);
+      else if (name.endsWith('Sync'))
+        return syncStop(program, () => original.call(this, file, ...rest));
+      else return watchStop(who, program, original.call(this, file, ...rest));
       return original.call(this, file, ...rest);
     };
   }
@@ -259,7 +306,15 @@ if (OUT && !globalThis.__astryxTestInputs) {
   // keeps the recorder.
   const originalFork = childProcess.fork;
   childProcess.fork = function (modulePath, ...rest) {
-    if (owner() && !recorded(optionsOf(rest).env)) {
+    const who = owner();
+    if (who && recorded(optionsOf(rest).env)) {
+      return watchStop(
+        who,
+        path.basename(String(modulePath)),
+        originalFork.call(this, modulePath, ...rest),
+      );
+    }
+    if (who) {
       unseen.add(
         `forks ${path.basename(String(modulePath))} without its recorder`,
       );
@@ -322,17 +377,13 @@ if (OUT && !globalThis.__astryxTestInputs) {
   const flush = () => {
     const who = owner();
     if (who) {
-      fs.appendFileSync(
-        path.join(OUT, `${process.pid}.jsonl`),
-        `${JSON.stringify({
-          for: who,
-          reads: [...reads],
-          probes: [...probes],
-          lists: [...lists],
-          writes: [...writes],
-          unseen: [...unseen],
-        })}\n`,
-      );
+      writeLine(who, {
+        reads: [...reads],
+        probes: [...probes],
+        lists: [...lists],
+        writes: [...writes],
+        unseen: [...unseen],
+      });
     }
     reads.clear();
     probes.clear();
