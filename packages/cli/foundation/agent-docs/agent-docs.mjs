@@ -43,6 +43,7 @@ import {renderCommandTokens} from '../doc-compiler/doc-syntax.mjs';
 import {isValidSemver, semverGte} from '../env/semver.mjs';
 import {discoverComponents} from '../discovery/component-discovery.mjs';
 import {Project} from '../config/project.mjs';
+import {iconFeatureGate} from '../integrations/icon-features.mjs';
 import {cliRootNamespaceNames} from '../doc-compiler/tree.mjs';
 import {humanLog} from '../response/json.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
@@ -590,6 +591,13 @@ export function projectHasBuiltCheck(dir) {
 }
 
 /**
+ * The agent-block line that sends an agent to the icon finder. Without it,
+ * agents copy icons from nearby code or a library instead of asking.
+ */
+export const ICON_FINDER_LINE =
+  'Need an icon? Run `astryx experimental icon <what it means>` and paste the import it prints, instead of copying one from a template or other code.';
+
+/**
  * Generate the agent cheat sheet from live CLI metadata.
  *
  * Structured as: workflow (behavioral) → rules (error prevention) → CLI reference.
@@ -613,7 +621,11 @@ export function projectHasBuiltCheck(dir) {
  * `getting-started` is the one it should reach for first.
  *
  * @param {string | null} version the Core version
- * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean}} [options]
+ * `iconFeatures` is the project's icon feature gate. Where it is on, the
+ * block tells the agent to ask the icon finder for an icon instead of copying
+ * one; where it is off, the block has no icon line.
+ *
+ * @param {{coreDir?: string|null, invocation?: string, stylingSystem?: 'stylex'|'tailwind'|'css', zh?: boolean, lang?: string, topics?: string[], agentDocs?: Array<{package: string, append: readonly string[]}>, builtCheck?: boolean, iconFeatures?: boolean}} [options]
  * @returns {string}
  */
 export function generateCompressedIndex(
@@ -625,6 +637,7 @@ export function generateCompressedIndex(
     topics,
     agentDocs = [],
     builtCheck = false,
+    iconFeatures = false,
   } = {},
 ) {
   const run = invocation;
@@ -660,6 +673,7 @@ export function generateCompressedIndex(
   lines.push(
     `CLI: run every command as \`${run} <cmd>\` (shown below as \`astryx ...\`).`,
   );
+  if (iconFeatures) lines.push(ICON_FINDER_LINE);
   lines.push('');
 
   // Required setup — components ship precompiled CSS; without these imports
@@ -839,6 +853,7 @@ export async function renderAgentDocsBlock(
     stylingSystem: detectStylingSystem(targetDir),
     topics,
     agentDocs,
+    iconFeatures: iconFeatureGate(project).on,
   });
 }
 
