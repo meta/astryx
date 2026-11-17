@@ -15,10 +15,12 @@
  * - End area restores the ordinary text context for consumer `endContent`; built-in controls opt back into the status foreground
  * - Content area (themeProps 'banner-content'): card background for additional content (children)
  * - Status icon (themeProps 'banner-icon'): the target rides on the default
- *   <Icon> itself — the element that paints — so 'status:X' overrides reach
- *   the glyph (#4166); for a custom `icon` node it stays on the layout wrapper
- * - Description (themeProps 'banner-description'): the supporting line owns its
- *   own colour and type, and the space between it and the title
+ *   <Icon> itself, a direct header item, so 'status:X' overrides reach the
+ *   glyph and hiding it leaves no gap; a custom `icon` node gets a wrapper
+ *   that carries the target
+ * - Message (themeProps 'banner-message'): the title and description column
+ * - Title (themeProps 'banner-title') and description (themeProps
+ *   'banner-description'): each line owns its own colour and type
  * - The end area carries no target: it is a layout row (flex, wrap, edge
  *   compensation) rather than a painted surface, and a theme that wants the
  *   header to grow around its buttons sets `padding-block` on 'banner'
@@ -314,6 +316,9 @@ const styles = stylex.create({
   iconWrapper: {
     display: 'flex',
     alignItems: 'center',
+    flexShrink: 0,
+  },
+  icon: {
     flexShrink: 0,
   },
   endArea: {
@@ -690,44 +695,47 @@ export function Banner({
           ),
         )}>
         {/* The 'banner-icon' target rides on the element that paints: the
-            default <Icon> below, or this wrapper when a custom `icon` node
-            is passed (core never injects props into consumer elements, so
-            overrides reach it via inheritance). The wrapper itself stays
-            layout-only. */}
-        <div
-          {...(isRenderable(icon)
-            ? mergeProps(
-                themeProps('banner-icon', {status}),
-                stylex.props(styles.iconWrapper),
-              )
-            : stylex.props(styles.iconWrapper))}
-          aria-hidden="true">
-          {isRenderable(icon) ? (
-            icon
-          ) : defaultIconName != null ? (
-            // Applied to the status <Icon> itself rather than the wrapper, so
-            // the element that paints the glyph is the element a theme
-            // targets — a 'banner-icon' 'status:X' color override beats the
-            // Icon's own variant from @layer astryx-theme (#4166).
-            <Icon
-              icon={defaultIconName}
-              size="md"
-              color={iconColor}
-              {...themeProps('banner-icon', {status})}
-            />
-          ) : null}
-        </div>
+            default <Icon>, or a wrapper around a custom `icon` node (core
+            never injects props into consumer elements, so overrides reach it
+            via inheritance). The default <Icon> is a direct flex item, so a
+            theme that hides 'banner-icon' also removes its column gap. */}
+        {isRenderable(icon) ? (
+          <div
+            {...mergeProps(
+              themeProps('banner-icon', {status}),
+              stylex.props(styles.iconWrapper),
+            )}
+            aria-hidden="true">
+            {icon}
+          </div>
+        ) : defaultIconName != null ? (
+          // The target is on the glyph itself, so a 'banner-icon' 'status:X'
+          // color override beats the Icon's own variant.
+          <Icon
+            icon={defaultIconName}
+            size="md"
+            color={iconColor}
+            xstyle={styles.icon}
+            {...themeProps('banner-icon', {status})}
+          />
+        ) : null}
         <div
           role={isUrgentAlert ? 'alert' : undefined}
           {...alertAriaProps}
-          {...stylex.props(
-            styles.headerContent,
-            isRenderable(endContent) && styles.headerContentWithEndContent,
+          {...mergeProps(
+            themeProps('banner-message'),
+            stylex.props(
+              styles.headerContent,
+              isRenderable(endContent) && styles.headerContentWithEndContent,
+            ),
           )}>
           <div
-            {...stylex.props(
-              styles.title,
-              hasStatusStyle(status) && styles.statusForeground,
+            {...mergeProps(
+              themeProps('banner-title'),
+              stylex.props(
+                styles.title,
+                hasStatusStyle(status) && styles.statusForeground,
+              ),
             )}>
             {title}
           </div>
