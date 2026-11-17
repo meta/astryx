@@ -61,7 +61,10 @@ export interface UseListFocusOptions {
   boundarySelector?: string;
 
   /**
-   * Whether arrow navigation wraps around at the ends.
+   * Whether arrow navigation wraps around at the ends. A list inside a
+   * `role="toolbar"` does not wrap on the toolbar's arrow keys: at its first
+   * and last item it leaves the key unconsumed, so the toolbar moves focus to
+   * its next control.
    * @default true
    */
   wrap?: boolean;
@@ -395,6 +398,23 @@ export function oneTabStopAmong(
       candidates[0];
     return stop == null ? items : [stop, ...items.filter(el => el !== stop)];
   };
+}
+
+/**
+ * Whether `key` moves focus along a toolbar that holds `list` among its own
+ * controls. A list in a popover, or a toolbar itself, is not in that row.
+ */
+function isToolbarKey(list: HTMLElement | null, key: string): boolean {
+  if (list == null || list.matches('[role="toolbar"]')) {
+    return false;
+  }
+  const owner = list.parentElement?.closest('[role="toolbar"], [popover]');
+  if (owner == null || owner.getAttribute('role') !== 'toolbar') {
+    return false;
+  }
+  return owner.getAttribute('aria-orientation') === 'vertical'
+    ? key === 'ArrowDown' || key === 'ArrowUp'
+    : key === 'ArrowLeft' || key === 'ArrowRight';
 }
 
 /**
@@ -837,10 +857,26 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         focusPage(-1);
       } else {
         let target: number;
+        // A list inside a toolbar is part of the toolbar's row. At the list's
+        // edge the key is the toolbar's: the list neither wraps nor consumes
+        // it, so the toolbar moves focus to its next control.
+        const wrapsHere = wrap && !isToolbarKey(listRef.current, e.key);
         if (isNext) {
-          target = findItemIndex(items, nextFrom, 1, wrap, isSkippedByKeys);
+          target = findItemIndex(
+            items,
+            nextFrom,
+            1,
+            wrapsHere,
+            isSkippedByKeys,
+          );
         } else if (isPrev) {
-          target = findItemIndex(items, prevFrom, -1, wrap, isSkippedByKeys);
+          target = findItemIndex(
+            items,
+            prevFrom,
+            -1,
+            wrapsHere,
+            isSkippedByKeys,
+          );
         } else if (isHome) {
           target = findItemIndex(items, 0, 1, false, isSkippedByKeys);
         } else {
@@ -854,6 +890,8 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         }
         if (target !== -1) {
           focusIndex(items, target);
+        } else if ((isNext || isPrev) && wrap && !wrapsHere) {
+          return;
         }
       }
 

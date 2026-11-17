@@ -713,3 +713,85 @@ describe('useListFocus paging (hasPaging)', () => {
     expect(event).toBe(true);
   });
 });
+
+describe('useListFocus in a list inside a toolbar', () => {
+  function Group() {
+    const {listRef, handleKeyDown} = useListFocus<HTMLDivElement>({
+      itemSelector: 'button',
+      orientation: 'horizontal',
+      wrap: true,
+    });
+    return (
+      <div ref={listRef} data-testid="group" onKeyDown={handleKeyDown}>
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </div>
+    );
+  }
+
+  function pressAt(name: string, key: string) {
+    // jsdom does not open native popovers, so the popover case is hidden.
+    screen.getByRole('button', {name, hidden: true}).focus();
+    // fireEvent returns false when preventDefault was called.
+    return fireEvent.keyDown(screen.getByTestId('group'), {key});
+  }
+
+  it('leaves the arrow at its last item to the toolbar: no wrap, key not consumed', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <Group />
+      </div>,
+    );
+
+    expect(pressAt('Last', 'ArrowRight')).toBe(true);
+    expect(screen.getByRole('button', {name: 'Last'})).toHaveFocus();
+  });
+
+  it('leaves the arrow at its first item to the toolbar', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <Group />
+      </div>,
+    );
+
+    expect(pressAt('First', 'ArrowLeft')).toBe(true);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it('still moves between its own items and consumes the key', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <Group />
+      </div>,
+    );
+
+    expect(pressAt('First', 'ArrowRight')).toBe(false);
+    expect(screen.getByRole('button', {name: 'Last'})).toHaveFocus();
+  });
+
+  it('wraps on a key the toolbar does not move with', () => {
+    render(
+      <div role="toolbar" aria-orientation="vertical">
+        <Group />
+      </div>,
+    );
+
+    expect(pressAt('Last', 'ArrowRight')).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it('wraps in a popover the toolbar holds', () => {
+    render(
+      <div role="toolbar" aria-orientation="horizontal">
+        <div popover="manual">
+          <Group />
+        </div>
+      </div>,
+    );
+
+    expect(pressAt('Last', 'ArrowRight')).toBe(false);
+    expect(
+      screen.getByRole('button', {name: 'First', hidden: true}),
+    ).toHaveFocus();
+  });
+});
