@@ -112,7 +112,7 @@ describe('NavigationStack', () => {
   // A card is a stacking context at rest, as it is during a transition (a
   // transform makes one), so screen content with any z-index stays under the
   // bar, whose z-index is 1.
-  it('keeps every card a stacking context at rest, so screen content stays under the bar', () => {
+  it("gives every card isolation: 'isolate' at rest", () => {
     render(<Harness initial={['General']} />);
     for (const title of ['Settings', 'General']) {
       expect(getComputedStyle(screenCard(title)!).isolation).toBe('isolate');

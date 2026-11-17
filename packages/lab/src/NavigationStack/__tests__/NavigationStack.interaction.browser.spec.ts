@@ -1518,6 +1518,18 @@ for (const pointer of ['touch', 'mouse'] as const) {
     try {
       await openStack(target, 'raised-content', {pointer});
       await expect(target.getByTestId('raised-content')).toBeVisible();
+      // At rest, after the animator lets go of `will-change` (it holds it
+      // briefly after the last motion, and that alone makes a stacking
+      // context), so only the card's own isolation keeps the content under.
+      await expect
+        .poll(() =>
+          target.evaluate(() =>
+            [...document.querySelectorAll('[data-navigation-screen]')].every(
+              screen => getComputedStyle(screen).willChange === 'auto',
+            ),
+          ),
+        )
+        .toBe(true);
       const hits = await target.evaluate(() => {
         const at = (element: Element | null) => {
           const box = element?.getBoundingClientRect();
