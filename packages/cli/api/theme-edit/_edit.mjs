@@ -8848,6 +8848,51 @@ async function missedSummary(ctx, slug, data, res, prior) {
   };
 }
 
+/** The color dials a missed line can set (the status colors). */
+const STATUS_DIALS = new Set(['info', 'success', 'warning', 'danger']);
+
+/**
+ * A status color a missed line sets, as one its own contrast check passes:
+ * the color asked for, else the nearest the check offers (a pale base
+ * yellow as the warning dial stands out from the page too little, and
+ * following that line would only bring a new problem).
+ * @param {any} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<string, any>} base
+ * @param {{thing: string, value: string, on?: string}} step
+ * @returns {string}
+ */
+function passingDialValue(ctx, slug, data, base, step) {
+  if (step.on || !STATUS_DIALS.has(step.thing)) return step.value;
+  const pal = paletteMapping(
+    ctx.project.cwd,
+    slug,
+    {
+      ...data,
+      settings: [
+        ...data.settings.filter(
+          x => !(x.source === 'dial' && x.thing === step.thing && !x.on),
+        ),
+        /** @type {any} */ ({
+          source: 'dial',
+          thing: step.thing,
+          value: step.value,
+        }),
+      ],
+    },
+    /** @type {any} */ (base),
+    ctx.project.core.tokenDefaults,
+  );
+  // (The check's own fix for the dial itself, never one for one mode.)
+  const better = paletteFailures(pal, step.thing, modesOf(data))
+    .map(f => /** @type {any} */ (f).fix)
+    .find(
+      f => f?.thing === step.thing && !f.mode && typeof f.value === 'string',
+    );
+  return better?.value ?? step.value;
+}
+
 /**
  * The parts the theme's own changes should have reached and did not, most
  * flagged first, each with why and the line that reaches it, its steps
@@ -8886,7 +8931,8 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
     /** @type {string[]} */
     const lines = [];
     let refused = false;
-    for (const st of x.steps) {
+    for (const st0 of x.steps) {
+      const st = {...st0, value: passingDialValue(ctx, slug, data, base, st0)};
       const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}`;
       const followed = await followChangeLine(
         'set',
