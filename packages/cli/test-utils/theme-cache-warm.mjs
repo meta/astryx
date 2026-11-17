@@ -4,7 +4,7 @@
  * @file Builds the theme editor's part data and component docs for the
  *   CLI's own Core, once per test run, into the run's folder.
  * @input The folder, as the first argument.
- * @output `<folder>/<core key>/parts.json` and `docs.json`.
+ * @output `<folder>/<core key>/parts.json`, `docs.json` and `items.json`.
  * @position Run by the node project's globalSetup in plain Node, as the CLI
  *   runs: the module runner globalSetup itself runs in does not give the
  *   theme build what it needs (import.meta.resolve). theme-cache.mjs copies
@@ -31,6 +31,14 @@ async function warmThemeCache(dir) {
     // A new theme reads the part data and the component docs, so the
     // editor builds both into the fixture's cache.
     await themeEditNew('warm', {cwd: fixture, like: 'neutral'});
+    // The component items of the sample page and of each sheet, with no
+    // drawing: every render of every fixture starts from them.
+    const {openProject} = await import('../api/theme-edit/_project.mjs');
+    const {showcaseItems} = await import('../api/theme-edit/_preview.mjs');
+    const {SHOWCASE_GROUPS} = await import('../api/theme-edit/_tables.mjs');
+    const project = await openProject(fixture);
+    for (const group of [undefined, ...SHOWCASE_GROUPS])
+      showcaseItems(project, group);
     const cache = cacheRoot(path.dirname(fixture));
     for (const key of fs.readdirSync(cache))
       for (const name of CACHE_FILES) {

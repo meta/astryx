@@ -40,12 +40,13 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /**
- * What the cached part data is built by: a fingerprint of this file and
- * every file it imports by a relative path, read once. Any change to the
- * code that draws and reads the census builds it again, with no number to
- * bump by hand (the installed Core is the cache folder's own key).
+ * A fingerprint of a module and every file it imports by a relative path,
+ * read once: what a cache built by that code is keyed by, so any change to
+ * the code builds it again, with no number to bump by hand (the installed
+ * Core is the cache folder's own key).
+ * @param {string} url the module's own `import.meta.url`
  */
-const CENSUS_KEY = (() => {
+export function codeFingerprint(url) {
   const hash = createHash('sha256');
   /** @type {Set<string>} */
   const seen = new Set();
@@ -66,9 +67,12 @@ const CENSUS_KEY = (() => {
     ))
       walk(path.resolve(path.dirname(file), m[1]));
   };
-  walk(fileURLToPath(import.meta.url));
+  walk(fileURLToPath(url));
   return hash.digest('hex').slice(0, 16);
-})();
+}
+
+/** What the cached part data is built by ({@link codeFingerprint}). */
+const CENSUS_KEY = codeFingerprint(import.meta.url);
 
 /**
  * Flags that change what a component does or whether it shows, not how it

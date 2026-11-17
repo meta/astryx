@@ -33,6 +33,7 @@ import {
 } from './_catalog.mjs';
 import {
   catalogVariants,
+  codeFingerprint,
   demoProps,
   needsParent,
   renderDir,
@@ -191,14 +192,74 @@ export function touchedFamilies(project, data) {
 }
 
 /**
- * The component items of the theme-building page for a Core install and a
- * group, made once: they come from the installed Core's component docs
- * alone, which the same install (its folder and its version and stylesheet
- * key) never changes, and every sample page and sheet a command renders
- * starts from them.
- * @type {Map<string, import('./_catalog.mjs').CatalogItem[]>}
+ * What the cached component items are built by ({@link codeFingerprint}):
+ * this file and every file it imports, read the first time it is needed.
+ * @type {string | null}
  */
-const componentItemsMade = new Map();
+let itemsKey = null;
+
+/**
+ * The component items of the theme-building page for each group, as JSON,
+ * by cache file: read or made once a process. They come from the installed
+ * Core's component docs alone, which the same install (its cache folder,
+ * keyed by its version and stylesheet) never changes, and every sample page
+ * and sheet a command renders starts from them; the cache file
+ * (items.json beside the part data) keeps them for the next command.
+ * @type {Map<string, Record<string, string>>}
+ */
+const itemsByFile = new Map();
+
+/**
+ * The component items for a group, from the cache or made now
+ * ({@link componentItems}), as a copy of their own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group
+ * @returns {import('./_catalog.mjs').CatalogItem[]}
+ */
+function cachedComponentItems(project, group) {
+  itemsKey ??= codeFingerprint(import.meta.url);
+  const file = path.join(project.cacheDir, 'items.json');
+  let kept = itemsByFile.get(file);
+  if (!kept) {
+    kept = {};
+    try {
+      const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (
+        cached?.itemsKey === itemsKey &&
+        cached.coreKey === project.coreKey &&
+        cached.groups &&
+        typeof cached.groups === 'object'
+      )
+        for (const [g, items] of Object.entries(cached.groups))
+          if (Array.isArray(items)) kept[g] = JSON.stringify(items);
+    } catch {
+      // Not made yet, or unreadable: made now.
+    }
+    itemsByFile.set(file, kept);
+  }
+  const at = group ?? '';
+  if (kept[at] == null) {
+    kept[at] = JSON.stringify(componentItems(project, group));
+    try {
+      fs.mkdirSync(project.cacheDir, {recursive: true});
+      // Written beside it and renamed in, so a reader never sees half a
+      // file; another command writing at once leaves one whole file.
+      const part = `${file}.${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+      fs.writeFileSync(
+        part,
+        `{"itemsKey":${JSON.stringify(itemsKey)},"coreKey":${JSON.stringify(project.coreKey)},"groups":{${Object.entries(
+          kept,
+        )
+          .map(([g, json]) => `${JSON.stringify(g)}:${json}`)
+          .join(',')}}}`,
+      );
+      fs.renameSync(part, file);
+    } catch {
+      // A read-only node_modules: made again next time.
+    }
+  }
+  return JSON.parse(kept[at]);
+}
 
 /**
  * Items of the theme-building page: each component once per variant
@@ -209,18 +270,7 @@ const componentItemsMade = new Map();
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
-  const madeKey = `${project.coreDir}\0${project.coreKey}\0${group ?? ''}`;
-  const made = componentItemsMade.get(madeKey);
-  /** @type {import('./_catalog.mjs').CatalogItem[]} */
-  const items = made
-    ? made.map(it => ({...it}))
-    : componentItems(project, group);
-  if (!made)
-    componentItemsMade.set(
-      madeKey,
-      items.map(it => ({...it})),
-    );
-  return withPages(project, group, items);
+  return withPages(project, group, cachedComponentItems(project, group));
 }
 
 /**
