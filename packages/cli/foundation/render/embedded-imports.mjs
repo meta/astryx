@@ -90,7 +90,7 @@ export function cssReferences(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = [
+export const RESOLVE_EXTENSIONS = [
   '.tsx',
   '.ts',
   '.jsx',

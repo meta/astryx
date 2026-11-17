@@ -2630,6 +2630,22 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
   }, 60_000);
 
+  it('names an extensionless JSON import the render leaves out once on the way back', () => {
+    const tree = path.join(away, 'extensionless-json');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.config.json'), JSON.stringify({title: 'Sales'}));
+    fs.writeFileSync(
+      path.join(tree, 'page.tsx'),
+      "import site from './site.config';\nexport default function Page() {\n  return <h1>{site.title}</h1>;\n}\n",
+    );
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.config.json']);
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['site.config']});
+  }, 60_000);
+
   it('keeps a recorded image that shares its stem with an imported module on the way back', () => {
     const tree = path.join(away, 'outside-stem');
     fs.mkdirSync(path.join(tree, 'page'), {recursive: true});

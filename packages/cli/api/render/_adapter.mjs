@@ -41,7 +41,7 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
-import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {RESOLVE_EXTENSIONS, reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
 import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
@@ -881,7 +881,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       for (const file of Array.isArray(source.notCarried) ? source.notCarried : []) {
         if (typeof file !== 'string' || file === '') continue;
         const ext = path.posix.extname(file);
-        const bare = MODULE_EXTENSIONS.includes(ext) ? file.slice(0, -ext.length) : null;
+        const bare = RESOLVE_EXTENSIONS.includes(ext) ? file.slice(0, -ext.length) : null;
         const folder = bare?.endsWith('/index') ? bare.slice(0, -'/index'.length) : null;
         if (named.has(file) || (bare && named.has(bare)) || (folder && named.has(folder))) continue;
         named.add(file);

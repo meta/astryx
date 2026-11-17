@@ -77,7 +77,7 @@
  * @property {'embedded' | 'rebuilt'} data.mode - `embedded`: the file carried its source, written back byte for byte. `rebuilt`: rebuilt from Astryx markup (text and layout only).
  * @property {string} data.output - The page module written: `out`, or by default inside a new folder beside the HTML file named after it (`report.html` gives `report-restored/`).
  * @property {string[]} data.files - Every file written, page first.
- * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered.
+ * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered. A file the rendered file records as not carried makes it false too, also when no import names it.
  * @property {string[]} [data.missing] - Embedded only: imports the file did not carry (files a render never embeds), and the files the render recorded as not carried (such as a module an alias names from outside the carried folder), so the restored page needs them before it renders.
  * @property {RenderAliased} [data.aliased] - Embedded only: the imports the page makes through a path alias that no alias here names. Their files come back in the page's own layout inside the new folder, and the page needs the alias to build or render again: `config` names the tsconfig.json or jsconfig.json TypeScript reads for the page (or the new one to create), `paths` the whole `paths` it needs, and `imports` each import with the file it came back as.
  * @property {string[]} [data.components] - Rebuilt only: the components the page uses.
