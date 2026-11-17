@@ -9,7 +9,8 @@
  * A look named for the whole theme and said bare ("cozy warm vibe") takes
  * the words a setting reads and names the rest; a look named for
  * something how cannot see ("whatsapp theme") asks for its colors as hex,
- * never guessing them.
+ * never guessing them. A built-in theme named as the look ("the butter
+ * look", "base butter") is the base dial.
  *
  * @position api/theme-edit — tests
  */
@@ -30,7 +31,7 @@ let unbuilt = '';
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-whole-look-', FIXTURE_PACKAGES);
-  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral', 'butter']);
   if (unbuilt) return;
   await themeEditNew('n', {cwd, like: 'neutral'});
 }, 600_000);
@@ -62,6 +63,17 @@ describe('a picture given as the look', () => {
     expect(a.text).toMatch(/how reads words, never a picture/);
     expect(a.text).not.toMatch(/no part is called/);
     expect(a.sets).toEqual([]);
+  }, 240_000);
+
+  it('a picture named by its file alone, "our brand board: ./look.png", is a picture too', async ctx => {
+    if (unbuilt) return ctx.skip();
+    expect(
+      (
+        await answer(
+          'here is our brand board: ./look.png. Make our app follow it.',
+        )
+      ).text,
+    ).toMatch(/how reads words, never a picture/);
   }, 240_000);
 
   it("the app's own photos are still said as photos", async ctx => {
@@ -98,6 +110,12 @@ describe('a look named for the whole theme, said bare', () => {
     expect(a.text).not.toMatch(/"warm"/);
   }, 240_000);
 
+  it('"minimal theme", "playful theme": a describing word is never taken for a brand', async ctx => {
+    if (unbuilt) return ctx.skip();
+    for (const q of ['minimal theme', 'playful theme'])
+      expect((await answer(q)).text).not.toMatch(/never guesses a brand/);
+  }, 240_000);
+
   it('"whatsapp theme" asks for its colors and writes nothing', async ctx => {
     if (unbuilt) return ctx.skip();
     const a = await answer('whatsapp theme');
@@ -105,5 +123,26 @@ describe('a look named for the whole theme, said bare', () => {
       /how does not know what "whatsapp" looks like and never guesses a brand's colors: give them as hex/,
     );
     expect(a.sets).toEqual([]);
+  }, 240_000);
+});
+
+describe('a built-in theme named as the look', () => {
+  it('"start from the butter look" and "base butter" answer with the base', async ctx => {
+    if (unbuilt) return ctx.skip();
+    // (how names the change of base; set checks it, as it checks every
+    // base.)
+    for (const q of ['start from the butter look', 'base butter'])
+      expect((await answer(q)).text).toMatch(
+        /the base: n builds on butter, and every setting it has is kept/,
+      );
+  }, 240_000);
+
+  it('"make the buttons chocolate" is no base', async ctx => {
+    if (unbuilt) return ctx.skip();
+    expect(
+      (await answer('make the buttons chocolate')).sets.some(l =>
+        /^base /.test(l),
+      ),
+    ).toBe(false);
   }, 240_000);
 });
