@@ -16,6 +16,10 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
+  // (Design systems' names for parts Core has under another name: an
+  // underline nav is a row of tabs; a navigation rail is the side nav.)
+  [/\bunderline[- ]?navs?\b/, {on: 'tab'}],
+  [/\b(?:navigation|nav) rails?\b/, {on: 'side-nav'}],
   // (A page's title is its top heading, never the page.)
   [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],

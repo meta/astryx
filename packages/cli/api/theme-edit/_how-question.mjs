@@ -3310,9 +3310,17 @@ function clausesOf(q, partWords, words = null) {
       // ("radio station app: rounder corners": a part word inside the
       // label of a product, before its colon, names the product.)
       const afterPart = rest.slice((m.index ?? 0) + m[0].length);
+      // ("live sports scores page: …": the product word itself, as the
+      // label's last word before its colon, is the product, never the
+      // page part.)
       if (
         new RegExp(String.raw`^\s+${PRODUCT_WORDS}\b`).test(afterPart) ||
-        new RegExp(String.raw`^[a-z' -]*\b${PRODUCT_WORDS}\s*:`).test(afterPart)
+        new RegExp(String.raw`^[a-z' -]*\b${PRODUCT_WORDS}\s*:`).test(
+          afterPart,
+        ) ||
+        (new RegExp(String.raw`^${PRODUCT_WORDS}$`).test(m[0].trim()) &&
+          /^\s*:/.test(afterPart) &&
+          /\b[a-z]+\s+$/.test(rest.slice(0, m.index ?? 0)))
       ) {
         rest = rest.replace(re, ' ');
         continue;
@@ -7091,6 +7099,50 @@ export function draftAnswer(ctx, env, question) {
     value: valueWord,
     verb: verbWord,
   });
+  // ("label badges: …": a part word right before another part word, its
+  // modifier, names a kind of that part, never a second part; "dialog
+  // buttons", a part that holds the other, stays the place.)
+  const first0 = (/** @type {string} */ on) =>
+    FAMILIES[on] ? FAMILIES[on][0] : on;
+  for (const c of clauses0) {
+    if (new Set(c.parts.map(p => p.on)).size < 2) continue;
+    const t = ` ${c.text.toLowerCase()} `;
+    /** @param {string} on */
+    const spans = on =>
+      lex.parts
+        .filter(([, x]) => x.on === on)
+        .flatMap(([re]) =>
+          [...t.matchAll(new RegExp(re.source, 'g'))].map(m => [
+            m.index ?? 0,
+            (m.index ?? 0) + m[0].length,
+          ]),
+        );
+    const drop = new Set(
+      c.parts
+        .filter(a =>
+          c.parts.some(
+            b =>
+              b.on !== a.on &&
+              !(C.MAP[first0(a.on)]?.contains ?? []).includes(first0(b.on)) &&
+              !slotHeld(first0(a.on), first0(b.on)) &&
+              spans(a.on).some(([, end]) =>
+                spans(b.on).some(
+                  ([at, bEnd]) =>
+                    at > end - 1 &&
+                    /^\s+$/.test(t.slice(end, at)) &&
+                    // (Only a list's head, said before its colon: "label
+                    // badges: …"; "inputs focus ring", "row dividers"
+                    // name a piece of the part.)
+                    /^\s*:/.test(t.slice(bEnd)),
+                ),
+              ),
+          ),
+        )
+        .map(p => p.on),
+    );
+    if (drop.size && drop.size < c.parts.length)
+      c.parts = c.parts.filter(p => !drop.has(p.on));
+  }
   // "cream background, terracotta accent, serif headings": a list whose
   // items each ask their own thing is each of them, never the first one's
   // part taking the rest.
@@ -9504,7 +9556,19 @@ export function draftAnswer(ctx, env, question) {
     if (
       !c.container &&
       c.parts.length &&
-      ['colon', 'with'].includes(String(joinOf.get(c)?.list))
+      ['colon', 'with'].includes(String(joinOf.get(c)?.list)) &&
+      // (A text role, "a sans-serif body", said with a head that is only
+      // text itself, is the theme's own text, never a part inside it:
+      // "serif headings with a sans-serif body"; "cards with white body
+      // text" stays the cards'.)
+      !(
+        c.parts.some(p => p.role) &&
+        clauses
+          .slice(0, clauses.indexOf(c))
+          .reverse()
+          .find(x => ['none', 'break'].includes(String(joinOf.get(x)?.sep)))
+          ?.parts.every(p => textOnlyPart(p.on))
+      )
     ) {
       const head = listHead(c);
       const k = head ? clauses.indexOf(head) : -1;
@@ -10793,6 +10857,11 @@ export function draftAnswer(ctx, env, question) {
           on &&
           TARGET.has(on) &&
           !C.MAP[on]?.at?.color &&
+          // (Never the component that holds the part in one of its slots:
+          // the app shell, whose top nav slot holds the top nav, is the
+          // frame around the bar, never the bar: "the top nav: #111827
+          // background" darkens the bar alone.)
+          !slotHeld(on, c.parts[0].on) &&
           // (Not twice for one look: "navy, with white text" adds the fill
           // and the text each once.)
           !clauses.some(
@@ -13335,6 +13404,53 @@ export function draftAnswer(ctx, env, question) {
         ? HUE_STATUS[hue].find(v => vals.includes(v))
         : undefined;
       if (status) c.parts = [{...c.parts[0], when: `variant:${status}`}];
+    }
+  }
+  // ("tables: 1px borders, …, and a #f8f9fa hover": a color said with a
+  // state and no look word of its own is the part's fill in that state,
+  // never the look a clause before it named.)
+  for (const c of clauses)
+    if (
+      c.state &&
+      c.colors.length &&
+      // (With a length, "2px #6750a4 when focused", it is the line.)
+      !c.lengths.length &&
+      c.parts.length &&
+      !aspectsOf(
+        c.text.replace(
+          /\b(?:on\s+)?(?:hover|hovered|focus(?:ed)?|pressed|active|selected|checked)\b/g,
+          ' ',
+        ),
+      ).length &&
+      !c.aspects.includes('background') &&
+      !c.parts.every(p => textOnlyPart(p.on))
+    )
+      c.aspects = ['background'];
+  // ("team colors red #c8102e and blue #003da5 as accents": a role said
+  // after a pair of colors is each color's role, the first's too.)
+  for (let i = 1; i < clauses.length; i++) {
+    const [a, b] = [clauses[i - 1], clauses[i]];
+    const role =
+      /\bas (?:the |our |two )?(accents?|accent colou?rs?|brand colou?rs?)\b/.exec(
+        b.text,
+      )?.[1];
+    if (
+      role &&
+      joinOf.get(b)?.sep === 'and' &&
+      a.colors.length &&
+      !a.parts.length &&
+      aspectsOf(a.text).every(x => x === 'colors') &&
+      !/\bas\b/.test(a.text)
+    ) {
+      a.text = `${a.text} as ${role}`;
+      // (A theme has one accent: the first color said is it; the second,
+      // with no setting of its own, is named in the words as typed, never
+      // a choice that holds the rest of the ask back.)
+      if (/^accent/.test(role) && b.colors.length) {
+        b.text = '';
+        b.colors = [];
+        b.aspects = [];
+      }
     }
   }
   // ("tooltips #172B4D with 12px white text": a length beside a text
