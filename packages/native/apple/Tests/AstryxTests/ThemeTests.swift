@@ -14,7 +14,7 @@ import Testing
 }
 
 @Test func everyPublishedThemeIsGenerated() {
-  let themes: [Theme] = [.default, .butter, .chocolate, .gothic, .matcha, .neutral, .stone, .y2k]
+  let themes: [Theme] = [.default, .butter, .chocolate, .glass, .gothic, .matcha, .neutral, .stone, .y2k]
   #expect(Set(themes.map(\.light.color.accent.description)).count > 1)
   #expect(Theme.neutral.native == NativeIntent())
 }

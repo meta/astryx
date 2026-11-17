@@ -133,7 +133,7 @@ import Testing
 // pale accent is not their tint; a single-mode theme sets its subtree's mode.
 
 @Test func aPaleAccentLeavesStockControlsTheSystemTint() {
-  for theme in [Theme.butter, .chocolate, .matcha, .neutral, .stone, .y2k, .gothic] {
+  for theme in [Theme.butter, .chocolate, .matcha, .neutral, .stone, .y2k, .gothic, .glass] {
     let accent = theme.dark.color.accent
     #expect(astryxContrast(.white, accent) < 3)
     #expect(astryxStockTint(accent) == .accentColor)
@@ -146,6 +146,7 @@ import Testing
 
 @Test func onlyASingleModeThemeSetsItsSubtreesMode() {
   #expect(Theme.gothic.singleMode == .dark)
+  #expect(Theme.glass.singleMode == .dark)
   for theme in [Theme.default, .butter, .neutral, .stone, .y2k] {
     #expect(theme.singleMode == nil)
   }

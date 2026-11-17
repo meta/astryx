@@ -64,6 +64,12 @@ export const workspaceAliases: WorkspaceAlias[] = [
     vite: 'packages/themes/chocolate/src/source.ts',
   },
   {
+    pkg: '@astryxdesign/theme-glass',
+    src: 'packages/themes/glass/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/glass/src/source.ts',
+  },
+  {
     pkg: '@astryxdesign/theme-gothic',
     src: 'packages/themes/gothic/src',
     stylex: 'wildcard',

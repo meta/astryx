@@ -77,12 +77,12 @@ Then use it as `npm run astryx -- component --list`. This avoids path errors whe
 
 ## Packages
 
-| Package                                    | Description                                                                                          | README                             |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| [`@astryxdesign/core`](packages/core)      | Components, theme system, and utilities                                                              | [README](packages/core/README.md)  |
-| [`@astryxdesign/cli`](packages/cli)        | CLI tooling: component docs, templates, scaffolding, themes, and codemods                            | [README](packages/cli/README.md)   |
-| [`@astryxdesign/build`](packages/build)    | Build plugins for StyleX source builds                                                               | [README](packages/build/README.md) |
-| [`@astryxdesign/theme-*`](packages/themes) | Seven ready-made, fully customizable themes (neutral, butter, chocolate, matcha, stone, gothic, y2k) | [README](packages/themes)          |
+| Package                                    | Description                                                                                                 | README                             |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| [`@astryxdesign/core`](packages/core)      | Components, theme system, and utilities                                                                     | [README](packages/core/README.md)  |
+| [`@astryxdesign/cli`](packages/cli)        | CLI tooling: component docs, templates, scaffolding, themes, and codemods                                   | [README](packages/cli/README.md)   |
+| [`@astryxdesign/build`](packages/build)    | Build plugins for StyleX source builds                                                                      | [README](packages/build/README.md) |
+| [`@astryxdesign/theme-*`](packages/themes) | Eight ready-made, fully customizable themes (neutral, butter, chocolate, glass, matcha, stone, gothic, y2k) | [README](packages/themes)          |
 
 > `@astryxdesign/lab` (experimental components) is used internally for Storybook and the sandbox and is not published to npm. `@astryxdesign/vega` (Vega/Vega-Lite chart wrapper) and `@astryxdesign/charts` (chart components) are published to npm only under the `@canary` dist-tag — there is no stable release yet.
 

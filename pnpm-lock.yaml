@@ -203,6 +203,9 @@ importers:
       '@astryxdesign/theme-butter':
         specifier: '*'
         version: link:../../packages/themes/butter
+      '@astryxdesign/theme-glass':
+        specifier: '*'
+        version: link:../../packages/themes/glass
       '@astryxdesign/theme-gothic':
         specifier: '*'
         version: link:../../packages/themes/gothic
@@ -336,6 +339,9 @@ importers:
       '@astryxdesign/theme-chocolate':
         specifier: '*'
         version: link:../../packages/themes/chocolate
+      '@astryxdesign/theme-glass':
+        specifier: '*'
+        version: link:../../packages/themes/glass
       '@astryxdesign/theme-gothic':
         specifier: '*'
         version: link:../../packages/themes/gothic
@@ -427,6 +433,9 @@ importers:
       '@astryxdesign/theme-chocolate':
         specifier: '*'
         version: link:../../packages/themes/chocolate
+      '@astryxdesign/theme-glass':
+        specifier: '*'
+        version: link:../../packages/themes/glass
       '@astryxdesign/theme-gothic':
         specifier: '*'
         version: link:../../packages/themes/gothic
@@ -1130,6 +1139,22 @@ importers:
         version: link:../../cli
 
   packages/themes/chocolate:
+    dependencies:
+      '@astryxdesign/core':
+        specifier: 0.7.17
+        version: link:../../core
+      lucide-react:
+        specifier: ^1.66.0
+        version: 1.67.0(@types/react@19.3.0)(react@19.3.1)
+      react:
+        specifier: '>=19'
+        version: 19.3.1
+    devDependencies:
+      '@astryxdesign/cli':
+        specifier: 0.7.17
+        version: link:../../cli
+
+  packages/themes/glass:
     dependencies:
       '@astryxdesign/core':
         specifier: 0.7.17

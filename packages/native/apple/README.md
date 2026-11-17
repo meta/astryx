@@ -136,7 +136,7 @@ and dark:
 - `Tokens.swift`: the typed token surface, from core's token names.
 - One `<Name>Theme.swift` per theme, declaring `Theme.<name>`: core's
   defaults (`.default`) and every published theme package (`.butter`,
-  `.chocolate`, `.gothic`, `.matcha`, `.neutral`, `.stone`, `.y2k`).
+  `.chocolate`, `.glass`, `.gothic`, `.matcha`, `.neutral`, `.stone`, `.y2k`).
 
 ```swift
 LoginTemplate().astryxTheme(.neutral)
@@ -181,6 +181,7 @@ in the app. Faces the published themes name (body, heading, code):
 | `.default`   | none (system fonts)                        |
 | `.butter`    | Outfit, JetBrains Mono                     |
 | `.chocolate` | Albert Sans, Fraunces, JetBrains Mono      |
+| `.glass`     | Figtree                                    |
 | `.gothic`    | Fustat, JetBrains Mono                     |
 | `.matcha`    | DM Sans, Playwrite US Trad, JetBrains Mono |
 | `.neutral`   | Figtree                                    |

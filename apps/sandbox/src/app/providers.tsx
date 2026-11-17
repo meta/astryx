@@ -11,6 +11,7 @@ import {stoneTheme} from '@astryxdesign/theme-stone/built';
 import {gothicTheme} from '@astryxdesign/theme-gothic/built';
 import {chocolateTheme} from '@astryxdesign/theme-chocolate/built';
 import {y2kTheme} from '@astryxdesign/theme-y2k/built';
+import {glassTheme} from '@astryxdesign/theme-glass/built';
 import type {DefinedTheme, ThemeMode} from '@astryxdesign/core/theme';
 
 /**
@@ -31,6 +32,7 @@ export const SANDBOX_THEMES: ReadonlyArray<{
   {id: 'gothic', label: 'Gothic', theme: gothicTheme},
   {id: 'chocolate', label: 'Chocolate', theme: chocolateTheme},
   {id: 'y2k', label: 'Y2K', theme: y2kTheme},
+  {id: 'glass', label: 'Glass', theme: glassTheme},
 ];
 
 const themes: Record<string, DefinedTheme> = Object.fromEntries(

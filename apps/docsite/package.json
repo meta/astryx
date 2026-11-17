@@ -26,6 +26,7 @@
     "@astryxdesign/lab": "*",
     "@astryxdesign/richtext": "*",
     "@astryxdesign/theme-butter": "*",
+    "@astryxdesign/theme-glass": "*",
     "@astryxdesign/theme-gothic": "*",
     "@astryxdesign/theme-matcha": "*",
     "@astryxdesign/theme-neutral": "*",

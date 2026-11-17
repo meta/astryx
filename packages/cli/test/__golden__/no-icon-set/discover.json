@@ -54,6 +54,18 @@
         "install": "pnpm add @astryxdesign/theme-chocolate@<version>"
       },
       {
+        "name": "@astryxdesign/theme-glass",
+        "package": "@astryxdesign/theme-glass",
+        "components": [],
+        "version": "<version>",
+        "description": "A deep navy canvas with glass cards and one vivid hue per colored card. Dark only, for dashboards and data-dense apps.",
+        "themes": [
+          "glass"
+        ],
+        "source": "Astryx",
+        "install": "pnpm add @astryxdesign/theme-glass@<version>"
+      },
+      {
         "name": "@astryxdesign/theme-gothic",
         "package": "@astryxdesign/theme-gothic",
         "components": [],

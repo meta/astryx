@@ -10,6 +10,7 @@ import {
 } from '@astryxdesign/core';
 import {butterTheme} from '@astryxdesign/theme-butter';
 import {chocolateTheme} from '@astryxdesign/theme-chocolate';
+import {glassTheme} from '@astryxdesign/theme-glass';
 import {gothicTheme} from '@astryxdesign/theme-gothic';
 import {matchaTheme} from '@astryxdesign/theme-matcha';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
@@ -29,6 +30,7 @@ import {storyPadding} from './storyFrame';
 const themes = {
   butter: butterTheme,
   chocolate: chocolateTheme,
+  glass: glassTheme,
   gothic: gothicTheme,
   matcha: matchaTheme,
   neutral: neutralTheme,
@@ -143,6 +145,7 @@ const preview: Preview = {
           {value: 'stone', title: 'Stone', icon: 'circlehollow'},
           {value: 'butter', title: 'Butter', icon: 'sun'},
           {value: 'chocolate', title: 'Chocolate', icon: 'circle'},
+          {value: 'glass', title: 'Glass', icon: 'moon'},
           {value: 'gothic', title: 'Gothic', icon: 'moon'},
           {value: 'matcha', title: 'Matcha', icon: 'circlehollow'},
           {value: 'probe', title: 'Probe (test fixture)', icon: 'beaker'},

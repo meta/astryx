@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "vitest run --root ../.. apps/sandbox --project node",
-    "build:deps": "pnpm -F @astryxdesign/theme-neutral build && pnpm -F @astryxdesign/theme-matcha build && pnpm -F @astryxdesign/theme-stone build && pnpm -F @astryxdesign/theme-gothic build && pnpm -F @astryxdesign/theme-chocolate build && pnpm -F @astryxdesign/theme-y2k build && pnpm -F @astryxdesign/theme-butter build",
+    "build:deps": "pnpm -F @astryxdesign/theme-neutral build && pnpm -F @astryxdesign/theme-matcha build && pnpm -F @astryxdesign/theme-stone build && pnpm -F @astryxdesign/theme-gothic build && pnpm -F @astryxdesign/theme-chocolate build && pnpm -F @astryxdesign/theme-y2k build && pnpm -F @astryxdesign/theme-butter build && pnpm -F @astryxdesign/theme-glass build",
     "generate:theme-family": "pnpm exec astryx theme build --family src/themes/theme-family/ocean.ts src/themes/theme-family/ocean-calm.ts src/themes/theme-family/ocean-calm-deep.ts src/themes/theme-family/ocean-midnight.ts --family-key sandbox-ocean-family",
     "generate:motion-audit": "node \"src/app/(sandbox)/pages/motion-lab/generate-motion-audit.mjs\"",
     "generate:changelog": "node scripts/generate-changelog.js",
@@ -25,6 +25,7 @@
     "@astryxdesign/lab": "*",
     "@astryxdesign/theme-butter": "*",
     "@astryxdesign/theme-chocolate": "*",
+    "@astryxdesign/theme-glass": "*",
     "@astryxdesign/theme-gothic": "*",
     "@astryxdesign/theme-matcha": "*",
     "@astryxdesign/theme-neutral": "*",

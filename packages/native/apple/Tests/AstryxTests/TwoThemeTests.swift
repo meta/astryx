@@ -98,7 +98,7 @@ private let secondTheme: Theme = {
 
 @MainActor
 @Test func statusMessagesMeetTheirContrastFloorInEveryTheme() {
-  for theme in [Theme.default, .butter, .chocolate, .matcha, .neutral, .stone, .y2k, .gothic] {
+  for theme in [Theme.default, .butter, .chocolate, .matcha, .neutral, .stone, .y2k, .gothic, .glass] {
     for tokens in [theme.light, theme.dark] {
       let c = tokens.color
       for (content, ground) in [(c.onErrorMuted, c.errorMuted), (c.onWarningMuted, c.warningMuted), (c.onSuccessMuted, c.successMuted)] {

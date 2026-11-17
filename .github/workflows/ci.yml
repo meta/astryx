@@ -814,6 +814,7 @@ jobs:
             -F @astryxdesign/theme-chocolate \
             -F @astryxdesign/theme-y2k \
             -F @astryxdesign/theme-butter \
+            -F @astryxdesign/theme-glass \
             build
 
       # `build` generates the docsite data first, so the data tests below run

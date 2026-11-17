@@ -20,6 +20,10 @@ Current records:
 - [Butter](../../packages/themes/butter/butter.spec.md) — current
 - [Y2K](../../packages/themes/y2k/y2k.spec.md) — current
 
+Draft records:
+
+- [Glass](../../packages/themes/glass/glass.spec.md) — draft
+
 A theme record sits between system theming architecture and consumer/component
 records. It uses one typed `references` list for architecture, design, system,
 and other knowledge relationships rather than separate relation fields:
