@@ -351,26 +351,6 @@ export function isTextEntryControl(
   return element.matches('[contenteditable]:not([contenteditable="false"])');
 }
 
-/**
- * Whether `element` is a text field of any state: a text-like `<input>`, a
- * `<textarea>` or an editable element, also when it is read-only, disabled
- * or brings up no keyboard. Browsers mark a pointer's focus on such a field
- * `:focus-visible`.
- */
-export function isTextField(element: Element | null): element is HTMLElement {
-  if (!isHTMLElement(element)) {
-    return false;
-  }
-  if (element.localName === 'input') {
-    return !NON_TEXT_INPUT_TYPES.has(
-      (element.getAttribute('type') ?? 'text').toLowerCase(),
-    );
-  }
-  return element.matches(
-    'textarea, [contenteditable]:not([contenteditable="false"])',
-  );
-}
-
 /** The text-entry control inside `container` that `target` is or labels. */
 export function findTextEntryControl(
   target: EventTarget | null,

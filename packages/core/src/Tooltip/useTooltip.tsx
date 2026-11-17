@@ -27,7 +27,6 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import {getInteractionModality} from '../utils/interactionModality';
-import {isTextField} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -53,6 +52,35 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+
+const NON_TEXT_INPUT_TYPES = new Set([
+  'button',
+  'checkbox',
+  'color',
+  'file',
+  'hidden',
+  'image',
+  'radio',
+  'range',
+  'reset',
+  'submit',
+]);
+
+/**
+ * Whether `element` is a text field in any state: a text-like `<input>`, a
+ * `<textarea>` or an editable element, also when it is read-only, disabled
+ * or brings up no keyboard.
+ */
+function isTextField(element: HTMLElement): boolean {
+  if (element.localName === 'input') {
+    return !NON_TEXT_INPUT_TYPES.has(
+      (element.getAttribute('type') ?? 'text').toLowerCase(),
+    );
+  }
+  return element.matches(
+    'textarea, [contenteditable]:not([contenteditable="false"])',
+  );
+}
 
 /**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
@@ -559,9 +587,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
         return false;
       }
-      // Focus on a trigger that is not a text field opens nothing after a
-      // pointer press, also when script moves it there. A text field is
-      // excepted, as browsers mark a pointer's focus on it focus-visible.
+      // Browsers mark a pointer's focus on a text field focus-visible, so
+      // after a pointer press only a text field opens the tooltip.
       if (
         !isTextField(target) &&
         getInteractionModality(target) === 'pointer'
