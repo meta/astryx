@@ -21,6 +21,12 @@ import {useTableSelection} from './plugins/selection/useTableSelection';
 import {useTableSelectionState} from './plugins/selection/useTableSelectionState';
 import type {TableColumn} from './types';
 import {
+  useTableFiltering,
+  type TableFilterState,
+  type TableFilterValue,
+} from './plugins/filtering/useTableFiltering';
+import type {PowerSearchConfig} from '../PowerSearch/types';
+import {
   useTableSortable,
   type TableSortState,
 } from './plugins/sortable/useTableSortable';
@@ -359,5 +365,119 @@ describe('TableHeaderCell truncation tooltip with header controls', () => {
     });
     await new Promise(resolve => setTimeout(resolve, 400));
     expect(tooltip()).toBeNull();
+  });
+});
+
+describe('TableHeaderCell truncation tooltip with an inline enum filter', () => {
+  const DEPARTMENT = 'Department of the employee';
+  const config: PowerSearchConfig = {
+    name: 'people',
+    fields: [
+      {
+        key: 'department',
+        label: DEPARTMENT,
+        defaultOperator: 'is',
+        operators: [
+          {
+            key: 'is',
+            label: 'is',
+            value: {
+              type: 'enum',
+              values: [
+                {value: 'ops', label: 'Ops'},
+                {value: 'design', label: 'Design and research'},
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const data = [{id: '1', department: 'ops'}];
+
+  function FilteredTable() {
+    const [filters, setFilters] = useState<TableFilterState>({
+      department: 'ops',
+    });
+    const plugin = useTableFiltering<{id: string; department: string}>({
+      filters,
+      onFilterChange: (key: string, value: TableFilterValue | null) =>
+        setFilters(prev => {
+          if (value == null) {
+            const {[key]: _removed, ...next} = prev;
+            return next;
+          }
+          return {...prev, [key]: value};
+        }),
+      variant: 'inline',
+      searchConfig: config,
+    });
+    return (
+      <Table
+        data={data}
+        columns={[
+          {key: 'department', header: DEPARTMENT, filter: 'department'},
+        ]}
+        idKey="id"
+        plugins={{filter: plugin}}
+      />
+    );
+  }
+
+  function withFocusVisible() {
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : realMatches.call(this, selector);
+    });
+  }
+
+  // The filter's own controls carry tooltips of their own (Clear); only the
+  // heading's tooltip is checked here.
+  function headingTooltips() {
+    return screen
+      .queryAllByRole('tooltip', {hidden: true})
+      .filter(el => (el.textContent ?? '').includes(DEPARTMENT));
+  }
+
+  function focusFilter() {
+    const header = screen.getByRole('columnheader');
+    const control = header.querySelector<HTMLElement>(
+      'button, input, [tabindex]:not([tabindex="-1"])',
+    );
+    expect(control).not.toBeNull();
+    act(() => {
+      control?.focus();
+    });
+  }
+
+  it("shows nothing under a fitting heading when the filter's value is cut", async () => {
+    // Only the filter's own value clips; the heading fits.
+    restore = withOverflow(
+      element =>
+        element.closest(
+          'input, [role="combobox"], [role="listbox"], [role="textbox"]',
+        ) != null,
+    );
+    withFocusVisible();
+    render(<FilteredTable />);
+    focusFilter();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(headingTooltips()).toHaveLength(0);
+  });
+
+  it('shows only the heading, not the filter value, when the heading is cut', async () => {
+    restore = withOverflow(true);
+    withFocusVisible();
+    render(<FilteredTable />);
+    focusFilter();
+    await waitFor(() => {
+      expect(headingTooltips()).toHaveLength(1);
+    });
+    expect(headingTooltips()[0].textContent?.trim()).toBe(DEPARTMENT);
   });
 });
