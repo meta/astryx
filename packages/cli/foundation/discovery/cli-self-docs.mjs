@@ -101,9 +101,13 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
+      // The docs and search read a command's summary with its pointers.
       loaded.push({
         source,
-        doc: doc.type === 'command' ? publishedCommandDoc(doc) : doc,
+        doc:
+          doc.type === 'command' && doc.pointers?.length
+            ? {...doc, summary: publishedSummary(doc)}
+            : doc,
       });
     } catch (error) {
       failed.push({
@@ -113,32 +117,6 @@ export async function loadCliSelfDocs(
     }
   }
   return {loaded, failed};
-}
-
-/**
- * A command doc as the docs and search read it: its summary with its
- * pointers, and each option's description with its parts.
- * @param {any} doc
- * @returns {any}
- */
-function publishedCommandDoc(doc) {
-  const options = doc.options?.some(
-    (/** @type {any} */ option) => option.pointers?.length,
-  );
-  if (!doc.pointers?.length && !options) return doc;
-  return {
-    ...doc,
-    ...(doc.pointers?.length ? {summary: publishedSummary(doc)} : {}),
-    ...(options
-      ? {
-          options: doc.options.map((/** @type {any} */ option) => {
-            if (!option.pointers?.length) return option;
-            const {pointers: _pointers, ...rest} = option;
-            return {...rest, description: publishedOptionDescription(option)};
-          }),
-        }
-      : {}),
-  };
 }
 
 /**
@@ -199,6 +177,17 @@ function entryText(entry, fn) {
     (/** @type {any} */ p) => p.name === entry.param,
   );
   return typeof param?.description === 'string' ? param.description : '';
+}
+
+/**
+ * The text for a command option: its own or its API parameter's, then the
+ * text of every part it declares.
+ * @param {{description?: string, param?: string, pointers?: Array<string | {text: string}>}} option
+ * @param {any} fn the FunctionDoc the command calls, if any
+ * @returns {string}
+ */
+function optionText(option, fn) {
+  return publishedOptionDescription(option, entryText({param: option.param}, fn));
 }
 
 /**
@@ -266,7 +255,7 @@ function commandSection(cmd, index) {
         ].filter(Boolean);
         return [
           `\`${option.flag}\``,
-          [sentence(entryText(option, fn), extra.length > 0), ...extra]
+          [sentence(optionText(option, fn), extra.length > 0), ...extra]
             .filter(Boolean)
             .join(' '),
         ];

@@ -8,7 +8,7 @@
  * @output pointerClause(), publishedSummary(), and
  *   publishedOptionDescription()
  * @position foundation/discovery — shared by help, which can leave a pointer
- *   out, and the docs and search, which read the whole summary
+ *   out, and the docs and search, which read the whole text
  */
 
 /**
@@ -34,16 +34,18 @@ export function publishedSummary(doc) {
 }
 
 /**
- * An option doc's description as `astryx docs` and search read it: the
- * description, then the text of every part.
+ * An option doc's description as help, `astryx docs`, and search read it:
+ * its own description, else the text it inherits from its API parameter,
+ * then the text of every part.
  * @param {{description?: string, pointers?: Array<string | {text: string}>}} option
- * @returns {string | undefined} undefined when the option gives neither
+ * @param {string} [inherited] the text of the API parameter it maps to
+ * @returns {string}
  */
-export function publishedOptionDescription(option) {
-  if (!option.pointers?.length) return option.description;
+export function publishedOptionDescription(option, inherited = '') {
+  const lead = option.description ? option.description : inherited;
   return (
-    (option.description ?? '') +
-    option.pointers
+    lead +
+    (option.pointers ?? [])
       .map(part => (typeof part === 'string' ? part : part.text))
       .join('')
   );
