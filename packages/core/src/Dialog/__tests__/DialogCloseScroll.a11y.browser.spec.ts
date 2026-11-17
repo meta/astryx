@@ -48,14 +48,14 @@ const SCROLL_OFFSET = 129;
  * edge sits below the viewport's top edge, the geometry in which a reveal of
  * the region moves the page.
  */
-async function mountScrolled(page: Page) {
+async function mountScrolled(page: Page, regionTabIndex = -1) {
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-dialog--default&viewMode=story`,
   );
   const opener = page.getByRole('button', {name: 'Open Modal', exact: true});
   await expect(opener).toBeVisible();
   await page.evaluate(
-    ({headerHeight, scrollOffset}) => {
+    ({headerHeight, scrollOffset, tabIndex}) => {
       const root = document.getElementById('storybook-root');
       if (root?.parentNode == null) {
         throw new Error('no story root');
@@ -66,7 +66,7 @@ async function mountScrolled(page: Page) {
         return node;
       };
       const main = document.createElement('div');
-      main.tabIndex = -1;
+      main.tabIndex = tabIndex;
       root.parentNode.insertBefore(spacer(headerHeight), root);
       root.parentNode.insertBefore(main, root);
       main.append(spacer(400), root, spacer(3000));
@@ -75,7 +75,11 @@ async function mountScrolled(page: Page) {
       // mouse-focusable there, so its nearest focusable ancestor takes it.
       main.focus({preventScroll: true});
     },
-    {headerHeight: HEADER_HEIGHT, scrollOffset: SCROLL_OFFSET},
+    {
+      headerHeight: HEADER_HEIGHT,
+      scrollOffset: SCROLL_OFFSET,
+      tabIndex: regionTabIndex,
+    },
   );
   await expect
     .poll(async () => page.evaluate(() => window.scrollY))
@@ -133,6 +137,17 @@ test('a backdrop close keeps the page where it was', async ({page}) => {
 
 test('an Escape close keeps the page where it was', async ({page}) => {
   const {opener, openerTop} = await mountScrolled(page);
+  await openDialog(page, opener);
+  await page.keyboard.press('Escape');
+  await expectPageStill(page, opener, openerTop);
+});
+
+test('an Escape close keeps the page where it was when the recorded opener is a Tab-stop region larger than the viewport', async ({
+  page,
+}) => {
+  // A Tab stop too large to fit the viewport, such as a scrollable table
+  // viewport WebKit records for a tapped button, is not revealed.
+  const {opener, openerTop} = await mountScrolled(page, 0);
   await openDialog(page, opener);
   await page.keyboard.press('Escape');
   await expectPageStill(page, opener, openerTop);

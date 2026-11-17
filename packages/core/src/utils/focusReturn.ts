@@ -183,9 +183,9 @@ export function focusForLastInput(
 
 /**
  * Returns focus to `opener` after an overlay closes, with the ring the last
- * input calls for. An opener that is a Tab stop and sits outside the visible
- * area scrolls just into view (`nearest`), so a person sees where focus went;
- * one already in view does not move. WebKit records the nearest focusable
+ * input calls for. An opener that is a Tab stop, fits inside its scroller's
+ * visible area and sits outside it scrolls just into view (`nearest`), so a
+ * person sees where focus went; one already in view does not move. WebKit records the nearest focusable
  * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
  * region. A reveal of that region scrolls the page to its top edge, so an
  * opener that is no Tab stop never scrolls.
@@ -195,9 +195,41 @@ export function returnFocusForLastInput(
   modality?: InteractionModality,
 ): void {
   focusForLastInput(opener, {preventScroll: true}, modality);
-  if (isTabStop(opener) && typeof opener.scrollIntoView === 'function') {
+  if (
+    isTabStop(opener) &&
+    typeof opener.scrollIntoView === 'function' &&
+    fitsItsScrollport(opener)
+  ) {
     opener.scrollIntoView({block: 'nearest', inline: 'nearest'});
   }
+}
+
+// Whether the element fits inside the visible area of its nearest scroller,
+// or of the window when no ancestor scrolls. A larger one, such as a
+// scrollable table viewport, would jump to its own edge, so it is not
+// revealed.
+function fitsItsScrollport(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const view = element.ownerDocument.defaultView;
+  for (
+    let node = element.parentElement;
+    node != null;
+    node = node.parentElement
+  ) {
+    const style = view?.getComputedStyle(node);
+    const scrolls =
+      style != null &&
+      /auto|scroll/.test(`${style.overflowX} ${style.overflowY}`) &&
+      (node.scrollHeight > node.clientHeight ||
+        node.scrollWidth > node.clientWidth);
+    if (scrolls) {
+      return rect.height <= node.clientHeight && rect.width <= node.clientWidth;
+    }
+  }
+  return (
+    view == null ||
+    (rect.height <= view.innerHeight && rect.width <= view.innerWidth)
+  );
 }
 
 /**

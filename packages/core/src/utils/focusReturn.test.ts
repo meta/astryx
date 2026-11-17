@@ -188,6 +188,21 @@ describe('returnFocusForLastInput', () => {
     expect(reveal).not.toHaveBeenCalled();
   });
 
+  it('never scrolls to a Tab stop larger than its scroller, such as a scrollable table viewport', () => {
+    const viewport = document.createElement('div');
+    viewport.tabIndex = 0;
+    document.body.appendChild(viewport);
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 800, 5000),
+    );
+    const focus = vi.spyOn(viewport, 'focus');
+    const reveal = vi.fn();
+    viewport.scrollIntoView = reveal;
+    returnFocusForLastInput(viewport);
+    expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
   it('takes the ring from the modality it is given', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
