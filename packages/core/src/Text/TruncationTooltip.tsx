@@ -219,18 +219,8 @@ function isVisuallyHidden(element: Element): boolean {
 
 // A field and its value: an input, or a widget that shows a chosen value (a
 // Selector's combobox). Its value is not the component's text.
-const FIELD_SELECTOR = [
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable]:not([contenteditable="false"])',
-  '[role="combobox"]',
-  '[role="listbox"]',
-  '[role="searchbox"]',
-  '[role="spinbutton"]',
-  '[role="slider"]',
-  '[role="textbox"]',
-].join(', ');
+const FIELD_SELECTOR =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="combobox"], [role="listbox"], [role="searchbox"], [role="spinbutton"], [role="slider"], [role="textbox"]';
 
 /**
  * Whether an element is left out of the measured text: hidden, a hidden copy
