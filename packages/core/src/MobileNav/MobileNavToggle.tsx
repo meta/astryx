@@ -19,6 +19,7 @@
  * toggle.
  */
 
+import {themeProps} from '../utils/themeProps';
 import React, {type ReactNode} from 'react';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
@@ -111,7 +112,11 @@ export function MobileNavToggle({
       aria-controls={mobileNavId || undefined}
       data-testid={testId ?? 'mobile-nav-toggle'}
       xstyle={xstyle}
-      className={className}
+      // A theme reaches the toggle as its own part, so it can draw it for
+      // the bar it sits in; a caller's class is kept beside it.
+      className={[themeProps('mobile-nav-toggle').className, className]
+        .filter(Boolean)
+        .join(' ')}
       style={style}
       isIconOnly
     />

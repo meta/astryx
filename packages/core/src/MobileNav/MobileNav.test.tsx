@@ -45,6 +45,17 @@ describe('MobileNav', () => {
     expect(dialog).not.toHaveClass('astryx-mobile-nav-drawer');
   });
 
+  it('carries mobile-nav-close on the Close button, beside the Button target', () => {
+    render(
+      <MobileNav isOpen={true} onOpenChange={() => {}}>
+        <span>Nav content</span>
+      </MobileNav>,
+    );
+    const close = screen.getByRole('button', {name: /close navigation/i});
+    expect(close).toHaveClass('astryx-mobile-nav-close');
+    expect(close).toHaveClass('astryx-button');
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <MobileNav isOpen={true} onOpenChange={() => {}}>

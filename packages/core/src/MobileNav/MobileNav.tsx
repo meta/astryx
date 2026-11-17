@@ -794,6 +794,9 @@ export function MobileNav({
                   icon={<Icon icon="close" color="inherit" />}
                   onClick={() => onOpenChange(false)}
                   isIconOnly
+                  // A theme reaches the close button as its own part, so it
+                  // can draw it for the drawer it sits on.
+                  {...themeProps('mobile-nav-close')}
                 />
               </div>
 
