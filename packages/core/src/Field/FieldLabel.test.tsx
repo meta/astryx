@@ -41,14 +41,12 @@ describe('FieldLabel', () => {
       />,
     );
     const label = screen.getByText('Email').closest('label') as Element;
-    expect(declarationsOf(label)).toContain('color: var(--color-text-primary)');
-    expect(declarationsOf(screen.getByText('We never share it'))).toContain(
-      'color: var(--color-text-secondary)',
+    expect(declaredValue(label, 'color')).toBe('var(--color-text-primary)');
+    expect(declaredValue(screen.getByText('We never share it'), 'color')).toBe(
+      'var(--color-text-secondary)',
     );
     const marker = screen.getByText('Optional').closest('span') as Element;
-    expect(declarationsOf(marker)).toContain(
-      'color: var(--color-text-secondary)',
-    );
+    expect(declaredValue(marker, 'color')).toBe('var(--color-text-secondary)');
   });
 
   it('renders label text', () => {
