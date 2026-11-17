@@ -111,6 +111,7 @@ Every run reads one base: Core, or an installed integration whose manifest decla
 | `hook`         | List hooks or print hook docs                                                                                    | `same`            |
 | `init`         | Initialize the design system in your project                                                                     | `own`             |
 | `integration`  | Author and verify an Astryx integration package                                                                  | by subcommand     |
+| `mcp`          | For AI tools that cannot run commands: serve every astryx command as an MCP tool, over stdio                     | `same`            |
 | `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                         | `same`            |
 | `swizzle`      | Copy component source for customization                                                                          | `refuse`          |
 | `template`     | List, show, or scaffold page and block templates                                                                 | `same`            |
