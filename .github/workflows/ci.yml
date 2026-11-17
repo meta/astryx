@@ -1494,7 +1494,8 @@ jobs:
 
       # template-phone-fit.browser.test.mjs builds every ready page template
       # into one Vite app and shows each in Chromium's phone emulation at
-      # 390 px, with touch and with a mouse; it fails on horizontal overflow.
+      # 390 px, with touch and with a mouse; it fails on horizontal overflow
+      # and on a chart label its chart clips.
       # It needs the build package's Vite plugin, built here. The Node legs
       # skip it; with ASTRYX_TEMPLATE_PHONE_FIT_BROWSER set, a missing browser
       # fails it.

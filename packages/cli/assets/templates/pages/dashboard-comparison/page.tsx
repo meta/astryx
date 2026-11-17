@@ -547,7 +547,8 @@ function ActiveUsersTrend() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Sized to the widest tick label, so the chart edge does not clip it.
+            width="auto"
             unit="K"
           />
           <Tooltip

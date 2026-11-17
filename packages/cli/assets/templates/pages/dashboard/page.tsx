@@ -524,7 +524,8 @@ function ActiveUsersChart() {
             }}
             axisLine={false}
             tickLine={false}
-            width={30}
+            // Sized to the widest tick label, so the chart edge does not clip it.
+            width="auto"
           />
           <Tooltip
             content={<ChartTooltip />}

@@ -184,6 +184,12 @@ const TIMELINE_TICKS = Array.from(
 // "Today" marker, as a day offset on the same scale.
 const PROJECT_DAY = 58;
 
+// The marker's label sits above the plot area, outside the bars. The chart's
+// top margin holds one label line plus the label's gap above the plot, so the
+// SVG does not clip the label.
+const TODAY_LABEL_SIZE = 11;
+const TODAY_LABEL_GAP = 5;
+
 // ============= DATA =============
 
 // Task backlog by status. Tasks are not equally sized, so the fixture makes
@@ -681,7 +687,12 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
         <BarChart
           data={data}
           layout="vertical"
-          margin={{top: 4, right: 16, left: 8, bottom: 4}}
+          margin={{
+            top: TODAY_LABEL_SIZE + TODAY_LABEL_GAP,
+            right: 16,
+            left: 8,
+            bottom: 4,
+          }}
           barCategoryGap={12}>
           <CartesianGrid horizontal={false} vertical stroke={CHART_GRID} />
           <XAxis
@@ -711,7 +722,8 @@ function GanttChart({milestones}: {milestones: Milestone[]}) {
             label={{
               value: 'Today',
               position: 'top',
-              fontSize: 11,
+              offset: TODAY_LABEL_GAP,
+              fontSize: TODAY_LABEL_SIZE,
               fill: CHART_NEUTRAL,
             }}
           />
@@ -884,7 +896,8 @@ function BurndownChart() {
             tick={AXIS_TICK}
             axisLine={false}
             tickLine={false}
-            width={40}
+            // Sized to the widest tick label, so the chart edge does not clip it.
+            width="auto"
             unit=" pts"
           />
           <Tooltip
