@@ -163,20 +163,22 @@ const styles = stylex.create({
 const CONCENTRIC_RADIUS =
   'max(0px, calc(var(--_segmented-control-radius) - var(--_segmented-control-padding)))';
 
+// A segment is its size at the default text size, where one label line is
+// shorter, and grows with its label when the text grows past it.
 const sizeStyles = stylex.create({
   sm: {
-    height: `calc(${sizeVars['--size-element-sm']} - 4px)`,
+    height: `max(calc(${sizeVars['--size-element-sm']} - 4px), 1lh)`,
     borderRadius: CONCENTRIC_RADIUS,
     paddingInline: spacingVars['--spacing-2'],
     fontSize: typeScaleVars['--text-supporting-size'],
   },
   md: {
-    height: `calc(${sizeVars['--size-element-md']} - 4px)`,
+    height: `max(calc(${sizeVars['--size-element-md']} - 4px), 1lh)`,
     borderRadius: CONCENTRIC_RADIUS,
     paddingInline: spacingVars['--spacing-3'],
   },
   lg: {
-    height: `calc(${sizeVars['--size-element-lg']} - 4px)`,
+    height: `max(calc(${sizeVars['--size-element-lg']} - 4px), 1lh)`,
     borderRadius: CONCENTRIC_RADIUS,
     paddingInline: spacingVars['--spacing-3'],
   },

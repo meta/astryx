@@ -610,9 +610,9 @@ describe('neutral theme component overrides', () => {
           neutralPalettes.neutral.dark[80],
         ),
       },
-      'size:sm': {height: 'calc(var(--size-element-sm) - 8px)'},
-      'size:md': {height: 'calc(var(--size-element-md) - 8px)'},
-      'size:lg': {height: 'calc(var(--size-element-lg) - 8px)'},
+      'size:sm': {height: 'max(calc(var(--size-element-sm) - 8px), 1lh)'},
+      'size:md': {height: 'max(calc(var(--size-element-md) - 8px), 1lh)'},
+      'size:lg': {height: 'max(calc(var(--size-element-lg) - 8px), 1lh)'},
       selected: {boxShadow: 'none'},
     });
   });
