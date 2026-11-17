@@ -62,7 +62,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Astryx is installing that CLI version, with its Core, into its cache. This happens once. In a project whose own CLI cannot start, it installs the version that matches the project's Core. To avoid the wait, install the project's dependencies. Outside a project, or in a project with nothing installed yet, it installs the version of the astryx command you started. Commands that read components use that version's Core, which is not downloaded yet (`astryx docs global/problems core-offline`). The second line means that another run is installing it. This run waits for up to 15 minutes.",
+          text: "Astryx is installing that CLI version, with its Core, into its cache. This happens once. In a project whose own CLI cannot start, it installs the version that matches the project's Core. To avoid the wait, install the project's dependencies. Outside a project, or in a fresh clone with nothing installed, it installs the version of the astryx command you started. Commands that read components use that version's Core, which is not downloaded yet (`astryx docs global/problems core-offline`). The second line means that another run is installing it. This run waits for up to 15 minutes.",
         },
       ],
     },
