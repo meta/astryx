@@ -29,6 +29,41 @@ import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 /** @param {number} n */
 const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
+/** The text answer names this many files at most. The JSON answer keeps every file. */
+const LISTED_FILES = 10;
+
+/**
+ * Names the first files, then counts the rest. The rest are named by the
+ * folder they share, when they share one.
+ * @param {string[]} files
+ */
+function fileList(files) {
+  if (files.length <= LISTED_FILES) return files.join(', ');
+  const rest = files.slice(LISTED_FILES);
+  const folder = sharedFolder(rest);
+  return `${files.slice(0, LISTED_FILES).join(', ')}, ... and ${rest.length} more${folder ? ` in ${folder}/` : ''}`;
+}
+
+/**
+ * @param {string[]} files
+ * @returns {string} the deepest folder that holds every file, or '' at the top
+ */
+function sharedFolder(files) {
+  /** @type {string[] | undefined} */
+  let shared;
+  for (const file of files) {
+    const parts = file.replaceAll('\\', '/').split('/').slice(0, -1);
+    if (shared === undefined) {
+      shared = parts;
+      continue;
+    }
+    let same = 0;
+    while (same < shared.length && same < parts.length && shared[same] === parts[same]) same++;
+    shared = shared.slice(0, same);
+  }
+  return (shared ?? []).join('/');
+}
+
 /**
  * A file rendered outside the current folder comes back into it: --reverse
  * writes only inside the folder it runs from, so the command names the first
@@ -84,8 +119,8 @@ export function registerExperimentalRender(group, program) {
             cssBytes: kb(d.cssBytes),
             classes: d.classes,
             images: d.images,
-            files: d.files.join(', '),
-            ...(d.notCarried?.length ? {notCarried: d.notCarried.join(', ')} : {}),
+            files: fileList(d.files),
+            ...(d.notCarried?.length ? {notCarried: fileList(d.notCarried)} : {}),
             stylesheets: d.stylesheets.join(', ') || 'none',
             scriptBytes: kb(d.scriptBytes),
             scriptModules: d.scriptModules,
@@ -106,7 +141,7 @@ export function registerExperimentalRender(group, program) {
           mode: d.mode,
           exact: d.exact,
           output: d.output,
-          files: d.files.join(', '),
+          files: fileList(d.files),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
           ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'

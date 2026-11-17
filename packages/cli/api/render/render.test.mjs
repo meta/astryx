@@ -2095,6 +2095,28 @@ describe('astryx experimental render (CLI)', () => {
     const r = await runCli(['experimental', '--help'], dir);
     expect(r.stdout).toMatch(/render[^\n]*\[experimental\]/);
   });
+
+  it('names at most 10 restored files in text and keeps every file in JSON', async () => {
+    const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
+    const sheets = Array.from({length: 12}, (_, i) => `styles/s${String(i + 1).padStart(2, '0')}.css`);
+    const page = {
+      path: 'page.tsx',
+      text: `${sheets.map(s => `import './${s}';`).join('\n')}\nexport default () => null;\n`,
+    };
+    const files = [page, ...sheets.map(s => ({path: s, text: 'p{}\n'}))];
+    put(
+      'many-files.html',
+      `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', files.map(f => ({path: f.path, bytes: Buffer.from(f.text)})))}</body>`,
+    );
+    const text = await runCli(['experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-text/page.tsx'], dir);
+    expect(text.status).toBe(0);
+    const line = text.stdout.split('\n').find(l => /^\s*files\b/.test(l)) ?? '';
+    expect(line).toContain('styles/s09.css');
+    expect(line).not.toContain('styles/s10.css');
+    expect(line).toContain('... and 3 more in many-text/styles/');
+    const json = await runCli(['--json', 'experimental', 'render', '--reverse', 'many-files.html', '--out', 'many-json/page.tsx'], dir);
+    expect(JSON.parse(json.stdout).data.files).toHaveLength(13);
+  }, 60_000);
 });
 
 describe('render(): refusals', () => {
