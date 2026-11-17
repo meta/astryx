@@ -314,8 +314,8 @@ export function Card({
           variantStyles[variant],
           elevationStyles[elevation],
           hasFixedHeight && styles.scrollable,
-          // A dynamic style is a new object on each call, which misses
-          // StyleX's identity cache for this whole list, so skip it when empty.
+          // A dynamic style is a new object on each call. That object misses
+          // StyleX's identity cache, and so does every style before it.
           isSized &&
             dynamicStyles.sizing(
               width ?? null,
