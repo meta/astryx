@@ -82,16 +82,13 @@ export function calculateMeasuredRange({
 
 /**
  * Mounted rows and the gaps that stand for the other items, with a retained
- * focused item and, when `isLastRetained`, the last item. A gap that starts
- * at the first item is `debt` px shorter: that space holds a correction back
- * until it can be written.
+ * focused item and, when `isLastRetained`, the last item.
  */
 export function createMeasuredSegments(
   offsets: ReadonlyArray<number>,
   start: number,
   end: number,
   focusIndex: number | undefined,
-  debt: number,
   isLastRetained = false,
 ): ListWindowSegment[] {
   const count = Math.max(0, offsets.length - 1);
@@ -108,15 +105,7 @@ export function createMeasuredSegments(
   }
   return segments.map(segment =>
     segment.type === 'gap'
-      ? {
-          ...segment,
-          height: Math.max(
-            0,
-            offsets[segment.end] -
-              offsets[segment.start] -
-              (segment.start === 0 ? debt : 0),
-          ),
-        }
+      ? {...segment, height: offsets[segment.end] - offsets[segment.start]}
       : segment,
   );
 }

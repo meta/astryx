@@ -7,8 +7,9 @@
  * @input Uses React refs, state, callbacks, useMediaQuery, the page-scroller
  *   rules, and the input stream's document scroll events when the page itself
  *   scrolls
- * @output Exports useChatStreamScroll hook for AI chat scroll behavior, and,
- *   internal to Chat, the shift a windowed list makes through it
+ * @output Exports useChatStreamScroll hook for AI chat scroll behavior; a
+ *   windowed list on the same container shifts the position and reads it
+ *   through chatStreamScrollChannel
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
  * Spring-based scroll-to-bottom with lock/unlock:
@@ -43,6 +44,10 @@ import {
   scrollportTop,
   scrollsPage,
 } from '../utils/pageScroller';
+import {
+  streamScrollPositionListeners,
+  streamScrollShifts,
+} from './chatStreamScrollChannel';
 
 // =============================================================================
 // Types
@@ -148,30 +153,6 @@ const following = new WeakSet<Element>();
  */
 export function isFollowingNewest(scroller: Element): boolean {
   return following.has(scroller);
-}
-
-/** The writes a windowed list makes through the stream scroll. */
-export interface ChatStreamScrollShift {
-  /**
-   * Moves the position by `delta` px. The hook does not read the move as the
-   * reader's, and a spring in flight moves with it.
-   */
-  shiftBy: (delta: number) => void;
-  /** Stops following, as the reader's scroll up does. */
-  unlock: () => void;
-}
-
-// The hook on each scroller, so it stays the one writer of the position.
-const shifts = new WeakMap<Element, ChatStreamScrollShift>();
-
-/**
- * The stream scroll that runs on `scroller`, for a windowed list that keeps
- * its rows in place there. Internal to Chat.
- */
-export function getStreamScrollShift(
-  scroller: Element,
-): ChatStreamScrollShift | undefined {
-  return shifts.get(scroller);
 }
 
 // The lock's marks on the scroller: anchoring off while the hook follows, and
@@ -411,8 +392,8 @@ export function useChatStreamScroll({
   // --- Event listeners ---
 
   // Syncs the scroll and scrollend listeners, and the shift a windowed list
-  // reads, with `enabled`: the stream container's own listeners, or the
-  // document's when the container scrolls the page.
+  // on the container writes through, with `enabled`: the stream container's
+  // own listeners, or the document's when the container scrolls the page.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
@@ -421,7 +402,7 @@ export function useChatStreamScroll({
 
     lastScrollTopRef.current = el.scrollTop;
     markFollowing(el, lockedRef.current);
-    shifts.set(el, {shiftBy, unlock});
+    streamScrollShifts.set(el, {shiftBy, unlock});
     const doc = el.ownerDocument;
     const isPage = scrollsPage(el);
     // The root's offsetHeight is the page's height. Its clientHeight is the
@@ -448,6 +429,9 @@ export function useChatStreamScroll({
         setLocked(false);
         animatingRef.current = false;
       }
+      streamScrollPositionListeners
+        .get(el)
+        ?.forEach(listener => listener(scrollTop));
     };
 
     const onScrollEnd = () => {
@@ -492,7 +476,7 @@ export function useChatStreamScroll({
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
       markFollowing(el, false);
-      shifts.delete(el);
+      streamScrollShifts.delete(el);
     };
   }, [
     scrollRef,

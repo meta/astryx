@@ -38,7 +38,11 @@ import type {
   ChatMessageListWindowing,
   ChatMessageListWindowProps,
 } from './chatMessageListVirtualization';
-import {getStreamScrollShift, isFollowingNewest} from './useChatStreamScroll';
+import {
+  streamScrollPositionListeners,
+  streamScrollShifts,
+} from './chatStreamScrollChannel';
+import {isFollowingNewest} from './useChatStreamScroll';
 
 /** The size of a message that has not rendered yet, in CSS px. */
 const DEFAULT_ITEM_SIZE = 96;
@@ -49,6 +53,10 @@ const styles = stylex.create({
     display: 'flow-root',
     flexShrink: 0,
   },
+  // Holds a correction while another writer moves the position.
+  bodyOffset: (offset: number) => ({
+    marginBlockStart: offset,
+  }),
   // A row holds its item's margins, so its measured size includes them.
   row: {
     display: 'flow-root',
@@ -85,12 +93,29 @@ const densityRowGap: Record<ChatDensity, stylex.StyleXStyles> = {
  * reads a correction as the reader's scroll.
  */
 function shiftScroller(scroller: HTMLElement, delta: number) {
-  const shift = getStreamScrollShift(scroller);
+  const shift = streamScrollShifts.get(scroller);
   if (shift == null) {
     scroller.scrollTop += delta;
   } else {
     shift.shiftBy(delta);
   }
+}
+
+/** Takes the position the stream scroll on `scroller` reads for each scroll event. */
+function subscribePosition(
+  scroller: HTMLElement,
+  listener: (top: number) => void,
+): () => void {
+  let listeners = streamScrollPositionListeners.get(scroller);
+  if (listeners == null) {
+    listeners = new Set();
+    streamScrollPositionListeners.set(scroller, listeners);
+  }
+  const subscribed = listeners;
+  subscribed.add(listener);
+  return () => {
+    subscribed.delete(listener);
+  };
 }
 
 interface WindowRowProps {
@@ -192,7 +217,7 @@ function WindowedItems({
       jumpTo: (top: number) => {
         const scroller = scrollerRef.current;
         if (scroller != null) {
-          getStreamScrollShift(scroller)?.unlock();
+          streamScrollShifts.get(scroller)?.unlock();
           shiftScroller(scroller, top - scroller.scrollTop);
         }
       },
@@ -203,12 +228,24 @@ function WindowedItems({
     const scroller = scrollerRef.current;
     return scroller != null && isFollowingNewest(scroller);
   }, [scrollerRef]);
+  // The log takes focus when the focused message is removed: the holder of
+  // the rows is not focusable.
+  const logRef = useMemo(
+    () => ({
+      get current(): HTMLElement | null {
+        return contentRef.current?.closest<HTMLElement>('[role="log"]') ?? null;
+      },
+    }),
+    [],
+  );
   const list = useMeasuredListWindow({
     keys,
     estimateSize,
     scroller: scrollerRef,
     content: contentRef,
+    focusTarget: logRef,
     writer,
+    subscribePosition,
     isEndAnchored,
     isLastRetained: true,
   });
@@ -259,7 +296,10 @@ function WindowedItems({
     <div
       ref={contentRef}
       aria-busy={list.isMountingHistory || undefined}
-      {...stylex.props(styles.body)}>
+      {...stylex.props(
+        styles.body,
+        list.offset !== 0 && styles.bodyOffset(list.offset),
+      )}>
       {children}
     </div>
   );

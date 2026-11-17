@@ -58,26 +58,26 @@ describe('measured list window math', () => {
     ).toEqual({start: 985, end: 1000});
   });
 
-  it('sizes each gap from the items it stands for, and takes the debt from the first', () => {
+  it('sizes each gap from the items it stands for, and keeps a retained last item', () => {
     const offsets = buildItemOffsets(10, () => 100);
-    expect(createMeasuredSegments(offsets, 4, 6, undefined, 0)).toEqual([
+    expect(createMeasuredSegments(offsets, 4, 6, undefined)).toEqual([
       {type: 'gap', start: 0, end: 4, height: 400},
       {type: 'rows', start: 4, end: 6},
       {type: 'gap', start: 6, end: 10, height: 400},
     ]);
-    expect(createMeasuredSegments(offsets, 4, 6, 9, 30)).toEqual([
-      {type: 'gap', start: 0, end: 4, height: 370},
+    expect(createMeasuredSegments(offsets, 4, 6, 9)).toEqual([
+      {type: 'gap', start: 0, end: 4, height: 400},
       {type: 'rows', start: 4, end: 6},
       {type: 'gap', start: 6, end: 9, height: 300},
       {type: 'rows', start: 9, end: 10},
     ]);
-    // A gap never gets shorter than zero.
-    expect(createMeasuredSegments(offsets, 1, 3, undefined, 500)[0]).toEqual({
-      type: 'gap',
-      start: 0,
-      end: 1,
-      height: 0,
-    });
+    // The last item stays mounted when it is retained.
+    expect(createMeasuredSegments(offsets, 4, 6, undefined, true)).toEqual([
+      {type: 'gap', start: 0, end: 4, height: 400},
+      {type: 'rows', start: 4, end: 6},
+      {type: 'gap', start: 6, end: 9, height: 300},
+      {type: 'rows', start: 9, end: 10},
+    ]);
   });
 
   it('resolves a removed anchor to its first surviving successor, then its predecessor', () => {

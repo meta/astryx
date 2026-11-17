@@ -187,8 +187,13 @@ export interface ChatMessageListItemsProps<T> extends Omit<
   handleRef?: React.Ref<ChatMessageListHandle>;
 }
 
+// The callbacks are read only with items, which the public props type
+// requires them beside.
 type ChatMessageListAnyProps<T> = Omit<ChatMessageListProps, 'children'> &
-  Partial<Omit<ChatMessageListItemsProps<T>, 'children'>> & {
+  Partial<
+    Omit<ChatMessageListItemsProps<T>, 'children' | 'getItemKey' | 'renderItem'>
+  > &
+  Pick<ChatMessageListItemsProps<T>, 'getItemKey' | 'renderItem'> & {
     children?: ReactNode;
   };
 
@@ -334,7 +339,7 @@ export function ChatMessageList<T>(
     items,
     getItemKey,
     renderItem,
-    // The windowed renderer reads these from the props.
+    // Kept off the log element: the windowed renderer reads them.
     estimateItemSize: _estimateItemSize,
     virtualization,
     handleRef: _handleRef,
@@ -351,15 +356,15 @@ export function ChatMessageList<T>(
     ref,
     ...rest
   } = props as ChatMessageListAnyProps<T>;
-  // Only the hook makes a capability, and it carries the windowed renderer.
-  const windowing =
-    items === undefined
-      ? undefined
-      : (
-          virtualization as
-            | {readonly [VIRTUALIZATION_CAPABILITY]?: ChatMessageListWindowing}
-            | undefined
-        )?.[VIRTUALIZATION_CAPABILITY];
+  // The capability carries the windowed renderer, so this module imports
+  // none of the windowing code.
+  const windowing = items
+    ? (
+        virtualization as
+          | {readonly [VIRTUALIZATION_CAPABILITY]?: ChatMessageListWindowing}
+          | undefined
+      )?.[VIRTUALIZATION_CAPABILITY]
+    : undefined;
   const layoutContext = useChatLayoutContext();
   const sentinelRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -369,29 +374,26 @@ export function ChatMessageList<T>(
   // announces its loading through the channel (spec:AST-086 FR4, FR8).
   useBusyAnnouncement(isLoadingTop, t('@astryx.spinner.loading'), innerRef);
 
-  const isWindowed = windowing !== undefined;
   // Syncs the layout's content observer with the inner content element. A
   // windowed list registers its newest row instead: its other rows change
   // size as they measure, with no new content.
   useEffect(() => {
-    if (layoutContext?.contentRef && innerRef.current && !isWindowed) {
+    if (layoutContext?.contentRef && innerRef.current && !windowing) {
       layoutContext.contentRef(innerRef.current);
       return () => layoutContext.contentRef(null);
     }
-  }, [layoutContext, isWindowed]);
+  }, [layoutContext, windowing]);
 
-  const hasChildren =
-    items !== undefined
-      ? items.length > 0
-      : // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
-        children != null &&
-        children !== false &&
-        !(Array.isArray(children) && children.length === 0);
+  const hasChildren = items
+    ? items.length > 0
+    : // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
+      children != null &&
+      children !== false &&
+      !(Array.isArray(children) && children.length === 0);
 
   let content: ReactNode = children;
-  if (items !== undefined && getItemKey !== undefined && renderItem) {
+  if (items) {
     if (windowing) {
-      // The renderer reads its own props, with callbacks of unknown items.
       content = (
         <windowing.Window
           {...(props as ChatMessageListWindowProps)}

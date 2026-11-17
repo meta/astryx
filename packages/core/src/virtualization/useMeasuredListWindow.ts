@@ -5,9 +5,11 @@
 /**
  * @file useMeasuredListWindow.ts
  * @input Item keys, a size estimate, the scroll container, the element that
- *   holds the rows, a position writer and a reader for end anchoring
- * @output The mounted rows and gaps, the row measurement hook-up, a reveal
- *   call, the focus island, and whether a commit mounts history
+ *   holds the rows, a position writer, the position another owner reads for
+ *   each scroll event, and a reader for end anchoring
+ * @output The mounted rows and gaps, the holder's offset, the row
+ *   measurement hook-up, a reveal call, the focus island, and whether a
+ *   commit mounts history
  * @position The measured block-axis hook of the private list-windowing
  *   module. Rows measure their own size. The hook keeps one anchor item in
  *   place as sizes and keys change, and moves the scroll position only
@@ -63,7 +65,18 @@ export interface UseMeasuredListWindowOptions {
   scroller: RefObject<HTMLElement | null>;
   /** The element that holds the rows and gaps, in the scroller's content. */
   content: RefObject<HTMLElement | null>;
+  /** The focusable element that takes focus when the focused item unmounts. */
+  focusTarget: RefObject<HTMLElement | null>;
   writer: MeasuredListWindowWriter;
+  /**
+   * Calls `listener` with the position the scroller's own owner reads for
+   * each scroll event, so the hook reads no layout on the scroll path.
+   * Returns the unsubscribe.
+   */
+  subscribePosition: (
+    scroller: HTMLElement,
+    listener: (top: number) => void,
+  ) => () => void;
   /** Whether the end stays in place now, as while new items are followed. */
   isEndAnchored: () => boolean;
   /**
@@ -76,6 +89,11 @@ export interface UseMeasuredListWindowOptions {
 export interface MeasuredListWindow {
   /** Mounted rows and the gaps that stand for the other items, in order. */
   segments: ReadonlyArray<ListWindowSegment>;
+  /**
+   * The block-start offset of the element that holds the rows, in CSS px.
+   * It holds a correction while another writer moves the position.
+   */
+  offset: number;
   /** Whether this commit mounts items that are not new at the end. */
   isMountingHistory: boolean;
   /** Measures a mounted row. Call it at commit; it returns the release. */
@@ -91,6 +109,8 @@ interface Plan {
   start: number;
   end: number;
   segments: ListWindowSegment[];
+  /** The correction the holder's offset carries in this render. */
+  debt: number;
   isMountingHistory: boolean;
 }
 
@@ -101,6 +121,14 @@ interface Hold {
   /** The scrollport height when `top` was read. An end hold follows it. */
   viewport: number;
   isEnd: boolean;
+}
+
+/** One batch of layout reads. */
+interface Geometry {
+  top: number;
+  viewport: number;
+  listTop: number;
+  max: number;
 }
 
 function hasSameKeys(
@@ -156,33 +184,35 @@ function createMeasuredListEngine() {
   let indices: ReadonlyMap<ListWindowKey, number> = new Map();
   let offsets: number[] = [0];
   let range = {start: 0, end: 0};
-  // The end of the gap that starts at the first item, or 0 with no gap.
-  let topGapEnd = 0;
 
-  // Geometry, read in one batch per change.
+  // Geometry. `listTop` is the holder's top without its offset.
   let isMeasured = false;
   let scrollTop = 0;
   let viewportSize = 0;
   let listTop = 0;
   let maxScroll = 0;
 
-  // The position the hook keeps.
+  // The position the hook keeps. The holder moves up by `debt` px; the
+  // committed render shows `renderedDebt`.
   let debt = 0;
+  let renderedDebt = 0;
   let anchor: {key: ListWindowKey; top: number} | undefined;
   let isOpening = true;
   let hasOpened = false;
   let reveal: {key: ListWindowKey; align: MeasuredRevealAlign} | undefined;
   let isRevealWritten = true;
+  // The space inside the revealed item's row before the item, such as the
+  // gap to the item above it. The reveal aligns the item, not that space.
+  let revealInset = 0;
   let busyFrame = 0;
   let isBusy = false;
   // Another writer moves the position: the reader's scroll and its momentum,
   // or the follow. A write now would stop or fight that motion.
   let isMoving = false;
   let motionTimer: ReturnType<typeof setTimeout> | undefined;
-  // The position to keep when the gap gives back the correction it held.
+  // The position to keep when the holder gives back the correction it held.
   let pendingHold: Hold | undefined;
 
-  // Row measurement.
   const elements = new Map<ListWindowKey, HTMLElement>();
   const fresh = new Set<ListWindowKey>();
   const queued = new Map<ListWindowKey, number>();
@@ -261,30 +291,74 @@ function createMeasuredListEngine() {
   /** Where the hold item's top rests below the scrollport's top. */
   function holdTop(hold: Hold, itemSize: number, viewport: number): number {
     if (reveal !== undefined && reveal.key === hold.key) {
-      return revealOffset(reveal.align, itemSize, viewport);
+      return (
+        revealOffset(reveal.align, itemSize - revealInset, viewport) -
+        revealInset
+      );
     }
     return hold.isEnd ? hold.top + viewport - hold.viewport : hold.top;
   }
 
-  function readGeometry(scroller: HTMLElement, content: HTMLElement) {
-    // One batch of layout reads per change, before any write.
-    scrollTop = scroller.scrollTop;
-    viewportSize = scroller.clientHeight;
-    listTop =
-      content.getBoundingClientRect().top -
-      scrollportTop(scroller) +
-      scrollTop -
-      (scrollsPage(scroller) ? 0 : scroller.clientTop);
-    maxScroll = Math.max(0, scroller.scrollHeight - viewportSize);
+  function measure(scroller: HTMLElement, content: HTMLElement): Geometry {
+    const top = scroller.scrollTop;
+    const viewport = scroller.clientHeight;
+    return {
+      top,
+      viewport,
+      listTop:
+        content.getBoundingClientRect().top -
+        scrollportTop(scroller) +
+        top -
+        (scrollsPage(scroller) ? 0 : scroller.clientTop) +
+        renderedDebt,
+      max: Math.max(0, scroller.scrollHeight - viewport),
+    };
+  }
+
+  function applyGeometry(geometry: Geometry) {
+    scrollTop = geometry.top;
+    viewportSize = geometry.viewport;
+    listTop = geometry.listTop;
+    maxScroll = geometry.max;
     isMeasured = viewportSize > 0;
+  }
+
+  /** Another writer moved the position: the reader or the follow. */
+  function noteMove() {
+    isOpening = false;
+    // A reveal the reader asked for outlives every move until it is written.
+    if (isRevealWritten) {
+      reveal = undefined;
+    }
+    isMoving = true;
+    clearTimeout(motionTimer);
+    motionTimer = setTimeout(endMotion, SCROLL_END_FALLBACK_MS);
+  }
+
+  /**
+   * Takes the position the browser shows now. A clamp onto the end of a
+   * shorter range is not a writer: the reader saw the position before it.
+   */
+  function takePosition(geometry: Geometry) {
+    if (Math.abs(geometry.top - scrollTop) < 1) {
+      return;
+    }
+    const isClamp =
+      scrollTop > geometry.max + EPSILON &&
+      Math.abs(geometry.top - geometry.max) < 1;
+    if (!isClamp) {
+      noteMove();
+      scrollTop = geometry.top;
+      updateAnchor();
+    }
   }
 
   /**
    * Moves the scroll position to `target`. While another writer moves it, a
    * write would stop a finger's momentum or fight a smooth scroll, so the
-   * gap above the rows takes the change instead.
+   * holder's offset takes the change instead.
    */
-  function moveTo(target: number, canAbsorb: boolean) {
+  function moveTo(target: number, canHold: boolean) {
     const scroller = connected;
     if (scroller == null || latest == null) {
       return;
@@ -297,25 +371,23 @@ function createMeasuredListEngine() {
       scrollTop = scroller.scrollTop;
       return;
     }
-    const delta = clamped - scrollTop;
-    if (Math.abs(delta) <= EPSILON) {
+    if (canHold && isMoving) {
+      const held = target - scrollTop;
+      if (Math.abs(held) > EPSILON) {
+        debt += held;
+        emit();
+      }
       return;
     }
-    if (
-      canAbsorb &&
-      topGapEnd > 0 &&
-      debt + delta <= offsets[topGapEnd] &&
-      isMoving
-    ) {
-      debt += delta;
-      emit();
+    const delta = clamped - scrollTop;
+    if (Math.abs(delta) <= EPSILON) {
       return;
     }
     latest.writer.shiftBy(delta);
     scrollTop = scroller.scrollTop;
   }
 
-  function holdPosition(hold: Hold | undefined, canAbsorb: boolean) {
+  function holdPosition(hold: Hold | undefined, canHold: boolean) {
     if (hold === undefined) {
       return;
     }
@@ -324,7 +396,8 @@ function createMeasuredListEngine() {
       return;
     }
     const top = holdTop(hold, sizeOf(index), viewportSize);
-    moveTo(listTop + offsets[index] - debt - top, canAbsorb);
+    // The end follows new content at once, so it is never held.
+    moveTo(listTop + offsets[index] - debt - top, canHold && !hold.isEnd);
   }
 
   function open() {
@@ -334,24 +407,7 @@ function createMeasuredListEngine() {
     }
   }
 
-  /**
-   * Takes the position another writer set since the last read: the reader,
-   * or a follow that moved before its scroll event.
-   */
-  function takePosition(scroller: HTMLElement) {
-    const top = scroller.scrollTop;
-    if (Math.abs(top - scrollTop) >= 1) {
-      isOpening = false;
-      reveal = undefined;
-      isMoving = true;
-      clearTimeout(motionTimer);
-      motionTimer = setTimeout(endMotion, SCROLL_END_FALLBACK_MS);
-    }
-    scrollTop = top;
-    updateAnchor();
-  }
-
-  /** Writes the correction the gap held while the position moved. */
+  /** Writes the correction the holder's offset held while the position moved. */
   function endMotion() {
     clearTimeout(motionTimer);
     isMoving = false;
@@ -362,13 +418,12 @@ function createMeasuredListEngine() {
     }
   }
 
-  function onScroll() {
-    const scroller = connected;
-    if (scroller == null) {
-      return;
+  function onPosition(top: number) {
+    if (Math.abs(top - scrollTop) >= 1) {
+      noteMove();
+      scrollTop = top;
+      updateAnchor();
     }
-    // The one read per scroll event. It writes nothing.
-    takePosition(scroller);
     if (!isMeasured) {
       return;
     }
@@ -390,8 +445,10 @@ function createMeasuredListEngine() {
     if (scroller == null || content == null) {
       return;
     }
+    const geometry = measure(scroller, content);
+    takePosition(geometry);
     const hold = captureHold();
-    readGeometry(scroller, content);
+    applyGeometry(geometry);
     if (hasOpened) {
       holdPosition(hold, false);
     } else {
@@ -408,7 +465,8 @@ function createMeasuredListEngine() {
       queued.clear();
       return;
     }
-    takePosition(scroller);
+    const geometry = measure(scroller, content);
+    takePosition(geometry);
     const hold = captureHold();
     let hasChange = false;
     for (const [key, size] of queued) {
@@ -418,11 +476,11 @@ function createMeasuredListEngine() {
       }
     }
     queued.clear();
+    applyGeometry(geometry);
     if (!hasChange) {
       return;
     }
     offsets = buildItemOffsets(keys.length, sizeOf);
-    readGeometry(scroller, content);
     if (hasOpened) {
       holdPosition(hold, true);
     }
@@ -454,7 +512,11 @@ function createMeasuredListEngine() {
     connected = undefined;
   }
 
-  function connect(scroller: HTMLElement, content: HTMLElement) {
+  function connect(
+    scroller: HTMLElement,
+    content: HTMLElement,
+    options: UseMeasuredListWindowOptions,
+  ) {
     if (anchoringOff !== content) {
       if (anchoringOff != null) {
         setScrollAnchoringOff(anchoringOff, false);
@@ -468,17 +530,13 @@ function createMeasuredListEngine() {
     }
     disconnect();
     connected = scroller;
+    stops.push(options.subscribePosition(scroller, onPosition));
     const doc = scroller.ownerDocument;
     const view = doc.defaultView;
     if (scrollEventTarget(scroller) === doc) {
       if (view != null) {
-        // The page's scroll fires at the document, its resize at the window.
+        // The page's scroll ends at the document, and resizes at the window.
         stops.push(
-          subscribeInput(view, 'scroll', event => {
-            if (event.target === doc) {
-              onScroll();
-            }
-          }),
           subscribeInput(view, 'scrollend', event => {
             if (event.target === doc) {
               endMotion();
@@ -493,12 +551,8 @@ function createMeasuredListEngine() {
       }
       return;
     }
-    scroller.addEventListener('scroll', onScroll, {passive: true});
     scroller.addEventListener('scrollend', endMotion);
-    stops.push(() => {
-      scroller.removeEventListener('scroll', onScroll);
-      scroller.removeEventListener('scrollend', endMotion);
-    });
+    stops.push(() => scroller.removeEventListener('scrollend', endMotion));
     const stopResize = observeResizeAfterLayout(scroller, onResize);
     if (stopResize != null) {
       stops.push(stopResize);
@@ -561,9 +615,9 @@ function createMeasuredListEngine() {
         start,
         end,
         focusIndex,
-        debt,
         isLastRetained,
       ),
+      debt,
       isMountingHistory,
     };
   }
@@ -587,7 +641,7 @@ function createMeasuredListEngine() {
       });
       return;
     }
-    connect(scroller, content);
+    connect(scroller, content, options);
     if (rendered.isMountingHistory) {
       isBusy = true;
       cancelAnimationFrame(busyFrame);
@@ -598,30 +652,27 @@ function createMeasuredListEngine() {
       });
     }
     const hasKeyChange = !hasSameKeys(keys, options.keys);
+    const debtChange = rendered.debt - renderedDebt;
     range = {start: rendered.start, end: rendered.end};
-    const first = rendered.segments[0];
-    topGapEnd = first?.type === 'gap' ? first.end : 0;
     // A parent render with the same rows reads and writes nothing.
     if (
       hasOpened &&
       !hasKeyChange &&
       fresh.size === 0 &&
       isRevealWritten &&
-      debt === 0 &&
+      debtChange === 0 &&
       pendingHold === undefined
     ) {
       return;
     }
-    if (hasOpened && pendingHold === undefined) {
-      takePosition(scroller);
+    const geometry = measure(scroller, content);
+    if (hasOpened) {
+      takePosition(geometry);
     }
     const hold = pendingHold ?? (hasOpened ? captureHold() : undefined);
     pendingHold = undefined;
     const holdIndex =
       hold === undefined ? undefined : resolve(hold, nextIndices);
-
-    // Reads: the geometry, then every row that mounted in this commit.
-    readGeometry(scroller, content);
     const measured: [ListWindowKey, number][] = [];
     for (const key of fresh) {
       const element = elements.get(key);
@@ -630,8 +681,17 @@ function createMeasuredListEngine() {
       }
     }
     fresh.clear();
+    const revealed =
+      reveal === undefined ? undefined : elements.get(reveal.key);
+    if (revealed != null) {
+      const rowTop = revealed.getBoundingClientRect().top;
+      revealInset =
+        (revealed.firstElementChild?.getBoundingClientRect().top ?? rowTop) -
+        rowTop;
+    }
 
-    // The model the rendered rows show, with the sizes they measured.
+    renderedDebt = rendered.debt;
+    applyGeometry({...geometry, listTop: geometry.listTop + debtChange});
     if (hasKeyChange) {
       keys = options.keys;
       indices = nextIndices;
@@ -640,10 +700,7 @@ function createMeasuredListEngine() {
       sizes.set(key, size);
     }
     offsets = buildItemOffsets(keys.length, sizeOf);
-    // A gap is never shorter than zero, so the debt fits in the gap above.
-    debt = topGapEnd > 0 ? Math.min(debt, offsets[topGapEnd]) : 0;
 
-    // Writes.
     if (!hasOpened) {
       open();
     } else if (hold !== undefined) {
@@ -652,7 +709,7 @@ function createMeasuredListEngine() {
         moveTo(maxScroll, false);
       } else {
         const top = holdTop(hold, sizeOf(holdIndex), viewportSize);
-        moveTo(listTop + offsets[holdIndex] - debt - top, true);
+        moveTo(listTop + offsets[holdIndex] - debt - top, !hold.isEnd);
       }
     }
     isRevealWritten = true;
@@ -702,6 +759,7 @@ function createMeasuredListEngine() {
       }
       reveal = {key, align};
       isRevealWritten = false;
+      revealInset = 0;
       isOpening = false;
       emit();
       return true;
@@ -733,7 +791,7 @@ export function useMeasuredListWindow(
   const [engine] = useState(createMeasuredListEngine);
   // The version changes with each size or position the engine records.
   useSyncExternalStore(engine.subscribe, engine.getVersion, engine.getVersion);
-  const {keys, estimateSize, content} = options;
+  const {keys, estimateSize, content, focusTarget} = options;
   const keyIndices = useMemo(
     () => new Map(keys.map((key, index) => [key, index])),
     [keys],
@@ -741,7 +799,7 @@ export function useMeasuredListWindow(
   const {focusIndex, onItemFocus, onItemBlur} = useListFocusIsland({
     keyIndices,
     isActive: true,
-    viewport: content,
+    viewport: focusTarget,
     focusContainer: content,
   });
   const plan = engine.plan(
@@ -752,8 +810,8 @@ export function useMeasuredListWindow(
     options.isLastRetained === true,
   );
 
-  // Syncs the scroll position, the row measurements and the scroll and
-  // resize listeners with the committed rows.
+  // Syncs the scroll position, the row measurements and the position,
+  // scroll-end and resize listeners with the committed rows.
   useIsomorphicLayoutEffect(() => {
     engine.commit(options, keyIndices, plan);
   });
@@ -763,6 +821,7 @@ export function useMeasuredListWindow(
 
   return {
     segments: plan.segments,
+    offset: -plan.debt,
     isMountingHistory: plan.isMountingHistory,
     observeItem: engine.observeItem,
     reveal: engine.reveal,

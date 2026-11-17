@@ -72,12 +72,16 @@ function body(): HTMLElement | null {
   );
 }
 
+/** The windowed body's top: the list's top plus the body's own offset. */
+function bodyTop(): number {
+  const offset = body()?.style.getPropertyValue('--x-marginBlockStart') ?? '';
+  return layout.listTop + (offset === '' ? 0 : Number.parseFloat(offset));
+}
+
 function scrollHeightOf(): number {
   const windowed = body();
   return (
-    layout.listTop +
-    (windowed == null ? 0 : heightOf(windowed)) +
-    layout.trailing
+    bodyTop() + (windowed == null ? 0 : heightOf(windowed)) + layout.trailing
   );
 }
 
@@ -86,7 +90,7 @@ function maxScroll(): number {
 }
 
 function rowTop(row: Element): number {
-  let top = layout.listTop;
+  let top = bodyTop();
   let sibling = row.previousElementSibling;
   while (sibling != null) {
     const gap = (sibling as HTMLElement).style.getPropertyValue('--x-height');
@@ -166,8 +170,14 @@ beforeAll(() => {
     },
   });
   override('scrollTop', {
+    // A browser clamps the position when the content gets shorter.
     get(this: HTMLElement) {
-      return scrollTops.get(this) ?? 0;
+      if (!isScroller(this)) {
+        return 0;
+      }
+      const top = Math.min(scrollTops.get(this) ?? 0, maxScroll());
+      scrollTops.set(this, top);
+      return top;
     },
     set(this: HTMLElement, value: number) {
       if (isScroller(this)) {
@@ -183,10 +193,17 @@ beforeAll(() => {
         return rect(0, layout.viewport);
       }
       if (isBody(this)) {
-        return rect(layout.listTop - scrolled, heightOf(this));
+        return rect(bodyTop() - scrolled, heightOf(this));
       }
       if (isRow(this)) {
         return rect(rowTop(this) - scrolled, heightOf(this));
+      }
+      // A message starts at its row's top: the layout has no row gap.
+      if (this.parentElement != null && isRow(this.parentElement)) {
+        return rect(
+          rowTop(this.parentElement) - scrolled,
+          heightOf(this.parentElement),
+        );
       }
       return rect(0, 0);
     },
@@ -484,6 +501,21 @@ describe('ChatMessageList windowing', () => {
     expect(distanceFromEnd(scroller)).toBe(0);
   });
 
+  it('keeps the end in place when a row above the last one gets shorter, and follows the next reply', async () => {
+    const {scroller} = await mount(messages(5000));
+    flushFrame();
+    const lastTop = screenTop('m4999');
+    // The browser clamps the position onto the end of the shorter content.
+    layout.sizes.set('m4997', 40);
+    await resized(['m4997']);
+    expect(screenTop('m4999')).toBe(lastTop);
+    expect(distanceFromEnd(scroller)).toBe(0);
+    expect(isFollowingNewest(scroller)).toBe(true);
+    layout.sizes.set('m4999', 400);
+    await resized(['m4999']);
+    expect(distanceFromEnd(scroller)).toBe(0);
+  });
+
   it('is the stream scroll that moves: a correction never reads as the reader scrolling', async () => {
     const {scroller} = await mount(messages(5000));
     flushFrame();
@@ -589,13 +621,24 @@ describe('ChatMessageList windowing', () => {
   it('keeps a focused row mounted when the window moves away from it', async () => {
     const {scroller} = await mount(messages(5000));
     flushFrame();
-    const button = screen.getByRole('button', {name: 'm4999'});
+    const button = screen.getByRole('button', {name: 'm4995'});
     act(() => button.focus());
     await readerScrollsTo(scroller, 0);
     await flushMicrotasks();
     expect(mountedIds()).toContain('m0');
-    expect(mountedIds()).toContain('m4999');
+    expect(mountedIds()).toContain('m4995');
     expect(document.activeElement).toBe(button);
+  });
+
+  it('returns focus to the log when the focused message is removed', async () => {
+    await mount(messages(5000));
+    flushFrame();
+    act(() => screen.getByRole('button', {name: 'm4997'}).focus());
+    act(() =>
+      controls.setItems(items => items.filter(item => item.id !== 'm4997')),
+    );
+    await flushMicrotasks();
+    expect(document.activeElement).toBe(screen.getByRole('log'));
   });
 
   it('still loads older messages through the top sentinel', async () => {
@@ -641,6 +684,22 @@ describe('ChatMessageList scrollToItem', () => {
     layout.sizes.set('m200', 150);
     await resized(['m198', 'm200']);
     expect(screenTop('m200') + 150).toBe(layout.viewport);
+  });
+
+  it('reveals a message when the rows it mounts are shorter than their estimates', async () => {
+    layout.defaultSize = 40;
+    try {
+      const {scroller} = await mount(messages(5000));
+      flushFrame();
+      act(() => {
+        controls.handle.current!.scrollToItem('m100');
+      });
+      await flushMicrotasks();
+      expect(screenTop('m100')).toBe(0);
+      expect(isFollowingNewest(scroller)).toBe(false);
+    } finally {
+      layout.defaultSize = 100;
+    }
   });
 
   it('returns false for a key no item has', async () => {
@@ -700,6 +759,28 @@ describe('ChatMessageList windowing while the reader scrolls', () => {
     });
     await flushMicrotasks();
     expect(scroller.scrollTop).toBe(position + 200);
+    expect(screenTop(reading)).toBe(top);
+  });
+
+  it('holds a change near the top of loaded history, where no gap sits above the rows', async () => {
+    const {scroller} = await mount(messages(5000));
+    flushFrame();
+    await readerScrollsTo(scroller, 0);
+    await flushMicrotasks();
+    await readerIsScrolling(scroller, 150);
+    await flushMicrotasks();
+    expect(mountedIds()[0]).toBe('m0');
+    const reading = firstVisibleId();
+    const top = screenTop(reading);
+    layout.sizes.set('m0', 300);
+    await resized(['m0']);
+    expect(scroller.scrollTop).toBe(150);
+    expect(screenTop(reading)).toBe(top);
+    await act(async () => {
+      scroller.dispatchEvent(new Event('scrollend'));
+    });
+    await flushMicrotasks();
+    expect(scroller.scrollTop).toBe(350);
     expect(screenTop(reading)).toBe(top);
   });
 

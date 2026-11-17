@@ -36,8 +36,9 @@ const renderMessage = (message: Message) => (
 );
 
 export default function UseChatMessageListVirtualizationHookUsage() {
-  // Only the rows near the scrollport mount. The list opens at the newest
-  // message; each row renders at its estimate until it measures.
+  // Only the rows near the scrollport mount, and the list opens at the
+  // newest message. Spacers stand for the other messages at their estimates
+  // until those rows have rendered.
   const virtualization = useChatMessageListVirtualization();
   return (
     <div style={panel}>

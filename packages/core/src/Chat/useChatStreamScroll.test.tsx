@@ -4,7 +4,12 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {
-  getStreamScrollShift,
+  streamScrollPositionListeners,
+  streamScrollShifts,
+} from './chatStreamScrollChannel';
+
+const getStreamScrollShift = (el: Element) => streamScrollShifts.get(el);
+import {
   useChatStreamScroll,
   type UseChatStreamScrollOptions,
   type UseChatStreamScrollReturn,
@@ -555,6 +560,25 @@ describe('useChatStreamScroll — the shift a windowed list makes through it', (
     flushRaf();
     // The spring's next frame starts from the shifted position.
     expect(el.scrollTop).toBeGreaterThan(afterFrame + 50);
+  });
+
+  it('sends the position it reads for each scroll event', () => {
+    const {el} = renderHook();
+    setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
+    flushRaf();
+    const tops: number[] = [];
+    const listener = (top: number) => tops.push(top);
+    streamScrollPositionListeners.set(el, new Set([listener]));
+    el.scrollTop = 250;
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+    streamScrollPositionListeners.delete(el);
+    el.scrollTop = 100;
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+    expect(tops).toEqual([250]);
   });
 
   it('stops following through the shift, and ends with the hook', () => {
