@@ -1048,6 +1048,19 @@ describe('CSS-named keys count only in a style context', () => {
 // walks. Each case builds an input of size n and 10n and compares the times,
 // not a fixed limit: a linear pass grows about 10 times, a quadratic one about
 // 100 times. The best of three runs keeps a slow moment from deciding.
+describe('style-context limits', () => {
+  it('reads a style context with more names than a call can take as arguments', () => {
+    // Names are queued one at a time; spreading them into one call would
+    // overflow the call stack past about 120,000.
+    const source = [
+      'const styles = stylex.create({',
+      ...Array.from({length: 130000}, (_, i) => `  n${i}: {width: 1},`),
+      '});',
+    ].join('\n');
+    expect(styleContextLines(source, false)).not.toBeNull();
+  });
+});
+
 describe('style-context cost grows with the file', () => {
   const best = source => {
     let fastest = Infinity;

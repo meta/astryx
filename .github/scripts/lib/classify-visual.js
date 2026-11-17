@@ -970,9 +970,10 @@ function styleContextLines(source, jsx) {
           ? {name: named[1], typed: STYLE_TYPE.test(named[2] ?? '')}
           : null;
         const result = source.slice(end, end + 400).match(
-          // Each class excludes the character that ends it, so the match
-          // never backtracks inside the window.
-          /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^;=?]*\?[^;:]*:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
+          // The window is at most 400 characters and the pattern has no
+          // nested repetition, so a declaration costs a bounded amount
+          // whatever the match tries.
+          /^\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]*)?=\s*(?:[^\s;=?][^;=?]*\?[^;:]*:\s*)?(stylex\s*\.\s*create|[A-Za-z_$][\w$]*)\s*\(/,
         );
         if (result && /^stylex/.test(result[2])) styleSheets.add(result[1]);
         else if (result)
