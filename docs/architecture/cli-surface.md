@@ -1075,13 +1075,15 @@ refusal); accepting a relative path that climbs out (a path such as
 
 `astryx build`'s start and alternative commands, and the place
 `astryx template` suggests when it refuses a path, name where a template goes.
-Outside a Next App Router, that path is the file the copy writes
-(`src/pages/<id>.tsx`, or `<id>.tsx` in the project's components folder), so
-an import of the named path finds the scaffold. A Next App Router page keeps
-its route folder, because Next serves the folder's `page.tsx`. A name that an
-import already resolves to (a folder's index, or a file with another
-extension) counts as taken, so the new file neither shadows a module nor is
-shadowed by one.
+A block, and a page outside a Next App Router, is the file the copy writes
+(`<id>.tsx` in the project's components folder, `src/pages/<id>.tsx`, or the
+Pages Router file `pages/<id>.tsx`), so an import of the named path finds the
+scaffold. A Next App Router page keeps its route folder, because Next serves
+the folder's `page.tsx`. Where the named path is a block or a page with no Next
+route folder, a name that an import already resolves to (a folder's index, or
+a file with another extension) counts as taken, so the new file neither
+shadows a module nor is shadowed by one; a Next page also skips a name whose
+URL another page serves.
 
 Rejected: naming a folder that holds `page.tsx` (an import of the folder does
 not resolve without an index file); writing an index file beside each scaffold

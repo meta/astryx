@@ -20,6 +20,7 @@ import {
   pagesRouterPage,
   sameUrlPage,
 } from './next-routes.mjs';
+import {resolveLocalModule} from './module-exports.mjs';
 
 /**
  * The project-relative path to scaffold a template into, read from the
@@ -101,33 +102,19 @@ export function templateDestination(projectDir, type, id) {
   );
 }
 
-/** The extensions a bare import of a path resolves to, besides a folder. */
-const IMPORT_EXTENSIONS = [
-  'tsx',
-  'ts',
-  'mts',
-  'cts',
-  'jsx',
-  'js',
-  'mjs',
-  'cjs',
-  'json',
-];
-
 /**
  * The module a bare import of `rel` without its extension already resolves
- * to, or null: a folder at that path (its index) or a file with any import
- * extension. A new file there would shadow it, or be shadowed by it.
+ * to, as the app's bundler resolves it, or null: a new file there would
+ * shadow it, or be shadowed by it.
  * @param {string} projectDir
  * @param {string} rel a `.tsx` path
  * @returns {string | null}
  */
 function moduleAt(projectDir, rel) {
-  const stem = path.join(projectDir, rel.slice(0, -'.tsx'.length));
-  if (fs.existsSync(stem)) return stem;
-  for (const ext of IMPORT_EXTENSIONS)
-    if (fs.existsSync(`${stem}.${ext}`)) return `${stem}.${ext}`;
-  return null;
+  const stem = rel.slice(0, -'.tsx'.length);
+  return resolveLocalModule(`./${stem}`, path.join(projectDir, 'index.js'), {
+    bundler: true,
+  });
 }
 
 /**
