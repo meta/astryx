@@ -3,11 +3,12 @@
 /**
  * @file TopNavMobileEndSearch.interaction.browser.spec.ts
  * @input The `Core/AppShell` Search In End Content On Mobile story in a built
- *   Storybook at 390, 375 and 320 px phone widths, in Chromium and WebKit
+ *   Storybook at 430, 390, 375 and 320 px phone widths, in Chromium and WebKit
  * @output Real-browser evidence that end content wider than the phone bar
- *   stays inside it: a search field that may narrow narrows, each end control
- *   and the menu toggle keep their size and stay inside the bar, nothing
- *   overlaps, and the page does not scroll sideways
+ *   stays inside it: the heading yields first, then a search field that may
+ *   narrow narrows, each end control and the menu toggle keep their size and
+ *   stay inside the bar, nothing overlaps, and the page does not scroll
+ *   sideways
  * @position Run with `pnpm test:interaction`. jsdom has no layout, so the
  *   control boxes are only observable here.
  */
@@ -37,14 +38,16 @@ test.afterAll(async () => {
 });
 
 const STORY = 'core-appshell--search-in-end-content-on-mobile';
+const HEADING = 'Northwind';
 const CONTROLS = [
   'Report a bug',
   'Notifications',
   'Profile',
   'Open navigation',
 ] as const;
-// The widest phone comes first. Its sizes are the sizes to keep.
-const WIDTHS = [390, 375, 320] as const;
+// The widest phone comes first. Its sizes are the sizes to keep. At 430 px the
+// heading has started to yield and the field still has its full width.
+const WIDTHS = [430, 390, 375, 320] as const;
 
 async function boxOf(locator: Locator) {
   const box = await locator.boundingBox();
@@ -65,11 +68,12 @@ async function openAt(page: Page, width: number) {
   return bar;
 }
 
-test('a search field in the end content narrows, so the end controls and the menu toggle stay inside the bar', async ({
+test('the heading yields first, then a search field in the end content narrows, so the end controls and the menu toggle stay inside the bar', async ({
   page,
 }) => {
   const keptSizes = new Map<string, {width: number; height: number}>();
   let previousSearchWidth = Infinity;
+  let fullSearchWidth: number | undefined;
 
   for (const width of WIDTHS) {
     const bar = await openAt(page, width);
@@ -104,6 +108,21 @@ test('a search field in the end content narrows, so the end controls and the men
     expect(search.x + search.width).toBeLessThanOrEqual(firstControl.x);
     expect(search.width).toBeLessThanOrEqual(previousSearchWidth);
     previousSearchWidth = search.width;
+
+    // The heading yields first: the field narrows only once the heading has
+    // no width left. Such a heading has no visible box, so read its layout box.
+    const heading = await bar
+      .getByText(HEADING, {exact: true})
+      .evaluate(element => ({
+        width: element.getBoundingClientRect().width,
+      }));
+    fullSearchWidth ??= search.width;
+    if (width === WIDTHS[0]) {
+      expect(heading.width).toBeGreaterThan(0);
+    }
+    if (search.width < fullSearchWidth - 0.5) {
+      expect(heading.width).toBeLessThanOrEqual(1);
+    }
   }
   // At 320 px the field is narrower than the 240px it asks for.
   expect(previousSearchWidth).toBeLessThan(240);
