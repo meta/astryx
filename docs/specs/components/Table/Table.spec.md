@@ -261,6 +261,8 @@ Consumer data, columns, props, module signatures and usage remain documented in
   columns and leave the span stale. The current full-span test covers only the case
   where expansion captures the final column set. This contract records both gaps
   and does not correct them.
+- FR5 gap: a sortable column whose `header` holds its own control nests that
+  control inside the Sort control. In development the column warns.
 - While rows glide, WebKit can draw a row's divider (FR14) one pixel higher or
   lower under a pinned cell than under the scrolling cells: at some fractional
   positions of the gliding row, the two parts round to different pixels. The step

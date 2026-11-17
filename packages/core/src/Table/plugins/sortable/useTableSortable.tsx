@@ -14,13 +14,21 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useId, useRef, useMemo, type ReactNode} from 'react';
+import {
+  useCallback,
+  useId,
+  useRef,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
+import {useDevWarning} from '../../../hooks/useDevWarning';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
@@ -227,6 +235,10 @@ function getNextDirection(
 // Sort Header Button Component
 // =============================================================================
 
+/** Elements a reader can operate on their own: a control nested in the label. */
+const HEADER_CONTROL_SELECTOR =
+  'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
+
 function SortHeaderButton<T extends Record<string, unknown>>({
   column,
   children,
@@ -253,6 +265,25 @@ function SortHeaderButton<T extends Record<string, unknown>>({
       : direction === 'descending'
         ? 'arrowDown'
         : 'arrowsUpDown';
+
+  // A header that holds its own control nests that control in the Sort
+  // button, which no assistive technology can operate (WCAG 4.1.2). Table has
+  // no place outside the Sort control for a caller's header control, so the
+  // column warns instead.
+  const [holdsControl, setHoldsControl] = useState(false);
+  const labelRef = useCallback((label: HTMLSpanElement | null) => {
+    if (label?.querySelector(HEADER_CONTROL_SELECTOR) != null) {
+      setHoldsControl(true);
+    }
+  }, []);
+  useDevWarning(
+    'useTableSortable',
+    `the header of sortable column "${sortKey}" holds its own control. ` +
+      'Its control nests in the Sort button, which assistive technology ' +
+      'cannot operate; this column cannot hold a header control while it is ' +
+      'sortable.',
+    holdsControl,
+  );
 
   // The button is named by its column's text, so the column header keeps
   // that name; direction lives in the header's aria-sort. Only the multi-sort
@@ -316,7 +347,9 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         )}
         aria-describedby={rank != null ? priorityId : undefined}
         onClick={handleClick}>
-        <span {...stylex.props(sortStyles.label)}>{children}</span>
+        <span ref={labelRef} {...stylex.props(sortStyles.label)}>
+          {children}
+        </span>
         <span
           {...stylex.props(
             sortStyles.iconWrapper,

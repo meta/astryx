@@ -309,6 +309,11 @@ export const docs = {
           'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
       },
       {
+        guidance: false,
+        description:
+          'Do not put a control (a button, link, or input) in the header of a sortable column. The Sort control wraps the whole header, so the control nests inside it and assistive technology cannot operate it. Keep header controls on columns that are not sortable.',
+      },
+      {
         guidance: true,
         description:
           'In children mode, put every row inside TableHeader, TableBody, or TableFooter. <table> cannot contain a <tr> directly: the HTML parser inserts an implied <tbody> for server-rendered markup and React does not on the client, so unwrapped rows mismatch on hydration.',
