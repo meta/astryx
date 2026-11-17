@@ -35,6 +35,7 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
+  FEELS,
   LIKE,
   wordTable,
 } from './_tables.mjs';
@@ -5835,6 +5836,16 @@ export function draftAnswer(ctx, env, question) {
         'i',
       ).test(x) &&
       !VETO.test(x)
+    )
+      return true;
+    // ("playful minimal recipe site": a feel word a dial's help gives, said
+    // bare, asks for that look.)
+    if (
+      !/\?\s*$/.test(x) &&
+      !VETO.test(x) &&
+      (x.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).some(w =>
+        FEELS.has(w),
+      )
     )
       return true;
     // ("the app should open in dark mode by default": the mode it shows
@@ -27654,9 +27665,13 @@ export function draftAnswer(ctx, env, question) {
   // (A list of three asks or more names the words none reads the same
   // way, parts among them or not: "page loud and fast: black background,
   // …, heavy condensed headings" names "fast".)
+  const qWords = q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? [];
   const lookAsk =
     /\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
-    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
+    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3 ||
+    qWords.some(w => FEELS.has(w));
+  /** The feel words a dial's help read for the whole theme. @type {Set<string>} */
+  const felt = new Set();
   if (!gateAll && lookAsk) {
     const answeredText = result
       .map(d => `${d.text} ${JSON.stringify(d.options)}`)
@@ -27664,11 +27679,50 @@ export function draftAnswer(ctx, env, question) {
       .toLowerCase();
     const STOP =
       /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich|success|warning|danger|info|accent|neutral|clear|status|statuses|high|low)$/;
+    // A feel word said for the whole theme ("playful", "minimal") moves the
+    // dials whose help gives that feel, each line saying what it read; a
+    // dial the ask sets itself keeps its value, and a word said of a part
+    // or of one thing ("soft shadows") is that one's.
+    const ownDials = new Set(
+      result
+        .flatMap(d => d.options.flat())
+        .filter(st => !st.on && Object.hasOwn(DIALS, String(st.thing)))
+        .map(st => String(st.thing)),
+    );
+    for (const w of new Set(qWords)) {
+      // ("too playful", "less minimal", "not playful": the feel is what
+      // the ask moves away from, never a move toward it.)
+      if (
+        new RegExp(
+          String.raw`\b(?:too|less|not|no|never|overly|so|un)[\s-]+(?:\w+\s+)?${w}\b`,
+        ).test(q.toLowerCase())
+      )
+        continue;
+      const moves = (FEELS.get(w) ?? []).filter(
+        m =>
+          !ownDials.has(m.dial) &&
+          !clauses.some(
+            c =>
+              (c.parts.length || c.aspects.length) &&
+              new RegExp(`\\b${w}\\b`).test(c.text),
+          ),
+      );
+      if (!moves.length) continue;
+      felt.add(w);
+      for (const m of moves) {
+        ownDials.add(m.dial);
+        result.push({
+          text: `${w} → ${m.dial} ${m.value} (the ${m.dial} dial's help: ${m.value} feels ${w})`,
+          options: [[set(m.dial, m.value)]],
+        });
+      }
+    }
     const notTaken = [
       ...new Set(
-        (q.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).filter(
+        qWords.filter(
           w =>
             w.length >= 4 &&
+            !felt.has(w) &&
             !STOP.test(w) &&
             !lex.vocab.includes(w) &&
             !Object.hasOwn(HUES, w) &&
@@ -27765,6 +27819,13 @@ export function draftAnswer(ctx, env, question) {
       if (!t || c.except || taken.has(c)) return false;
       if (!/[a-z]{3,}|#[0-9a-f]{3}|\d/i.test(t)) return false;
       if (texts.includes(t.toLowerCase())) return false;
+      // (A clause a feel word was read from, "playful theme", is taken.)
+      if (
+        (t.toLowerCase().match(/[a-z][a-z-]*[a-z]/g) ?? []).some(w =>
+          felt.has(w),
+        )
+      )
+        return false;
       const vals = steps.map(st => String(st.value ?? '').toLowerCase());
       if (
         [...c.colors, ...c.lengths].some(v =>
