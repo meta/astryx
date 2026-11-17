@@ -87,6 +87,61 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
+const LATER_TEXT_PAGE = `import {useState} from 'react';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Banner} from '@astryxdesign/core/Banner';
+import {Button} from '@astryxdesign/core/Button';
+import {Heading, Text} from '@astryxdesign/core/Text';
+
+function Settings() {
+  return (
+    <div>
+      <Heading level={1}>Settings</Heading>
+      <Heading level={2}>Appearance</Heading>
+    </div>
+  );
+}
+
+export default function Page() {
+  const [view, setView] = useState('home');
+  return (
+    <div>
+      <Button label="Settings" onClick={() => setView('settings')} />
+      <Banner status="info" title="What changed">Three fields moved to the settings page.</Banner>
+      <Badge>
+        <Text>Finalized</Text>
+      </Badge>
+      {view === 'settings' ? <Settings /> : <Text>Home</Text>}
+    </div>
+  );
+}
+`;
+
+describe('render(): text a component did not draw', () => {
+  /** @type {import('./render.type.mjs').RenderWarning[]} */
+  let dropped;
+
+  beforeAll(async () => {
+    put('later-text.tsx', LATER_TEXT_PAGE);
+    const result = /** @type {any} */ (await render('later-text.tsx', {cwd: dir}));
+    dropped = result.data.warnings.filter(
+      (/** @type {any} */ w) => w.code === 'dropped-children',
+    );
+  }, 60_000);
+
+  it('names the component whose docs list no children, not the text inside it', () => {
+    expect(dropped.map(w => w.message)).toEqual([
+      '<Badge> on line 22 did not render the text "Finalized" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    ]);
+  });
+
+  it('stays silent for text a later paint shows: a collapsed Banner body, an inactive view', () => {
+    const text = dropped.map(w => w.message).join('\n');
+    expect(text).not.toContain('Three fields moved');
+    expect(text).not.toContain('Appearance');
+  });
+});
+
 describe('render(): page to one HTML file', () => {
   /** @type {import('./render.type.mjs').RenderPageResponse} */
   let result;
@@ -143,8 +198,9 @@ describe('render(): page to one HTML file', () => {
   it('warns when a component drops the text it was given', () => {
     const dropped = result.data.warnings.filter(w => w.code === 'dropped-children');
     expect(dropped).toHaveLength(1);
-    expect(dropped[0].message).toContain('ListItem');
-    expect(dropped[0].message).toContain('label=');
+    expect(dropped[0].message).toContain('<ListItem> on line 16');
+    expect(dropped[0].message).toContain('ListItem takes no children');
+    expect(dropped[0].message).toContain('astryx component ListItem');
   });
 
   it('gives the page back byte for byte', async () => {
