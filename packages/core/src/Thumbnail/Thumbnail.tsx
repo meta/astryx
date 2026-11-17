@@ -522,7 +522,8 @@ export function Thumbnail({
             onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
             aria-disabled={isInteractive ? undefined : 'true'}
-            {...stylex.props(styles.interactiveButton)}>
+            // The container draws Open's ring.
+            {...focusOutlineProps.suppressed(styles.interactiveButton)}>
             {imageContent}
           </button>
         ) : (
