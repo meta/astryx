@@ -50,7 +50,7 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {BundleError, bundleForBrowser} from './client-bundle.mjs';
-import {neededImports} from './value-uses.mjs';
+import {droppedImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -1343,12 +1343,25 @@ function packageResolves(spec, file) {
 }
 
 /**
+ * One of the page's modules as Babel parses it: TypeScript in a TypeScript
+ * file, JSX in a `.jsx` or `.tsx` file and in JavaScript.
+ * @param {string} source
+ * @param {string} file
+ */
+function parseModule(source, file) {
+  const typed = /\.[cm]?tsx?$/.test(file);
+  return requireFromCli('@babel/parser').parse(source, {
+    sourceType: 'module',
+    plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+  });
+}
+
+/**
  * Every package the page's own modules import that does not resolve, found
  * before the page loads, so one refusal names them all.
  * @returns {string[]} package names, sorted
  */
 function missingPackages() {
-  const parser = requireFromCli('@babel/parser');
   /** @type {Set<string>} */
   const missing = new Set();
   const seen = new Set([entry]);
@@ -1362,24 +1375,19 @@ function missingPackages() {
     } catch {
       continue;
     }
-    // A static import the module uses only as a type, or not at all, is
-    // dropped as a build drops it.
-    /** @type {{needed: Set<string>, imported: Set<string>} | null} */
-    let staticImports = null;
-    try {
-      const typed = /\.[cm]?tsx?$/.test(file);
-      staticImports = neededImports(
-        parser.parse(source, {
-          sourceType: 'module',
-          plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
-        }).program,
-      );
-    } catch {
-      // A module that does not parse is reported where it is compiled.
+    // TypeScript drops a static import that the module uses only as a type,
+    // or not at all; JavaScript loads every import.
+    /** @type {Set<string>} */
+    let dropped = new Set();
+    if (/\.[cm]?tsx?$/.test(file)) {
+      try {
+        dropped = droppedImports(parseModule(source, file));
+      } catch {
+        // A module that does not parse is reported where it is compiled.
+      }
     }
-    for (const {specifier, typeOnly} of moduleImports(source, file) ?? []) {
-      if (typeOnly) continue;
-      if (staticImports?.imported.has(specifier) && !staticImports.needed.has(specifier)) continue;
+    for (const {specifier, typeOnly, declaration} of moduleImports(source, file) ?? []) {
+      if (typeOnly || (declaration && dropped.has(specifier))) continue;
       const raw = specifier.split('?')[0];
       const target = importedFile(raw, file);
       if (target && path.isAbsolute(target)) {

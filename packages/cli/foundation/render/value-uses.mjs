@@ -1,131 +1,110 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Which names a module uses as values, read from its Babel AST.
+ * @file Which of a module's import bindings it uses as values, read through
+ * Babel's scope.
  *
- * @input  a module's AST (`@babel/parser`, TypeScript and JSX) and the names to look for
- * @output the names the module uses in an expression or JSX, not only in a type
+ * @input  a module's AST (`@babel/parser`, a `File`)
+ * @output each static import's bindings with the references that resolve to
+ *   them as values; the packages a TypeScript build drops
  * @position foundation/render, used by the render worker's import checks
  */
 
-/** AST keys that never hold a value use of a name. */
-const SKIPPED_KEYS = new Set([
-  'loc',
-  'start',
-  'end',
-  'extra',
-  'range',
-  'comments',
-  'leadingComments',
-  'trailingComments',
-  'innerComments',
-]);
-
-/** AST keys whose subtree is a type, which a build drops. */
-const TYPE_KEYS = new Set([
-  'typeAnnotation',
-  'returnType',
-  'typeParameters',
-  'typeArguments',
-  'superTypeParameters',
-  'implements',
-]);
-
-/** Declarations that hold only types. */
-const TYPE_NODES = new Set([
-  'TSInterfaceDeclaration',
-  'TSTypeAliasDeclaration',
-  'TSDeclareFunction',
-  'TSImportType',
-  'TSTypeQuery',
-  'TSTypeReference',
-]);
+import {traverse} from '@babel/core';
 
 /**
- * The names among `names` that a module uses as values: in an expression or
- * JSX, not only in a type, a property key or an import. `export type {A}`
- * and `export {type A}` name a type, as a type position does.
- * @param {any} program the module's AST (`File.program`)
- * @param {Set<string>} names
- * @returns {Set<string>}
+ * Whether a reference sits in a type, which a TypeScript build drops. This
+ * is the test Babel's TypeScript transform applies before it drops an import.
+ * @param {any} ref a reference's NodePath
  */
-export function valueUses(program, names) {
-  /** @type {Set<string>} */
-  const used = new Set();
-  /** @param {any} node @param {any} parent @param {string} key @param {boolean} inType */
-  const walk = (node, parent, key, inType) => {
-    if (!node || typeof node.type !== 'string') return;
-    if (node.type === 'ImportDeclaration') return;
-    const typeExport =
-      (node.type === 'ExportNamedDeclaration' ||
-        node.type === 'ExportSpecifier') &&
-      node.exportKind === 'type';
-    const typed =
-      inType || typeExport || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
-    if (
-      (node.type === 'Identifier' || node.type === 'JSXIdentifier') &&
-      names.has(node.name) &&
-      !typed
-    ) {
-      const isKey =
-        ((parent?.type === 'MemberExpression' ||
-          parent?.type === 'OptionalMemberExpression' ||
-          parent?.type === 'JSXMemberExpression') &&
-          key === 'property' &&
-          !parent.computed) ||
-        ((parent?.type === 'ObjectProperty' ||
-          parent?.type === 'ObjectMethod' ||
-          parent?.type === 'ClassProperty' ||
-          parent?.type === 'ClassMethod') &&
-          key === 'key' &&
-          !parent.computed) ||
-        (parent?.type === 'JSXAttribute' && key === 'name');
-      if (!isKey) used.add(node.name);
-    }
-    for (const [childKey, child] of Object.entries(node)) {
-      if (SKIPPED_KEYS.has(childKey) || !child || typeof child !== 'object')
-        continue;
-      if (Array.isArray(child))
-        for (const item of child) walk(item, node, childKey, typed);
-      else walk(child, node, childKey, typed);
-    }
-  };
-  for (const statement of program.body) walk(statement, program, 'body', false);
-  return used;
+function inType(ref) {
+  switch (ref.parent.type) {
+    case 'TSTypeReference':
+    case 'TSExpressionWithTypeArguments':
+    case 'TSTypeQuery':
+      return true;
+    case 'TSQualifiedName':
+      return (
+        ref.parentPath.findParent(
+          (/** @type {any} */ up) => up.type !== 'TSQualifiedName',
+        ).type !== 'TSImportEqualsDeclaration'
+      );
+    case 'ExportSpecifier':
+      return (
+        ref.parent.exportKind === 'type' ||
+        ref.parentPath.parent.exportKind === 'type'
+      );
+    default:
+      return false;
+  }
 }
 
 /**
- * The modules a module's static imports name that it needs at run time: a
- * module it imports for its effects alone (`import 'x'`), or one with a
- * binding the module uses as a value. An import only of types, or of names
- * the module never uses, is left out, as a build leaves it out.
- * @param {any} program the module's AST (`File.program`)
- * @returns {{needed: Set<string>, imported: Set<string>}} `imported`: every module a static import names
+ * One binding a static import makes.
+ * @typedef {object} ImportUse
+ * @property {any} specifier the import specifier
+ * @property {any[]} values the NodePaths of the references that resolve to
+ *   this binding and use it as a value. A parameter or a local declaration
+ *   of the same name is its own binding, so its references are not here.
  */
-export function neededImports(program) {
+
+/**
+ * Each static import declaration of a module, with the bindings it makes.
+ * @param {any} ast the module's AST (`File`)
+ * @returns {Map<any, ImportUse[]>} by import declaration, in source order
+ */
+export function importUses(ast) {
+  /** @type {Map<any, ImportUse[]>} */
+  const uses = new Map();
+  traverse(ast, {
+    Program(program) {
+      for (const statement of program.get('body')) {
+        if (!statement.isImportDeclaration()) continue;
+        uses.set(
+          statement.node,
+          statement.node.specifiers.map((/** @type {any} */ specifier) => {
+            const binding = program.scope.getBinding(specifier.local.name);
+            return {
+              specifier,
+              values:
+                binding?.kind === 'module'
+                  ? binding.referencePaths.filter(ref => !inType(ref))
+                  : [],
+            };
+          }),
+        );
+      }
+      program.stop();
+    },
+  });
+  return uses;
+}
+
+/**
+ * The modules a TypeScript build drops from a module's static imports: an
+ * `import type`, or an import each binding of which is a `type` binding or
+ * is used only in types or not at all. A module that another static import
+ * of the same module keeps is not dropped. Only static import declarations
+ * are read: a re-export, an `import()` or a `require()` loads its module.
+ * JavaScript keeps every import, so call this only for a TypeScript module.
+ * @param {any} ast the module's AST (`File`)
+ * @returns {Set<string>}
+ */
+export function droppedImports(ast) {
   /** @type {Set<string>} */
-  const imported = new Set();
-  /** @type {Map<string, string[]>} */
-  const bindings = new Map();
+  const dropped = new Set();
   /** @type {Set<string>} */
-  const needed = new Set();
-  for (const node of program.body) {
-    if (node.type !== 'ImportDeclaration') continue;
-    const source = String(node.source.value);
-    imported.add(source);
-    if (node.importKind === 'type') continue;
-    if (node.specifiers.length === 0) {
-      needed.add(source);
-      continue;
-    }
-    const names = node.specifiers
-      .filter((/** @type {any} */ s) => s.importKind !== 'type')
-      .map((/** @type {any} */ s) => s.local.name);
-    bindings.set(source, [...(bindings.get(source) ?? []), ...names]);
+  const kept = new Set();
+  for (const [declaration, bindings] of importUses(ast)) {
+    const elided =
+      declaration.importKind === 'type' ||
+      (bindings.length > 0 &&
+        bindings.every(
+          ({specifier, values}) =>
+            specifier.importKind === 'type' || values.length === 0,
+        ));
+    (elided ? dropped : kept).add(String(declaration.source.value));
   }
-  const used = valueUses(program, new Set([...bindings.values()].flat()));
-  for (const [source, names] of bindings) {
-    if (names.some(name => used.has(name))) needed.add(source);
-  }
-  return {needed, imported};
+  for (const source of kept) dropped.delete(source);
+  return dropped;
 }
