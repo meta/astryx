@@ -443,8 +443,8 @@ function flexRowFreeWidth(list: HTMLElement): number {
  * How far a list's box can widen as it shows more items. A list sized by
  * its items shows them at their own widths; one that is not (a caller
  * `width`, a squeeze) has no room to give. Otherwise the room runs up to the
- * list's `max-width`. `shownWidth` is the natural width of what the list
- * shows now.
+ * list's pixel `max-width`. `shownWidth` is the natural width of what the
+ * list shows now.
  */
 function widenRoom(list: HTMLElement, shownWidth: number): number {
   const style = getComputedStyle(list);
@@ -456,7 +456,9 @@ function widenRoom(list: HTMLElement, shownWidth: number): number {
     px(style.paddingRight) -
     px(style.borderLeftWidth) -
     px(style.borderRightWidth);
-  if (Math.abs(content - shownWidth) > 1) {
+  // A box at its min-width floor (an OverflowList's folded floor) is still
+  // sized by its items: the floor only stops it shrinking further.
+  if (Math.abs(content - shownWidth) > 1 && box > px(style.minWidth) + 1) {
     return 0;
   }
   // Typed OM keeps `auto` for a width nothing sets.
@@ -466,8 +468,15 @@ function widenRoom(list: HTMLElement, shownWidth: number): number {
       return 0;
     }
   }
-  const maxWidth = parseFloat(style.maxWidth);
-  return Number.isFinite(maxWidth) ? Math.max(0, maxWidth - box) : Infinity;
+  // A cap the computed style keeps unresolved (a percentage, `calc()`,
+  // `min()`) gives no share, since its room cannot be read.
+  const maxWidth = style.maxWidth;
+  if (maxWidth === 'none') {
+    return Infinity;
+  }
+  return /^[\d.]+px$/.test(maxWidth)
+    ? Math.max(0, parseFloat(maxWidth) - box)
+    : 0;
 }
 
 /**
@@ -658,7 +667,10 @@ export function useOverflowInternal(
           // The indicator as the list renders it: its count can differ from
           // the measure copy's.
           (indicatorShown
-            ? (container.lastElementChild?.getBoundingClientRect().width ?? 0)
+            ? ((collapseFrom === 'start'
+                ? container.firstElementChild
+                : container.lastElementChild
+              )?.getBoundingClientRect().width ?? 0)
             : 0) +
           gap * Math.max(0, shown.length + (indicatorShown ? 1 : 0) - 1);
         const box = container.getBoundingClientRect().width;

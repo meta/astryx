@@ -500,7 +500,7 @@ export const ContentSizedParent: Story = {
   ),
 };
 
-/** In a wide flex row, a list whose width the caller sets or caps folds within that width and keeps its trigger. */
+/** In a wide flex row, a list whose width the caller sets or caps (in pixels or with `calc()`) folds within that width and keeps its trigger. */
 export const CallerLimitedWidth: Story = {
   render: () => {
     const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
@@ -527,6 +527,45 @@ export const CallerLimitedWidth: Story = {
         </div>
         <div data-testid="width-capped" style={{display: 'flex', marginTop: 8}}>
           {list({maxWidth: 200})}
+        </div>
+        <div data-testid="width-calc" style={{display: 'flex', marginTop: 8}}>
+          {list({maxWidth: 'calc(25% + 30px)'})}
+        </div>
+      </div>
+    );
+  },
+};
+
+/** In a flex row that narrows and widens again, a list that folds from the start and one that keeps one item unfold again as the row widens. */
+export const RowWidensAfterFold: Story = {
+  render: () => {
+    const items = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'];
+    const list = (props: {
+      collapseFrom?: 'start' | 'end';
+      minVisibleItems?: number;
+    }) => (
+      <OverflowList
+        gap={2}
+        {...props}
+        overflowRenderer={overflowItems => (
+          <Button
+            label={`+${overflowItems.length}`}
+            variant="ghost"
+            size="sm"
+          />
+        )}>
+        {items.map(label => (
+          <Button key={label} label={label} size="sm" />
+        ))}
+      </OverflowList>
+    );
+    return (
+      <div data-testid="widen-frame" style={{width: 900, padding: 8}}>
+        <div data-testid="from-start" style={{display: 'flex'}}>
+          {list({collapseFrom: 'start'})}
+        </div>
+        <div data-testid="one-kept" style={{display: 'flex', marginTop: 8}}>
+          {list({minVisibleItems: 1})}
         </div>
       </div>
     );

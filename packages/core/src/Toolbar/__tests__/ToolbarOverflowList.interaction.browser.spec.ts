@@ -523,6 +523,91 @@ test.describe('a single row’s minimum width', () => {
     }
   });
 
+  test('in a row that narrows and widens again, a list folding from the start and one keeping an item unfold', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--row-widens-after-fold&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="one-kept"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    const read = async (width: number) => {
+      await page.evaluate(w => {
+        const frame = document.querySelector<HTMLElement>(
+          '[data-testid="widen-frame"]',
+        );
+        if (frame != null) {
+          frame.style.width = `${w}px`;
+        }
+      }, width);
+      await page.waitForTimeout(300);
+      return page.evaluate(() =>
+        ['from-start', 'one-kept'].map(id =>
+          [
+            ...(document.querySelector(
+              `[data-testid="${id}"] .astryx-overflow-list`,
+            )?.children ?? []),
+          ].map(child => (child as HTMLElement).innerText.trim()),
+        ),
+      );
+    };
+    const narrow = await read(140);
+    for (const labels of narrow) {
+      expect(labels.some(label => /^\+\d+$/.test(label))).toBe(true);
+    }
+    const wide = await read(900);
+    test.info().annotations.push({
+      type: 'widen-after-fold',
+      description: JSON.stringify({narrow, wide}),
+    });
+    for (const labels of wide) {
+      expect(labels).toHaveLength(10);
+    }
+  });
+
+  test('a list capped with calc() holds one fold across frames', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--caller-limited-width&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="width-calc"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(300);
+    const samples: string[][] = [];
+    for (let frame = 0; frame < 12; frame += 1) {
+      samples.push(
+        await page.evaluate(() =>
+          [
+            ...(document.querySelector(
+              '[data-testid="width-calc"] .astryx-overflow-list',
+            )?.children ?? []),
+          ].map(child => (child as HTMLElement).innerText.trim()),
+        ),
+      );
+      await page.evaluate(
+        async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          }),
+      );
+    }
+    test.info().annotations.push({
+      type: 'calc-cap',
+      description: JSON.stringify(samples[0]),
+    });
+    for (const sample of samples) {
+      expect(sample).toEqual(samples[0]);
+    }
+    expect(samples[0].at(-1)).toMatch(/^\+\d+$/);
+  });
+
   test('in a parent narrower than its folded width, keeps the indicator whole', async ({
     page,
   }) => {
