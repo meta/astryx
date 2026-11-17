@@ -40,7 +40,7 @@ import {
   getPositionTryFallbacks,
 } from './useLayer';
 import {preserveAnimations} from './preserveAnimations';
-import {getAnchorClearFallbacks, LAYER_LIFT_PROPERTY} from './layerSlideRules';
+import {getAnchorClearFallbacks} from './layerSlideRules';
 import {typeScaleVars} from '../theme/tokens.stylex';
 import type {
   LayerPlacement,
