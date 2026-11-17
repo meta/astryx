@@ -353,6 +353,31 @@ describe('useHotkeys', () => {
       expect(onPress).toHaveBeenCalledTimes(1);
     });
 
+    it('fires alt+space on Option+Space, which types a no-break space', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+space', onPress}]));
+
+      press('\u00a0', {code: 'Space', altKey: true});
+      expect(onPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('matches the plain ASCII character Option types, not the key position (German Mac Option+L types "@")', () => {
+      stubApplePlatform();
+      const onAt = vi.fn();
+      const onL = vi.fn();
+      renderHook(() =>
+        useHotkeys([
+          {keys: 'alt+@', onPress: onAt},
+          {keys: 'alt+l', onPress: onL},
+        ]),
+      );
+
+      press('@', {code: 'KeyL', altKey: true});
+      expect(onAt).toHaveBeenCalledTimes(1);
+      expect(onL).not.toHaveBeenCalled();
+    });
+
     it('does not use the key position on other platforms, so an AltGr letter fires no shortcut', () => {
       stubOtherPlatform();
       const onPress = vi.fn();

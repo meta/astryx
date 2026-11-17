@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `useHotkeys`: an `alt` combo such as `'alt+a'` or `'alt+1'` now fires on macOS. Option changes the character a key types there (Option+A types "å", and some keys are dead keys), so the combo never matched. On macOS, when Option has rewritten the character, the combo matches the key's US position, whatever the keyboard layout: on an AZERTY Mac, Option plus the key labeled A fires `'alt+q'`. Name shifted punctuation as `'alt+shift+/'`, not `'alt+?'`. Other platforms are unchanged, and shortcuts stay silent in text fields.
+[fix] `useHotkeys`: an `alt` combo such as `'alt+a'`, `'alt+1'` or `'alt+space'` now fires on macOS. Option changes the character a key types there (Option+A types "å", and some keys are dead keys), so the combo never matched. On macOS, when Option types a dead key or a non-ASCII character, a combo with a letter, digit, punctuation or space key matches that key's US position, whatever the keyboard layout: on an AZERTY Mac, Option plus the key labeled A fires `'alt+q'`. When Option types a plain ASCII character, the combo matches that character: a German Mac types "@" for Option+L, so it fires `'alt+@'`. On macOS, name shifted punctuation as `'alt+shift+/'`, not `'alt+?'`. Other platforms are unchanged, and shortcuts stay silent in text fields.
 
 @cixzhang

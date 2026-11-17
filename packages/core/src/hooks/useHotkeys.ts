@@ -28,10 +28,13 @@ export interface Hotkey {
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
    * by a final key compared case-insensitively against event.key. On macOS,
-   * where Option changes the typed character, an 'alt' combo also matches
-   * the final key's US key position (event.code), whatever the layout. For
-   * punctuation that shift changes, name it there: 'alt+shift+/', not
-   * 'alt+?'.
+   * where Option changes the typed character, an 'alt' combo whose final key
+   * is a letter, digit, punctuation key or space also matches that key's US
+   * position (event.code), whatever the layout, when Option typed a dead key
+   * or a non-ASCII character. When Option types a plain ASCII character, the
+   * combo matches that character: on a German Mac Option+L types '@', so it
+   * fires 'alt+@', not 'alt+l'. On macOS, name punctuation that shift changes
+   * with shift: 'alt+shift+/', not 'alt+?'.
    * Named keys: 'escape', 'enter', 'space', 'up', 'down', 'left', 'right'
    * (arrow names map to ArrowUp/ArrowDown/ArrowLeft/ArrowRight).
    * Use 'plus' for a literal '+' key.
@@ -86,6 +89,9 @@ const PUNCTUATION_CODES: Record<string, string> = {
  * letter, digit or punctuation key; null for any other key.
  */
 function physicalKeyCode(key: string): string | null {
+  if (key === ' ') {
+    return 'Space';
+  }
   if (/^[a-z]$/.test(key)) {
     return `Key${key.toUpperCase()}`;
   }
