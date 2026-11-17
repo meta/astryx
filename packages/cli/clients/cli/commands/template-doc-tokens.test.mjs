@@ -13,6 +13,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../api/template/template.mjs')} */
+const {template} = require('../../../api/template/template.mjs');
+/** @type {typeof import('../../../api/build/build.mjs')} */
+const {build} = require('../../../api/build/build.mjs');
 
 vi.setConfig({testTimeout: 60_000, hookTimeout: 60_000});
 
@@ -197,5 +204,77 @@ describe('astryx component --blocks', () => {
     );
     expect(json.stdout).not.toContain('{@command');
     expect(json.stdout).not.toContain(RUN);
+  });
+});
+
+describe('a {@pm} step renders for the project the API call names', () => {
+  /** @type {string} */
+  let yarnDir;
+  beforeAll(() => {
+    // A Yarn project, read from this process's folder, which uses pnpm.
+    yarnDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-template-doc-pm-'));
+    fs.writeFileSync(
+      path.join(yarnDir, 'package.json'),
+      JSON.stringify({
+        name: 'yarn-app',
+        packageManager: 'yarn@4.9.1',
+        dependencies: {'@acme/stack': '1.0.0'},
+      }),
+    );
+    fs.writeFileSync(path.join(yarnDir, 'yarn.lock'), '');
+    fs.writeFileSync(
+      path.join(yarnDir, 'astryx.config.mjs'),
+      "export default {integrations: ['@acme/stack']};\n",
+    );
+    const pkg = path.join(yarnDir, 'node_modules', '@acme', 'stack');
+    fs.mkdirSync(path.join(pkg, 'templates'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({name: '@acme/stack', version: '1.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'astryx.integration.mjs'),
+      "export default {templates: './templates'};\n",
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'templates', 'zebra-stack.doc.mjs'),
+      `export default ${JSON.stringify({
+        type: 'page',
+        name: 'zebra-stack',
+        category: 'Acme',
+        description: 'Zebra roster stack: run {@pm install zebra-kit} first.',
+        keywords: ['zebra', 'stack'],
+      })};\n`,
+    );
+    fs.writeFileSync(path.join(pkg, 'templates', 'zebra-stack.tsx'), SOURCE);
+  });
+  afterAll(() => {
+    fs.rmSync(yarnDir, {recursive: true, force: true});
+  });
+
+  it('template(): the list and the skeleton', async () => {
+    const list = /** @type {any} */ (
+      await template(undefined, {list: true, cwd: yarnDir})
+    );
+    const entry = list.data.find(
+      (/** @type {any} */ each) => each.id === 'zebra-stack',
+    );
+    expect(entry.description).toBe(
+      'Zebra roster stack: run `yarn add zebra-kit` first.',
+    );
+    const skeleton = /** @type {any} */ (
+      await template('zebra-stack', {skeleton: true, cwd: yarnDir})
+    );
+    expect(skeleton.data.description).toBe(
+      'Zebra roster stack: run `yarn add zebra-kit` first.',
+    );
+  });
+
+  it('build(): every part of one answer agrees', async () => {
+    const kit = await build('zebra roster stack', {cwd: yarnDir});
+    const text = JSON.stringify(kit);
+    expect(text).toContain('yarn add zebra-kit');
+    expect(text).not.toContain('pnpm add zebra-kit');
+    expect(text).not.toContain('{@pm');
   });
 });
