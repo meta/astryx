@@ -17,9 +17,13 @@ import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
+import {SOURCE_TYPE} from './source-block.mjs';
 
 /** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
+
+/** The module the page's script reads a carried file from. */
+export const CARRIED_MODULE = 'astryx:carried';
 
 /** An address that leaves the file: another site, mail or a phone call. */
 export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
@@ -254,6 +258,23 @@ function locatedFile(file) {
 const loaderFor = file =>
   /\.[cm]?tsx$/.test(file) ? 'tsx' : /\.[cm]?ts$/.test(file) ? 'ts' : 'jsx';
 
+/**
+ * Reads a carried file from the page's embedded source, once, by its
+ * SHA-256, as a data: URI with the `prefix` it needs (`data:image/png;base64`).
+ */
+const CARRIED_SOURCE = `let files;
+export function carried(sha256, prefix) {
+  if (files === undefined) {
+    files = new Map();
+    // The CLI writes its source block last, as readSourceBlock reads it.
+    const blocks = document.querySelectorAll('script[type="${SOURCE_TYPE}"]');
+    const block = blocks[blocks.length - 1];
+    for (const file of block ? JSON.parse(block.textContent).files : []) files.set(file.sha256, file.base64);
+  }
+  return prefix + ',' + (files.get(sha256) ?? '');
+}
+`;
+
 /** Files a package may import for their address; the page's own are inlined before esbuild sees them. */
 const ASSET_LOADERS = Object.fromEntries(
   [
@@ -403,6 +424,16 @@ export async function bundleForBrowser({
     name: 'astryx-page',
     setup(/** @type {any} */ setupBuild) {
       build = setupBuild;
+      // An image the page imports comes from the embedded source, which
+      // carries it already, so the script holds no copy of its own.
+      build.onResolve({filter: /^astryx:carried$/}, () => ({
+        path: 'carried',
+        namespace: 'astryx-carried',
+      }));
+      build.onLoad({filter: /.*/, namespace: 'astryx-carried'}, () => ({
+        contents: CARRIED_SOURCE,
+        loader: 'js',
+      }));
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
       build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
       build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));

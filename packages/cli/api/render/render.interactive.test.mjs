@@ -288,6 +288,68 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
+  it('reads each imported image the embedded source carries from it, so the script holds no copy, and keeps a copy of one the source leaves out', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    put('src/shot.png', png);
+    // Under a dot-folder, which the embedded source never carries.
+    const other = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    put('src/.art/hidden.png', other);
+    put(
+      'src/shots.tsx',
+      `import {useEffect, useState} from 'react';
+import shot from './shot.png';
+import hidden from './.art/hidden.png';
+export default function Page() {
+  const [drawn, setDrawn] = useState('no');
+  useEffect(() => setDrawn('yes'), []);
+  return (
+    <main data-drawn={drawn}>
+      <img src={shot} alt="One" />
+      <img src={shot} alt="Two" />
+      <img src={hidden} alt="Hidden" />
+      {/* A page that shows a rendered file's source block in its markup. */}
+      <script type="application/x-astryx-source" dangerouslySetInnerHTML={{__html: '{"files":[]}'}} />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/shots.tsx', {cwd: dir, out: 'shots.html'});
+    const file = read('shots.html');
+    const script = file.slice(file.lastIndexOf('<script>'));
+    const data = png.toString('base64');
+    // The carried image is in the markup per image shown and once in the
+    // embedded source; the one the source leaves out keeps its own copy.
+    expect(script).not.toContain(data);
+    expect(script.split(other.toString('base64')).length - 1).toBe(1);
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    // The script drew the page: only it sets the marker.
+    expect(
+      dom.window.document
+        .querySelector(`#${ROOT_ID} main`)
+        ?.getAttribute('data-drawn'),
+    ).toBe('yes');
+    const shown = [
+      ...dom.window.document.querySelectorAll(`#${ROOT_ID} img`),
+    ].map(img => img.getAttribute('src'));
+    expect(shown).toEqual([
+      `data:image/png;base64,${data}`,
+      `data:image/png;base64,${data}`,
+      `data:image/png;base64,${other.toString('base64')}`,
+    ]);
+    dom.window.close();
+  }, 120_000);
+
   it('keeps showing an image the page names by a string path once the script draws the page', async () => {
     // A 1x1 PNG beside the page, named by a string, not imported.
     put(

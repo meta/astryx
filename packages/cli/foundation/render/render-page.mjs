@@ -740,6 +740,25 @@ export function withCarriedPaths(script, rewrites) {
   return out;
 }
 
+/** A call of the script's `carried(sha256, prefix)`, which reads an image from the embedded source. */
+const CARRIED_CALL = /[A-Za-z_$][\w$]*\((["'])([0-9a-f]{64})\1,\s*(["'])(data:[^"']*;base64)\3\)/g;
+
+/**
+ * The script with each image the embedded source does not carry written in
+ * as its data: URI (`uriOf` gives it), so the image still shows once the
+ * script draws the page.
+ * @param {string} script
+ * @param {Set<string>} carried the SHA-256 of each file the source carries
+ * @param {(sha256: string, prefix: string) => string | null} uriOf
+ */
+export function withUncarriedImages(script, carried, uriOf) {
+  return script.replace(CARRIED_CALL, (call, _q, sha, _p, prefix) => {
+    if (carried.has(sha)) return call;
+    const uri = uriOf(sha, prefix);
+    return uri === null ? call : JSON.stringify(uri);
+  });
+}
+
 /**
  * The warning for a page rendered without Intl.Segmenter.
  * @returns {RenderWarning}
@@ -1414,7 +1433,28 @@ export async function renderPage(entry, options = {}) {
   // With a script, the markup sits in the one element the script draws into,
   // which takes no box of its own.
   const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
-  const scriptTag = drawn ? `<script>${drawn}</script>\n` : '';
+  // An image the embedded source leaves out (under a dot-folder, say) keeps
+  // its own data: URI in the script.
+  const carriedSha = new Set(embedded.map(e => sha256(e.bytes)));
+  /** @type {Map<string, Buffer>} */
+  const imageBytes = new Map();
+  for (const f of files) {
+    if (!isAssetPath(f)) continue;
+    try {
+      const bytes = fs.readFileSync(f);
+      imageBytes.set(sha256(bytes), bytes);
+    } catch {
+      // A file that went away since the page imported it stays as written.
+    }
+  }
+  const pageScript =
+    drawn === null
+      ? null
+      : withUncarriedImages(drawn, carriedSha, (sha, prefix) => {
+          const bytes = imageBytes.get(sha);
+          return bytes ? `${prefix},${bytes.toString('base64')}` : null;
+        });
+  const scriptTag = pageScript ? `<script>${pageScript}</script>\n` : '';
   let html;
   if (options.output) {
     // The charset and generator metas come first: a browser reads the
@@ -1514,6 +1554,6 @@ export async function renderPage(entry, options = {}) {
     ]).size,
     warnings,
     fromSet: message.fromSet ?? [],
-    ...(drawn ? {scriptBytes: Buffer.byteLength(drawn), scriptModules: message.scriptModules ?? 0} : {}),
+    ...(pageScript ? {scriptBytes: Buffer.byteLength(pageScript), scriptModules: message.scriptModules ?? 0} : {}),
   };
 }

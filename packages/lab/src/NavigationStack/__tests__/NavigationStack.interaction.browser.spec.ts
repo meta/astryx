@@ -105,7 +105,13 @@ async function newFinePage(browser: Browser) {
  */
 async function openStack(
   page: Page,
-  story: 'settings' | 'pushed' | 'carousel' | 'declines-pops' | 'large-title',
+  story:
+    | 'settings'
+    | 'pushed'
+    | 'carousel'
+    | 'declines-pops'
+    | 'large-title'
+    | 'raised-content',
   {
     standalone = false,
     pointer = 'touch',
@@ -1562,6 +1568,58 @@ test('under a finger, a pop that reveals a screen two levels down leaves its bar
   expect(await readCut(page, 'root')).toEqual({shown: 0});
   expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
 });
+
+for (const pointer of ['touch', 'mouse'] as const) {
+  test(`screen content with z-index 2 stays under the bar's title and Back (${pointer})`, async ({
+    page,
+    browser,
+  }) => {
+    // A mouse page reads a fine pointer only in its own context.
+    const {context, page: target} =
+      pointer === 'mouse' ? await newFinePage(browser) : {context: null, page};
+    try {
+      await openStack(target, 'raised-content', {pointer});
+      await expect(target.getByTestId('raised-content')).toBeVisible();
+      // At rest, after the animator lets go of `will-change` (it holds it
+      // briefly after the last motion, and that alone makes a stacking
+      // context), so only the card's own isolation keeps the content under.
+      await expect
+        .poll(() =>
+          target.evaluate(() =>
+            [...document.querySelectorAll('[data-navigation-screen]')].every(
+              screen => getComputedStyle(screen).willChange === 'auto',
+            ),
+          ),
+        )
+        .toBe(true);
+      const hits = await target.evaluate(() => {
+        const at = (element: Element | null) => {
+          const box = element?.getBoundingClientRect();
+          if (element == null || box == null) {
+            return null;
+          }
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return hit != null && element.contains(hit);
+        };
+        const title = [...document.querySelectorAll('h2')].find(
+          h => h.closest('[inert]') == null,
+        );
+        return {
+          title: at(title ?? null),
+          back: at(document.querySelector('[data-navigation-back]')),
+        };
+      });
+      expect(hits).toEqual({title: true, back: true});
+      await target.locator('[data-navigation-back]').click();
+      await expect(card(target, 'screen-General')).toHaveCount(0);
+    } finally {
+      await context?.close();
+    }
+  });
+}
 
 test('under a finger, Back reveals the covered bar whole', async ({page}) => {
   const {driver} = await openStack(page, 'settings');

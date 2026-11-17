@@ -1244,13 +1244,19 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       const wrapper = wrapped.get(specifier);
       if (!wrapper) continue;
       accounted.add(declaredKey(specifier));
+      // A set wraps a library package, not one subpath of it.
+      const library = wrapper.data.source?.package;
+      const from =
+        library && node.source.value !== library
+          ? `${node.source.value}, part of ${library}`
+          : node.source.value;
       icons.kept.push({
         module: node.source.value,
         export: importedName(specifier),
         reason:
           wrapper === target
-            ? `it already comes from ${node.source.value}, which ${icons.set} wraps`
-            : `no set in your list maps its icon definition, and it already comes from ${node.source.value}, which ${wrapper.package}/${wrapper.name} wraps`,
+            ? `it already comes from ${from}, which ${icons.set} wraps`
+            : `no set in your list maps its icon definition, and it already comes from ${from}, which ${wrapper.package}/${wrapper.name} wraps`,
       });
     }
   }

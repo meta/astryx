@@ -984,11 +984,11 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
           radius: style.borderTopLeftRadius,
         };
       });
-    // Off: the md thumb is 16 × 16, as with a mouse.
+    // Off: the md thumb is 16 × 16, as with a mouse, and round at 50%.
     expect(await read()).toEqual({
       width: THUMB_OFF,
       height: THUMB_OFF,
-      radius: expect.stringMatching(/px$/),
+      radius: '50%',
     });
     await driver.play(tap(center, {holdMs: 50}));
     await expect(input).toBeChecked();
