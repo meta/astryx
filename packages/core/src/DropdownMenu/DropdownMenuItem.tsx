@@ -190,7 +190,7 @@ export interface DropdownMenuItemProps extends Omit<
 
 interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
   disabledMessageTooltip?: TooltipReturn;
-  isDisabledMessageShown?: boolean;
+  hasDisabledMessage?: boolean;
 }
 
 /**
@@ -208,18 +208,18 @@ interface DropdownMenuItemRowProps extends DropdownMenuItemProps {
  * ```
  */
 export function DropdownMenuItem(props: DropdownMenuItemProps) {
-  const isDisabledMessageShown = props.isDisabled && !!props.disabledMessage;
+  const hasDisabledMessage = props.isDisabled && !!props.disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     focusTrigger: 'always',
-    isEnabled: isDisabledMessageShown,
+    isEnabled: hasDisabledMessage,
   });
 
   return (
     <DropdownMenuItemRow
       {...props}
       disabledMessageTooltip={disabledMessageTooltip}
-      isDisabledMessageShown={isDisabledMessageShown}
+      hasDisabledMessage={hasDisabledMessage}
     />
   );
 }
@@ -245,7 +245,7 @@ function DropdownMenuItemRow({
   onPointerMove,
   onAuxClick,
   disabledMessageTooltip,
-  isDisabledMessageShown = false,
+  hasDisabledMessage = false,
   ...rest
 }: DropdownMenuItemRowProps) {
   const ctx = useDropdownMenuContext();
@@ -376,7 +376,7 @@ function DropdownMenuItemRow({
           },
         )}
       />
-      {isDisabledMessageShown &&
+      {hasDisabledMessage &&
         disabledMessageTooltip != null &&
         disabledMessage != null &&
         surfaceHost != null &&

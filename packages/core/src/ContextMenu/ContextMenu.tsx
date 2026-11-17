@@ -71,7 +71,6 @@ import {
   DropdownMenuRootOpenContext,
   DropdownMenuSurfaceContext,
   type DropdownMenuContextValue,
-  type DropdownMenuSurfaceHost,
   type DropdownMenuSurfaceValue,
 } from '../DropdownMenu/DropdownMenuContext';
 import {
@@ -101,10 +100,7 @@ import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
-import {
-  submenuHostProps,
-  submenuHostStyles,
-} from '../privateAttributes/submenuHost.stylex';
+import {submenuHostProps} from '../privateAttributes/submenuHost.stylex';
 import type {
   DropdownMenuItemData,
   DropdownMenuDividerData,
@@ -405,20 +401,7 @@ export function ContextMenu({
   }, [usesSheetActionList]);
 
   const menuId = useId();
-  const surfaceHostRef = useRef<HTMLDivElement | null>(null);
-  const [surfaceHostKey, setSurfaceHostKey] = useState(0);
-  const attachSurfaceHost = useCallback((node: HTMLDivElement | null) => {
-    surfaceHostRef.current = node;
-    if (node != null) {
-      setSurfaceHostKey(key => key + 1);
-    }
-  }, []);
-  const surfaceHost = useMemo<DropdownMenuSurfaceHost>(
-    () => ({
-      getElement: () => (surfaceHostKey > 0 ? surfaceHostRef.current : null),
-    }),
-    [surfaceHostKey],
-  );
+  const [hostElement, setHostElement] = useState<HTMLDivElement | null>(null);
   // Cursor point in the trigger's local coordinate space (offset from the
   // trigger's top-left, in-flow). Stored here and written to the cursor
   // anchor element so the menu is positioned relative to the trigger context
@@ -804,8 +787,11 @@ export function ContextMenu({
     [closeMenu, size, drillIn, label],
   );
   const surfaceValue = useMemo<DropdownMenuSurfaceValue>(
-    () => ({host: surfaceHost, ownerId: menuId}),
-    [surfaceHost, menuId],
+    () => ({
+      host: {getElement: () => hostElement},
+      ownerId: menuId,
+    }),
+    [hostElement, menuId],
   );
 
   const resolvedMenuContent = wrapContent(
@@ -863,11 +849,7 @@ export function ContextMenu({
             )}>
             {resolvedMenuContent}
           </div>
-          <div
-            ref={attachSurfaceHost}
-            {...submenuHostProps}
-            {...stylex.props(submenuHostStyles)}
-          />
+          <div ref={setHostElement} {...submenuHostProps} />
         </DropdownMenuRootOpenContext>
       </DropdownMenuSurfaceContext>
     </DropdownMenuContext>

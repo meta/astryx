@@ -71,7 +71,6 @@ import {
   DropdownMenuSurfaceContext,
   type DropdownMenuContextValue,
   type DropdownMenuSize,
-  type DropdownMenuSurfaceHost,
   type DropdownMenuSurfaceValue,
 } from '../DropdownMenu/DropdownMenuContext';
 import {
@@ -553,20 +552,8 @@ function BreadcrumbMenuTrigger({
   const menuId = useId();
   const triggerId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const surfaceHostRef = useRef<HTMLDivElement | null>(null);
-  const [surfaceHostKey, setSurfaceHostKey] = useState(0);
-  const attachSurfaceHost = useCallback((node: HTMLDivElement | null) => {
-    surfaceHostRef.current = node;
-    if (node != null) {
-      setSurfaceHostKey(key => key + 1);
-    }
-  }, []);
-  const surfaceHost = useMemo<DropdownMenuSurfaceHost>(
-    () => ({
-      getElement: () => (surfaceHostKey > 0 ? surfaceHostRef.current : null),
-    }),
-    [surfaceHostKey],
-  );
+  const [surfaceHostElement, setSurfaceHostElement] =
+    useState<HTMLDivElement | null>(null);
   const isSupporting = variant === 'supporting';
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
@@ -691,8 +678,11 @@ function BreadcrumbMenuTrigger({
     [closeMenu, menuSize],
   );
   const surfaceValue = useMemo<DropdownMenuSurfaceValue>(
-    () => ({host: surfaceHost, ownerId: menuId}),
-    [surfaceHost, menuId],
+    () => ({
+      host: {getElement: () => surfaceHostElement},
+      ownerId: menuId,
+    }),
+    [surfaceHostElement, menuId],
   );
 
   const menuContent = Array.isArray(menu) ? renderDropdownItems(menu) : menu;
@@ -767,7 +757,7 @@ function BreadcrumbMenuTrigger({
                 {menuContent}
               </div>
               <div
-                ref={attachSurfaceHost}
+                ref={setSurfaceHostElement}
                 {...submenuHostProps}
                 {...stylex.props(submenuHostStyles)}
               />
