@@ -44,6 +44,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
   iconUseCommand,
   unlistedIconSets,
@@ -94,7 +95,10 @@ export {
   themeBuild,
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
-export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
+export {
+  installCommandFor as packageInstallCommand,
+  installStepFor as packageInstallStep,
+} from '../../foundation/discovery/template-needs.mjs';
 export {addMatchingCore} from '../../foundation/release/notices.mjs';
 export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';

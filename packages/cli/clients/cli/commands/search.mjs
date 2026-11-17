@@ -28,6 +28,7 @@ import {
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
+  docText,
   emit,
   formatDeprecation,
   section,
@@ -195,7 +196,8 @@ export function registerSearch(program) {
             // The text view keeps a description's first sentence. A
             // component, hook or doc result's command prints the whole doc;
             // --verbose and --json keep the description whole.
-            ...(options.verbose ? {} : {description: firstSentence}),
+            description: (/** @type {string} */ value) =>
+              docText(options.verbose ? value : firstSentence(value)),
           },
         }),
         ...note,

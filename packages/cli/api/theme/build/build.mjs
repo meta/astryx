@@ -113,12 +113,14 @@ import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, keyValueLine, nullThemeValues} from './null-values.mjs';
 import {typographyInputProblems} from './typography-values.mjs';
+import {radiusInputProblems} from './radius-values.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
 import {
   INPUT_DECLARATION_FILES,
   inputFieldsFrom,
   sourceFieldProblems,
   inputFieldProblems,
+  sourceInputField,
   sourceTypography,
 } from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
@@ -3152,16 +3154,20 @@ function isPlainObject(value) {
 
 /**
  * @param {any} value
+ * @param {Set<any>} [seen] the themes already met on the way up its bases
  * @returns {boolean}
  */
-function isThemeObject(value) {
+function isThemeObject(value, seen = new Set()) {
+  if (seen.has(value)) return false;
+  seen.add(value);
   return Boolean(
     value &&
     typeof value === 'object' &&
     typeof value.name === 'string' &&
     ((value.tokens && typeof value.tokens === 'object') ||
-      // A theme with no tokens of its own over a base it extends.
-      (value.extends !== value && isThemeObject(value.extends))),
+      // A theme with no tokens of its own over a base it extends (a base
+      // that reaches back to it is no theme: `extends` cycles).
+      isThemeObject(value.extends, seen)),
   );
 }
 
@@ -4058,17 +4064,32 @@ function isDefinedTheme(theme) {
  * @param {Set<any>} [seen] the bases already met, for one that extends itself
  * @returns {any}
  */
-function defineThemeInput(theme, seen = new Set()) {
+function defineThemeInput(theme, seen = new Set([theme])) {
+  // Each value as the build writes it (a BigInt as its digits, a boxed
+  // primitive as itself), so defineTheme reads what is written, as the
+  // value judge does.
   const input = Object.fromEntries(
-    Object.entries(theme).filter(([, value]) => value !== undefined),
+    Object.entries(theme)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => [
+        key,
+        key === 'extends' ? value : writtenPrimitives(value),
+      ]),
   );
   const base = input.extends;
-  if (
-    base &&
-    typeof base === 'object' &&
-    !isDefinedTheme(base) &&
-    !seen.has(base)
-  ) {
+  if (base && typeof base === 'object' && !isDefinedTheme(base)) {
+    // A plain base that reaches back to a theme already on the way (`a`
+    // extends `b`, `b` extends `a`) has no base to build from.
+    if (seen.has(base)) {
+      const names = [...seen, base].map(t =>
+        typeof t?.name === 'string' ? `"${t.name}"` : 'a theme with no name',
+      );
+      throw new AstryxError(
+        `The themes extend each other in a cycle (${names.join(' extends ')}), so none has a base to build from. Give the cycle a theme that extends nothing.`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
     seen.add(base);
     input.extends = _defineTheme(defineThemeInput(base, seen));
   }
@@ -5240,11 +5261,18 @@ async function themeBuildInternal(
           from = {file: path.relative(cwd, base.file) || base.file, line: at};
           break;
         }
+      // From the theme it extends only when that theme holds this very
+      // value: a resolved base holds every token, so holding the path alone
+      // says nothing.
       const inherited =
         line == null &&
         (from != null ||
           (parentTheme != null &&
-            valueAt(parentTheme, item.path) !== undefined));
+            valueAt(parentTheme, item.path) !== undefined &&
+            Object.is(
+              valueAt(parentTheme, item.path),
+              valueAt(themeDef, item.path),
+            )));
       return inherited && handOff.prepareFamily
         ? []
         : [{...item, line, inherited, elsewhere: line == null, from}];
@@ -5252,7 +5280,7 @@ async function themeBuildInternal(
   const nulls = placed(nullThemeValues(themeDef));
   /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null, at?: {file: string, line: number} | null}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.at ? ` (in ${n.at.file}, line ${n.at.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.at ? ` (in ${n.at.file}, line ${n.at.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ` (not written in this file as it is: computed in it, or from ${parentTheme != null ? '' : 'the theme it extends or '}a module it imports)` : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);
@@ -5399,8 +5427,23 @@ async function themeBuildInternal(
     return {...t, line, inherited: false, elsewhere: line == null, from: null};
   });
 
+  // A radius scale missing a field builds every scaled corner as NaNpx:
+  // warned at its line, as the editor refuses it.
+  const radiusInput =
+    interception?.inputOf(themeDef)?.radius ??
+    // A plain-object theme is its own input.
+    (isDefinedTheme(themeDef) ? undefined : themeDef.radius) ??
+    sourceInputField(themeSource, filePath, 'radius');
+  const badRadius = radiusInputProblems(radiusInput).map(t => {
+    const line =
+      keyPathLine(themeSource, t.path, filePath) ??
+      keyPathLine(themeSource, ['radius'], filePath);
+    return {...t, line, inherited: false, elsewhere: line == null, from: null};
+  });
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
+  /** @type {string[]} */
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
@@ -5425,8 +5468,11 @@ async function themeBuildInternal(
     ...badKeys.map(nullLine),
     ...badValueLines.map(nullLine),
     ...badTypography.map(nullLine),
+    ...badRadius.map(nullLine),
     ...badFields.map(nullLine),
   ]) {
+    // The source reader and the loaded value can name one field alike.
+    if (warningMessages.includes(w)) continue;
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
   }

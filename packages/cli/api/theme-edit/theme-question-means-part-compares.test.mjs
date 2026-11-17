@@ -471,7 +471,7 @@ describe('"like" and "as" compare only in comparison forms', () => {
       ],
       [
         'use navy as the card background',
-        "set q background-color '#1e3a8a' --on card",
+        "set q background-color '#1e3a8a' --on card --when variant:default",
       ],
       ['use 8px as the button radius', 'set q border-radius 8px --on button'],
       ['use 12px as the card padding', 'set q padding 12px --on card'],

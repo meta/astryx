@@ -39,6 +39,7 @@ import {
   resolvedTokens,
   themeSourceParseError,
   themeSourceProblem,
+  baseRedraws,
 } from './_settings.mjs';
 import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -983,6 +984,37 @@ function finish(env, drafts) {
       else if (unmet.length)
         d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
     }
+    // A joined answer ("all of it, in order") drops each step that alone
+    // changes nothing, as its own line says; written, it would pin that
+    // setting, so a later dial would not reach it.
+    if (d.sequence && d.options.some(o => o.length > 1)) {
+      /** @param {import('./_how-commands.mjs').Step} st */
+      const noOp = st => {
+        const r = env.check([st]);
+        return !r.ok && /^it changes nothing/.test(r.why);
+      };
+      const before = d.options.map(o => o.length);
+      d.options = d.options
+        .map(o => (o.length > 1 ? o.filter(st => !noOp(st)) : o))
+        .filter(o => o.length);
+      // (Left holding what another answer already says: not given twice.)
+      const narrowed = d.options.some((o, i) => o.length < (before[i] ?? 0));
+      if (
+        narrowed &&
+        d.options.every(o =>
+          drafts.some(
+            x =>
+              x !== d &&
+              x.options.some(
+                y =>
+                  y.length === o.length &&
+                  y.every((st, k) => key(st) === key(o[k])),
+              ),
+          ),
+        )
+      )
+        continue;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
     if (!commands.length && !d.options.length && unmet.length) {
@@ -1370,6 +1402,9 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   // a variant it does not render reads (heading level 5, an error toast)
   // shows no reader there; Core's stylesheet still names it.
   const inSheet = !readers.length && stylesheetReads(ctx, key);
+  // Where the theme's base draws past it: a part and condition whose own
+  // base rule sets the property this token feeds in Core.
+  const redrawn = ctx.unchecked ? [] : baseRedraws(C, env.base, key);
   return {
     kind: 'setting',
     subject,
@@ -1385,6 +1420,14 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
             ? `no part in the part data reads ${key}, but Core's stylesheet does, in a variant or state the part data does not render; so readBy is incomplete`
             : `no part reads ${key}, and Core's stylesheet does not use it`,
         }),
+    ...(redrawn.length
+      ? {
+          notIn: redrawn.map(
+            r =>
+              `${r.part}${r.when ? ` (${r.when.replace(':', ' ')})` : ''}: the ${env.data.like ?? 'base'} theme draws its ${r.prop} from ${r.value}, so ${key} does not reach it; set ${r.prop} --on ${r.part}${r.when ? ` --when ${r.when}` : ''} there`,
+          ),
+        }
+      : {}),
     ...unknown,
     ...themeFields,
     examples: commands,

@@ -361,6 +361,7 @@
           "<text>",
           "<text>",
           "<text>",
+          "<text>",
           "<text>"
         ],
         "exitCodes": [
@@ -1005,6 +1006,36 @@
         "responseTypes": [
           "<text>"
         ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "mcp",
+        "description": "<text>",
+        "arguments": [],
+        "options": [
+          {
+            "flag": "--docs-only",
+            "description": "<text>",
+            "type": "boolean",
+            "available": true
+          }
+        ],
+        "json": false,
+        "available": true,
         "examples": [
           "<text>",
           "<text>"

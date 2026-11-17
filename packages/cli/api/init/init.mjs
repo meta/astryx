@@ -25,7 +25,7 @@ import {user} from './user/user.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
-export {getNextSteps} from './run/run.mjs';
+export {getNextSteps, getWorkflowSteps} from './run/run.mjs';
 
 /**
  * Re-exported types so callers can keep referencing them off the init barrel

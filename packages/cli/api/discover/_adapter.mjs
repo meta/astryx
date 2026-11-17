@@ -39,6 +39,7 @@ import {
   projectTree,
 } from '../docs/_adapter.mjs';
 import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
@@ -311,7 +312,7 @@ async function describeInstalledFresh(project, scanned) {
       );
     // Components come from the scan above; loading every component doc again
     // here would only slow the list down.
-    // Icon sets are read below, only with the opt-in.
+    // Icon sets are read below, only where icon features are on.
     // Docs are named from the project's docs catalog, below.
     const {identities} = await collectIdentities({
       ...integration,
@@ -322,7 +323,7 @@ async function describeInstalledFresh(project, scanned) {
     // Icon sets are listed the way every icon surface sees them: a set that
     // is invalid or whose module does not resolve answers nothing (FR9).
     // They are experimental (spec:AST-017 FR27), so discover lists them only
-    // in a project that opts in with `experimental.iconSet`.
+    // where the icon feature gate is on.
     const {sets, withdrawn} = optedIntoIconSets(project)
       ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
       : {sets: [], withdrawn: []};
@@ -686,7 +687,7 @@ function savedCopyPath(cacheDir, from, request) {
 /**
  * @param {string} file
  * @param {string} label
- * @param {boolean} iconSets the project opts into icon sets
+ * @param {boolean} iconSets icon features are on in the project
  */
 function readSavedCopy(file, label, iconSets) {
   try {
@@ -723,7 +724,7 @@ function writeSavedCopy(file, catalog) {
  * @param {{package?: string, version?: string}} request
  * @param {string} label
  * @param {number} timeoutMs
- * @param {boolean} iconSets the project opts into icon sets
+ * @param {boolean} iconSets icon features are on in the project
  */
 async function callSource(source, request, label, timeoutMs, iconSets) {
   const controller = new AbortController();
@@ -887,7 +888,7 @@ async function callOwnSources(project, request = {}, options = {}) {
   const result = {sources: [], packages: []};
   const fromDoor = doorSources();
   if (project == null && fromDoor.length === 0) return result;
-  // Without the opt-in, icon-set items and fields are unknown before the
+  // With icon features off, icon-set items and fields are unknown before the
   // catalog is checked, so one cannot fail a source (spec:AST-051 FR7).
   const iconSets = optedIntoIconSets(project);
 
@@ -994,8 +995,10 @@ export async function callSources(project, request = {}, options = {}) {
     ],
     // Source order: the first entry per integration is the one discover
     // keeps. Official packages are put first only where discover shows them.
-    // An experimental kind is a kind this project does not read unless it
-    // opts in, so its items are ignored like any unknown kind (FR7).
+    // An experimental kind is a kind this project does not read unless that
+    // kind is on here (for icon sets: an installed icon-set package or
+    // `experimental.iconSet`), so its items are ignored like any unknown kind
+    // (FR7).
     packages: withoutUnreadKinds(project, [...own.packages, ...added]),
   };
 }
@@ -1025,7 +1028,7 @@ function officialNotCovered(packages, official, request = {}) {
 
 /**
  * The experimental item kinds a catalog may list (spec:AST-017 FR27):
- * `icon-set`, read only in a project that sets `experimental.iconSet`.
+ * `icon-set`, read only where the icon feature gate is on.
  */
 export const EXPERIMENTAL_KINDS = /** @type {const} */ (['icon-set']);
 
@@ -1046,7 +1049,7 @@ export async function loadReadKinds() {
 
 /**
  * The item kinds discover reads in this project: every stable kind, and the
- * experimental ones when the project opts in.
+ * experimental ones where icon features are on.
  * @param {Project | undefined} project
  * @returns {readonly string[]}
  */
@@ -1055,11 +1058,11 @@ export function readKinds(project) {
 }
 
 /**
- * Whether the project opts into icon sets with `experimental.iconSet`.
+ * Whether discover reads icon sets in this project: the icon feature gate.
  * @param {Project | undefined} project
  */
 export function optedIntoIconSets(project) {
-  return Boolean(project?.config?.experimental?.iconSet);
+  return iconFeatureGate(project).on;
 }
 
 /**

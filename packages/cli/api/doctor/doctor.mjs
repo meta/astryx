@@ -113,6 +113,7 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  iconFeatureGate,
   iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
@@ -182,12 +183,13 @@ import {
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
  * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
- *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   The project's icon sets (AST-084 FR17), or null when they could not be
+ *   read or the icon feature gate is off.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
  *   Each file in the project's own source that uses the placeholder component
- *   the CLI writes for a missing icon, read only in a project that sets
- *   `experimental.iconSet`; null otherwise.
+ *   the CLI writes for a missing icon, read only where the icon feature gate
+ *   is on; null otherwise.
  *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
@@ -665,8 +667,8 @@ export function checkImplicitIntegrations(ctx) {
       'themes',
       'docs',
       'codemods',
-      // An experimental root counts only in a project that opts in.
-      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+      // An experimental root counts only where icon features are on.
+      ...(ctx.iconSets ? ['iconSets'] : []),
     ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
@@ -1153,8 +1155,8 @@ export function checkIntegrationCoreRange(ctx) {
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
  * other installed set that was withdrawn, with why.
- * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
- * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project where the
+ * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
@@ -1164,12 +1166,16 @@ export function checkIconSets(ctx) {
   const label = 'Icon sets';
   if (state == null) return null;
   const {sets, withdrawn, choice} = state;
-  // Only a project that opts in with `experimental.iconSet` gets the check.
-  if (!choice.configured) return null;
-  const list = [
-    {selector: choice.configured, status: choice.status, reason: choice.reason},
-    ...(choice.backups ?? []),
-  ];
+  const list = choice.configured
+    ? [
+        {
+          selector: choice.configured,
+          status: choice.status,
+          reason: choice.reason,
+        },
+        ...(choice.backups ?? []),
+      ]
+    : [];
   const installFix =
     'Install the package that ships the set, or remove it from experimental.iconSet in astryx.config (`astryx experimental icon --list` names the installed sets).';
   const missing = list.filter(each => each.status === 'missing');
@@ -1211,8 +1217,8 @@ export function checkIconSets(ctx) {
       status: 'fail',
       message:
         declared.length === 0
-          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
-          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured ?? choice.set.name} declares no such variant. Its variants: ${declared.join(', ')}.`,
       fix:
         declared.length === 0
           ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
@@ -1263,22 +1269,36 @@ export function checkIconSets(ctx) {
  */
 function iconUseCommandOf(choice, variant) {
   return iconUseCommand(
-    /** @type {string} */ (choice.configured),
+    /** @type {string} */ (choice.configured ?? choice.set?.name),
     (choice.backups ?? []).map(each => each.selector),
     variant,
   );
 }
 
 /**
+ * The main set the placeholder fixes name: the one `experimental.iconSet`
+ * names, else the only installed set; null when no main set is decided or
+ * icon features are off. The placeholder check, and the source scan it
+ * reads, run only when there is one.
+ * @param {DoctorContext['iconSets']} iconSets
+ * @returns {string | null}
+ */
+export function placeholderMainSet(iconSets) {
+  return iconSets?.choice.configured ?? iconSets?.choice.set?.name ?? null;
+}
+
+/**
  * The placeholder component for a missing icon, still in the project's own
  * source (AST-084): each file and the meanings it stands for, with the commands that give each a
- * real icon. Only a project that sets `experimental.iconSet` gets the check.
+ * real icon. Only a project where the icon feature gate is on, and whose
+ * main set is decided, gets the check.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck | null}
  */
 export function checkIconPlaceholders(ctx) {
   const choice = ctx.iconSets?.choice;
-  if (!choice?.configured || ctx.iconPlaceholders == null) return null;
+  const main = placeholderMainSet(ctx.iconSets);
+  if (!choice || !main || ctx.iconPlaceholders == null) return null;
   const id = 'icon-placeholders';
   const label = 'Placeholder icons';
   const found = ctx.iconPlaceholders;
@@ -1290,7 +1310,6 @@ export function checkIconPlaceholders(ctx) {
       message: 'No copied code uses the placeholder for a missing icon.',
     };
   }
-  const main = choice.configured;
   const meanings = [
     ...new Set(found.flatMap(each => each.meanings ?? [])),
   ].sort();
@@ -2584,7 +2603,9 @@ export async function runChecks(options = {}) {
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
       try {
-        iconSets = await project.iconSets();
+        iconSets = iconFeatureGate(project).on
+          ? await project.iconSets()
+          : null;
       } catch {
         iconSets = null;
       }
@@ -2636,8 +2657,9 @@ export async function runChecks(options = {}) {
       checkDocsProgressiveDisclosure(ctx),
     ),
   ];
-  // Only a project that names an icon set scans its source for placeholders.
-  if (iconSets?.choice.configured) {
+  // Only a project where icon features are on and a main set is decided
+  // scans its source for placeholders: no other project gets the check.
+  if (placeholderMainSet(iconSets)) {
     try {
       ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
     } catch {
