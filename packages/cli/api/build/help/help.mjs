@@ -29,7 +29,7 @@ import {appThemeWiring} from '../_adapter.mjs';
  * @returns {string}
  */
 export function themeRule(wiring) {
-  const modes = wiring.state === 'wired' && wiring.hasModes;
+  const modes = wiring.state !== 'none' && wiring.hasModes;
   const module =
     wiring.state === 'wired'
       ? `the generated ${wiring.modulePath}`

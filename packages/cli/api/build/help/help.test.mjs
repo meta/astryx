@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {buildHelp, themeRule, themeStep} from './help.mjs';
+import {themeAdd} from '../../theme/add/add.mjs';
 import {STARTER_THEME} from '../../../foundation/discovery/theme-discovery.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
@@ -82,6 +83,7 @@ describe('build playbook theme rule', () => {
     const wiring = {
       state: /** @type {const} */ ('installed'),
       slug: 'stone',
+      hasModes: false,
       provider: null,
     };
     expect(themeStep(wiring)?.commands).toEqual([
@@ -95,6 +97,19 @@ describe('build playbook theme rule', () => {
     expect(rule).toContain(`${VALUE}>`);
     expect(rule).toContain(THEME_IMPORT);
     expect(rule).not.toMatch(/theme add/);
+  });
+
+  it("passes an installed theme's one color mode before it is added, as theme add will", () => {
+    const rule = themeRule({
+      state: 'installed',
+      slug: 'midnight',
+      hasModes: true,
+      provider: null,
+    });
+    expect(rule).toContain(
+      `${VALUE} mode={themeModes[defaultThemeSlug] ?? 'system'}>`,
+    );
+    expect(rule).toContain('{themes, defaultThemeSlug, themeModes}');
   });
 
   it('names the starter theme in a project with no theme', async () => {
@@ -119,7 +134,7 @@ describe('build playbook theme rule', () => {
     );
   });
 
-  it('names the provider an installed integration declares, read from the project', async () => {
+  it('names the provider an installed integration declares, with its mode, the same before and after theme add', async () => {
     const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-build-help-'));
     dirs.push(dir);
     /** @param {string} rel @param {string} text */
@@ -154,7 +169,7 @@ describe('build playbook theme rule', () => {
     );
     write(
       'node_modules/@acme/ui/astryx.integration.mjs',
-      "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme'}};\n",
+      "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme', modeProp: 'colorMode'}};\n",
     );
     write(
       'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
@@ -166,7 +181,7 @@ describe('build playbook theme rule', () => {
     );
     write(
       'node_modules/@acme/ui/dist/brand.js',
-      "export const brandTheme = {name: 'brand', tokens: {}};\n",
+      "export const brandTheme = {name: 'brand', tokens: {}};\nexport const colorModes = ['dark'];\n",
     );
     write('node_modules/@acme/ui/dist/brand.css', '');
     write(
@@ -174,13 +189,29 @@ describe('build playbook theme rule', () => {
       'export function AcmeThemeProvider({children}) { return children; }\n',
     );
 
-    const {data} = await buildHelp({cwd: dir});
-    const rule = data.rules.find(r => r.includes('{themes, defaultThemeSlug}'));
-    expect(rule).toContain(
-      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
-    );
+    const before = await buildHelp({cwd: dir});
+    const rule = before.data.rules.find(r => r.includes('AcmeThemeProvider'));
+    const line =
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]} colorMode={themeModes[defaultThemeSlug]}>';
+    expect(rule).toContain(line);
     expect(rule).toContain("import {AcmeThemeProvider} from '@acme/ui/theme'");
     expect(rule).not.toContain('<Theme ');
-    expect(data.steps.at(-1)?.commands[0].command).toBe('theme add brand');
+    expect(before.data.steps.at(-1)?.commands[0].command).toBe(
+      'theme add brand',
+    );
+
+    // The wiring theme add then prints is the wiring the playbook named.
+    const added = await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    expect(added.data.appProvider?.line).toBe(line);
+    const after = await buildHelp({cwd: dir});
+    expect(after.data.rules).toContain(
+      /** @type {string} */ (rule).replace(
+        'the astryx-themes module the theme step writes',
+        `the generated ${added.data.modulePath}`,
+      ),
+    );
+    expect(after.data.steps.at(-1)?.commands[0].command).not.toMatch(
+      /^theme add/,
+    );
   });
 });

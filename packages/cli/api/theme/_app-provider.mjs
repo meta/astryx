@@ -28,6 +28,15 @@ import {listAvailableThemeState} from './_adapter.mjs';
  */
 export async function appProviders(cwd) {
   const {themes} = await listAvailableThemeState(cwd);
+  return providersOf(themes);
+}
+
+/**
+ * `appProviders` for themes already listed.
+ * @param {Awaited<ReturnType<typeof listAvailableThemeState>>['themes']} themes
+ * @returns {{found: Array<{provider: AppProvider, owner: string}>, taking: {provider: AppProvider, owner: string} | null}}
+ */
+export function providersOf(themes) {
   /** @type {Map<string, {provider: AppProvider, owner: string}>} */
   const byProvider = new Map();
   for (const theme of themes)

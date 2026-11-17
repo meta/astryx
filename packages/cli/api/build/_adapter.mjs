@@ -37,8 +37,15 @@ import {extractComponents} from '../../foundation/discovery/template-adapter.mjs
 import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
-import {themeListAvailable} from '../theme/theme.mjs';
-import {appProviders} from '../theme/_app-provider.mjs';
+import {
+  listAvailableThemeState,
+  themeOwnerInstalled,
+} from '../theme/_adapter.mjs';
+import {providersOf} from '../theme/_app-provider.mjs';
+import {
+  ThemeImportError,
+  resolveThemeImports,
+} from '../../foundation/discovery/theme-imports.mjs';
 import {
   ThemeStateError,
   readThemeState,
@@ -436,7 +443,7 @@ function withComponents(entry, filePath) {
 
 /**
  * @typedef {({state: 'wired', modulePath: string, hasModes: boolean}
- *   | {state: 'installed', slug: string}
+ *   | {state: 'installed', slug: string, hasModes: boolean}
  *   | {state: 'none', slug: string, package: string})
  *   & {provider: ThemeProvider | null}} AppThemeWiring
  */
@@ -445,8 +452,10 @@ function withComponents(entry, filePath) {
  * How the project at `cwd` wires its theme, read the way `theme add` reads
  * it: `wired` when `theme add` has written the generated module, `installed`
  * when a theme it can add is installed but not added, and otherwise the
- * starter theme. `provider` is set when an installed package names the
- * provider that takes the theme.
+ * starter theme. `hasModes` says the module records a theme's one color mode,
+ * or will once `theme add` adds the installed theme, read from its built
+ * module as `theme add` reads it. `provider` is set when an installed package
+ * names the provider that takes the theme.
  * @param {string} cwd
  * @returns {Promise<AppThemeWiring>}
  */
@@ -454,7 +463,8 @@ export async function appThemeWiring(cwd) {
   /** @type {ThemeProvider | null} */
   let provider = null;
   try {
-    const {taking} = await appProviders(cwd);
+    const {themes} = await listAvailableThemeState(cwd);
+    const {taking} = providersOf(themes);
     if (taking?.provider.themeProp)
       provider = {
         export: taking.provider.export,
@@ -474,10 +484,16 @@ export async function appThemeWiring(cwd) {
         provider,
       };
     }
-    const installed = (await themeListAvailable({cwd})).data.find(
-      theme => theme.installed,
+    const installed = themes.find(theme =>
+      themeOwnerInstalled(theme, state.projectDir),
     );
-    if (installed) return {state: 'installed', slug: installed.slug, provider};
+    if (installed)
+      return {
+        state: 'installed',
+        slug: installed.slug,
+        hasModes: oneColorModeOf(installed, cwd),
+        provider,
+      };
   } catch (error) {
     // Outside a project, or with theme state the theme commands refuse, the
     // playbook names the starter theme; those commands report the problem.
@@ -490,4 +506,20 @@ export async function appThemeWiring(cwd) {
     package: STARTER_THEME.package,
     provider,
   };
+}
+
+/**
+ * Whether `theme add` records one color mode for a theme: its built module
+ * exports one. A theme whose built module cannot be resolved has none here;
+ * `theme add` reports that problem.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ */
+function oneColorModeOf(theme, cwd) {
+  try {
+    return resolveThemeImports(theme, {cwd}).mode != null;
+  } catch (error) {
+    if (error instanceof ThemeImportError) return false;
+    throw error;
+  }
 }
