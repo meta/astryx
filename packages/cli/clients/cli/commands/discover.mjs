@@ -311,6 +311,9 @@ function addBlocks(install, themes, addsOther, run, note) {
   return blocks;
 }
 
+/** A whole scoped package name, `@scope/name`. */
+const SCOPED_NAME = /^@[^/\s]+\/[^/\s]+$/;
+
 /**
  * @param {import('commander').Command} program
  */
@@ -319,10 +322,21 @@ export function registerDiscover(program) {
     fn: discoverFn,
     action:
       /**
-       * @param {string | undefined} query
+       * @param {string[] | string | undefined} words
        * @param {{components?: boolean, type?: string, installed?: boolean, available?: boolean, limit?: string}} options
        */
-      async (query, options) => {
+      async (words, options) => {
+        // The query is variadic, as search's is: `astryx discover bar chart`
+        // is one query, "bar chart". A scoped package name and one word after
+        // it name an item: `astryx discover @acme/charts BarChart` opens
+        // `@acme/charts/BarChart`.
+        const query = Array.isArray(words)
+          ? words.length > 0
+            ? words.join(
+                words.length === 2 && SCOPED_NAME.test(words[0]) ? '/' : ' ',
+              )
+            : undefined
+          : words;
         rejectEmptyArgument('query', query, 'astryx discover');
         const detail = program.opts().detail || 'full';
         const json = program.opts().json || false;

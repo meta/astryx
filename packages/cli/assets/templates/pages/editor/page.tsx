@@ -61,6 +61,7 @@ import {
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import {Spinner} from '@astryxdesign/core/Spinner';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 type BlockType =
   'hero' | 'text' | 'image' | 'button' | 'cards' | 'features' | 'cta';
@@ -148,7 +149,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   },
   {
     key: 'actions',
-    header: '',
+    header: <VisuallyHidden>Actions</VisuallyHidden>,
     width: proportional(1, {minWidth: 60}),
     renderCell: () => (
       <Button
@@ -549,7 +550,7 @@ function BlockPreview({
         <Card padding={6} style={cardStyle} onClick={onSelect}>
           <HStack gap={3} vAlign="start" hAlign="between" paddingBlockEnd={4}>
             <VStack gap={1}>
-              <Heading level={3}>
+              <Heading level={3} accessibilityLevel={2}>
                 {(props.heading as string) || 'Features'}
               </Heading>
               {(props.description as string) && (
@@ -576,7 +577,9 @@ function BlockPreview({
       return (
         <Card style={cardStyle} onClick={onSelect}>
           <VStack gap={4}>
-            <Heading level={3}>Cards</Heading>
+            <Heading level={3} accessibilityLevel={2}>
+              Cards
+            </Heading>
             <Divider />
             <List density="balanced" hasDividers={false}>
               {cardItems.map((card, i) => (
@@ -712,7 +715,9 @@ export default function EditorPage() {
   const blocksTabContent = (
     <VStack gap={2}>
       <VStack gap={1}>
-        <Heading level={4}>Add Block</Heading>
+        <Heading level={4} accessibilityLevel={2}>
+          Add Block
+        </Heading>
         <List density="balanced" hasDividers={false}>
           {(Object.keys(BLOCK_META) as BlockType[]).map(type => (
             <ListItem
@@ -728,7 +733,9 @@ export default function EditorPage() {
       </VStack>
 
       <VStack gap={1}>
-        <Heading level={4}>Layers</Heading>
+        <Heading level={4} accessibilityLevel={2}>
+          Layers
+        </Heading>
         <List density="balanced" hasDividers={false}>
           {blocks.map(block => (
             <ListItem
@@ -828,7 +835,9 @@ export default function EditorPage() {
             // Mobile: the title, an Edit button that opens the customizations
             // dialog, and the primary action.
             <HStack gap={3} vAlign="center" hAlign="between">
-              <Heading level={2}>{pageTitle}</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                {pageTitle}
+              </Heading>
               <HStack gap={2} vAlign="center">
                 <Button
                   label="Edit"
@@ -857,7 +866,9 @@ export default function EditorPage() {
                   onBlur={() => setIsEditingTitle(false)}
                 />
               ) : (
-                <Heading level={2}>{pageTitle}</Heading>
+                <Heading level={2} accessibilityLevel={1}>
+                  {pageTitle}
+                </Heading>
               )}
 
               <Toolbar
@@ -927,7 +938,7 @@ export default function EditorPage() {
         header={isMobile ? sidebar : undefined}
         start={isMobile ? undefined : sidebar}
         content={
-          <LayoutContent padding={8}>
+          <LayoutContent role="main" padding={8}>
             <VStack gap={4} style={canvasStyle(VIEWPORT_MAX[viewport])}>
               {blocks.length > 0 ? (
                 blocks.map(block => (

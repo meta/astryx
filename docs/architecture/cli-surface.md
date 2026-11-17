@@ -43,6 +43,7 @@ verified_by:
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
     api/build/build.test.mjs,
+    clients/cli/lib/unknown-command.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -81,7 +82,13 @@ rather than left to the command author.
    the run with `ERR_VERSIONS_UNAVAILABLE` before any write.
 3. **Dispatch.** `clients/cli/index.mjs` parses with Commander, sets JSON mode
    in `preAction` before any command body runs, and rejects a command that
-   cannot support `--json` before any side effect.
+   cannot support `--json` before any side effect. A word that names no
+   command fails with suggestions that are runs that parse: besides the
+   command tree, the answer reads other command lines' word orders (`add
+theme matcha` is `theme add matcha`) and the table of their words in
+   `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
+   uses it and no word is a command or a command's plural. The answer only
+   suggests: it runs nothing and never names an experimental command.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
@@ -289,7 +296,7 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
   integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the JavaScript theme build compiles from a theme's local TypeScript or JSX modules, what theme build finds when it checks a theme's pseudo-class keys and token names, the lookup commands'
-  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  not-found hint's name summaries, npm's list of the files an integration package packs, the locale and time zone a run's debug record names (on Linux), the CLI's own docs tree, each stored doc's checked contents, keyed by its text, discover's record of the loaded integrations and what each adds, and what it searches in its sources' saved copies (for `discover` and search's discover line), doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create. A template that
   `astryx template <name> <path>` writes may also go, as a scratch copy, to a
@@ -665,8 +672,14 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
     the root that serves the run, in addition to what `spec:AST-081` FR12 finds
     there, and loads with FR12's validation, peer-range check, and provider
     identity rules. An approved name that root does not hold is left out.
+  - Outside a project, a page that `render` renders also takes from the root
+    that serves the run each package that root's `package.json` lists in
+    `dependencies` or `optionalDependencies`, such as an icon library its host
+    installed for pages, and `template`, `build` and `theme eject` do not name
+    those packages as missing (`spec:AST-081` FR3).
   - Enumeration through a root reads only the packages INV14 or `spec:AST-081`
-    FR12 name, and a root's own config is never read.
+    FR12 name, and the packages its `package.json` lists for the bullet above;
+    a root's own config is never read.
   - Every run a package set serves records, for each package it resolves, its
     name, version, and whether it comes from the project or the package set, and
     the host entry returns that record with the run's result (`spec:AST-081`
@@ -766,6 +779,7 @@ non-interactive guarantee.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
+- `foundation/render/client-bundle.mjs` — the script of a file `astryx experimental render` writes; where a viewer's frame blocks them, it stands in for storage (in memory) and for the Clipboard API (the copy command).
 - `api/index.mjs` — the public programmatic API, `@astryxdesign/cli/api`, which
   re-exports every subject's functions.
 - `api/<subject>/…` — the scriptable functions the commands wrap, laid out as
@@ -1077,6 +1091,26 @@ Rejected: refusing every path outside the current folder (most agents that
 render a page for an artifact name an absolute path, and retry after the
 refusal); accepting a relative path that climbs out (a path such as
 `../page.html` reads as a mistake more often than as a choice).
+
+### DEC-17 — A named scaffold path is the file the copy writes
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+`astryx build`'s start and alternative commands, and the place
+`astryx template` suggests when it refuses a path, name where a template goes.
+A block, and a page outside a Next App Router, is the file the copy writes
+(`<id>.tsx` in the project's components folder, `src/pages/<id>.tsx`, or the
+Pages Router file `pages/<id>.tsx`), so an import of the named path finds the
+scaffold. A Next App Router page keeps its route folder, because Next serves
+the folder's `page.tsx`. Where the named path is a block or a page with no Next
+route folder, a name that an import already resolves to (a folder's index, or
+a file with another extension) counts as taken, so the new file neither
+shadows a module nor is shadowed by one; a Next page also skips a name whose
+URL another page serves.
+
+Rejected: naming a folder that holds `page.tsx` (an import of the folder does
+not resolve without an index file); writing an index file beside each scaffold
+(a second file that the template does not own).
 
 ## Verification
 

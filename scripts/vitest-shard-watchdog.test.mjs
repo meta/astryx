@@ -18,6 +18,18 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'shard-watchdog-'));
 afterAll(() => fs.rmSync(scratch, {recursive: true, force: true}));
 
 /**
+ * The watchdog's settings come only from each case: a Main leg exports them
+ * for its own run, and a fixture run must not take them over.
+ */
+function withoutWatchdogSettings() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([k]) => !k.startsWith('VITEST_SHARD_WATCHDOG_'),
+    ),
+  );
+}
+
+/**
  * @param {string[]} files
  * @param {Record<string, string>} env
  * @param {{timeout?: number}} [options]
@@ -38,7 +50,7 @@ function runFixtures(files, env, {timeout = 60_000} = {}) {
       cwd: root,
       encoding: 'utf8',
       timeout,
-      env: {...process.env, CI: 'true', ...env},
+      env: {...withoutWatchdogSettings(), CI: 'true', ...env},
     },
   );
 }
@@ -92,6 +104,33 @@ describe('the Node shard watchdog', () => {
     const out = result.stdout + result.stderr;
     expect(result.status, out).toBe(0);
     expect(out).toContain('::warning title=Node shard near its limit::');
+  }, 60_000);
+
+  it('fails a stuck run whatever the leg running these tests sets for its own watchdog', () => {
+    const saved = {
+      name: process.env.VITEST_SHARD_WATCHDOG_NAME_ONLY,
+      seconds: process.env.VITEST_SHARD_WATCHDOG_SECONDS,
+    };
+    // As Main's Node step sets them for its own leg.
+    process.env.VITEST_SHARD_WATCHDOG_NAME_ONLY = '1';
+    process.env.VITEST_SHARD_WATCHDOG_SECONDS = '600';
+    try {
+      const result = runFixtures(['hang-import.fixture.mjs'], {
+        VITEST_SHARD_WATCHDOG_SECONDS: '4',
+      });
+      const out = result.stdout + result.stderr;
+      expect(result.status, out).toBe(1);
+      expect(out).toContain(
+        '::error title=Node shard stuck::shard stuck in scripts/fixtures/shard-watchdog/hang-import.fixture.mjs',
+      );
+    } finally {
+      for (const [k, v] of /** @type {const} */ ([
+        ['VITEST_SHARD_WATCHDOG_NAME_ONLY', saved.name],
+        ['VITEST_SHARD_WATCHDOG_SECONDS', saved.seconds],
+      ]))
+        if (v == null) delete process.env[k];
+        else process.env[k] = v;
+    }
   }, 60_000);
 
   it('names a file that hangs while it loads, before any test starts', () => {
