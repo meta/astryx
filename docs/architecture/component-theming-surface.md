@@ -179,7 +179,9 @@ but acceptance alone is best effort, not a compatibility promise.
   and interaction state are reflected as target capabilities through
   `themeProps`; they do not create parallel targets solely for each state. An
   artwork request, such as `Icon.variant`, selects supplied artwork rather than
-  styling and is not reflected.
+  styling and is not reflected. One owner exception: the token a touch Delete
+  selects in Tokenizer paints a private look and is not reflected
+  (`component:Tokenizer/DEC-5`).
 - **INV7 — Guarantees use one catalog and exact target declarations.** The shared
   catalog defines the supported vocabulary, not an automatic target promise. Each
   target's `guaranteedProperties` lists the rational catalog subset it guarantees

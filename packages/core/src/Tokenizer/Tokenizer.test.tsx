@@ -387,6 +387,317 @@ describe('Tokenizer', () => {
     });
   });
 
+  // UIKit's search tokens take two Deletes on a touch screen: the first selects
+  // the last token, the second removes it (measured on iOS 26.2).
+  describe('Delete on a touch screen', () => {
+    function stubPointer(coarse: boolean) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('pointer: coarse') ? coarse : false,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function Controlled({
+      onChange,
+    }: {
+      onChange: (items: SearchableItem[]) => void;
+    }) {
+      const [items, setItems] = useState([users[0], users[1]]);
+      return (
+        <Tokenizer
+          presentation="popover"
+          label="Members"
+          searchSource={userSource}
+          value={items}
+          onChange={next => {
+            setItems(next);
+            onChange(next);
+          }}
+        />
+      );
+    }
+
+    const tokenNamed = (name: string) =>
+      screen.getByRole('button', {name: `Remove ${name}`}).parentElement!;
+
+    it('selects the last token on the first Delete and removes it on the second', async () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      render(<Controlled onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      expect(tokenNamed('Alice')).not.toHaveAttribute('aria-description');
+      // The selection adds no public attribute: themes see no new state.
+      expect(tokenNamed('Bob')).not.toHaveAttribute('data-selected');
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe(
+          'Bob selected. Delete again to remove it.',
+        );
+      });
+
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(onChange).toHaveBeenLastCalledWith([users[0]]);
+      expect(
+        screen.queryByRole('button', {name: 'Remove Bob'}),
+      ).not.toBeInTheDocument();
+      expect(tokenNamed('Alice')).not.toHaveAttribute('aria-description');
+    });
+
+    it('announces the selection to screen readers, then the removal', async () => {
+      stubPointer(true);
+      render(<Controlled onChange={vi.fn()} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe(
+          'Bob selected. Delete again to remove it.',
+        );
+      });
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe('Removed Bob');
+      });
+    });
+
+    it('forgets the selection when its token leaves, so the same item comes back unselected', () => {
+      stubPointer(true);
+      function Harness() {
+        const [items, setItems] = useState([users[0], users[1]]);
+        return (
+          <>
+            <Tokenizer
+              presentation="popover"
+              label="Members"
+              searchSource={userSource}
+              value={items}
+              onChange={setItems}
+            />
+            <button
+              type="button"
+              onClick={() => setItems([users[0], users[1]])}>
+              Add Bob back
+            </button>
+          </>
+        );
+      }
+      render(<Harness />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      // Removed with its ×, then added back.
+      fireEvent.click(screen.getByRole('button', {name: 'Remove Bob'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Add Bob back'}));
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      // One Delete selects it again; it does not remove it.
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+    });
+
+    it('selects nothing in a disabled field, which stays non-interactive', () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          presentation="popover"
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+          isDisabled
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      // No token, and not the input, carries a selection.
+      expect(document.querySelector('[aria-description]')).toBeNull();
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps the selection findable after its announcement, on the token', () => {
+      stubPointer(true);
+      render(<Controlled onChange={vi.fn()} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      const message = 'Bob selected. Delete again to remove it.';
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description', message);
+      expect(tokenNamed('Alice')).not.toHaveAttribute('aria-description');
+      // Typing on clears the selection, and the description with it.
+      fireEvent.keyDown(input, {key: 'a'});
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+    });
+
+    it("keeps a described field's own description on its input while a token is selected", () => {
+      stubPointer(true);
+      render(
+        <Tokenizer
+          presentation="popover"
+          label="Members"
+          description="Pick up to five people"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute(
+        'aria-description',
+        'Bob selected. Delete again to remove it.',
+      );
+      expect(input).not.toHaveAttribute('aria-description');
+      expect(input).toHaveAccessibleDescription('Pick up to five people');
+    });
+
+    it('drops the selection when text arrives with no key press: a paste, dictation or a keyboard suggestion', () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      render(<Controlled onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      // A paste: the value changes, with no keydown.
+      fireEvent.change(input, {target: {value: 'xy'}});
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+      expect(input).not.toHaveAccessibleDescription(
+        'Bob selected. Delete again to remove it.',
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('clears the selection when a token is picked from the open list, so the next Delete only selects', async () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      function WithEntries() {
+        const [items, setItems] = useState([users[0], users[1]]);
+        return (
+          <Tokenizer
+            presentation="popover"
+            label="Members"
+            searchSource={userSource}
+            hasEntriesOnFocus
+            debounceMs={0}
+            value={items}
+            onChange={next => {
+              setItems(next);
+              onChange(next);
+            }}
+          />
+        );
+      }
+      render(<WithEntries />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      // The focus list opens with the entries not yet chosen.
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      fireEvent.click(screen.getByText('Charlie'));
+      expect(onChange).toHaveBeenLastCalledWith([users[0], users[1], users[2]]);
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+      onChange.mockClear();
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      // The first Delete selects the new last token and removes nothing.
+      expect(onChange).not.toHaveBeenCalled();
+      expect(tokenNamed('Charlie')).toHaveAttribute('aria-description');
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+    });
+
+    it('keeps the selected token when another key is typed', () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      render(<Controlled onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+
+      fireEvent.keyDown(input, {key: 'Shift'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      fireEvent.keyDown(input, {key: 'a'});
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('drops the selection when focus leaves the field', () => {
+      stubPointer(true);
+      render(<Controlled onChange={vi.fn()} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      act(() => input.blur());
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+    });
+
+    it('removes at once on a touch screen when tokens are custom-rendered (no selected look)', () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          presentation="popover"
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+          renderToken={(item, onRemove) => (
+            <button type="button" onClick={onRemove}>
+              {item.label}
+            </button>
+          )}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(onChange).toHaveBeenCalledWith([users[0]], {
+        item: users[1],
+        type: 'remove',
+      });
+    });
+
+    it('removes the last token on the first Delete under a mouse, as before', () => {
+      stubPointer(false);
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+      const onChange = vi.fn();
+      render(<Controlled onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(onChange).toHaveBeenLastCalledWith([users[0]]);
+    });
+  });
+
   // A touch keyboard rises when the field focuses its input during a tap. So
   // a finger that only removes a token with the keyboard down leaves focus
   // where it was. Every other removal keeps focusing the input.

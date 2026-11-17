@@ -55,7 +55,7 @@ export const docs = {
       name: 'onChange',
       type: '(items: T[], change: TokenizerChange<T>) => void',
       description:
-        "Called when selection changes. The change argument includes the affected item and type ('add' | 'create' | 'remove' | 'reorder'). Additions and removals (including Backspace on an empty input) are announced to screen readers via a polite live region.",
+        "Called when selection changes. The change argument includes the affected item and type ('add' | 'create' | 'remove' | 'reorder'). Additions and removals (including Backspace on an empty input) are announced to screen readers via a polite live region. On a touch screen the first Backspace on an empty input selects the last token (announced) and the second removes it, as iOS does with search tokens; with `renderToken`, which draws no selected look, one Backspace still removes it.",
       required: true,
     },
     {
