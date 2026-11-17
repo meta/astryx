@@ -92,7 +92,7 @@ This theme uses a custom typeface:
 | Heading | Figtree                     |
 | Code    | System monospace (built in) |
 
-**Load it with the theme's font stylesheet.** It loads Figtree from font files shipped in this package (in `fonts/`, with its license), each with `font-display: fallback`, so a page draws its text in the theme's fonts from its first paint and never waits on a network (an offline machine, a sandbox, CI):
+**Load it with the theme's font stylesheet.** It loads Figtree from font files shipped in this package (in `fonts/`, with its license), each with `font-display: fallback`, so a page never waits on a network; served from the same machine or a fast connection, the text first draws in the theme's fonts (a face that takes more than about 3 s leaves that page in the fallback font) (an offline machine, a sandbox, CI):
 
 ```css
 @import '@astryxdesign/theme-neutral/fonts.css';

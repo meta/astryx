@@ -2,10 +2,12 @@
 
 /*
  * The theme's fonts, shipped in this package (their licenses are in
- * fonts/): each face is a local woff2 file with font-display: fallback:
- * the text waits a moment for its face, which loads from the package in
- * that time, so it draws in the theme's font from its first paint; a page
- * never waits on a network.
+ * fonts/): each face is a local woff2 file with font-display: fallback.
+ * Text waits about 100 ms for its face; served from the same machine or a
+ * fast connection, the face arrives in that time and the text first draws
+ * in the theme's font. A slower face shows the fallback font, and one that
+ * takes more than about 3 s stays in it on that page. A page never waits
+ * on a network.
  * Written by scripts/vendor-theme-fonts.mjs: do not edit by hand.
  */
 

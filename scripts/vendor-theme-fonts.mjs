@@ -8,8 +8,8 @@
  * packages, copies their woff2 files and licenses
  * into the theme's `fonts/` folder, and writes `fonts.css`: local
  * `@font-face` rules with `font-display: fallback`, so a page never waits
- * on a network, and a face read from the package within the brief block
- * period draws the text from its first paint, with no fallback flash. Run it after changing a theme's fonts, then
+ * on a network; served from the same machine or a fast connection, a face
+ * arrives within the brief block period and text first draws in it. Run it after changing a theme's fonts, then
  * format the stylesheets it writes with prettier (each
  * `packages/themes/<theme>/fonts.css`).
  * @input THEME_FONTS; the Fontsource packages, fetched with `npm pack`
@@ -185,10 +185,12 @@ function vendorTheme(theme, tmp) {
       '',
       '/*',
       " * The theme's fonts, shipped in this package (their licenses are in",
-      ' * fonts/): each face is a local woff2 file with font-display: fallback:',
-      ' * the text waits a moment for its face, which loads from the package in',
-      " * that time, so it draws in the theme's font from its first paint; a page",
-      ' * never waits on a network.',
+      ' * fonts/): each face is a local woff2 file with font-display: fallback.',
+      ' * Text waits about 100 ms for its face; served from the same machine or a',
+      ' * fast connection, the face arrives in that time and the text first draws',
+      " * in the theme's font. A slower face shows the fallback font, and one that",
+      ' * takes more than about 3 s stays in it on that page. A page never waits',
+      ' * on a network.',
       ' * Written by scripts/vendor-theme-fonts.mjs: do not edit by hand.',
       ' */',
       '',

@@ -61,8 +61,9 @@ copies synchronized.
 
 The theme's font stylesheet loads Sarina, Outfit and JetBrains Mono from font
 files shipped in this package (in `fonts/`, with their licenses), each with
-`font-display: fallback`, so a page draws its text in the theme's fonts from its
-first paint and never waits on a network:
+`font-display: fallback`, so a page never waits on a network; served from the same
+machine or a fast connection, the text first draws in the theme's fonts (a face
+that takes more than about 3 s leaves that page in the fallback font):
 
 ```css
 @import '@astryxdesign/theme-butter/fonts.css';
