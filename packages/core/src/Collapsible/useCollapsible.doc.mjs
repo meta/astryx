@@ -26,7 +26,7 @@ export const docs = {
     {
       name: 'contentHeightProperty',
       type: '`--${string}`',
-      description: "A CSS custom property for the content's natural height. At each open, and at each close the content animates, the hook measures the height once, with the content's animation suppressed for the read, and writes it to this property on the content element as a px value that height can take. Keyframes grow from 0px to var(<property>) and shrink back.",
+      description: "A CSS custom property for the content's natural height. At each open, and at each close that keeps the children, the hook measures the height once, with the content's animation suppressed for the read, and writes it to this property on the content element as a px value that height can take. Keyframes grow from 0px to var(<property>) and shrink back.",
     },
   ],
   returns: [
@@ -97,7 +97,7 @@ export const docsDense = {
     isCollapsible: 'enable collapsible behavior. true = self-managed (starts open). Pass config object for controlled mode / custom defaults.',
     value: 'unique id within CollapsibleGroup. When present + inside group, state managed by group.',
     hasContentAnimation: 'content element plays its own CSS open/close animation: isEntering/isExiting while it runs, isPresent through the close. No animation / Reduce Motion: ends at once. Mount starts none.',
-    contentHeightProperty: 'custom property that gets the content natural height (px) at each open + animated close, read w/ animation suppressed, for grow/shrink keyframes.',
+    contentHeightProperty: 'custom property that gets the content natural height (px) at each open + each close that keeps the children, read w/ animation suppressed, for grow/shrink keyframes.',
   },
   returnDescriptions: {
     isEnabled: 'whether collapsible behavior active.',

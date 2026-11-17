@@ -38,7 +38,7 @@ references:
 | Behavior                | Spreading `triggerProps` on a `<button>` and `contentProps` on an always-rendered content element makes one disclosure. Children render only while `isPresent`, so closed content mounts nothing. With `hasContentAnimation`, a close keeps the children, inert, until the content's own CSS animation ends; Reduce Motion and a close with no animation end it at once. |
 | End-user impact         | A person using a product whose whole list row is the disclosure button gets the same disclosure semantics as Collapsible's trigger, and long lists of closed rows mount no closed content.                                                                                                                                                                               |
 | Builder impact          | A builder renders the trigger and the content element and spreads one object onto each. New caller choices: whether the content animates, and which custom property receives the measured height. The caller owns the trigger's paint, its keyframes, and focus inside content that closes (OQ2).                                                                        |
-| Compatibility/readiness | Additive: every new option is off by default, and no existing return changes. Authority: `draft`. jsdom covers the props, presence, phases, and measurement; real-browser evidence of the measured grow and fade is pending.                                                                                                                                             |
+| Compatibility/readiness | Additive: every new option is off by default, and no existing return changes. Authority: `draft`. jsdom covers the props, presence, phases, and measurement.                                                                                                                                                                                                             |
 | Review checks           | Reject a content element that renders only while open, a data attribute that carries the open or motion state, a phase that a mount starts, a close that keeps children with no running animation or under Reduce Motion, and a measurement on mount or with the keyframes applied.                                                                                      |
 | Governing rules         | `architecture:public-component-api` INV2, INV21, DEC-2; `architecture:react-component-runtime` INV3, INV5, INV6; `design:reduced-motion` DR1, DR2a, DR3; `spec:AST-055/DEC-4` for hook trigger props.                                                                                                                                                                    |
 
@@ -66,7 +66,9 @@ uncontrolled) keep their consumer documentation, and
 
 - Released default preserved: yes. Without the new options, `isPresent`
   equals `isOpen`, `isEntering` and `isExiting` stay `false`, and the hook
-  writes nothing to the DOM.
+  writes nothing to the DOM. Each call takes one id from React's `useId`, so
+  ids generated after a direct call shift by one; Collapsible and Banner
+  reuse the hook's id and keep theirs.
 - Compatibility class: additive optional options and return fields.
 - Migration decision: none required.
 
@@ -126,10 +128,11 @@ attribute (`architecture:public-component-api` DEC-2).
 
 ### Transformation and precedence order
 
-- **ORD1 — After an open-state change commits.** Measure the height (FR9) →
-  end the phase under Reduce Motion (FR8) → end the phase when no animation of
-  the content runs (FR5) → otherwise wait for the content's own animation
-  events.
+- **ORD1 — After an open-state change commits.** Decide whether the
+  content's own animation holds the phase (FR5, FR8) → queue the height of an
+  open, or of a close that the animation holds (FR9) → end a phase that
+  nothing holds, before the frame paints → measure every queued element in
+  one pass (PR2) → wait for the content's own animation events.
 - **ORD2 — Height value.** The rendered height, unless a transformed ancestor
   makes it differ from the layout height by a pixel or more, then the layout
   height → minus block padding and borders for `content-box` sizing.
@@ -142,8 +145,12 @@ attribute (`architecture:public-component-api` DEC-2).
   it, the content element carries one `animationend` and one `animationcancel`
   listener while it is attached, and a replaced element moves them to the new
   element.
-- **PR2 — One read per change.** An open-state change makes at most one forced
-  layout for the measurement and one animation read for the phase.
+- **PR2 — One measurement pass per commit.** Every content element whose
+  height a commit queues is measured in one pass after the commit and before
+  the frame paints: the hook suppresses every element's animation, then reads
+  every height, then writes every value. Rows of an accordion that open and
+  close together force one layout, not one each
+  (`architecture:react-component-runtime` INV18).
 
 ## Accessibility contract
 
@@ -177,14 +184,14 @@ attribute (`architecture:public-component-api` DEC-2).
 
 ## Verification map
 
-| Contract     | Verification                                                                                                         | Representative states                                                                                                                                                                | Mutation or failure expectation                                                                                                                                                    |
-| ------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, AR1     | `useCollapsible.test.tsx` trigger and content props suite; `useCollapsible.a11y.test.tsx` disclosure binding         | closed, open, closed with content animation; uncontrolled and controlled                                                                                                             | A missing or wrong `aria-expanded`, an `aria-controls` that names no element, or a click that does not reach the state owner fails.                                                |
-| FR2, FR3     | `useCollapsible.test.tsx` trigger and content props suite                                                            | closed and empty; opened; closed again                                                                                                                                               | Children mounted while closed, a content element that leaves the document, or a missing `hidden` fails.                                                                            |
-| FR4–FR7, AR2 | `useCollapsible.test.tsx` content animation suite, with a stubbed running animation                                  | mount; open and close with a running animation; end and cancel; a descendant's end; reopen during the close; a replaced content element; no animation; endless animation; transition | A phase on mount, children dropped while the content animation runs, children kept with none running, a content that is not inert during the close, or an unmount on reopen fails. |
-| FR8          | `useCollapsible.test.tsx` Reduce Motion and theme-mark cases                                                         | the media query; a theme that reduces motion for everyone                                                                                                                            | Children kept, or a phase left, after the commit fails.                                                                                                                            |
-| FR9          | `useCollapsible.test.tsx` content height suite, with a natural height visible only while the animation is suppressed | open; animated close; close without the hold; mount; own inline animation name; `content-box`; scaled ancestor                                                                       | A value of `0px`, a value written on mount, a lost inline animation name, or a border-box value for `content-box` fails.                                                           |
-| FR6          | Real-browser frame capture of the `Core/Collapsible` headless rows story                                             | close with and without `animation-fill-mode: forwards`                                                                                                                               | Evidence gap: no real-browser test shows that no frame paints the children after their close animation.                                                                            |
+| Contract     | Verification                                                                                                         | Representative states                                                                                                                                                                                                               | Mutation or failure expectation                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, AR1     | `useCollapsible.test.tsx` trigger and content props suite; `useCollapsible.a11y.test.tsx` disclosure binding         | closed, open, closed with content animation; uncontrolled and controlled                                                                                                                                                            | A missing or wrong `aria-expanded`, an `aria-controls` that names no element, or a click that does not reach the state owner fails.                                                             |
+| FR2, FR3     | `useCollapsible.test.tsx` trigger and content props suite                                                            | closed and empty; opened; closed again                                                                                                                                                                                              | Children mounted while closed, a content element that leaves the document, or a missing `hidden` fails.                                                                                         |
+| FR4–FR7, AR2 | `useCollapsible.test.tsx` content animation suite, with a stubbed running animation                                  | mount; open and close with a running animation; end and cancel; a descendant's end; reopen during the close; a replaced content element; no animation; endless animation; transition                                                | A phase on mount, children dropped while the content animation runs, children kept with none running, a content that is not inert during the close, or an unmount on reopen fails.              |
+| FR8          | `useCollapsible.test.tsx` Reduce Motion and theme-mark cases                                                         | the media query; a theme that reduces motion for everyone                                                                                                                                                                           | Children kept, or a phase left, after the commit fails.                                                                                                                                         |
+| FR9, PR2     | `useCollapsible.test.tsx` content height suite, with a natural height visible only while the animation is suppressed | open; animated close; close without the hold, with and without `hasContentAnimation`; a close Reduce Motion completes at once; two rows that change in one commit; mount; own inline animation name; `content-box`; scaled ancestor | A value of `0px`, a value written on mount, a lost inline animation name, a border-box value for `content-box`, a measured close that nothing holds, or a read after another row's write fails. |
+| FR6          | Real-browser frame capture of the `Core/Collapsible` headless rows story                                             | close with and without `animation-fill-mode: forwards`                                                                                                                                                                              | Evidence gap: no real-browser test shows that no frame paints the children after their close animation.                                                                                         |
 
 ## Decision log
 

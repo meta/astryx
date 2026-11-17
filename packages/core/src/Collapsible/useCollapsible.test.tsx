@@ -21,6 +21,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useCollapsible, type UseCollapsibleOptions} from './useCollapsible';
+import {CollapsibleGroup} from './CollapsibleGroup';
 import {
   CollapsibleGroupContext,
   type CollapsibleGroupContextValue,
@@ -304,6 +305,16 @@ function runAnimationOn(element: HTMLElement) {
   };
 }
 
+/** Makes each of `queries` match, and leaves every other query as it was. */
+function matchQueries(...queries: string[]) {
+  const matchMedia = window.matchMedia;
+  vi.spyOn(window, 'matchMedia').mockImplementation(query =>
+    queries.includes(query)
+      ? {...matchMedia(query), matches: true}
+      : matchMedia(query),
+  );
+}
+
 function resetLifecycle() {
   lifecycle.mounts = 0;
   lifecycle.unmounts = 0;
@@ -483,12 +494,7 @@ describe('useCollapsible — content animation', () => {
 
   it('drops the children at once under Reduce Motion', async () => {
     const user = userEvent.setup();
-    const matchMedia = window.matchMedia;
-    vi.spyOn(window, 'matchMedia').mockImplementation(query =>
-      query === '(prefers-reduced-motion: reduce)'
-        ? {...matchMedia(query), matches: true}
-        : matchMedia(query),
-    );
+    matchQueries('(prefers-reduced-motion: reduce)');
     render(<Disclosure isCollapsible hasContentAnimation />);
     runAnimationOn(content());
 
@@ -638,6 +644,99 @@ describe('useCollapsible — content height', () => {
 
     await user.click(trigger());
     expect(content().style.getPropertyValue('--row-height')).toBe('');
+  });
+
+  it('measures no animated-option close that no animation holds', async () => {
+    const user = userEvent.setup();
+    render(
+      <Disclosure
+        isCollapsible
+        hasContentAnimation
+        contentHeightProperty="--row-height"
+      />,
+    );
+    stubNaturalHeight(content(), 96);
+
+    await user.click(trigger());
+    expect(content()).toHaveAttribute('hidden');
+    expect(content().style.getPropertyValue('--row-height')).toBe('');
+  });
+
+  it('measures no close that Reduce Motion completes at once', async () => {
+    const user = userEvent.setup();
+    matchQueries('(prefers-reduced-motion: reduce)');
+    render(
+      <Disclosure
+        isCollapsible
+        hasContentAnimation
+        contentHeightProperty="--row-height"
+      />,
+    );
+    stubNaturalHeight(content(), 96);
+    runAnimationOn(content());
+
+    await user.click(trigger());
+    expect(content()).toHaveAttribute('hidden');
+    expect(content().style.getPropertyValue('--row-height')).toBe('');
+  });
+
+  it('reads every row that changes in one commit before it writes any', async () => {
+    const user = userEvent.setup();
+    function Row({value}: {value: string}) {
+      const row = useCollapsible({
+        isCollapsible: true,
+        value,
+        hasContentAnimation: true,
+        contentHeightProperty: '--row-height',
+      });
+      return (
+        <>
+          {/* eslint-disable-next-line @eslint-react/dom-no-missing-button-type -- triggerProps carries type="button" */}
+          <button {...row.triggerProps}>{value}</button>
+          <div {...row.contentProps} data-testid={`content-${value}`}>
+            {row.isPresent && <p>{value}</p>}
+          </div>
+        </>
+      );
+    }
+    render(
+      <CollapsibleGroup type="single" defaultValue="a">
+        <Row value="a" />
+        <Row value="b" />
+      </CollapsibleGroup>,
+    );
+    const rows = [
+      screen.getByTestId('content-a'),
+      screen.getByTestId('content-b'),
+    ];
+    const reads: string[] = [];
+    for (const row of rows) {
+      runAnimationOn(row);
+      Object.defineProperty(row, 'offsetHeight', {
+        configurable: true,
+        get: () => 40,
+      });
+      vi.spyOn(row, 'getBoundingClientRect').mockImplementation(() => {
+        reads.push(
+          rows
+            .map(
+              each =>
+                `${each.style.getPropertyValue('animation-name')}|${each.style.getPropertyValue('--row-height')}`,
+            )
+            .join(' '),
+        );
+        return new DOMRect(0, 0, 320, 40);
+      });
+    }
+
+    // One click closes "a" and opens "b" in the same commit.
+    await user.click(screen.getByRole('button', {name: 'b'}));
+    // Every read sees both rows' animations suppressed and no height written.
+    expect(reads).toEqual(['none| none|', 'none| none|']);
+    for (const row of rows) {
+      expect(row.style.getPropertyValue('--row-height')).toBe('40px');
+      expect(row.style.getPropertyValue('animation-name')).toBe('');
+    }
   });
 
   it("restores the content's own inline animation name", async () => {

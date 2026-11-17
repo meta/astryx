@@ -66,7 +66,7 @@ export interface UseCollapsibleOptions {
   hasContentAnimation?: boolean;
   /**
    * A CSS custom property for the content's natural height. At each open,
-   * and at each close the content animates, the hook measures the height
+   * and at each close that keeps the children, the hook measures the height
    * once and writes it to this property on the content element, as a `px`
    * value that `height` can take. The measurement ignores the content's CSS
    * animation, so keyframes can grow from `0px` to `var(<property>)`.
@@ -178,20 +178,50 @@ function naturalHeight(node: HTMLElement): number {
   return Math.max(0, height - edges);
 }
 
-function writeNaturalHeight(node: HTMLElement, property: string): void {
+/**
+ * Suppresses the element's CSS animations until the returned function runs.
+ * The open keyframes start at 0 and the close keyframes at the measured
+ * height, so a read with them applied gets a keyframe value.
+ */
+function suppressAnimation(node: HTMLElement): () => void {
   const {style} = node;
   const ownName = style.getPropertyValue('animation-name');
   const ownPriority = style.getPropertyPriority('animation-name');
-  // The open keyframes start at 0 and the close keyframes at the measured
-  // height. A read with them applied gets the keyframe value, not the content.
   style.setProperty('animation-name', 'none', 'important');
-  const height = naturalHeight(node);
-  if (ownName === '') {
-    style.removeProperty('animation-name');
-  } else {
-    style.setProperty('animation-name', ownName, ownPriority);
+  return () => {
+    if (ownName === '') {
+      style.removeProperty('animation-name');
+    } else {
+      style.setProperty('animation-name', ownName, ownPriority);
+    }
+  };
+}
+
+/** Content elements that wait for a height measurement, with their property. */
+const pendingHeights = new Map<HTMLElement, string>();
+
+/**
+ * Measures every content element that changes in one commit in one pass:
+ * all writes, then all reads, then all writes. Rows of an accordion that open
+ * and close together then force one layout, not one each. The pass runs in a
+ * microtask, after the commit and before the frame paints.
+ */
+function measureNaturalHeight(node: HTMLElement, property: string): void {
+  if (pendingHeights.size === 0) {
+    queueMicrotask(flushNaturalHeights);
   }
-  style.setProperty(property, `${height}px`);
+  pendingHeights.set(node, property);
+}
+
+function flushNaturalHeights(): void {
+  const entries = [...pendingHeights].filter(([node]) => node.isConnected);
+  pendingHeights.clear();
+  const restores = entries.map(([node]) => suppressAnimation(node));
+  const heights = entries.map(([node]) => naturalHeight(node));
+  entries.forEach(([node, property], index) => {
+    restores[index]?.();
+    node.style.setProperty(property, `${heights[index]}px`);
+  });
 }
 
 /**
@@ -337,24 +367,27 @@ export function useCollapsible(
 
   const wasOpenRef = useRef(isOpen);
   // Syncs the content element's layout and CSS animations with an open-state
-  // change, before the frame paints. It writes the natural height for the
-  // keyframes. It ends a motion phase that no running animation holds.
+  // change, before the frame paints. It ends a motion phase that no running
+  // animation holds. It queues the height measurement for an open, and for a
+  // close that keeps the children.
   useLayoutEffect(() => {
     const isChange = wasOpenRef.current !== isOpen;
     wasOpenRef.current = isOpen;
     const node = contentNodeRef.current;
+    const isHeld = motion != null && node != null && holdsMotion(node);
     if (
       node != null &&
       isChange &&
-      isPresent &&
-      contentHeightProperty != null
+      contentHeightProperty != null &&
+      (isOpen || isHeld)
     ) {
-      writeNaturalHeight(node, contentHeightProperty);
+      measureNaturalHeight(node, contentHeightProperty);
     }
-    if (motion != null && (node == null || !holdsMotion(node))) {
+    if (motion != null && !isHeld) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- the phase ends from the animation state read in this commit, before the frame paints
       setMotionState(null);
     }
-  }, [isOpen, isPresent, motion, contentHeightProperty]);
+  }, [isOpen, motion, contentHeightProperty]);
 
   return {
     isEnabled,
