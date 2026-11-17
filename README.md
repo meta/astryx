@@ -1,0 +1,1 @@
+Before/after screenshots for the Field label weight change: FormLayout mixed-controls story, every first-party theme, light and dark, 390px phone and 1280px desktop, Chromium with Liberation Sans as the system sans-serif font.
