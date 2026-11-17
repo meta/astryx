@@ -4,9 +4,10 @@
  * @file nestedControlPress.test.tsx
  * @input vitest (jsdom), React Testing Library, ClickableCard,
  *   SelectableCard, Item, TreeList and Token
- * @output Checks the press rule of every container, for a mouse and a pen: a
- *   press that starts on a nested control turns off the container's `:active`
- *   paint until the press ends; a press on the container's own surface or its
+ * @output Checks the press rule of every container, for a finger, a pen and
+ *   a mouse: a finger's press that starts on a nested control paints no press
+ *   on the container, and a mouse's or a pen's turns off the container's
+ *   `:active` paint until the press ends; a press on the container's own surface or its
  *   own action leaves it on; a row whose root is a link keeps its press. The
  *   paint itself is checked in a real browser
  *   (__tests__/NestedControlPress.a11y.chromium.spec.ts)
@@ -14,9 +15,11 @@
  *   through each container that composes it
  */
 
-import {fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useRef, type ReactNode} from 'react';
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {PRESS_ONSET_MS} from '../utils/pressGesture';
+import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {SelectableCard} from '../SelectableCard/SelectableCard';
 import {Item} from '../Item/Item';
@@ -120,6 +123,10 @@ function nestedOf(name: string): HTMLElement {
     : screen.getByRole('button', {name: 'Nested'});
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe.each(CASES)('$name', testCase => {
   it.each(['mouse', 'pen'] as const)(
     'turns off its press paint for a %s press on a nested control, until the press ends',
@@ -135,6 +142,45 @@ describe.each(CASES)('$name', testCase => {
       expect(container.style.getPropertyValue(PAINT)).toBe('');
     },
   );
+
+  it('paints no press on the container for a finger press on a nested control, and paints one for a finger on its surface', () => {
+    vi.useFakeTimers();
+    render(testCase.render());
+    const nested = nestedOf(testCase.name);
+    const container = testCase.container(nested);
+    fireEvent.pointerDown(nested, {
+      pointerType: 'touch',
+      pointerId: 1,
+      button: 0,
+    });
+    act(() => {
+      vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    });
+    expect(container.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    fireEvent.pointerUp(nested, {
+      pointerType: 'touch',
+      pointerId: 1,
+      button: 0,
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    const surface = testCase.surface();
+    fireEvent.pointerDown(surface, {
+      pointerType: 'touch',
+      pointerId: 2,
+      button: 0,
+    });
+    act(() => {
+      vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    });
+    expect(container.hasAttribute(PRESSED_ATTRIBUTE)).toBe(true);
+    fireEvent.pointerUp(surface, {
+      pointerType: 'touch',
+      pointerId: 2,
+      button: 0,
+    });
+  });
 
   it('keeps its press paint for a mouse press on its own surface', () => {
     render(testCase.render());
