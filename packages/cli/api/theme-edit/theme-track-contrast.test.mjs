@@ -39,8 +39,14 @@ beforeAll(async () => {
   const unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) throw new Error(unbuilt);
   await themeEditNew('t', {cwd, like: 'neutral'});
-  await themeEditSet('t', '--color-border', '#000000', {cwd});
+  // A near-black track under a near-black fill, set on the track itself, so
+  // the case does not hang on which token a base theme's track reads.
   await themeEditSet('t', 'accent', '#111111', {cwd});
+  await themeEditSet('t', 'background-color', '#1f1f1f', {
+    cwd,
+    on: 'progress-bar-track',
+    mode: 'light',
+  });
   await themeEditNew('c', {cwd, like: 'neutral'});
   await themeEditSet('c', 'accent', '#7c3aed', {cwd});
 }, 600_000);

@@ -40,13 +40,13 @@ afterAll(() => {
 describe('a track the base theme draws from the emphasized border', () => {
   it('is named as what the part shows', async () => {
     const {data} = /** @type {any} */ (
-      await themeEditHow('progress-bar-track', {cwd, theme: 't'})
+      await themeEditHow('switch', {cwd, theme: 't'})
     );
     const fill = data.reads.background.find(
-      (/** @type {any} */ r) => r.token === '--color-background-muted',
+      (/** @type {any} */ r) => r.token === '--color-background-gray',
     );
     expect(fill.shows).toMatch(
-      /^--color-border-emphasized \(the neutral theme points --color-background-muted at it on progress-bar\)$/,
+      /^--color-border-emphasized \(the neutral theme points --color-background-gray at it on switch\)$/,
     );
   });
 
@@ -57,9 +57,6 @@ describe('a track the base theme draws from the emphasized border', () => {
     const line = data.notes.find((/** @type {string} */ n) =>
       /follows it/.test(n),
     );
-    expect(line).toMatch(
-      /the parts the base theme draws from it: .*progress-bar/,
-    );
-    expect(line).toMatch(/switch/);
+    expect(line).toMatch(/the parts the base theme draws from it: .*switch/);
   });
 });
