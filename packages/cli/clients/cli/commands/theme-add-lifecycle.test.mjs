@@ -36,6 +36,7 @@ beforeEach(() => {
       exports: {
         './themes/ocean': './dist/ocean.js',
         './themes/ocean.css': './dist/ocean.css',
+        './themes/ocean.fonts.css': './dist/ocean.fonts.css',
       },
     }),
   );
@@ -58,6 +59,10 @@ beforeEach(() => {
   fs.writeFileSync(
     path.join(packageDir, 'dist/ocean.css'),
     '[data-astryx-theme="ocean"] {}\n',
+  );
+  fs.writeFileSync(
+    path.join(packageDir, 'dist/ocean.fonts.css'),
+    '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
   );
 });
 
@@ -100,6 +105,32 @@ describe('theme add cleanup lifecycle', () => {
       },
     });
     expect(Object.keys(payload.meta)).toEqual(['answeredBy']);
+  });
+
+  it('supports --no-fonts and keeps the choice in the generated module', async () => {
+    const result = await runCli(
+      [
+        'theme',
+        'add',
+        'ocean',
+        '--no-fonts',
+        '--package',
+        '@acme/themes',
+        '--json',
+      ],
+      tmpDir,
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).data.themes[0]).not.toHaveProperty(
+      'fontStylesheet',
+    );
+    const module = fs.readFileSync(
+      path.join(tmpDir, 'src/astryx-themes.ts'),
+      'utf-8',
+    );
+    expect(module).toContain('"noFonts":["ocean"]');
+    expect(module).not.toContain('ocean.fonts.css');
   });
 
   it('keeps --import as an accepted no-op with the same response', async () => {
@@ -221,6 +252,7 @@ describe('theme add cleanup lifecycle', () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain('--import');
+    expect(result.stdout).toContain('--no-fonts');
     expect(result.stdout).toMatch(/compatibility no-op/i);
     expect(result.stdout).toContain('theme eject <slug> [path] [--overwrite]');
     expect(result.stdout).not.toMatch(/^\s+-f, --overwrite/m);

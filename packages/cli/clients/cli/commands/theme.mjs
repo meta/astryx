@@ -1089,9 +1089,18 @@ export function registerTheme(program) {
   // Help leaves out a line whose command the run's base does not serve, or
   // whose value names an item only Core has (the theme topic).
   const overrides = [
-    ['theme targets', `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`],
-    ['component <Name>', `  ${getCliInvocation()} component <Name>         One component's theming table\n`],
-    ['docs theme', `  ${getCliInvocation()} docs theme               How component overrides work\n`],
+    [
+      'theme targets',
+      `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>         One component's theming table\n`,
+    ],
+    [
+      'docs theme',
+      `  ${getCliInvocation()} docs theme               How component overrides work\n`,
+    ],
   ];
   theme.addHelpText(
     'after',
@@ -1976,7 +1985,7 @@ function registerThemeCommands(theme, program, docs, words) {
     fn: themeAddFn,
     action: async (
       /** @type {string | undefined} */ slug,
-      /** @type {{list?: boolean, import?: boolean, package?: string}} */ options,
+      /** @type {{list?: boolean, import?: boolean, fonts?: boolean, package?: string}} */ options,
     ) => {
       const json = program.opts().json || false;
       /** @type {import('../../../api/theme/theme.type.mjs').ThemeListResponse | import('../../../api/theme/theme.type.mjs').ThemeAppResponse} */
@@ -1990,6 +1999,7 @@ function registerThemeCommands(theme, program, docs, words) {
               })
             : await themeAdd(slug, {
                 import: options.import,
+                noFonts: options.fonts === false,
                 cwd: process.cwd(),
                 package: options.package,
               });

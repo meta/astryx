@@ -1167,7 +1167,16 @@ async function writeThemeApp(
     );
   }
   themes = kept;
-  const finalState = {...state, themes, defaultSlug, configured: true};
+  const noFonts = (state.noFonts ?? []).filter(slug =>
+    Object.hasOwn(themes, slug),
+  );
+  const finalState = {
+    ...state,
+    themes,
+    defaultSlug,
+    noFonts,
+    configured: true,
+  };
   const resolved = resolveRecordedThemes(finalState, available);
   let prepared;
   try {
@@ -1202,7 +1211,9 @@ async function writeThemeApp(
         owner: theme.owner,
         module: theme.module,
         stylesheet: theme.stylesheet,
-        ...(theme.fontStylesheet ? {fontStylesheet: theme.fontStylesheet} : {}),
+        ...(theme.fontStylesheet && !noFonts.includes(theme.slug)
+          ? {fontStylesheet: theme.fontStylesheet}
+          : {}),
         source: theme.source,
         ...(theme.mode ? {mode: theme.mode} : {}),
       })),
@@ -1345,7 +1356,7 @@ async function withThemeAppLock(cwd, fn) {
 /**
  * Add one available built theme to the app record.
  * @param {string} slug
- * @param {{cwd?: string, package?: string}} [options]
+ * @param {{cwd?: string, package?: string, noFonts?: boolean}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
 export async function addThemeToApp(slug, options = {}) {
@@ -1356,7 +1367,7 @@ export async function addThemeToApp(slug, options = {}) {
 /**
  * @param {string} slug
  * @param {string} cwd
- * @param {{package?: string}} options
+ * @param {{package?: string, noFonts?: boolean}} options
  */
 async function addThemeToAppLocked(slug, cwd, options) {
   const match = await findTheme(slug, {cwd, package: options.package});
@@ -1402,13 +1413,17 @@ async function addThemeToAppLocked(slug, cwd, options) {
     }
   }
   const themes = {...state.themes, [match.slug]: owner};
-  const changed = previous !== owner;
+  const noFonts = new Set(state.noFonts ?? []);
+  const hadNoFonts = noFonts.has(match.slug);
+  if (options.noFonts) noFonts.add(match.slug);
+  const changed =
+    previous !== owner || (options.noFonts === true && !hadNoFonts);
   const defaultSlug =
     state.configured && state.defaultSlug != null
       ? state.defaultSlug
       : match.slug;
   return writeThemeApp(
-    state,
+    {...state, noFonts: [...noFonts]},
     themes,
     defaultSlug,
     'add',

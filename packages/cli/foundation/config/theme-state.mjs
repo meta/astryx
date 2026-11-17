@@ -4,9 +4,10 @@
  * @file App-theme state stored in the generated theme module.
  *
  * The module is both the app import surface and the only record of added themes.
- * Its generated header records owners and the default without adding another public
- * export. Commands parse that header without running project code, regenerate the
- * whole marked file instead of editing it, and never replace an authored file.
+ * Its generated header records owners, the default, and any intentional font
+ * fallbacks without adding another public export. Commands parse that header
+ * without running project code, regenerate the whole marked file instead of
+ * editing it, and never replace an authored file.
  *
  * @input A project directory and resolved built-theme imports
  * @output Parsed state plus deterministic generated-module write plans
@@ -179,12 +180,15 @@ function validThemeRecord(value, label, source = '') {
   }
   const keys = Object.keys(value);
   if (
-    keys.length !== 2 ||
+    keys.some(
+      key => !['themes', 'defaultThemeSlug', 'noFonts'].includes(key),
+    ) ||
+    keys.length < 2 ||
     !keys.includes('themes') ||
     !keys.includes('defaultThemeSlug')
   ) {
     throw new ThemeStateError(
-      `${label} ${THEME_RECORD_MARKER} header must contain only themes and defaultThemeSlug.`,
+      `${label} ${THEME_RECORD_MARKER} header must contain themes, defaultThemeSlug, and optional noFonts.`,
     );
   }
 
@@ -215,7 +219,30 @@ function validThemeRecord(value, label, source = '') {
         : {},
     );
   }
-  return {themes, defaultSlug: value.defaultThemeSlug};
+  let noFonts;
+  if (value.noFonts !== undefined) {
+    if (
+      !Array.isArray(value.noFonts) ||
+      value.noFonts.length === 0 ||
+      value.noFonts.some(
+        slug =>
+          typeof slug !== 'string' ||
+          !THEME_SLUG_RE.test(slug) ||
+          !Object.hasOwn(themes, slug),
+      ) ||
+      new Set(value.noFonts).size !== value.noFonts.length
+    ) {
+      throw new ThemeStateError(
+        `${label} noFonts must list each added theme at most once, using lowercase kebab-case slugs.`,
+      );
+    }
+    noFonts = value.noFonts;
+  }
+  return {
+    themes,
+    defaultSlug: value.defaultThemeSlug,
+    ...(noFonts ? {noFonts} : {}),
+  };
 }
 
 /**
@@ -327,6 +354,7 @@ export function resolveThemeModule(projectDir, {forWrite = false} = {}) {
  * @property {string} packageFile
  * @property {Record<string, string>} themes
  * @property {string|null} defaultSlug
+ * @property {string[]} [noFonts] added themes that intentionally use system fonts
  * @property {string|null} legacyTheme
  * @property {boolean} configured
  * @property {ReturnType<typeof resolveThemeModule>} module
@@ -351,6 +379,7 @@ export function readThemeState(cwd = process.cwd()) {
       packageFile,
       themes: record.themes,
       defaultSlug: record.defaultSlug,
+      ...(record.noFonts ? {noFonts: record.noFonts} : {}),
       legacyTheme: null,
       configured: true,
       module,
@@ -408,15 +437,17 @@ export function readThemeState(cwd = process.cwd()) {
  * @param {RenderedAppTheme[]} themes
  * @param {string} defaultSlug
  * @param {boolean} typescript
- * @param {{keepModes?: boolean}} [options] `keepModes`: the module has
+ * @param {{keepModes?: boolean, noFonts?: Iterable<string>}} [options]
+ * `keepModes`: the module has
  *   exported `themeModes` before, so it keeps exporting it (empty when no
  *   theme has one mode), as the app's wiring imports it
+ * `noFonts`: added themes that intentionally use their system-font fallback
  */
 export function renderThemeModule(
   themes,
   defaultSlug,
   typescript,
-  {keepModes = false} = {},
+  {keepModes = false, noFonts = []} = {},
 ) {
   if (!themes.some(theme => theme.slug === defaultSlug)) {
     // The record's default names no added theme; choosing an added one as the
@@ -436,6 +467,7 @@ export function renderThemeModule(
   const entries = [];
   /** @type {Record<string, string>} */
   const owners = {};
+  const noFontSlugs = new Set(noFonts);
   /** The one color mode of each theme that has one only. */
   /** @type {string[]} */
   const modes = [];
@@ -449,7 +481,7 @@ export function renderThemeModule(
       `import {${theme.exportName} as ${local}} from ${JSON.stringify(theme.module)};`,
       `import ${JSON.stringify(theme.stylesheet)};`,
     );
-    if (theme.fontStylesheet) {
+    if (theme.fontStylesheet && !noFontSlugs.has(theme.slug)) {
       imports.push(`import ${JSON.stringify(theme.fontStylesheet)};`);
     }
     entries.push(`  ${JSON.stringify(theme.slug)}: ${local},`);
@@ -458,6 +490,13 @@ export function renderThemeModule(
   const record = JSON.stringify({
     themes: owners,
     defaultThemeSlug: defaultSlug,
+    ...(themes.filter(theme => noFontSlugs.has(theme.slug)).length > 0
+      ? {
+          noFonts: themes
+            .filter(theme => noFontSlugs.has(theme.slug))
+            .map(theme => theme.slug),
+        }
+      : {}),
   });
   return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */\n\n${imports.join(
     '\n',
@@ -562,6 +601,7 @@ export function isUneditedThemeModule(source, typescript) {
     return (
       renderThemeModule(themes, record.defaultSlug, typescript, {
         keepModes: /\bexport const themeModes\b/u.test(source),
+        noFonts: record.noFonts,
       }) === source
     );
   } catch {
@@ -622,6 +662,7 @@ export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
       keepModes: /\bexport const themeModes\b/.test(
         String(module.expectedOriginal ?? ''),
       ),
+      noFonts: state.noFonts,
     },
   );
   return {
