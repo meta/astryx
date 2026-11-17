@@ -7454,9 +7454,11 @@ async function changeOnce(
       ],
       // Problems the theme had that this change moved but left failing,
       // each with what it was and its fix; left out when none.
-      .../** @type {any} */ ((r).leftProblems?.length
-        ? {leftProblems: problemLines(/** @type {any} */ (r).leftProblems)}
-        : {}),
+      .../** @type {any} */ (
+        r.leftProblems?.length
+          ? {leftProblems: problemLines(/** @type {any} */ (r).leftProblems)}
+          : {}
+      ),
       // (What it brought is told apart from the misses it found: those
       // repeat after every change otherwise.)
       ...(await missedSummary(ctx, slug, data, r.res, {
@@ -8918,7 +8920,7 @@ function passingDialValue(ctx, slug, data, base, step) {
  * @param {Array<{text: string}>} checked every contrast check's problem and note
  * @returns {string[]}
  */
-function drawnContrastNotes(drawn, checked) {
+export function drawnContrastNotes(drawn, checked) {
   /** @type {Map<string, import('./_context.mjs').LowContrast[]>} */
   const byPart = new Map();
   for (const x of drawn) {

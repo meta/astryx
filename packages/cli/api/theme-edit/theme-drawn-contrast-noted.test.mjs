@@ -1,61 +1,126 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file show --png notes text its pictures draw too faint to read that no
- * contrast check measures (an overlay drawn open, a state, a variant the
- * checks do not draw), with the part, ratio, colors and picture; the
- * theme's disabled and placeholder text and text over media are left out.
+ * @file The text a picture draws too faint to read, as the browser that
+ * takes the picture measures it: faint text in a part is found with its
+ * part, ratio and colors; the theme's disabled text color, text over a
+ * picture or gradient beside it, and text in no part are left out. show
+ * notes each part and mode no contrast check names, with its picture.
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditNew, themeEditShow} from './theme-edit.mjs';
-import {
-  makeLinkedFixture,
-  removeLinkedFixture,
-} from '../../test-utils/linked-fixture.mjs';
-import {
-  FIXTURE_PACKAGES,
-  writeFixtureBaseTheme,
-} from '../../test-utils/base-theme-fixture.mjs';
-import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {createRequire} from 'node:module';
+import {describe, expect, it} from 'vitest';
+import {screenshot} from './_preview.mjs';
+import {drawnContrastNotes} from './_edit.mjs';
 
-// (These cases read drawn pictures: drawn for real.)
-realRenders(true);
-
-const T = 600_000;
-/** @type {string} */
-let cwd;
-let unbuilt = '';
-beforeAll(async () => {
-  cwd = makeLinkedFixture('astryx-theme-drawn-contrast-', FIXTURE_PACKAGES);
-  writeFixtureBaseTheme(cwd, 'neutral');
-  unbuilt = await installRealBaseThemes(cwd, ['gothic']);
-  if (!unbuilt) await themeEditNew('g', {cwd, like: 'gothic'});
-}, T);
-afterAll(() => {
-  if (cwd) removeLinkedFixture(cwd);
+const chrome = [
+  ...(process.env.PATH ?? '')
+    .split(path.delimiter)
+    .flatMap(d =>
+      ['google-chrome', 'chromium', 'chromium-browser', 'chrome'].map(n =>
+        path.join(d, n),
+      ),
+    ),
+].find(f => {
+  try {
+    fs.accessSync(f, fs.constants.X_OK);
+    return fs.statSync(f).isFile();
+  } catch {
+    return false;
+  }
 });
 
-describe('text the pictures draw too faint to read', () => {
-  it(
-    'a menu drawn open with unreadable text is noted, with its picture',
+const PAGE = `<html><body style="margin:0;background:#ffffff">
+<div style="--color-text-disabled:#aaaaaa">
+  <div class="astryx-top-nav-item" style="background:#bcbee4;color:#5a5146;padding:8px">Projects</div>
+  <div class="astryx-button" style="color:#aaaaaa;padding:8px">Disabled look</div>
+  <div class="astryx-overlay" style="position:relative;width:200px;height:100px">
+    <div style="position:absolute;inset:0;background:linear-gradient(135deg,#172554,#67e8f9)"></div>
+    <div class="astryx-overlay-scrim" style="position:absolute;inset:0;background:rgba(0,0,0,0.2)">
+      <span class="astryx-button" style="color:#ffffff">Quick view</span>
+    </div>
+  </div>
+  <div style="color:#eeeeee">No part</div>
+  <div class="astryx-text" style="color:#111111">Readable</div>
+</div></body></html>`;
+
+describe('text a picture draws too faint to read', () => {
+  it.skipIf(!chrome)(
+    'is measured in its part, leaving out disabled text, media and text in no part',
     async () => {
-      if (unbuilt) return;
-      const r = /** @type {any} */ (await themeEditShow('g', {cwd, png: true}))
-        .data;
-      if (!r.pictures?.length) return; // (no browser here)
-      const notes = /** @type {string[]} */ (r.notes).filter(n =>
-        n.startsWith('the pictures draw text in '),
-      );
-      expect(
-        notes.some(n =>
-          /^the pictures draw text in side-nav-item \("Inbox"\) at 1\.\d+:1 in light \(#000000 on #[0-9a-f]{6}, in themes\/g\/sheet-overlays\.png\), which no check above measures; text needs 4\.5:1; what draws it: .* how side-nav-item$/.test(
-            n,
-          ),
-        ),
-      ).toBe(true);
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-faint-'));
+      try {
+        const html = path.join(dir, 'p.html');
+        fs.writeFileSync(html, PAGE);
+        const r = /** @type {any} */ (
+          await screenshot(
+            {cwd: dir, req: createRequire(path.join(dir, 'package.json'))},
+            html,
+            path.join(dir, 'p.png'),
+            'light',
+          )
+        );
+        expect(r.ok, r.reason).toBe(true);
+        expect(r.lowContrast).toEqual([
+          {
+            part: 'top-nav-item',
+            text: 'Projects',
+            ratio: 4.3,
+            fg: '#5a5146',
+            bg: '#bcbee4',
+          },
+        ]);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
     },
-    T,
+    120_000,
   );
+});
+
+describe('show', () => {
+  const drawn = [
+    {
+      page: null,
+      file: 'themes/t/sheet-overlays.png',
+      part: 'top-nav-item',
+      text: 'Projects',
+      mode: /** @type {const} */ ('light'),
+      ratio: 4.3,
+      fg: '#5a5146',
+      bg: '#bcbee4',
+    },
+    {
+      page: null,
+      file: 'themes/t/sheet-overlays.png',
+      part: 'citation',
+      text: '1',
+      mode: /** @type {const} */ ('light'),
+      ratio: 4.46,
+      fg: '#5a5146',
+      bg: '#bfc1e8',
+    },
+  ];
+
+  it('notes a part no check names, with its picture and how', () => {
+    const notes = drawnContrastNotes(drawn, [
+      {text: 'text in citation ("1") is 4.46:1 in light (…); text needs 4.5:1'},
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(
+      /^the pictures draw text in top-nav-item \("Projects"\) at 4\.3:1 in light \(#5a5146 on #bcbee4, in themes\/t\/sheet-overlays\.png\), which no check above measures; text needs 4\.5:1; what draws it: .* how top-nav-item$/,
+    );
+  });
+
+  it('says nothing a check already names in that mode', () => {
+    expect(
+      drawnContrastNotes(drawn, [
+        {text: 'text in top-nav-item ("Projects") is 4.3:1 in light (…)'},
+        {text: 'text in citation ("1") is 4.46:1 in light (…)'},
+      ]),
+    ).toEqual([]);
+  });
 });
