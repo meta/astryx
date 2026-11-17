@@ -14,7 +14,9 @@
  *   nested default card, a transparent card, a text field, inline code, an
  *   open menu, a selected segment, an input group addon, a step number, a
  *   banner and a striped table row (whose cell color the table root fixes);
- * - a pressed nav item's text on the pressed fill over the page;
+ * - a nav item's text at rest, hovered, pressed and selected over the page;
+ * - a ghost or secondary button's label at rest, hovered and pressed, on the
+ *   page and on a surface;
  * - secondary text on a selected row, a dropzone and a numbered citation on
  *   the page, and on a selected row and a numbered citation inside every
  *   card;
@@ -361,13 +363,90 @@ function rows() {
         for (const role of TEXT_ROLES)
           push({...base, where, role, text: at(tokens, role), layers});
       }
-      // A pressed nav item draws its own rule's text on that fill.
+      // A nav item's own text at rest, hovered, pressed and selected, over
+      // the page.
       {
-        const nav = themeTokens(theme, rule(theme, 'top-nav-item'));
-        roles('pressed nav item', nav, [
-          at(page, '--color-overlay-pressed'),
-          body,
-        ]);
+        const navRule = rule(theme, 'top-nav-item');
+        const nav = themeTokens(theme, navRule);
+        const navText = role =>
+          navRule.color != null && role === '--color-text-primary'
+            ? resolveColor(navRule.color, nav, modeIndex)
+            : at(nav, role);
+        const selectedRule = {
+          ...navRule,
+          ...rule(theme, 'top-nav-item', 'selected'),
+        };
+        const selected = themeTokens(theme, selectedRule);
+        const selectedFill =
+          selectedRule.backgroundColor != null &&
+          selectedRule.backgroundColor !== 'transparent'
+            ? resolveColor(selectedRule.backgroundColor, selected, modeIndex)
+            : null;
+        for (const [state, layers] of [
+          ['nav item', [body]],
+          ['hovered nav item', [at(page, '--color-overlay-hover'), body]],
+          ['pressed nav item', [at(page, '--color-overlay-pressed'), body]],
+        ])
+          for (const role of TEXT_ROLES)
+            push({...base, where: state, role, text: navText(role), layers});
+        for (const role of ['--color-text-primary', '--color-text-secondary'])
+          push({
+            ...base,
+            where: 'selected nav item',
+            role,
+            text:
+              selectedRule.color != null && role === '--color-text-primary'
+                ? resolveColor(selectedRule.color, selected, modeIndex)
+                : at(selected, role),
+            layers: selectedFill ? [selectedFill, body] : [body],
+          });
+      }
+      // A ghost or secondary button's label on its fill at rest, hovered and
+      // pressed, on the page and on a surface.
+      for (const variant of ['ghost', 'secondary']) {
+        const own = {
+          ...rule(theme, 'button'),
+          ...rule(theme, 'button', `variant:${variant}`),
+        };
+        const tokens = themeTokens(theme, own);
+        const label =
+          own.color != null
+            ? resolveColor(own.color, tokens, modeIndex)
+            : at(tokens, '--color-text-primary');
+        const fillOf = value =>
+          value == null || value === 'transparent'
+            ? null
+            : resolveColor(value, tokens, modeIndex);
+        const fill = fillOf(
+          own.backgroundColor ??
+            (variant === 'secondary' ? 'var(--color-neutral)' : null),
+        );
+        const hoverFill = fillOf(own[':hover']?.backgroundColor);
+        for (const [ground, under] of [
+          ['the page', body],
+          ['a surface', at(page, '--color-background-surface')],
+        ]) {
+          const rest = fill ? [fill, under, body] : [under, body];
+          for (const [state, layers] of [
+            ['', rest],
+            [
+              'hovered ',
+              [
+                at(tokens, '--color-overlay-hover'),
+                ...(hoverFill ? [hoverFill] : []),
+                ...rest,
+              ],
+            ],
+            ['pressed ', [at(tokens, '--color-overlay-pressed'), ...rest]],
+          ])
+            push({
+              ...base,
+              where: `${state}${variant} button on ${ground}`,
+              role: 'button label',
+              text: label,
+              layers,
+            });
+        }
       }
       // Status text on its pale status fill (a field status, a banner).
       for (const status of ['success', 'warning', 'error', 'info'])
