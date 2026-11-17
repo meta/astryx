@@ -35,6 +35,7 @@ import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {devMissingCallback} from '../utils/devWarning';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchPresentation} from '../utils/touchPresentation';
@@ -48,6 +49,10 @@ import {PressGroupContext} from '../hooks/pressGroupContext';
 import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import {alertController} from '../motion/uikit/alert';
 import {useAlertMotion} from './useAlertMotion';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 
@@ -197,6 +202,16 @@ export function AlertDialog({
   'data-testid': testId,
   ...rest
 }: AlertDialogProps) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    typeof onOpenChange !== 'function'
+  ) {
+    onOpenChange = devMissingCallback(
+      'AlertDialog',
+      'onOpenChange',
+      'is required to close the alert dialog, for example onOpenChange={setIsOpen}. AlertDialog has no onClose prop.',
+    );
+  }
   const t = useComponentTranslator();
   const cancelLabel = cancelLabelFromProps ?? t('@astryx.alertDialog.cancel');
   const titleId = useId();
