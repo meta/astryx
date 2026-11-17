@@ -439,7 +439,7 @@ Firefox for Android (Gap 21). Each other gap below is open.
 - **Gap 21 — Back in Firefox for Android.** In Firefox for Android on a slow
   device, Back with the keyboard up sometimes leaves the page where the keyboard
   reveal scrolled it instead of where it was before (observed 2 of 14 in the
-  Android emulator with a slow-device profile; the same on main).
+  Android emulator with a slow-device profile; more often on main).
 
 ### Follow-up
 
