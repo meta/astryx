@@ -50,6 +50,11 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Outline/Outline.generated';
+import {devPropError} from '../utils/devWarning';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 registerEnglishFallback(english);
 export type {OutlineItem} from './types';
@@ -348,6 +353,13 @@ export function Outline({
   'data-testid': testId,
   ...props
 }: OutlineProps) {
+  if (process.env.NODE_ENV !== 'production' && !Array.isArray(items)) {
+    throw devPropError(
+      'Outline',
+      'items',
+      "must be an array of headings, for example items={[{id: 'intro', label: 'Introduction', level: 1}]}.",
+    );
+  }
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.outline.label');
