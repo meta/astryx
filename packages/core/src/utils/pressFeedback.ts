@@ -1082,9 +1082,9 @@ const PLACE = {
  * tints. The box is measured once, at the press's start, against the row's
  * padding box. Script places the layer because CSS anchor positioning ran
  * Layout during the release. The reads change no layout and no hit-testing. A
- * positioned surface, or one that holds its own layers, reads only its
- * computed style: it is its own layers' containing block. A key's press (`at` null) is on
- * the control's own box. Returns whether the press is on the row.
+ * positioned surface, or one that holds its own layers, is its own layers'
+ * containing block, so it is not placed. A key's press (`at` null) is on the
+ * control's own box. Returns whether the press is on the row.
  */
 function placePress(
   element: HTMLElement,
@@ -1095,7 +1095,7 @@ function placePress(
   const row =
     style.getPropertyValue(PLACE_OPT_IN).trim() === 'control' &&
     style.position === 'static' &&
-    !holdsItsLayers(style)
+    !holdsItsLayers(element)
       ? element.offsetParent
       : null;
   if (!(row instanceof HTMLElement)) {
@@ -1122,35 +1122,18 @@ function placePress(
 }
 
 /**
- * The properties other than `position` that make an element the containing
- * block of its absolutely placed pseudo-elements.
+ * Whether a static control is still its own layers' containing block, as a
+ * transform, a filter or layout containment makes it. The engine answers: a
+ * rendered child's offset parent is then the control. With no rendered child
+ * to ask, the control counts as holding them.
  */
-const CONTAINING = [
-  'translate',
-  'rotate',
-  'scale',
-  'perspective',
-  'filter',
-  'backdrop-filter',
-] as const;
-
-/**
- * Whether a static control is still its own layers' containing block: a
- * transform, a filter or containment holds them, and the row does not.
- */
-function holdsItsLayers(style: CSSStyleDeclaration): boolean {
-  return (
-    style.transform !== 'none' ||
-    CONTAINING.some(
-      name => !['', 'none'].includes(style.getPropertyValue(name)),
-    ) ||
-    /layout|paint|strict|content/.test(style.getPropertyValue('contain')) ||
-    style.getPropertyValue('container-type').includes('size') ||
-    /auto|hidden/.test(style.getPropertyValue('content-visibility')) ||
-    /transform|translate|rotate|scale|perspective|filter|contain/.test(
-      style.willChange,
-    )
-  );
+function holdsItsLayers(element: HTMLElement): boolean {
+  for (const child of element.children) {
+    if (child instanceof HTMLElement && child.offsetParent != null) {
+      return child.offsetParent === element;
+    }
+  }
+  return true;
 }
 
 /**

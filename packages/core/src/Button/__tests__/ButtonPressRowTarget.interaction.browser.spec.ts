@@ -286,22 +286,31 @@ for (const gesture of ['held', 'tapped'] as const) {
   });
 }
 
-for (const [property, value] of [
-  ['transform', 'scale(1)'],
-  ['filter', 'opacity(1)'],
+for (const [property, declarations, holds] of [
+  ['transform', 'transform: scale(1)', true],
+  ['filter', 'filter: opacity(1)', true],
+  ['transform-style', 'transform-style: preserve-3d', true],
+  // A ray from the Button's own position, not turned: the Button stays put.
+  ['offset-path', 'offset-path: ray(0deg); offset-rotate: 0deg', true],
+  ['will-change', 'will-change: position', true],
+  // Inline-size containment is not layout containment: the row still holds
+  // the layers.
+  ['container-type', 'container-type: inline-size', false],
 ] as const) {
-  test(`a finger on a static Button that keeps a ${property} tints the Button`, async ({
+  test(`a finger on a static Button with ${property} set tints only the Button`, async ({
     page,
   }) => {
     const {driver, button, probes} = await openRow(page);
-    // The ${property} keeps the Button its layers' containing block, as its
-    // default transform does, so its `::after` covers only the Button.
-    await button.evaluate(
-      (el, [name, setting]) => {
-        (el as HTMLElement).style.setProperty(name, setting);
+    const kept = await button.evaluate(
+      (el, [name, css]) => {
+        const target = el as HTMLElement;
+        const before = getComputedStyle(target).getPropertyValue(name);
+        target.style.cssText += ';' + css;
+        return getComputedStyle(target).getPropertyValue(name) !== before;
       },
-      [property, value],
+      [property, declarations],
     );
+    expect(kept, `${declarations} applies`).toBe(true);
     const at = await buttonCenter(button);
     const {states, log} = await pressAndRead(
       page,
@@ -311,16 +320,16 @@ for (const [property, value] of [
       fingerHold(driver, at),
     );
     expect(probes.length, log).toBeGreaterThan(0);
-    // The Button is the layer's containing block, so the layer's box reads
-    // against the Button: at its origin, at its size.
+    // Where the Button holds its layers, the layer's box reads against the
+    // Button: at its origin, at its size. Where the row holds them, the
+    // layer takes the Button's box in the row.
     for (const state of states) {
       expect(state.layer, log).toBe('""');
-      expect(state.layerBox, log).toEqual([
-        0,
-        0,
-        state.buttonBox[2],
-        state.buttonBox[3],
-      ]);
+      expect(state.layerBox, log).toEqual(
+        holds
+          ? [0, 0, state.buttonBox[2], state.buttonBox[3]]
+          : state.buttonBox,
+      );
     }
   });
 }
