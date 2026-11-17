@@ -71,6 +71,10 @@ describe('what the changes did not reach', () => {
           'm',
         ),
       );
+      // (It says what the line means and that nothing is broken.)
+      expect(r.stdout).toMatch(
+        /^missed: .*These are not problems .*Nothing is broken; to bring one in line with your changes, run its line from show/m,
+      );
     },
     T,
   );

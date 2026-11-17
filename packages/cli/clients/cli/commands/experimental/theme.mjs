@@ -639,7 +639,7 @@ function missedLine(d) {
   if (!missed) return [];
   return [
     record({
-      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}: show lists the first with their lines; show --json lists each`,
+      missed: `${missed} miss${missed > 1 ? 'es' : ''} on ${missedParts} part${missedParts > 1 ? 's' : ''} the theme's changes did not reach${missedOn.length ? ` (${missedOn.join(', ')})` : ''}. These are not problems (problems are listed apart): each part still shows the base theme's look in a state or variant. Nothing is broken; to bring one in line with your changes, run its line from show (show --json lists each)`,
     }),
   ];
 }
@@ -1613,9 +1613,9 @@ function defineGroup(parent, doc) {
               commands: (cmd.commands ?? [])
                 .filter(command => commandAvailable(command, helpBase()))
                 .map(command => ({
-                name: command.name(),
-                summary: command.summary() || command.description(),
-              })),
+                  name: command.name(),
+                  summary: command.summary() || command.description(),
+                })),
             },
           }),
         );
@@ -1672,9 +1672,18 @@ export function registerExperimentalTheme(group, program) {
   explained(theme, groupDoc);
   // The run's base may not serve a line's command; help then leaves it out.
   const overrides = [
-    ['experimental theme targets', `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`],
-    ['experimental theme editor how', `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`],
-    ['component <Name>', `  ${getCliInvocation()} component <Name>                    One component's theming table\n`],
+    [
+      'experimental theme targets',
+      `  ${getCliInvocation()} experimental theme targets          Every themeable class, with its props and states\n`,
+    ],
+    [
+      'experimental theme editor how',
+      `  ${getCliInvocation()} experimental theme editor how <part>  What one part reads, and the commands that change it\n`,
+    ],
+    [
+      'component <Name>',
+      `  ${getCliInvocation()} component <Name>                    One component's theming table\n`,
+    ],
   ];
   theme.addHelpText(
     'after',

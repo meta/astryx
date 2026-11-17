@@ -6359,7 +6359,49 @@ async function changeOnce(
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
-  const styled = styledChanges(compiledBefore, compiledAfter, base);
+  /**
+   * What Core draws for a part's property at rest, in both modes the same,
+   * read from the part data with the base theme's tokens; null when the
+   * modes differ or nothing is read.
+   * @param {string} part @param {string} prop
+   */
+  const drawnAtRest = (part, prop) => {
+    const at = /** @type {Record<string, string>} */ (
+      ctx.C?.MAP?.[part]?.at?.[prop] ?? {}
+    );
+    // (At rest: every look the part renders, with no state, the plain
+    // rule reaching each of them; one value only when they all agree.)
+    const rests = Object.entries(at)
+      .filter(([k]) => !/[:\s]|state|open|pressed|checked/.test(k))
+      .map(([, v]) => v);
+    if (!rests.length) return null;
+    /** @param {'light' | 'dark'} m @param {string} rest */
+    const resolveOne = (m, rest) => {
+      let v = String(rest);
+      for (let i = 0; i < 6 && /var\(/.test(v); i++)
+        v = v.replace(
+          /var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi,
+          (_m, t, fb) =>
+            String(
+              base?.[m]?.[t] ?? ctx.project.core.tokenDefaults?.[t] ?? fb ?? '',
+            ),
+        );
+      return v.trim();
+    };
+    const all = new Set(
+      rests.flatMap(rest => [
+        resolveOne('light', rest),
+        resolveOne('dark', rest),
+      ]),
+    );
+    return all.size === 1 ? [...all][0] || null : null;
+  };
+  const styled = styledChanges(
+    compiledBefore,
+    compiledAfter,
+    base,
+    drawnAtRest,
+  );
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
