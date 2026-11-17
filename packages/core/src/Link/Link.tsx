@@ -64,6 +64,10 @@ registerEnglishFallback(english);
 const styles = stylex.create({
   base: {
     display: 'inline-flex',
+    // The root stops at its container, and the label below can shrink. Thus
+    // a label with no break opportunity, such as a bare URL, wraps inside the
+    // line and does not push past it.
+    maxWidth: '100%',
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
     fontFamily: 'inherit',
@@ -84,12 +88,15 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // A truncating label needs a box that stops at its container: an
-  // inline-flex root otherwise grows to its whole text, so its Text never
-  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
-  // FR4).
+  // A truncating root may shrink below its label's length inside a flex row,
+  // so its Text overflows and draws an ellipsis (`component:Link` FR6,
+  // `component:Text` FR4).
   truncating: {
-    maxWidth: '100%',
+    minWidth: 0,
+  },
+  // A flex item's min-width defaults to its longest word; zero lets the label
+  // shrink to the root, so its text wraps.
+  label: {
     minWidth: 0,
   },
   /**
@@ -205,9 +212,10 @@ export interface LinkProps extends BaseProps<
   hasUnderline?: boolean;
   /**
    * Whether the link is disabled.
-   * A disabled link renders as a plain anchor without an href (and without
-   * target/rel/onClick), so it cannot navigate or run onClick. It keeps a tab
-   * stop and is announced as a disabled link.
+   * A disabled link cannot navigate or run onClick. With `href` and no
+   * `onClick` it renders as a plain anchor without an href, target, or rel;
+   * with `onClick` it renders as a link-styled button. It keeps a tab stop and
+   * is announced as disabled.
    * @default false
    */
   isDisabled?: boolean;
@@ -295,6 +303,30 @@ export interface LinkProps extends BaseProps<
   children: ReactNode;
 }
 
+type LinkKeyDownHandler = React.KeyboardEventHandler<
+  HTMLAnchorElement | HTMLButtonElement
+>;
+
+// Spread these props after the caller's props, so a caller `aria-disabled` or
+// `role` cannot replace them. A caller `tabIndex` still applies, so a disabled
+// Link keeps the focus order it has when enabled.
+function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    role: 'link',
+    'aria-disabled': true,
+  } as const;
+}
+
+// The native button keeps its own role.
+function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    role: undefined,
+    'aria-disabled': true,
+  } as const;
+}
+
 /**
  * A styled anchor link component.
  *
@@ -379,7 +411,8 @@ export function Link({
         weight={weight}
         color={labelColor}
         display={display}
-        maxLines={maxLines}>
+        maxLines={maxLines}
+        xstyle={styles.label}>
         {children}
       </Text>
       {isExternalWithIcon && (
@@ -406,7 +439,6 @@ export function Link({
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
-        aria-disabled={isDisabled || undefined}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -427,24 +459,21 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
-        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
+        {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
         {sharedContent}
       </button>
     );
   } else if (isDisabled) {
     // A disabled link renders as an <a> with no href, so nothing can navigate
     // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it (spec:AST-085
-    // FR1, FR5). The router LinkComponent is deliberately skipped — a disabled
-    // link performs no navigation, and custom router links may require a live
-    // href. target/rel are omitted with the href.
+    // role so keyboard and screen-reader users still find it. The router
+    // LinkComponent is deliberately skipped — a disabled link performs no
+    // navigation, and custom router links may require a live href. target/rel
+    // are omitted with the href.
     linkElement = (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
-        role="link"
         aria-label={label || undefined}
-        aria-disabled={true}
         tabIndex={0}
         {...mergeProps(
           themeProps('link', {color}),
@@ -463,7 +492,7 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        {...disabledInteractionProps(props.onKeyDown)}>
+        {...disabledAnchorProps(props.onKeyDown)}>
         {sharedContent}
       </a>
     );

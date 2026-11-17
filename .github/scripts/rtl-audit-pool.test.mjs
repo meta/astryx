@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+
 import {describe, expect, it} from 'vitest';
 import {
   closePageQuietly,
@@ -65,6 +67,119 @@ function phase(scanCounts) {
     describe: story => ({storyId: story.storyId}),
   };
 }
+
+describe('one retry for a story that errored', () => {
+  /** A scan that throws on its first `failures` attempts at `storyId`. */
+  function flaky({storyId, failures, verdict = 'pass'}) {
+    const attempts = [];
+    return {
+      attempts,
+      options: {
+        retry: true,
+        scan: async (story, page) => {
+          attempts.push({storyId: story.storyId, page: page.id});
+          const seen = attempts.filter(a => a.storyId === story.storyId).length;
+          if (story.storyId === storyId && seen <= failures) {
+            throw new Error(`${TIMEOUT} (attempt ${seen})`);
+          }
+          return {
+            storyId: story.storyId,
+            verdict: story.storyId === storyId ? verdict : 'N-A',
+          };
+        },
+        onError: (story, error, {firstError} = {}) => ({
+          storyId: story.storyId,
+          verdict: 'ERROR',
+          notes: [String(error)],
+          ...(firstError ? {firstError} : {}),
+        }),
+        onRetried: (result, firstError) => ({
+          ...result,
+          retriedAfter: firstError,
+        }),
+        describe: story => ({storyId: story.storyId}),
+      },
+    };
+  }
+
+  it('retries an ERROR once on a fresh page, and keeps the first reason', async () => {
+    const browser = fakeBrowser();
+    const pool = await createPagePool({size: 2, openPage: browser.openPage});
+    const run = flaky({storyId: 'core-story--3', failures: 1});
+    const results = await mapPool(stories(8, []), pool, run.options);
+    const tries = run.attempts.filter(a => a.storyId === 'core-story--3');
+    expect(tries).toHaveLength(2);
+    expect(tries[1].page).not.toBe(tries[0].page);
+    expect(results[3]).toEqual({
+      storyId: 'core-story--3',
+      verdict: 'pass',
+      retriedAfter: `Error: ${TIMEOUT} (attempt 1)`,
+    });
+    expect(pool.retries).toEqual([
+      {
+        storyId: 'core-story--3',
+        firstError: `Error: ${TIMEOUT} (attempt 1)`,
+        outcome: 'recovered',
+      },
+    ]);
+  });
+
+  it('never retries a judged verdict', async () => {
+    const browser = fakeBrowser();
+    const pool = await createPagePool({size: 2, openPage: browser.openPage});
+    const run = flaky({storyId: 'core-story--3', failures: 0, verdict: 'fail'});
+    const results = await mapPool(stories(8, []), pool, run.options);
+    expect(
+      run.attempts.filter(a => a.storyId === 'core-story--3'),
+    ).toHaveLength(1);
+    expect(results[3].verdict).toBe('fail');
+    expect(pool.retries).toEqual([]);
+  });
+
+  it('retries exactly once: a second ERROR stays ERROR, with both reasons', async () => {
+    const browser = fakeBrowser();
+    const pool = await createPagePool({size: 2, openPage: browser.openPage});
+    const run = flaky({storyId: 'core-story--3', failures: 5});
+    const results = await mapPool(stories(8, []), pool, run.options);
+    expect(
+      run.attempts.filter(a => a.storyId === 'core-story--3'),
+    ).toHaveLength(2);
+    expect(results[3]).toEqual({
+      storyId: 'core-story--3',
+      verdict: 'ERROR',
+      notes: [`Error: ${TIMEOUT} (attempt 2)`],
+      firstError: `Error: ${TIMEOUT} (attempt 1)`,
+    });
+    expect(pool.retries).toEqual([
+      {
+        storyId: 'core-story--3',
+        firstError: `Error: ${TIMEOUT} (attempt 1)`,
+        outcome: 'error',
+        error: `Error: ${TIMEOUT} (attempt 2)`,
+      },
+    ]);
+    // Each failed attempt replaced its page.
+    expect(pool.recoveries).toHaveLength(2);
+  });
+});
+
+describe('the audit passes that retry', () => {
+  it('the D1 and D5+D6 passes opt in to one retry; the curated pass does not', () => {
+    const source = fs.readFileSync(
+      new URL('../../apps/storybook/rtl-audit/rtl-audit.mjs', import.meta.url),
+      'utf8',
+    );
+    const pass = phase => {
+      const start = source.indexOf(`phase: '${phase}'`);
+      return source.slice(source.lastIndexOf('mapPool(', start), start);
+    };
+    for (const phase of ['D1', 'D5+D6']) {
+      expect(pass(phase), phase).toMatch(/\bretry: true\b/);
+      expect(pass(phase), phase).toContain('onRetried');
+    }
+    expect(source.match(/\bretry: true\b/g)).toHaveLength(2);
+  });
+});
 
 describe('RTL audit worker pages', () => {
   it('fails only the story that broke a page; the worker continues on a fresh page', async () => {

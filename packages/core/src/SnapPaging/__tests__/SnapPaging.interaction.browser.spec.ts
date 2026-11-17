@@ -21,15 +21,20 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   drag,
+  FRAME_STARVATION_MS,
   freezePageWhen,
+  holdInputUntil,
   installPageFreeze,
   installTimerGate,
   openStory,
+  requireFrames,
   tap,
   thawPage,
   touchDriver,
   webInputDriver,
+  WHEEL_SCROLL_END_MS,
   withStorybook,
+  type InputHold,
 } from '@astryxdesign/interaction-harness';
 
 import {paging} from '../../motion/uikit/paging';
@@ -533,12 +538,6 @@ const TRACKPAD_IN_CHROMIUM =
   "Chromium's CDP wheels read as a mouse's wheel; the trackpad cases run in WebKit";
 
 /**
- * How long after its last wheel the gesture host ends a horizontal trackpad
- * scroll, ms. A gap this long or longer starts a new gesture.
- */
-const TRACKPAD_SCROLL_END_MS = 220;
-
-/**
  * Reports a coarse primary pointer to script, before the story loads: a
  * tablet with a trackpad, whose wheels a desktop context can inject.
  */
@@ -596,9 +595,7 @@ for (const pointer of ['coarse', 'fine'] as const) {
           steps: Array.from({length: 40}, (_, i) => ({
             dx: i % 2 === 0 ? 7 : 6,
           })),
-          // WebKit stamps wheels in whole ms, so the longest gap that keeps
-          // one scroll is 1 ms shorter than the end.
-          maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+          maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
         });
         await settled(scroller);
         await expect
@@ -636,7 +633,12 @@ test('the scroll offset holds through a swipe, and the settle hands it on', asyn
     });
   });
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}));
+  // The row pages from the release the page reads. A release it reads on the
+  // other side of the advance speed from the script fails by name.
+  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
   const seen = await page.evaluate(
     () => (window as unknown as {__seen: number[]}).__seen,
   );
@@ -988,7 +990,10 @@ test('a widening that leaves a settling row past its new last page lands it ther
       {once: true},
     );
   });
-  await swipe(page, scroller, {px: -80, ms: 80});
+  // A short drag held still settles the row back onto its last page. It
+  // moves away from where the widened row ends, so the widening always
+  // leaves it past the new last page.
+  await swipe(page, scroller, {px: -60, ms: 160, restMs: 120});
   await expect
     .poll(
       async () =>
@@ -1007,6 +1012,22 @@ test('a widening that leaves a settling row past its new last page lands it ther
     'the row still settles at the widening',
   ).not.toBe(true);
   await settled(scroller);
+  // A slow page can hand the row back before it draws a frame at rest, so
+  // the case waits for that frame.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const {frames} = window as unknown as {
+            frames: {isMoving: boolean}[];
+          };
+          return frames.some(
+            (frame, i) => i > 0 && frames[i - 1].isMoving && !frame.isMoving,
+          );
+        }),
+      {message: 'the page draws a frame at rest', timeout: 5000},
+    )
+    .toBe(true);
   const frames = await page.evaluate(
     () =>
       (window as unknown as {frames: {shown: number; isMoving: boolean}[]})
@@ -1659,6 +1680,7 @@ async function pressInSettle(
   scroller: Locator,
   until: number,
   back = false,
+  beforeThaw?: () => Promise<void>,
 ) {
   const next = await page
     .getByRole('button', {name: /next|right|forward/i})
@@ -1669,6 +1691,7 @@ async function pressInSettle(
   // The settle's frames go through the gate, so the freeze below holds them.
   await installTimerGate(page);
   await scroller.evaluate(el => el.setAttribute('data-press-in-settle', ''));
+  await logShown(scroller);
   // A drag past half a view that rests before the lift releases at 0, so the
   // row settles on the nearest page, the next one. A flick's release reads
   // its speed from when the touches arrive, and a starved page receives
@@ -1684,25 +1707,100 @@ async function pressInSettle(
   // `until`. A read from this process comes a round trip late, and a loaded
   // runner can miss the whole pass in that time. A settle that hands the row
   // back first fails here, by name.
-  await freezePageWhen(
+  await freezeWhenHeldIn(
     page,
-    ({at, isBack}) => {
-      const el = document.querySelector('[data-press-in-settle]');
-      const items = Array.from(el?.children ?? []) as HTMLElement[];
-      if (el == null || items.length === 0) {
-        return false;
-      }
-      const shown =
-        el.getBoundingClientRect().left - items[0].getBoundingClientRect().left;
-      const isHeld = items.some(item => item.style.translate !== '');
-      return isHeld && (isBack ? shown < at : shown >= at);
-    },
-    {at: until, isBack: back},
+    back ? -Infinity : until,
+    back ? until : Infinity,
   );
   const held = await isTakenOver(scroller);
   await page.mouse.click(next.x + next.width / 2, next.y + next.height / 2);
+  await beforeThaw?.();
   await thawPage(page);
   return held;
+}
+
+type Shown = {t: number; held: boolean; shown: number};
+
+/**
+ * Logs, on every real frame from now on, where the row shows and whether the
+ * paging holds it. The freeze checks the same frames.
+ */
+async function logShown(scroller: Locator) {
+  await scroller.evaluate(el => {
+    const log: Shown[] = [];
+    (window as unknown as {__shownLog: Shown[]}).__shownLog = log;
+    const freeze = (
+      window as unknown as {
+        __harnessFreeze?: {frame: (callback: () => void) => number};
+      }
+    ).__harnessFreeze;
+    const frame = (callback: () => void) =>
+      freeze == null ? requestAnimationFrame(callback) : freeze.frame(callback);
+    const items = Array.from(el.children) as HTMLElement[];
+    const read = () => {
+      log.push({
+        t: performance.now(),
+        held: items.some(item => item.style.translate !== ''),
+        shown:
+          el.getBoundingClientRect().left -
+          items[0].getBoundingClientRect().left,
+      });
+      if (log.length < 2000) {
+        frame(read);
+      }
+    };
+    frame(read);
+  });
+}
+
+/**
+ * Freezes the scene in the first real frame where the paging holds the row
+ * shown in `[from, to)`. A row that passed that window between two frames
+ * more than the starvation gap apart was starved of frames, which fails by
+ * name. Needs `logShown` first.
+ */
+async function freezeWhenHeldIn(page: Page, from: number, to: number) {
+  try {
+    await freezePageWhen(
+      page,
+      ({lo, hi}) => {
+        const el = document.querySelector('[data-press-in-settle]');
+        const items = Array.from(el?.children ?? []) as HTMLElement[];
+        if (el == null || items.length === 0) {
+          return false;
+        }
+        const shown =
+          el.getBoundingClientRect().left -
+          items[0].getBoundingClientRect().left;
+        const isHeld = items.some(item => item.style.translate !== '');
+        return isHeld && shown >= lo && shown < hi;
+      },
+      {lo: from, hi: to},
+    );
+  } catch (error) {
+    const log = await page.evaluate(
+      () => (window as unknown as {__shownLog: Shown[]}).__shownLog,
+    );
+    const side = ({shown}: Shown) => (shown < from ? -1 : shown >= to ? 1 : 0);
+    // The row crossed the window between a frame that held it short of the
+    // window and the next, which shows it past or handed back.
+    for (let i = 1; i < log.length; i++) {
+      const [before, after] = [log[i - 1], log[i]];
+      const isCrossed =
+        before.held &&
+        side(before) !== 0 &&
+        (side(after) === -side(before) ||
+          (!after.held && side(after) !== side(before)));
+      if (isCrossed && after.t - before.t > FRAME_STARVATION_MS) {
+        requireFrames([before, after], {
+          min: 1,
+          during: 'the row held in its freeze window',
+          where: sample => sample.held && side(sample) === 0,
+        });
+      }
+    }
+    throw error;
+  }
 }
 
 /** The row's offset once two reads a while apart agree. */
@@ -1733,6 +1831,12 @@ test('an edge press late in a settle steps on to a stop', async ({page}) => {
   expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
 });
 
+/**
+ * How far into an edge button's move the touch lands, ms on the scene's
+ * clock. The case needs the catch short of halfway to the move's target.
+ */
+const CATCH_INTO_MOVE_MS = 100;
+
 for (const holdMs of [150, 40]) {
   test(`during an edge button's move, a ${holdMs} ms touch on the row stops it where it shows, and the row rests on a stop`, async ({
     page,
@@ -1745,11 +1849,28 @@ for (const holdMs of [150, 40]) {
     if (box == null) {
       throw new Error('no scroller');
     }
-    expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
     const driver = await touchDriver(page);
+    // The page handles the touch on the scene's clock, a set time into the
+    // edge button's move, however late this process sends it. A touch that
+    // reaches the page after that time fails by name.
+    let hold: InputHold | null = null;
+    expect(
+      await pressInSettle(page, scroller, stops[3] * 0.9, false, async () => {
+        hold = await holdInputUntil(page, {
+          afterResumeMs: CATCH_INTO_MOVE_MS,
+          on: ['touchstart', 'pointerdown'],
+        });
+      }),
+    ).toBe(true);
+    if (hold == null) {
+      throw new Error('no hold');
+    }
+    const caught: InputHold = hold;
+    await caught.resumed();
     await driver.play(
       tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs}),
     );
+    await caught.landed();
     const at = await restingOffset(scroller);
     expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
     // A finger stops the pager's own move at the touch, short of its target.
@@ -1964,13 +2085,19 @@ test.describe('with a finger and a mouse', () => {
       'snap-paging-partial-last-page',
       'paging',
     );
-    for (let i = 0; i < 7; i++) {
-      await swipe(page, scroller, {px: 80, ms: 80});
-      await settled(scroller);
-    }
-    // At the end, a flick settles back onto the same stop. The page narrows
-    // the row by 1 px 60 ms after the lift, so the resize lands mid-settle
-    // whatever the runner's lag.
+    // At the end, a flick settles back onto the same stop. An instant scroll
+    // takes the row there, so the flick is the case's only touch.
+    await scroller.evaluate(el => {
+      el.scrollTo({left: el.scrollWidth - el.clientWidth, behavior: 'instant'});
+    });
+    await expect
+      .poll(async () => offset(scroller), {
+        message: 'the row starts at its end',
+        timeout: 5000,
+      })
+      .toBeCloseTo(await travel(scroller), 0);
+    // The page narrows the row by 1 px 60 ms after the lift, so the resize
+    // lands mid-settle whatever the runner's lag.
     await scroller.evaluate(el => {
       const flags = window as unknown as {heldAtResize?: boolean};
       el.addEventListener(

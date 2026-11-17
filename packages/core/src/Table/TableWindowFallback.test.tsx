@@ -20,7 +20,7 @@ const bodyModifier: TablePlugin<Item> = {transformBodyRow: props => props};
 function Fixture({reason}: {reason: string}) {
   const virtualization = useTableRowsVirtualization({
     rowHeight: reason === 'geometry' ? 0 : 56,
-    viewportHeight: 240,
+    initialViewportHeight: 240,
   });
   return (
     <Table
@@ -48,7 +48,7 @@ describe('Table windowing admission diagnostics', () => {
     function StatusFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       const rowStatus = useTableRowStatus<Item>({
         getStatus: () => ({status: 'success', label: 'Ready'}),
@@ -115,7 +115,7 @@ describe('Table windowing admission diagnostics', () => {
     function CallerFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table
@@ -181,7 +181,7 @@ describe('Table windowing admission diagnostics', () => {
     function FocusFixture({fallback}: {fallback: boolean}) {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       const selection = useTableSelection({
         getIsItemSelected: () => false,
@@ -233,7 +233,7 @@ describe('Table windowing admission diagnostics', () => {
     function DuplicateFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table

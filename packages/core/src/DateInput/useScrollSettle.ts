@@ -54,6 +54,8 @@
  * still moving.
  *
  * A person's input on the scroller ends the caller's steer (useScrollSteer).
+ * A caller can name the keys that scroll its scroller. Then another key, as
+ * Tab, leaves the steer running.
  *
  * SYNC: When modified, update DateInputTouch.test.tsx.
  */
@@ -81,11 +83,17 @@ export interface ScrollSteer {
   current: () => number | null;
   /** Ends the steer. */
   end: () => void;
+  /** Whether a person's `key` on the scroller ends the steer. */
+  endsOnKey: (key: string) => boolean;
 }
 
 /**
  * One steer for one scroller: pass it to {@link useScrollSettle}, start it
  * before each `scrollTo` the caller makes, and read it in the settle.
+ *
+ * @param scrollKeys - the keys that scroll the scroller, so they end the
+ *   steer. Without it, every key ends the steer: a key that moves focus to
+ *   another part of the scroller scrolls it too.
  *
  * @example
  * ```
@@ -93,7 +101,7 @@ export interface ScrollSteer {
  * useScrollSettle(ref, element => finishOrRound(element, steer.current()), true, undefined, steer);
  * ```
  */
-export function useScrollSteer(): ScrollSteer {
+export function useScrollSteer(scrollKeys?: ReadonlySet<string>): ScrollSteer {
   const rowRef = useRef<number | null>(null);
   return useMemo(
     () => ({
@@ -104,8 +112,9 @@ export function useScrollSteer(): ScrollSteer {
       end: () => {
         rowRef.current = null;
       },
+      endsOnKey: key => scrollKeys?.has(key) ?? true,
     }),
-    [],
+    [scrollKeys],
   );
 }
 
@@ -216,6 +225,12 @@ export function useScrollSettle(
       steer?.end();
     };
 
+    const endSteerOnKey = (event: KeyboardEvent) => {
+      if (steer?.endsOnKey(event.key) === true) {
+        steer.end();
+      }
+    };
+
     const onPointerEnd = () => {
       // The drag's release: its glide to the nearest row re-arms this on its
       // own, and the timer covers a release already on a row, which scrolls
@@ -236,7 +251,7 @@ export function useScrollSettle(
     element.addEventListener('touchstart', endSteer, {passive: true});
     element.addEventListener('wheel', endSteer, {passive: true});
     element.addEventListener('pointerdown', endSteer, {passive: true});
-    element.addEventListener('keydown', endSteer, {passive: true});
+    element.addEventListener('keydown', endSteerOnKey, {passive: true});
 
     return () => {
       clearTimeout(timer);
@@ -253,7 +268,7 @@ export function useScrollSettle(
       element.removeEventListener('touchstart', endSteer);
       element.removeEventListener('wheel', endSteer);
       element.removeEventListener('pointerdown', endSteer);
-      element.removeEventListener('keydown', endSteer);
+      element.removeEventListener('keydown', endSteerOnKey);
     };
   }, [ref, isEnabled, isHeldRef, steer]);
 

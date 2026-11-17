@@ -5,7 +5,7 @@
  * @input A workload: a multi-file preset (file count and changed lines) or
  *   one file of a given size
  * @output Deterministic old/new file contents, their line and changed-line
- *   totals, and small formatting helpers for the DiffViewer performance sandbox
+ *   totals, and the megabyte formatter for the DiffViewer performance sandbox
  * @position Pure support utilities for the DiffViewer performance sandbox;
  *   no React and no DOM, so any harness can render the same fixtures
  *
@@ -375,50 +375,6 @@ export function countLines(files: ReadonlyArray<DiffBenchmarkFile>): number {
   );
 }
 
-export function formatDuration(value: number | null): string {
-  return value == null ? '—' : `${value.toFixed(1)} ms`;
-}
-
-export function formatCount(value: number | null): string {
-  return value == null ? '—' : value.toLocaleString();
-}
-
 export function formatMegabytes(bytes: number | null): string {
   return bytes == null ? '—' : `${(bytes / 1_048_576).toFixed(1)} MB`;
-}
-
-export interface LongTaskReading {
-  count: number;
-  totalMs: number;
-}
-
-/**
- * Collects long tasks until the returned stop function is called. Returns
- * null from stop when the browser has no Long Tasks API, so a page shows no
- * reading rather than a misleading zero.
- */
-export function watchLongTasks(): () => LongTaskReading | null {
-  const isSupported =
-    typeof PerformanceObserver !== 'undefined' &&
-    PerformanceObserver.supportedEntryTypes?.includes('longtask') === true;
-  if (!isSupported) {
-    return () => null;
-  }
-  const entries: PerformanceEntry[] = [];
-  const observer = new PerformanceObserver(list => {
-    for (const entry of list.getEntries()) {
-      entries.push(entry);
-    }
-  });
-  observer.observe({type: 'longtask', buffered: false});
-  return () => {
-    for (const entry of observer.takeRecords()) {
-      entries.push(entry);
-    }
-    observer.disconnect();
-    return {
-      count: entries.length,
-      totalMs: entries.reduce((total, entry) => total + entry.duration, 0),
-    };
-  };
 }

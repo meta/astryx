@@ -272,19 +272,21 @@ export async function runHostedCli(options) {
   );
 
   const {runCli} = await import('../clients/cli/run.mjs');
+  const {recordRunFor} = await import('../foundation/fs/gather-cache.mjs');
   const run = () =>
     runCli({
       cliRoot: CLI_ROOT,
       argv: [...input.argv],
       declinedProjectCli: input.declinedProjectCli,
     });
-  let answered;
-  if (input.cliCommand === undefined) {
-    answered = await run();
-  } else {
+  const {cliCommand} = input;
+  // A hosted run records what it reads as a run of the bin does, so a later
+  // run with the same inputs reuses its kept catalog.
+  const answered = await recordRunFor(input.argv, async () => {
+    if (cliCommand === undefined) return run();
     const {runWithCliDoor} = await import('../foundation/env/cli-command.mjs');
-    answered = await runWithCliDoor(input.cliCommand, run);
-  }
+    return runWithCliDoor(cliCommand, run);
+  });
   // Another package set's host entry answered the run (INV30).
   if (answered) return answered;
   const code = process.exitCode;

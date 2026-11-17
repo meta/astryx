@@ -312,7 +312,11 @@ one removal merged ahead of the decision to allow it.
   Automation MUST use the documented programmatic API.
   Public controls MUST define their accepted values, default, precedence and
   interactions, error behavior, and a representative invocation. Commands and
-  options MUST appear in generated help and the machine-readable manifest.
+  options MUST appear in generated help and the machine-readable manifest; help
+  leaves out the ones the run's base does not serve and counts them, and the
+  manifest lists every command and every command's option with `available`;
+  the global options, which every base serves, carry none (`spec:AST-114`
+  FR7).
   Automatic behavior and other controls MUST either appear there or be linked from
   those discovery surfaces to consumer documentation. A
   normal invocation mode MUST have a documented command, option, or configuration
@@ -472,8 +476,20 @@ one removal merged ahead of the decision to allow it.
   names; persistence uses a feature- and schema-versioned experimental namespace;
   build tooling uses experimental exports/configuration; and docs use marked
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
-  data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
+  data, and behavior unchanged. For icon sets, installing a package that declares
+  `experimental.iconSets` is an opt-in, as setting `experimental.iconSet` is
+  (`spec:AST-084/DEC-13`). Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
+  One named exception: stable theme help and docs, one theme line of the agent
+  docs block, one line of `init`'s next steps (beside, never instead of, its
+  existing steps), and one line in each of the `theme eject` and
+  `theme palette generate` results MAY point at the experimental theme editor
+  (`experimental theme editor`, `experimental theme preview`) as the way to make
+  and change a theme, and `experimental theme preview app <dir>` as the starter
+  app that shows a theme when there is no app yet, phrased for theme work only
+  and labeled experimental each time; no other experimental surface may be
+  named, and the
+  exception ends when the theme editor graduates or is removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the
@@ -820,7 +836,17 @@ one removal merged ahead of the decision to allow it.
   plus the existing undecided-scope contract fallback that treats every file as changed
   when GitHub truncates the file list; it carries no other later `main` workflow or
   product work. This sync is not a pull request, uses no force or admin operation, marks no check, grants no release state, and changes no
-  package, product, Changeset, or release output. The repair branch rebases onto it, so
+  package, product, Changeset, or release output. For `v0.7.12` only, if that
+  first sync's normal release-branch CI exposes an incomplete validator or a
+  missing contract test for the carried fallback, one second and final
+  fast-forward policy sync may follow from the current release head. Its exact
+  reviewed bundle changes only `scripts/release/active-release.mjs`,
+  `scripts/release/active-release.test.mjs`, and
+  `.github/scripts/touched-components.test.mjs`. Every change is an exact port
+  of a normal pull request already merged on `main`; CodeBunny approves the
+  corrective commit's exact head before the fast-forward; and the full
+  visual, accessibility, RTL, product, and test release gate reruns on that
+  head. No third sync is admitted. The repair branch rebases onto the final sync, so
   every required check runs under the new trusted base before the repair can merge. The
   repair receives CodeBunny approval at its exact
   head and every normal product and test lane runs and passes. After it merges, the full
@@ -981,7 +1007,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                                                                                                                                                                         | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                                                                                                                                                                                                      |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                                                                                                                                                                                     | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception; an open layer under touch with extra elements                                                                                                                                                                                                                                                                        | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking; an open layer more than 5 elements over its fine-pointer count, an added element that is themeable, a new anatomy part, or without a job in its record, or a closed layer, trigger, or repeated component above its fine-pointer count                                                                                                                                                                                       |
-| FR61      | Release-validator, policy-carry, and scope-routing fixtures; one exact test port; exact-head CodeBunny/CI; then the full release gate                                                                                                                                                                                                                           | one non-merge test commit still present on main; stable patch id equal but changed-line digest different; reverted source; product, package, Changeset, snapshot, assertion, test-control, timeout or retry edits; multiple commits; unauthorized policy-carry path; undecidable file list                                                                                                              | A broader change enters the release branch, the carried policy differs from its reviewed main commit, the repair runs a narrow lane, a repeated or waived gate substitutes for proof, or tagging starts before the new exact head passes the full release gate                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR61      | Release-validator, initial and corrective policy-carry, and scope-routing fixtures; one exact test port; exact-head CodeBunny/CI; then the full release gate                                                                                                                                                                                                    | one non-merge test commit still present on main; stable patch id equal but changed-line digest different; reverted source; product, package, Changeset, snapshot, assertion, test-control, timeout or retry edits; multiple commits; unauthorized policy-carry path; undecidable file list                                                                                                              | A broader change enters the release branch, the carried policy differs from its reviewed main commit, the repair runs a narrow lane, a repeated or waived gate substitutes for proof, or tagging starts before the new exact head passes the full release gate                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR3       | Current component contract, latest-stable inspection, and coarse/non-coarse browser evidence                                                                                                                                                                                                                                                                    | Auxiliary numeric steppers hidden with accessible direct entry and keyboard stepping retained; lost entry path; removed public prop or essential action                                                                                                                                                                                                                                                 | A qualifying numeric-stepper adaptation is labeled breaking, or the narrow rule is used to excuse a lost API, essential action, value/validation/callback contract, or accessible entry path                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## Decision log
@@ -1542,8 +1568,11 @@ product work, while accepting the red result would waive a release gate. The bra
 therefore admits the narrow FR61 class: one test-only patch still present on `main`,
 proved by patch id, exact changed-line digest, and explicit content limits. A branch
 that predates the rule first receives the branch-specific reviewed policy bundle
-through the validated policy-only carry. The repair is then reviewed and tested normally before
-a new full exact-head release gate.
+through the validated policy-only carry. For `v0.7.12` only, a defect in that
+sync's validator or matching workflow-contract test admits one second and final
+three-file corrective sync, after its exact bundle has merged on `main` and
+CodeBunny has approved the corrective commit's exact head. The repair is then
+reviewed and tested normally before a new full exact-head release gate.
 
 Rejected: another unchanged retry, accepting a named flake, copying an unreviewed
 patch, allowing product or release-output changes in the repair, or merging around a

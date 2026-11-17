@@ -371,7 +371,7 @@ function positionIn(
   return offsets[i] + (page - i) * (offsets[i + 1] - offsets[i]);
 }
 
-function mod(value: number, count: number): number {
+export function mod(value: number, count: number): number {
   return ((value % count) + count) % count;
 }
 
@@ -559,7 +559,9 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   When a replaced viewport or track attaches, a motion that the detach
  *   stopped ends on its page. Its report and `onSettle` go out from a frame.
  * - A controlled `index` wins. A page that the pager reports and the owner
- *   does not take returns the pager to `index`, without a report.
+ *   does not take returns the pager to `index`, without a report. A resize
+ *   that renumbers the pages keeps the settle's page under its new number,
+ *   also without a report. A controlled `index` then names the old number.
  * - The pan and the catch attach for every pointer. A mouse drags the track
  *   as a finger does. The pan follows a trackpad's scroll along its axis, but
  *   never a mouse wheel's.
@@ -1010,8 +1012,8 @@ export function createPager(
       }
       settleHandle = null;
       if (finished) {
-        // The track rests on its curve's end. A clock read a frame behind the
-        // finish would show the curve a hair short of it.
+        // Set the track on its curve's end. A clock read one frame before the
+        // finish shows a value short of that end.
         animator?.set({x: x.at(x.duration)});
         rest();
       }
@@ -1055,12 +1057,14 @@ export function createPager(
     // A new writing direction mirrors the track, so it re-places it too.
     const isFlipped = rtl !== isRtl;
     let changed = width !== pageWidth || isFlipped;
-    // A settle's track is read before the pages are measured: measuring a
-    // held row can re-place its children and end their curves.
+    // Read the settle's track before measuring the pages. Measuring a held
+    // row can re-place its children and end their curves.
     const seed =
       settleHandle != null && animator != null ? readSeed(animator) : null;
     const oldStride = stride();
     const oldWidth = pageWidth > 0 ? pageWidth : 1;
+    // A settle that began before the viewport had a width showed nothing.
+    const wasLaidOut = pageWidth > 0;
     isRtl = rtl;
     pageWidth = width;
     // Where a position on the old layout sits on the new one. The same pages
@@ -1147,7 +1151,9 @@ export function createPager(
     if (!isDragging && !caughtSettle) {
       // A track the resize leaves past its new last page lands on its target
       // at once, as at rest. A held row's scroll offset can still move under
-      // it as the browser clamps it.
+      // it as the browser clamps it. A settle that began before the viewport
+      // had a width also lands at once. It showed nothing, so a viewer that
+      // opens on a photo shows it with no slide from the first.
       const isPastEnd =
         seed != null &&
         !isLooping() &&
@@ -1157,6 +1163,7 @@ export function createPager(
         settleHandle != null &&
         animator != null &&
         seed != null &&
+        wasLaidOut &&
         !isFlipped &&
         !isPastEnd
       ) {

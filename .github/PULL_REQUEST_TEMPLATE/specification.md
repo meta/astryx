@@ -34,6 +34,7 @@
 - R4 rejected alternatives over one line or outside a decision:
 - R5 pull request or issue references remaining:
 - R6 ruled open questions still listing options:
+- R7 project status (build status or work order):
 
 ## Scope
 

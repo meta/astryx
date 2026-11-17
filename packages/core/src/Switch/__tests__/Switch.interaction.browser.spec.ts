@@ -28,6 +28,7 @@ import {
   armHold,
   blockMainThread,
   compareCurve,
+  controlColor,
   cubicBezier,
   countBetween,
   advanceFrozenPage,
@@ -38,6 +39,7 @@ import {
   installPageFreeze,
   installTimerGate,
   markElement,
+  MARKER_RGB,
   openStory,
   releaseAnimations,
   seekAnimations,
@@ -53,6 +55,7 @@ import {
   traceRendering,
   trackControl,
   trackMarker,
+  trackMarkers,
   waitForRest,
   withStorybook,
   writeEvidence,
@@ -2359,11 +2362,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     castFrames: Parameters<typeof trackMarker>[1],
     starts: [number, number],
   ): Promise<ClockedFrame[]> {
-    const pageTime = pageTimesOnControls(await trackControl(page, castFrames), {
-      ahead: await trackControl(page, castFrames, {ahead: true}),
+    const [control, ahead, tracked] = await trackMarkers(page, castFrames, {
+      colors: [controlColor(), controlColor({ahead: true}), MARKER_RGB],
+    });
+    const pageTime = pageTimesOnControls(control, {
+      ahead,
       controlStarts: starts,
     });
-    const tracked = await trackMarker(page, castFrames);
     const shown = tracked.filter(
       (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
         f.box != null && f.box.width > 0 && f.box.height > 0,
@@ -3305,8 +3310,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       // The red channel's mean in an 8 px square: a scalar on x. With both
       // controls, a WebKit proof judges each frame at its time on the
       // controls' clock, at display rate.
-      const control = await trackControl(page, read);
-      const ahead = await trackControl(page, read, {ahead: true});
+      const [control, ahead] = await trackMarkers(page, read, {
+        colors: [controlColor(), controlColor({ahead: true})],
+      });
       const colour = await trackBrightness(page, read, {...probe, size: 8});
       runs.push({
         tracked: colour,

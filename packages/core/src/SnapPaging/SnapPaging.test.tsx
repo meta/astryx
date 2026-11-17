@@ -404,6 +404,45 @@ describe('Carousel with hasSnap', () => {
         });
       });
     }
+
+    it("a translate that moves between an item's rect and its own read is read again: the stops stay the layout's", () => {
+      // The running animation moves 1.27 px once, right after the fourth
+      // item's rect is read.
+      const element = document.createElement('div');
+      Object.defineProperty(element, 'offsetWidth', {value: 300});
+      Object.defineProperty(element, 'clientWidth', {value: 300});
+      element.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+      let translate = -30;
+      let isMoved = false;
+      const items = new Set<Element>();
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const start = i * (94.67 + 8);
+        item.getBoundingClientRect = () => {
+          const rect = new DOMRect(start + translate, 0, 94.67, 100);
+          if (i === 3 && !isMoved) {
+            isMoved = true;
+            translate -= 1.27;
+          }
+          return rect;
+        };
+        items.add(item);
+        element.append(item);
+      }
+      const readStyle = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (target, pseudo) =>
+          items.has(target)
+            ? ({translate: `${translate}px`} as CSSStyleDeclaration)
+            : readStyle(target, pseudo),
+      );
+      document.body.append(element);
+      const {stops} = snapPages(element, 0, 411, true);
+      expect(isMoved).toBe(true);
+      stops.slice(0, 5).forEach((stop, i) => {
+        expect(stop).toBeCloseTo(layoutStops[i], 6);
+      });
+    });
   });
 
   describe("a held row's span", () => {
@@ -457,6 +496,41 @@ describe('Carousel with hasSnap', () => {
 
     it('under a scaled row takes the scale off each rect before its translate', () => {
       expect(itemsSpan(movingRow(2), true)).toBeCloseTo(layoutSpan, 6);
+    });
+
+    it("reads an item again when its translate moves between its rect and its own read, so the span stays the layout's", () => {
+      // The running animation moves 1.27 px once, right after the last
+      // item's rect is read.
+      const element = document.createElement('div');
+      Object.defineProperty(element, 'offsetWidth', {value: 300});
+      element.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+      let translate = -280;
+      let isMoved = false;
+      const items = new Set<Element>();
+      for (let i = 0; i < 7; i++) {
+        const item = document.createElement('div');
+        const left = i * (94.67 + 8);
+        item.getBoundingClientRect = () => {
+          const rect = new DOMRect(left + translate, 0, 94.67, 100);
+          if (i === 6 && !isMoved) {
+            isMoved = true;
+            translate -= 1.27;
+          }
+          return rect;
+        };
+        items.add(item);
+        element.append(item);
+      }
+      const readStyle = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (target, pseudo) =>
+          items.has(target)
+            ? ({translate: `${translate}px`} as CSSStyleDeclaration)
+            : readStyle(target, pseudo),
+      );
+      document.body.append(element);
+      expect(itemsSpan(element, true)).toBeCloseTo(layoutSpan, 6);
+      expect(isMoved).toBe(true);
     });
 
     it('at rest reads the rects as they are', () => {

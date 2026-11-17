@@ -56,7 +56,7 @@ export const doc = {
       name: 'keywords',
       type: 'string[]',
       description:
-        "Search keywords for CLI discovery: the ideas, domains, and other names a builder might use for what the template serves (e.g. ['monitoring', 'uptime', 'on-call'] for a service-health dashboard). Lowercase. `astryx search` matches them as it matches the description and `astryx build` ranks page templates on them, so keep them out of `description`. Integration templates need @astryxdesign/cli 0.6.6 or later: earlier CLIs reject the field and drop that template, and CLIs before 0.6.4 also hide the package's doc topics.",
+        "Search keywords for CLI discovery: the ideas, domains, and other names a builder might use for what the template serves (e.g. ['monitoring', 'uptime', 'on-call'] for a service-health dashboard). Lowercase. One keyword names one concept: write a list of words as separate keywords (['kpi', 'tiles'], not 'kpi tiles'). Write several words as one keyword only for a term the words do not mean apart, such as 'table of contents' or 'reading pane': when `astryx build` chooses the start and its alternatives, such a keyword counts only when the request names the whole phrase, in order, never through its words alone. Inside a phrase, build skips search's stopwords and one-letter words, so 'sign in' matches as 'sign' and 'on-call' as 'call'. `astryx search` matches them as it matches the description and `astryx build` ranks page templates on them, so keep them out of `description`. Integration templates need @astryxdesign/cli 0.6.6 or later: earlier CLIs reject the field and drop that template, and CLIs before 0.6.4 also hide the package's doc topics.",
     },
     {
       name: 'replaces',
@@ -69,13 +69,13 @@ export const doc = {
       type: 'Record<string, string>',
       stability: 'experimental',
       description:
-        "The icon definition each icon the source imports draws, such as `{TrashIcon: 'delete'}`: a named import is keyed by the name it imports (`{Trash as TrashIcon}` is `Trash`), a default import by its local name (`import DeleteIcon from …` is `DeleteIcon`). When the project sets `experimental.iconSet`, `astryx template` (shown or copied) replaces each declared icon with the set's icon for that definition (`astryx docs cli/experimental/icon-definitions`) and reports every key as mapped or kept; an undeclared import is left alone. A name imported from two modules (`TrashIcon` from an outline and a solid module) needs one key, and each import keeps its variant when its module belongs to an installed set.",
+        "The icon definition each icon the source imports draws, such as `{TrashIcon: 'delete'}`: a named import is keyed by the name it imports (`{Trash as TrashIcon}` is `Trash`), a default import by its local name (`import DeleteIcon from …` is `DeleteIcon`). When the project sets `experimental.iconSet`, `astryx template` (shown or copied) replaces each declared icon with the icon for that definition (`astryx docs cli/experimental/icon-definitions`) from the first set in the project's list that maps it, or with a placeholder the copied file declares when no set does, and reports every key as mapped, a placeholder, or kept; an undeclared import is left alone, and `astryx integration check` notes it (`template_icon_undeclared`, failing `--strict --next`) in a package whose templates declare `icons`. A name imported from two modules (`TrashIcon` from an outline and a solid module) needs one key, and each import keeps its variant when its module belongs to an installed set.",
     },
     {
       name: 'isReady',
       type: 'boolean',
       description:
-        "Whether the template is ready for use. false shows as '(WIP)' in the gallery and CLI.",
+        "Whether the template is ready for use. false shows as '(not ready)' in the CLI; the gallery hides the template.",
     },
     {
       name: 'scaffold',

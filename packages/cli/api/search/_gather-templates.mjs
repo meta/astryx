@@ -5,6 +5,7 @@
  */
 
 import fs from 'node:fs';
+import {renderTokens} from '../../foundation/doc-compiler/links.mjs';
 import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
 import {discoverTemplates} from '../template/template.mjs';
 import {listAvailableThemes} from '../theme/_adapter.mjs';
@@ -15,6 +16,14 @@ import {
 } from '../../foundation/discovery/template-adapter.mjs';
 import {sameWord, wordsOf} from './_words.mjs';
 
+/**
+ * The source file each template candidate's `weakKeywords` are read from,
+ * when it could be read, and the names if this run already read them: a
+ * gather kept between runs stores the names it has and the file for the rest
+ * (api/search/_adapter.mjs), so storing costs no parse.
+ * @type {WeakMap<object, {file: string, derivedSoFar: () => string[] | undefined}>}
+ */
+export const derivedFromSource = new WeakMap();
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
@@ -75,14 +84,20 @@ export async function gatherTemplates(cwd) {
     let derive = () => [];
     /** @type {string[] | null} */
     let weakKeywordBound = null;
+    /** @type {string | null} */
+    let readSource = null;
+    /** @type {(() => string[] | undefined) | undefined} */
+    let derivedNow;
     if (t.type === 'page') {
       if (t.filePath) {
         try {
           const source = fs.readFileSync(t.filePath, 'utf-8');
+          readSource = t.filePath;
           // Parsing the source costs more than the rest of the page's gather.
           // It waits until a term could match a name the source can yield.
           /** @type {string[] | undefined} */
           let derived;
+          derivedNow = () => derived;
           derive = () => {
             if (derived === undefined) {
               try {
@@ -101,15 +116,15 @@ export async function gatherTemplates(cwd) {
       if (t.category)
         keywords.push(...t.category.split(/[^A-Za-z0-9]+/).filter(Boolean));
     }
-    return {
-      domain: 'template',
+    const candidate = {
+      domain: /** @type {const} */ ('template'),
       name: commandName,
       keywords,
       get weakKeywords() {
         return derive();
       },
       ...(weakKeywordBound ? {weakKeywordBound} : {}),
-      description: t.description || '',
+      description: renderTokens(t.description || ''),
       // A template's own keywords name the many ideas it serves, so they score
       // as its prose does, not as a name: one of them matching one word of a
       // short idea is not a direct match.
@@ -122,7 +137,14 @@ export async function gatherTemplates(cwd) {
       _kind: t.type, // 'page' | 'block'
       _resultName: t.dirName,
       _commandName: commandName,
+      ...(t.isReady === false ? {_notReady: /** @type {const} */ (true)} : {}),
     };
+    if (readSource)
+      derivedFromSource.set(candidate, {
+        file: readSource,
+        derivedSoFar: () => derivedNow?.(),
+      });
+    return candidate;
   });
 }
 

@@ -367,8 +367,14 @@ function validateReleaseState({
   return errors;
 }
 
+const GIT_MAX_BUFFER = 64 * 1024 * 1024;
+
 function gitRaw(root, args) {
-  return execFileSync('git', args, {cwd: root, encoding: 'utf8'});
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: GIT_MAX_BUFFER,
+  });
 }
 
 function git(root, args) {
@@ -1015,7 +1021,7 @@ function validateReleaseTestRepairAtRef(
   const changeDigest = exactChangeDigest(diff);
   const files = [
     ...new Set(entries.flatMap(entry => diffEntryFiles(entry) ?? [])),
-  ];
+  ].sort();
   const mainPatches = new Map();
   if (mainRef) {
     const candidates = git(root, [
@@ -1029,11 +1035,29 @@ function validateReleaseTestRepairAtRef(
       .split('\n')
       .filter(Boolean);
     for (const commit of candidates) {
+      const candidateEntries = git(root, [
+        'diff-tree',
+        '--root',
+        '--no-commit-id',
+        '--name-status',
+        '-r',
+        commit,
+      ])
+        .split('\n')
+        .filter(Boolean);
+      const candidateEntryFiles = candidateEntries.map(diffEntryFiles);
+      if (candidateEntryFiles.some(candidateFiles => candidateFiles === null))
+        continue;
+      const candidateFiles = [...new Set(candidateEntryFiles.flat())].sort();
+      if (canonicalJson(candidateFiles) !== canonicalJson(files)) continue;
+
       const candidateDiff = gitRaw(root, [
         'show',
         '--format=',
         '--binary',
         commit,
+        '--',
+        ...candidateFiles,
       ]);
       const candidatePatchId = stablePatchId(root, candidateDiff);
       if (!candidatePatchId || candidatePatchId !== patchId) continue;
@@ -1068,7 +1092,7 @@ const RELEASE_POLICY_CARRY_PATTERNS = [
   /^scripts\/release\/active-release(?:\.test)?\.mjs$/,
   /^scripts\/release\/release-paths\.mjs$/,
   /^\.github\/actions\/test-scope\/action\.yml$/,
-  /^\.github\/scripts\/test-scope-action\.test\.mjs$/,
+  /^\.github\/scripts\/(?:test-scope-action|touched-components)\.test\.mjs$/,
   /^\.github\/workflows\/ci\.yml$/,
   /^docs\/release\.md$/,
   /^docs\/specs\/AST-(?:017|030)\/spec\.md$/,

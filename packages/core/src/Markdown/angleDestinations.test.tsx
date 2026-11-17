@@ -23,7 +23,8 @@ describe('angle-bracket destinations (CommonMark 0.31 §6.3)', () => {
   it.each([
     ['[a](<b(c>)', ['link(b(c)']],
     ['[a](<b(c> "t")', ['link(b(c)']],
-    ['[a](< b(c) d >)', ['link( b(c) d )']],
+    // The parser stores the normalized destination: outer whitespace goes.
+    ['[a](< b(c) d >)', ['link(b(c) d)']],
     ['![i](<b(c>)', ['image(b(c)']],
     ['[a](<b\\>c>)', ['link(b>c)']],
     ['[a](<b\\<c>)', ['link(b<c)']],

@@ -20,7 +20,15 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from 'vitest';
 import ThemeShowcase, {
   ThemeShowcaseStore,
 } from '../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
@@ -261,6 +269,40 @@ describe('theme-showcase local interactions', () => {
     expect(
       screen.getByText('No payment is submitted or saved.'),
     ).toBeInTheDocument();
+  });
+
+  it('opens a sign-in dialog from the navigation, closes it, and reopens it empty', async () => {
+    // jsdom does not implement the modal dialog methods; remove the stubs
+    // afterwards so other tests see jsdom unchanged.
+    const proto = HTMLDialogElement.prototype;
+    proto.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    proto.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    onTestFinished(() => {
+      delete (proto as Partial<HTMLDialogElement>).showModal;
+      delete (proto as Partial<HTMLDialogElement>).close;
+    });
+    const user = userEvent.setup();
+    render(<ThemeShowcaseStore />);
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Sign in'}));
+    const dialog = await screen.findByRole('dialog', {name: 'Sign in'});
+    const email = within(dialog).getByLabelText('Email');
+    await user.type(email, 'customer@example.com');
+    expect(email).toHaveValue('customer@example.com');
+    await user.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', {name: 'Sign in'}),
+      ).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', {name: 'Sign in'}));
+    const reopened = await screen.findByRole('dialog', {name: 'Sign in'});
+    expect(within(reopened).getByLabelText('Email')).toHaveValue('');
   });
 
   it('filters inventory by text and changes cart feedback without navigation', async () => {

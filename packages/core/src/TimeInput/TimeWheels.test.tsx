@@ -25,6 +25,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import {WHEEL_ROW_HEIGHT} from '../DateInput/wheelOptions';
 import type {ISOTimeString} from '../utils';
 import {TimeWheels} from './TimeWheels';
 import type {TimeParts} from './timeWheelRules';
@@ -122,6 +123,34 @@ function restingLabel(name: string): string | null {
   const list = column(name);
   const id = list.getAttribute('aria-activedescendant');
   return id == null ? null : (document.getElementById(id)?.textContent ?? null);
+}
+
+/** The rows a column draws, its own and its copies, at their places. */
+function drawnRows(name: string): {row: HTMLElement; place: number}[] {
+  const strip = column(name).querySelector<HTMLElement>('[data-wheel-strip]')!;
+  const own = Array.from(
+    strip.querySelectorAll<HTMLElement>(':scope > [data-wheel-row]'),
+  ).map((row, index) => ({row, place: index}));
+  const container = strip.querySelector(':scope > [aria-hidden="true"]');
+  const copies = (
+    container == null ? [] : (Array.from(container.children) as HTMLElement[])
+  ).map(row => ({
+    row,
+    place: Number.parseFloat(row.style.insetBlockStart) / WHEEL_ROW_HEIGHT,
+  }));
+  return [...own, ...copies];
+}
+
+/** The label of the row drawn under the band, read from the strip itself. */
+function drawnLabel(name: string): string | null {
+  const strip = column(name).querySelector<HTMLElement>('[data-wheel-strip]')!;
+  const [, y = '0'] = strip.style
+    .getPropertyValue('translate')
+    .trim()
+    .split(/\s+/);
+  const shift = (Number.parseFloat(y) || 0) / WHEEL_ROW_HEIGHT;
+  const hit = drawnRows(name).find(({place}) => Math.abs(place + shift) < 0.1);
+  return hit?.row.textContent ?? null;
 }
 
 const at = (hour: number, minute: number): TimeParts => ({
@@ -230,6 +259,104 @@ describe('TimeWheels — minutes', () => {
     expect(onCommit).toHaveBeenLastCalledWith(at(12, 59));
     advance(550);
     expect(restingLabel('Hour')).toBe('12');
+  });
+});
+
+describe('TimeWheels — the minute column loops, and its seam keeps the hour, as UIDatePicker’s does', () => {
+  it('turns 11:59 AM into 11:00 AM for ArrowDown on the minutes: the hour and AM/PM stay', () => {
+    const {onCommit} = renderWheels({initial: at(11, 59)});
+    fireEvent.keyDown(column('Minute'), {key: 'ArrowDown'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(11, 0));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('00');
+    expect(drawnLabel('Hour')).toBe('11');
+    expect(drawnLabel('AM/PM')).toBe('AM');
+  });
+
+  it('turns 1:00 PM into 1:59 PM for ArrowUp on the minutes: the hour and PM stay', () => {
+    const {onCommit} = renderWheels({initial: at(13, 0)});
+    fireEvent.keyDown(column('Minute'), {key: 'ArrowUp'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(13, 59));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('59');
+    expect(drawnLabel('Hour')).toBe('1');
+    expect(drawnLabel('AM/PM')).toBe('PM');
+  });
+
+  it('turns 12:00 PM into 12:59 PM for ArrowUp on the minutes: the hour and PM stay', () => {
+    const {onCommit} = renderWheels({initial: at(12, 0)});
+    fireEvent.keyDown(column('Minute'), {key: 'ArrowUp'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(12, 59));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('59');
+    expect(drawnLabel('Hour')).toBe('12');
+    expect(drawnLabel('AM/PM')).toBe('PM');
+  });
+
+  it('turns 11:59 PM into 11:00 PM for ArrowDown on the minutes: the hour and PM stay', () => {
+    const {onCommit} = renderWheels({initial: at(23, 59)});
+    fireEvent.keyDown(column('Minute'), {key: 'ArrowDown'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(23, 0));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('00');
+    expect(drawnLabel('Hour')).toBe('11');
+    expect(drawnLabel('AM/PM')).toBe('PM');
+  });
+
+  it('turns 11:55 AM into 11:05 AM for PageDown on the minutes, ten rows on across the seam', () => {
+    const {onCommit} = renderWheels({initial: at(11, 55)});
+    fireEvent.keyDown(column('Minute'), {key: 'PageDown'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(11, 5));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('05');
+    expect(drawnLabel('Hour')).toBe('11');
+  });
+
+  it('keeps 12:58 PM’s hour four minute rows on: 12:02 PM, as UIDatePicker does', () => {
+    const {onCommit} = renderWheels({initial: at(12, 58)});
+    for (let i = 0; i < 4; i++) {
+      fireEvent.keyDown(column('Minute'), {key: 'ArrowDown'});
+    }
+    expect(onCommit).toHaveBeenLastCalledWith(at(12, 2));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('02');
+    expect(drawnLabel('Hour')).toBe('12');
+    expect(drawnLabel('AM/PM')).toBe('PM');
+  });
+
+  it('keeps the hour for Home and End on the minutes: 10:03 AM to 10:59 AM', () => {
+    const {onCommit} = renderWheels({initial: at(10, 3)});
+    fireEvent.keyDown(column('Minute'), {key: 'End'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(10, 59));
+    advance(550);
+    expect(restingLabel('Hour')).toBe('10');
+  });
+
+  it('skips the minutes past a 1:30 PM maximum when ArrowUp passes the seam from 1:00 PM', () => {
+    const {onCommit} = renderWheels({
+      initial: at(13, 0),
+      max: '13:30' as ISOTimeString,
+    });
+    fireEvent.keyDown(column('Minute'), {key: 'ArrowUp'});
+    expect(onCommit).toHaveBeenLastCalledWith(at(13, 30));
+    advance(550);
+    expect(drawnLabel('Minute')).toBe('30');
+  });
+
+  it('greys the minutes drawn above :00 at a 5 PM maximum: they are 5 PM’s own', () => {
+    renderWheels({initial: at(17, 0), max: '17:00' as ISOTimeString});
+    const above = drawnRows('Minute').filter(
+      ({place}) => place >= -4 && place <= -1,
+    );
+    expect(above.map(({row}) => row.textContent)).toEqual([
+      '56',
+      '57',
+      '58',
+      '59',
+    ]);
+    for (const {row} of above) {
+      expect(row.className.includes('rowDisabled')).toBe(true);
+    }
   });
 });
 

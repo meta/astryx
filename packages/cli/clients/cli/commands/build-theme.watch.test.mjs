@@ -24,6 +24,7 @@ import {
   onTestFinished,
 } from 'vitest';
 import {execFileSync, spawn} from 'node:child_process';
+import {EventEmitter} from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -32,7 +33,6 @@ import {ensureCoreBuilt} from './ensure-core-built.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_BIN = path.resolve(__dirname, '../bin/astryx.mjs');
-
 function runCli(args, cwd) {
   try {
     const out = execFileSync('node', [CLI_BIN, ...args], {
@@ -51,6 +51,20 @@ function runCli(args, cwd) {
   }
 }
 
+/**
+ * Writes a theme source whole: to a new file in the same folder, then renamed
+ * over it. A rebuild that reads the source while the test writes it then sees
+ * the old or the new content, never a part of it. fs.writeFileSync empties the
+ * file before it writes, so a rebuild reading in that gap ends at once on a
+ * part of a file and a second rebuild follows.
+ * @param {string} file
+ * @param {string} content
+ */
+function saveWhole(file, content) {
+  const part = `${file}.${process.pid}.part`;
+  fs.writeFileSync(part, content);
+  fs.renameSync(part, file);
+}
 /**
  * Resolves once the child's output holds `count` matches of `pattern`, and
  * rejects if the child exits first. It waits on the watcher's own output, not
@@ -97,6 +111,99 @@ function waitForOutput(
 }
 
 /**
+ * Saves `content` to `source` once, with the watcher already armed, and
+ * resolves once `file` holds `color`. Rebuilds run one at a time, each one
+ * printing "rebuilding" when it starts and "Watching" when it ends. A rebuild
+ * still running at the save may end without the color; the first rebuild that
+ * starts after the save must not: that is a stale theme, and the wait fails by
+ * name. fs.watch can drop an event under load, so the save is made again
+ * every 2 s, but only while no rebuild has started since it: a rebuild that
+ * starts after the save reads the new content, so a stale one is never hidden.
+ * More than 2 such saves fail by name: a watcher that keeps missing saves is
+ * a fault to report, not to wait out.
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {() => string} read
+ * @param {{file: string, source: string, content: string, color: string, saved?: boolean}} edit
+ *   `saved`: the caller has just written `content` itself; wait without saving.
+ */
+function saveAndWaitForColor(
+  child,
+  read,
+  {file, source, content, color, saved = false},
+) {
+  const count = (/** @type {RegExp} */ pattern) =>
+    (read().match(pattern) ?? []).length;
+  // Each started rebuild ends with one more "Watching" line after the first.
+  const startedBefore = count(/rebuilding /g);
+  if (!saved) saveWhole(source, content);
+  let savedAt = Date.now();
+  let missed = 0;
+  const built = () => {
+    try {
+      return fs.readFileSync(file, 'utf-8').includes(color);
+    } catch {
+      return false;
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (built()) {
+        cleanup();
+        resolve(undefined);
+        return;
+      }
+      if (
+        count(/rebuilding /g) === startedBefore &&
+        Date.now() - savedAt >= 2000
+      ) {
+        missed += 1;
+        if (missed > 2) {
+          cleanup();
+          reject(
+            new Error(
+              `the watcher missed ${missed} saves in a row: no rebuild started after saving ${source}:\n${read()}`,
+            ),
+          );
+          return;
+        }
+        saveWhole(source, content);
+        savedAt = Date.now();
+      }
+      const firstAfterSaveEnded =
+        count(/rebuilding /g) > startedBefore &&
+        count(/Watching /g) >= startedBefore + 2;
+      if (firstAfterSaveEnded && !built()) {
+        cleanup();
+        reject(
+          new Error(
+            `a rebuild after the save produced a stale theme: ${file} does not hold ${color}:\n${read()}`,
+          ),
+        );
+      }
+    };
+    const exited = (/** @type {number | null} */ code) => {
+      cleanup();
+      reject(
+        new Error(
+          `the watcher exited (${code}) before ${file} held ${color}:\n${read()}`,
+        ),
+      );
+    };
+    const timer = setInterval(check, 250);
+    const cleanup = () => {
+      clearInterval(timer);
+      child.stdout?.off('data', check);
+      child.stderr?.off('data', check);
+      child.off('exit', exited);
+    };
+    child.stdout?.on('data', check);
+    child.stderr?.on('data', check);
+    child.once('exit', exited);
+    check();
+  });
+}
+
+/**
  * Resolves with the child's exit code once it exits and its output is read.
  * Only the test's timeout bounds the wait, and each test kills its watcher
  * when it finishes.
@@ -118,6 +225,86 @@ beforeEach(() => {
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
+});
+
+describe('the wait for a saved edit', () => {
+  /** A watcher stand-in whose output the case writes. */
+  function fakeWatcher() {
+    const child = /** @type {any} */ (new EventEmitter());
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    let out = '';
+    const print = (/** @type {string} */ line) => {
+      out += `${line}\n`;
+      child.stdout.emit('data', Buffer.from(line));
+    };
+    return {child, print, read: () => out};
+  }
+
+  it('fails by name when the first rebuild after the save ends without the color', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    w.print('Watching a.mjs for changes');
+    const wait = saveAndWaitForColor(w.child, w.read, {
+      file,
+      source,
+      content: 'x',
+      color: '#040506',
+    });
+    w.print('Change detected — rebuilding a.mjs...');
+    w.print('Watching a.mjs for changes');
+    await expect(wait).rejects.toThrow(
+      'a rebuild after the save produced a stale theme',
+    );
+  });
+
+  it('fails by name when the watcher misses more than two saves in a row', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    // Armed, but no rebuild ever starts.
+    w.print('Watching a.mjs for changes');
+    await expect(
+      saveAndWaitForColor(w.child, w.read, {
+        file,
+        source,
+        content: 'x',
+        color: '#040506',
+      }),
+    ).rejects.toThrow('the watcher missed 3 saves in a row');
+  }, 20_000);
+
+  it('lets a rebuild running at the save end without the color, and takes the next one', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    w.print('Watching a.mjs for changes');
+    w.print('Change detected — rebuilding a.mjs...');
+    const wait = saveAndWaitForColor(w.child, w.read, {
+      file,
+      source,
+      content: 'x',
+      color: '#040506',
+    });
+    // The rebuild that was running ends with the old color.
+    w.print('Watching a.mjs for changes');
+    // The rebuild of the save starts, writes the color, and ends.
+    w.print('Change detected — rebuilding a.mjs...');
+    fs.writeFileSync(file, '--color-bg: #040506');
+    w.print('Watching a.mjs for changes');
+    await expect(wait).resolves.toBeUndefined();
+    expect(fs.readFileSync(source, 'utf-8')).toBe('x');
+  });
 });
 
 describe('theme build --watch', () => {
@@ -174,11 +361,11 @@ describe('theme build --watch', () => {
       // fs.watch can drop an event under load, so the write repeats until the
       // watcher reports the change (an idempotent write).
       const changed = `export default { name: 'wt', tokens: { '--color-bg': '#010203' } };\n`;
-      fs.writeFileSync(themeFile, changed);
+      saveWhole(themeFile, changed);
       await waitForOutput(child, read, 'rebuilding wt\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(themeFile, changed);
+            saveWhole(themeFile, changed);
           } catch {
             // The temporary folder is gone at teardown.
           }
@@ -195,6 +382,96 @@ describe('theme build --watch', () => {
     await waitForExit(child);
     expect(stdout).toMatch(/Stopped watching/);
   }, 30_000);
+
+  it('rebuilds when a local file the theme imports changes, in another folder too', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'parts'));
+    const colors = path.join(tmpDir, 'parts', 'colors.mjs');
+    fs.writeFileSync(colors, `export const BG = '#ffffff';\n`);
+    fs.writeFileSync(
+      path.join(tmpDir, 'wi.mjs'),
+      `import {BG} from './parts/colors.mjs';\nexport default { name: 'wi', tokens: { '--color-bg': BG } };\n`,
+    );
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'wi.mjs', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let stdout = '';
+    child.stdout.on('data', d => (stdout += d.toString()));
+    child.stderr.on('data', d => (stdout += d.toString()));
+    const read = () => stdout;
+    try {
+      await waitForOutput(child, read, 'Watching');
+      const changed = `export const BG = '#010203';\n`;
+      await waitForOutput(child, read, 'rebuilding wi\\.mjs', {
+        onPoll: () => {
+          try {
+            saveWhole(colors, changed);
+          } catch {
+            // The temporary folder is gone at teardown.
+          }
+        },
+      });
+      await waitForOutput(child, read, 'Watching', {count: 2});
+      expect(fs.readFileSync(path.join(tmpDir, 'wi.css'), 'utf-8')).toContain(
+        '#010203',
+      );
+    } finally {
+      child.kill('SIGINT');
+    }
+    await waitForExit(child);
+  }, 30_000);
+
+  it('ends on the full content after a rebuild reads a source written in place, and keeps watching', async () => {
+    // Some editors write a file in place (vim with backupcopy=yes, VS Code on
+    // some file systems): the file is empty, then full. A rebuild that reads it
+    // in between ends on part of a file; the change that fills it must still
+    // rebuild the theme from the full content.
+    const themeFile = path.join(tmpDir, 'ip.mjs');
+    const cssFile = path.join(tmpDir, 'ip.css');
+    const version = (/** @type {string} */ color) =>
+      `export default { name: 'ip', tokens: { '--color-bg': '${color}' } };\n`;
+    fs.writeFileSync(themeFile, version('#ffffff'));
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'ip.mjs', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let stdout = '';
+    const read = () => stdout;
+    child.stdout.on('data', d => (stdout += d.toString()));
+    child.stderr.on('data', d => (stdout += d.toString()));
+    try {
+      await waitForOutput(child, read, 'Watching');
+      // Empty the source in place, and fill it 1.5 s later: the debounce
+      // starts a rebuild of the empty file in between.
+      const fd = fs.openSync(themeFile, 'w');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      fs.writeSync(fd, version('#0a0b0c'));
+      fs.closeSync(fd);
+      await saveAndWaitForColor(child, read, {
+        file: cssFile,
+        source: themeFile,
+        content: version('#0a0b0c'),
+        color: '#0a0b0c',
+        saved: true,
+      });
+      // A rebuild of part of a file may add a "rebuilding" line; the watcher
+      // stays alive and ends on the full content.
+      expect(child.exitCode).toBe(null);
+      expect(fs.readFileSync(cssFile, 'utf-8')).toMatch(/#0a0b0c/);
+    } finally {
+      child.kill('SIGINT');
+    }
+    await waitForExit(child);
+    expect(stdout.trimEnd().endsWith('Stopped watching.')).toBe(true);
+  }, 60_000);
 
   it('stops at once when interrupted mid-rebuild, and drops a queued change', async () => {
     const themeFile = path.join(tmpDir, 'ws.mjs');
@@ -231,14 +508,14 @@ describe('theme build --watch', () => {
       await waitForOutput(child, read, 'rebuilding ws\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(themeFile, slow);
+            saveWhole(themeFile, slow);
           } catch {
             // The temporary folder is gone at teardown.
           }
         },
       });
       // Queue a change behind the rebuild in progress (debounce is 100 ms).
-      fs.writeFileSync(themeFile, `${slow}// queued\n`);
+      saveWhole(themeFile, `${slow}// queued\n`);
       // Let the 100 ms debounce queue the change. This is not a deadline: a slow
       // runner can only leave the change unqueued, never fail the test.
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -328,7 +605,7 @@ describe('theme build --watch', () => {
       );
 
       const changed = `export default { name: 'w2', tokens: { '--color-bg': '#010203' } };\n`;
-      fs.writeFileSync(second, changed);
+      saveWhole(second, changed);
 
       // fs.watch can drop an event under load, so the write repeats until the
       // watcher reports the change; the next "Watching" line follows the
@@ -336,7 +613,7 @@ describe('theme build --watch', () => {
       await waitForOutput(child, () => stdout, 'rebuilding w2\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(second, changed);
+            saveWhole(second, changed);
           } catch {
             // The temporary folder is gone at teardown.
           }
@@ -357,4 +634,118 @@ describe('theme build --watch', () => {
       child.kill('SIGINT');
     }
   }, 30_000);
+
+  it.each([
+    ['', 0],
+    // A second between saves gives the rebuilds of one save time to finish
+    // before the next save: the race a count of "Watching" lines lost on CI.
+    [', saving the next color a second after the last one landed', 1000],
+  ])(
+    'prints the --out editor-folder warning once per session, not on every rebuild%s',
+    async (_pause, pauseMs) => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+      const editor = path.join(tmpDir, 'themes', 'g');
+      fs.mkdirSync(editor, {recursive: true});
+      fs.writeFileSync(
+        path.join(editor, 'g.settings.json'),
+        JSON.stringify({like: 'neutral', settings: []}),
+      );
+      const source = path.join(tmpDir, 'other.mjs');
+      const version = (/** @type {string} */ color) =>
+        `export default { name: 'other', tokens: { '--color-bg': '${color}' } };\n`;
+      fs.writeFileSync(source, version('#ffffff'));
+
+      const child = spawn(
+        process.execPath,
+        [
+          CLI_BIN,
+          'theme',
+          'build',
+          'other.mjs',
+          '--out',
+          'themes/g/a.css',
+          '--watch',
+        ],
+        {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+      );
+      onTestFinished(() => {
+        child.kill('SIGKILL');
+      });
+      let out = '';
+      let stderr = '';
+      child.stdout.on('data', d => (out += d.toString()));
+      child.stderr.on('data', d => {
+        stderr += d.toString();
+        out += d.toString();
+      });
+
+      try {
+        await waitForOutput(child, () => out, 'Watching other\\.mjs');
+        // Two rebuilds, each writing into the editor folder again.
+        for (const color of ['#010203', '#040506']) {
+          if (color !== '#010203' && pauseMs)
+            await new Promise(resolve => setTimeout(resolve, pauseMs));
+          await saveAndWaitForColor(child, () => out, {
+            file: path.join(editor, 'a.css'),
+            source,
+            content: version(color),
+            color,
+          });
+        }
+        expect(fs.readFileSync(path.join(editor, 'a.css'), 'utf-8')).toContain(
+          '#040506',
+        );
+        expect(
+          out.match(/rebuilding other\.mjs/g)?.length,
+        ).toBeGreaterThanOrEqual(2);
+        expect(stderr.match(/theme editor made/g)).toHaveLength(1);
+      } finally {
+        child.kill('SIGINT');
+      }
+    },
+    60_000,
+  );
+
+  it('prints the editor-theme warning once per session, not on every rebuild', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    const source = path.join(editor, 'g.theme.ts');
+    const version = (/** @type {string} */ color) =>
+      `export default { name: 'g', tokens: { '--color-bg': '${color}' } };\n`;
+    fs.writeFileSync(source, version('#ffffff'));
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'themes/g/g.theme.ts', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let out = '';
+    let stderr = '';
+    child.stdout.on('data', d => (out += d.toString()));
+    child.stderr.on('data', d => {
+      stderr += d.toString();
+      out += d.toString();
+    });
+    try {
+      await waitForOutput(child, () => out, 'Watching');
+      for (const color of ['#010203', '#040506']) {
+        await saveAndWaitForColor(child, () => out, {
+          file: path.join(editor, 'g.css'),
+          source,
+          content: version(color),
+          color,
+        });
+      }
+      expect(stderr.match(/is a theme the theme editor made/g)).toHaveLength(1);
+    } finally {
+      child.kill('SIGINT');
+    }
+  }, 60_000);
 });
