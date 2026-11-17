@@ -132,7 +132,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Verify: you can state the reason in one sentence, and the choice still holds if the nav doubles in size. `astryx build "<idea>"` names the template to start from; scaffold it and the pairing is already wired up.',
+          text: 'Verify: you can state the reason in one sentence, and the choice still holds if the nav doubles in size. `{@command build "<idea>"}` names the template to start from; scaffold it and the pairing is already wired up.',
         },
       ],
     },

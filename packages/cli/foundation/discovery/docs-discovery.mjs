@@ -31,9 +31,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
 import {
   sectionKey,
@@ -41,11 +43,10 @@ import {
   sourceTitle,
   withSourceTitle,
 } from './docs-section-key.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
+import {topicLevel} from '../doc-compiler/generated-levels.mjs';
 
 export {withSourceTitle};
-
-/** Where the CLI's own topics live. */
-const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
 
 /**
  * Owner package recorded for the built-in topics. They ship inside the CLI
@@ -54,18 +55,37 @@ const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
  */
 export const BUILTIN_DOCS_PACKAGE = CLI_PROVIDER_ID;
 
-/**
- * A built-in topic file: `{topic}.doc.mjs`. Anchored at both ends so a
- * localization overlay (`{topic}.doc.zh.mjs`) is not read as a topic of its
- * own — it is loaded by the topic it overlays.
- */
-const BUILTIN_TOPIC_FILE_RE = /^([\w-]+)\.doc\.mjs$/;
-
 /** Conventional doc-file suffixes for an integration's topics. */
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
 
 /** A topic name is a CLI argument and a URL segment; keep it to both. */
 const TOPIC_NAME_RE = /^[\w-]+$/;
+
+/**
+ * Whether a `replaces` or `extends` names a route of the docs tree rather than
+ * a flat topic: a topic name never holds a `/`, and a guide the tree places is
+ * always read by a route that does.
+ * @param {unknown} target
+ * @returns {target is string}
+ */
+export function isGuideRoute(target) {
+  return typeof target === 'string' && target.includes('/');
+}
+
+/**
+ * What the integrations do to one guide the docs tree places, in configured
+ * order: a replacement, and the extensions merged onto whatever is there.
+ * Set on the guide's tree node where the project's tree is built.
+ * @typedef {object} GuideOverlay
+ * @property {DocsTopicRecord | null} replacement the doc readers get at the
+ *   route instead of the guide; the last package configured wins
+ * @property {Array<{package: string, path: string, providerId?: string}>} extensions
+ *   every extension of the guide, in configured order, whether it was
+ *   configured before or after a replacement: an extension adds to whatever
+ *   answers its route
+ * @property {string} [replacedPackage] the package of the replacement this one
+ *   took over from, when the guide was replaced twice
+ */
 
 /**
  * @typedef {object} DocsTopicRecord A doc file discovered under a docs root.
@@ -77,6 +97,7 @@ const TOPIC_NAME_RE = /^[\w-]+$/;
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the doc declares
  * @property {string} [replaces] topic this doc takes the place of
  * @property {string} [extendsTopic] topic this doc merges onto (`extends`)
  */
@@ -91,7 +112,10 @@ const TOPIC_NAME_RE = /^[\w-]+$/;
  * @property {string} [title]
  * @property {string} [description]
  * @property {string|null} [category]
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string} [replaces] the topic this one took the place of
+ * @property {string} [replacedPackage] the package whose topic or guide this
+ *   one took the place of
  * @property {Array<{package: string, path: string, providerId?: string}>} extensions
  *   overlays to merge onto the base doc, in the order their integrations were
  *   configured; each section an extension adds resolves its links against the
@@ -107,14 +131,53 @@ const TOPIC_NAME_RE = /^[\w-]+$/;
  * @returns {Record<string, string>} topic name → absolute doc path
  */
 export function discoverBuiltinTopics() {
+  // These topics describe Core; they show only in a run whose base is Core.
+  if (currentNonCoreBase()) return Object.create(null);
+  return builtinTopicsForCore();
+}
+
+/**
+ * The CLI's own topics as a run on Core reads them, whatever the run's base.
+ * @returns {Record<string, string>} topic name → absolute doc path
+ */
+export function builtinTopicsForCore() {
   /** @type {Record<string, string>} */
   const topics = Object.create(null);
   if (!fs.existsSync(BUILTIN_DOCS_DIR)) return topics;
-  for (const file of fs.readdirSync(BUILTIN_DOCS_DIR)) {
+  for (const file of listDir(BUILTIN_DOCS_DIR)) {
     const match = file.match(BUILTIN_TOPIC_FILE_RE);
     if (match) topics[match[1]] = path.join(BUILTIN_DOCS_DIR, file);
   }
   return topics;
+}
+
+/**
+ * The name an integration doc declares, whether it is placed (has
+ * `placement`, so it is no topic or root namespace), and the generated level
+ * its category puts it in when it is a flat topic (null for a placed doc or
+ * a namespace, which sit in no level), as docs discovery reads the doc; null when
+ * the doc does not load or parse, or names nothing. A doc of exported
+ * literals is read as data ({@link readDocAsData}).
+ *
+ * @param {string} file an integration doc file
+ * @returns {Promise<{name: string, placed: boolean, level: string | null} | null>}
+ */
+export async function integrationDocDeclaration(file) {
+  let doc;
+  try {
+    doc = /** @type {any} */ (
+      parseReadableDoc(await readDocAsData(file), path.basename(file))
+    );
+  } catch {
+    return null;
+  }
+  if (typeof doc?.name !== 'string') return null;
+  const placed = doc.placement != null;
+  return {
+    name: doc.name,
+    placed,
+    level: placed || doc.type === 'namespace' ? null : topicLevel(doc.category),
+  };
 }
 
 /**
@@ -127,7 +190,7 @@ export function builtinGuideFiles() {
   const files = Object.values(discoverBuiltinTopics());
   const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
   if (fs.existsSync(tree)) {
-    for (const file of fs.readdirSync(tree).sort()) {
+    for (const file of listDir(tree).sort()) {
       if (BUILTIN_TOPIC_FILE_RE.test(file)) files.push(path.join(tree, file));
     }
   }
@@ -152,6 +215,51 @@ export async function loadTopicModule(file) {
     );
   }
   return doc;
+}
+
+/**
+ * The doc `file` exports, as {@link loadTopicModule} gives it, read as data
+ * when the file holds only exported literals (../doc-compiler/literal-doc.mjs),
+ * so the read is the file alone; else imported.
+ * @param {string} file absolute path to a doc file
+ * @returns {Promise<unknown>} the authored doc value
+ */
+export async function readDocAsData(file) {
+  return readLiteralDoc(file) ?? loadTopicModule(file);
+}
+
+/**
+ * The CLI's own topics with what these integrations' docs add, in
+ * configured order, each package's docs read with `read` and withdrawn as
+ * the project's catalog withdraws them ({@link DocsCatalog#addDiscovered}).
+ * Icon sets and issues are the project's (config/project.mjs docs); this
+ * reads the doc files alone.
+ * @param {Array<{name?: string, docs?: unknown} | null | undefined>} integrations
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link readDocAsData} by default
+ * @returns {Promise<DocsCatalog>}
+ */
+export async function integrationDocsCatalog(
+  integrations,
+  {read = readDocAsData} = {},
+) {
+  const catalog = DocsCatalog.fromBuiltins();
+  for (const [at, integration] of integrations.entries()) {
+    if (!integration?.docs) continue;
+    try {
+      catalog.addDiscovered(
+        await discoverIntegrationDocs(
+          /** @type {{name: string, docs: string}} */ (integration),
+          {read},
+        ),
+        {package: integration.name ?? '', rank: at + 1},
+      );
+    } catch {
+      // A package whose docs fail to read adds none, as the project's
+      // catalog withdraws it.
+    }
+  }
+  return catalog;
 }
 
 /** Every block kind a section may hold, with the fields each one requires. */
@@ -205,7 +313,21 @@ const BLOCK_FIELD_VALUES = {
 const PROJECTION_FIELDS = ['fields', 'sections'];
 
 /** Keys a section may carry. */
-const SECTION_FIELDS = ['id', 'title', 'category', 'content', 'previewType'];
+const SECTION_FIELDS = [
+  'id',
+  'title',
+  'category',
+  'content',
+  'previewType',
+  'before',
+  'after',
+];
+
+/**
+ * The fields an extension section places itself with: the key of the base
+ * section it goes before or after. Read only by a merge, never by a reader.
+ */
+export const SECTION_POSITION_FIELDS = ['before', 'after'];
 
 /**
  * Check the fields the docs surfaces actually read. `parseDoc` is the outer
@@ -264,6 +386,19 @@ export function problemsInTopic(doc, {placement = false} = {}) {
         if (!SECTION_FIELDS.includes(key)) {
           problems.push(`${at}.${key}: not a field of a section`);
         }
+      }
+      for (const field of SECTION_POSITION_FIELDS) {
+        const value = section?.[field];
+        if (value != null && (typeof value !== 'string' || value === '')) {
+          problems.push(
+            `${at}.${field}: expected the key of a section, as \`--index\` shows it`,
+          );
+        }
+      }
+      if (section?.before != null && section?.after != null) {
+        problems.push(
+          `${at}: sets both \`before\` and \`after\`; a section goes in one place`,
+        );
       }
       if (!Array.isArray(section?.content)) {
         problems.push(`${at}.content: expected an array of blocks`);
@@ -451,9 +586,14 @@ function isFolder(dir) {
  * against its package while the rest of the CLI keeps working.
  *
  * @param {{name: string, docs?: string, providerId?: string}} integration a loaded integration
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link loadTopicModule} by default
  * @returns {Promise<{records: DocsTopicRecord[], errors: Error[], namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>}
  */
-export async function discoverIntegrationDocs(integration) {
+export async function discoverIntegrationDocs(
+  integration,
+  {read = loadTopicModule} = {},
+) {
   const docsDir = integration?.docs;
   /** @type {DocsTopicRecord[]} */
   const records = [];
@@ -472,7 +612,7 @@ export async function discoverIntegrationDocs(integration) {
   const files = [];
   /** @param {string} dirPath */
   function scanDir(dirPath) {
-    for (const entry of fs.readdirSync(dirPath, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dirPath)) {
       if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
       const full = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
@@ -492,7 +632,7 @@ export async function discoverIntegrationDocs(integration) {
   for (const file of files) {
     let doc;
     try {
-      doc = parseReadableDoc(await loadTopicModule(file), path.basename(file));
+      doc = parseReadableDoc(await read(file), path.basename(file));
     } catch (err) {
       errors.push(
         new Error(
@@ -565,7 +705,9 @@ export async function discoverIntegrationDocs(integration) {
         kind: 'generic',
         name: parsed.name,
         title: parsed.title,
+        // Rendered once, where the tree is built (api/docs/_adapter.mjs).
         summary: parsed.description,
+        ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
         group: null,
         placement: parsed.placement,
         ref: {topicFile: file},
@@ -587,6 +729,7 @@ export async function discoverIntegrationDocs(integration) {
       title: parsed.title,
       description: parsed.description,
       category: parsed.category ?? null,
+      ...(Array.isArray(parsed.keywords) ? {keywords: parsed.keywords} : {}),
       replaces: parsed.replaces,
       extendsTopic: parsed.extends,
       ...(providerId === integration.name ? {} : {providerId}),
@@ -599,8 +742,9 @@ export async function discoverIntegrationDocs(integration) {
 /**
  * Merge an extension onto a base topic: a section with a stable `id` replaces
  * the base section with the same `id`; legacy sections without IDs fall back to
- * title matching. A section with no match is appended. The title and
- * description stay the base topic's: an extension adds to a topic, it never
+ * title matching. A section with no match is added: before or after the
+ * section whose key its `before` or `after` names, else at the end. The title
+ * and description stay the base topic's: an extension adds to a topic, it never
  * renames it. A topic that `replaces` another is the one that renames.
  *
  * Keyed by section TITLE rather than by position, the way the localization
@@ -613,22 +757,124 @@ export async function discoverIntegrationDocs(integration) {
  * @returns {any} a new doc; neither input is mutated
  */
 export function mergeTopic(base, overlay) {
+  return mergeTopicReport(base, overlay).doc;
+}
+
+/**
+ * {@link mergeTopic}, also naming each `before` or `after` that found no
+ * section: that section was added at the end instead.
+ *
+ * @param {any} base
+ * @param {any} overlay
+ * @returns {{doc: any, unplaced: Array<{section: string, field: 'before' | 'after', key: string}>}}
+ */
+export function mergeTopicReport(base, overlay) {
   const sections = [...(base.sections ?? [])];
-  for (const section of overlay.sections ?? []) {
+  /** @type {Array<{section: string, field: 'before' | 'after', key: string}>} */
+  const unplaced = [];
+
+  for (const authored of overlay.sections ?? []) {
+    const section = withoutPosition(authored);
     const at = findMergeTarget(sections, section);
     if (at === -1) {
-      sections.push(section);
+      const field = authored.before != null ? 'before' : 'after';
+      const key = authored[field];
+      if (typeof key !== 'string') {
+        sections.push(section);
+        continue;
+      }
+      const anchor = sections.findIndex(
+        candidate => sectionKey(candidate) === key || candidate.id === key,
+      );
+      if (anchor === -1) {
+        unplaced.push({section: sectionKey(section), field, key});
+        sections.push(section);
+      } else if (field === 'before') {
+        // Placed just before a section another was placed `after`, it joins
+        // that section's group, so later sections placed there follow both.
+        if (sections[anchor][PLACED_AFTER] != null) {
+          Object.defineProperty(section, PLACED_AFTER, {
+            value: sections[anchor][PLACED_AFTER],
+            configurable: true,
+          });
+        }
+        sections.splice(anchor, 0, section);
+      } else {
+        // Sections placed after one key keep their order, across every
+        // extension merged onto the topic: each goes after every section
+        // placed there before it, and after the sections placed after those.
+        const group = new Set([key]);
+        let at = anchor + 1;
+        while (at < sections.length && group.has(sections[at][PLACED_AFTER])) {
+          group.add(sectionKey(sections[at]));
+          at += 1;
+        }
+        Object.defineProperty(section, PLACED_AFTER, {
+          value: key,
+          configurable: true,
+        });
+        sections.splice(at, 0, section);
+      }
     } else {
       // A legacy extension that replaces a section which has since gained a
-      // stable ID keeps that ID, so readers addressing it keep working.
+      // stable ID keeps that ID, so readers addressing it keep working. A
+      // replacing section keeps the place of the one it replaces.
       const replaced = sections[at];
-      sections[at] =
+      const replacing =
         section.id == null && replaced.id != null
           ? withSourceTitle({...section, id: replaced.id}, sourceTitle(section))
           : section;
+      // It also keeps the place an earlier `after` gave the one it replaces,
+      // so sections placed after that key later still follow it.
+      if (replaced[PLACED_AFTER] != null) {
+        const placed =
+          replacing === section ? withoutPosition({...section}) : replacing;
+        for (const symbol of Object.getOwnPropertySymbols(section)) {
+          if (!(symbol in placed)) {
+            Object.defineProperty(
+              placed,
+              symbol,
+              /** @type {PropertyDescriptor} */ (
+                Object.getOwnPropertyDescriptor(section, symbol)
+              ),
+            );
+          }
+        }
+        Object.defineProperty(placed, PLACED_AFTER, {
+          value: replaced[PLACED_AFTER],
+          configurable: true,
+        });
+        sections[at] = placed;
+      } else {
+        sections[at] = replacing;
+      }
     }
   }
-  return {...base, sections};
+  return {doc: {...base, sections}, unplaced};
+}
+
+/** The key a merged section was placed `after`, so later ones follow it. */
+const PLACED_AFTER = Symbol('astryx.docs.placedAfter');
+
+/**
+ * A section without the fields that place it; readers never see them.
+ * @param {any} section
+ * @returns {any}
+ */
+export function withoutPosition(section) {
+  if (section?.before == null && section?.after == null) return section;
+  const {before: _before, after: _after, ...rest} = section;
+  // Copy every own symbol (the provider and authored-title marks) too.
+  for (const symbol of Object.getOwnPropertySymbols(section)) {
+    Object.defineProperty(
+      rest,
+      symbol,
+      /** @type {PropertyDescriptor} */ (
+        Object.getOwnPropertyDescriptor(section, symbol)
+      ),
+    );
+  }
+  return rest;
 }
 
 /**
@@ -723,6 +969,31 @@ export class DocsCatalog {
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
   #issues = [];
+  /** @type {DocsTopicRecord[]} every doc that targets a route, in order */
+  #guideTargeters = [];
+
+  /**
+   * Record a doc that replaces or extends a guide the docs tree places, by
+   * its route. Whether the route holds such a guide, under that route or one
+   * it moved from, is known only once the tree is built, so the project tree
+   * applies each record there, in configured order ({@link GuideOverlay}); a
+   * route that holds none applies nothing.
+   * @param {DocsTopicRecord} record
+   * @returns {import('../integrations/issue').AstryxIntegrationIssue | null}
+   */
+  #targetGuide(record) {
+    this.#guideTargeters.push(record);
+    return null;
+  }
+
+  /**
+   * Every doc that replaces or extends a guide by its route, in configured
+   * order, so a check can name a route that holds no guide.
+   * @returns {ReadonlyArray<DocsTopicRecord>}
+   */
+  get guideTargeters() {
+    return this.#guideTargeters;
+  }
 
   /**
    * Record a doc file a package ships that did not load. Its package's docs
@@ -739,6 +1010,42 @@ export class DocsCatalog {
    */
   get issues() {
     return this.#issues;
+  }
+
+  /**
+   * Add what one integration's docs discovery found
+   * ({@link discoverIntegrationDocs}): its topics and tree inputs, or, when
+   * any doc is unusable, none of them and each failure as an issue of the
+   * catalog. A partial contribution is the state where a `replaces` silently
+   * does nothing, so one unusable doc withdraws the package's docs.
+   * @param {Awaited<ReturnType<typeof discoverIntegrationDocs>>} discovered
+   * @param {{package: string, rank: number}} owner the package the catalog
+   *   names in an issue, and the integration's place in configured order
+   * @returns {import('../integrations/issue').AstryxIntegrationIssue[]} the
+   *   issues of the package's docs, in order
+   */
+  addDiscovered({records, errors, namespaces, guides}, {package: pkg, rank}) {
+    if (errors.length > 0) {
+      for (const e of errors) {
+        this.addIssue({package: pkg, message: e.message});
+      }
+      return errors.map(e => ({
+        code: 'invalid_doc',
+        severity: 'error',
+        message: e.message,
+      }));
+    }
+    /** @type {import('../integrations/issue').AstryxIntegrationIssue[]} */
+    const issues = [];
+    for (const record of records) {
+      const issue = this.add(record);
+      if (issue) issues.push(issue);
+    }
+    this.addTreeInputs({
+      namespaces: namespaces.map(input => ({...input, rank})),
+      guides: guides.map(input => ({...input, rank})),
+    });
+    return issues;
   }
 
   /**
@@ -810,6 +1117,9 @@ export class DocsCatalog {
   add(record) {
     if (record.extendsTopic != null) {
       const target = this.resolve(record.extendsTopic);
+      if (!target && isGuideRoute(record.extendsTopic)) {
+        return this.#targetGuide(record);
+      }
       if (!target) {
         return {
           code: 'invalid_doc',
@@ -827,6 +1137,9 @@ export class DocsCatalog {
 
     if (record.replaces != null) {
       const target = this.resolve(record.replaces);
+      if (!target && isGuideRoute(record.replaces)) {
+        return this.#targetGuide(record);
+      }
       if (!target) {
         return {
           code: 'invalid_doc',
@@ -858,10 +1171,18 @@ export class DocsCatalog {
         title: record.title,
         description: record.description,
         category: record.category,
+        ...(record.keywords ? {keywords: record.keywords} : {}),
         replaces: replaced,
+        // The package whose topic it took over: an earlier replacement's, when
+        // the topic was already replaced.
+        replacedPackage: target.package,
         ...(record.providerId ? {providerId: record.providerId} : {}),
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to the topic a reader reads under the name it
+        // extends, so it carries over to the replacement: otherwise configured
+        // order alone would decide whether its sections show (a theme
+        // package's sections on `theme` would vanish in an app whose base
+        // library, configured later, replaces `theme`).
+        extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
         this.#aliases.set(replacedKey, replacementKey);
@@ -889,6 +1210,7 @@ export class DocsCatalog {
       title: record.title,
       description: record.description,
       category: record.category,
+      ...(record.keywords ? {keywords: record.keywords} : {}),
       ...(record.providerId ? {providerId: record.providerId} : {}),
       extensions: [],
     });

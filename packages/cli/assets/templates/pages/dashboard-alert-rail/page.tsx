@@ -94,9 +94,9 @@ interface WindowSeries {
 }
 
 const STATUS_STROKE: Record<HealthStatus, string> = {
-  healthy: 'var(--color-success, #0B991F)',
-  warning: 'var(--color-warning, #B25000)',
-  critical: 'var(--color-error, #D6002A)',
+  healthy: 'var(--color-text-success)',
+  warning: 'var(--color-text-warning)',
+  critical: 'var(--color-text-error)',
 };
 
 const STATUS_DOT: Record<HealthStatus, StatusDotVariant> = {
@@ -1314,7 +1314,9 @@ function UptimeRow({entry}: {entry: ServiceUptime}) {
             label={STATUS_LABEL[entry.status]}
             isPulsing={entry.status === 'critical'}
           />
-          <Heading level={4}>{entry.service}</Heading>
+          <Heading level={4} accessibilityLevel={3}>
+            {entry.service}
+          </Heading>
         </HStack>
         <Text type="supporting" color="secondary">
           {entry.uptime.toFixed(2)}% uptime
@@ -1469,7 +1471,7 @@ export default function ServiceHealthMonitorPage() {
                 </Text>
               </HStack>
             </VStack>
-            <HStack gap={2} vAlign="center">
+            <HStack gap={2} vAlign="center" wrap="wrap">
               <SegmentedControl
                 label="Time window"
                 value={timeWindow}
@@ -1500,7 +1502,7 @@ export default function ServiceHealthMonitorPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               {/* Traffic-light KPI tiles */}

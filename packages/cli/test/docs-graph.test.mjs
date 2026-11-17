@@ -32,8 +32,10 @@ import {
   loadCliSelfDocs,
 } from '../foundation/discovery/cli-self-docs.mjs';
 import {routeSegment} from '../foundation/discovery/docs-section-key.mjs';
+import {EXPERIMENTAL_AUTHORING_ROUTE} from '../foundation/discovery/authoring-self-docs.mjs';
 import {generateCompressedIndex} from '../foundation/agent-docs/agent-docs.mjs';
-import {program, JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {program} from '../clients/cli/program.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 
@@ -297,6 +299,8 @@ function problemWith(shown, {commands, groups, global}) {
   for (; i < rest.length; i++) {
     const token = rest[i];
     if (!/^--?[a-zA-Z]/.test(token)) continue;
+    // `experimental theme` takes a design token's name as an operand.
+    if (name.startsWith('experimental theme') && TOKEN_OPERAND.test(token)) continue;
     if (!known(flags, token)) {
       return `\`astryx ${name}\` has no option ${token.split('=')[0]}`;
     }
@@ -304,6 +308,9 @@ function problemWith(shown, {commands, groups, global}) {
   }
   return null;
 }
+
+/** A design token's name, such as `--color-text-primary`. */
+const TOKEN_OPERAND = /^--(?:color|radius|spacing|size|font|text|shadow|border|focus|duration|ease|syntax)-[a-z0-9-]+$/;
 
 /**
  * Commands a doc shows on purpose as wrong: the error codes they trigger. Each
@@ -406,25 +413,31 @@ describe('the docs graph', () => {
     // of the field reference, which `astryx docs authoring <name>` reads.
     const {loaded, failed} = await loadCliSelfDocs(discoverCliSelfDocSources(CLI), CLI);
     expect(failed).toEqual([]);
-    const authoring =
-      reads.get(`${TOP} authoring/field-reference --index`)?.data.sections ??
-      reads.get(`${TOP} authoring/field-reference`)?.data.sections ??
-      [];
-    expect(authoring.length).toBeGreaterThan(10);
+    // An experimental schema is a section of its own experimental route
+    // instead (spec:AST-084 FR0); that route is a tree node, and one read
+    // returns all its sections.
+    const sectionsOf = (/** @type {string} */ route) =>
+      (reads.get(`${TOP} ${route} --index`) ?? reads.get(`${TOP} ${route}`))
+        ?.data.sections ?? [];
+    expect(sectionsOf('authoring/field-reference').length).toBeGreaterThan(10);
     for (const {source, doc} of loaded) {
       const leaf = [...tree.nodes.values()].find(
         node => node.kind === doc.type && node.name === doc.name,
       );
-      const section = authoring.find(
+      const route =
+        doc.stability === 'experimental'
+          ? EXPERIMENTAL_AUTHORING_ROUTE
+          : 'authoring/field-reference';
+      const section = sectionsOf(route).find(
         (/** @type {any} */ s) => s.id === routeSegment(doc.name) || s.title === doc.displayName,
       );
       const ok = leaf
         ? reached(`${TOP} ${leaf.route}`)
         : section
           ? reached(`${TOP} authoring ${section.id}`) ||
-            reached(`${TOP} authoring/field-reference ${section.id}`) ||
-            // The walk opens the field reference whole, with every section.
-            reached(`${TOP} authoring/field-reference`)
+            reached(`${TOP} ${route} ${section.id}`) ||
+            // The walk opens the reference whole, with every section.
+            reached(`${TOP} ${route}`)
           : false;
       if (!ok) unreached.push(source);
     }

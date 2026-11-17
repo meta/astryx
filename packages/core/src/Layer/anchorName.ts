@@ -39,8 +39,12 @@ export function addAnchorName(el: HTMLElement, name: string): void {
 }
 
 export function removeAnchorName(el: HTMLElement, name: string): void {
-  writeAnchorNames(
-    el,
-    readAnchorNames(el).filter(existing => existing !== name),
-  );
+  const names = readAnchorNames(el);
+  // A write invalidates the element's style even when the value is the same.
+  if (names.includes(name)) {
+    writeAnchorNames(
+      el,
+      names.filter(existing => existing !== name),
+    );
+  }
 }

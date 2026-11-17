@@ -9,7 +9,20 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   isShowcase: true,
-  description:
-    'A basic app shell with content padding.',
-  componentsUsed: ['AppShell', 'SideNav', 'Heading', 'Text', 'VStack', 'NavIcon'],
+  description: 'A basic app shell with content padding.',
+  componentsUsed: [
+    'AppShell',
+    'SideNav',
+    'Heading',
+    'Text',
+    'VStack',
+    'NavIcon',
+  ],
+  icons: {
+    ChartBarIcon: 'chart',
+    CubeIcon: 'package',
+    DocumentTextIcon: 'document',
+    HomeIcon: 'home',
+    UsersIcon: 'users',
+  },
 };

@@ -2,60 +2,32 @@
 
 /**
  * @file ime.ts
- * @input Receives a keyboard event (React SyntheticEvent's `nativeEvent`, or a
- *   native DOM KeyboardEvent) with optional `isComposing` / `keyCode`.
- * @output Exports `isImeKeyEvent`, the canonical predicate for "this keydown is
- *   part of an in-progress IME composition and must not be treated as a command".
- * @position Shared low-level utility; consumed by every editable/overlay surface
- *   that handles Enter/Escape/arrows in `onKeyDown` (Typeahead, PowerSearch,
- *   Dialog, ContextMenu, Tooltip, Chat composer, focus-trap Escape, ...).
- *
- * ── Why this exists (read once, here — do not re-explain at call sites) ──
- *
- * When a CJK user (Korean / Japanese / Chinese) is composing text via an IME,
- * the browser fires a `keydown` event to COMMIT or CANCEL the pending
- * composition (Enter commits the highlighted candidate; Escape cancels it;
- * ArrowUp/Down/Home/End navigate the candidate window). Crucially this
- * `keydown` fires BEFORE the `compositionend` event that actually writes the
- * committed text into the field. So a naive `onKeyDown` handler sees a bare
- * "Enter" or "Escape" and misreads the composition-commit/cancel as an
- * application command — accepting a typeahead suggestion, submitting a chat
- * message, closing a dialog/menu/tooltip, or saving a filter — mid-composition.
- * The fix is to detect the composing keydown and early-return before running
- * any command logic.
- *
- * Two signals, both needed:
- *
- *  1. `event.isComposing === true` — the modern, spec'd signal
- *     (https://www.w3.org/TR/uievents/#dom-keyboardevent-iscomposing). This is
- *     the primary check and is reliable in current evergreen browsers.
- *
- *  2. `event.keyCode === 229` — the legacy fallback. `229` is the sentinel
- *     keyCode browsers report for "the key event is being processed by an IME".
- *     It is still load-bearing: some IMEs and older Safari fire the composing
- *     `keydown` with `isComposing` NOT yet set to `true`, but DO report
- *     keyCode 229. Keeping both makes the guard robust across the browser
- *     matrix we support. Do not drop the 229 fallback without a browser-matrix
- *     audit.
- *
- * ── Which event object to pass ──
- *
- * React's SyntheticEvent for KeyboardEvent *does* surface `isComposing`, but to
- * avoid any cross-browser normalization gap prefer passing the *native* event
- * (`e.nativeEvent`) from React handlers — that is what BaseTypeahead,
- * PowerSearch, and the Chat composer do. Native DOM listeners (Dialog,
- * ContextMenu, Tooltip, focus-trap) pass the DOM `KeyboardEvent` directly.
- * The parameter is intentionally structurally typed so both shapes are accepted.
- *
- * Note: `keyCode` is deprecated on the DOM `KeyboardEvent` type but is still
- * present at runtime; we read it defensively via the optional structural field.
+ * @input A keyboard event (a React event's `nativeEvent`, or a native DOM
+ *   KeyboardEvent) with optional `isComposing` and `keyCode`
+ * @output `isImeKeyEvent`: whether a keydown is part of an IME composition and
+ *   must not act as a command
+ * @position Shared low-level utility for every surface that handles Enter,
+ *   Escape or arrows in `onKeyDown`
  */
 
+// During IME composition (Korean, Japanese, Chinese), the browser fires a
+// keydown to commit or cancel the composition before `compositionend`. A
+// plain handler sees Enter or Escape and runs a command mid-composition. So
+// return early on a composing keydown. Do not explain this again at call
+// sites.
+//
+// Both signals are needed. `isComposing` is the standard signal. keyCode 229
+// is the legacy fallback: some IMEs and older Safari send the composing
+// keydown with `isComposing` not yet true, but with keyCode 229. Do not drop
+// it without a browser-matrix audit.
+//
+// Prefer the native event (`e.nativeEvent`) from React handlers. The
+// parameter is structurally typed, so both event shapes work. `keyCode` is
+// deprecated in the DOM types but is still present at runtime.
+
 /**
- * The sentinel `keyCode` browsers report while a key event is being processed
- * by an IME (the composing keydown that fires before `compositionend`). See the
- * file header for why this legacy signal is still load-bearing alongside
- * `isComposing`.
+ * The sentinel `keyCode` that browsers report while an IME processes a key
+ * event. See the note above for why this legacy signal stays.
  */
 const IME_PROCESSING_KEY_CODE = 229;
 

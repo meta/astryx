@@ -45,7 +45,7 @@ export const oceanTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'Local imports must stay inside the theme folder. One that leaves it, such as `../../shared/colors`, fails with `invalid_theme`, and every theme in the package disappears from `theme list`. `astryx theme template` writes a file that explains every `defineTheme` field. For the full token set and component theming, read {@link generic:author-a-theme}.',
+          text: 'Local imports must stay inside the theme folder. One that leaves it, such as `../../shared/colors`, fails with `invalid_theme`, and every theme in the package disappears from `theme list`. `{@command theme template}` writes a file that explains every `defineTheme` field. For the full token set and component theming, read {@link generic:author-a-theme}.',
         },
       ],
     },
@@ -90,7 +90,7 @@ export const oceanContrastTheme = defineTheme({
       content: [
         {
           type: 'prose',
-          text: 'Core private variables start with `--_`, such as `--_field-radius`. They are internals and can change in any Core release, so `theme build` reports each one it finds as an `[error]`. Set the standard CSS property instead — `borderRadius`, `padding` — and let the build emit the internal variable where Core needs it.',
+          text: 'Core private variables start with `--_`, such as `--_field-radius`. They are internals and can change in any Core release, so `theme build` refuses a theme that sets one (`ERR_THEME_INVALID`, naming each) and writes nothing. Set the standard CSS property instead — `borderRadius`, `padding` — and let the build emit the internal variable where Core needs it.',
         },
       ],
     },

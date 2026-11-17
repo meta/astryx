@@ -82,7 +82,7 @@ export const docs = {
             [
               '`discoverSources`',
               'none',
-              "Your own discover sources. `astryx discover` reports each as the host's.",
+              "Your own discover sources. `{@command discover}` reports each as the host's.",
             ],
           ],
         },

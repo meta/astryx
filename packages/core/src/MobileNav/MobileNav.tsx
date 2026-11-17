@@ -4,21 +4,24 @@
 
 /**
  * @file MobileNav.tsx
- * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX
+ * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX and
+ *   the Layer module's entrance hold
  * @output Exports MobileNav component and MobileNavProps
  * @position Core implementation; consumed by index.ts
  *
  * Full-height slide-out drawer overlay for mobile navigation.
  * The mobile counterpart to SideNav — accepts the same children
- * (SideNavSection, SideNavItem, or any ReactNode).
+ * (SideNavSection, SideNavItem, or any ReactNode). The drawer is never wider
+ * than 85% of the viewport, so a strip of the page stays beside it to tap.
  *
  * Uses the native `<dialog>` element with `showModal()` for top-layer rendering.
  * This eliminates z-index stacking issues — the drawer renders above everything
  * without manual z-index management. The browser provides:
  * - Top layer promotion (no z-index needed)
  * - `::backdrop` pseudo-element
- * - Body scroll lock
  * - Focus trapping
+ *
+ * The page behind takes `useScrollLock`, the same lock as every other modal.
  *
  * Escape is owned by the shared dismissal stack (`useLayerDismissal`), so a
  * drawer opened over another layer takes the press and nothing behind it
@@ -35,10 +38,12 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/MobileNav/index.ts (exports if types change)
  * - /packages/core/src/Layer/useLayerDismissal.ts (dismissal stack)
- * - /packages/core/src/hooks/scrollbarGutter.ts (shared scroll-lock gutter)
+ * - /packages/core/src/hooks/useScrollLock.ts (the page's scroll lock)
+ * - /packages/core/src/MobileNav/MobileNavTouchPresentation.test.tsx (touch)
  * - /packages/cli/assets/templates/blocks/components/MobileNav/ (showcase blocks)
  */
 
+import {usePresentationHold} from '../Layer/presentationHold';
 import {
   useCallback,
   useEffect,
@@ -61,22 +66,32 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {Heading} from '../Heading/Heading';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {
-  holdScrollbarGutter,
-  type ScrollbarGutterHold,
-} from '../hooks/scrollbarGutter';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isRtlElement} from '../hooks/isRtlElement';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useScrollLock} from '../hooks/useScrollLock';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Styles
 // =============================================================================
@@ -134,8 +149,8 @@ const styles = stylex.create({
   // ::backdrop is provided by the browser's top layer
   backdrop: {
     '::backdrop': {
+      // No backdrop-filter: a full-viewport blur is costly to repaint.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],
@@ -166,6 +181,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface's text color. The browser gives a dialog and a popover
+    // CanvasText, which follows the color scheme and not the theme, so text
+    // that sets no color of its own (a selected nav row) needs this.
+    color: colorVars['--color-text-primary'],
     boxSizing: 'border-box',
     overflow: 'hidden',
     transitionProperty: 'transform',
@@ -223,7 +242,10 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: spacingVars['--spacing-12'],
+    // At least one bar high, and taller for header content that needs it (a
+    // stacked title and search, or a title wrapped at a larger text size), so
+    // it never runs into the first item below.
+    minHeight: spacingVars['--spacing-12'],
     paddingInline: spacingVars['--spacing-2'],
     flexShrink: 0,
     borderBlockEndWidth: borderVars['--border-width'],
@@ -250,9 +272,12 @@ const styles = stylex.create({
 });
 
 const dynamicStyles = stylex.create({
+  // The requested width, never more than 85 % of the viewport: on a narrow
+  // phone a strip of the page stays visible beside the drawer, as a target
+  // for the tap that closes it.
   width: (w: number) => ({
-    width: '100vw',
-    maxWidth: `${w}px`,
+    width: `${w}px`,
+    maxWidth: '85vw',
   }),
 });
 
@@ -269,6 +294,14 @@ const dynamicStyles = stylex.create({
  * own scheduled `dialog.close()` has a chance to run (#5701).
  */
 export const MAX_CLOSE_DELAY_MS = 250;
+/**
+ * Longest the drawer slides in or out for, in ms. Both run for the theme's
+ * `--duration-medium`: 410 ms by default, and at most 545 ms on the default
+ * scale (`--duration-medium-max`). The slide-out keeps playing after the
+ * dialog closes, while the dialog's `display` transition keeps it rendered.
+ * The touch hold on the slide-in ends by this time.
+ */
+export const MAX_EXIT_MS = 550;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
 const CLOSE_WITHIN_HOLD = 0.6;
 
@@ -316,7 +349,10 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cap = matchesMediaQuery(
+    dialog.ownerDocument.defaultView,
+    '(prefers-reduced-motion: reduce)',
+  )
     ? 0
     : MAX_CLOSE_DELAY_MS;
 
@@ -469,7 +505,7 @@ export function MobileNav({
   ref,
   ...rest
 }: MobileNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Read from AppShell context as fallback
   const appShellMobile = useAppShellMobile();
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
@@ -491,66 +527,81 @@ export function MobileNav({
   );
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it. A closing drawer stops containing as soon as it starts to
+  // slide out.
+  useFocusRegionContainment(dialogRef, isOpen);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  // The input hold on the drawer's layer while it slides in under a coarse
+  // primary pointer. It is null under a fine one and once the slide-in ends.
+  const releaseHoldRef = useRef<(() => void) | null>(null);
   // Element that was focused when the drawer opened; focus goes back to it
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
-  // Keeps the dialog rendered from the commit that closes it until the delayed
-  // `close()` below has run. The `display` transition on the dialog is meant to
-  // do this, but a browser that does not hold a discrete `display` transition
-  // (WebKit) drops the dialog to `display: none` at once while it is still an
-  // open modal: nothing is visible, yet the whole page stays inert until the
-  // timer fires. Set during render, so it is already true in the commit that
-  // closes. The drawer's transform and the backdrop stay keyed to `isOpen`, so
-  // the slide-out is unchanged.
-  const [isCloseHeld, setIsCloseHeld] = useState(false);
-  const [wasOpen, setWasOpen] = useState(isOpen);
-  if (wasOpen !== isOpen) {
-    setWasOpen(isOpen);
-    setIsCloseHeld(!isOpen);
-  }
-  const gutterRef = useRef<ScrollbarGutterHold | null>(null);
-
-  // Gives back the gutter held open in place of the hidden scrollbar.
-  const releaseGutter = useCallback(() => {
-    if (gutterRef.current) {
-      gutterRef.current.release();
-      gutterRef.current = null;
-    }
-  }, []);
-  // Resolved side — computed from trigger position when side='auto'
-  const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
-    side === 'auto' ? 'end' : side,
-  );
-
-  // Resolve which edge the drawer slides from. Deliberately its own effect,
-  // declared before the open/close effect below so the trigger is still the
-  // active element when `side='auto'` reads it. Keeping it out of that effect
-  // is what stops a `side` change during a close from re-arming the delay: the
-  // CSS hold runs from the commit that started the slide-out and does not
-  // restart, so a fresh full delay could land after the drawer had already
-  // stopped being rendered — #4290 again.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    if (side === 'auto') {
-      const trigger = document.activeElement as HTMLElement | null;
-      if (trigger && trigger !== document.body) {
+  // Keeps the dialog rendered from the open until the delayed `close()` below
+  // has run: the layer runtime's presentation hold. The `display` transition
+  // on the dialog is meant to do this, but a browser that does not hold a
+  // discrete `display` transition (WebKit) drops the dialog to
+  // `display: none` at once while it is still an open modal: nothing is
+  // visible, yet the whole page stays inert until the timer fires. Held during
+  // render, so it is already held in the commit that closes. The drawer's
+  // transform and the backdrop stay keyed to `isOpen`, so the slide-out is
+  // unchanged.
+  const {isHeld: isPresentationHeld, release: releasePresentation} =
+    usePresentationHold({isOpen, presentation: true});
+  // The same page lock as every other modal. Its effect runs before the
+  // open/close effect below, so it measures the scrollbar gutter before
+  // showModal() can hide the scrollbar.
+  useScrollLock(isOpen);
+  // For side='auto', the edge is resolved while rendering the transition to
+  // open (or to `auto` while open). An Effect would commit the default `end`
+  // first, so the drawer would slide in from the wrong edge. An explicit
+  // `side` is used directly.
+  const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
+  const [wasAutoOpen, setWasAutoOpen] = useState(false);
+  const isAutoOpen = isOpen && side === 'auto';
+  // Hydration must not read focus or layout; resolve after it.
+  const canReadDom = !useIsHydrating();
+  if (canReadDom && isAutoOpen !== wasAutoOpen) {
+    setWasAutoOpen(isAutoOpen);
+    if (isAutoOpen) {
+      // The opener is the focused element. If a tap left no focus, or focus is
+      // already inside this dialog (a server-open drawer, where showModal()
+      // ran before this render), fall back to the element whose
+      // `aria-controls` names this dialog.
+      const active = document.activeElement as HTMLElement | null;
+      const hasOpenerFocus =
+        active !== null &&
+        active !== document.body &&
+        !dialogRef.current?.contains(active);
+      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const trigger =
+        hasOpenerFocus && active
+          ? active
+          : Array.from(
+              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render. Never on the server or while hydrating.
+              document.querySelectorAll<HTMLElement>('[aria-controls]'),
+            ).find(el =>
+              (el.getAttribute('aria-controls') ?? '')
+                .split(/\s+/)
+                .some(token => token !== '' && dialogIds.includes(token)),
+            );
+      if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
-        setResolvedSide(
-          triggerCenter < window.innerWidth / 2 ? 'start' : 'end',
-        );
+        const half = window.innerWidth / 2;
+        // An opener in the inline-start half opens the drawer at the start. A
+        // centred opener opens it at the end in both directions.
+        const isInStartHalf = isRtlElement(trigger)
+          ? triggerCenter > half
+          : triggerCenter < half;
+        setAutoSide(isInStartHalf ? 'start' : 'end');
       }
-    } else {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
-      setResolvedSide(side);
     }
-  }, [isOpen, side]);
+  }
+  const resolvedSide = side === 'auto' ? autoSide : side;
 
   // Open/close the dialog via showModal()/close()
   // close() is delayed so the slide-out transition can play.
@@ -561,10 +612,8 @@ export function MobileNav({
     }
 
     if (isOpen) {
-      // Taken first: every mutation below is one that can hide the scrollbar,
-      // and the gutter has to be measured while it is still there.
-      gutterRef.current ??= holdScrollbarGutter(document.documentElement);
-
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (!dialog.open) {
         // Capture the opener before showModal() pulls focus into the top
         // layer. Only on the transition into open: a reopen while the delayed
@@ -574,23 +623,24 @@ export function MobileNav({
           document.activeElement as HTMLElement | null;
         dialog.showModal();
       }
-      // Prevent background scrolling and iOS pull-to-refresh.
-      // overflow: clip avoids creating a scroll container (unlike hidden),
-      // so there's no scroll bounce and no need to save/restore scroll position.
-      document.documentElement.style.overflow = 'clip';
-      gutterRef.current.settle();
+      // Under a coarse primary pointer, nothing takes a touch until the
+      // slide-in ends, at most MAX_EXIT_MS in. A close holds nothing, because
+      // only an entrance is held. Under a fine one, nothing is held.
+      releaseHoldRef.current = holdEntranceInput(dialog, {
+        entrance: drawerRef.current,
+        capMs: MAX_EXIT_MS,
+      });
     } else if (dialog.open) {
-      document.documentElement.style.overflow = '';
-      releaseGutter();
-
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
-        setIsCloseHeld(false);
+        releasePresentation();
       }, resolveCloseDelay(dialog));
     } else {
       // Nothing is open, so there is no close to hold the dialog for, and no
       // close timer is left to release the hold.
-      setIsCloseHeld(false);
+      releasePresentation();
     }
 
     return () => {
@@ -598,10 +648,12 @@ export function MobileNav({
         clearTimeout(closeTimeoutRef.current);
         closeTimeoutRef.current = null;
       }
-      document.documentElement.style.overflow = '';
-      releaseGutter();
+      // The hold this run took ends with it: a reopen, a close or an
+      // unmount mid-slide never leaves input blocked.
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
     };
-  }, [isOpen, releaseGutter]);
+  }, [isOpen, releasePresentation]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -619,6 +671,8 @@ export function MobileNav({
   useEffect(() => {
     const dialog = dialogRef.current;
     return () => {
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (dialog?.open) {
         closeAndRestoreFocus(dialog, triggerElementRef);
       }
@@ -628,6 +682,9 @@ export function MobileNav({
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isOpen,
     onDismiss: () => onOpenChange(false),
+    // The dialog's document is this layer's: rendered into an iframe or a
+    // Picture-in-Picture window, it ranks with the layers opened inside it.
+    getContainer: () => dialogRef.current,
   });
 
   // The native `cancel` event is the browser's own close-watcher firing: an
@@ -640,6 +697,11 @@ export function MobileNav({
   // only, and never while an IME composition is in progress.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (!shouldDismissOnCloseRequest()) {
         return;
@@ -662,6 +724,9 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
+  const navigationLabel =
+    label ??
+    (typeof header === 'string' ? header : t('@astryx.mobileNav.navigation'));
 
   return (
     <dialog
@@ -674,7 +739,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          (isOpen || isCloseHeld) && styles.open,
+          isPresentationHeld && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,
@@ -684,51 +749,65 @@ export function MobileNav({
       )}
       {...rest}
       data-testid={testId}
-      aria-label={
-        label ??
-        (typeof header === 'string'
-          ? header
-          : t('@astryx.mobileNav.navigation'))
-      }
-      onClick={composeEventHandlers(onClickProp, handleDialogClick)}
+      aria-label={navigationLabel}
+      // Presses inside the navigation do not reach handlers around where it
+      // is written.
+      {...layerClickBoundary({
+        ...rest,
+        onClick: composeEventHandlers(onClickProp, handleDialogClick),
+      })}
       onCancel={handleCancel}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>
-          {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
-          <div
-            tabIndex={-1}
-            {...stylex.props(
-              styles.drawer,
-              dynamicStyles.width(width),
-              isStart && styles.drawerStart,
-              isStart && isOpen && styles.drawerStartOpen,
-              !isStart && styles.drawerEnd,
-              !isStart && isOpen && styles.drawerEndOpen,
-            )}>
-            {/* Header — content + close button */}
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>
+            {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
             <div
-              {...stylex.props(styles.header, !header && styles.headerNoTitle)}>
-              {typeof header === 'string' ? (
-                <Heading level={2} xstyle={styles.headerText}>
-                  {header}
-                </Heading>
-              ) : (
-                (header ?? null)
-              )}
-              <Button
-                variant="ghost"
-                label={t('@astryx.mobileNav.closeNavigation')}
-                icon={<Icon icon="close" color="inherit" />}
-                onClick={() => onOpenChange(false)}
-                isIconOnly
-              />
-            </div>
+              ref={drawerRef}
+              tabIndex={-1}
+              {...stylex.props(
+                styles.drawer,
+                dynamicStyles.width(width),
+                isStart && styles.drawerStart,
+                isStart && isOpen && styles.drawerStartOpen,
+                !isStart && styles.drawerEnd,
+                !isStart && isOpen && styles.drawerEndOpen,
+              )}>
+              {/* Header — content + close button */}
+              <div
+                {...stylex.props(
+                  styles.header,
+                  !header && styles.headerNoTitle,
+                )}>
+                {typeof header === 'string' ? (
+                  <Heading level={2} xstyle={styles.headerText}>
+                    {header}
+                  </Heading>
+                ) : (
+                  (header ?? null)
+                )}
+                <Button
+                  variant="ghost"
+                  label={t('@astryx.mobileNav.closeNavigation')}
+                  icon={<Icon icon="close" color="inherit" />}
+                  onClick={() => onOpenChange(false)}
+                  isIconOnly
+                />
+              </div>
 
-            {/* Scrollable content */}
-            <div {...stylex.props(styles.content)}>{children}</div>
-          </div>
-        </LayerContentBoundary>
-      </LayerDepthProvider>
+              {/* Scrollable content, the drawer's navigation landmark: a
+                  modal dialog is not a landmark. */}
+              <nav
+                // Named as the dialog is: by the caller's aria-labelledby when
+                // it resolves, else by the dialog's own label.
+                aria-labelledby={rest['aria-labelledby']}
+                aria-label={navigationLabel}
+                {...stylex.props(styles.content)}>
+                {children}
+              </nav>
+            </div>
+          </LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

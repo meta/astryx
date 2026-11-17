@@ -13,9 +13,11 @@ export const doc = {
     'signin',
     'authentication',
     'credentials',
-    'account access',
+    'account',
+    'access',
   ],
   isReady: true,
   isHiddenFromOverview: true,
   category: 'Login - Basic',
+  icons: {CubeIcon: 'package'},
 };

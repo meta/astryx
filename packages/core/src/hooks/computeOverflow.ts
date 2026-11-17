@@ -162,7 +162,7 @@ function packRows(
 }
 
 /** Count how many rows a set of items occupies when wrapped at availableWidth. */
-function countRows(
+export function countRows(
   orderedWidths: number[],
   gap: number,
   availableWidth: number,

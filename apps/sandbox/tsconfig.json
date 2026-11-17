@@ -15,7 +15,10 @@
     "incremental": true,
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@astryx-docs/demo-content": [
+        "../docsite/src/templateDemoContent/demoContent.tsx"
+      ]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.mts"],

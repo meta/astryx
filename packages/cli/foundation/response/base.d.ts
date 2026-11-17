@@ -34,6 +34,36 @@ export interface CLIError {
   error: string;
   code: ErrorCode;
   suggestions?: Suggestion[];
+  /**
+   * What the command had already done when it failed, present only on errors
+   * from a command that changes files before it can fail (for example the
+   * `upgrade.run` data of a failed `astryx upgrade`). The error is still an
+   * error: branch on `code`.
+   */
+  receipt?: Record<string, unknown>;
+  /**
+   * What a refused run needs, present only on `ERR_BASE_CAPABILITY`: the
+   * command, the option or argument value that declared the step, the steps
+   * it requires and the ones the run's base does not serve, why, and the base.
+   */
+  requirement?: BaseRequirement;
+}
+
+/** The `requirement` member of an `ERR_BASE_CAPABILITY` error. */
+export interface BaseRequirement {
+  /** The command as a user types it after `astryx`, e.g. `theme build`. */
+  command: string;
+  /** The option's long flag, when an option declared the step. */
+  option: string | null;
+  /** The argument and value, when an argument value declared the step. */
+  argument: {name: string; value: string} | null;
+  requires: string[];
+  missing: string[];
+  /** `not-declared`: no declared adapter exports the step. `failed-to-load`:
+   *  the declared adapter module does not load; `module` names it. */
+  reason: 'not-declared' | 'failed-to-load';
+  module?: string;
+  base: {name: string; version: string | null};
 }
 
 /** Returned by the fallback hook for commands without --json support. */
@@ -77,6 +107,8 @@ export interface AnsweredBy {
   /** The Core the run pairs with, or `null` when there is none. */
   core: string | null;
   copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback';
+  /** The run's base, present only when it is not Core; `core` is then `null`. */
+  base?: {name: string; version: string | null};
 }
 
 export interface CLIResponse {

@@ -4,7 +4,8 @@
  * @file Dispatcher-level tests for docs() — the argument-shape routing that
  * sits above the list/detail/section leaves. The leaves have their own tests;
  * this pins the router: docs() -> list, docs(topic) -> detail,
- * docs(topic, section) -> section, plus the unknown-topic/section error codes.
+ * docs(topic, section) -> section, list: true -> list (refused beside a topic
+ * or section), plus the unknown-topic/section error codes.
  * Runs against the real CLI-bundled docs (no cwd/project needed).
  */
 
@@ -39,6 +40,27 @@ describe('docs() dispatcher routing', () => {
 
   it('empty topic -> docs.list (falsy topic routes to list)', async () => {
     expect((await docs('')).type).toBe('docs.list');
+  }, SLOW);
+
+  it('list -> docs.list, the same read as no topic', async () => {
+    const bare = await docs();
+    expect(await docs(undefined, undefined, {list: true})).toEqual(bare);
+    expect(await docs('', undefined, {list: true})).toEqual(bare);
+    expect(await docs(undefined, undefined, {list: true, depth: 1})).toEqual(
+      await docs(undefined, undefined, {depth: 1}),
+    );
+  }, SLOW);
+
+  it('list beside a topic or a section -> ERR_INVALID_ARGUMENT', async () => {
+    for (const [topic, section] of [
+      ['theme', undefined],
+      ['theme', 'quick-start'],
+      [undefined, 'quick-start'],
+    ]) {
+      const err = await docs(topic, section, {list: true}).catch(e => e);
+      expect(err).toBeInstanceOf(AstryxError);
+      expect(err.code).toBe('ERR_INVALID_ARGUMENT');
+    }
   }, SLOW);
 
   it('topic only -> docs.detail, the whole doc', async () => {
@@ -93,7 +115,7 @@ describe('docs() dispatcher routing', () => {
 
   it("lists the docs tree's namespaces in meta, so every data entry reads as a topic", async () => {
     const res = await docs();
-    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
+    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'calendars', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
     for (const entry of res.data) {
       expect((await docs(entry.topic)).type).toBe('docs.detail');
     }
@@ -252,6 +274,26 @@ describe('docs() dispatcher routing', () => {
     expect((await docs()).data.map(entry => entry.topic)).not.toContain(
       'cli-integrations',
     );
+  }, SLOW);
+
+  it('an unknown route keeps every child of its namespace, closest first', async () => {
+    // `tokens/usage` names the one child whose name repeats the namespace, so
+    // it opens it now; a route no child answers to still lists them all.
+    const error = await docs('tokens/colour').catch(e => e);
+    expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+    const names = error.suggestions.map(s => s.name);
+    expect(names[0]).toBe('tokens/tokens-color');
+    const none = await docs('tokens/zzzz-nope').catch(e => e);
+    expect([...names].sort()).toEqual(none.suggestions.map(s => s.name).sort());
+  }, SLOW);
+
+  it('an unknown flat topic is cut where the matches get weaker', async () => {
+    const error = await docs('authoring-at-meta').catch(e => e);
+    expect(error.suggestions.map(s => s.name)).toEqual(['authoring']);
+    // One-letter words do not narrow it: `a11y` keeps the whole browse list.
+    const browse = await docs('zzzz-nope').catch(e => e);
+    const a11y = await docs('a11y').catch(e => e);
+    expect(a11y.suggestions.length).toBe(browse.suggestions.length);
   }, SLOW);
 
   it('a section no guide of a namespace has -> ERR_UNKNOWN_SECTION, naming its guides', async () => {

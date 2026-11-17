@@ -7,8 +7,10 @@ import * as path from 'node:path';
 import {Project, DEFAULT_ISSUES_URL, findConfigPath} from './project.mjs';
 import {InMemoryConfigCache} from './config-cache.mjs';
 import {getCliInvocation} from '../env/package-manager.mjs';
+import {warnOnIntegrationIssues} from '../integrations/integration-warnings.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
 import {discoverCoreTemplates} from '../discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -200,7 +202,7 @@ function scaffoldLocalPackage({name = '@acme/local'} = {}) {
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-project-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-project-test-'));
   process.chdir(tmpDir);
 });
 
@@ -291,30 +293,26 @@ describe('Project.load', () => {
   });
 });
 
-describe('Project.issues and a near-miss manifest key', () => {
+describe('Project.issues leaves out a near-miss manifest key', () => {
   it.each([
     [
       'alone, while the loaded integration fills providerId from the package name',
       {providerID: '@acme/widgets'},
-      'Fix: rename "providerID" to "providerId" in astryx.integration.mjs.',
     ],
     [
       'beside the key it suggests',
       {providerID: '@acme/widgets', providerId: '@acme/widgets'},
-      'Fix: remove "providerID" from astryx.integration.mjs; it already sets "providerId".',
     ],
-  ])(
-    'reads the keys the manifest declares: providerID %s',
-    async (_label, unknownKeys, fix) => {
-      scaffold({unknownKeys});
-      const project = await Project.load(tmpDir);
-      const keys = (await project.issues()).filter(
-        issue => issue.code === 'unknown_manifest_key',
-      );
-      expect(keys).toHaveLength(1);
-      expect(keys[0].message).toContain(fix);
-    },
-  );
+  ])('providerID %s', async (_label, unknownKeys) => {
+    // A key this CLI does not know is a note in validate, never a project
+    // issue the everyday nudge would count.
+    scaffold({unknownKeys});
+    const project = await Project.load(tmpDir);
+    const keys = (await project.issues()).filter(
+      issue => issue.code === 'unknown_manifest_key',
+    );
+    expect(keys).toEqual([]);
+  });
 });
 
 describe('Project.load and the cliCommand an integration declares', () => {
@@ -620,13 +618,18 @@ describe('Project forward compatibility', () => {
     const {integration} = await project.codemods('0.1.0', '0.2.0');
     expect(integration).toHaveLength(1);
 
+    // Keys from a newer CLI are version skew, not a problem with the
+    // package: no project issue, so the everyday nudge stays quiet.
     const issues = await project.issues();
-    expect(issues.every(i => i.severity !== 'error')).toBe(true);
-    const unknown = issues.filter(i => i.code === 'unknown_manifest_key');
-    expect(unknown).toHaveLength(1);
-    expect(unknown[0].severity).toBe('warning');
-    expect(unknown[0].message).toContain('"futureRoot"');
-    expect(unknown[0].message).toContain('"anotherOne"');
+    expect(issues.filter(i => i.code === 'unknown_manifest_key')).toEqual([]);
+    const lines = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation(line => lines.push(line));
+    try {
+      await warnOnIntegrationIssues(project);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lines).toEqual([]);
   });
 
   it('still refuses a known key of the wrong type', async () => {

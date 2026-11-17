@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from CodeBlock.tsx, Code.tsx, tokenizer.ts, highlightRanges.ts, highlightStyles.ts
@@ -13,6 +11,13 @@
 
 export {CodeBlock} from './CodeBlock';
 export type {CodeBlockProps} from './CodeBlock';
+export {createCodeLanguage} from './grammar';
+export type {
+  CodeLanguage,
+  CodeLanguageToken,
+  CodeLanguageTokenize,
+  CreateCodeLanguageOptions,
+} from './grammar';
 
 export {Code} from '../Code';
 export type {CodeProps, CodeColor, CodeSize} from '../Code';

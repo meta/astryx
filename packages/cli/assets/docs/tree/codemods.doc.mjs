@@ -14,7 +14,7 @@ export const docs = {
   category: 'guide',
   keywords: ['breaking change', 'migrate apps', 'integration codemod'],
   description:
-    'Ship codemods that `astryx upgrade` runs to migrate app code, and know which of them an app runs.',
+    'Ship codemods that `{@command upgrade}` runs to migrate app code, and know which of them an app runs.',
   sections: [
     {
       id: 'add-a-codemod',
@@ -22,12 +22,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`integration add codemod` writes a codemod into a folder named after a version. Apps run it with `astryx upgrade` to migrate their code.',
+          text: '`integration add codemod` writes a codemod into a folder named after a version. Apps run it with `{@command upgrade}` to migrate their code.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add codemod rename-delay --to 0.7.0',
+          code: '{@command integration add codemod rename-delay --to 0.7.0}',
         },
         {
           type: 'code',
@@ -92,7 +92,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "Two rules decide whether an app's `astryx upgrade` runs your codemods: the app's Core versions, and whether the app names your package.",
+          text: "Two rules decide whether an app's `{@command upgrade}` runs your codemods: the app's Core versions, and whether the app names your package.",
         },
         {
           type: 'list',
@@ -110,15 +110,15 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'An app previews codemods with `astryx upgrade` and writes the changes with `--apply`. Without `--apply`, nothing on disk changes.',
+          text: 'An app previews codemods with `{@command upgrade}` and writes the changes with `--apply`. Without `--apply`, nothing on disk changes.',
         },
         {
           type: 'code',
           lang: 'bash',
           code: `# Preview each codemod and the files it would change
-astryx upgrade --from 0.6.3 --integration @acme/astryx-widgets
+{@command upgrade --from 0.6.3 --integration @acme/astryx-widgets}
 # Write the changes
-astryx upgrade --from 0.6.3 --integration @acme/astryx-widgets --apply`,
+{@command upgrade --from 0.6.3 --integration @acme/astryx-widgets --apply}`,
         },
         {
           type: 'code',

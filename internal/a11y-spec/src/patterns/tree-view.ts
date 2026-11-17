@@ -104,7 +104,7 @@ const TREELIST_AR1_LEVEL: AstryxRecord = {
   standard: 'astryx',
   id: 'component:TreeList',
   clause: 'AR1',
-  url: 'https://github.com/facebook/astryx/blob/458a74c2a65a44c1fc7f76266e812e6d47213080/packages/core/src/TreeList/TreeList.spec.md#L155-L157',
+  url: 'https://github.com/meta/astryx/blob/458a74c2a65a44c1fc7f76266e812e6d47213080/packages/core/src/TreeList/TreeList.spec.md#L155-L157',
   requirement:
     'every row is role="treeitem", named by its label and described by its description, aria-expanded when it has children, aria-selected when it is the selected row, aria-level for its depth, and aria-posinset/aria-setsize among its siblings.',
 };
@@ -112,7 +112,7 @@ const TREELIST_AR1_ACTIVATION: AstryxRecord = {
   standard: 'astryx',
   id: 'component:TreeList',
   clause: 'AR1',
-  url: 'https://github.com/facebook/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/TreeList/TreeList.spec.md#L151-L161',
+  url: 'https://github.com/meta/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/TreeList/TreeList.spec.md#L151-L161',
   requirement: 'Enter and Space activate the focused row.',
 };
 const APG_ENTER = apgReq(
@@ -131,7 +131,7 @@ const TREELIST_AR1_RTL: AstryxRecord = {
   standard: 'astryx',
   id: 'component:TreeList',
   clause: 'AR1',
-  url: 'https://github.com/facebook/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/TreeList/TreeList.spec.md#L151-L161',
+  url: 'https://github.com/meta/astryx/blob/250fd9ac197381ec06900279efc31cbb03544ca9/packages/core/src/TreeList/TreeList.spec.md#L151-L161',
   requirement:
     'ArrowRight expands a closed row, then moves into its first child, and ArrowLeft collapses an open row or moves to the parent — mirrored under RTL.',
 };

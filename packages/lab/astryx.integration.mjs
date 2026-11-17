@@ -7,5 +7,5 @@
 export default {
   components: './src',
   templates: './blocks',
-  issuesUrl: 'https://github.com/facebook/astryx/issues',
+  issuesUrl: 'https://github.com/meta/astryx/issues',
 };

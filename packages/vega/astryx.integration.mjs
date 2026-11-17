@@ -6,5 +6,5 @@
  */
 export default {
   components: './src',
-  issuesUrl: 'https://github.com/facebook/astryx/issues',
+  issuesUrl: 'https://github.com/meta/astryx/issues',
 };

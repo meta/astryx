@@ -62,7 +62,7 @@ export const docs = {
               '`%APPDATA%\\astryx`',
             ],
             [
-              'Update checks and notices, and why the last notice or check did not happen (for `astryx doctor` only)',
+              'Update checks and notices, and why the last notice or check did not happen (for `{@command doctor}` only)',
               '`<settings>/state.json`',
               '`<settings>/state.json`',
               '`<settings>\\state.json`',
@@ -128,7 +128,7 @@ export const docs = {
           style: 'unordered',
           items: [
             "`meta.answeredBy` on every successful `--json` result: `cli` (the version that answered), `core` (the Core it used, or `null`), and `copy`: `project` (the project's own CLI), `starting` (the astryx command you started, in a project with no CLI of its own), `matched` (the CLI version equal to the project's Core, when the project's own CLI cannot start), `carried` (outside a project), or `fallback` (that version could not be obtained, so the astryx command you started answered instead).",
-            '`meta.available` entries from `astryx discover` with `source: "installed for this computer"`: an integration installed next to your global install that the project could add, with its install command in `install`.',
+            '`meta.available` entries from `{@command discover}` with `source: "installed for this computer"`: an integration installed next to your global install that the project could add, with its install command in `install`.',
           ],
         },
       ],

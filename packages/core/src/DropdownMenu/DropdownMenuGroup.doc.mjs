@@ -13,7 +13,7 @@ export const docs = {
     defaults: {title: 'Version history'},
   },
   description:
-    'A group of rows in a compound menu. A visible title names role="group" through aria-labelledby; an omitted title leaves the group unnamed. The heading is not a menuitem, so arrow keys and typeahead skip it. Keep title content non-interactive and place controls in DropdownMenu header or footer. The data-driven equivalent is the `{type: "section", title, items}` entry in `items`; both forms share the heading treatment and theme target.',
+    'A group of rows in a compound menu. A visible title names role="group" through aria-labelledby; an omitted title leaves the group unnamed. The heading is not a menuitem, so arrow keys and typeahead skip it. Keep title content non-interactive and place controls in DropdownMenu header or footer. The data-driven equivalent is the `{type: "section", title, items}` entry in `items`; both forms share the heading treatment and theme target. Host attributes and DOM handlers (id, data-*, aria-*) reach the group element; its role, and its name while it has a title, stay component-owned.',
   usage: {
     description:
       'Use DropdownMenuGroup to give related compound-menu rows one visible and programmatic name. Use an untitled group only when a separate name would not help people understand the rows.',
@@ -107,7 +107,7 @@ export const docsZh = {
   displayName: 'Dropdown Menu Group',
   isHiddenFromOverview: true,
   description:
-    '复合菜单中的一组菜单行。可见标题通过 aria-labelledby 为 role="group" 命名；省略标题时该组没有名称。标题不是 menuitem，因此方向键和预输入会跳过它。标题内容应保持非交互；控件应放在 DropdownMenu 的 header 或 footer 中。',
+    '复合菜单中的一组菜单行。可见标题通过 aria-labelledby 为 role="group" 命名；省略标题时该组没有名称。标题不是 menuitem，因此方向键和预输入会跳过它。标题内容应保持非交互；控件应放在 DropdownMenu 的 header 或 footer 中。宿主属性和 DOM 事件处理函数（id、data-*、aria-*）会传到分组元素上；其 role 以及有标题时的名称由组件控制。',
   usage: {
     description:
       '使用 DropdownMenuGroup 为相关的复合菜单行提供同一个可见名称和无障碍名称。只有当名称能帮助理解这些菜单行时才使用分组。',

@@ -40,7 +40,7 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
   counterPinned: {
     flexShrink: 0,

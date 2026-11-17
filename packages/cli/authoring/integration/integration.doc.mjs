@@ -51,15 +51,40 @@ export const doc = {
       name: 'docs',
       type: 'string',
       description:
-        'The folder that holds your doc topics, relative to package.json. Every {topic}.doc.{ts,mjs,js} under it shows up in `astryx docs`: a flat topic next to the built-in topics, where it can set `replaces` or `extends` to take over a built-in topic or add to it, and a guide with `placement` at its own route in the docs tree, under a namespace doc of the same package.',
+        'The folder that holds your doc topics, relative to package.json. Every {topic}.doc.{ts,mjs,js} under it shows up in `{@command docs}`: a flat topic next to the built-in topics, where it can set `replaces` or `extends` to take over a built-in topic or add to it, and a guide with `placement` at its own route in the docs tree, under a namespace doc of the same package.',
       example: "'./docs'",
     },
     {
       name: 'themes',
       type: 'string',
       description:
-        'The folder that holds your themes, relative to package.json, with one folder per theme. Each theme folder has the theme source and a matching .doc.mjs file with the same name. Installed themes show up in `astryx theme list`; `theme add` imports their built package exports, and `theme eject` creates an editable local fork.',
+        'The folder that holds your themes, relative to package.json, with one folder per theme. Each theme folder has the theme source and a matching .doc.mjs file with the same name. Installed themes show up in `{@command theme list}`; `theme add` imports their built package exports, and `theme eject` creates an editable local fork.',
       example: "'./themes'",
+    },
+    {
+      name: 'themeProvider',
+      type: '{ export: string; from: string; themeProp?: string; modeProp?: string }',
+      description:
+        "The one provider component that wires every theme under `themes` into an app, when your package wires its themes itself rather than through Astryx's Theme. `export` is the component's named export and `from` the module an app imports it from. `themeProp`, when the provider takes a theme object, names that prop: `{@command theme add}` then shows the wiring that passes the added theme to it. `modeProp`, only beside `themeProp`, names the prop that takes a color mode: for a theme with one color mode, that wiring passes the mode too. The field is a hint: a part this CLI cannot use (an export that is no component name, a prop that names no prop, a `modeProp` with no `themeProp`) is dropped with an `ignored_manifest_field` warning, and the rest of the manifest loads. `{@command doctor}` counts a theme as wired when the app renders that component, and `{@command theme list}` names it beside each of your themes. Each theme's stylesheet stays the one your package exports for it. A CLI older than this field ignores it with a warning and keeps the rest of the manifest.",
+      example:
+        "{export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme', modeProp: 'themeMode'}",
+    },
+    {
+      name: 'experimental',
+      type: '{ iconSets?: string }',
+      stability: 'experimental',
+      description:
+        'Experimental contribution roots: they may change or be removed in a patch release.',
+      fields: [
+        {
+          name: 'experimental.iconSets',
+          type: 'string',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The folder that holds your icon sets, relative to package.json, with one folder per set. Each set folder has a matching `<name>.doc.mjs` IconSetDoc and a `<name>.icons.json` data file. Installed sets answer `astryx experimental icon`; a project that sets `experimental.iconSet` gets copied templates in that set's icons.",
+          example: "'./icon-sets'",
+        },
+      ],
     },
     {
       name: 'agentDocs',
@@ -72,7 +97,7 @@ export const doc = {
       name: 'issuesUrl',
       type: 'string',
       description:
-        "Where people file issues for this package: an absolute URL, such as its GitHub issues page. A value that is not a URL fails the whole manifest; the scheme is not checked. Nothing warns when it is missing, but without it `astryx gap-report` about this package fails unless the project or a loaded integration has a gapReport handler, and `astryx swizzle` prints no feedback link for this package's components. When no handler is loaded, a github.com issues URL is filed with the GitHub CLI once the reporter passes `--confirm-public`; any other URL is returned for the reporter to open.",
+        "Where people file issues for this package: an absolute URL, such as its GitHub issues page. A value that is not a URL fails the whole manifest; the scheme is not checked. Nothing warns when it is missing, but without it `{@command gap-report}` about this package fails unless the project or a loaded integration has a gapReport handler, and `{@command swizzle}` prints no feedback link for this package's components. When no handler is loaded, a github.com issues URL is filed with the GitHub CLI once the reporter passes `--confirm-public`; any other URL is returned for the reporter to open.",
       example: "'https://github.com/acme/widgets/issues'",
     },
     {
@@ -83,11 +108,26 @@ export const doc = {
       example: "'https://widgets.acme.dev'",
     },
     {
+      name: 'logo',
+      type: '{ light: string; dark?: string }',
+      description:
+        "The square logo catalogs show beside your package's name: paths, relative to the package root, to images the package ships. Each is a PNG, JPEG or WebP image, or a shapes-only SVG, of at most 512 KB, whose extension (`.png`, `.jpg`, `.jpeg`, `.webp`, `.svg`) names its format. Set `dark` for a version drawn for dark backgrounds; without it, `light` is used everywhere. `{@command integration check}` notes a logo that is missing, not one of those images, or not packed. In an SVG, no attribute value may hold `<`, `>`, `&` or `\\`, so write `and` rather than `&amp;` in a label. A package.json `marketplace.logo` is also read when this field is not set.",
+      example:
+        "{ light: './marketplace/logo.svg', dark: './marketplace/logo-dark.svg' }",
+    },
+    {
       name: 'cliCommand',
       type: 'string',
       description:
-        'The command your users run the Astryx CLI with, when it is not their package manager, such as a wrapper your company ships. Every command the CLI prints in an app that loads your package starts with it, in place of `pnpm exec astryx` or `yarn astryx`: hints, errors, Doctor fixes, and doc text. One line, without a subcommand. If two loaded packages set different commands, neither is used and `astryx doctor` warns. An invalid value is ignored with an `invalid_cli_command` warning, and the rest of the manifest still loads. JSON output keeps commands bare.',
+        'The command your users run the Astryx CLI with, when it is not their package manager, such as a wrapper your company ships. Every command the CLI prints in an app that loads your package starts with it, in place of `pnpm exec astryx` or `yarn astryx`: hints, errors, Doctor fixes, and doc text. One line, without a subcommand. If two loaded packages set different commands, neither is used and `{@command doctor}` warns. An invalid value is ignored with an `invalid_cli_command` warning, and the rest of the manifest still loads. JSON output keeps commands bare.',
       example: "'acme astryx'",
+    },
+    {
+      name: 'base',
+      type: '{adapters?: Record<string, string>}',
+      description:
+        "Makes your package a base: a component library that stands in for Core in the apps that use it. `adapters` maps a capability, as `BaseCapability` lists them, to the module, relative to the package, that performs its platform steps; the functions the module exports are the steps your base serves. `base: {}` serves content only. A run reads one base: `--base`; else, in an integration package, the base it is or builds on; else the app's Core; else its one installed base; else Core. Help hides a command whose step the base does not serve, and running it fails with `ERR_BASE_CAPABILITY`. Commands do not call adapter steps yet, so a base other than Core serves no step, whatever `adapters` declares. The CLI imports an adapter by its path with Node's own loader (no `exports` resolution and no TypeScript), so ship it as a JavaScript module listed in `files`. A capability here is a CLI platform step group, not an app's native capability. An integration builds on each base it lists in `peerDependencies`; with none, a base builds on no base and any other integration builds on Core. It contributes only to runs on a base it builds on or is.",
+      example: "{adapters: {themes: './astryx/themes.mjs'}}",
     },
   ],
   examples: [
@@ -131,7 +171,7 @@ export const doc = {
     },
     {
       type: 'prose',
-      text: "Set `cliCommand` only when your users run the CLI with a command other than their package manager's, such as `acme astryx`. The CLI picks the command it prints in this order: the `cliCommand` of the loaded integrations when they name one command, then the command a host tool names, then the package manager's. Two different `cliCommand` values cancel out, and `astryx doctor` warns in its `cli-command` check. See `astryx docs authoring/building-blocks/configuration/cli-command`.",
+      text: "Set `cliCommand` only when your users run the CLI with a command other than their package manager's, such as `acme astryx`. The CLI picks the command it prints in this order: the `cliCommand` of the loaded integrations when they name one command, then the command a host tool names, then the package manager's. Two different `cliCommand` values cancel out, and `{@command doctor}` warns in its `cli-command` check. See `{@command docs authoring/building-blocks/configuration/cli-command}`.",
     },
     {
       type: 'prose',
@@ -140,7 +180,7 @@ export const doc = {
     {
       type: 'prose',
       text:
-        'Validate the manifest with `astryx doctor integration validate`. At the ' +
+        'Validate the manifest with `{@command doctor integration validate}`. At the ' +
         'load boundary, a known field of the wrong type is an error, issuesUrl ' +
         'and docsiteUrl must be valid URLs, and unknown fields become warnings so an older CLI ' +
         'can still load the fields it understands. Before publishing, also run ' +

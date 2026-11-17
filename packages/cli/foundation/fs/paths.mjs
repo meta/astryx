@@ -13,16 +13,38 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {listDir, pathExists} from './listing-cache.mjs';
+import {
+  findEntry,
+  listDir,
+  listDirEntries,
+  listingCacheActive,
+  pathExists,
+} from './listing-cache.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
 import {hostedRun, recordResolved} from '../runtime/package-root.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * Whether `target`, a path or a file URL, names one of the CLI's own files:
+ * one inside the CLI's folder, outside the node_modules folder inside it. In
+ * an installed CLI, its build id stands for exactly these files (AST-081 FR7).
+ * @param {string} target
+ * @param {string} root - the CLI's folder in the same form, ending in `sep`
+ * @param {string} sep - the separator of that form
+ * @returns {boolean}
+ */
+export function isCliBuildFile(target, root, sep) {
+  return (
+    target.startsWith(root) && !target.startsWith(`${root}node_modules${sep}`)
+  );
+}
 
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
@@ -115,6 +137,19 @@ export function requireCoreDir(startDir = process.cwd()) {
 }
 
 /**
+ * The Core whose components, hooks, and docs this run reads: as
+ * {@link requireCoreDir} in a run on Core, and null in a run on another
+ * base, which reads no Core content. Each content reader treats null as no
+ * Core items and answers from the run's integrations alone.
+ *
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function coreContentDir(startDir = process.cwd()) {
+  return currentNonCoreBase() ? null : requireCoreDir(startDir);
+}
+
+/**
  * An Error carrying a stable error code, which the JSON envelope and every
  * command's error output read the way they read an API error's.
  * @param {string} message
@@ -145,6 +180,8 @@ export function findCarriedCoreDir(startDir, {fetch = false} = {}) {
  * @returns {{dir: string | null, unavailable: string | null, version?: string, reason?: string}}
  */
 function carriedCoreFor(startDir, fetch = false) {
+  // A run whose base is not Core never reads Core, so it never fetches one.
+  if (currentNonCoreBase()) return {dir: null, unavailable: null};
   const carried = carriedCore({fetch: false});
   if (!carried.dir && !fetch) return carried;
   if (runChoice(startDir).copy === 'project') {
@@ -163,6 +200,18 @@ function carriedCoreFor(startDir, fetch = false) {
  * @returns {string | null}
  */
 export function findProjectCoreDir(startDir = process.cwd()) {
+  // A run whose base is not Core reads no Core, even one the project installs.
+  if (currentNonCoreBase()) return null;
+  return installedProjectCoreDir(startDir);
+}
+
+/**
+ * The project's installed @astryxdesign/core, whatever base the run reads:
+ * the lookup that decides the run's base.
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function installedProjectCoreDir(startDir = process.cwd()) {
   const near = findNearbyCoreDir(startDir);
   if (near) return near;
   // A folder deeper than that reach still belongs to the project the walk to
@@ -263,7 +312,7 @@ function isCoreSource(dir) {
  * @param {string} p
  * @returns {string}
  */
-function realDir(p) {
+export function realDir(p) {
   try {
     return fs.realpathSync(path.resolve(p));
   } catch {
@@ -276,7 +325,7 @@ function realDir(p) {
  *
  * @returns {string|null}
  */
-function homeFolder() {
+export function homeFolder() {
   try {
     const home = os.homedir();
     return home ? realDir(home) : null;
@@ -286,15 +335,30 @@ function homeFolder() {
 }
 
 /**
+ * Whether a relative path climbs out of the folder it starts in: `..`
+ * itself, or a path that begins with `../` (or `..` and the platform's
+ * separator). A name that only
+ * begins with two dots (`..x`) is a folder or file like any other.
+ *
+ * @param {string} rel
+ * @returns {boolean}
+ */
+export function climbsOut(rel) {
+  return (
+    rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`)
+  );
+}
+
+/**
  * Whether `child` lies strictly inside `parent`.
  *
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && !climbsOut(rel) && !path.isAbsolute(rel);
 }
 
 /**
@@ -334,6 +398,31 @@ export function findPackageRoot(startDir) {
 }
 
 /**
+ * A path a command writes in a project, read the same way by every theme
+ * command: from the working folder when given, from the project root (the
+ * nearest folder with a package.json, else the working folder) when not,
+ * and with a backslash as a folder separator on every platform.
+ * @param {string} cwd
+ * @param {string | undefined} typed the path as given, or undefined
+ * @param {string} fallback the path from the project root when none is given
+ * @returns {{projectDir: string, typed: string | undefined, relative: string}}
+ *   `typed`: the path as given with `/`; `relative`: from the project root
+ */
+export function projectWritePath(cwd, typed, fallback) {
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const given = typed == null ? undefined : String(typed).replace(/\\/g, '/');
+  const absolute =
+    given == null ? path.join(projectDir, fallback) : path.resolve(cwd, given);
+  return {
+    projectDir,
+    typed: given,
+    relative: path.isAbsolute(given ?? '')
+      ? /** @type {string} */ (given)
+      : path.relative(projectDir, absolute) || '.',
+  };
+}
+
+/**
  * The Astryx project `startDir` belongs to: the nearest folder at or above it
  * whose package.json declares an Astryx package (`@astryxdesign/*`, or the
  * legacy `@xds/*`), or that a workspace whose root declares one lists as a
@@ -368,8 +457,22 @@ export function findAstryxProject(startDir) {
  * @returns {string}
  */
 export function findWorkspaceRoot(startDir) {
-  /** @type {string|null} */
-  let nearestPackage = null;
+  return (
+    findDeclaredWorkspaceRoot(startDir) ??
+    findPackageRoot(startDir) ??
+    path.resolve(startDir)
+  );
+}
+
+/**
+ * The nearest directory at or above `startDir` that declares a workspace,
+ * by a `pnpm-workspace.yaml` or a package.json `workspaces` field; null
+ * outside a workspace.
+ *
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+export function findDeclaredWorkspaceRoot(startDir) {
   for (const dir of foldersUpFrom(startDir)) {
     if (
       fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
@@ -377,14 +480,8 @@ export function findWorkspaceRoot(startDir) {
     ) {
       return dir;
     }
-    if (
-      nearestPackage == null &&
-      fs.existsSync(path.join(dir, 'package.json'))
-    ) {
-      nearestPackage = dir;
-    }
   }
-  return nearestPackage ?? path.resolve(startDir);
+  return null;
 }
 
 /**
@@ -639,14 +736,57 @@ function findNearbyCoreDir(startDir) {
  * @returns {string|null}
  */
 function findPnpPackage(startDir, name) {
-  if (!process.versions.pnp) return null;
+  const api = pnpApi(startDir);
+  if (!api) return null;
   try {
     const from = path.resolve(startDir);
-    const api = createRequire(path.join(from, 'noop.js'))('pnpapi');
     const dir = api.resolveToUnqualified(name, path.join(from, '/'));
     return dir && fs.existsSync(path.join(dir, 'package.json')) ? dir : null;
   } catch {
-    // The project does not declare it, or this is not a PnP process after all.
+    // The project does not declare it.
+    return null;
+  }
+}
+
+/**
+ * Does the workspace or package that holds `startDir` depend on `name`, by
+ * Yarn's Plug'n'Play runtime? Yarn then runs that package's commands from
+ * `startDir`, as a package runner runs a command it finds in
+ * `node_modules/.bin`. False outside a PnP process.
+ *
+ * @param {string} startDir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function pnpDependsOn(startDir, name) {
+  const api = pnpApi(startDir);
+  if (!api) return false;
+  try {
+    const from = path.join(path.resolve(startDir), '/');
+    const locator = api.findPackageLocator(from);
+    const info = locator ? api.getPackageInformation(locator) : null;
+    return Boolean(info?.packageDependencies?.get(name));
+  } catch {
+    // The runtime cannot place the folder.
+    return false;
+  }
+}
+
+/**
+ * The Plug'n'Play runtime's API, asked from `startDir`; null outside a PnP
+ * process.
+ *
+ * @param {string} startDir
+ * @returns {any}
+ */
+function pnpApi(startDir) {
+  if (!process.versions.pnp) return null;
+  try {
+    return createRequire(path.join(path.resolve(startDir), 'noop.js'))(
+      'pnpapi',
+    );
+  } catch {
+    // Not a PnP process after all.
     return null;
   }
 }
@@ -687,10 +827,16 @@ export function findNodeModulesPackage(startDir, name) {
  *
  * @param {string} startDir
  * @param {string} name
+ * @param {number} [maxDepth] how many folders to walk up; `Infinity` walks
+ *   every ancestor, as Node's own resolution does
  * @returns {string|null} the package directory, or null when not installed
  */
-export function findInstalledPackage(startDir, name) {
-  for (const dir of readFolders(startDir, INSTALLED_REACH)) {
+export function findInstalledPackage(
+  startDir,
+  name,
+  maxDepth = INSTALLED_REACH,
+) {
+  for (const dir of readFolders(startDir, maxDepth)) {
     const packageDir = installedIn(dir, name);
     if (packageDir) return packageDir;
   }
@@ -800,7 +946,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -842,10 +988,13 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 
 /**
  * List available component directories in packages/core/src.
- * Returns directory names that contain Astryx*.tsx files.
- * @param {string} coreDir
+ * Component directories are capitalized (`Button`, `Dialog`); lowercase
+ * directories hold shared infrastructure and are never listed.
+ * @param {string | null} coreDir null in a run that reads no Core
+ * @returns {string[]}
  */
 export function listComponents(coreDir) {
+  if (coreDir == null) return [];
   const srcDir = path.join(coreDir, 'src');
   if (!fs.existsSync(srcDir)) return [];
 
@@ -853,12 +1002,35 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      // Skip non-component dirs
-      if (['hooks', 'theme', 'utils'].includes(e.name)) return false;
-      return true;
+      return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
     .sort();
+}
+
+/**
+ * `path.relative(root, target)`, read straight off the string when `target`
+ * is a plain path under `root`. A resolver probes tens of thousands of such
+ * paths, and `path.relative` normalizes both on every call.
+ * @param {string} root
+ * @param {string} target
+ * @returns {string}
+ */
+function relativeInside(root, target) {
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (path.isAbsolute(root) && target.startsWith(prefix)) {
+    const rest = target.slice(prefix.length);
+    const plain =
+      rest !== '' &&
+      !(path.sep === '\\' && rest.includes('/')) &&
+      rest
+        .split(path.sep)
+        .every(
+          segment => segment !== '' && segment !== '.' && segment !== '..',
+        );
+    if (plain) return rest;
+  }
+  return path.relative(root, target);
 }
 
 /**
@@ -877,13 +1049,28 @@ export function listComponents(coreDir) {
  * @returns {boolean}
  */
 export function existsCaseExact(targetPath, rootDir) {
-  if (!pathExists(targetPath)) return false;
-
-  const rel = path.relative(rootDir, targetPath);
-  if (rel === '') return true;
+  const rel = relativeInside(rootDir, targetPath);
+  if (rel === '') return pathExists(targetPath);
   if (path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`))
     return false;
 
+  if (listingCacheActive()) {
+    // Inside an operation the folders' listings answer, so a name that a
+    // listing lacks costs no probe of the disk. A symbolic link still needs
+    // its target.
+    let folder = rootDir;
+    let entry = null;
+    for (const segment of rel.split(path.sep)) {
+      entry = findEntry(folder, segment);
+      if (!entry) return false;
+      folder = folder.endsWith(path.sep)
+        ? `${folder}${segment}`
+        : `${folder}${path.sep}${segment}`;
+    }
+    return !entry?.isSymbolicLink() || pathExists(targetPath);
+  }
+
+  if (!pathExists(targetPath)) return false;
   let dir = rootDir;
   for (const segment of rel.split(path.sep)) {
     let entries;

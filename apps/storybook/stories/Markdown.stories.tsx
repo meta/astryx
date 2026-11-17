@@ -270,11 +270,63 @@ export const NestedLists: Story = {
   },
 };
 
+export const LongNumberMarkers: Story = {
+  args: {
+    children: [
+      '8. Eight',
+      '   1. Nested under eight',
+      '9. Nine',
+      '   1. Nested under nine',
+      '10. Ten',
+      '    1. Nested under ten',
+      '11. Eleven',
+      '12. Twelve',
+      '',
+      '## Roman counters',
+      '',
+      '1. Outer',
+      '   1. Middle',
+      ...Array.from(
+        {length: 8},
+        (_, index) => `      ${index + 1}. Roman item ${index + 1}`,
+      ),
+    ].join('\n'),
+  },
+};
+
 export const ShiftedHeadings: Story = {
   name: 'Shifted Headings (start at h3)',
   args: {
     children: SAMPLE_MD,
     headingLevelStart: 3,
+  },
+};
+
+const MIXED_DIRECTION_MD = [
+  '## Release notes',
+  '',
+  'This paragraph reads from left to right.',
+  '',
+  'הפסקה הזאת נקראת מימין לשמאל.',
+  '',
+  '> ציטוט שנקרא מימין לשמאל.',
+  '',
+  '- An English item',
+  '- פריט בעברית',
+  '',
+  '| Name | שם |',
+  '| --- | --- |',
+  '| Markdown | מסמך |',
+].join('\n');
+
+/**
+ * Each prose block lays out in the direction of its own text, whatever the
+ * direction around the document. Switch the direction toolbar to compare.
+ */
+export const MixedDirection: Story = {
+  name: 'Mixed-direction blocks',
+  args: {
+    children: MIXED_DIRECTION_MD,
   },
 };
 
@@ -362,8 +414,8 @@ const SHORT_SIX_COLUMN_TABLE = [
 const WIDE_TOKEN_TABLE = [
   '| Identifier | Endpoint | Status | Accessibility status and remediation owner |',
   '|---|---|---|---|',
-  '| [PR #6860](https://github.com/facebook/astryx/pull/6860) | https://example.com/v2/pipelines/build/runs/1284/logs | `needs_revision_before_landing_v2` | Pass |',
-  '| [PR #6852](https://github.com/facebook/astryx/pull/6852) | https://example.com/v2/pipelines/docs/runs/97/logs | `ContentNegotiationMiddleware` | Review |',
+  '| [PR #6860](https://github.com/meta/astryx/pull/6860) | https://example.com/v2/pipelines/build/runs/1284/logs | `needs_revision_before_landing_v2` | Pass |',
+  '| [PR #6852](https://github.com/meta/astryx/pull/6852) | https://example.com/v2/pipelines/docs/runs/97/logs | `ContentNegotiationMiddleware` | Review |',
 ].join('\n');
 
 function ReadingColumn({width, children}: {width: string; children: string}) {

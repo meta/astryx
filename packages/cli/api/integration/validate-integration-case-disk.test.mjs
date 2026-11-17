@@ -10,6 +10,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock(
   '../../foundation/discovery/component-discovery.mjs',
@@ -41,7 +42,7 @@ const {validateIntegration} = await import('./validate-integration.mjs');
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-case-disk-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-case-disk-'));
 });
 
 afterEach(() => {
@@ -70,9 +71,21 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    expect(data.notes).toEqual([
+    // The component has no example template and the package no logo; those
+    // notes are tested elsewhere.
+    expect(
+      (data.notes ?? []).filter(
+        note =>
+          ![
+            'component_without_example',
+            'package_without_example',
+            'package_without_logo',
+          ].includes(note.code),
+      ),
+    ).toEqual([
       {
         code: 'source_without_component_doc',
+        next: true,
         message:
           'Component doc "Acmewidget.doc.mjs" and its source "AcmeWidget.tsx" differ only in letter case. They pair on a case-insensitive disk (macOS, Windows) but not on Linux, where CI and most installs run, so there the component is missing. Fix: rename Acmewidget.doc.mjs to AcmeWidget.doc.mjs.',
       },
@@ -100,9 +113,21 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    expect(data.notes).toEqual([
+    // The component has no example template and the package no logo; those
+    // notes are tested elsewhere.
+    expect(
+      (data.notes ?? []).filter(
+        note =>
+          ![
+            'component_without_example',
+            'package_without_example',
+            'package_without_logo',
+          ].includes(note.code),
+      ),
+    ).toEqual([
       {
         code: 'source_without_component_doc',
+        next: true,
         message:
           'Hidden component doc "Acmewidget.doc.mjs" and its source "AcmeWidget.tsx" differ only in letter case. They pair on a case-insensitive disk (macOS, Windows) but not on Linux, where CI and most installs run. Fix: rename Acmewidget.doc.mjs to AcmeWidget.doc.mjs.',
       },

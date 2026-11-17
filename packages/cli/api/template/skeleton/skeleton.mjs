@@ -5,13 +5,19 @@
  * spatial annotations) plus the components a resolved template composes.
  *
  * @position api/template/skeleton — derives a compact layout reference from the
- *   resolved match's source; the template dispatcher routes `--skeleton` here.
+ *   resolved match's source, with demo content replaced as a copy replaces it;
+ *   the template dispatcher routes `--skeleton` here.
  */
 
 import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {extractComponents, pkgOf} from '../../../foundation/discovery/template-adapter.mjs';
+import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
+import {
+  componentsInSource,
+  pkgOf,
+  replaceTemplateDemos,
+} from '../../../foundation/discovery/template-adapter.mjs';
 
 const STRUCTURAL = new Set([
   'AppShell',
@@ -141,7 +147,7 @@ function extractSkeleton(source) {
 
     // Match a JSX opening tag, e.g. `<Section` or the legacy `<XDSSection`.
     // The `XDS` prefix is optional (templates author bare names post
-    // un-prefix migration P2380608025). `tagName` is the full authored name
+    // un-prefix migration). `tagName` is the full authored name
     // (used for the self-closing lookahead); `comp` is the bare display name.
     const openMatch = t.match(/^<((XDS)?([A-Z]\w+))/);
     if (openMatch && !t.startsWith('</')) {
@@ -242,15 +248,20 @@ export function templateSkeleton(match, templates) {
       ERROR_CODES.ERR_NO_SOURCE,
     );
   }
-  const src = fs.readFileSync(match.filePath, 'utf-8');
+  // The skeleton outlines the source that template.show returns, so it never
+  // names demo content that a copy replaces.
+  const {source} = replaceTemplateDemos(
+    fs.readFileSync(match.filePath, 'utf-8'),
+  );
   return {
     type: 'template.skeleton',
     package: pkgOf(match),
     data: {
       template: match.dirName,
-      description: match.description,
-      components: extractComponents(match.filePath),
-      skeleton: extractSkeleton(src),
+      description: renderTokens(match.description),
+      components: componentsInSource(source),
+      skeleton: extractSkeleton(source),
+      isReady: match.isReady !== false,
     },
   };
 }

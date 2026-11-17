@@ -8,7 +8,9 @@
  * their legacy public deep paths and are resolved from files on disk.
  *
  * @input Parsed package.json, package directory, and a public subpath
- * @output The public specifier and confined target file, when exported
+ * @output The public specifier and confined target file, when exported, the
+ *   file a subpath's `source` condition names, when the package has it, and
+ *   the target a subpath maps to under given conditions
  * @position packages/cli/foundation/discovery — shared package import metadata
  */
 
@@ -61,6 +63,16 @@ function targetString(value) {
 }
 
 /**
+ * The order Node and TypeScript try export patterns in: the longer part
+ * before the `*` first, then the longer key.
+ * @param {string} a
+ * @param {string} b
+ */
+function patternKeyCompare(a, b) {
+  return b.indexOf('*') - a.indexOf('*') || b.length - a.length;
+}
+
+/**
  * Find an exact or one-star subpath mapping and the wildcard value it matched.
  * @param {Record<string, unknown>} map
  * @param {string} subpath
@@ -71,7 +83,7 @@ function subpathValue(map, subpath) {
   }
   const patterns = Object.keys(map)
     .filter(key => key.startsWith('./') && key.split('*').length === 2)
-    .sort((a, b) => b.length - a.length);
+    .sort(patternKeyCompare);
   for (const pattern of patterns) {
     const star = pattern.indexOf('*');
     const prefix = pattern.slice(0, star);
@@ -163,6 +175,86 @@ function resolveLegacy(packageDir, subpath) {
     ...MODULE_EXTENSIONS.map(extension => path.join(base, `index${extension}`)),
   ];
   return candidates.find(regularFile) ?? null;
+}
+
+/**
+ * The raw export value one subpath maps to, with the wildcard it matched.
+ * @param {unknown} exportsField
+ * @param {string} subpath
+ * @returns {{value: unknown, wildcard: string} | null}
+ */
+function rawExportValue(exportsField, subpath) {
+  if (exportsField == null) return null;
+  if (!isRecord(exportsField)) {
+    return subpath === '.' ? {value: exportsField, wildcard: ''} : null;
+  }
+  if (!Object.keys(exportsField).some(key => key.startsWith('.'))) {
+    return subpath === '.' ? {value: exportsField, wildcard: ''} : null;
+  }
+  const selected = subpathValue(exportsField, subpath);
+  return selected.found
+    ? {value: selected.value, wildcard: selected.wildcard}
+    : null;
+}
+
+/**
+ * Select one string target under a list of conditions, matched in the order
+ * the export object lists them, as Node and TypeScript match them; `default`
+ * always matches.
+ * @param {unknown} value
+ * @param {readonly string[]} conditions
+ * @returns {string|null}
+ */
+function conditionTarget(value, conditions) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const selected = conditionTarget(item, conditions);
+      if (selected) return selected;
+    }
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  for (const [key, item] of Object.entries(value)) {
+    if (key !== 'default' && !conditions.includes(key)) continue;
+    const selected = conditionTarget(item, conditions);
+    if (selected) return selected;
+  }
+  return null;
+}
+
+/**
+ * The target one subpath of a package's exports maps to under a list of
+ * conditions, its wildcard filled in, as written in the package (`./x`).
+ * Null when the package exports no such subpath.
+ * @param {unknown} exportsField
+ * @param {string} subpath `.` or a `./`-prefixed subpath
+ * @param {readonly string[]} conditions
+ * @returns {string|null}
+ */
+export function conditionalExportTarget(exportsField, subpath, conditions) {
+  const selected = rawExportValue(exportsField, subpath);
+  if (!selected) return null;
+  const target = conditionTarget(selected.value, conditions);
+  return target === null ? null : target.replaceAll('*', selected.wildcard);
+}
+
+/**
+ * The file a subpath's `source` condition names, when that file is in the
+ * package. A package that ships its source (or a workspace package before it
+ * is built) declares it beside the built target, so reading it answers the
+ * same with or without a build. Null when there is no such condition or file.
+ * @param {{exports?: unknown}} pkg
+ * @param {string} packageDir
+ * @param {string} subpath `.` or a `./`-prefixed subpath
+ * @returns {string|null}
+ */
+export function sourceExportTarget(pkg, packageDir, subpath) {
+  const selected = rawExportValue(pkg.exports, subpath);
+  if (!selected || !isRecord(selected.value)) return null;
+  const source = selected.value.source;
+  if (typeof source !== 'string') return null;
+  return resolveTarget(packageDir, source.replaceAll('*', selected.wildcard));
 }
 
 /**

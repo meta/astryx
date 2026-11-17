@@ -75,7 +75,7 @@ This spec does not:
 
 ### Authority boundary
 
-AST-009 supersedes the public [Accessibility Checklist](https://github.com/facebook/astryx/wiki/Accessibility-Checklist) only for real-AT follow-up classification, evidence boundaries, the merge and release evidence bar, and durable receipts. The checklist remains the consumer and contributor bar for component accessibility requirements.
+AST-009 supersedes the public [Accessibility Checklist](https://github.com/meta/astryx/wiki/Accessibility-Checklist) only for real-AT follow-up classification, evidence boundaries, the merge and release evidence bar, and durable receipts. The checklist remains the consumer and contributor bar for component accessibility requirements.
 
 AST-009 does not own focus-ring appearance, interaction-modality behavior, visual or contrast methodology, browser support, component theming, or overlay behavior. Those stay with [interaction modality](../../architecture/interaction-modality.md), [browser support](../AST-013/spec.md), [component theming](../../architecture/component-theming-surface.md), [theme tokens](../../architecture/theme-tokens.md), [layer runtime](../../architecture/layer-runtime.md), [overlay dismissal](../../families/overlay-dismissal.md), and the owning component records.
 

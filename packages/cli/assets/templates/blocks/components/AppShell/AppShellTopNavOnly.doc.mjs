@@ -10,5 +10,13 @@ export const doc = {
     'Simple layout with TopNav and no side navigation, suitable for landing pages.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['AppShell', 'TopNav', 'Heading', 'Text', 'VStack', 'NavIcon'],
+  componentsUsed: [
+    'AppShell',
+    'TopNav',
+    'Heading',
+    'Text',
+    'VStack',
+    'NavIcon',
+  ],
+  icons: {CubeIcon: 'package'},
 };

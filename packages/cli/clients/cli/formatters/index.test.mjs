@@ -186,6 +186,21 @@ describe('records inline layout', () => {
     ).toBe('a    Alpha - First.\nbbb  Beta');
   });
 
+  it('sizes the first column from the records sizesColumn keeps; another overhangs it', () => {
+    const rows = [
+      {id: 'a', summary: 'First.'},
+      {id: 'a-much-longer-name', summary: 'Extra.', extra: true},
+      {id: 'bbb', summary: 'Third.'},
+    ];
+    expect(
+      records(rows, {
+        fields: ['id', 'summary'],
+        layout: 'inline',
+        sizesColumn: row => !row.extra,
+      }).toString(),
+    ).toBe('a    First.\na-much-longer-name  Extra.\nbbb  Third.');
+  });
+
   it('wraps a long record under the first column', () => {
     const out = records([{id: 'a', text: 'word '.repeat(40).trim()}], {
       layout: 'inline',

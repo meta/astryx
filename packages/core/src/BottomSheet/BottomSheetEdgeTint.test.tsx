@@ -148,15 +148,38 @@ describe('BottomSheetEdgeTint', () => {
     expect(tints()).toHaveLength(1);
   });
 
-  it('gives a modal switcher flow exactly one tint', () => {
-    render(
+  it('gives a modal switcher flow exactly one tint at rest, and one per presented dialog through a handoff', () => {
+    const {rerender} = render(
       <BottomSheetSwitcher activeSheet="comment" onActiveSheetChange={() => {}}>
         <BottomSheet sheetId="comment" label="Add a comment">
           Comment
         </BottomSheet>
+        <BottomSheet sheetId="confirmation" label="Confirmation">
+          Confirmation
+        </BottomSheet>
       </BottomSheetSwitcher>,
     );
     expect(tints()).toHaveLength(1);
+    expect(tints()[0]?.closest('dialog')?.getAttribute('aria-label')).toBe(
+      'Add a comment',
+    );
+
+    rerender(
+      <BottomSheetSwitcher
+        activeSheet="confirmation"
+        onActiveSheetChange={() => {}}>
+        <BottomSheet sheetId="comment" label="Add a comment">
+          Comment
+        </BottomSheet>
+        <BottomSheet sheetId="confirmation" label="Confirmation">
+          Confirmation
+        </BottomSheet>
+      </BottomSheetSwitcher>,
+    );
+    // Mid-handoff both dialogs are presented; each carries its own tint.
+    expect(
+      tints().map(tint => tint.closest('dialog')?.getAttribute('aria-label')),
+    ).toEqual(['Add a comment', 'Confirmation']);
   });
 
   it('keeps the tint out of the accessibility tree and out of hit testing', async () => {

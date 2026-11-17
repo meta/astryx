@@ -1,0 +1,7 @@
+Copied template to out/text/page.tsx
+
+package: @astryxdesign/core
+
+Install missing dependencies: pnpm add @heroicons/react@"^2.2.0"
+
+<text>

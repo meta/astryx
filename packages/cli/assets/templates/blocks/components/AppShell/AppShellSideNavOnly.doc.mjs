@@ -10,5 +10,20 @@ export const doc = {
     'App shell with SideNav header providing app identity, no TopNav needed.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['AppShell', 'SideNav', 'Heading', 'Text', 'VStack', 'NavIcon'],
+  componentsUsed: [
+    'AppShell',
+    'SideNav',
+    'Heading',
+    'Text',
+    'VStack',
+    'NavIcon',
+  ],
+  icons: {
+    ChartBarIcon: 'chart',
+    Cog6ToothIcon: 'settings',
+    CubeIcon: 'package',
+    FolderIcon: 'folder',
+    HomeIcon: 'home',
+    UsersIcon: 'users',
+  },
 };

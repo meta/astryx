@@ -9,5 +9,19 @@ export const doc = {
   description: 'Assistant message with footer actions: copy, retry, thumbs up/down, and model label. Use for AI responses that need feedback or utility controls.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Chat', 'ChatMessageMetadata', 'Timestamp', 'Button', 'Icon', 'Text', 'Layout'],
+  componentsUsed: [
+    'Chat',
+    'ChatMessageMetadata',
+    'Timestamp',
+    'Button',
+    'Icon',
+    'Text',
+    'Layout',
+  ],
+  icons: {
+    ArrowPathIcon: 'refresh',
+    ClipboardDocumentIcon: 'clipboard',
+    HandThumbDownIcon: 'thumbsDown',
+    HandThumbUpIcon: 'thumbsUp',
+  },
 };

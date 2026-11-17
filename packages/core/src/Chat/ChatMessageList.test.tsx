@@ -182,9 +182,13 @@ describe('ChatMessageList', () => {
         );
       });
       expect(action).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('status', {name: 'Loading'})).toBeTruthy();
+      // The loader Spinner inside the log is silent (spec:AST-086 FR4, FR8).
+      expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      );
       await act(async () => complete());
-      expect(screen.queryByRole('status', {name: 'Loading'})).toBeNull();
+      expect(document.querySelector('.astryx-spinner')).toBeNull();
       unmount();
       expect(disconnect).toHaveBeenCalledTimes(1);
     } finally {

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, afterEach, vi} from 'vitest';
+import {describe, it, expect, afterEach, beforeAll, vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -20,6 +20,7 @@ import {
 } from './package-manager.mjs';
 import {recordDeclaredCliCommands, runWithCliDoor} from './cli-command.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {usePnpApi} from '../../test-utils/pnp-fixtures.mjs';
 
 let tmpDir;
 const ORIGINAL_ARGV1 = process.argv[1];
@@ -50,6 +51,7 @@ afterEach(() => {
   }
   vi.restoreAllMocks();
   delete process.env.npm_config_user_agent;
+  delete process.versions.pnp;
   process.argv[1] = ORIGINAL_ARGV1;
 });
 
@@ -511,6 +513,22 @@ describe('cliBinResolves', () => {
     fs.mkdirSync(path.join(dir, 'node_modules', '.bin'), {recursive: true});
     expect(cliBinResolves(dir)).toBe(false);
   });
+
+  it("under Yarn Plug'n'Play, is true when the folder's workspace depends on the CLI", () => {
+    const dir = usePnpApi(makeTmpDir(), {
+      '@astryxdesign/cli': path.join(os.tmpdir(), 'store', 'cli'),
+    });
+    const src = path.join(dir, 'src');
+    fs.mkdirSync(src);
+    expect(cliBinResolves(src)).toBe(true);
+  });
+
+  it("under Yarn Plug'n'Play, is false when the folder's workspace does not depend on it", () => {
+    const dir = usePnpApi(makeTmpDir(), {
+      '@astryxdesign/core': path.join(os.tmpdir(), 'store', 'core'),
+    });
+    expect(cliBinResolves(dir)).toBe(false);
+  });
 });
 
 describe('getCliInvocation', () => {
@@ -847,6 +865,19 @@ describe('commandInFolder', () => {
   );
 
   describe.runIf(PWSH)('in PowerShell, where it is installed', () => {
+    // The first `pwsh` a job starts pays PowerShell's cold start, which on a
+    // busy runner has outlasted a test's 30 s. `spawnSync` blocks, so that
+    // start landed on the first test's clock. Starting it once here, on the
+    // hook's own timeout, leaves each test's clock to its command.
+    beforeAll(() => {
+      const warm = spawnSync(
+        /** @type {string} */ (PWSH),
+        ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'],
+        {encoding: 'utf8'},
+      );
+      expect(warm.status, warm.stderr).toBe(0);
+    }, 120_000);
+
     it('runs in the folder with every argument unchanged', () => {
       const root = makeTmpDir();
       const project = path.join(root, 'it\'s Macy’s ‘q’ $5 %x% !y `z` "q" [1]');

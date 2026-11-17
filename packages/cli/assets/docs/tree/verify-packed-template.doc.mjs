@@ -27,11 +27,11 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration verify',
+          code: '{@command integration verify}',
         },
         {
           type: 'prose',
-          text: '`integration verify` runs `npm pack`, including lifecycle scripts, unpacks the `.tgz` file into a temporary app without installing its dependencies, and checks the unpacked integration. It publishes nothing and removes the `.tgz` file and the temporary app.',
+          text: '`integration verify` runs `{@pm-only npm "the tarball the registry receives" pack}`, including lifecycle scripts, unpacks the `.tgz` file into a temporary app without installing its dependencies, and checks the unpacked integration. It publishes nothing and removes the `.tgz` file and the temporary app.',
         },
         {
           type: 'list',
@@ -67,7 +67,7 @@ export const docs = {
             'Whether the copied file type-checks in every supported app toolchain.',
             'Whether package-owned CSS, fonts, icons, images, or media load in a browser.',
             'Whether layout, color modes, keyboard and pointer input, and real content work.',
-            'Whether a template id collides with Core, or whether a `replaces` target exists. Run `astryx doctor integration templates` for those.',
+            'Whether a template id collides with Core, or whether a `replaces` target exists. Run `{@command doctor integration templates}` for those.',
             'How the template scores on quality.',
           ],
         },

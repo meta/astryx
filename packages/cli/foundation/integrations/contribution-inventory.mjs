@@ -24,6 +24,9 @@ import {loadComponentDoc} from '../discovery/component-loader.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationDocs} from '../discovery/docs-discovery.mjs';
+import {discoverIconSetDirectory} from '../discovery/icon-set-discovery.mjs';
+import {generatedTypesPath} from '../discovery/icon-set-paths.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 // ── File-walk helpers (no module imports, no execution) ──────────
 
@@ -121,8 +124,34 @@ function enumerateDocFiles(root, pkgDir) {
   return walkDir(root, n => DOC_RE.test(n)).map(f => rel(pkgDir, f));
 }
 
+/**
+ * Every file an icon set ships: its descriptor, data file, own definitions,
+ * and license notices, and its generated icons module.
+ * @param {string} root
+ * @param {string} pkgDir
+ */
+function enumerateIconSetFiles(root, pkgDir) {
+  /** @type {string[]} */
+  const files = [];
+  for (const set of discoverIconSetDirectory(root, '(local)').sets) {
+    files.push(set.docPath, set.dataPath);
+    for (const definition of set.definitions) files.push(definition.file);
+    for (const notice of set.notices) files.push(path.join(set.dir, notice));
+    if (set.data.generated) {
+      const generated = path.join(pkgDir, set.data.generated);
+      if (fs.existsSync(generated)) files.push(generated);
+      const types = generatedTypesPath(set.data.generated);
+      if (types && fs.existsSync(path.join(pkgDir, types))) {
+        files.push(path.join(pkgDir, types));
+      }
+    }
+  }
+  return [...new Set(files)].sort().map(file => rel(pkgDir, file));
+}
+
 /** @type {Record<FileInventoryRoot['kind'], (root: string, pkgDir: string) => string[]>} */
 const ENUMERATORS = {
+  iconSets: enumerateIconSetFiles,
   themes: enumerateThemeFiles,
   components: enumerateComponentFiles,
   templates: enumerateTemplateFiles,
@@ -135,13 +164,14 @@ const ROOT_KINDS = /** @type {const} */ ([
   'templates',
   'codemods',
   'docs',
+  'iconSets',
 ]);
 
 /**
  * The contribution files readers read under each declared root that is a
  * readable folder, package-relative, without importing anything. A folder
  * inside a root that cannot be listed is skipped.
- * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string}} loaded
+ * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, iconSets?: string}} loaded
  * @param {string} pkgDir
  * @returns {string[]}
  */
@@ -164,7 +194,7 @@ export function contributionFiles(loaded, pkgDir) {
 
 /**
  * @typedef {object} FileInventoryRoot
- * @property {'themes'|'components'|'templates'|'codemods'|'docs'} kind
+ * @property {'themes'|'components'|'templates'|'codemods'|'docs'|'iconSets'} kind
  * @property {string} path — project-relative root path
  * @property {string[]} files — project-relative required file paths
  */
@@ -216,6 +246,8 @@ export function computeRequiredFiles(loaded) {
  * @property {{version: string, id: string}[]} codemods
  * @property {string[]} docs
  * @property {string[]} agentDocsAppend
+ * @property {string[]} [iconSets] icon set names; present only when the
+ *   package declares `experimental.iconSets` (experimental)
  */
 
 /**
@@ -228,6 +260,7 @@ export function computeRequiredFiles(loaded) {
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {{append?: readonly string[]}} [agentDocs]
+ * @property {string} [iconSets]
  */
 
 /**
@@ -261,9 +294,19 @@ export async function collectIdentities(loaded) {
     agentDocsAppend: loaded.agentDocs?.append
       ? [...loaded.agentDocs.append]
       : [],
+    // Experimental: only a package that declares `experimental.iconSets`
+    // gains the field, so every other package's inventory is unchanged.
+    ...(loaded.iconSets ? {iconSets: []} : {}),
   };
   /** @type {Array<{kind: string, message: string}>} */
   const errors = [];
+  if (loaded.iconSets && fs.existsSync(loaded.iconSets)) {
+    const found = discoverIconSetDirectory(loaded.iconSets, loaded.name);
+    identities.iconSets = found.sets.map(set => set.name).sort();
+    for (const error of found.errors) {
+      errors.push({kind: 'iconSets', message: error.message});
+    }
+  }
 
   if (loaded.themes && isFolder(loaded.themes)) {
     try {
@@ -272,7 +315,7 @@ export async function collectIdentities(loaded) {
       );
       identities.themes = themes
         .map(t => ({slug: t.slug, exportName: t.exportName}))
-        .sort((a, b) => a.slug.localeCompare(b.slug));
+        .sort((a, b) => compareText(a.slug, b.slug));
     } catch (err) {
       errors.push({
         kind: 'themes',
@@ -325,7 +368,7 @@ export async function collectIdentities(loaded) {
           name: t.name,
           ...(t.replaces == null ? {} : {replaces: t.replaces}),
         }))
-        .sort((a, b) => a.id.localeCompare(b.id));
+        .sort((a, b) => compareText(a.id, b.id));
     } catch (err) {
       errors.push({
         kind: 'templates',
@@ -343,7 +386,7 @@ export async function collectIdentities(loaded) {
         for (const cm of codemods) entries.push({version, id: cm.id});
       }
       identities.codemods = entries.sort((a, b) =>
-        `${a.version}/${a.id}`.localeCompare(`${b.version}/${b.id}`),
+        compareText(`${a.version}/${a.id}`, `${b.version}/${b.id}`),
       );
     } catch (err) {
       errors.push({
@@ -379,7 +422,7 @@ export async function collectIdentities(loaded) {
  * handler, not a second set of per-writer rules.
  *
  * @param {IdentitySource} loaded
- * @param {'theme'|'component'|'template'|'codemod'|'doc'|'agent-doc'} kind
+ * @param {'theme'|'component'|'template'|'codemod'|'doc'|'agent-doc'|'icon-set'} kind
  * @param {string} name
  * @param {{version?: string}} [options]
  * @returns {Promise<void>}
@@ -390,6 +433,21 @@ export async function assertContributionVisible(
   name,
   {version} = {},
 ) {
+  if (kind === 'icon-set') {
+    // An icon set is read by its own discovery seam (spec:AST-084 FR1–FR3):
+    // the descriptor and data file must both parse, and the set must be found.
+    const {sets, errors} = loaded.iconSets
+      ? discoverIconSetDirectory(loaded.iconSets, loaded.name)
+      : {sets: [], errors: []};
+    const error = errors.find(entry => entry.name === name);
+    if (error) throw new Error(error.message);
+    if (!sets.some(set => set.name === name)) {
+      throw new Error(
+        `icon-set contribution "${name}" was not visible after writing.`,
+      );
+    }
+    return;
+  }
   const {identities, errors} = await collectIdentities(loaded);
   const errorKind =
     kind === 'theme'
@@ -497,6 +555,12 @@ export function compareIdentities(local, packed) {
     item => `${item.version}/${item.id}`,
   );
   compareKind('Doc topic', local.docs, packed.docs, item => item);
+  compareKind(
+    'Icon set',
+    local.iconSets ?? [],
+    packed.iconSets ?? [],
+    item => item,
+  );
 
   if (
     JSON.stringify(local.agentDocsAppend) !==

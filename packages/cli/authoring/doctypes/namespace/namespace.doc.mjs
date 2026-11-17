@@ -65,6 +65,12 @@ export const doc = {
       description: 'Search terms not already present in the title or summary.',
     },
     {
+      name: 'describes',
+      type: "'cli'",
+      description:
+        "`cli` on a root namespace of the CLI's own docs whose pages describe the CLI itself, not the components of a base. A run on any base reads such a namespace and everything under it; every other root of the CLI's own docs describes Core, and only a run on Core reads it.",
+    },
+    {
       name: 'slots',
       type: 'Record<string, NamespaceSlot>',
       description:
@@ -76,6 +82,13 @@ export const doc = {
       type: 'NamespaceAdoptionRule[]',
       description:
         'Provider-local rules that adopt otherwise-unplaced docs from a logical discovery group. They never scan a folder.',
+    },
+    {
+      name: 'adopts[].source.packages',
+      type: "'all'",
+      stability: 'experimental',
+      description:
+        "Experimental: may change or be removed in a patch release. `'all'` adopts the group from every package, not only the namespace's own, and is read only on the CLI's own namespaces that are marked `stability: 'experimental'`.",
     },
     {
       name: 'blocks',

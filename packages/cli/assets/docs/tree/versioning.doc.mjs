@@ -28,7 +28,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# 1.0.0 -> 2.0.0: a breaking change\nnpm version major\n# 1.0.0 -> 1.1.0: a new feature\nnpm version minor\n# 1.0.0 -> 1.0.1: a fix\nnpm version patch',
+          code: '# 1.0.0 -> 2.0.0: a breaking change\n{@pm-only npm "npm, which every Node install carries, sets the version" version major}\n# 1.0.0 -> 1.1.0: a new feature\n{@pm-only npm "npm, which every Node install carries, sets the version" version minor}\n# 1.0.0 -> 1.0.1: a fix\n{@pm-only npm "npm, which every Node install carries, sets the version" version patch}',
         },
         {
           type: 'list',
@@ -54,13 +54,13 @@ export const docs = {
           rows: [
             [
               'A component name, such as `AcmeCarousel`',
-              'Imports, and `astryx component AcmeCarousel`',
+              'Imports, and `{@command component AcmeCarousel}`',
             ],
             [
               'A template id, such as `acme-dashboard`',
-              '`astryx template acme-dashboard`',
+              '`{@command template acme-dashboard}`',
             ],
-            ['A theme slug, such as `ocean`', '`astryx theme add ocean`'],
+            ['A theme slug, such as `ocean`', '`{@command theme add ocean}`'],
             [
               'A topic name or route, such as `acme/deploying`',
               'Reads of the old name, and links to it from other docs',
@@ -138,7 +138,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'An unknown field in `astryx.integration.mjs` is ignored with an `unknown_manifest_key` warning, and the rest of the manifest still loads.',
+            'An unknown field in `astryx.integration.mjs` is ignored, and the rest of the manifest still loads. `{@command doctor integration validate}` lists it as an `unknown_manifest_key` note; it is not an issue, so everyday commands do not warn about it. CLIs before 0.7.17 report it as a warning.',
             'A named export that the CLI does not know is ignored with no warning, so `debug` and `gapReport` are safe to add.',
             'Published 0.6.3 and earlier print each `{@link ...}` as written.',
             'Published 0.6.3 and earlier reject a template that sets `replaces` or `keywords`, drop that template, and hide every doc topic your package ships. Published 0.6.4 and 0.6.5 still drop a template that sets `keywords`.',

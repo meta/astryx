@@ -16,7 +16,8 @@ export const doc = {
     'incidents',
     'observability',
     'operations',
-    'live status',
+    'live',
+    'status',
     'real-time',
     'reliability',
     'traffic',
@@ -31,4 +32,12 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Monitoring',
+  icons: {
+    ArrowDownIcon: 'arrowDown',
+    ArrowUpIcon: 'arrowUp',
+    BellAlertIcon: 'notificationActive',
+    CheckCircleIcon: 'success',
+    ServerStackIcon: 'server',
+    StopIcon: 'stop',
+  },
 };

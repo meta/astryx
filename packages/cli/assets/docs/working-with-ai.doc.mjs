@@ -40,7 +40,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "That's it. The `init --features agents` command generates everything your AI needs (component index, behavioral rules, CLI reference, and package guidance from configured integrations) from the installed project. After a dependency bump, `astryx upgrade --from <old version>` reports a stale block and adding `--apply` refreshes it.",
+          text: "That's it. The `init --features agents` command generates everything your AI needs (component index, behavioral rules, CLI reference, and package guidance from configured integrations) from the installed project. After a dependency bump, `{@command upgrade --from <old version>}` reports a stale block and adding `--apply` refreshes it.",
         },
         {
           type: 'prose',
@@ -50,12 +50,12 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Manual options',
-          code: `astryx init --features agents --agent claude    # CLAUDE.md if present, else .claude/CLAUDE.md
-astryx init --features agents --agent cursor    # .cursorrules if present, else AGENTS.md
-astryx init --features agents --agent codex     # AGENTS.md (Copilot, Codex, etc.)
-astryx init --features agents --agent hermes    # .hermes.md or HERMES.md if present, else AGENTS.md
-astryx init --features agents --agent muse      # AGENTS.md (Muse)
-astryx init --features agents --agent all       # every agent file present except GEMINI.md, else AGENTS.md and .claude/CLAUDE.md`,
+          code: `{@command init --features agents --agent claude}    # CLAUDE.md if present, else .claude/CLAUDE.md
+{@command init --features agents --agent cursor}    # .cursorrules if present, else AGENTS.md
+{@command init --features agents --agent codex}     # AGENTS.md (Copilot, Codex, etc.)
+{@command init --features agents --agent hermes}    # .hermes.md or HERMES.md if present, else AGENTS.md
+{@command init --features agents --agent muse}      # AGENTS.md (Muse)
+{@command init --features agents --agent all}       # every agent file present except GEMINI.md, else AGENTS.md and .claude/CLAUDE.md`,
         },
         {
           type: 'prose',
@@ -63,7 +63,7 @@ astryx init --features agents --agent all       # every agent file present excep
         },
         {
           type: 'prose',
-          text: "For agents that work outside any one project, your global install keeps one short Astryx skill, `~/.agents/skills/astryx/SKILL.md`, linked into the skill folders agent tools read, such as `~/.claude/skills/astryx`. It tells agents Astryx is there and when to use it; `astryx init --user` writes it now or, with `--remove-agents`, turns it off. Inside a project, agents follow that project's own agent docs. See {@link generic:computer-agent-guide}.",
+          text: "For agents that work outside any one project, your global install keeps one short Astryx skill, `~/.agents/skills/astryx/SKILL.md`, linked into the skill folders agent tools read, such as `~/.claude/skills/astryx`. It tells agents Astryx is there and when to use it; `{@command init --user}` writes it now or, with `--remove-agents`, turns it off. Inside a project, agents follow that project's own agent docs. See {@link generic:computer-agent-guide}.",
         },
       ],
     },
@@ -78,9 +78,9 @@ astryx init --features agents --agent all       # every agent file present excep
           type: 'list',
           style: 'ordered',
           items: [
-            '`astryx build "<idea>"`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
-            '`astryx template <name> <path>`: scaffold that template into the project, keep its frame and spacing, and replace its content',
-            '`astryx component <Name>`: read props and examples for every component used',
+            '`{@command build "<idea>"}`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
+            '`{@command template <name> <path>}`: scaffold that template into the project, keep its frame and spacing, and replace its content',
+            '`{@command component <Name>}`: read props and examples for every component used',
           ],
         },
         {
@@ -100,7 +100,7 @@ astryx init --features agents --agent all       # every agent file present excep
           type: 'code',
           lang: 'bash',
           label: 'Install as a Cursor project rule',
-          code: `astryx init --features agents --agent-docs-path .cursor/rules/astryx.mdc`,
+          code: `{@command init --features agents --agent-docs-path .cursor/rules/astryx.mdc}`,
         },
         {
           type: 'prose',
@@ -171,26 +171,61 @@ npm run astryx -- docs tokens --dense`,
           type: 'code',
           lang: 'bash',
           label: 'Short output for pasting into AI conversations',
-          code: `astryx docs styling --full --detail brief
-astryx component Dialog --detail compact
-astryx docs principles --dense`,
+          code: `{@command docs styling --full --detail brief}
+{@command component Dialog --detail compact}
+{@command docs principles --dense}`,
         },
       ],
     },
     {
-      title: 'MCP Server',
+      id: 'mcp-server',
+      title: 'If your AI tool needs MCP',
       content: [
         {
           type: 'prose',
-          text: 'Astryx ships a Model Context Protocol (MCP) server that any MCP-compatible AI tool can connect to. Instead of manually pasting CLI output, the AI can query the Astryx design system directly, searching for components, reading full documentation, and pulling code examples on demand.',
+          text: 'Start with the CLI: an agent that can run commands runs astryx directly, guided by the agent docs that init writes. Use the Model Context Protocol (MCP) only when your AI tool cannot run commands, or reaches tools only through MCP.',
         },
         {
           type: 'prose',
-          text: 'The MCP server exposes two tools: search(query) for discovering components, doc topics, and templates; and get(name) for retrieving full documentation with props, usage, and examples.',
+          text: 'Astryx serves MCP two ways. In a project, connect the CLI itself: {@command mcp} serves every astryx command as a tool, and each answer is for the version of Astryx the project has, with its theme and integrations. With nothing installed, connect the docs site: it runs the same server for the latest published release, with only the commands that read the docs.',
         },
         {
           type: 'prose',
-          text: 'Add the server to your MCP config file. The entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
+          text: 'The CLI server runs on standard input and output, so your AI tool starts it in the project folder. Each command that answers with --json is one tool, named by its words (theme build is theme_build), and its inputs are the command\'s arguments and options under their CLI names. A tool call runs the command with --json and answers with its output unchanged, so a tool answers as the command does, and a new command or option is a tool input at once. The server also gives the agent the project\'s agent docs, the text init writes, when the project has none yet.',
+        },
+        {
+          type: 'code',
+          lang: 'json',
+          label: 'Claude Code (.mcp.json), Cursor (.cursor/mcp.json) and Cline',
+          code: `{
+  "mcpServers": {
+    "astryx": {
+      "command": "npx",
+      "args": ["@astryxdesign/cli", "mcp"]
+    }
+  }
+}`,
+        },
+        {
+          type: 'prose',
+          text: 'Claude Code can also write that entry from the terminal:',
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: `claude mcp add astryx -- npx @astryxdesign/cli mcp`,
+        },
+        {
+          type: 'code',
+          lang: 'toml',
+          label: 'Codex (~/.codex/config.toml)',
+          code: `[mcp_servers.astryx]
+command = "npx"
+args = ["@astryxdesign/cli", "mcp"]`,
+        },
+        {
+          type: 'prose',
+          text: 'The hosted server is the CLI server with `--docs-only`, run by the docs site: its tools are search, build, component, hook, docs, template, discover, theme list and theme targets, and each answers as that command does with --json, for the latest published release, not for your project. It takes one JSON-RPC message per request, and no input that names a folder, a file to write or a package to read. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
         },
         {
           type: 'code',
@@ -246,7 +281,7 @@ astryx docs principles --dense`,
         },
         {
           type: 'prose',
-          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and retrieve full documentation without any manual CLI invocation. The server uses the same keyword index from component docs, so search quality improves automatically as component documentation is updated.',
+          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and read full documentation, props and template source without running the CLI.',
         },
       ],
     },

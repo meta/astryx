@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Chat', 'Token', 'Icon', 'Button', 'Layout'],
+  icons: {PaperClipIcon: 'attach'},
 };

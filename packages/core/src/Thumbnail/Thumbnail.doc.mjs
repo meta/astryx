@@ -49,7 +49,7 @@ export const docs = {
       name: 'showRemoveOn',
       type: "'always' | 'hover'",
       description:
-        'When the remove button is visible. `hover` (the default) reveals it on hover and on keyboard focus, and keeps it visible on any touch-capable device; `always` shows it at rest. Only applies when `onRemove` is set.',
+        'When the remove button is visible. `hover` (the default) reveals it on hover and on keyboard focus, and keeps it visible under a coarse primary pointer (a phone or tablet); `always` shows it at rest. Only applies when `onRemove` is set.',
       default: "'hover'",
     },
     {
@@ -79,8 +79,7 @@ export const docs = {
     ],
     vars: [
       {name: '--_thumbnail-hit-inset', description: 'Outset of the remove button\'s invisible hit area, applied to a ::after overlay. 0 on a fine pointer; negative on a coarse one, which grows the 20px button to the 24px touch target without changing what is drawn.', default: '0px', private: true},
-      {name: '--_press-overlay', description: 'Fill of the ::after interaction overlay: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while pressed (`:active` on a mouse; `data-astryx-press="on"` written by the touch press controller under a finger) and the hover token for the release fade. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
-      {name: '--_press-overlay-transition', description: 'Duration of the overlay\'s background-color transition: the fast duration token, except 0s while a believed touch press paints so it lands on the first frame.', default: 'var(--duration-fast)', private: true},
+      {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
     ],
   },
   usage: {
@@ -154,7 +153,7 @@ export const docsDense = {
     onClick: '(e) => void. Adds button semantics + hover overlay.',
     isLoading: 'Skeleton (no src) or upload overlay (with src). Default: false.',
     isDisabled: 'Disabled state. Default: false.',
-    showRemoveOn: "When remove button shows: hover (default: reveal on hover/focus, stays visible on touch) | always. Only when onRemove set.",
+    showRemoveOn: "When remove button shows: hover (default: reveal on hover/focus, stays visible under coarse primary pointer, e.g. phone/tablet) | always. Only when onRemove set.",
     xstyle: 'stylex.create() for layout.',
     className: 'CSS class. Prefer xstyle.',
     style: 'Inline styles. Prefer xstyle.',

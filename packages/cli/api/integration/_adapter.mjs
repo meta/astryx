@@ -3,7 +3,7 @@
 /**
  * @file The integration subject's access to the environment (INV21): reading
  * one package's component docs and sources with the project's own TypeScript,
- * and its topics.
+ * its topics, and the scope its examples are read against.
  *
  * @input a loaded integration and the directory the command runs in
  * @output the reports the integration checks attach to their results
@@ -15,12 +15,24 @@ import {
   forEachIntegrationDoc,
   integrationSourceForDoc,
 } from '../../foundation/discovery/component-discovery.mjs';
+import {Project} from '../../foundation/config/project.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
+import {packageDocTargets} from '../docs/_adapter.mjs';
 import {comparePropDocs} from '../../foundation/discovery/prop-drift.mjs';
 import {findCopiedPassages} from '../../foundation/discovery/copied-passages.mjs';
 import {findFluff} from '../../foundation/discovery/doc-fluff.mjs';
-import {findRunnerCommands} from '../../foundation/discovery/runner-commands.mjs';
+import {findDocCommands} from '../../foundation/discovery/runner-commands.mjs';
 import {findStrayPointers} from '../../foundation/discovery/stray-pointers.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {
+  loadLocalIntegration,
+  resolveInstalledIntegrationDir,
+} from '../../foundation/integrations/integrations.mjs';
+import {
+  exampleCodeCheck,
+  exampleScopeFor,
+} from '../../foundation/integrations/example-code.mjs';
 
 /**
  * Each component doc's props compared with the component's TypeScript props,
@@ -115,18 +127,128 @@ export async function integrationStrayPointers(discovered, integration) {
 }
 
 /**
- * Each Astryx command a package's topics write with a package runner. A
- * package whose topics cannot be discovered has none here: the other checks
- * report topics that do not load.
+ * What each doc in one integration's docs replaces or extends, read against
+ * the CLI's docs and the package's own (see `packageDocTargets`); empty when
+ * the docs do not load, which other checks report.
  * @param {any} integration a loaded integration
- * @returns {Promise<import('../../foundation/discovery/runner-commands.mjs').RunnerCommand[]>}
+ * @returns {Promise<import('../docs/_adapter.mjs').DocTarget[]>}
  */
-export async function integrationRunnerCommands(integration) {
+export async function integrationDocTargets(integration) {
   let discovered;
   try {
     discovered = await discoverIntegrationDocs(integration);
   } catch {
     return [];
   }
-  return findRunnerCommands(discovered);
+  // A doc that does not load is an issue already; its targets are not read.
+  if (discovered.errors.length > 0) return [];
+  try {
+    return await packageDocTargets(integration, discovered);
+  } catch {
+    // A package whose docs cannot form a tree is reported by the docs check.
+    return [];
+  }
+}
+
+/**
+ * The doc-syntax findings in a package's topics: commands written with a
+ * runner, for one package manager, or bare, and tokens that do not parse. A
+ * package whose topics cannot be discovered has none here: the other checks
+ * report topics that do not load.
+ * @param {any} integration a loaded integration
+ * @returns {Promise<import('../../foundation/discovery/runner-commands.mjs').RunnerCommand[]>}
+ */
+export async function integrationDocCommands(integration) {
+  let discovered;
+  try {
+    discovered = await discoverIntegrationDocs(integration);
+  } catch {
+    return [];
+  }
+  return findDocCommands(discovered);
+}
+
+/**
+ * Whether icon features are on in the project at `cwd` (the icon feature
+ * gate). An installed package's experimental root is read only then
+ * (spec:AST-017 FR27, spec:AST-084 FR0): a project where they are off gets
+ * what a CLI without icon sets reports. A config that does not load has them
+ * off.
+ * @param {string} cwd
+ * @returns {Promise<boolean>}
+ */
+export async function projectUsesIconSets(cwd) {
+  try {
+    const project = await Project.load(cwd);
+    return iconFeatureGate(project).on;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @typedef {object} LoadedExampleScope
+ * @property {boolean} found whether an integration manifest loaded
+ * @property {string | null} name
+ * @property {string | null} version
+ * @property {import('../../authoring/example/type.ts').ExampleScope | null} scope
+ * @property {string} [reason] why there is no scope
+ * @property {string} [incomplete] why names Core or React give were not read
+ */
+
+/**
+ * The scope a package's component examples are read against: the local
+ * package rooted at `cwd` (no `pkg`), or a package installed beside it.
+ * Throws when `pkg` is not a bare package name.
+ * @param {string | undefined} pkg
+ * @param {string} cwd
+ * @returns {Promise<LoadedExampleScope>}
+ */
+export async function loadExampleScope(pkg, cwd) {
+  const packageDir = pkg
+    ? resolveInstalledIntegrationDir(pkg, cwd)
+    : findPackageRoot(cwd);
+  /** @type {any} */
+  let integration = null;
+  /** @type {string | undefined} */
+  let reason;
+  if (packageDir) {
+    try {
+      integration = await loadLocalIntegration(packageDir);
+    } catch (err) {
+      reason = /** @type {Error} */ (err).message;
+    }
+  }
+  if (integration?.__loadError) reason = integration.__loadError;
+  if (!integration || reason) {
+    return {
+      found: false,
+      name: integration?.name ?? null,
+      version: integration?.version ?? null,
+      scope: null,
+      reason:
+        reason ??
+        (packageDir
+          ? `No astryx.integration.{ts,mjs,js} next to the package.json in ${packageDir}.`
+          : 'No package.json found.'),
+    };
+  }
+  const read = await exampleScopeFor(integration);
+  return {
+    found: true,
+    name: integration.name ?? null,
+    version: integration.version ?? null,
+    scope: read.scope,
+    ...(read.reason ? {reason: read.reason} : {}),
+    ...(read.incomplete ? {incomplete: read.incomplete} : {}),
+  };
+}
+
+/**
+ * Each of the package's component examples that cannot run on its own, as a
+ * note with its fix, and the examples that could not be judged.
+ * @param {any} integration a loaded integration
+ */
+export function integrationExampleCode(integration) {
+  return exampleCodeCheck(integration);
 }

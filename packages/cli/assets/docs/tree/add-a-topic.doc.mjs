@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add doc deploying\n# Read it the way an app will\nastryx docs deploying',
+          code: '{@command integration add doc deploying}\n# Read it the way an app will\n{@command docs deploying}',
         },
         {
           type: 'code',
@@ -40,7 +40,7 @@ export const docs = {
           items: [
             'Name the topic in lowercase kebab-case, such as `deploying`. Readers type the name as a command argument, so it holds only letters, digits, `_`, and `-`.',
             'Keep the name stable: readers and links find the topic by it.',
-            'Pick a name `astryx docs` does not already list: no Core topic, and no section such as `tokens` or `layout`. To take over or add to a Core topic, see {@link generic:extend-or-replace}.',
+            'Pick a name `{@command docs}` does not already list: no Core topic, and no section such as `tokens` or `layout`. To take over or add to a Core topic, see {@link generic:extend-or-replace}.',
           ],
         },
       ],
@@ -57,7 +57,7 @@ export const docs = {
           type: 'code',
           lang: 'javascript',
           label: 'docs/deploying.doc.mjs',
-          code: "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Ship an app built with Acme widgets.',\n  sections: [{\n    id: 'build-before-you-ship',\n    title: 'Build before you ship',\n    content: [\n      {type: 'prose', text: 'Build the app, then upload the `dist` folder.'},\n      {type: 'code', lang: 'bash', code: 'npm run build'},\n      {type: 'list', style: 'unordered', items: ['Keep `dist` out of git.']},\n      {type: 'table', headers: ['Variable', 'Value'], rows: [['`NODE_ENV`', '`production`']]},\n    ],\n  }],\n};",
+          code: "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Ship an app built with Acme widgets.',\n  sections: [{\n    id: 'build-before-you-ship',\n    title: 'Build before you ship',\n    content: [\n      {type: 'prose', text: 'Build the app, then upload the `dist` folder.'},\n      {type: 'code', lang: 'bash', code: '{@@pm run build}'},\n      {type: 'list', style: 'unordered', items: ['Keep `dist` out of git.']},\n      {type: 'table', headers: ['Variable', 'Value'], rows: [['`NODE_ENV`', '`production`']]},\n    ],\n  }],\n};",
         },
         {
           type: 'prose',
@@ -75,17 +75,17 @@ export const docs = {
     },
     {
       id: 'write-commands-without-a-runner',
-      title: 'Write commands without a runner',
+      title: 'Write commands for every reader',
       content: [
         {
           type: 'prose',
-          text: 'Start every CLI command in a doc with the word astryx alone, with no runner such as npx or pnpm exec in front. The CLI prefixes each one when it prints the doc, with the command the reader runs: `pnpm exec astryx` or `yarn astryx` from their package manager, or the `cliCommand` an integration sets. See {@link generic:cli-command}. `doctor integration validate` (and so `integration check`) lists each command written with a runner as a `runner_command` note, with its file, line and the bare command to write. A note fails nothing. An install step, which runs before the CLI is installed, is the one exception: write the scoped package name, `@astryxdesign/cli`, after the download runner. The unscoped name after a download runner is always listed, because it fetches an unrelated package.',
+          text: "Write an Astryx command as `{@@command doctor}` and a package-manager step as `{@@pm install @acme/widgets}`, never with a runner such as npx or pnpm exec, or a package manager's own command, in front. The CLI shows each one with the command the reader runs: `pnpm exec astryx doctor` or `yarn astryx doctor`, `pnpm add @acme/widgets` or `npm install @acme/widgets`, or the `cliCommand` an integration sets. {@link generic:doc-syntax} lists every token. A command written bare, the word astryx and a command, is shown the same way. `doctor integration validate` (and so `integration check`) names each command written another way, with the token that replaces it; {@link generic:doc-syntax} lists what it checks. An install step, which runs before the CLI is installed, is `{@@pm dlx @astryxdesign/cli init}`.",
         },
         {
           type: 'code',
           lang: 'javascript',
           label: 'docs/deploying.doc.mjs',
-          code: "{type: 'prose', text: 'Check the app with `astryx doctor` before you ship.'},\n{type: 'code', lang: 'bash', code: 'astryx doctor'},",
+          code: "{type: 'prose', text: 'Check the app with {@@command doctor} before you ship.'},\n{type: 'code', lang: 'bash', code: '{@@command doctor}'},",
         },
         {
           type: 'code',

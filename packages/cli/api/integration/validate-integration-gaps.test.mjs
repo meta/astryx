@@ -17,7 +17,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {parse} from '@babel/parser';
-import {spawnSync} from 'node:child_process';
 import {
   validateIntegration,
   validateLocalIntegration,
@@ -29,22 +28,27 @@ import {
 } from './check/check.mjs';
 import {componentDocNamesCheck} from '../../foundation/integrations/validate-contributions.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 let copies = 0;
 
-const CLI = path.join(
-  process.cwd(),
-  'packages',
-  'cli',
-  'clients',
-  'cli',
-  'bin',
-  'astryx.mjs',
-);
-
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-gaps-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-validate-gaps-'));
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
 });
 
 afterEach(() => {
@@ -121,13 +125,46 @@ async function issuesOf(dir) {
 }
 
 /**
+ * The notes validate prints beside its issues for a package.
+ * @param {string} dir
+ * @returns {Promise<Array<{code: string, message: string, next?: boolean}>>}
+ */
+async function notesOf(dir) {
+  return (await validateLocalIntegration(dir)).notes ?? [];
+}
+
+/**
  * The notes validate lists beside its issues, which count nowhere: the layout
  * findings added after the last minor release, each with its fix.
  * @param {string} dir
  * @returns {Promise<Array<{code: string, message: string}>>}
  */
 async function listedOf(dir) {
-  return (await validateIntegration(undefined, {cwd: dir})).data.notes ?? [];
+  return (
+    (await validateIntegration(undefined, {cwd: dir})).data.notes ?? []
+  ).filter(note => !EXAMPLE_CODES.has(note.code));
+}
+
+/**
+ * The example and listing notes, which nearly every fixture here draws (a
+ * component with no example template, a package with no logo);
+ * authoring-checks.test.mjs and package-listing-check.test.mjs cover them.
+ */
+const EXAMPLE_CODES = new Set([
+  'component_without_example',
+  'template_category',
+  'showcase_not_standalone',
+  'template_asset_not_packed',
+  'package_without_logo',
+  'package_without_example',
+]);
+
+/**
+ * Notes without the example notes.
+ * @param {Array<{code: string, message: string, next?: boolean}> | undefined} notes
+ */
+function others(notes) {
+  return (notes ?? []).filter(note => !EXAMPLE_CODES.has(note.code));
 }
 
 /**
@@ -185,7 +222,7 @@ describe('a name that differs from its file name', () => {
     expect(await issuesOf(dir)).toEqual([]);
     const issues = await allOf(dir);
     expect(issues.map(issue => issue.code)).toEqual(['doc_name_mismatch']);
-    expect(Object.keys(issues[0]).sort()).toEqual(['code', 'message']);
+    expect(Object.keys(issues[0]).sort()).toEqual(['code', 'message', 'next']);
     expect(issues[0].message).toBe(
       'Component doc "AcmeWidget.doc.mjs" sets name: \'AcmeWidgets\', but components/AcmeWidget.tsx, the module its import names, does not export AcmeWidgets, so Astryx lists the component as "AcmeWidget" (its file name), and `astryx component AcmeWidget` prints `import {AcmeWidgets}`. Fix: set name: \'AcmeWidget\' in AcmeWidget.doc.mjs.',
     );
@@ -239,7 +276,12 @@ describe('a name that differs from its file name', () => {
       });
 
       const {data} = await validateIntegration(undefined, {cwd: dir});
-      expect(data.notes ?? []).toEqual([]);
+      // A relative module that is not in the package is a note of its own.
+      expect(
+        others(data.notes).filter(
+          note => note.code !== 'relative_import_not_shipped',
+        ),
+      ).toEqual([]);
       expect(data.docNames).toEqual({
         status: 'checked',
         findings: [],
@@ -293,18 +335,14 @@ describe('a name that differs from its file name', () => {
     },
   );
 
-  it('prints the doc names it could not check', () => {
+  it('prints the doc names it could not check', async () => {
     const dir = writeNamed({
       [MANIFEST]: manifest({components: './components'}),
       'components/AcmeWidget.doc.mjs': namedDoc('AcmeWidget', 'AcmeWidgets'),
       'components/AcmeWidget.tsx': "export {AcmeWidgets} from '@acme/ui';\n",
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       '[info] Component names not checked: 1 doc(s) whose source exports this check cannot read:',
@@ -625,7 +663,7 @@ describe('block component names', () => {
     ]);
   });
 
-  it('prints the block names it could not judge', () => {
+  it('prints the block names it could not judge', async () => {
     const dir = writeKit({
       [MANIFEST]: manifest({templates: './templates'}),
       'templates/account-card.doc.mjs': block(" componentsUsed: ['Panel']"),
@@ -633,11 +671,7 @@ describe('block component names', () => {
         "import * as UI from '@acme/kit';\nexport default function A() {\n  return <UI.Panel />;\n}\n",
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       '[info] Block component names not checked: 1 name(s) this check could not judge:',
@@ -657,7 +691,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect((data.notes ?? []).map(note => note.message)).toEqual([
+    expect(others(data.notes).map(note => note.message)).toEqual([
       expect.stringContaining('names "AcmeGizmo" in componentsUsed'),
     ]);
     expect(data.blockComponents?.unchecked).toEqual([]);
@@ -682,7 +716,7 @@ describe('block component names', () => {
       });
 
       const {data} = await validateIntegration(undefined, {cwd: dir});
-      expect((data.notes ?? []).map(note => note.message)).toEqual([
+      expect(others(data.notes).map(note => note.message)).toEqual([
         expect.stringContaining('names "AcmeGizmo" in componentsUsed'),
       ]);
       expect(data.blockComponents?.unchecked).toEqual([]);
@@ -838,7 +872,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect((data.notes ?? []).map(note => note.message)).toEqual([
+    expect(others(data.notes).map(note => note.message)).toEqual([
       expect.stringContaining('names "AcmeGizmo" in componentsUsed'),
     ]);
   });
@@ -857,7 +891,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect(data.notes ?? []).toEqual([]);
+    expect(others(data.notes)).toEqual([]);
     expect(data.blockComponents?.unchecked).toEqual([
       {
         file: 'templates/account-card.doc.mjs',
@@ -882,7 +916,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect((data.notes ?? []).map(note => note.message)).toEqual([
+    expect(others(data.notes).map(note => note.message)).toEqual([
       expect.stringContaining('names "AcmeGizmo" in componentsUsed'),
     ]);
     expect(data.blockComponents?.unchecked).toEqual([]);
@@ -897,7 +931,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect(data.notes ?? []).toEqual([]);
+    expect(others(data.notes)).toEqual([]);
     expect(data.blockComponents?.unchecked).toEqual([
       {
         file: 'templates/account-card.doc.mjs',
@@ -917,7 +951,7 @@ describe('block component names', () => {
     });
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
-    expect((data.notes ?? []).map(note => note.message)).toEqual([
+    expect(others(data.notes).map(note => note.message)).toEqual([
       expect.stringContaining('names "AcmeGizmo" in componentsUsed'),
     ]);
     expect(data.blockComponents?.unchecked).toEqual([]);
@@ -933,6 +967,13 @@ describe('block component names', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: dir});
     expect(data.issues).toEqual([]);
+    // The package exports the template, so the missing helper also breaks
+    // an app that imports it.
+    expect(
+      (data.notes ?? [])
+        .filter(note => note.code === 'relative_import_not_shipped')
+        .map(note => note.next),
+    ).toEqual([true]);
     expect(data.blockComponents?.unchecked.map(entry => entry.name)).toEqual([
       'Panel',
     ]);
@@ -960,7 +1001,7 @@ describe('block component names', () => {
       );
 
       const {data} = await validateIntegration(undefined, {cwd: outside});
-      expect(data.notes ?? []).toEqual([]);
+      expect(others(data.notes)).toEqual([]);
       const reason =
         'Core is not installed, so its component names cannot be checked.';
       expect(data.blockComponents).toEqual({
@@ -1366,9 +1407,10 @@ describe('package.json', () => {
       ).toEqual([['invalid_component', 'error']]);
     }
     const validate = result.data.checks[0].response.data;
-    expect('notes' in validate ? validate.notes : undefined).toEqual([
+    expect('notes' in validate ? others(validate.notes) : undefined).toEqual([
       {
         code: 'invalid_package_json',
+        next: true,
         message:
           'package.json has no "name", so npm cannot pack or publish the package, and a project that installs it has no name to select it by. Fix: add "name": "@your-scope/your-package" to package.json.',
       },
@@ -1635,10 +1677,19 @@ describe('the manifest', () => {
       [MANIFEST]: manifest({component: './components'}),
     });
 
-    const message = only(await issuesOf(dir), 'unknown_manifest_key');
+    const message = only(await notesOf(dir), 'unknown_manifest_key');
     expect(message).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: rename "component" to "components" in astryx.integration.mjs. If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
-    );
+    ); // A near miss is a `next` note; a key from a newer CLI is a plain one.
+    expect(
+      (await notesOf(dir)).find(note => note.code === 'unknown_manifest_key')
+        ?.next,
+    ).toBe(true);
+    expect(
+      (await issuesOf(dir)).some(
+        issue => issue.code === 'unknown_manifest_key',
+      ),
+    ).toBe(false);
   });
 
   it('says to remove a near-miss key when the manifest already sets the key it suggests', async () => {
@@ -1648,7 +1699,7 @@ describe('the manifest', () => {
       'components/AcmeWidget.tsx': componentSource('AcmeWidget'),
     });
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toBe(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toBe(
       'This CLI does not know the manifest key "component", so it is ignored. Did you mean `components`? Fix: remove "component" from astryx.integration.mjs; it already sets "components". If it is a key from a newer Astryx CLI instead, upgrading @astryxdesign/cli picks it up.',
     );
     const fixed = follow(dir, {
@@ -1676,14 +1727,26 @@ describe('the manifest', () => {
         'docs/a.doc.mjs': topic('a'),
       });
 
-      expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(fix);
+      expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(fix);
+    },
+  );
+
+  it.each([['componant'], ['COMPONENTS']])(
+    'still suggests %s → components, but only one edit away is a next note',
+    async key => {
+      const dir = writePackage({[MANIFEST]: manifest({[key]: './components'})});
+      const note = (await notesOf(dir)).find(
+        n => n.code === 'unknown_manifest_key',
+      );
+      expect(note?.message).toContain('Did you mean `components`?');
+      expect(note?.next).toBeUndefined();
     },
   );
 
   it('keeps the newer-CLI explanation for a key that is no near miss', async () => {
     const dir = writePackage({[MANIFEST]: manifest({playgrounds: './x'})});
 
-    expect(only(await issuesOf(dir), 'unknown_manifest_key')).toContain(
+    expect(only(await notesOf(dir), 'unknown_manifest_key')).toContain(
       'published against a newer Astryx CLI',
     );
   });
@@ -1890,9 +1953,11 @@ describe('layout findings 0.7.2 did not fail on', () => {
         const validate = /** @type {any} */ (
           result.data.checks[0].response.data
         );
-        expect(validate.notes.length).toBeGreaterThan(0);
-        for (const note of validate.notes) {
-          expect(Object.keys(note).sort()).toEqual(['code', 'message']);
+        expect(others(validate.notes).length).toBeGreaterThan(0);
+        for (const note of others(validate.notes)) {
+          // Listed now, a warning from the next minor release: `next`.
+          expect(Object.keys(note).sort()).toEqual(['code', 'message', 'next']);
+          expect(note.next).toBe(true);
           expect(note.message).toContain('Fix: ');
         }
       } finally {
@@ -1902,7 +1967,7 @@ describe('layout findings 0.7.2 did not fail on', () => {
     },
   );
 
-  it('prints the notes and counts none of them', () => {
+  it('prints the notes and counts none of them', async () => {
     const dir = writePackage({
       [MANIFEST]: manifest({components: './components'}),
       'components/AcmeWidget.doc.mjs': componentDoc('AcmeWidget'),
@@ -1910,14 +1975,10 @@ describe('layout findings 0.7.2 did not fail on', () => {
       'components/AcmeWidget.tsx': componentSource('AcmeWidget'),
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
-      'note (duplicate_component_doc): Component "AcmeWidget" has 2 docs:',
+      'note (duplicate_component_doc): [next minor] Component "AcmeWidget" has 2 docs:',
     );
     expect(run.stdout).toContain('Summary: 0 errors, 0 warnings');
   });
@@ -1950,8 +2011,8 @@ describe('name findings listed until the next minor release', () => {
       const {data} = await validateIntegration(undefined, {cwd: dir});
       expect(data.issues).toEqual([]);
       expect(/** @type {any} */ (data)[report].findings).toEqual([]);
-      expect(data.notes?.map(note => note.code)).toEqual([code]);
-      expect(data.notes?.[0].message).toContain('Fix: ');
+      expect(others(data.notes).map(note => note.code)).toEqual([code]);
+      expect(others(data.notes)[0].message).toContain('Fix: ');
 
       const result = await integrationCheck({cwd: dir, strict: true});
       expect(result.data.failures).toEqual([]);
@@ -1959,16 +2020,12 @@ describe('name findings listed until the next minor release', () => {
     },
   );
 
-  it('prints the name notes and counts none', () => {
+  it('prints the name notes and counts none', async () => {
     const dir = blockLayout();
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
-      'note (unknown_block_component): Template "account-card" names "AcmeGizmo" in componentsUsed',
+      'note (unknown_block_component): [next minor] Template "account-card" names "AcmeGizmo" in componentsUsed',
     );
     expect(run.stdout).toContain('Summary: 0 errors, 0 warnings');
   });

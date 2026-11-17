@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "projects-loading-states",
+  "source": "sd-1",
+  "title": "Loading, error and retry states",
+  "prompt": "Build a projects page that loads its data. When the page opens, show the text \"Loading projects\u2026\" in a status region (role=\"status\") for about one second, then show the list \"Atlas\", \"Borealis\" and \"Cosmos\". Above the list, a switch labelled \"Fail loads\" (off at first) and a \"Reload\" button. Reload shows the loading text again and loads the list again. While Fail loads is on, a load ends in an alert (role=\"alert\") with the text \"Could not load projects\" and a \"Try again\" button, which loads again."
+}

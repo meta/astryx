@@ -85,7 +85,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Export a `gapReport` handler, and `astryx gap-report` in an app sends it each gap report, such as a missing component or variant. The handler files the report and returns a receipt.',
+          text: 'Export a `gapReport` handler, and `{@command gap-report}` in an app sends it each gap report, such as a missing component or variant. The handler files the report and returns a receipt.',
         },
         {
           type: 'code',
@@ -127,7 +127,7 @@ export const gapReport = {
         {
           type: 'code',
           lang: 'bash',
-          code: "astryx gap-report AcmeCarousel --category missing_variant --reason 'Need a vertical layout'",
+          code: "{@command gap-report AcmeCarousel --category missing_variant --reason 'Need a vertical layout'}",
         },
         {
           type: 'code',
@@ -173,7 +173,7 @@ message:     Rerun with --confirm-public to file this report.`,
       content: [
         {
           type: 'prose',
-          text: 'When an app loads packages naming their own `issuesUrl`, a report can go to the default (the handlers, or the fallback above) or to one of those packages. `astryx gap-report --list-categories` and the receipt of a report filed without `--to` list every destination, with a line telling the agent to ask the person.',
+          text: 'When an app loads packages naming their own `issuesUrl`, a report can go to the default (the handlers, or the fallback above) or to one of those packages. `{@command gap-report --list-categories}` and the receipt of a report filed without `--to` list every destination, with a line telling the agent to ask the person.',
         },
         {
           type: 'list',

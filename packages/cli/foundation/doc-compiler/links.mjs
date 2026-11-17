@@ -11,9 +11,16 @@
  *   with the doc's identity, route, title, summary, and command. A reference
  *   block in a topic section also carries the `content` it includes. A link
  *   that names no doc is a problem, never a guess.
- * @position Pure. The docs adapter owns the resolver (the project's docs tree
- *   and topic catalog) and applies this to every read and every doctor check.
+ *   Doc tokens render here too (renderTokens), so text and JSON carry the
+ *   same commands.
+ * @position Pure, apart from reading which package manager the working
+ *   directory's project uses, for `{@pm}` tokens. The docs adapter owns the
+ *   resolver (the project's docs tree and topic catalog) and applies this to
+ *   every read and every doctor check.
  */
+
+import {renderCommandTokens} from './doc-syntax.mjs';
+import {docPackageManager} from '../env/package-manager.mjs';
 
 /** The kinds a link can name: every authored doc kind. */
 export const LINK_KINDS = new Set([
@@ -114,13 +121,13 @@ export function parseLinkTarget(target) {
 }
 
 /**
- * Text with each inline link replaced by its name, for indexes that must not
- * read the link syntax as words.
+ * Text with each inline link replaced by its name and each doc token by its
+ * command, for indexes that must not read the syntax as words.
  * @param {string} text
  * @returns {string}
  */
 export function unlinkText(text) {
-  return text
+  return String(renderTokens(text))
     .split(CODE_SPAN)
     .map(part =>
       part.startsWith('`')
@@ -134,6 +141,25 @@ export function unlinkText(text) {
 }
 
 /**
+ * Text with its doc tokens rendered (doc-syntax.mjs): `{@command …}` as the
+ * bare `astryx …` command, which text output then starts with the reader's
+ * runner the way it starts every command, and `{@pm …}` in the package
+ * manager of the project the CLI runs in. JSON readers get runnable commands,
+ * the way they did before docs wrote tokens.
+ * @param {unknown} text
+ * @param {string | null} [lang] the code block's language for a block's body
+ * @returns {any}
+ */
+export function renderTokens(text, lang = null) {
+  if (typeof text !== 'string' || !text.includes('{@')) return text;
+  return renderCommandTokens(
+    text,
+    {stem: 'astryx', pm: docPackageManager(process.cwd())},
+    lang,
+  );
+}
+
+/**
  * Text with each inline link replaced by the command that opens its doc. A
  * link written inside code ticks is shown as written: it documents the syntax,
  * it does not link. A link that names no doc prints as written: text that was
@@ -143,7 +169,8 @@ export function unlinkText(text) {
  * @returns {Promise<any>}
  */
 async function resolveInline(text, find) {
-  if (typeof text !== 'string' || !text.includes('{@link')) return text;
+  if (typeof text !== 'string') return text;
+  if (!text.includes('{@link')) return renderTokens(text);
   let out = '';
   for (const part of text.split(CODE_SPAN)) {
     if (part.startsWith('`')) {
@@ -160,7 +187,7 @@ async function resolveInline(text, find) {
     }
     out += part.slice(last);
   }
-  return out;
+  return renderTokens(out);
 }
 
 /**
@@ -396,6 +423,12 @@ export async function linkBlocks(blocks, resolve, at = {}, include) {
         content.push({...block, steps});
         break;
       }
+      case 'code':
+        content.push({
+          ...block,
+          code: renderTokens(block.code, block.lang ?? ''),
+        });
+        break;
       case 'collection':
         problems.push({
           target: `collection:${block.source?.slot ?? ''}`,

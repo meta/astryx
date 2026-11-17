@@ -338,6 +338,132 @@ describe('DropdownMenuRadioGroup / RadioItem', () => {
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalledTimes(1);
   });
 
+  it('composes the caller click handler with the selection', async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    const onChange = vi.fn(() => calls.push('change'));
+    const onClick = vi.fn(() => calls.push('click'));
+    render(
+      <DropdownMenu button={{label: 'Sort'}}>
+        <DropdownMenuRadioGroup
+          value="newest"
+          onChange={onChange}
+          label="Sort by"
+          hasCloseOnSelect={false}>
+          <DropdownMenuRadioItem value="newest" label="Newest" />
+          <DropdownMenuRadioItem
+            value="oldest"
+            label="Oldest"
+            onClick={onClick}
+          />
+        </DropdownMenuRadioGroup>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Sort/}));
+    await user.click(
+      screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
+    );
+    expect(onChange).toHaveBeenCalledWith('oldest');
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(calls).toEqual(['change', 'click']);
+  });
+
+  it('composes the caller pointer-move handler with menu hover focus', async () => {
+    const user = userEvent.setup();
+    const onPointerMove = vi.fn(() => document.activeElement);
+    render(
+      <DropdownMenu button={{label: 'Sort'}}>
+        <DropdownMenuRadioGroup
+          value="newest"
+          onChange={() => {}}
+          label="Sort by">
+          <DropdownMenuRadioItem value="newest" label="Newest" />
+          <DropdownMenuRadioItem
+            value="oldest"
+            label="Oldest"
+            onPointerMove={onPointerMove}
+          />
+        </DropdownMenuRadioGroup>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Sort/}));
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Oldest',
+      hidden: true,
+    });
+    fireEvent.pointerMove(item, {pointerType: 'mouse'});
+    expect(item).toHaveFocus();
+    expect(onPointerMove).toHaveBeenCalledOnce();
+    expect(onPointerMove).toHaveReturnedWith(item);
+  });
+
+  it('composes the caller click handler on keyboard activation', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Sort'}}>
+        <DropdownMenuRadioGroup
+          value="oldest"
+          onChange={onChange}
+          label="Sort by">
+          <DropdownMenuRadioItem
+            value="newest"
+            label="Newest"
+            onClick={onClick}
+          />
+          <DropdownMenuRadioItem value="oldest" label="Oldest" />
+        </DropdownMenuRadioGroup>
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Sort/}).focus();
+    await user.keyboard('{Enter}');
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Newest',
+      hidden: true,
+    });
+    await waitFor(() => expect(item).toHaveFocus());
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenCalledWith('newest');
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('does not select, close, or call the caller click handler when disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Sort'}}>
+        <DropdownMenuRadioGroup
+          value="newest"
+          onChange={onChange}
+          label="Sort by">
+          <DropdownMenuRadioItem value="newest" label="Newest" />
+          <DropdownMenuRadioItem
+            value="oldest"
+            label="Oldest"
+            onClick={onClick}
+            isDisabled
+          />
+        </DropdownMenuRadioGroup>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Sort/}));
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Oldest',
+      hidden: true,
+    });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    await user.click(item);
+    // A screen reader's activation reaches the row as a detail-0 click that
+    // the menu's press model does not intercept.
+    fireEvent.click(item, {detail: 0});
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(item).toHaveAttribute('aria-checked', 'false');
+    expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+  });
+
   it('keeps the menu open while controlled selection updates when requested', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -421,6 +547,38 @@ describe('DropdownMenuRadioGroup / RadioItem', () => {
 
     fireEvent.click(group);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('composes caller root inputs without replacing the row semantics', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Sort'}}>
+        <DropdownMenuRadioGroup
+          value="newest"
+          onChange={() => {}}
+          label="Sort by">
+          <DropdownMenuRadioItem
+            value="newest"
+            label="Newest"
+            data-owner="consumer"
+            aria-describedby="sort-hint"
+            className="consumer-row"
+            style={{inlineSize: 240}}
+          />
+        </DropdownMenuRadioGroup>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Sort/}));
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Newest',
+      hidden: true,
+    });
+    expect(item).toHaveAttribute('data-owner', 'consumer');
+    expect(item).toHaveAttribute('aria-describedby', 'sort-hint');
+    expect(item).toHaveAttribute('aria-checked', 'true');
+    expect(item).toHaveClass('consumer-row');
+    expect(item).toHaveClass('astryx-dropdown-menu-item');
+    expect(item).toHaveStyle({inlineSize: '240px'});
   });
 
   it('throws when a radio item is used outside a group', () => {

@@ -320,28 +320,13 @@ export interface RampSeed {
   sourceHex: string;
   /** Optional semantic tag ("Success", "Error", …) — informational only */
   semantic?: string;
-  /**
-   * Optional precomputed canonical ramp — `{0: '#…', 5: '#…', …, 100: '#…'}`.
-   *
-   * When present, the snap detector uses these exact hex values for
-   * matching instead of regenerating the ramp from `sourceHex` via the
-   * HCT pipeline. Use this when a theme exports a hand-tuned palette
-   * (e.g. stone's `stonePalettes.red`) that drifts from the pure HCT
-   * generator's output by more than a couple of \u0394E units — without it,
-   * tokens whose values come from the canonical ramp would show up as
-   * "off-ramp" against the generator's slightly different ramp.
-   *
-   * Same per-mode shape: a single map covers BOTH light and dark
-   * resolutions. The dark-mode generator's tone-lift / chroma-attenuation
-   * transforms aren't applied — the supplied canonical values are
-   * treated as authoritative for both modes.
-   *
-   * Permissive `string | number` keys/values match the shape of theme
-   * palette exports like `stonePalettes.red` which carry both numeric
-   * tone steps and metadata keys (`hue`, `chroma`); non-numeric keys
-   * and non-string values are skipped at lookup time.
-   */
+  /** Optional precomputed canonical light-mode ramp. */
   tones?: Readonly<Record<string | number, string | number>>;
+  /** Optional dark-mode source and ramp for mode-aware theme palettes. */
+  dark?: {
+    sourceHex?: string;
+    tones?: Readonly<Record<string | number, string | number>>;
+  };
 }
 
 export interface SnapMatch {
@@ -373,22 +358,17 @@ export function findClosestRampStep(
   const targetLab = hexToLab(targetHex);
   let best: SnapMatch | null = null;
   for (const seed of seeds) {
-    // Canonical ramp wins when supplied — themes with hand-tuned
-    // ramps (stone, gothic, y2k, butter) drift from the pure HCT
-    // generator by enough to flip on-ramp tokens to "near"/"off" if
-    // we ignore the canonical values. See `RampSeed.tones` for
-    // context. The canonical map's permissive `string | number` value
-    // type means we filter to strings at lookup (the metadata keys
-    // `hue` and `chroma` carry numeric values that we ignore here).
+    const canonicalTones = (mode === 'dark' && seed.dark?.tones) || seed.tones;
     let lookup: (t: number) => string | undefined;
-    if (seed.tones) {
-      const map = seed.tones;
+    if (canonicalTones) {
       lookup = t => {
-        const v = map[t];
-        return typeof v === 'string' ? v : undefined;
+        const value = canonicalTones[t];
+        return typeof value === 'string' ? value : undefined;
       };
     } else {
-      const {hue, chroma} = hexToHct(seed.sourceHex);
+      const sourceHex =
+        (mode === 'dark' && seed.dark?.sourceHex) || seed.sourceHex;
+      const {hue, chroma} = hexToHct(sourceHex);
       const ramp = tonalPaletteForMode(hue, chroma, mode);
       lookup = t => ramp[t];
     }

@@ -11,16 +11,21 @@
  * block), and themes. The adapter gathers every candidate (_adapter.mjs),
  * and search's tree (tree.mjs) picks the searcher that answers.
  * `searchCore(query)` is the lexical ranker alone (_lexical.mjs); `build`
- * reads it, so build's output does not move when search's tree does.
+ * reads it, so build's output does not move when search's tree does. A doc
+ * keyword that is another entry's name is not a match (_named-keywords.mjs)
+ * in three places: `search`, `rankSearchIndex` (search-index.mjs), and
+ * `searchCore` with `ownKeywords`. `searchCore` without it, which build
+ * reads, reads every keyword as gathered.
  */
 
-import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
-  gatherCandidates,
-  gatherCandidatesReused,
-  loadSearchData,
-} from './_adapter.mjs';
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
+import {searchView} from './_named-keywords.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
 import {SEARCH_TREE} from './tree.mjs';
@@ -52,6 +57,18 @@ export {componentKeywords} from './_adapter.mjs';
  */
 export async function search(query, options = {}) {
   checkSearchArgs(query, options);
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => searchRead(query, options),
+  );
+}
+
+/**
+ * The search itself, inside its project's package-manager scope.
+ * @param {string} query
+ * @param {any} options
+ */
+async function searchRead(query, options) {
   return withListingCache(
     async () =>
       /** @type {import('./search.type.mjs').SearchResponse} */ (
@@ -60,7 +77,13 @@ export async function search(query, options = {}) {
             await runTree(
               SEARCH_TREE,
               {query, options},
-              {...(await gatherCandidatesReused(options)), data: loadSearchData()},
+              {
+                // A keyword that names another entry is not a match here
+                // (_named-keywords.mjs); searchCore, which build reads,
+                // keeps every keyword.
+                ...(await searchCatalog(options)),
+                data: loadSearchData(),
+              },
             )
           ),
           options.cwd ?? process.cwd(),
@@ -70,19 +93,99 @@ export async function search(query, options = {}) {
 }
 
 /**
+ * The other declaring domain, whose names a search for one `type` still reads.
+ * @type {Record<string, string>}
+ */
+const NAMING_DOMAIN = {component: 'hook', hook: 'component'};
+
+/**
+ * The gathered catalog for `options`, with keywords as search reads them
+ * (_named-keywords.mjs). The names come from every component and hook, so a
+ * search for one `type` keeps and drops the keywords an open search does.
+ * @param {{cwd?: string, type?: string}} options
+ */
+async function searchCatalog(options) {
+  const gathered = await gatherCandidatesReused(options);
+  const other = options.type == null ? null : NAMING_DOMAIN[options.type];
+  return searchView(
+    gathered,
+    other == null
+      ? []
+      : [await gatherCandidatesReused({cwd: options.cwd, type: other})],
+  );
+}
+
+/**
  * The lexical ranker alone: keyword and fuzzy scoring of every candidate.
- * `build` ranks from it.
+ * `build` ranks from it. It ranks the candidates search gathers, reused the
+ * same way. A later query in the same folder, for the same `type`, gathers
+ * again only when an input changed.
+ *
+ * `ownKeywords` ranks as `search` reads keywords: a doc keyword that is
+ * another entry's name is not a match (_named-keywords.mjs). Only search's own
+ * comparisons set it; build never does, so build reads every keyword.
+ *
+ * `readyTemplatesOnly` leaves every page template that is not ready yet out
+ * of the entries search ranks, as if it were absent: it takes no place, moves
+ * no order and adds nothing to `matchCount`. Only build sets it; search itself
+ * lists every template.
  *
  * @param {string} query
- * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number}} [options]
+ * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number, ownKeywords?: boolean, readyTemplatesOnly?: boolean}} [options]
  * @returns {Promise<import('./search.type.mjs').SearchResponse>}
  */
 export async function searchCore(query, options = {}) {
   checkSearchArgs(query, options);
-  return withListingCache(async () =>
-    linkSearchResponse(
-      rankLexical(query, options, await gatherCandidates(options)),
-      options.cwd ?? process.cwd(),
-    ),
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => searchCoreRead(query, options),
   );
+}
+
+/** @param {any} c a gathered candidate @returns {boolean} */
+const notReadyPage = c => c._notReady === true && c._kind === 'page';
+
+/** @type {WeakMap<object, object>} each gathered catalog without its not-ready page templates */
+const readyOnly = new WeakMap();
+
+/**
+ * A gathered catalog, or the same catalog without the page templates that are
+ * not ready yet. The narrowed catalog is kept per catalog, so a search that
+ * reuses a gather reuses its narrowed form too.
+ * @template {{all: any[]}} T
+ * @param {T} catalog
+ * @param {boolean} ready
+ * @returns {T}
+ */
+function withoutNotReady(catalog, ready) {
+  if (!ready || !catalog.all.some(notReadyPage)) return catalog;
+  let narrowed = readyOnly.get(catalog);
+  if (!narrowed) {
+    narrowed = {...catalog, all: catalog.all.filter(c => !notReadyPage(c))};
+    readyOnly.set(catalog, narrowed);
+  }
+  return /** @type {T} */ (narrowed);
+}
+
+/**
+ * The lexical search itself, inside its project's package-manager scope.
+ * @param {string} query
+ * @param {any} options
+ */
+async function searchCoreRead(query, options) {
+  return withListingCache(async () => {
+    return linkSearchResponse(
+      rankLexical(
+        query,
+        options,
+        withoutNotReady(
+          options.ownKeywords
+            ? await searchCatalog(options)
+            : await gatherCandidatesReused(options),
+          options.readyTemplatesOnly === true,
+        ),
+      ),
+      options.cwd ?? process.cwd(),
+    );
+  });
 }

@@ -16,7 +16,8 @@ export const doc = {
   summary:
     'After bumping @astryxdesign/core, migrate project source with codemods and update copied compositions.',
   description:
-    'Runs the codemods between `from` and the installed Core version, then refreshes the ' +
+    'Runs the codemods between `from` and the installed version of the run\'s active base ' +
+    '(Core, or the base a project or `--base` names), then refreshes the ' +
     'managed agent-docs block. Dry-run by default; `apply` writes changes only after the ' +
     'selected codemods and hooks succeed. Config codemods run before astryx.config is ' +
     'loaded, so they can repair an invalid config. Also updates copied compositions from ' +
@@ -42,7 +43,7 @@ export const doc = {
       name: 'options.from',
       type: 'string',
       description:
-        'Version before the dependency bump; the target is the installed @astryxdesign/core (or legacy @xds/core). Required unless `list` or `registry` is set.',
+        'Version before the dependency bump; the target is the installed version of the run\'s active base: @astryxdesign/core (or legacy @xds/core) in a run on Core, or the base\'s package in a run on another base, which runs no Core codemod and checks no copied composition. Required unless `list` or `registry` is set.',
     },
     {
       name: 'options.apply',
@@ -128,13 +129,13 @@ export const doc = {
     {
       type: 'upgrade.run',
       description:
-        'The terminal run receipt: from, to, codemods (count), integrations, agentDocs, agentDocsRefreshed, registryCompositions (when receipts are found), sourcePathFound (false when the resolved `path` does not exist, so nothing was scanned), filesChanged, transformsApplied, modifiedFiles, protectedFiles, declinedCandidates, errors, and complete. When a protected file still requires a change, complete is false and errorCode is ERR_CODEMOD_PROTECTED; the CLI exits nonzero while preserving the structured receipt. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run, and command runs the same upgrade with the matching CLI.',
+        'The terminal run receipt: from, to, codemods (count), integrations, agentDocs, agentDocsRefreshed, registryCompositions (when receipts are found), sourcePathFound (false when the resolved `path` does not exist, so nothing was scanned), filesChanged, transformsApplied, modifiedFiles, protectedFiles, declinedCandidates (left unchanged for manual review, including code a codemod identified but cannot migrate; never incomplete), regenerate (generated files to rebuild, with their commands), errors, and complete. When a protected file still requires a change, including a protected file in regenerate, complete is false and errorCode is ERR_CODEMOD_PROTECTED; the CLI exits nonzero while preserving the structured receipt. A run that fails after its codemods ran throws instead (see throws), and the thrown AstryxError carries the same receipt on `receipt`, with complete false and errorCode set to its code. A file in regenerate that nothing protects is such a failure: it is also in errors, and the run throws ERR_CODEMOD_FAILED. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run, and command runs the same upgrade with the matching CLI.',
     },
   ],
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: '`from` is missing (and neither `list` nor `registry` is set); `list` and `registry` are both set; `list` is combined with `from`, `force`, `apply`, `path` (non-default), `codemod`, `skipCodemod`, `integration` or `installDeps`; `registry` is combined with `from`, `force`, `codemod`, `skipCodemod`, `integration` or `installDeps`; an `integration` specifier is invalid or not installed; or astryx.config fails to load or validate and no pending config codemod repairs it',
+      when: '`from` is missing (and neither `list` nor `registry` is set); `list` and `registry` are both set; `list` is combined with `from`, `force`, `apply`, `path` (non-default), `codemod`, `skipCodemod`, `integration` or `installDeps`; `registry` is combined with `from`, `force`, `codemod`, `skipCodemod`, `integration` or `installDeps`; an `integration` specifier is invalid or not installed; or astryx.config fails to load or validate and no pending config codemod repairs it (when core codemods already wrote files, the error carries their receipt on `receipt`)',
     },
     {code: 'ERR_INVALID_VERSION', when: '`from` is not a valid semver string'},
     {
@@ -143,7 +144,7 @@ export const doc = {
     },
     {
       code: 'ERR_VERSION_DETECT',
-      when: "the project has installed neither @astryxdesign/core nor legacy @xds/core in its own node_modules, nor, for a member its workspace lists, in a folder up to the workspace root (with no Astryx project, in `ctx.cwd`'s own node_modules); with `registry`, only when copied-composition receipts exist and @astryxdesign/core is not installed",
+      when: "the project has not installed the run's active base (in a run on Core, neither @astryxdesign/core nor legacy @xds/core) in its own node_modules, nor, for a member its workspace lists, in a folder up to the workspace root (with no Astryx project, in `ctx.cwd`'s own node_modules); with `registry`, only in a run on Core, when copied-composition receipts exist and @astryxdesign/core is not installed",
     },
     {
       code: 'ERR_DEP_MISSING',
@@ -155,11 +156,11 @@ export const doc = {
     },
     {
       code: 'ERR_CODEMOD_FAILED',
-      when: 'one or more codemods failed, or a post-codemod hook failed, and no protected file still needs a change (otherwise an upgrade.run receipt with complete: false is returned)',
+      when: "one or more codemods failed (including a generated file to regenerate that nothing protects), or a post-codemod hook failed, and no protected file still needs a change (otherwise an upgrade.run receipt with complete: false is returned). The error carries the run's receipt on `receipt`: the files already changed, each failure in errors, complete: false",
     },
     {
       code: 'ERR_CODEMOD_PROTECTION_SOURCE',
-      when: 'a working-tree protection declaration cannot be read or parsed before writes begin',
+      when: 'a working-tree protection declaration cannot be read or parsed before writes begin, or after post-codemod hooks rewrite it (the error then carries the receipt on `receipt`)',
     },
   ],
   examples: [

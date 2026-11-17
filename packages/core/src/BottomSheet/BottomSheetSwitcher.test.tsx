@@ -10,7 +10,7 @@
  * update these tests to match the public behavior.
  */
 
-import {fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {
   StrictMode,
   createRef,
@@ -22,8 +22,15 @@ import {
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {hasActiveFocusTrapEscape, useFocusTrap} from '../hooks';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {Dialog} from '../Dialog';
+import {hydrateRoot} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
+import {
+  isScrollLockActive,
+  subscribeScrollLock,
+} from '../hooks/rootScrollStyles';
 
 // jsdom implements no <dialog> presentation. The stubs record which open
 // dialogs are modal, standing in for the `:modal` pseudo-class jsdom cannot
@@ -260,6 +267,12 @@ function RequiredConfirmFlow() {
   );
 }
 
+/**
+ * A three-step flow that mounts closed, for the host-dialog contract: the
+ * switcher's ref, `id`, and `data-testid`. `onMountLayout` and
+ * `onMountPassive` run in the consumer's own mount effects, where a parent
+ * would first read the ref.
+ */
 function HostFlow({
   dialogRef,
   dialogProps,
@@ -337,11 +350,62 @@ function openDialogs(): HTMLDialogElement[] {
 
 /**
  * Whether the shared page-scroll lock (useScrollLock, as Dialog uses) is
- * engaged: it pins <body>. The browser spec measures the lock's effect on
- * scrolling; this reads its pin.
+ * engaged. The browser spec measures the lock's effect on scrolling; this
+ * reads its state.
  */
 function isScrollLockEngaged(): boolean {
-  return document.body.style.position === 'fixed';
+  return isScrollLockActive();
+}
+
+/** Records every change of the shared lock's state until `stop` runs. */
+function recordScrollLock(): {changes: boolean[]; stop: () => void} {
+  const changes: boolean[] = [];
+  const stop = subscribeScrollLock(() => changes.push(isScrollLockActive()));
+  return {changes, stop};
+}
+
+/** A two-step flow whose second step opens a Core Dialog above itself. */
+function DialogInStepFlow() {
+  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setActiveSheet('details')}>
+        Start flow
+      </button>
+      <BottomSheetSwitcher
+        activeSheet={activeSheet}
+        onActiveSheetChange={setActiveSheet}>
+        <BottomSheet
+          sheetId="details"
+          label="Details"
+          data-testid="details-sheet">
+          <button type="button" onClick={() => setActiveSheet('confirm')}>
+            Continue
+          </button>
+        </BottomSheet>
+        <BottomSheet
+          sheetId="confirm"
+          label="Confirm"
+          data-testid="confirm-sheet">
+          <button type="button" onClick={() => setIsDialogOpen(true)}>
+            Open dialog
+          </button>
+          <Dialog
+            isOpen={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            aria-label="Are you sure">
+            <button type="button" onClick={() => setIsDialogOpen(false)}>
+              Close dialog
+            </button>
+          </Dialog>
+          <button type="button" onClick={() => setActiveSheet(null)}>
+            Done
+          </button>
+        </BottomSheet>
+      </BottomSheetSwitcher>
+    </>
+  );
 }
 
 /**
@@ -428,6 +492,30 @@ function mockSheetTop(sheet: HTMLElement, top: number) {
     vi.spyOn(sheet.parentElement, 'getBoundingClientRect').mockReturnValue(
       rect,
     );
+  }
+}
+
+// A fast downward drag on a handle: two moves, 16 ms apart on the events'
+// own timestamps, so it releases at 3,750 px/s.
+let flickTime = 0;
+
+function flick(handle: HTMLElement) {
+  for (const [type, y] of [
+    ['pointerdown', 0],
+    ['pointermove', 60],
+    ['pointermove', 120],
+    ['pointerup', 120],
+  ] as const) {
+    flickTime += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperties(event, {
+      button: {value: 0},
+      clientY: {value: y},
+      isPrimary: {value: true},
+      pointerId: {value: 1},
+      timeStamp: {value: flickTime},
+    });
+    fireEvent(handle, event);
   }
 }
 
@@ -915,14 +1003,7 @@ describe('BottomSheetSwitcher', () => {
     }
 
     fireEvent.click(dialog);
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    flick(handle);
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
@@ -985,14 +1066,7 @@ describe('BottomSheetSwitcher', () => {
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    flick(handle);
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
@@ -1282,18 +1356,15 @@ describe('BottomSheetSwitcher', () => {
     });
 
     it('holds one page scroll lock for the whole flow: engaged continuously through a handoff, released once after the exit', () => {
-      // The shared lock restores the saved offset with window.scrollTo on its
-      // last release, so the call count is the release count: a flow that
-      // released and re-acquired between steps would scroll the page back
-      // mid-handoff.
-      vi.spyOn(window, 'scrollY', 'get').mockReturnValue(300);
+      // Every change of the shared lock is recorded: a flow that released and
+      // re-acquired between steps would add a pair of changes mid-handoff.
+      const lock = recordScrollLock();
       render(<Flow />);
       expect(isScrollLockEngaged()).toBe(false);
 
       fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
       expect(isScrollLockEngaged()).toBe(true);
-      expect(document.body.style.top).toBe('-300px');
-      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(lock.changes).toEqual([true]);
 
       fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
       // Two modal sheet dialogs are open: still the one lock.
@@ -1319,37 +1390,74 @@ describe('BottomSheetSwitcher', () => {
       expect(window.scrollTo).not.toHaveBeenCalled();
       finishSheetTransition(getSheetLayer('details-sheet'), 'transform');
       expect(isScrollLockEngaged()).toBe(false);
-      expect(document.body.style.top).toBe('');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      expect(window.scrollTo).toHaveBeenCalledWith(0, 300);
+      expect(lock.changes).toEqual([true, false]);
+      // The lock never moves the page.
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      lock.stop();
     });
 
     it('keeps the lock through a StrictMode replay of a flow mounted open, and releases it when the flow unmounts while presented', () => {
-      vi.spyOn(window, 'scrollY', 'get').mockReturnValue(120);
+      const lock = recordScrollLock();
       const mounted = render(
         <StrictMode>
           <HostFlow initialSheet="details" />
         </StrictMode>,
       );
       // StrictMode runs the lock's effect, its cleanup, and the effect again
-      // in one commit: the pin must stand afterwards, and the one real
-      // release has not happened.
+      // in one commit: the lock must stand afterwards.
       expect(isScrollLockEngaged()).toBe(true);
-      expect(document.body.style.top).toBe('-120px');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      vi.mocked(window.scrollTo).mockClear();
+      expect(lock.changes).toEqual([true, false, true]);
 
       fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
       expect(openDialogs()).toHaveLength(2);
       expect(isScrollLockEngaged()).toBe(true);
-      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(lock.changes).toEqual([true, false, true]);
 
       // Unmounted while presented, two dialogs open: one release.
       mounted.unmount();
       expect(isScrollLockEngaged()).toBe(false);
-      expect(document.body.style.top).toBe('');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      expect(window.scrollTo).toHaveBeenCalledWith(0, 120);
+      expect(lock.changes).toEqual([true, false, true, false]);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      lock.stop();
+    });
+
+    it('keeps the lock engaged under a Core Dialog opened from a step, and the Dialog paints above the step', () => {
+      const lock = recordScrollLock();
+      render(<DialogInStepFlow />);
+      fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
+      finishSheetTransition(getSheetLayer('confirm-sheet'), 'transform');
+      finishSheetTransition(getSheetLayer('details-sheet'), 'opacity');
+      const confirmDialog = getSheetDialog('confirm-sheet');
+
+      fireEvent.click(screen.getByRole('button', {name: 'Open dialog'}));
+      const dialog = screen.getByRole('dialog', {name: 'Are you sure'});
+      expect(dialog).toHaveAttribute('open');
+      // The Dialog was presented after the step's dialog, so the top layer
+      // paints it above; the Dialog and the flow share the lock's counter,
+      // so the step beneath keeps the pin when the Dialog gives its hold back.
+      expect(HTMLDialogElement.prototype.showModal).toHaveBeenLastCalledWith();
+      expect(
+        vi.mocked(HTMLDialogElement.prototype.showModal).mock.contexts.at(-1),
+      ).toBe(dialog);
+      expect(confirmDialog).toHaveAttribute('open');
+      expect(isScrollLockEngaged()).toBe(true);
+
+      expect(window.scrollTo).not.toHaveBeenCalled();
+
+      // Escape reaches the Dialog first, not the step beneath it.
+      fireEvent.keyDown(dialog, {key: 'Escape'});
+      expect(dialog).not.toHaveAttribute('open');
+      expect(confirmDialog).toHaveAttribute('open');
+      expect(isScrollLockEngaged()).toBe(true);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+      finishSheetTransition(getSheetLayer('confirm-sheet'), 'transform');
+      expect(isScrollLockEngaged()).toBe(false);
+      // One engagement for the whole flow, Dialog included.
+      expect(lock.changes).toEqual([true, false]);
+      lock.stop();
     });
 
     it("resolves the switcher ref to the host sheet's dialog and never to null while a sheet is mounted, from the first commit on", () => {
@@ -1473,6 +1581,111 @@ describe('BottomSheetSwitcher', () => {
       expect(withId()).toEqual([dialogs[1]]);
     });
 
+    it('renders a flow that mounts open closed in server markup, then opens its active sheet, with the switcher id once, after hydration (component:BottomSheet FR17)', () => {
+      // Nothing can enter a native host before hydration, so a flow with an
+      // active sheet renders as a closed one on the server: no dialog open,
+      // none claiming aria-modal, the id on no element.
+      const flow = (
+        <BottomSheetSwitcher
+          id="checkout"
+          data-testid="checkout-flow"
+          activeSheet="confirm"
+          onActiveSheetChange={() => {}}>
+          <BottomSheet sheetId="details" label="Details">
+            Content
+          </BottomSheet>
+          <BottomSheet sheetId="confirm" label="Confirm">
+            Content
+          </BottomSheet>
+        </BottomSheetSwitcher>
+      );
+      const markup = renderToString(flow);
+      const dialogs = markup.match(/<dialog\b[^>]*>/g) ?? [];
+      expect(dialogs).toHaveLength(2);
+      expect(markup).not.toMatch(/<dialog[^>]*\sopen/);
+      expect(markup).not.toContain('aria-modal');
+      expect(markup.match(/id="checkout"/g) ?? []).toHaveLength(0);
+
+      // Hydrating opens the active sheet in the render after it, with the
+      // id and data-testid on its dialog, once.
+      const container = document.createElement('div');
+      container.innerHTML = markup;
+      document.body.appendChild(container);
+      let root!: ReturnType<typeof hydrateRoot>;
+      act(() => {
+        root = hydrateRoot(container, flow);
+      });
+      const withId = container.querySelectorAll('[id="checkout"]');
+      expect(withId).toHaveLength(1);
+      expect(withId[0]).toHaveAttribute('aria-label', 'Confirm');
+      expect(withId[0]).toHaveAttribute('data-testid', 'checkout-flow');
+      expect(withId[0]).toHaveAttribute('aria-modal', 'true');
+      // Present on page load, the active sheet opens where it rests
+      // (spec:AST-013 FR13).
+      expect(
+        getComputedStyle(
+          withId[0].querySelector('.astryx-bottom-sheet') as HTMLElement,
+        ).transitionDuration,
+      ).toBe('.01s');
+      // The open flow holds the sheet stack and the page's scroll lock; leave
+      // nothing behind for the next test.
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    it('renders every sheet dialog closed in server markup, with the switcher id on no element until the first commit', () => {
+      // Which sheet mounts first is known once its dialog registers during
+      // the first commit; server rendering has no commit, so the id waits for
+      // the client. What server markup must still get right: one closed
+      // dialog per sheet, none `open`, and the id never duplicated.
+      const markup = renderToString(
+        <BottomSheetSwitcher
+          id="checkout"
+          data-testid="checkout-flow"
+          activeSheet={null}
+          onActiveSheetChange={() => {}}>
+          <BottomSheet sheetId="details" label="Details">
+            Content
+          </BottomSheet>
+          <BottomSheet sheetId="confirm" label="Confirm">
+            Content
+          </BottomSheet>
+        </BottomSheetSwitcher>,
+      );
+      expect(markup.match(/<dialog\b/g)).toHaveLength(2);
+      expect(markup).not.toMatch(/<dialog[^>]*\sopen/);
+      expect(markup.match(/id="checkout"/g) ?? []).toHaveLength(0);
+
+      // Hydrating the same tree on the client: the first commit's synchronous
+      // re-render puts the id on the first sheet's dialog, exactly once.
+      const container = document.createElement('div');
+      container.innerHTML = markup;
+      document.body.appendChild(container);
+      act(() => {
+        hydrateRoot(
+          container,
+          <BottomSheetSwitcher
+            id="checkout"
+            data-testid="checkout-flow"
+            activeSheet={null}
+            onActiveSheetChange={() => {}}>
+            <BottomSheet sheetId="details" label="Details">
+              Content
+            </BottomSheet>
+            <BottomSheet sheetId="confirm" label="Confirm">
+              Content
+            </BottomSheet>
+          </BottomSheetSwitcher>,
+        );
+      });
+      const withId = container.querySelectorAll('[id="checkout"]');
+      expect(withId).toHaveLength(1);
+      expect(withId[0]).toBe(container.querySelector('dialog'));
+      expect(withId[0]).toHaveAttribute('data-testid', 'checkout-flow');
+      expect(withId[0]).toHaveAttribute('aria-label', 'Details');
+      container.remove();
+    });
+
     it('orders a non-modal handoff inside the switcher-owned isolation surface, with no page-wide z-index on a sheet dialog', () => {
       render(<HostFlow hasScrim={false} initialSheet="details" />);
       const detailsDialog = getSheetDialog('details-sheet');
@@ -1542,6 +1755,55 @@ describe('BottomSheetSwitcher', () => {
       expect(onToggle).toHaveBeenCalledTimes(3);
       expect(getSheetDialog('a')).toHaveAttribute('aria-label', 'Details');
       expect(getSheetDialog('b')).toHaveAttribute('aria-label', 'Confirm');
+    });
+
+    it('forces alertdialog on a required step and leaves the other sheet dialogs with no role when the switcher sets none', () => {
+      render(
+        <BottomSheetSwitcher
+          activeSheet="details"
+          onActiveSheetChange={() => {}}>
+          <BottomSheet sheetId="details" label="Details" data-testid="a">
+            Content
+          </BottomSheet>
+          <BottomSheet
+            sheetId="danger"
+            label="Danger"
+            purpose="required"
+            data-testid="c">
+            Content
+          </BottomSheet>
+        </BottomSheetSwitcher>,
+      );
+      expect(getSheetDialog('a')).not.toHaveAttribute('role');
+      expect(getSheetDialog('c')).toHaveAttribute('role', 'alertdialog');
+    });
+
+    it('keeps the scrim takeover pin under prefers-reduced-motion: the reduced duration reads the pinned variable', () => {
+      render(<HostFlow initialSheet="details" />);
+      // jsdom evaluates neither @media nor ::backdrop; read the compiled
+      // rules the dialog's scrim class produced. The reduced-motion rule for
+      // the backdrop's transition-duration must defer to the takeover pin
+      // (`--_sheet-scrim-duration: 0s` for one style flush); a literal 0.01s
+      // there would win the cascade and paint a frame with no scrim.
+      const rules: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          rules.push(rule.cssText);
+        }
+      }
+      const reducedBackdropDurations = rules.filter(
+        text =>
+          text.includes('prefers-reduced-motion: reduce') &&
+          text.includes('::backdrop') &&
+          text.includes('transition-duration'),
+      );
+      expect(reducedBackdropDurations.length).toBeGreaterThan(0);
+      for (const text of reducedBackdropDurations) {
+        expect(text).toMatch(
+          /transition-duration:\s*var\(--_sheet-scrim-duration,\s*0?\.01s\)/,
+        );
+        expect(text).not.toMatch(/transition-duration:\s*0?\.01s/);
+      }
     });
 
     it('paints one scrim through a handoff and hands it over without a fade', () => {

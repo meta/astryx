@@ -14,7 +14,7 @@
 
 import * as path from 'node:path';
 import {findLockfile, lockedVersion, readJson} from '../release/project.mjs';
-import {resolveInstalledPackageDir} from '../integrations/autolink.mjs';
+import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 
 const SCOPE = '@astryxdesign/';
 const FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies'];

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "profile-tabs",
+  "source": "dd-4",
+  "title": "Profile page tabs",
+  "prompt": "Create a user profile page for \"Ada Lovelace\" with three tabs: Overview, Activity and Settings. Overview is selected when the page loads. Each tab has its own panel: the Overview panel has the heading \"Overview\", the Activity panel has the heading \"Recent activity\", and the Settings panel has the heading \"Account settings\". Only the selected tab's panel is shown. The tabs must work with a mouse and with the keyboard: the arrow keys move between tabs, and Enter or Space shows the focused tab's panel if the arrow key did not already show it."
+}

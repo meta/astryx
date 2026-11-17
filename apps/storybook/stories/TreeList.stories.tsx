@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useEffect, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {Button} from '@astryxdesign/core/Button';
+import {VStack} from '@astryxdesign/core/Layout';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -70,6 +73,25 @@ const fileTreeItems: TreeListItemData[] = [
 export const Basic: Story = {
   args: {
     items: fileTreeItems,
+  },
+};
+
+export const WithContentBelow: Story = {
+  render: () => (
+    <VStack gap={4}>
+      <TreeList items={fileTreeItems} />
+      <Button label="Open folder" onClick={() => {}} />
+    </VStack>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Content after the tree takes its new place by layout when a ' +
+          "folder expands or collapses; under a finger only the tree's own " +
+          'rows animate.',
+      },
+    },
   },
 };
 
@@ -534,4 +556,47 @@ export const NoGuides: Story = {
     items: guideItems,
     variant: 'noGuides',
   },
+};
+
+// =============================================================================
+// Collapse with focus inside the branch (AR2)
+// =============================================================================
+
+/**
+ * The app collapses "src" from a keyboard shortcut (`[`), which leaves focus
+ * where it was. Focus on "index.ts" moves to "src"; focus elsewhere stays put.
+ */
+function CollapseFocusDemo() {
+  const [isExpanded, setIsExpanded] = useState(true);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '[') {
+        setIsExpanded(expanded => !expanded);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+  return (
+    <VStack gap={2}>
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+      <Button label="Elsewhere" variant="secondary" />
+    </VStack>
+  );
+}
+
+export const CollapseFocus: Story = {
+  name: 'Collapse Focus',
+  render: () => <CollapseFocusDemo />,
 };

@@ -21,7 +21,7 @@
 }
 
 .report-codeModal-codeBlock {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 13px;
   line-height: 1.5;
   background-color: var(--color-background-body);
@@ -58,11 +58,11 @@
 }
 
 .report-color-positive {
-  color: var(--color-success);
+  color: var(--color-text-success);
 }
 
 .report-color-negative {
-  color: var(--color-error);
+  color: var(--color-text-error);
 }
 
 .report-color-neutral {
@@ -70,11 +70,11 @@
 }
 
 .report-color-warning {
-  color: var(--color-warning);
+  color: var(--color-text-warning);
 }
 
 .report-color-info {
-  color: var(--color-info, #8b5cf6);
+  color: var(--color-text-info);
 }
 
 /* === PromptDetailCard === */

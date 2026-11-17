@@ -34,9 +34,17 @@ export type {CommandDoc} from './doctypes/types.js'; //      search.doc.mjs (CLI
 export type {EnumDoc} from './doctypes/types.js'; //         error-codes.doc.mjs (vocabulary)
 export type {NamespaceDoc} from './doctypes/types.js'; //    cli.doc.mjs (hierarchy)
 export type {ThemeDoc} from './doctypes/types.js'; //        oceanTheme.doc.mjs
+export type {IconSetDoc} from './doctypes/types.js'; //      outline.doc.mjs
+export type {IconSetData} from './doctypes/types.js'; //     outline.icons.json
+export type {IconDefinitionDoc} from './doctypes/types.js'; //  delete.doc.mjs
 export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,mjs}
 export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
-export type {AstryxIntegration} from './integration/type.js'; // astryx.integration.{ts,mjs}
+export type {
+  AstryxIntegration,
+  BaseCapability,
+  BaseDeclaration,
+  BaseStep,
+} from './integration/type.js'; // astryx.integration.{ts,mjs}
 export type {
   GapReportHandler,
   GapReportHandlerContext,
@@ -70,6 +78,10 @@ export {parseCommand} from './doctypes/command/parse.mjs';
 export {parseEnum} from './doctypes/enum/parse.mjs';
 export {parseNamespace} from './doctypes/namespace/parse.mjs';
 export {parseTheme} from './doctypes/theme/parse.mjs';
+/** @experimental Icon sets may change or be removed in a patch release. */
+export {parseIconSet, parseIconSetData} from './doctypes/icon-set/parse.mjs';
+/** @experimental Icon definitions may change or be removed in a patch release. */
+export {parseIconDefinition} from './doctypes/icon-definition/parse.mjs';
 export {parseLegacyDoc} from './doctypes/legacy.mjs';
 export {parseConfig} from './config/parse.mjs';
 export {parseIntegration} from './integration/parse.mjs';
@@ -80,6 +92,18 @@ export {
 export {parseDiscoverCatalog} from './discover/parse.mjs';
 export {parseCodemod} from './codemod/parse.mjs';
 export {parseDebugEvent} from './debug/parse.mjs';
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXAMPLES — whether a doc example runs on its own, as a live preview does.
+// ═══════════════════════════════════════════════════════════════════════
+export {previewableExample} from './example/preview.mjs';
+export type {
+  ExampleScope,
+  ExampleScopeName,
+  PreviewableExample,
+  ExampleProblem,
+  ExampleProblemCode,
+} from './example/type.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 // FIELD & SUB-TYPES — the building blocks of the docs above. Import these
@@ -111,10 +135,12 @@ export type {
   SingleComponentDoc,
   MultiComponentDoc,
   ComponentEntry,
+  ComponentDeprecation,
   ComponentGroupDoc,
   ComponentTranslationDoc,
   ComponentPropDoc,
   ComponentExampleDoc,
+  ExampleKind,
   ComponentAnatomyElement,
   ComponentAccessibilityRequirement,
   ComponentAccessibilityThemeStatus,
@@ -130,6 +156,8 @@ export type {
   ComponentThemingTarget,
   ComponentThemingVar,
   ComponentThemingDerivedVar,
+  ComponentIconSlotDoc,
+  ComponentIconSlotStateDoc,
   UsageDoc,
   // hook
   HookParamDoc,
@@ -166,6 +194,14 @@ export type {
   CommandOutsideProject,
   // enum
   EnumMemberDoc,
+  // icon set
+  IconSetDefault,
+  IconSetIcon,
+  IconSetMatch,
+  IconSetMatchConfidence,
+  IconSetSource,
+  IconSetVariant,
+  IconSetAdapter,
 } from './doctypes/types.js';
 export type {PostCodemodHook, DebugConfig} from './config/type.js';
 export type {

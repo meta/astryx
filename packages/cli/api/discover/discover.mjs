@@ -33,7 +33,9 @@ import {
   discoverPackages,
   findComponent,
   hasSources,
+  loadReadKinds,
   officialDeclarations,
+  STABLE_KINDS,
   officialFirst,
   officialList,
   withDeclaredOfficial,
@@ -52,7 +54,6 @@ import {search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
-import {DISCOVER_KINDS} from '../../authoring/discover/parse.mjs';
 
 const DEFAULT_LIMIT = 20;
 
@@ -88,15 +89,13 @@ function splitTarget(query) {
 
 /**
  * @param {{type?: unknown, installed?: boolean, available?: boolean, limit?: unknown}} options
+ * @param {readonly string[]} kinds the item kinds this project reads
  */
-function checkOptions({type, installed, available, limit}) {
-  if (
-    type != null &&
-    !(/** @type {readonly unknown[]} */ (DISCOVER_KINDS).includes(type))
-  ) {
+function checkOptions({type, installed, available, limit}, kinds) {
+  if (type != null && !kinds.includes(/** @type {string} */ (type))) {
     throw new AstryxError(
       `Unknown --type "${String(type)}"`,
-      DISCOVER_KINDS.map(kind => ({name: kind, reason: 'item kind'})),
+      kinds.map(kind => ({name: kind, reason: 'item kind'})),
       ERROR_CODES.ERR_INVALID_OPTION,
     );
   }
@@ -178,7 +177,14 @@ export function answersQueries(project) {
  */
 export async function discover(query, options = {}) {
   const {lang = null, zh = false, type, limit} = options;
-  checkOptions(options);
+  // An experimental kind is read only in a project where it is on (spec:AST-017
+  // FR27); only then does `--type` take it, or an error name it.
+  const kinds =
+    options.type != null &&
+    !(/** @type {readonly unknown[]} */ (STABLE_KINDS).includes(options.type))
+      ? await loadReadKinds()
+      : STABLE_KINDS;
+  checkOptions(options, kinds);
   const only = options.installed
     ? /** @type {const} */ ('installed')
     : options.available
@@ -186,10 +192,19 @@ export async function discover(query, options = {}) {
       : undefined;
 
   const {packages: scanned, configured, project} = await discoverPackages();
-  const integrations = await describeInstalled(project, scanned);
-  const declared = declaredDependencies(project);
   // The official list is always read, so discover always has a source.
   const official = officialList({project});
+  // The list asks every source for its catalog. A catalog needs nothing the
+  // installed packages' descriptions give, so a slow source, such as a remote
+  // catalog, answers while they are read.
+  const listCatalog = query
+    ? undefined
+    : callSources(project, undefined, {official});
+  // Awaited below; a failure reading the installed packages first must not
+  // leave it unhandled.
+  listCatalog?.catch(() => {});
+  const integrations = await describeInstalled(project, scanned);
+  const declared = declaredDependencies(project);
   const declarations = officialDeclarations(project, official.packages);
   const add = addCommand(project);
   const addOfficial = addCommand(project, {official: official.packages});
@@ -215,7 +230,7 @@ export async function discover(query, options = {}) {
   // No query, or any query in a project that loads no integration and has no
   // discover source of its own: the list (spec:AST-051 FR1).
   if (!query || (integrations.length === 0 && !hasSources(project))) {
-    const catalog = await catalogFor();
+    const catalog = await (listCatalog ?? catalogFor());
     const packages = installedFor(catalog);
     // Inside a project, the integrations installed for the computer are
     // available, never loaded (spec AST-081 FR12).
@@ -308,6 +323,18 @@ export async function discover(query, options = {}) {
     if (!target.item) return detail(packages, target.name, context);
     const found = item(packages, target.name, target.item, context);
     if (found) return found;
+    // An installed icon set that was withdrawn answers nothing; say why
+    // rather than that the package has no such item (spec:AST-084 FR17).
+    const gone = packages
+      .find(p => p.name === target.name)
+      ?.withdrawnIconSets?.find(each => each.name === target.item);
+    if (gone) {
+      throw new AstryxError(
+        `Icon set "${target.item}" in ${target.name} is installed but withdrawn: ${gone.reason}`,
+        [],
+        ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+      );
+    }
     if (officialOnly) {
       throw new AstryxError(
         `"${target.item}" not found in ${target.name}`,

@@ -38,6 +38,7 @@ describe('discover.item leaf', () => {
   it("finds an installed package's own template, doc, theme, or codemod", () => {
     expect(item(PACKAGES, '@acme/widgets', 'pages/Home')).toEqual({
       type: 'discover.item',
+      package: '@acme/widgets',
       data: {
         package: '@acme/widgets',
         version: '1.2.3',
@@ -53,6 +54,7 @@ describe('discover.item leaf', () => {
       item(PACKAGES, '@acme/charts', 'pages/report', {catalog: CATALOG, add}),
     ).toEqual({
       type: 'discover.item',
+      package: '@acme/charts',
       data: {
         package: '@acme/charts',
         version: '2.0.0',

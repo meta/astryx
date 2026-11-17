@@ -59,4 +59,4 @@ Huge thanks to everyone who contributed this release: [@AKnassa](https://github.
 
 Also thank you to [@aarongarciah](https://github.com/aarongarciah) for feedback on accessibility, and to [@aurorascharff](https://github.com/aurorascharff), who drove the work to optimize the docsite on the latest Next.js features.
 
-The full changelog is on the [v0.1.3 release page](https://github.com/facebook/astryx/releases/tag/v0.1.3).
+The full changelog is on the [v0.1.3 release page](https://github.com/meta/astryx/releases/tag/v0.1.3).

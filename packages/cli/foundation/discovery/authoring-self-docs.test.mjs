@@ -6,7 +6,9 @@ import * as path from 'node:path';
 import {
   AUTHORING_SELF_DOCS,
   auditAuthoringSelfDocs,
+  EXPERIMENTAL_AUTHORING_ROUTE,
   buildAuthoringTopic,
+  buildExperimentalAuthoringSections,
   discoverAuthoringSelfDocSources,
 } from './authoring-self-docs.mjs';
 import {
@@ -18,6 +20,7 @@ import {doc as graphFieldsDoc} from '../../authoring/doctypes/base/graph-fields.
 import {doc as namespaceDoc} from '../../authoring/doctypes/namespace/namespace.doc.mjs';
 import {doc as referenceDoc} from '../../authoring/doctypes/reference/reference.doc.mjs';
 import {docs} from '../../api/docs/docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -30,23 +33,37 @@ describe('authoring self-docs', () => {
   });
 
   it('audits clean: every self-doc loads, is reachable, and fits one read', async () => {
+    // The three experimental schemas are sections of their own route, not of
+    // `astryx docs authoring` (spec:AST-084 FR0).
     expect(await auditAuthoringSelfDocs()).toEqual({
-      sections: AUTHORING_SELF_DOCS.length,
+      sections: AUTHORING_SELF_DOCS.length - 3,
+      experimental: 3,
       unreachable: [],
       failed: [],
       oversized: [],
     });
   });
 
-  it('builds a valid guide with one section per self-doc, placed under authoring', async () => {
+  it('builds a valid guide with one section per stable self-doc, placed under authoring, and serves the experimental ones on their own route', async () => {
     const {placement, ...topic} = await buildAuthoringTopic();
     expect(problemsInTopic(topic)).toEqual([]);
-    expect(topic.sections).toHaveLength(AUTHORING_SELF_DOCS.length);
+    expect(topic.sections).toHaveLength(AUTHORING_SELF_DOCS.length - 3);
     expect(placement).toEqual({
       parent: 'namespace:authoring',
       slot: 'reference',
       order: 10,
     });
+    const experimental = await buildExperimentalAuthoringSections();
+    expect(experimental.map(section => section.id)).toEqual([
+      'icon-set-doc',
+      'icon-set-data',
+      'icon-definition-doc',
+    ]);
+    expect(topic.sections.map(section => section.id)).not.toContain(
+      'icon-set-doc',
+    );
+    const read = await docs(EXPERIMENTAL_AUTHORING_ROUTE, 'icon-set-data');
+    expect(read.data.title).toBe('IconSetData');
   });
 
   it(
@@ -134,7 +151,7 @@ describe('auditAuthoringSelfDocs', () => {
   let root;
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-self-docs-'));
+    root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-self-docs-'));
     fs.mkdirSync(path.join(root, 'kept'));
     fs.writeFileSync(
       path.join(root, 'kept', 'kept.doc.mjs'),

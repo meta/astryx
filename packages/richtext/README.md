@@ -36,7 +36,7 @@ RichText supports one Lexical minor at a time, named by its `lexical` and
 `@lexical/*` peer ranges. Those are **optional** peer dependencies, so your
 package manager does not add them: install them at that minor alongside
 richtext. See the RFC:
-[facebook/astryx#3899](https://github.com/facebook/astryx/issues/3899).
+[meta/astryx#3899](https://github.com/meta/astryx/issues/3899).
 
 ## Install
 
@@ -68,6 +68,20 @@ import '@astryxdesign/richtext/richtext.css';
 so your theme's token overrides (`@layer astryx-theme`) win over it, as long
 as Core's `reset.css` (or a `@layer reset, astryx-base, astryx-theme;` line,
 if your app has its own reset) loads first.
+
+## Editing code blocks
+
+In a code block, Tab and Shift+Tab indent and outdent every line the selection
+touches, by the indent the block already uses: a tab when one of its lines
+starts with a tab, otherwise the fewest leading spaces of any indented line,
+kept between 2 and 8, otherwise 2 spaces. Press Escape, then Tab, to move focus
+out of the editor.
+
+Backspace at the very start of a code block turns it into a paragraph of its
+lines, instead of merging the code into the block above.
+
+Pasting rich content into a code block inserts its plain text, one line per
+block: headings, lists, tables, and formatting never land inside the code.
 
 ## Examples
 

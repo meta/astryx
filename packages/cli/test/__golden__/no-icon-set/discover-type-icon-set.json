@@ -1,0 +1,32 @@
+{
+  "apiVersion": 1,
+  "type": "discover.list",
+  "data": [
+    {
+      "name": "@acme/glyphs",
+      "package": "@acme/glyphs",
+      "category": "@acme/glyphs",
+      "components": [],
+      "version": "1.0.0",
+      "iconSets": [
+        "glyphs"
+      ]
+    }
+  ],
+  "meta": {
+    "available": [],
+    "sources": [
+      {
+        "name": "Astryx",
+        "from": "@astryxdesign/cli",
+        "status": "fresh",
+        "complete": true
+      }
+    ],
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

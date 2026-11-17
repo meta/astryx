@@ -90,7 +90,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm install @astryxdesign/core @astryxdesign/cli\nastryx init',
+          code: '{@pm install @astryxdesign/core @astryxdesign/cli}\n{@command init}',
         },
         {
           type: 'prose',
@@ -99,7 +99,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm i -g @astryxdesign/cli',
+          code: '{@pm install @astryxdesign/cli --global}',
         },
         {
           type: 'prose',

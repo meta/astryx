@@ -37,13 +37,43 @@ export function item(packages, packageName, itemName, options = {}) {
       if (kind === 'component') continue;
       const names = /** @type {Record<string, unknown>} */ (pkg)[field];
       if (Array.isArray(names) && names.includes(itemName)) {
+        const set =
+          kind === 'icon-set'
+            ? pkg.iconSetDetails?.find(entry => entry.name === itemName)
+            : undefined;
+        if (set) {
+          return {
+            type: 'discover.item',
+            package: packageName,
+            data: {
+              package: packageName,
+              ...(pkg.version ? {version: pkg.version} : {}),
+              kind,
+              name: itemName,
+              title: set.displayName,
+              summary: set.description,
+              license: set.license,
+              iconCount: set.iconCount,
+              ...(set.default ? {default: set.default} : {}),
+              definitions: set.definitions,
+              command: `astryx experimental icon <words> --set ${packageName}/${itemName}`,
+              installed: true,
+            },
+          };
+        }
+        // A doc that adds sections to another package's topic names them,
+        // so a reader can open its own section straight away.
+        const sections =
+          kind === 'doc' ? pkg.docSections?.[itemName] : undefined;
         return {
           type: 'discover.item',
+          package: packageName,
           data: {
             package: packageName,
             ...(pkg.version ? {version: pkg.version} : {}),
             kind,
             name: itemName,
+            ...(sections ? {sections} : {}),
             installed: true,
           },
         };
@@ -59,6 +89,7 @@ export function item(packages, packageName, itemName, options = {}) {
   const shown = version ?? defaultVersion(catalog);
   return {
     type: 'discover.item',
+    package: packageName,
     data: {
       package: packageName,
       ...(shown ? {version: shown} : {}),
@@ -67,6 +98,13 @@ export function item(packages, packageName, itemName, options = {}) {
       ...(found.title ? {title: found.title} : {}),
       ...(found.summary ? {summary: found.summary} : {}),
       ...(found.keywords ? {keywords: found.keywords} : {}),
+      ...(found.iconCount != null ? {iconCount: found.iconCount} : {}),
+      ...(found.definitions ? {definitions: found.definitions} : {}),
+      ...(found.kind === 'icon-set' && pkg != null
+        ? {
+            command: `astryx experimental icon <words> --set ${packageName}/${found.name}`,
+          }
+        : {}),
       installed: pkg != null,
       ...(pkg == null && installedAs ? {installedAs} : {}),
       ...(pkg == null && !installedAs && add

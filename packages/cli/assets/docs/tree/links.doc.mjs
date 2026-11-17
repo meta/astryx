@@ -38,7 +38,7 @@ export const docs = {
           style: 'unordered',
           items: [
             'The kind is `generic` for a topic or guide, `namespace` for a docs section, `command` or `function` for a CLI command or API function, `schema` or `enum` for a schema or a fixed set of values, `component` for a component, and `page` or `block` for a template.',
-            'Name a component by its export name and a template by its id. Its link reads as the command that opens it, such as `astryx component AcmeCarousel --package @acme/widgets`.',
+            'Name a component by its export name and a template by its id. Its link reads as the command that opens it, such as `{@command component AcmeCarousel --package @acme/widgets}`.',
             'Inside backticks or a code block, link syntax prints as written.',
           ],
         },
@@ -78,7 +78,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration docs',
+          code: '{@command doctor integration docs}',
         },
         {
           type: 'code',

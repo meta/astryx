@@ -20,13 +20,19 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDir} from '../fs/listing-cache.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
+import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
+import {rootNamespaceName} from '../discovery/name-roots.mjs';
 import {diagnostic, sortDiagnostics} from './diagnostics.mjs';
 import {readDocView} from './read.mjs';
 import {packageSource} from './source.mjs';
+import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {KIND_GROUPS, TOPIC_LEVELS, topicLevel} from './generated-levels.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export {routeSegment};
 
@@ -38,36 +44,6 @@ const CLI_PROVIDER = '@astryxdesign/cli';
 
 /** One route segment: lowercase letters and digits joined by single hyphens. */
 export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * The generated level that `groupBy: 'kind'` makes for each kind: its route
- * segment, title, and summary.
- * @type {Readonly<Record<string, {segment: string, title: string, summary: string}>>}
- */
-export const KIND_GROUPS = Object.freeze({
-  command: {
-    segment: 'commands',
-    title: 'Commands',
-    summary: 'Every command and subcommand.',
-  },
-  function: {
-    segment: 'functions',
-    title: 'Functions',
-    summary: 'Every function: its signature, parameters, returns, and errors.',
-  },
-  schema: {
-    segment: 'schemas',
-    title: 'Schemas',
-    summary: 'Data shapes, field by field.',
-  },
-  enum: {
-    segment: 'enums',
-    title: 'Enums',
-    summary:
-      'Every fixed list of values, such as error codes and response types.',
-  },
-  generic: {segment: 'guides', title: 'Guides', summary: 'Every guide.'},
-});
 
 /**
  * @typedef {import('../../authoring/doctypes/namespace/type').NamespaceDoc} NamespaceDoc
@@ -101,6 +77,7 @@ export const KIND_GROUPS = Object.freeze({
  * @property {string} summary
  * @property {string | null} group the discovery group adoption reads, or null
  * @property {DocPlacement | undefined} placement
+ * @property {string[]} [keywords] the search keywords a guide declares
  * @property {any} [ref] what a reader needs to open the doc, carried as given
  */
 
@@ -124,38 +101,12 @@ export const KIND_GROUPS = Object.freeze({
  * @property {string | null} [category] the topic's sidebar group:
  *   `foundations` puts it in Foundations; anything else, in Guides
  * @property {string} source where the topic comes from, for diagnostics
+ * @property {string[]} [keywords] the search keywords the topic declares
  * @property {string[]} [aliases] every other name the topic answers to: the
  *   topics it replaced, directly or through a chain
  */
 
-/**
- * The generated levels that hold the flat topics, by category
- * (spec:AST-046 FR12). A topic keeps its own name as its route; its level is
- * only where it sits. Readers see these titles in a topic's path, so each is
- * a plain name for what the topics are.
- */
-export const TOPIC_LEVELS = Object.freeze({
-  guides: Object.freeze({
-    route: 'guides',
-    title: 'Guides',
-    summary:
-      'Guides that stand on their own: getting started, principles, theming, and working with AI. Each topic keeps its own name; open one by it.',
-  }),
-  foundations: Object.freeze({
-    route: 'foundations',
-    title: 'Foundations',
-    summary:
-      'Color, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on. Each topic keeps its own name; open one by it.',
-  }),
-});
-
-/**
- * The generated level a flat topic sits in.
- * @param {string | null | undefined} category
- * @returns {'guides' | 'foundations'}
- */
-export const topicLevel = category =>
-  category === 'foundations' ? 'foundations' : 'guides';
+export {KIND_GROUPS, TOPIC_LEVELS, topicLevel};
 
 /**
  * @typedef {object} TreeNode
@@ -169,7 +120,8 @@ export const topicLevel = category =>
  * @property {string} name
  * @property {string} title
  * @property {string} summary
- * @property {string[]} [keywords] an authored namespace's search keywords
+ * @property {string[]} [keywords] the search keywords an authored namespace,
+ *   a guide, or a flat topic declares; a typed doc's are on its `ref.selfDoc`
  * @property {string | null} parent the parent's route; null at the top
  * @property {string | null} slot the parent slot this node sits in
  * @property {number | null} order
@@ -178,6 +130,9 @@ export const topicLevel = category =>
  * @property {TreeSlot[]} slots a namespace's slots; empty for a leaf
  * @property {string} source
  * @property {any} [ref]
+ * @property {import('../discovery/docs-discovery.mjs').GuideOverlay} [guideOverlay]
+ *   what integrations do to a guide the tree places, by its route: set by the
+ *   project's tree, absent when nothing replaces or extends it
  */
 
 /**
@@ -614,6 +569,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
         name: doc.name,
         title: doc.title,
         summary: doc.summary,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         parent: home.parentRoute,
         slot: home.slot,
         order: home.order,
@@ -660,6 +616,7 @@ export function buildDocsTree({namespaces, docs, topics = []}) {
           name: topic.name,
           title: topic.title,
           summary: topic.summary,
+          ...(Array.isArray(topic.keywords) ? {keywords: topic.keywords} : {}),
           parent: level.route,
           slot: 'topics',
           order: i,
@@ -767,8 +724,9 @@ function checkPlacement(placement, kind, at, declared) {
 }
 
 /**
- * Every adoption rule in the doc's own package that matches its group and
- * kind, from namespaces that have a route.
+ * Every adoption rule that matches the doc's group and kind, from namespaces
+ * that have a route: its own package's, and an experimental CLI namespace's
+ * rule that adopts its group from every package (`source.packages: 'all'`).
  * @param {TreeDocInput} doc
  * @param {Map<string, TreeNamespaceInput>} declared
  * @param {Map<string, string | null>} routeOf
@@ -777,10 +735,16 @@ function adoptionsFor(doc, declared, routeOf) {
   /** @type {Array<{key: string, namespace: TreeNamespaceInput, rule: NonNullable<NamespaceDoc['adopts']>[number]}>} */
   const matches = [];
   for (const [key, namespace] of declared) {
-    if (namespace.provider !== doc.provider || routeOf.get(key) == null)
-      continue;
+    if (routeOf.get(key) == null) continue;
     for (const rule of namespace.doc.adopts ?? []) {
       if (rule.source.group !== doc.group) continue;
+      // Adopting from every package is experimental (spec:AST-017 FR27): only
+      // a CLI namespace marked experimental may (the icon definitions).
+      const shared =
+        rule.source.packages === 'all' &&
+        namespace.provider === CLI_PROVIDER &&
+        /** @type {any} */ (namespace.doc).stability === 'experimental';
+      if (namespace.provider !== doc.provider && !shared) continue;
       if (
         rule.source.kinds &&
         !rule.source.kinds.includes(/** @type {any} */ (doc.kind))
@@ -800,8 +764,7 @@ function adoptionsFor(doc, declared, routeOf) {
  */
 export function treeDocFiles(dir = TREE_DOCS_DIR) {
   if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
+  return listDir(dir)
     .filter(file => /^[\w-]+\.doc\.mjs$/u.test(file))
     .sort(byText)
     .map(file => path.join(dir, file));
@@ -820,10 +783,7 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
   /** @type {string[]} */
   const names = [];
   for (const file of treeDocFiles(dir)) {
-    const text = fs.readFileSync(file, 'utf8');
-    if (!/["']?type["']?\s*:\s*["']namespace["']/u.test(text)) continue;
-    if (/["']?placement["']?\s*:/u.test(text)) continue;
-    const name = /["']?name["']?\s*:\s*["']([\w-]+)["']/u.exec(text)?.[1];
+    const name = rootNamespaceName(fs.readFileSync(file, 'utf8'));
     if (name) names.push(name);
   }
   return names.sort(byText);
@@ -834,12 +794,14 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
  * assets/docs/tree, and, unless left out, every typed self-doc with its
  * `namespace` group. A file that fails to load or parse is a diagnostic, never
  * a thrown error.
- * @param {{selfDocs?: boolean, dir?: string}} [options]
+ * @param {{selfDocs?: boolean, dir?: string, allRoots?: boolean}} [options]
+ *   `allRoots`: every root, as a run on Core reads them, whatever the base
  * @returns {Promise<{namespaces: TreeNamespaceInput[], docs: TreeDocInput[], diagnostics: CompilerDiagnostic[]}>}
  */
 export async function loadTreeInputs({
   selfDocs = true,
   dir = TREE_DOCS_DIR,
+  allRoots = false,
 } = {}) {
   /** @type {TreeNamespaceInput[]} */
   const namespaces = [];
@@ -904,6 +866,7 @@ export async function loadTreeInputs({
         name: doc.name,
         title: doc.title,
         summary: doc.description,
+        ...(Array.isArray(doc.keywords) ? {keywords: doc.keywords} : {}),
         group: null,
         placement: doc.placement,
         ref: {topicFile: file},
@@ -918,6 +881,23 @@ export async function loadTreeInputs({
     }
   }
   if (selfDocs) {
+    // Astryx's icon definitions, adopted by the `icon-definitions` namespace with
+    // every installed set's own.
+    const definitions = astryxIconDefinitions();
+    for (const {file, message} of definitions.errors) {
+      diagnostics.push(
+        diagnostic('invalid_doc', {
+          provider: CLI_PROVIDER,
+          source: packageSource(file),
+          message,
+        }),
+      );
+    }
+    for (const {doc, file} of definitions.definitions) {
+      docs.push(
+        iconDefinitionTreeInput(doc, file, CLI_PROVIDER, CLI_PROVIDER_ID),
+      );
+    }
     const {loaded} = await loadCliSelfDocs();
     for (const {source, doc} of loaded) {
       docs.push({
@@ -934,7 +914,78 @@ export async function loadTreeInputs({
       });
     }
   }
+  if (dir === TREE_DOCS_DIR && !allRoots && currentNonCoreBase()) {
+    return {...onlyCliRoots(namespaces, docs), diagnostics};
+  }
   return {namespaces, docs, diagnostics};
+}
+
+/**
+ * The tree inputs under a root namespace that describes the CLI itself
+ * (`describes: 'cli'`). Every other root describes Core, so its namespaces
+ * and guides show only in a run whose base is Core. A doc that names no
+ * parent is a CLI self-doc that a namespace adopts by its group, and stays.
+ * @param {TreeNamespaceInput[]} namespaces
+ * @param {TreeDocInput[]} docs
+ * @returns {{namespaces: TreeNamespaceInput[], docs: TreeDocInput[]}}
+ */
+function onlyCliRoots(namespaces, docs) {
+  /** @param {DocPlacement | undefined} placement */
+  const parentOf = placement =>
+    typeof placement?.parent === 'string' &&
+    placement.parent.startsWith('namespace:')
+      ? placement.parent.slice('namespace:'.length)
+      : undefined;
+  /** @type {Map<string, TreeNamespaceInput['doc']>} */
+  const byName = new Map(namespaces.map(ns => [ns.doc.name, ns.doc]));
+  /** @param {string} name */
+  const describesCli = name => {
+    const seen = new Set();
+    let current = byName.get(name);
+    while (current != null && !seen.has(current.name)) {
+      seen.add(current.name);
+      const parent = parentOf(current.placement);
+      if (parent == null) return current.describes === 'cli';
+      current = byName.get(parent);
+    }
+    return false;
+  };
+  return {
+    namespaces: namespaces.filter(ns => describesCli(ns.doc.name)),
+    docs: docs.filter(doc => {
+      const parent = parentOf(doc.placement);
+      return parent == null || describesCli(parent);
+    }),
+  };
+}
+
+/** The discovery group every icon definition doc belongs to. */
+export const ICON_DEFINITIONS_GROUP = 'icon-definitions';
+
+/**
+ * One icon definition as a docs-tree input: grouped for the CLI's
+ * `icon-definitions` namespace, which adopts them from every package.
+ * @param {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} doc
+ * @param {string} file
+ * @param {string} provider
+ * @param {string} providerId
+ * @returns {TreeDocInput}
+ */
+export function iconDefinitionTreeInput(doc, file, provider, providerId) {
+  return {
+    provider,
+    providerId,
+    source: packageSource(file),
+    kind: 'icon-definition',
+    name: doc.name,
+    title: doc.name,
+    // Built-in definitions are the ones every set must map; the words are
+    // what an author searches the library for.
+    summary: `${doc.builtIn ? '[built-in] ' : ''}${doc.description}${doc.words.length > 0 ? ` Words: ${doc.words.join(', ')}.` : ''}`,
+    group: ICON_DEFINITIONS_GROUP,
+    placement: undefined,
+    ref: {selfDoc: doc},
+  };
 }
 
 /** @type {Map<string, Promise<DocsTree>>} */
@@ -952,6 +1003,11 @@ export function loadDocsTree({selfDocs = true, fresh = false} = {}) {
   if (!tree) {
     tree = loadTreeInputs({selfDocs}).then(inputs => {
       const result = buildDocsTree(inputs);
+      // Tree inputs carry authored summaries; each renders its doc tokens
+      // once, here or where the project tree is built.
+      for (const node of result.nodes.values()) {
+        node.summary = renderTokens(node.summary);
+      }
       return {
         ...result,
         diagnostics: sortDiagnostics([
@@ -963,4 +1019,19 @@ export function loadDocsTree({selfDocs = true, fresh = false} = {}) {
     built.set(key, tree);
   }
   return tree;
+}
+
+/**
+ * Is this node an experimental surface's doc (spec:AST-017 FR27): marked
+ * `stability: 'experimental'` itself, or under a namespace that is? Every
+ * reader that marks or counts experimental docs asks this one question.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {boolean}
+ */
+export function isExperimentalTreeNode(tree, node) {
+  return [...tree.ancestors(node), node].some(
+    (/** @type {any} */ each) =>
+      each.ref?.selfDoc?.stability === 'experimental',
+  );
 }

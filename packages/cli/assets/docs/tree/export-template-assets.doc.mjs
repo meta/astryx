@@ -106,7 +106,7 @@ export const docs = {
           items: [
             '`integration add` appends the manifest and templates directory when a `files` list already exists. Add the other directories yourself.',
             'If `package.json` sets `sideEffects`, include CSS in it, as above, so bundlers keep side-effect stylesheet imports.',
-            'Run `npm pack --dry-run` and read the real file list instead of reasoning from the workspace.',
+            'Run `{@pm-only npm "the tarball the registry receives" pack --dry-run}` and read the real file list instead of reasoning from the workspace.',
           ],
         },
       ],

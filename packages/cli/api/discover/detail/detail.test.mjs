@@ -31,8 +31,10 @@ describe('discover.detail leaf', () => {
   it('projects the matched package into a detail entry', () => {
     const res = detail(PACKAGES, '@acme/widgets');
     expect(res.type).toBe('discover.detail');
+    expect(res.package).toBe('@acme/widgets');
     expect(res.data).toEqual({
       name: '@acme/widgets',
+      package: '@acme/widgets',
       category: '@acme/widgets',
       components: ['Alpha', 'Beta'],
       version: '1.2.3',
@@ -81,6 +83,7 @@ describe('discover.detail leaf with a discover source', () => {
   it('describes a package the project does not have, with the command that adds it', () => {
     expect(detail(PACKAGES, '@acme/charts', {catalog, add}).data).toEqual({
       name: '@acme/charts',
+      package: '@acme/charts',
       category: '@acme/charts',
       components: ['Chart'],
       version: '2.0.0',

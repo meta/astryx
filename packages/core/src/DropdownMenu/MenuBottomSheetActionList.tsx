@@ -9,18 +9,21 @@
  * @position Shared implementation for menu bottom-sheet presentations
  */
 
-import React, {useRef, type ReactElement} from 'react';
+import React, {useId, useRef, type ReactElement} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Divider} from '../Divider';
-import {Heading} from '../Heading';
-import {Icon, renderIconSlot} from '../Icon';
-import {List, ListItem} from '../List';
+import {Divider} from '../Divider/Divider';
+import {Heading} from '../Heading/Heading';
+import {Icon, renderIconSlot} from '../Icon/Icon';
+import {List} from '../List/List';
+import {ListItem} from '../List/ListItem';
 import {useMenuPress} from '../hooks/useMenuPress';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {rtlStyles} from '../utils';
-import {getInteractionModality} from '../utils/interactionModality';
+import {rtlStyles} from '../utils/rtlStyles';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
+import {visibleText} from '../utils/accessibleName';
 
 /** The action rows: ListItem renders its action as a button (or a link). */
 const SHEET_ROW_SELECTOR = 'button:not(:disabled), a[href]';
@@ -33,9 +36,9 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   destructiveAction: {
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
-    color: colorVars['--color-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
+    color: colorVars['--color-text-error'],
   },
   structuralItem: {
     listStyleType: 'none',
@@ -64,9 +67,13 @@ export function MenuBottomSheetActionList({
 }: {
   items: DropdownMenuOption[];
   onSelect: (item: DropdownMenuItemData, event: React.MouseEvent) => void;
-  onOpenSubmenu: (item: DropdownMenuItemData) => void;
+  /** `title` is the label's text, also for a label that is not a string. */
+  onOpenSubmenu: (item: DropdownMenuItemData, title?: string) => void;
 }) {
+  const labelIdPrefix = useId();
   const listRef = useRef<HTMLUListElement>(null);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const listComposedRef = useMergedRefs(listRef, modalityRef);
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
@@ -75,13 +82,20 @@ export function MenuBottomSheetActionList({
     itemSelector: SHEET_ROW_SELECTOR,
   });
 
+  // `rowPath` names the row within the whole list: an index alone restarts in
+  // every section.
   const renderItem = (
     item: DropdownMenuItemData,
     index: number,
+    rowPath: string = String(index),
   ): ReactElement => {
     const isSubmenu = item.items != null && item.items.length > 0;
     const isDestructive = item.variant === 'destructive';
     const isLink = !isSubmenu && item.href != null;
+    // A sub-menu row's node label renders in its own element, so the level
+    // it opens can take the label's text as its title.
+    const labelId = `${labelIdPrefix}-label-${rowPath}`;
+    const hasNodeLabel = isSubmenu && typeof item.label !== 'string';
 
     const handleActivate = (event: React.MouseEvent) => {
       if (isLink && item.isDisabled) {
@@ -89,11 +103,21 @@ export function MenuBottomSheetActionList({
         event.preventDefault();
         return;
       }
-      if (getInteractionModality() === 'pointer') {
+      if (readModality() === 'pointer') {
         (event.currentTarget as HTMLElement).blur();
       }
       if (isSubmenu) {
-        onOpenSubmenu(item);
+        const labelElement = hasNodeLabel
+          ? event.currentTarget.ownerDocument.getElementById(labelId)
+          : null;
+        onOpenSubmenu(
+          item,
+          typeof item.label === 'string'
+            ? item.label
+            : labelElement != null
+              ? visibleText(labelElement)
+              : undefined,
+        );
       } else if (isLink && isModifiedClick(event)) {
         // A modified click on a link row is the browser's (a new tab); the
         // row's handler stays out of it, the sheet still closes.
@@ -106,7 +130,9 @@ export function MenuBottomSheetActionList({
     return (
       <ListItem
         key={getItemKey(item, index)}
-        label={item.label}
+        label={
+          hasNodeLabel ? <span id={labelId}>{item.label}</span> : item.label
+        }
         description={item.description}
         startContent={
           item.icon
@@ -145,8 +171,11 @@ export function MenuBottomSheetActionList({
 
   return (
     <List
-      ref={listRef}
+      ref={listComposedRef}
       density="spacious"
+      // Focus parks on the list when no row is lit, as in DropdownMenu's own
+      // menu, so a row a cancelled finger lit loses its highlight.
+      tabIndex={-1}
       xstyle={styles.list}
       {...menuPress.menuProps}>
       {items.map((option, index) => {
@@ -176,7 +205,11 @@ export function MenuBottomSheetActionList({
                     {option.title}
                   </Heading>
                 )}
-                <List density="spacious">{option.items.map(renderItem)}</List>
+                <List density="spacious">
+                  {option.items.map((item, itemIndex) =>
+                    renderItem(item, itemIndex, `${index}-${itemIndex}`),
+                  )}
+                </List>
               </div>
             </li>
           );

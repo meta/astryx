@@ -25,6 +25,9 @@ import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
+import {npmCommand} from '../../foundation/release/cache.mjs';
+import {runNpmPackJson} from '../../foundation/integrations/pack-state.mjs';
+import {commandTokensIn} from '../../foundation/doc-compiler/doc-syntax.mjs';
 import {resolvePackageDir} from '../../foundation/integrations/integrations.mjs';
 import {
   literalThemeName,
@@ -37,6 +40,8 @@ import {
   keywordsCliProblem,
   replacesCliProblem,
   sectionIdsCliProblem,
+  docTokensCliProblem,
+  sectionPositionCliProblem,
   themesCliProblem,
 } from '../../foundation/integrations/cli-requirement.mjs';
 import {
@@ -45,7 +50,7 @@ import {
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {discoverIntegrationThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {inspectPackageExport} from '../../foundation/discovery/package-exports.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {moduleExportsName} from '../../foundation/discovery/module-exports.mjs';
 import {
   ThemeImportError,
@@ -53,7 +58,7 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   normalizeThemeBuildForCompare,
-  themeBuild,
+  themeBuildWithHandOff,
 } from '../theme/build/build.mjs';
 import {
   discoverIntegrationComponents,
@@ -95,14 +100,20 @@ const GENERATED_HEADER_LINE =
 const SOURCE_LINE = /^( \* Source: )(\S(?:.*\S)?)(\s*)$/u;
 const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
+// The built module's own doc comment names the command that built it, which
+// depends on the package manager and host that ran the build.
+const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
 
 /**
- * Compare generated theme outputs without making their build directory or
- * CLI/Core version look like source drift. Normalization applies only to the
- * first generated JS or CSS comment and only when it contains exactly one
- * well-formed Source, CLI, and Core line. Missing, duplicate, malformed,
- * reordered, or any other bytes stay significant. `theme build --check`
- * deliberately stays strict.
+ * Compare generated theme outputs without making their build directory,
+ * CLI/Core version, or build command look like source drift. Normalization
+ * applies only to a file whose first comment is the generated header with
+ * exactly one well-formed Source, CLI, and Core line; it covers those lines
+ * and, in a built module, the one `built by` line that names the command
+ * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
+ * malformed, reordered, or any other bytes stay significant. `theme build
+ * --check` deliberately stays strict.
  * @param {string} content
  */
 export function normalizeThemeVerifyForCompare(content) {
@@ -121,8 +132,12 @@ export function normalizeThemeVerifyForCompare(content) {
   if (source.length !== 1 || cli.length !== 1 || core.length !== 1) {
     return normalized;
   }
+  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
   return lines
     .map((line, index) => {
+      if (builtBy === 1 && BUILT_BY_LINE.test(line)) {
+        return line.replace(BUILT_BY_LINE, '$1<command>$3$4');
+      }
       if (index >= close) return line;
       if (SOURCE_LINE.test(line)) {
         return line.replace(SOURCE_LINE, '$1<source>$3');
@@ -262,26 +277,29 @@ function npmPackErrorDetail(output) {
 /**
  * Run `npm pack --json` with output directed to `destDir` so no preexisting
  * tgz is overwritten. This intentionally runs the package lifecycle, matching
- * the artifact `npm publish` would produce. Uses spawnSync with an args array —
- * no shell — so paths with metacharacters cannot inject.
+ * the artifact `npm publish` would produce. npm starts the way the CLI starts
+ * it everywhere else (`npmCommand`): npm's own entry file run with this Node
+ * when one is found, so an `npm` earlier on the PATH that is not npm itself
+ * cannot answer for it. npm runs with an args array — no shell — so paths
+ * with metacharacters cannot inject, and its output goes to a file, so a
+ * package of any size is listed.
  *
  * @param {string} packageDir
  * @param {string} destDir
  * @returns {{filename: string, fileCount: number, size: number, unpackedSize: number, packedPaths: Set<string>}}
  */
 function runNpmPack(packageDir, destDir) {
-  const result = spawnSync(
-    'npm',
+  const result = runNpmPackJson(
+    npmCommand(),
+    packageDir,
     [
-      'pack',
-      '--json',
       '--silent',
       // Lifecycle scripts still run; background mode keeps their output off
       // the stdout that carries the JSON result.
       '--foreground-scripts=false',
       `--pack-destination=${destDir}`,
     ],
-    {cwd: packageDir, encoding: 'utf-8', timeout: 60_000},
+    {timeout: 60_000},
   );
   if (result.error) {
     throw new Error(`Could not start npm pack: ${result.error.message}`);
@@ -323,18 +341,49 @@ function extractTarball(tgzPath, extractDir) {
 }
 
 /**
+ * Whether any of these doc files writes a doc token (`{@command …}`, `{@pm …}`
+ * or `{@pm-only …}`; an escaped `{@@…}` is not one).
+ * @param {unknown[]} files
+ * @returns {boolean}
+ */
+function writesDocTokens(files) {
+  return files.some(file => {
+    if (typeof file !== 'string') return false;
+    try {
+      return commandTokensIn(fs.readFileSync(file, 'utf8')).length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * Whether any of these doc files has a section that sets `id`.
  * @param {string[]} files
  * @returns {Promise<boolean>}
  */
 async function setsSectionIds(files) {
+  return setsSectionField(files, ['id']);
+}
+
+/**
+ * Whether any of these doc files has a section that sets one of `fields`.
+ * @param {string[]} files
+ * @param {string[]} fields
+ * @returns {Promise<boolean>}
+ */
+async function setsSectionField(files, fields) {
   for (const file of files) {
     if (typeof file !== 'string') continue;
     const doc = /** @type {any} */ (
       await loadTopicModule(file).catch(() => null)
     );
     const sections = Array.isArray(doc?.sections) ? doc.sections : [];
-    if (sections.some((/** @type {any} */ section) => section?.id != null)) {
+    if (
+      sections.some((/** @type {any} */ section) =>
+        fields.some(field => section?.[field] != null),
+      )
+    ) {
       return true;
     }
   }
@@ -533,6 +582,23 @@ function declaredThemeBuildOutputs(integration, theme, themeCount) {
 }
 
 /**
+ * The name the package's own build gave a theme's stylesheet, which the
+ * built module's usage comment names: the stylesheet the package exports,
+ * else the one a build writes beside its module (named as the module is),
+ * else the theme's slug. The expected build names its stylesheet the same,
+ * so the module it writes compares byte for byte.
+ * @param {string} slug
+ * @param {{stylesheetFile?: string | null, moduleFile?: string | null}} files
+ * @returns {string}
+ */
+function builtStylesheetName(slug, {stylesheetFile, moduleFile}) {
+  if (stylesheetFile) return path.basename(stylesheetFile);
+  if (moduleFile)
+    return `${path.basename(moduleFile).replace(/\.[cm]?js$/, '')}.css`;
+  return `${slug}.css`;
+}
+
+/**
  * Check every declared path in an incomplete export pair without making the
  * missing partner a publication error.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} localTheme
@@ -585,14 +651,26 @@ async function validateIncompleteThemeExports(
   const expectedDir = fs.mkdtempSync(
     path.join(os.tmpdir(), `astryx-theme-${localTheme.slug}-`),
   );
-  const expectedCss = path.join(expectedDir, `${localTheme.slug}.css`);
+  const expectedCss = path.join(
+    expectedDir,
+    builtStylesheetName(localTheme.slug, {
+      stylesheetFile: outputs.find(output => output.kind === 'stylesheet')
+        ?.inspected.target,
+      moduleFile: outputs.find(output => output.kind === 'module')?.inspected
+        .target,
+    }),
+  );
   let expectedModule = path.join(expectedDir, `${localTheme.slug}.js`);
   try {
     if (outputs.some(output => output.kind !== 'font stylesheet')) {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {cwd: packageDir});
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         throw new Error('the theme build produced no complete receipt');
       }
@@ -1025,14 +1103,19 @@ async function validatePackedThemeExports(
     const expectedDir = fs.mkdtempSync(
       path.join(os.tmpdir(), `astryx-theme-${localTheme.slug}-`),
     );
-    const expectedCss = path.join(expectedDir, `${localTheme.slug}.css`);
+    const expectedCss = path.join(
+      expectedDir,
+      builtStylesheetName(localTheme.slug, localImports),
+    );
     try {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {
-        cwd: localIntegration.__packageDir,
-      });
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: localIntegration.__packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         issues.push(
           error(
@@ -1285,7 +1368,11 @@ export async function integrationPackCheck(options = {}) {
   const pkgVersion = typeof pkg.version === 'string' ? pkg.version : null;
 
   // ── Phase 1: structure validation ──
-  const localResult = await validateLocalIntegration(cwd);
+  // The relative imports of the shipped modules are checked once, in the
+  // packed tree below, which holds exactly what npm packs: no npm listing.
+  const localResult = await validateLocalIntegration(cwd, {
+    shippedImports: false,
+  });
   /** @type {Issue[]} */
   const issues = [
     ...localResult.issues,
@@ -1381,6 +1468,36 @@ export async function integrationPackCheck(options = {}) {
       const idProblem = sectionIdsCliProblem(pkg);
       if (idProblem != null) {
         issues.push(error('section_ids_need_cli', idProblem));
+      }
+    }
+    // `before` and `after` need a newer CLI than any field above. Added in a
+    // patch release, it warns and never fails the check (INV35).
+    if (
+      await setsSectionField(
+        [
+          ...records.map(record => record.path),
+          ...guides.map(guide => /** @type {any} */ (guide.ref).topicFile),
+        ],
+        ['before', 'after'],
+      )
+    ) {
+      const positionProblem = sectionPositionCliProblem(pkg);
+      if (positionProblem != null) {
+        issues.push(warning('section_position_needs_cli', positionProblem));
+      }
+    }
+    // A doc token shows as written on a CLI before the one that renders
+    // them. Added in a patch release, it warns and never fails (INV35).
+    if (
+      problem == null &&
+      writesDocTokens([
+        ...records.map(record => record.path),
+        ...guides.map(guide => /** @type {any} */ (guide.ref).topicFile),
+      ])
+    ) {
+      const tokenProblem = docTokensCliProblem(pkg);
+      if (tokenProblem != null) {
+        issues.push(warning('doc_tokens_need_cli', tokenProblem));
       }
     }
   }
@@ -1571,11 +1688,29 @@ export async function integrationPackCheck(options = {}) {
     }
 
     // Validate the extracted tree as an installed integration
+    // The packed tree is the package being authored: its icon sets are
+    // checked whatever the scratch folder's config says.
     const packedResult = await validateInstalledIntegration(
       pkgName,
       scratchBase,
+      {iconSets: true},
     );
 
+    // Each relative import of a packed module that names no packed file:
+    // validate lists it as a note, and it is a warning here, as the other
+    // listed findings of the local tree are.
+    for (const issue of packedResult.listed ?? []) {
+      if (
+        issue.code !== 'relative_import_not_shipped' &&
+        issue.code !== 'built_module_imports_typescript'
+      )
+        continue;
+      issues.push({
+        code: `packed_${issue.code}`,
+        severity: 'warning',
+        message: `Packed: ${issue.message}`,
+      });
+    }
     for (const issue of packedResult.issues) {
       issues.push({
         code: `packed_${issue.code}`,

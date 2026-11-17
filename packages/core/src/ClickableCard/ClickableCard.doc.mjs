@@ -13,6 +13,7 @@ export const docs = {
       {guidance: true, description: 'Use for cards that navigate to a detail page or trigger a single action.'},
       {guidance: true, description: 'Nest buttons or links freely inside; they handle their own events.'},
       {guidance: false, description: 'Use for toggling selection; use SelectableCard for that.'},
+      {guidance: false, description: 'Use with a transparent variant and no padding only to borrow the press model for a surface that owns its own box. Compose the chrome-free recipe in the useClickableContainer docs instead: it adds no Card styles to the page.'},
     ],
     anatomy: [
       {name: 'Container', required: true, description: 'Interactive div with hover/focus/active states.'},
@@ -38,8 +39,7 @@ export const docs = {
     container: true,
     targets: [{className: 'astryx-clickable-card', visualProps: ['variant']}],
     vars: [
-      {name: '--_press-overlay', description: 'Fill of the ::after interaction overlay: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while pressed (`:active` on a mouse; `data-astryx-press="on"` written by the touch press controller under a finger) and the hover token for the release fade. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
-      {name: '--_press-overlay-transition', description: 'Duration of the overlay\'s background-color transition: the fast duration token, except 0s while a believed touch press paints so it lands on the first frame.', default: 'var(--duration-fast)', private: true},
+      {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
     ],
   },
   playground: {
@@ -68,6 +68,7 @@ export const docsDense = {
       {guidance: true, description: 'Use for cards navigating to detail page or triggering single action.'},
       {guidance: true, description: 'Nest buttons/links freely inside; they handle own events.'},
       {guidance: false, description: 'Use for toggling selection; use SelectableCard instead.'},
+      {guidance: false, description: 'Use w/ transparent variant + no padding only to borrow press model for surface owning its own box; compose chrome-free recipe in useClickableContainer docs instead (no Card styles).'},
     ],
   },
   propDescriptions: {

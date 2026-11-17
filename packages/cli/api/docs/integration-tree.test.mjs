@@ -14,6 +14,7 @@ import {loadDocsCatalog} from './_adapter.mjs';
 import {search} from '../search/search.mjs';
 import {checkDocsTree} from '../doctor/doctor.mjs';
 import {integrationDocConflicts} from '../integration/authoring-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -133,7 +134,7 @@ function scaffold(files) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-tree-test-'),
+    path.join(REPO_ROOT, '.astryx-integration-tree-test-'),
   );
 });
 
@@ -187,6 +188,28 @@ describe('integration docs in the docs tree', () => {
     expect(
       top.data.slots[0].children.map((/** @type {any} */ c) => c.route),
     ).toEqual(['acme/setup', 'acme/deploy']);
+  }, SLOW);
+
+  it('renders a placed guide summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'deploy.doc.mjs': guide('deploy', {
+        description: 'Show the syntax {@@pm run build} beside {@pm run build}.',
+        placement: {parent: 'namespace:acme', slot: 'guides', order: 2},
+      }),
+    });
+    const top = await docs('acme', undefined, {cwd: tmpDir});
+    const deploy = top.data.slots[0].children.find((/** @type {any} */ c) => c.route === 'acme/deploy');
+    expect(deploy.summary).toMatch(/^Show the syntax \{@pm run build\} beside `\S+ run build`\.$/);
+  }, SLOW);
+
+  it('renders a flat topic summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'notes.doc.mjs': {...kit()['notes.doc.mjs'], description: 'Show the syntax {@@pm run build} beside {@pm run build}.'},
+    });
+    const listed = await docs('guides', undefined, {cwd: tmpDir});
+    expect(JSON.stringify(listed.data)).toContain('Show the syntax {@pm run build} beside `');
   }, SLOW);
 
   it('reads a placed guide one level at a time, with its links resolved', async () => {
@@ -403,6 +426,39 @@ describe('integration docs in the docs tree', () => {
     const check = await checkDocsTree({docsCatalog: await loadDocsCatalog(tmpDir)});
     expect(check.message).toContain('takes the route "use-a-theme", which the topic "super-tokens" also answers to');
     expect(check.message).not.toContain('names no doc');
+  }, SLOW);
+
+  it("opens the CLI's links to a topic an integration replaces under the same name", async () => {
+    scaffold({
+      ...kit(),
+      'theme.doc.mjs': {
+        type: 'generic',
+        name: 'theme',
+        title: 'Acme theme',
+        description: 'Theming the Acme kit.',
+        replaces: 'theme',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+      'getting-started.doc.mjs': {
+        type: 'generic',
+        name: 'getting-started',
+        title: 'Acme getting started',
+        description: 'Starting with the Acme kit.',
+        replaces: 'getting-started',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+    });
+    const check = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(check.message).not.toContain('"generic:theme" names no doc');
+    expect(check.message).not.toContain(
+      '"generic:getting-started" names no doc',
+    );
+    expect(check).toMatchObject({id: 'docs-tree', status: 'pass'});
+    expect((await docs('theme', undefined, {cwd: tmpDir})).data.title).toBe(
+      'Acme theme',
+    );
   }, SLOW);
 
   it("keeps the CLI's routes from a replacement that answers to one, in one package or across a chain", async () => {

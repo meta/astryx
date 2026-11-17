@@ -46,7 +46,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'Install the packages and run `astryx init` for agent docs, then add the reset, `astryx.css`, and theme CSS imports (see Theme and CSS Setup below).',
+            'Install the packages and run `{@command init}` for agent docs, then add the reset, `astryx.css`, and theme CSS imports (see Theme and CSS Setup below).',
             'Wrap the app root with Theme and choose the initial light, dark, or system mode behavior.',
             'Make Tailwind and design system CSS layer order explicit before replacing components.',
             'Render the foundation smoke test page and confirm primitives keep their padding before migrating any surface.',
@@ -70,18 +70,18 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Migration-oriented CLI pass',
-          code: `astryx docs migration
-astryx docs theme
-astryx docs styling
-astryx template --list --type block
-astryx template AppShellTopNavWithSideNav --skeleton
-astryx template PopoverSettingsPanel --skeleton
-astryx component AppShell
-astryx component SideNav
-astryx component TopNav
-astryx component CommandPalette
-astryx component Button
-astryx component TextInput`,
+          code: `{@command docs migration}
+{@command docs theme}
+{@command docs styling}
+{@command template --list --type block}
+{@command template AppShellTopNavWithSideNav --skeleton}
+{@command template PopoverSettingsPanel --skeleton}
+{@command component AppShell}
+{@command component SideNav}
+{@command component TopNav}
+{@command component CommandPalette}
+{@command component Button}
+{@command component TextInput}`,
         },
         {
           type: 'prose',
@@ -91,8 +91,8 @@ astryx component TextInput`,
           type: 'code',
           lang: 'bash',
           label: 'Short and JSON modes',
-          code: `astryx docs migration --full --detail brief
-astryx component Button --json`,
+          code: `{@command docs migration --full --detail brief}
+{@command component Button --json}`,
         },
       ],
     },

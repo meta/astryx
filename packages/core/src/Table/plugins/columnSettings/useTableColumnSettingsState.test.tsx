@@ -8,7 +8,9 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {renderHook, act} from '@testing-library/react';
+import {Suspense, startTransition, use} from 'react';
+import {renderHook, act, render, screen} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
   useTableColumnSettingsState,
   type UseTableColumnSettingsStateConfig,
@@ -292,5 +294,74 @@ describe('useTableColumnSettingsState', () => {
       act(() => result.current.toggleColumn('email'));
       expect(onChange).not.toHaveBeenCalled();
     });
+  });
+});
+
+// A render that reads this promise suspends for good.
+const pending = new Promise<never>(() => {});
+function Pending(): null {
+  use(pending);
+  return null;
+}
+
+type PickerState = Pick<
+  UseTableColumnSettingsStateConfig,
+  'activeColumnKeys' | 'onChangeActiveColumnKeys'
+>;
+
+function RoleToggle(state: PickerState) {
+  const {toggleColumn} = useTableColumnSettingsState({
+    columns: columnOptions,
+    ...state,
+  });
+  return (
+    <button type="button" onClick={() => toggleColumn('role')}>
+      Toggle Role
+    </button>
+  );
+}
+
+function ColumnPicker({
+  isPending,
+  ...state
+}: PickerState & {isPending: boolean}) {
+  return (
+    <Suspense fallback={null}>
+      <RoleToggle {...state} />
+      {isPending ? <Pending /> : null}
+    </Suspense>
+  );
+}
+
+describe('useTableColumnSettingsState after a render React discards', () => {
+  it('a column toggle starts from the columns on screen and reports to the committed callback', async () => {
+    const user = userEvent.setup();
+    const committed: string[][] = [];
+    const discarded: string[][] = [];
+    const {rerender} = render(
+      <ColumnPicker
+        activeColumnKeys={['name', 'email']}
+        onChangeActiveColumnKeys={keys => committed.push([...keys])}
+        isPending={false}
+      />,
+    );
+    // The next props render in a transition, then suspend for good, so React
+    // keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <ColumnPicker
+            activeColumnKeys={['name', 'email', 'role']}
+            onChangeActiveColumnKeys={keys => discarded.push([...keys])}
+            isPending
+          />,
+        );
+      });
+    });
+
+    await user.click(screen.getByRole('button', {name: 'Toggle Role'}));
+
+    expect(discarded).toEqual([]);
+    expect(committed).toEqual([['name', 'email', 'role']]);
   });
 });

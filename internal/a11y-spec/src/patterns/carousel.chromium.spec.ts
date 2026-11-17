@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/carousel|packages/core/src/Carousel/|apps/storybook/stories/CarouselA11y)
 
 /**
  * @file carousel.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Contract self-test; proves the reusable contract, not Astryx components.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {describeExpectation, requiredLayers} from '../contract';
 import {

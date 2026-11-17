@@ -11,7 +11,12 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {SelectableCard} from './SelectableCard';
-import {hasReleaseFade, readsPressStrength} from '../__tests__/pressState';
+import {
+  afterPaintsPress,
+  hasReleaseFade,
+  pressArmsShadowedByDefault,
+  readsPressStrength,
+} from '../__tests__/pressState';
 
 describe('SelectableCard', () => {
   it('renders children', () => {
@@ -202,5 +207,10 @@ describe('SelectableCard pressed state (touch)', () => {
     expect(hasReleaseFade(card)).toBe(true);
     expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(card)).toBe(true);
+    expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(afterPaintsPress(card)).toBe(true);
+    // In a layered stylesheet a press arm on a custom property the card also
+    // declares without it never applies.
+    expect(pressArmsShadowedByDefault(card)).toEqual([]);
   });
 });

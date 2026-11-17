@@ -25,20 +25,29 @@ import {
   availableComputerIntegrations,
 } from '../../foundation/config/project.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {projectAddCommand} from '../../foundation/release/notices.mjs';
-import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {
-  scanAllPackages,
-  findComponentInPackages,
-} from './_package-scanner.mjs';
+  addVerbFor,
+  projectAddCommand,
+} from '../../foundation/release/notices.mjs';
+import {hostedRun} from '../../foundation/runtime/package-root.mjs';
+import {scanAllPackages, findComponentInPackages} from './_package-scanner.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {collectIdentities} from '../../foundation/integrations/contribution-inventory.mjs';
-import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
+import {
+  packageDocNames,
+  packageDocSections,
+  projectTree,
+} from '../docs/_adapter.mjs';
+import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
 import {CLI_ROOT, findInstalledPackage} from '../../foundation/fs/paths.mjs';
-import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
+import {
+  DISCOVER_KINDS,
+  parseDiscoverCatalog,
+} from '../../authoring/discover/parse.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
@@ -100,9 +109,25 @@ const DEPENDENCY_FIELDS = [
  * @typedef {ScannedPackage & {
  *   templates?: string[],
  *   docs?: string[],
+ *   docSections?: Record<string, string[]>,
  *   themes?: string[],
  *   codemods?: string[],
+ *   iconSets?: string[],
+ *   iconSetDetails?: IconSetSummary[],
+ *   withdrawnIconSets?: Array<{name: string, reason: string}>,
  * }} InstalledPackage
+ */
+
+/**
+ * What discover shows about one installed icon set (spec:AST-084 FR17).
+ * @typedef {object} IconSetSummary
+ * @property {string} name
+ * @property {string} displayName
+ * @property {string} description
+ * @property {string} license
+ * @property {number} iconCount
+ * @property {{variant?: string}} [default]
+ * @property {string[]} definitions the icon definitions its `map` covers
  */
 
 /**
@@ -146,8 +171,7 @@ function validateDocs(docs) {
     return 'docs.name is missing or not a string';
   if (!d.usage || typeof d.usage.description !== 'string')
     return 'docs.usage.description is missing or not a string';
-  if (d.props && !Array.isArray(d.props))
-    return 'docs.props must be an array';
+  if (d.props && !Array.isArray(d.props)) return 'docs.props must be an array';
   if (d.components && !Array.isArray(d.components))
     return 'docs.components must be an array';
   if (d.usage?.bestPractices && !Array.isArray(d.usage.bestPractices))
@@ -194,6 +218,43 @@ export async function discoverPackages() {
   return {packages, configured: true, project};
 }
 
+/** A terminal escape sequence: CSI (`ESC [ … final`), OSC, or a two-byte one. */
+const ESCAPE_SEQUENCE =
+  // eslint-disable-next-line no-control-regex
+  /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
+/**
+ * Every other control or format character: C0, C1, and the bidirectional and
+ * zero-width marks that would reorder or hide a printed line.
+ */
+const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * The `description` in the package.json of an installed package, so the list
+ * says what an installed integration is, as it does for one a source lists.
+ * The text is the package's own, so terminal escape sequences and control
+ * and format characters are removed; a blank one is left out.
+ * @param {string | undefined} packageDir
+ * @returns {string | undefined}
+ */
+export function packageDescription(packageDir) {
+  if (!packageDir) return undefined;
+  let raw;
+  try {
+    raw = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    )?.description;
+  } catch {
+    return undefined;
+  }
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw
+    .replace(ESCAPE_SEQUENCE, '')
+    .replace(CONTROL_CHARACTER, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean || undefined;
+}
+
 /**
  * Every integration the project loads, with what it adds. An integration with
  * no components root is included with `components: []`; one that failed to
@@ -206,6 +267,7 @@ export async function discoverPackages() {
 export async function describeInstalled(project, scanned) {
   if (project == null) return scanned;
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
+  const docs = await projectDocs(project);
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -222,19 +284,96 @@ export async function describeInstalled(project, scanned) {
       );
     // Components come from the scan above; loading every component doc again
     // here would only slow the list down.
+    // Icon sets are read below, only where icon features are on.
+    // Docs are named from the project's docs catalog, below.
     const {identities} = await collectIdentities({
       ...integration,
       components: undefined,
+      iconSets: undefined,
+      docs: undefined,
     });
+    // Icon sets are listed the way every icon surface sees them: a set that
+    // is invalid or whose module does not resolve answers nothing (FR9).
+    // They are experimental (spec:AST-017 FR27), so discover lists them only
+    // where the icon feature gate is on.
+    const {sets, withdrawn} = optedIntoIconSets(project)
+      ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
+      : {sets: [], withdrawn: []};
+    const description = packageDescription(integration.__packageDir);
     installed.push({
       ...base,
+      ...(description ? {description} : {}),
       templates: identities.templates.map(t => t.id),
-      docs: identities.docs,
+      // Each doc by the name `astryx docs` opens it by, not the name on its
+      // file: a doc that adds sections to `theme` opens as `theme`, and names
+      // the sections it adds there, so a reader can open one straight away.
+      docs: docs
+        ? packageDocNames(docs.catalog, docs.tree, integration.name)
+        : [],
+      ...docSectionsOf(
+        docs
+          ? await packageDocSections(docs.catalog, docs.tree, integration.name)
+          : {},
+      ),
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
+      iconSets: sets.map(set => set.name),
+      iconSetDetails: sets.map(set => ({
+        name: set.name,
+        displayName: set.displayName,
+        description: set.description,
+        license: set.license,
+        iconCount: set.data.icons.length,
+        ...(set.data.default ? {default: set.data.default} : {}),
+        definitions: [...Object.keys(set.data.map ?? {})].sort(),
+      })),
+      // Never listed; named only to say why a lookup of one answers nothing.
+      ...(withdrawn.length > 0
+        ? {
+            withdrawnIconSets: withdrawn.map(each => ({
+              name: each.name,
+              reason: each.reason,
+            })),
+          }
+        : {}),
     });
   }
   return installed;
+}
+
+/**
+ * The `docSections` field, when a package adds sections to any doc another
+ * package owns; nothing otherwise, so every other entry reads as it did.
+ * @param {Record<string, string[]>} sections
+ * @returns {{docSections?: Record<string, string[]>}}
+ */
+function docSectionsOf(sections) {
+  return Object.keys(sections).length > 0 ? {docSections: sections} : {};
+}
+
+/**
+ * The project's docs catalog and tree, as a docs read builds them, so discover
+ * names each doc the way `astryx docs` opens it. Null when no integration
+ * ships docs, so there is nothing to name and nothing is built, or when they
+ * cannot be built: a docs read then answers from the CLI's own topics alone,
+ * so no integration doc opens.
+ * @param {Project} project
+ * @returns {Promise<{catalog: import('../../foundation/discovery/docs-discovery.mjs').DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree} | null>}
+ */
+async function projectDocs(project) {
+  if (
+    !project.loadedIntegrations.some(
+      integration => !integration.__loadError && integration.docs,
+    )
+  ) {
+    return null;
+  }
+  try {
+    const catalog = await project.docs();
+    return {catalog, tree: await projectTree(catalog)};
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -286,6 +425,7 @@ export async function computerAvailableEntries(project, installed, declared) {
   const have = new Set([...installed.map(pkg => pkg.name), ...declared]);
   return (await availableComputerIntegrations(cwd, have)).map(c => ({
     name: c.name,
+    package: c.name,
     components: [],
     ...(c.version ? {version: c.version} : {}),
     ...(c.description ? {description: c.description} : {}),
@@ -461,23 +601,21 @@ function newerFirst(a, b) {
  * @returns {(name: string, version?: string) => string}
  */
 export function addCommand(project, {official = []} = {}) {
-  const pm = detectPackageManager(project?.cwd ?? process.cwd());
-  const verb =
-    pm === 'pnpm'
-      ? 'pnpm add'
-      : pm === 'yarn'
-        ? 'yarn add'
-        : pm === 'bun'
-          ? 'bun add'
-          : 'npm install';
+  const cwd = project?.cwd ?? process.cwd();
   const byName = new Map(official.map(pkg => [pkg.package, pkg]));
+  // An Astryx package at one version is saved exactly in a project that pins
+  // its Core to one version (see addVerbFor): that pin is about Astryx's
+  // release. Any other package is saved as the package manager saves it.
+  /** @param {string} name @param {string | null} version */
+  const verb = (name, version) =>
+    addVerbFor(cwd, name.startsWith('@astryxdesign/') ? version : null);
   return (name, version) => {
-    if (version) return `${verb} ${name}@${version}`;
+    if (version) return `${verb(name, version)} ${name}@${version}`;
     const pin = byName.get(name)?.pin;
-    if (!pin) return `${verb} ${name}`;
+    if (!pin) return `${verb(name, null)} ${name}`;
     return isValidSemver(pin)
-      ? `${verb} ${name}@${pin}`
-      : `${verb} "${name}@${pin}"`;
+      ? `${verb(name, pin)} ${name}@${pin}`
+      : `${verb(name, null)} "${name}@${pin}"`;
   };
 }
 
@@ -508,13 +646,14 @@ function savedCopyPath(cacheDir, from, request) {
 /**
  * @param {string} file
  * @param {string} label
+ * @param {boolean} iconSets icon features are on in the project
  */
-function readSavedCopy(file, label) {
+function readSavedCopy(file, label, iconSets) {
   try {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       savedAt: String(saved.savedAt),
-      catalog: parseDiscoverCatalog(saved.catalog, label),
+      catalog: parseDiscoverCatalog(saved.catalog, label, {iconSets}),
     };
   } catch {
     return null;
@@ -544,8 +683,9 @@ function writeSavedCopy(file, catalog) {
  * @param {{package?: string, version?: string}} request
  * @param {string} label
  * @param {number} timeoutMs
+ * @param {boolean} iconSets icon features are on in the project
  */
-async function callSource(source, request, label, timeoutMs) {
+async function callSource(source, request, label, timeoutMs, iconSets) {
   const controller = new AbortController();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -564,7 +704,7 @@ async function callSource(source, request, label, timeoutMs) {
       ),
       timedOut,
     ]);
-    return parseDiscoverCatalog(answer, label);
+    return parseDiscoverCatalog(answer, label, {iconSets});
   } finally {
     clearTimeout(timer);
   }
@@ -589,6 +729,9 @@ async function callOwnSources(project, request = {}, options = {}) {
   const result = {sources: [], packages: []};
   const fromDoor = doorSources();
   if (project == null && fromDoor.length === 0) return result;
+  // With icon features off, icon-set items and fields are unknown before the
+  // catalog is checked, so one cannot fail a source (spec:AST-051 FR7).
+  const iconSets = optedIntoIconSets(project);
 
   /** @type {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>} */
   const origins = [];
@@ -597,7 +740,10 @@ async function callOwnSources(project, request = {}, options = {}) {
   }
   for (const integration of project?.loadedIntegrations ?? []) {
     if (integration.__discoverError) {
-      origins.push({from: integration.name, error: integration.__discoverError});
+      origins.push({
+        from: integration.name,
+        error: integration.__discoverError,
+      });
     } else if (integration.__discover) {
       origins.push({from: integration.name, source: integration.__discover});
     }
@@ -617,7 +763,10 @@ async function callOwnSources(project, request = {}, options = {}) {
   /** @type {Set<string>} */
   const seen = new Set();
   const ask = request.package
-    ? {package: request.package, ...(request.version ? {version: request.version} : {})}
+    ? {
+        package: request.package,
+        ...(request.version ? {version: request.version} : {}),
+      }
     : {};
   for (const {from, key = from, source, error} of origins) {
     if (source == null) {
@@ -632,7 +781,7 @@ async function callOwnSources(project, request = {}, options = {}) {
     /** @type {import('../../authoring/discover/type').DiscoverCatalog} */
     let catalog;
     try {
-      catalog = await callSource(source, ask, label, timeoutMs);
+      catalog = await callSource(source, ask, label, timeoutMs, iconSets);
       writeSavedCopy(file, catalog);
       result.sources.push({
         name: catalog.source.name,
@@ -643,9 +792,14 @@ async function callOwnSources(project, request = {}, options = {}) {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const saved = readSavedCopy(file, label);
+      const saved = readSavedCopy(file, label, iconSets);
       if (saved == null) {
-        result.sources.push({name: from, from, status: 'failed', error: message});
+        result.sources.push({
+          name: from,
+          from,
+          status: 'failed',
+          error: message,
+        });
         continue;
       }
       catalog = saved.catalog;
@@ -716,8 +870,66 @@ export async function callSources(project, request = {}, options = {}) {
     ],
     // Source order: the first entry per integration is the one discover
     // keeps. Official packages are put first only where discover shows them.
-    packages: [...own.packages, ...added],
+    // An experimental kind is a kind this project does not read unless that
+    // kind is on here (for icon sets: an installed icon-set package or
+    // `experimental.iconSet`), so its items are ignored like any unknown kind
+    // (FR7).
+    packages: withoutUnreadKinds(project, [...own.packages, ...added]),
   };
+}
+
+/**
+ * The experimental item kinds a catalog may list (spec:AST-017 FR27):
+ * `icon-set`, read only where the icon feature gate is on.
+ */
+export const EXPERIMENTAL_KINDS = /** @type {const} */ (['icon-set']);
+
+/** The item kinds every project reads: the catalog kinds, less experimental ones. */
+export const STABLE_KINDS = DISCOVER_KINDS.filter(
+  kind =>
+    !(/** @type {readonly string[]} */ (EXPERIMENTAL_KINDS).includes(kind)),
+);
+
+/**
+ * The item kinds discover reads in the project at the working directory, or
+ * the stable kinds when it cannot be read.
+ * @returns {Promise<readonly string[]>}
+ */
+export async function loadReadKinds() {
+  return readKinds(await Project.load().catch(() => undefined));
+}
+
+/**
+ * The item kinds discover reads in this project: every stable kind, and the
+ * experimental ones where icon features are on.
+ * @param {Project | undefined} project
+ * @returns {readonly string[]}
+ */
+export function readKinds(project) {
+  return optedIntoIconSets(project) ? DISCOVER_KINDS : STABLE_KINDS;
+}
+
+/**
+ * Whether discover reads icon sets in this project: the icon feature gate.
+ * @param {Project | undefined} project
+ */
+export function optedIntoIconSets(project) {
+  return iconFeatureGate(project).on;
+}
+
+/**
+ * @template {{contributions: Array<{kind: string}>}} P
+ * @param {Project | undefined} project
+ * @param {P[]} packages
+ * @returns {P[]}
+ */
+function withoutUnreadKinds(project, packages) {
+  if (optedIntoIconSets(project)) return packages;
+  const kinds = readKinds(project);
+  return packages.map(pkg => ({
+    ...pkg,
+    contributions: pkg.contributions.filter(c => kinds.includes(c.kind)),
+  }));
 }
 
 /**
@@ -927,6 +1139,7 @@ export const KIND_FIELDS = /** @type {const} */ ([
   ['theme', 'themes'],
   ['codemod', 'codemods'],
   ['agent-doc', 'agentDocs'],
+  ['icon-set', 'iconSets'],
 ]);
 
 /**
@@ -940,6 +1153,7 @@ export function toEntry(pkg) {
   /** @type {Record<string, unknown>} */
   const entry = {
     name: pkg.name,
+    package: pkg.name,
     category: pkg.category,
     components: pkg.components,
     version: pkg.version,
@@ -951,6 +1165,7 @@ export function toEntry(pkg) {
     const values = /** @type {Record<string, unknown>} */ (pkg)[field];
     if (Array.isArray(values) && values.length > 0) entry[field] = values;
   }
+  if (pkg.docSections) entry.docSections = pkg.docSections;
   if (pkg.latest) entry.latest = pkg.latest;
   return /** @type {import('./discover.type.mjs').DiscoverListEntry} */ (entry);
 }
@@ -979,7 +1194,10 @@ export async function loadValidatedDoc(result, {lang, zh}) {
   try {
     docs = await loadDocs(
       result.docPath,
-      /** @type {{zh?: boolean, dense?: boolean, lang?: string}} */ ({zh, lang}),
+      /** @type {{zh?: boolean, dense?: boolean, lang?: string}} */ ({
+        zh,
+        lang,
+      }),
     );
   } catch (e) {
     throw new AstryxError(

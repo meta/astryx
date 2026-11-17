@@ -316,7 +316,7 @@ export const AdaptivePresentation: Story = {
     docs: {
       description: {
         story:
-          'Uses the built-in adaptive policy: BottomSheet at 768px and below with a coarse primary pointer, anchored popover otherwise. Use device emulation to exercise the touch branch.',
+          'Uses the built-in adaptive policy: BottomSheet on a compact touch screen (a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px), anchored popover otherwise. Use device emulation to exercise the touch branch.',
       },
     },
   },

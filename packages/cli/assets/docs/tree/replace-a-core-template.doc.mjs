@@ -31,7 +31,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Sharing a Core id without `replaces` does not replace Core. It makes the bare id ambiguous, so `astryx template <id>` fails until the app adds `--package`, and `doctor integration templates` reports an accidental collision.',
+            'Sharing a Core id without `replaces` does not replace Core. It makes the bare id ambiguous, so `{@command template <id>}` fails until the app adds `--package`, and `doctor integration templates` reports an accidental collision.',
             'A replacement can keep the Core id or use its own. `replaces` is what makes it the default.',
           ],
         },
@@ -113,10 +113,10 @@ export default {
           type: 'code',
           lang: 'bash',
           code: `# Receives the active replacement
-astryx template shell-side-nav src/app
+{@command template shell-side-nav src/app}
 
 # Receives the original Core template
-astryx template shell-side-nav --package @astryxdesign/core src/app`,
+{@command template shell-side-nav --package @astryxdesign/core src/app}`,
         },
         {
           type: 'prose',
@@ -140,7 +140,7 @@ astryx template shell-side-nav --package @astryxdesign/core src/app`,
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration templates',
+          code: '{@command doctor integration templates}',
         },
         {
           type: 'table',

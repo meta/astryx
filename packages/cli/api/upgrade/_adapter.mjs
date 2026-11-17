@@ -24,6 +24,7 @@ import {
   latestVersion,
 } from '../../assets/codemods/registry.mjs';
 import {runCodemods} from '../../assets/codemods/runner.mjs';
+import {codemodOutcome} from '../../assets/codemods/outcome.mjs';
 import {
   discoverIntegrationCodemods,
   selectIntegrationCodemods,
@@ -31,6 +32,7 @@ import {
 import {runIntegrationCodemods} from '../../assets/codemods/integration-runner.mjs';
 import {
   AgentDocsHomeError,
+  agentDocsVersion,
   assertAgentDocsTarget,
   installAgentDocs,
   inspectAgentDocs,
@@ -51,9 +53,17 @@ import {
 } from '../../foundation/fs/paths.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {resolveProviders} from '../../foundation/integrations/provider-resolution.mjs';
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
+import {
+  isBaseIntegration,
+  runBase,
+  splitForBase,
+} from '../../foundation/bases/resolve.mjs';
+
+import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
@@ -141,7 +151,12 @@ export function relativeToOrigin(result, {cwd: root, origin}) {
     };
   }
   if (data.modifiedFiles) data.modifiedFiles = data.modifiedFiles.map(rebase);
-  for (const key of ['protectedFiles', 'declinedCandidates', 'errors']) {
+  for (const key of [
+    'protectedFiles',
+    'declinedCandidates',
+    'errors',
+    'regenerate',
+  ]) {
     if (data[key]) {
       data[key] = data[key].map(
         (/** @type {{file: string, declarations?: string[]}} */ entry) => ({
@@ -185,18 +200,28 @@ function rebaseDeclaration(rebase) {
 }
 
 /**
+ * Earlier names a base's package was published under.
+ * @type {Record<string, string[]>}
+ */
+const LEGACY_NAMES = {[CORE_PROVIDER_ID]: ['@xds/core']};
+
+/**
  * Detect the installed target version: the Core the Astryx project of `cwd`
  * installed, in its own node_modules or, for a member its workspace lists, in
  * a folder up to the workspace root. The nearest folder wins, the current
  * name before the legacy one, then Yarn Plug'n'Play. A Core above a project
  * no workspace lists does not count, so a nested project that has not
  * installed its own reports nothing installed. With no Astryx project, only
- * the node_modules of `cwd` itself is read, as released versions did.
+ * the node_modules of `cwd` itself is read, as released versions did. The
+ * package read is the run's base: Core, or the base a project or `--base`
+ * names.
  * @param {string} cwd
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the base of the upgrade in `cwd` ({@link upgradeBase})
  * @returns {{version: string, packageName: string}|null}
  */
-export function detectInstalledTargetVersion(cwd) {
-  const found = findProjectPackageOf(cwd, ['@astryxdesign/core', '@xds/core']);
+export function detectInstalledTargetVersion(cwd, base = runBase(cwd)) {
+  const found = findProjectPackageOf(cwd, targetPackages(base));
   if (!found) return null;
   try {
     const pkg = JSON.parse(
@@ -207,6 +232,68 @@ export function detectInstalledTargetVersion(cwd) {
     // Unreadable package.json: no version to target.
     return null;
   }
+}
+
+/**
+ * The base an upgrade in `cwd` reads, resolved from the project in that
+ * folder, so a caller of the package API gets the base the CLI reads there.
+ * @param {string} cwd
+ * @returns {Promise<import('../../foundation/bases/resolve.mjs').BaseResolution>}
+ */
+export async function upgradeBase(cwd) {
+  try {
+    return (await Project.load(cwd, {core: 'project'})).base;
+  } catch {
+    // A config that does not load yet, which a config codemod may fix,
+    // leaves the base the CLI resolves without it.
+    return runBase(cwd);
+  }
+}
+
+/**
+ * The packages that hold an upgrade's target version: the base's package,
+ * then the earlier names it was published under.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string[]}
+ */
+function targetPackages(base) {
+  const name = base.ok ? base.base.name : CORE_PROVIDER_ID;
+  return [name, ...(LEGACY_NAMES[name] ?? [])];
+}
+
+/**
+ * The target package as a message names it, such as
+ * `@astryxdesign/core (or legacy @xds/core)`.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string}
+ */
+export function upgradeTargetLabel(base) {
+  const [name, ...legacy] = targetPackages(base);
+  return legacy.length > 0 ? `${name} (or legacy ${legacy.join(', ')})` : name;
+}
+
+/**
+ * Does an upgrade on `base` read Core? Core's codemods, its copied
+ * compositions, and the Core version the agent-docs block names belong to a
+ * run on Core. A run on another base reads none of them.
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {boolean}
+ */
+export function upgradeReadsCore(base) {
+  return !base.ok || base.base.core;
+}
+
+/**
+ * The version the agent-docs block names after an upgrade: the target Core's
+ * in a run on Core, else the version `init` writes, so an upgrade and a later
+ * `init` agree.
+ * @param {string} cwd
+ * @param {string} targetVersion
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ * @returns {string}
+ */
+export function upgradeAgentDocsVersion(cwd, targetVersion, base) {
+  return upgradeReadsCore(base) ? targetVersion : agentDocsVersion(cwd);
 }
 
 /**
@@ -555,6 +642,17 @@ export function applyAgentDocsRefresh(plan) {
 }
 
 /**
+ * Core's codemods for the (from, to] range. They ship in the CLI for Core, so
+ * a run whose base is not Core has none.
+ * @param {string} from
+ * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} base
+ */
+async function coreTransformsBetween(from, to, base) {
+  return upgradeReadsCore(base) ? getTransformsBetween(from, to) : [];
+}
+
+/**
  * Every registered codemod (oldest→newest) for `upgrade --list`. Registry walk
  * + flatten; nothing is run.
  * @returns {Promise<Array<{name: string, title: string, version: string, pr?: string, optional: boolean}>>}
@@ -562,7 +660,7 @@ export function applyAgentDocsRefresh(plan) {
 export async function collectAllCodemods() {
   const codemods = [];
   const manifests = /** @type {CoreVersionManifest[]} */ (
-    await getTransformsBetween('0.0.0', latestVersion)
+    await coreTransformsBetween('0.0.0', latestVersion, runBase())
   );
   for (const {version, transforms} of manifests) {
     for (const {name, meta, optional} of transforms) {
@@ -582,11 +680,13 @@ export async function collectAllCodemods() {
  * Core version manifests for the (from, to] range.
  * @param {string} from
  * @param {string} to
+ * @param {import('../../foundation/bases/resolve.mjs').BaseResolution} [base]
+ *   the upgrade's base ({@link upgradeBase})
  * @returns {Promise<CoreVersionManifest[]>}
  */
-export async function getCoreVersionManifests(from, to) {
+export async function getCoreVersionManifests(from, to, base = runBase()) {
   return /** @type {CoreVersionManifest[]} */ ([
-    ...(await getTransformsBetween(from, to)),
+    ...(await coreTransformsBetween(from, to, base)),
   ]);
 }
 
@@ -600,10 +700,58 @@ export async function ensureCodemodDeps({installDeps} = {}) {
 }
 
 /**
+ * @typedef {{kind: 'manual', file: string, codemod: string, message: string, line?: number} | {kind: 'regenerate', file: string, codemod: string, message: string, commands: string[]}} CodemodOutcomeRecord
+ */
+
+/**
+ * Wrap each core code and config transform so the non-failure outcomes it
+ * throws (`assets/codemods/outcome.mjs`) are recorded instead of reaching the
+ * runner as errors. The wrapped transform leaves that file unchanged, exactly
+ * as the throw did. Project codemods keep their own contract. One wrapper per
+ * pass: the regeneration re-check takes a fresh one, so an outcome a hook
+ * resolved does not linger.
+ *
+ * @template {{version: string, transforms: Array<{name: string, transform: any, meta?: {codemodType?: string}}>}} M
+ * @param {M[]} versionManifests
+ * @param {string} root project root; recorded files are relative to it
+ * @returns {{versionManifests: M[], outcomes: CodemodOutcomeRecord[]}}
+ */
+export function withCodemodOutcomes(versionManifests, root) {
+  /** @type {CodemodOutcomeRecord[]} */
+  const outcomes = [];
+  const wrapped = versionManifests.map(manifest => ({
+    ...manifest,
+    transforms: manifest.transforms.map(entry => {
+      if (entry.meta?.codemodType === 'project') return entry;
+      const {transform, name} = entry;
+      return {
+        ...entry,
+        /** @param {{path: string, source: string}} file @param {unknown} api */
+        transform(file, api) {
+          try {
+            return transform(file, api);
+          } catch (err) {
+            const outcome = codemodOutcome(err);
+            if (!outcome) throw err;
+            outcomes.push({
+              ...outcome,
+              file: path.relative(root, file.path).split(path.sep).join('/'),
+              codemod: `core:${name}`,
+            });
+            return undefined;
+          }
+        },
+      };
+    }),
+  }));
+  return {versionManifests: /** @type {M[]} */ (wrapped), outcomes};
+}
+
+/**
  * Run the CORE registry codemods. Runs BEFORE the config is loaded so a core
  * CONFIG codemod can repair a config the strict loader would otherwise reject.
  * @param {CoreVersionManifest[]} versionManifests
- * @param {{apply: boolean, path: string, codemod?: string, skipCodemods: Set<string>, root?: string, protection?: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, silent?: boolean, coversTarget?: boolean}} options
+ * @param {{apply: boolean, path: string, codemod?: string, skipCodemods: Set<string>, root?: string, protection?: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, silent?: boolean, coversTarget?: boolean, outcomes?: CodemodOutcomeRecord[]}} options
  */
 export async function runCoreCodemods(
   versionManifests,
@@ -616,6 +764,7 @@ export async function runCoreCodemods(
     protection,
     silent,
     coversTarget,
+    outcomes,
   },
 ) {
   return runCodemods(versionManifests, {
@@ -627,6 +776,7 @@ export async function runCoreCodemods(
     root,
     protection,
     coversTarget,
+    outcomes,
   });
 }
 
@@ -642,7 +792,9 @@ export async function runCoreCodemods(
  *
  * @param {string} cwd
  * @param {string[]} [extraIntegrationSpecs] explicit `--integration` specs
- * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger}>}
+ * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger, iconSets: boolean}>}
+ *   `iconSets`: icon features are on (an installed icon-set package or
+ *   `experimental.iconSet`)
  */
 export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   // The CLI debug preflight may already have imported this config before core
@@ -695,7 +847,7 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
       : // Resolved from the project, as --integration names a package it
         // installed, not from whichever folder the process started in.
         await loadIntegrations(extraSpecs, {cwd, resolveProviders: false});
-  const {integrations, ledger} = resolveProviders(
+  const resolved = resolveProviders(
     [
       ...candidates,
       ...installed.map(integration => ({
@@ -711,7 +863,23 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
     ],
     {codemods: true, prior: providerLedgerOf(project)},
   );
-  return {postCodemodHooks, integrations, ledger};
+  const {ledger} = resolved;
+  // Only integrations that are the run's base or build on it run codemods,
+  // the --integration packages included. Every base the project load found
+  // counts, whether or not the config lists it.
+  const bases = [
+    ...project.loadedIntegrations,
+    ...project.integrationsLeftOut.map(({integration}) => integration),
+  ].filter(isBaseIntegration);
+  const integrations = project.base.ok
+    ? splitForBase(resolved.integrations, project.base.base, bases).kept
+    : resolved.integrations;
+  return {
+    postCodemodHooks,
+    integrations,
+    ledger,
+    iconSets: iconFeatureGate(project).on,
+  };
 }
 
 /**
@@ -719,11 +887,24 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
  * nudge must not fail the upgrade) and is suppressed for --json/programmatic
  * callers (the silent logger).
  * @param {Array<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} integrations
+ * @param {{iconSets?: boolean}} [options] `iconSets`: icon features are on
+ *   in the project (the icon feature gate). Without them a package's
+ *   experimental icon-set root is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
+ *   own issues.
  * @returns {Promise<void>}
  */
-export async function warnIntegrationIssues(integrations) {
+export async function warnIntegrationIssues(integrations, {iconSets} = {}) {
   try {
-    await warnOnIntegrationIssues(integrations, {json: logger.silent});
+    await warnOnIntegrationIssues(
+      iconSets
+        ? integrations
+        : integrations.map(each =>
+            each && typeof each === 'object'
+              ? {...each, iconSets: undefined}
+              : each,
+          ),
+      {json: logger.silent},
+    );
   } catch {
     // Never let the nudge break the upgrade.
   }

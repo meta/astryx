@@ -8,6 +8,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 vi.mock('../../foundation/discovery/template-conflict-release.mjs', () => ({
   expandedTemplateConflictSchemaActive: () => true,
@@ -28,8 +29,12 @@ import {
   integrationComponentConflicts,
   integrationDocConflicts,
   integrationTemplateConflicts,
-  shellArg,
 } from './authoring-checks.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 
@@ -145,13 +150,27 @@ const PASSAGE =
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-template-conflicts-'),
+    path.join(REPO_ROOT, '.astryx-template-conflicts-'),
+  );
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
 });
 
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
+
+/** The listing notes a fixture with no logo draws; package-listing-check.test.mjs covers them. */
+const LISTING_CODES = new Set([
+  'package_without_logo',
+  'package_without_example',
+]);
 
 describe('integrationTemplateConflicts', () => {
   it('warns on an id shared with Core and gives the package-qualified command', async () => {
@@ -368,13 +387,6 @@ describe('integrationTemplateConflicts', () => {
     );
     expect(conflict?.message).toContain('Rename');
     expect(conflict?.message).not.toContain('set replaces');
-  });
-
-  it('shell-quotes unusual ids instead of allowing command substitution', () => {
-    expect(shellArg('safe/id')).toBe('safe/id');
-    expect(shellArg('my$thing')).toBe("'my$thing'");
-    expect(shellArg("a'b")).toBe("'a'\\''b'");
-    expect(shellArg('foo`id`')).toBe("'foo`id`'");
   });
 
   it('returns a malformed template once as an invalid_template issue', async () => {
@@ -1401,7 +1413,7 @@ describe('validateIntegration runner-command notes', () => {
       line: 1,
       command: 'pnpm exec astryx doctor',
     });
-    expect(hit.message).toContain('Write `astryx doctor`');
+    expect(hit.message).toContain('Write the token `{@command doctor}`');
     // A note only: no issue, so no exit changes on it.
     expect(
       data.issues.map((/** @type {any} */ issue) => issue.code),
@@ -1542,6 +1554,141 @@ describe('validateIntegration runner-command notes', () => {
         ['Install', 1],
       ]),
     );
+  });
+
+  it('lists package-manager commands, bare commands and broken tokens with the token to write, all for the next minor', async () => {
+    writeTopic(
+      'Add it with `npm install -D @acme/widgets`, run `astryx search acme`, then {@pm add x} and {@cmd docs}. Only npm: `npm pkg set name=x`.',
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const notes = (data.notes ?? []).filter(
+      (/** @type {any} */ note) =>
+        note.code !== 'runner_command' && !LISTING_CODES.has(note.code),
+    );
+
+    expect(
+      notes.map((/** @type {any} */ note) => [note.code, note.next]),
+    ).toEqual([
+      ['package_manager_command', true],
+      ['plain_command', true],
+      ['doc_token', true],
+      ['doc_token', true],
+      ['package_manager_command', true],
+      // The fixture's install step, in its bash block.
+      ['package_manager_command', true],
+    ]);
+    const messages = notes.map((/** @type {any} */ note) => note.message);
+    expect(messages[0]).toContain('{@pm install @acme/widgets --dev}');
+    expect(messages[1]).toContain('{@command search acme}');
+    expect(messages[2]).toContain('{@pm}` starts with a verb');
+    expect(messages[3]).toContain('Doc tokens are');
+    expect(messages[4]).toContain(
+      '{@pm-only npm "<why only npm>" pkg set name=x}',
+    );
+    expect(messages[5]).toContain('{@pm dlx @astryxdesign/cli init}');
+    expect(data.issues.map((/** @type {any} */ issue) => issue.code)).toEqual(
+      [],
+    );
+  });
+
+  it('reads a verb named alone as a mention, and TSDoc tags in a TypeScript sample as code', async () => {
+    writeTopic(
+      'Scripts run with `npm run`, `pnpm dlx` fetches a package, and `npm i -g`, `yarn global add` and `npm pkg set` each take one.',
+    );
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace(
+        /\{"type":"code"[^}]*\}/,
+        JSON.stringify({
+          type: 'code',
+          lang: 'ts',
+          code: '/** {@inheritDoc Base.render} */\nexport const x = 1;',
+        }),
+      ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    expect(
+      (data.notes ?? []).filter((/** @type {any} */ note) =>
+        ['package_manager_command', 'doc_token'].includes(note.code),
+      ),
+    ).toEqual([]);
+  });
+
+  it('lists a token that never closes, in prose and in any code block', async () => {
+    writeTopic(
+      'Install with {@pm install @acme/widgets --dev before you start.',
+    );
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace(
+        /\{"type":"code"[^}]*\}/,
+        JSON.stringify({
+          type: 'code',
+          lang: 'tsx',
+          code: '// {@pm install @acme/widgets --dev\nexport const x = 1;',
+        }),
+      ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0].message).toContain('never closes');
+  });
+
+  it('lists a {@command} token that names no Astryx command', async () => {
+    writeTopic('Run {@command dcotor} before you ship.');
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].message).toContain('`dcotor` is not an Astryx command');
+  });
+
+  it('reads the command after leading global flags in a {@command} token', async () => {
+    writeTopic(
+      'Read it as data with {@command --json component Button} or {@command --detail full docs acme}, not {@command --json dcotor}, {@command --json nosuch docs} or {@command --detail full nosuch}. Check the version with {@command --version}; {@command --json} alone names nothing.',
+    );
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    const tokens = (data.notes ?? []).filter(
+      (/** @type {any} */ note) => note.code === 'doc_token',
+    );
+    expect(
+      tokens.map(note => note.message.match(/`(\w+)` is not/)?.[1]),
+    ).toEqual(['dcotor', 'nosuch', 'nosuch', undefined]);
+    expect(tokens[3].message).toContain('names no Astryx command');
+  });
+
+  it('lists nothing for a topic written in the doc syntax', async () => {
+    writeTopic(
+      'Add it with {@pm install @acme/widgets --dev}, run {@command docs acme}, and {@pm-only npm "only npm has pkg" pkg set name=x}. Show the syntax: {@@pm install x}.',
+    );
+    // The fixture's bash block holds a scoped install step; write it as a token.
+    const file = path.join(tmpDir, 'docs', 'acme-setup.doc.mjs');
+    fs.writeFileSync(
+      file,
+      fs
+        .readFileSync(file, 'utf8')
+        .replace(
+          'npx @astryxdesign/cli init',
+          '{@pm dlx @astryxdesign/cli init}',
+        ),
+    );
+
+    const {data} = await validateIntegration(undefined, {cwd: tmpDir});
+    expect(
+      (data.notes ?? []).filter(
+        (/** @type {any} */ note) => !LISTING_CODES.has(note.code),
+      ),
+    ).toEqual([]);
   });
 
   it('lists nothing for bare commands and the scoped install step', async () => {

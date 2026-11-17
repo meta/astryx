@@ -17,7 +17,7 @@ export const docs = {
   title: 'Page template',
   category: 'guide',
   description:
-    'Help people find a page: give it a category for `astryx search` and template listings, and flag a sparse starting shell as a scaffold.',
+    'Help people find a page: give it a category for `{@command search}` and template listings, and flag a sparse starting shell as a scaffold.',
   sections: [
     {
       id: 'start-from-the-generated-page-doc',
@@ -56,7 +56,7 @@ export default {
           type: 'list',
           style: 'unordered',
           items: [
-            'Set `category` to the most specific supported `{Group} - {Variant}` value. Its words become search terms for `astryx search`, and it appears in the JSON template list.',
+            'Set `category` to the most specific supported `{Group} - {Variant}` value. Its words become search terms for `{@command search}`, and it appears in the JSON template list.',
             'Set `scaffold: true` only for a deliberately sparse starting shell. The JSON template list reports it, so tools and galleries can tell a scaffold from a finished page.',
             "Fields that only Astryx's own gallery reads, such as `isHiddenFromOverview`, have no effect on integration templates.",
           ],

@@ -30,6 +30,8 @@ const fs = await import('node:fs');
 
 let tmpDir;
 beforeEach(() => {
+  // One mock serves both tests, so each counts only its own calls, in any order.
+  vi.mocked(fs.linkSync).mockClear();
   tmpDir = realFs.mkdtempSync(path.join(os.tmpdir(), 'astryx-publish-eperm-'));
 });
 afterEach(() => {

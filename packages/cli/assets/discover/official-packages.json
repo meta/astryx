@@ -102,6 +102,14 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
+          "name": "CircleCheckIndicator"
+        },
+        {
+          "kind": "component",
           "name": "CircularProgress"
         },
         {
@@ -126,6 +134,10 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
@@ -134,7 +146,7 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
+          "name": "LineClamp"
         },
         {
           "kind": "component",
@@ -146,7 +158,15 @@
         },
         {
           "kind": "component",
-          "name": "MobileTokenizer"
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
         },
         {
           "kind": "component",
@@ -162,11 +182,27 @@
         },
         {
           "kind": "component",
+          "name": "SelectableCardGroup"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {
           "kind": "component",
           "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
         },
         {
           "kind": "component",
@@ -194,7 +230,15 @@
         },
         {
           "kind": "component",
+          "name": "TourStep"
+        },
+        {
+          "kind": "component",
           "name": "TransferList"
+        },
+        {
+          "kind": "component",
+          "name": "WeightedSVGIcon"
         },
         {
           "kind": "template",
@@ -230,6 +274,10 @@
         },
         {
           "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
+        },
+        {
+          "kind": "template",
           "name": "DiffViewerShowcase"
         },
         {
@@ -239,6 +287,22 @@
         {
           "kind": "template",
           "name": "EmojiPickerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputBudgetAllocation"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputFamilyMembers"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputMailingList"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputShowcase"
         }
       ]
     },
@@ -250,6 +314,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

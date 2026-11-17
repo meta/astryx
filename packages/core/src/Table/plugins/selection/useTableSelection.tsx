@@ -29,7 +29,10 @@
  * Because the background is an inline style, it outranks anything
  * userland can layer on with StyleX. `hasRowHighlight: false` is the
  * supported way to reclaim the row background; `aria-selected` is
- * unaffected by it.
+ * unaffected by it. A selected row also carries the `table-row` `selected`
+ * theme state (`data-selected="selected"`), whatever `hasRowHighlight` is.
+ * A theme styles the row there. To recolor the wash, a theme sets
+ * `--color-accent-muted`, which the inline background reads.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/useTableSelection.doc.mjs (config prop table)
@@ -38,7 +41,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -53,7 +55,17 @@ import {CheckboxInput} from '../../../CheckboxInput';
 import {mergeRefs} from '../../../utils';
 import type {TablePlugin, TableColumn, BodyRowRenderProps} from '../../types';
 import {pixel} from '../../columnUtils';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+import {themeDataAttributes} from '../../../utils/themeProps';
+
+registerEnglishFallback(english);
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
 // =============================================================================
 // Config Type
@@ -141,11 +153,16 @@ function createSelectionStore<T extends Record<string, unknown>>(
   };
 }
 
+/** The `table-row` target's theme state attribute for a selected row. */
+const SELECTED_STATE = themeDataAttributes({selected: 'selected'});
+
 /**
  * Apply or remove selection styling on a <tr> element.
  *
  * `aria-selected` tracks selection on its own: it is the semantic half of
- * the state and stays correct whether or not the row is painted.
+ * the state and stays correct whether or not the row is painted. The
+ * `table-row` target's `selected` theme state follows it, so a theme can
+ * style a selected row.
  */
 function applyRowSelectionStyle(
   el: HTMLTableRowElement,
@@ -156,6 +173,13 @@ function applyRowSelectionStyle(
     el.setAttribute('aria-selected', 'true');
   } else {
     el.removeAttribute('aria-selected');
+  }
+  for (const [name, value] of Object.entries(SELECTED_STATE)) {
+    if (isSelected) {
+      el.setAttribute(name, value ?? '');
+    } else {
+      el.removeAttribute(name);
+    }
   }
   // Written on every pass, not just when painting: the flag can flip while a
   // row is already selected, and the wash has to come back off.
@@ -184,7 +208,11 @@ function applyRowSelectionStyle(
 // =============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SelectionStoreContext = createContext<SelectionStore<any> | null>(null);
+const SelectionStoreContext = createSharedContext<SelectionStore<any> | null>(
+  'SelectionStoreContext',
+  1,
+  null,
+);
 SelectionStoreContext.displayName = 'SelectionStoreContext';
 
 // =============================================================================
@@ -235,7 +263,7 @@ function SelectAllCheckboxInner<T extends Record<string, unknown>>({
 }: {
   store: SelectionStore<T>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const getSnapshot = useCallback(() => {
     const config = store.getConfig();
     const allSelected = config.getIsAllSelected();
@@ -287,7 +315,7 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
   store: SelectionStore<T>;
   item: T;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = store.getConfig();
   const isSelected = useIsItemSelected(store, item);
   const selectable = config.getIsItemSelectable?.(item) ?? true;
@@ -387,8 +415,9 @@ export function useTableSelection<T extends Record<string, unknown>>(
     [],
   );
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>
@@ -398,6 +427,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
       },
 
       transformColumns(columns: TableColumn<T>[]) {
+        registerFixedHeightColumn(selectionColumn);
         return [selectionColumn, ...columns];
       },
 
@@ -440,4 +470,5 @@ export function useTableSelection<T extends Record<string, unknown>>(
     }),
     [store, selectionColumn],
   );
+  return registerCountIndependentPlugin(plugin);
 }

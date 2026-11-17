@@ -5,8 +5,8 @@
  * @input The PostCSS plugin, run from apps whose Astryx packages are linked
  *   from a workspace where package links form cycles
  * @output Proves the plugin compiles what each installed package publishes,
- *   once, never walks a package's own `node_modules`, and refuses `files`
- *   entries it cannot read faithfully
+ *   once, never walks a package's own `node_modules`, honors negated `files`
+ *   entries, and refuses positive globs it cannot read faithfully
  * @position Regression test for @astryxdesign/build's PostCSS library scan
  */
 
@@ -31,7 +31,9 @@ const stylexModule = color =>
 /**
  * A pnpm-style workspace. Core publishes `src` and also carries a test fixture;
  * its dev dependency, the CLI, links back to it. The theme declares no `files`,
- * and its own dependency links to core. Two more list a glob and a `!` entry.
+ * and its own dependency links to core. One more lists a positive glob that
+ * cannot be represented faithfully; another uses Astryx's test and benchmark
+ * negations.
  */
 beforeAll(() => {
   root = fs.realpathSync(
@@ -57,9 +59,18 @@ beforeAll(() => {
     'packages/globbed/src/index.ts': stylexModule('orange'),
     'packages/negated/package.json': manifest('@astryxdesign/negated', [
       'src',
-      '!src/internal',
+      '!**/*.test.*',
+      '!**/*.spec.ts',
+      '!**/__tests__/**',
+      '!**/__mocks__/**',
+      '!**/*.bench.*',
     ]),
     'packages/negated/src/index.ts': stylexModule('teal'),
+    'packages/negated/src/index.test.ts': stylexModule('red'),
+    'packages/negated/src/private.spec.ts': stylexModule('blue'),
+    'packages/negated/src/perf.bench.ts': stylexModule('yellow'),
+    'packages/negated/src/__tests__/helper.ts': stylexModule('orange'),
+    'packages/negated/src/__mocks__/helper.ts': stylexModule('purple'),
     'apps/site/src/page.tsx': '',
     'apps/themed/src/page.tsx': '',
     'apps/globbed/src/page.tsx': '',
@@ -149,15 +160,18 @@ describe('the PostCSS plugin and workspace links', () => {
     ]);
   });
 
-  it.each([
-    ['globbed', 'src/*'],
-    ['negated', '!src/internal'],
-  ])(
-    'refuses a `files` entry it cannot read faithfully: %s',
-    async (name, entry) => {
-      await expect(compileApp(path.join(root, `apps/${name}`))).rejects.toThrow(
-        `@astryxdesign/build reads plain files entries only; @astryxdesign/${name} lists "${entry}"`,
-      );
-    },
-  );
+  it('honors negated test and benchmark entries in package files', async () => {
+    const {css, compiled} = await compileApp(path.join(root, 'apps/negated'));
+
+    expect(compiled).toEqual([
+      path.join('node_modules/@astryxdesign/negated/src/index.ts'),
+    ]);
+    expect(css).toMatch(/@layer astryx-base \{[^]*color:\s*teal/);
+  });
+
+  it('refuses a positive `files` glob it cannot read faithfully', async () => {
+    await expect(compileApp(path.join(root, 'apps/globbed'))).rejects.toThrow(
+      '@astryxdesign/build reads plain positive files entries only; @astryxdesign/globbed lists "src/*"',
+    );
+  });
 });

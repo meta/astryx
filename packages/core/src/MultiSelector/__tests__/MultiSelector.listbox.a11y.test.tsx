@@ -9,7 +9,7 @@
 
 import {cleanup, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {describe, expect, it} from 'vitest';
+import {beforeAll, describe, expect, it} from 'vitest';
 import {
   expectAccessibilitySpec,
   LISTBOX_PATTERN,
@@ -22,6 +22,13 @@ import {
 import {installListboxDialogStubs} from '../../Selector/__tests__/Listbox.a11y.dom';
 
 installListboxDialogStubs();
+
+// The bottom sheet is loaded on demand (SelectorBottomSheet's lazy import).
+// Loading its module is not part of an open, so the file waits for it once
+// here, and each scenario's open waits only for the open.
+beforeAll(async () => {
+  await import('../../BottomSheet/BottomSheet');
+});
 
 const scenarios = LISTBOX_SCENARIOS.filter(
   scenario => scenario.component === 'MultiSelector',

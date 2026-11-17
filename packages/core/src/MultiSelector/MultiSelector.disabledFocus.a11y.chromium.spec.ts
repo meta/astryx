@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file MultiSelector.disabledFocus.a11y.chromium.spec.ts
@@ -9,7 +10,7 @@
  *   focus off an element that becomes disabled, so it cannot show the loss.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
