@@ -183,8 +183,15 @@ const SURFACES = Object.freeze({
   KNOWLEDGE: 'knowledge',
   DOCSITE: 'docsite',
   NODE_TOOLING: 'node-tooling',
+  NODE_TIMES: 'node-times',
   SHARED_OR_UNKNOWN: 'shared-or-unknown',
 });
+
+// The recorded Node test times. They decide only how the Node legs are
+// scheduled, never what a test checks, so a change to them alone runs the
+// Node leg plan's budget check and no test (spec:AST-030 FR13). Beside any
+// other change they count as test configuration and run the full suite.
+const RECORDED_TIMES = /^scripts\/vitest-node-durations(?:\.[\w-]+)?\.json$/;
 
 const RUNTIME_PACKAGE_SURFACES = Object.freeze([
   ['packages/core/', 'runtime:core'],
@@ -311,6 +318,7 @@ function isNodeToolingPath(filePath) {
 
 function surfacesForPath(filePath) {
   if (isSpecRecordPath(filePath)) return [SURFACES.KNOWLEDGE];
+  if (RECORDED_TIMES.test(filePath)) return [SURFACES.NODE_TIMES];
   if (filePath.startsWith('apps/docsite/')) return [SURFACES.DOCSITE];
   if (isNodeToolingPath(filePath)) return [SURFACES.NODE_TOOLING];
 
@@ -403,7 +411,10 @@ function classifyChanges(
     !hasPackageReleaseChange;
   const exactSurface = surface =>
     complete && surfaces.length === 1 && surfaces[0] === surface;
-  const specOnly = exactSurface(SURFACES.KNOWLEDGE);
+  // A change only to the recorded Node test times takes the knowledge lane,
+  // which runs no test for a change that holds no record.
+  const timesOnly = exactSurface(SURFACES.NODE_TIMES);
+  const specOnly = exactSurface(SURFACES.KNOWLEDGE) || timesOnly;
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
   // Every changed path is in the Lab package, besides Changesets, which no
@@ -441,12 +452,13 @@ function classifyChanges(
     filePath =>
       isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
   );
-  const fullSuite = !complete || sharedInfra.length > 0;
+  const fullSuite = !timesOnly && (!complete || sharedInfra.length > 0);
   // The Vitest lanes run every test unless every shared path is one the
   // module graph reaches.
   const vitestFullSuite =
-    !complete ||
-    sharedInfra.some(filePath => !isVitestGraphInfraPath(filePath));
+    !timesOnly &&
+    (!complete ||
+      sharedInfra.some(filePath => !isVitestGraphInfraPath(filePath)));
   return {
     specOnly,
     toolingOnly,

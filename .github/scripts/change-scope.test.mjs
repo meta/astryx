@@ -85,6 +85,43 @@ describe('spec-only change scope', () => {
     expect(readme.specOnly).toBe(false);
   });
 
+  it('gives a change only to the recorded Node test times the knowledge lane, which runs no test', () => {
+    for (const files of [
+      ['scripts/vitest-node-durations.json'],
+      [
+        'scripts/vitest-node-durations.json',
+        'scripts/vitest-node-durations.min-node.json',
+      ],
+    ]) {
+      const result = classifyChanges(
+        files.map(filename => ({filename, status: 'M'})),
+      );
+      expect(result.surfaces).toEqual(['node-times']);
+      expect(result.specOnly).toBe(true);
+      expect(result.fullSuite).toBe(false);
+      expect(result.vitestFullSuite).toBe(false);
+      expect(result.touchesKnowledgeRecords).toBe(false);
+    }
+  });
+
+  it.each([
+    'packages/core/src/Button/Button.tsx',
+    'docs/specs/AST-030/spec.md',
+    'scripts/vitest-node-legs.mjs',
+    '.github/workflows/ci.yml',
+  ])(
+    'runs the recorded Node test times beside %s as today: the full suite',
+    other => {
+      const result = classifyChanges([
+        {filename: 'scripts/vitest-node-durations.json', status: 'M'},
+        {filename: other, status: 'M'},
+      ]);
+      expect(result.specOnly).toBe(false);
+      expect(result.fullSuite).toBe(true);
+      expect(result.vitestFullSuite).toBe(true);
+    },
+  );
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},
