@@ -1115,3 +1115,42 @@ describe('Icon', () => {
     });
   });
 });
+
+describe('Icon given its glyph as name', () => {
+  it('renders the registry glyph, keeps name off the DOM, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Other icon libraries call the glyph prop `name`.
+    const props = {
+      name: 'check',
+      'data-testid': 'named',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    const icon = screen.getByTestId('named');
+    expect(icon.querySelector('svg')).not.toBeNull();
+    expect(icon).not.toHaveAttribute('name');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(
+      'Icon: takes its glyph in `icon`, not `name`.',
+    );
+    warn.mockRestore();
+  });
+
+  it('renders an icon component given as name', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = {
+      name: TestIcon,
+      'data-testid': 'component',
+    } as unknown as Parameters<typeof Icon>[0];
+    render(<Icon {...props} />);
+    expect(screen.getByTestId('component').tagName.toLowerCase()).toBe('svg');
+    warn.mockRestore();
+  });
+
+  it('prefers icon and does not warn when icon is given', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<Icon icon="check" data-testid="both" />);
+    expect(screen.getByTestId('both').querySelector('svg')).not.toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

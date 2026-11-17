@@ -42,6 +42,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {mergeRefs} from '../utils/mergeRefs';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
 
 export type {IconSize} from './IconSize.stylex';
@@ -308,7 +309,7 @@ function getIconA11yProps(label: string | undefined): IconA11yProps {
  * ```
  */
 export function Icon({
-  icon,
+  icon: iconProp,
   color = 'inherit',
   size: sizeProp,
   variant,
@@ -317,8 +318,14 @@ export function Icon({
   className,
   style,
   xstyle,
-  ...props
+  ...restProps
 }: IconProps) {
+  const {icon, props} = readGlyph(iconProp, restProps);
+  useDevWarning(
+    'Icon',
+    'takes its glyph in `icon`, not `name`. Pass it as icon, for example <Icon icon="close" />.',
+    icon !== iconProp,
+  );
   const size = useIconSize(sizeProp);
   // Derive ARIA from `label`: decorative (aria-hidden) by default, or a
   // meaningful image (role="img" + aria-label) when `label` is non-empty.
@@ -374,6 +381,22 @@ export function Icon({
 }
 
 Icon.displayName = 'Icon';
+
+/**
+ * The glyph and the remaining props. Other icon libraries name the glyph
+ * prop `name`, so a call without `icon` reads `name`, and `name` does not
+ * reach the DOM.
+ */
+function readGlyph<Rest extends object>(
+  icon: IconProps['icon'] | undefined,
+  rest: Rest,
+): {icon: IconProps['icon']; props: Rest} {
+  if (icon != null || !('name' in rest) || rest.name == null) {
+    return {icon: icon as IconProps['icon'], props: rest};
+  }
+  const {name, ...props} = rest as Rest & {name: IconProps['icon']};
+  return {icon: name, props: props as Rest};
+}
 
 // =============================================================================
 // Internal: Registry Icon Renderer
