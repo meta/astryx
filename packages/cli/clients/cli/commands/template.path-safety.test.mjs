@@ -132,7 +132,7 @@ describe('template path safety', () => {
     }
   });
 
-  it('names the page file in a project that is not a Next app, and the named command writes exactly that file', async () => {
+  it('names the page or block file in a project that is not a Next app, and the named command writes exactly that file', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
     fs.writeFileSync(
@@ -151,6 +151,18 @@ describe('template path safety', () => {
     expect(fs.existsSync(path.join(cwd, named))).toBe(true);
     expect(fs.readdirSync(path.join(cwd, 'src', 'pages'))).toEqual([
       'blank.tsx',
+    ]);
+
+    const blockErr = await templateApi('ButtonShowcase', {
+      targetPath: nowhere('scratch-block'),
+      cwd,
+    }).catch(e => e);
+    const namedBlock = blockErr.suggestions[0].name.split(' ').at(-1);
+    expect(namedBlock).toBe('src/components/ButtonShowcase.tsx');
+
+    await templateApi('ButtonShowcase', {targetPath: namedBlock, cwd});
+    expect(fs.readdirSync(path.join(cwd, 'src', 'components'))).toEqual([
+      'ButtonShowcase.tsx',
     ]);
   });
 
