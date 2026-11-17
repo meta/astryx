@@ -1120,7 +1120,9 @@ function docObject(docPath) {
   const cached = docReads.get(docPath);
   if (cached?.stamp === stamp) return cached.value;
   const value = staticExportObject(docPath, DOC_EXPORTS.components);
-  docReads.set(docPath, {stamp, value});
+  // A file that appeared after its stamp is not kept: the entry would
+  // outlive its removal.
+  if (stamp !== '-') docReads.set(docPath, {stamp, value});
   return value;
 }
 

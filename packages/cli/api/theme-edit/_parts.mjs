@@ -770,7 +770,9 @@ export async function partData(project) {
       Object.values(cached.map).every(isRecord) &&
       Array.isArray(cached.pairs)
     ) {
-      readParts.set(file, {stamp, data: cached});
+      // A file that appeared after its stamp is not kept: the entry would
+      // outlive its removal.
+      if (stamp !== '-') readParts.set(file, {stamp, data: cached});
       return cached;
     }
   } catch {

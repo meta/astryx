@@ -116,13 +116,15 @@ function keptEntry(kept, file, stamp) {
 
 /**
  * Keep `entry` for `file`; past {@link MAX_KEPT_MODULES}, the least recently
- * used entry goes.
- * @template T
+ * used entry goes. An entry read under the absent stamp `-` is not kept: the
+ * file appeared after its stamp, and a kept entry would outlive its removal.
+ * @template {{stamp: string}} T
  * @param {Map<string, T>} kept
  * @param {string} file
  * @param {T} entry
  */
 function keepEntry(kept, file, entry) {
+  if (entry.stamp === '-') return;
   kept.delete(file);
   kept.set(file, entry);
   if (kept.size > MAX_KEPT_MODULES) {

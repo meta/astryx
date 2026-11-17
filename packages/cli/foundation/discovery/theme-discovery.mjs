@@ -750,7 +750,9 @@ export function readStaticDescriptorValue(
       read = {error};
     }
     cached = {stamp, read};
-    descriptorReads.set(key, cached);
+    // A file that appeared after its stamp is not kept: the entry would
+    // outlive its removal.
+    if (stamp !== '-') descriptorReads.set(key, cached);
   }
   if ('error' in cached.read) throw cached.read.error;
   return data ? structuredClone(cached.read.value) : {...cached.read.value};
