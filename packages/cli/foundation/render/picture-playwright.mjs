@@ -68,7 +68,7 @@ try {
         // part that redraws when its size changes (a responsive chart)
         // starts over and is pictured empty: the window opens as tall as the
         // page, and the picture waits until the page is quiet.
-        const height = await page.evaluate(() => document.documentElement.scrollHeight);
+        const height = Number(await page.evaluate('document.documentElement.scrollHeight'));
         await page.setViewportSize({
           width: PICTURE_WINDOW.width,
           height: Math.max(PICTURE_WINDOW.height, Math.ceil(height)),
