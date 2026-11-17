@@ -1021,6 +1021,8 @@ export function Button({
       text !== '' && !hasCallerTooltip(buttonEl) && isLabelCut(labelEl);
     setCutLabel(isCut ? text : null);
   };
+  // Focus leaving, Escape, or a press on the Button closes it, as a press
+  // closes the Button's own tooltip.
   const hideCutLabel = () => setCutLabel(null);
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1255,6 +1257,7 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(props.onPointerDown, hideCutLabel)}
         onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
         onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
         onClick={handleClick}
@@ -1282,6 +1285,7 @@ export function Button({
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+        onPointerDown={composeEventHandlers(props.onPointerDown, hideCutLabel)}
         onFocus={composeEventHandlers(props.onFocus, showCutLabel)}
         onBlur={composeEventHandlers(props.onBlur, hideCutLabel)}
         onClick={handleClick}

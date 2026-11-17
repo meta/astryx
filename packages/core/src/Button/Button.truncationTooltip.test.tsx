@@ -300,4 +300,17 @@ describe('Button label truncation tooltip', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
+
+  it('closes when the Button is pressed', async () => {
+    restore = withOverflow(true);
+    render(<Button label={LABEL} />);
+    const button = screen.getByRole('button');
+    await showByFocus(button);
+    act(() => {
+      fireEvent.pointerDown(button, {pointerType: 'mouse'});
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    });
+  });
 });
