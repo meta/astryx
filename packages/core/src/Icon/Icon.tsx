@@ -401,7 +401,6 @@ const objectComponentTypes = new Set<symbol>([
   Symbol.for('react.lazy'),
 ]);
 
-/** Whether a value can be a glyph: a key string or an icon component. */
 function isGlyphSource(value: unknown): boolean {
   return (
     (typeof value === 'string' && value !== '') ||
