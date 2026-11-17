@@ -11,6 +11,9 @@
 
 import {
   COLOR_IN_VALUE,
+  colorAtOpacity,
+  colorOpacitiesAsCss,
+  opacitySuffixAt,
   COLOR_NAMES,
   alphaOf,
   compositeOver,
@@ -667,9 +670,25 @@ const SHADE_WORDS =
 function colorsFound(c) {
   /** @type {Array<[number, string, boolean?]>} */
   const found = [];
+  // "black/5", "blue-500/20", "gray-900/[.1]": a color with an opacity
+  // after its slash, as Tailwind writes it, is that color at that opacity,
+  // written out (rgb(r g b / a)); never the color solid.
+  /**
+   * @param {[number, string, boolean?]} entry
+   * @param {number} end where the color's words end
+   */
+  const put = (entry, end) => {
+    const stop = /^-\d{2,3}/.exec(c.slice(end))?.[0] ?? '';
+    const op = opacitySuffixAt(c, end + stop.length);
+    const clear = op ? colorAtOpacity(entry[1], op.alpha) : null;
+    found.push(clear ? [entry[0], clear, true] : entry);
+  };
   // "gray-50", "zinc 900": a stop on a gray family, by its lightness.
   for (const m of c.matchAll(GRAY_STOP))
-    found.push([m.index ?? 0, grayStop(m[1], Number(m[2])), true]);
+    put(
+      [m.index ?? 0, grayStop(m[1], Number(m[2])), true],
+      (m.index ?? 0) + m[0].length,
+    );
   // "a cool blue-gray", "greenish grey": a gray with that hue in it (a
   // little of the hue in a mid gray), never the hue itself.
   const TINTED = /\b([a-z]+?)(?:ish)?[- ](?:gray|grey)\b/g;
@@ -696,6 +715,7 @@ function colorsFound(c) {
     .replace(GRAY_STOP, s => ' '.repeat(s.length))
     .matchAll(re)) {
     const before = c.slice(Math.max(0, (m.index ?? 0) - 12), m.index);
+    const end = (m.index ?? 0) + m[0].length;
     // "charcoal text instead of black": the color after "instead of" is
     // the one to move away from.
     if (/\bnot\s*$|\bno\s*$|\binstead of\s*$|\brather than\s*$/.test(before))
@@ -705,7 +725,7 @@ function colorsFound(c) {
       // A typed hex color keeps the case it is written in, as set stores it.
       // A color-mix() is kept as typed; set checks it.
       if (parseColor(whole) || /^color-mix\(/.test(whole))
-        found.push([m.index ?? 0, whole, true]);
+        put([m.index ?? 0, whole, true], end);
       continue;
     }
     // ("a lighter purple" is that hue's light shade, as "light purple".)
@@ -720,7 +740,7 @@ function colorsFound(c) {
       })[m[1] ?? ''] ?? m[1];
     const word = m[2];
     if (shade && SHADED[shade]?.[word]) {
-      found.push([m.index ?? 0, SHADED[shade][word]]);
+      put([m.index ?? 0, SHADED[shade][word]], end);
       continue;
     }
     // (A shade of a hue the table has no shade for: the hue mixed toward
@@ -746,19 +766,19 @@ function colorsFound(c) {
             : shade === 'light'
               ? 0.75
               : 0.88;
-      found.push([
-        m.index ?? 0,
-        hex(base.slice(0, 3).map(v => Math.round(v + (to - v) * k))),
-      ]);
+      put(
+        [
+          m.index ?? 0,
+          hex(base.slice(0, 3).map(v => Math.round(v + (to - v) * k))),
+        ],
+        end,
+      );
       continue;
     }
     if (HUES[word])
-      found.push([(m.index ?? 0) + (m[1] ? m[1].length + 1 : 0), HUES[word]]);
+      put([(m.index ?? 0) + (m[1] ? m[1].length + 1 : 0), HUES[word]], end);
     else if (word.length > 3 && !NOT_COLORS.has(word) && parseColor(word))
-      found.push([
-        m.index ?? 0,
-        hex(/** @type {number[]} */ (parseColor(word))),
-      ]);
+      put([m.index ?? 0, hex(/** @type {number[]} */ (parseColor(word)))], end);
   }
   return found.sort((a, b) => a[0] - b[0]);
 }
@@ -12434,10 +12454,12 @@ export function draftAnswer(ctx, env, question) {
     // (Only a color written out, a hex or a color function: a color word
     // is read loosely, "warm gray", "brand blue".)
     const avoided = /\b(?:never|avoid|not|no|without|don'?t)\b/.test(text);
+    // (A color with an opacity after its slash, `#000/12`, is that color
+    // at that opacity: rgb(0 0 0 / 0.12).)
     const literals =
       avoided || c.dir
         ? []
-        : (text.match(
+        : ((colorOpacitiesAsCss(text)?.css ?? text).match(
             /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\([^)]*\)/g,
           ) ?? []);
     if (
@@ -29002,8 +29024,10 @@ export function draftAnswer(ctx, env, question) {
     const steps = result.flatMap(d => d.options.flat());
     const texts = result.map(d => d.text.toLowerCase()).join('\n');
     const vals = steps.map(st => String(st.value ?? '').toLowerCase());
+    // (Each color a line writes, in any form: a hex typed with an opacity
+    // after its slash, `#000/12`, is written as rgb(0 0 0 / 0.12).)
     const writtenColors = vals.flatMap(v =>
-      (v.match(/#[0-9a-f]{3,8}\b/g) ?? []).map(h => String(parseColor(h))),
+      (v.match(COLOR_IN_VALUE) ?? []).map(h => String(parseColor(h))),
     );
     /** @param {string} v */
     const usedValue = v => {

@@ -88,6 +88,7 @@ import {
   mixSide,
   splitTop,
   colorSides,
+  colorOpacitiesAsCss,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -3974,6 +3975,27 @@ function checkTyped(
           ],
         },
       );
+  }
+  // Tailwind's color/opacity shorthand (`black/5`, `#000/10`) is no CSS
+  // color: the same color at that opacity is, and is the line offered; a
+  // Tailwind stop (`blue-500/20`) is named, since its color is not read
+  // here. The opacity is never dropped.
+  if (!unset && typeof value === 'string') {
+    const read = colorOpacitiesAsCss(value);
+    if (read) {
+      const {css: asCss, found: clear, unread} = read;
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        unread.length
+          ? `${unread.map(x => `"${x.typed}"`).join(', ')} ${unread.length > 1 ? 'are colors' : 'is a color'} with an opacity after the slash, as Tailwind writes it; CSS writes a color at an opacity as rgb(r g b / alpha), such as rgb(59 130 246 / 0.2). Give the color written out at that opacity.`
+          : `${clear.map(x => `"${x.typed}"`).join(', ')} ${clear.length > 1 ? 'are colors' : 'is a color'} with an opacity after the slash, as Tailwind writes it; CSS writes ${clear.length > 1 ? 'them' : 'it'} as ${clear.map(x => x.color).join(', ')}.`,
+        {
+          run: unread.length
+            ? [`${HOW} ${thing}`]
+            : [setLine(slug, thing, asCss, flags)],
+        },
+      );
+    }
   }
   // A value that holds NaN or undefined (a script's empty value pasted)
   // is no CSS value, and Core refuses a theme that resolves to one.

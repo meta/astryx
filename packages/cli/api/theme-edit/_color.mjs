@@ -239,6 +239,98 @@ export const COLOR_NAMES = Object.keys(NAMED);
 export const namedColorHex = name =>
   Object.hasOwn(NAMED, name) ? NAMED[name] : null;
 
+/**
+ * The opacity a slash after a color gives it, as Tailwind writes it
+ * (`black/5` is black at 5%; `white/[.08]` and `white/[8%]` at 8%), read at
+ * `at` (the slash), with how many characters it takes; null when no
+ * opacity is written there. Only the share of the color is read: 0 to 100,
+ * or 0 to 1 in brackets.
+ * @param {string} text
+ * @param {number} at
+ * @returns {{alpha: number, length: number} | null}
+ */
+export function opacitySuffixAt(text, at) {
+  const m =
+    /^\/(?:(\d{1,3}(?:\.\d+)?)|\[\s*(\d*\.?\d+)\s*(%?)\s*\])(?![\w.%\]])/.exec(
+      text.slice(at),
+    );
+  if (!m) return null;
+  const n = m[1] != null ? Number(m[1]) / 100 : Number(m[2]) / (m[3] ? 100 : 1);
+  if (!Number.isFinite(n) || n < 0 || n > 1) return null;
+  return {alpha: n, length: m[0].length};
+}
+
+/**
+ * A color at a share of its opacity, as CSS writes it: `rgb(r g b / a)`,
+ * its own alpha included (a half-clear color at 50% is a quarter); null
+ * for what is not a fixed color.
+ * @param {string} color
+ * @param {number} alpha 0 to 1
+ * @returns {string | null}
+ */
+export function colorAtOpacity(color, alpha) {
+  const rgb = parseColor(color);
+  if (!rgb) return null;
+  const a = Math.round(alphaOf(color) * alpha * 1000) / 1000;
+  return `rgb(${rgb.map(c => Math.round(c)).join(' ')} / ${a})`;
+}
+
+/**
+ * Tailwind's color/opacity shorthand written in a value (`0 0 0 1px
+ * black/5`, `#000/10`, `white/[.08]`): each color written out (a hex or a
+ * CSS color name) with an opacity after its slash. `color` is what CSS
+ * writes for it; null for a color word this reader cannot read as one
+ * (Tailwind's own stops, `blue-500/20`), which the caller names.
+ * @param {string} value
+ * @returns {Array<{index: number, typed: string, color: string | null}>}
+ */
+export function colorOpacitiesIn(value) {
+  const text = String(value ?? '');
+  /** @type {Array<{index: number, typed: string, color: string | null}>} */
+  const out = [];
+  for (const m of text.matchAll(
+    /(?<![\w#.])(#[0-9a-f]{3,8}|[a-z]+(?:-\d{2,3})?)(?=\/)/gi,
+  )) {
+    const at = (m.index ?? 0) + m[0].length;
+    const op = opacitySuffixAt(text, at);
+    if (!op) continue;
+    const word = m[1].toLowerCase();
+    const stop = /-\d{2,3}$/.test(word);
+    const base = word.startsWith('#')
+      ? parseColor(word)
+        ? m[1]
+        : null
+      : namedColorHex(word);
+    if (!base && !stop) continue;
+    out.push({
+      index: m.index ?? 0,
+      typed: text.slice(m.index ?? 0, at + op.length),
+      color: base ? colorAtOpacity(base, op.alpha) : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * A value with each color/opacity shorthand in it written as CSS writes it
+ * (`0 0 0 1px black/5` is `0 0 0 1px rgb(0 0 0 / 0.05)`), and the ones this
+ * reader cannot read (Tailwind's own stops); null when the value has none.
+ * @param {string} value
+ * @returns {{css: string, found: ReturnType<typeof colorOpacitiesIn>, unread: ReturnType<typeof colorOpacitiesIn>} | null}
+ */
+export function colorOpacitiesAsCss(value) {
+  const found = colorOpacitiesIn(value);
+  if (!found.length) return null;
+  const css = found.reduceRight(
+    (v, x) =>
+      x.color == null
+        ? v
+        : v.slice(0, x.index) + x.color + v.slice(x.index + x.typed.length),
+    String(value),
+  );
+  return {css, found, unread: found.filter(x => x.color == null)};
+}
+
 /** Color keywords that are valid colors but have no fixed value. */
 const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE];
 
