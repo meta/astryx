@@ -2603,7 +2603,9 @@ describe('render(): a page outside a project', () => {
     expect(note).not.toContain('come back exactly');
     const back = runBin(path.join(tree, 'page'), ['experimental', 'export', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
-    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+    // The import and the record name rows.ts, which is named once; the
+    // record also names helper.ts, which only rows.ts imports.
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows', '../lib/helper.ts']});
     // Rendered from the folder that holds both, the module is carried.
     const whole = runBin(tree, ['experimental', 'export', 'page/page.tsx', '--out', 'whole.html']);
     expect(whole.status).toBe(0);
@@ -2658,6 +2660,11 @@ describe('render(): a page outside a project', () => {
     const note = html.slice(0, html.indexOf('-->'));
     expect(note).toContain('Not carried: ../shared/rows.ts (--reverse cannot give them back)');
     expect(note).not.toContain('come back exactly');
+    // --reverse cannot resolve the alias, but the file records what the
+    // render left out, so it names the module as missing.
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../shared/rows.ts']});
   }, 60_000);
 
   it('carries a JSON file and a stylesheet from above the page folder, and names an image from there as not carried', () => {
@@ -2710,7 +2717,8 @@ describe('render(): a page outside a project', () => {
     expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(tree, ['experimental', 'export', '--reverse', 'page.html']);
-    expect(back.json.data).toMatchObject({exact: false, missing: ['site.scss']});
+    expect(back.json.data.exact).toBe(false);
+    expect(back.json.data.missing).toEqual(['site.scss']);
   }, 60_000);
 
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {

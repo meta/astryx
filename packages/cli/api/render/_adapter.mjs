@@ -871,7 +871,19 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
+      // A file the render could not carry is missing too, also when no
+      // import here names it (an alias this reverse cannot resolve). One the
+      // imports already name, with or without its extension, is named once.
+      const named = new Set(unreached);
+      const missing = [...unreached];
+      for (const file of Array.isArray(source.notCarried) ? source.notCarried : []) {
+        if (typeof file !== 'string' || file === '') continue;
+        const bare = file.replace(/\.[^./]+$/, '');
+        if (named.has(file) || named.has(bare)) continue;
+        named.add(file);
+        missing.push(file);
+      }
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its
