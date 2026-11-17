@@ -71,7 +71,7 @@ export const doc = {
     {
       value: 'component.detail.blocks',
       description:
-        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category}); each block names the package that owns it, and the envelope's package names the component's owner.",
+        "One component's example blocks, as {component, showcase, examples, related} of BlockEntry ({name, package, displayName, description, isShowcase, category, isReady}); each block names the package that owns it, and the envelope's package names the component's owner.",
     },
 
     // docs
@@ -123,19 +123,19 @@ export const doc = {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, `newProblems` (every problem this change made, each with the command that fixes it, measured against every problem the theme had before; the text shows the first eight and counts the rest), build `warnings`, what a whole-theme change leaves out (`leftOut`, each `note` with the lines that `run` it), how many misses the changes to the theme leave (`missed`) and on how many parts (`missedParts`; a part can miss two ways, its border and its shadow), both left out when none (`show` lists each), the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
-        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `openProblems` (every contrast problem the theme has now, each with the command that fixes it; the text shows the first eight and counts the rest), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `missed` (the parts the changes the theme makes did not reach, most flagged first, each with why and the line that reaches it), `unreached` (the parts with a fill of their own the theme leaves on the base look, most visible first: no setting on them and their fill or text color as the base gives it), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures` with the two to open (`look`, left out when none was taken), and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, `alsoRemoved` (when the setting was listed more than once by hand: the other entries, removed with it), and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewAdd',
@@ -293,7 +293,7 @@ export const doc = {
     {
       value: 'search',
       description:
-        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
+        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName, kind and isReady (templates; false when the template doc sets isReady: false). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
     },
 
     // build
@@ -305,14 +305,14 @@ export const doc = {
     {
       value: 'build.kit',
       description:
-        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ...} (the start and each alternative name the package that owns the template), pages (search's closest templates), blocks and domain as SearchResultEntry[] (each naming its package), frame and foundation (Core component names), and hint {reason, commands} when thin.",
+        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ..., isReady} (the start and each alternative name the package that owns the template, and carry isReady), pages (search's closest templates that build could start from), blocks and domain as SearchResultEntry[] (each naming its package; each template with isReady), frame and foundation (Core component names in a run on Core; empty in a run on another base), and hint {reason, commands} when thin.",
     },
 
     // swizzle
     {
       value: 'swizzle.list',
       description:
-        "The names of swizzlable components discoverable from cwd's @astryxdesign/core. The envelope's package is @astryxdesign/core.",
+        "The names of swizzlable components discoverable from cwd's @astryxdesign/core; none in a run on another base. The envelope's package is the run's active base: @astryxdesign/core in a run on Core.",
     },
     {
       value: 'swizzle.copy',
@@ -341,17 +341,17 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content).",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content), and isReady (false when the template's doc sets isReady: false).",
     },
     {
       value: 'template.skeleton',
       description:
-        "A layout skeleton (structural tags with spatial annotations) plus the template's description and the components it composes. The envelope's package names the npm package that owns the template.",
+        "A layout skeleton (structural tags with spatial annotations) plus the template's description, the components it composes, and isReady. The envelope's package names the npm package that owns the template.",
     },
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory (relative to the project; absolute for a scratch copy in the system temp folder), written file name, file count, givenPath (optional; the absolute path as given, present only when it was inside the project), demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined), and isReady. The envelope's package names the npm package that owns the template.",
     },
 
     {
@@ -364,7 +364,7 @@ export const doc = {
     {
       value: 'hook.list',
       description:
-        "The hook catalog grouped by category: `detail` (the level: names | compact | full) and `components`, the grouped map of hook names, brief entries, or a full HookDoc per entry. The envelope's package is @astryxdesign/core, the only package that ships hooks.",
+        "The hook catalog grouped by category: `detail` (the level: names | compact | full) and `components`, the grouped map of hook names, brief entries, or a full HookDoc per entry. The envelope's package is the run's active base: @astryxdesign/core in a run on Core.",
     },
     {
       value: 'hook.detail',
@@ -381,7 +381,7 @@ export const doc = {
     {
       value: 'theme.build',
       description:
-        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load).',
+        'A theme build receipt: name, tokenCount and componentCount (override counts), sizeKB, the written outputs {css, cssDts, js, dts, and variantsDts when applicable}, warnings (defects to fix), and notices (advisories about a correct theme, such as a named font it does not load). A --family build whose root extends a theme the family does not select adds base {theme, package (the installed package it comes from, or null for a local base: a file of the project or a theme defined in the file of the root), export (the name the root imports it by, or null for a theme defined in the file of the root)}: a requirement of the outputs.',
     },
     {
       value: 'theme.build.check',
@@ -396,7 +396,7 @@ export const doc = {
     {
       value: 'theme.list',
       description:
-        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, owner package or local root, source, added, and default fields. Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
+        'Every bundled, installed package, and local theme as a ThemeListEntry[]. Each entry has slug, displayName, description, maintained, package (the package that provides it, or the local root), source, added, and default fields, plus owner (the package the app imports the built theme from, such as the bundled theme package @astryxdesign/theme-<slug>, or the local root) and installed (whether that owner is installed). Optional meta.unmigratedCopies names earlier descriptor-less copies, their missing descriptor, and the upgrade command; those copies are not data entries.',
     },
     {
       value: 'theme.app',
@@ -421,7 +421,7 @@ export const doc = {
     {
       value: 'theme.palette.generate',
       description:
-        'An author-reviewable OKLCH palette response: recipe (`astryx-oklch-v1`), status (`candidate`), familyCount, stopCount, modes, candidate (`TonalPaletteCandidate`), and generationReceipt. The generationReceipt contains schemaVersion (1), recipe, generatorVersion (`palette-generator-v1`), candidateFormatVersion (`palette-typescript-v1` or `palette-json-v1`), candidateSha256, optional preview, resolved request, and diagnostics. File-write fields are output, receipt, preview, written, and reason (`exists` or null).',
+        'An author-reviewable OKLCH palette response: recipe (the one the request or config names; `astryx-oklch-v1` when it names none), status (`candidate`), familyCount, stopCount, modes, candidate (`TonalPaletteCandidate`), and generationReceipt. The generationReceipt contains schemaVersion (1), recipe, generatorVersion (`palette-generator-v1`), candidateFormatVersion (`palette-typescript-v1` or `palette-json-v1`), candidateSha256, optional preview, resolved request, and diagnostics. File-write fields are output, receipt, preview, written, and reason (`exists` or null).',
     },
 
     // upgrade

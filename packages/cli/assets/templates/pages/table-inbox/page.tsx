@@ -122,6 +122,7 @@ import {
   useTableSelectionState,
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 import {
   ArchiveBoxIcon,
   ArrowLeftIcon,
@@ -989,6 +990,7 @@ function ReceivedCell({
    */
   isOverlaid: boolean;
 }) {
+  const showToast = useToast();
   return (
     /* `height` reserves the buttons' line box. Without it the row is 40px at
        rest and 44px with the actions in it, so every row nudges its
@@ -1012,6 +1014,17 @@ function ReceivedCell({
             label={`${action.label} — ${item.subject}`}
             tooltip={action.label}
             icon={<Icon icon={action.icon} size="sm" />}
+            onClick={
+              // A delete needs a confirm step, which this demo does not have.
+              action.id === 'delete'
+                ? undefined
+                : () =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: `Demo: ${action.label} would run on “${item.subject}” here`,
+                      uniqueID: `${action.id}-${item.id}`,
+                    })
+            }
           />
         ))}
       </HStack>
@@ -1350,6 +1363,7 @@ function ConversationPane({
   /** True when the pane has replaced the list rather than sitting beside it. */
   isFullWidth: boolean;
 }) {
+  const showToast = useToast();
   // Named against the subject, because the pane is not the only Archive on
   // screen — every row in the list behind it has one.
   const threadActions = THREAD_ACTIONS.map(action => (
@@ -1359,6 +1373,17 @@ function ConversationPane({
       label={`${action.label} — ${conversation.subject}`}
       tooltip={action.label}
       icon={<Icon icon={action.icon} size="sm" />}
+      onClick={
+        // A delete needs a confirm step, which this demo does not have.
+        action.id === 'delete'
+          ? undefined
+          : () =>
+              // Demo only: replace this toast with the call that performs the action.
+              showToast({
+                body: `Demo: ${action.label} would run on “${conversation.subject}” here`,
+                uniqueID: `${action.id}-${conversation.id}`,
+              })
+      }
     />
   ));
 
@@ -1709,6 +1734,7 @@ function ComposeWindow({
    */
   draft: ComposeDraft | null;
 }) {
+  const showToast = useToast();
   const [recipients, setRecipients] = useState<SearchableItem[]>([]);
   const [cc, setCc] = useState<SearchableItem[]>([]);
   const [bcc, setBcc] = useState<SearchableItem[]>([]);
@@ -1943,6 +1969,13 @@ function ComposeWindow({
                     label="Send"
                     variant="primary"
                     icon={<Icon icon={PaperAirplaneIcon} size="sm" />}
+                    onClick={() =>
+                      // Demo only: replace this toast with the call that performs the action.
+                      showToast({
+                        body: 'Demo: the message would send here',
+                        uniqueID: 'compose-send',
+                      })
+                    }
                   />
                   {COMPOSER_TOOLS.map(tool => (
                     <IconButton
@@ -1951,6 +1984,13 @@ function ComposeWindow({
                       label={tool.label}
                       tooltip={tool.label}
                       icon={<Icon icon={tool.icon} size="sm" />}
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: `Demo: ${tool.label} would open here`,
+                          uniqueID: `compose-${tool.id}`,
+                        })
+                      }
                     />
                   ))}
                 </>
@@ -1975,6 +2015,7 @@ function ComposeWindow({
 // ============= PAGE =============
 
 export default function SupportInboxTemplate() {
+  const showToast = useToast();
   const [category, setCategory] = useState<Category>('inbox');
   /**
    * Which thread the user has picked — `undefined` until they pick one.
@@ -2421,6 +2462,13 @@ export default function SupportInboxTemplate() {
                   label="Refresh"
                   variant="ghost"
                   icon={<Icon icon={ArrowPathIcon} size="sm" />}
+                  onClick={() =>
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: the inbox would refresh here',
+                      uniqueID: 'refresh',
+                    })
+                  }
                 />
                 {/* Compose belongs on this row rather than down with the tabs.
                     Starting a message is unconditional — as true with nine
@@ -2488,6 +2536,17 @@ export default function SupportInboxTemplate() {
                               variant="ghost"
                               size="sm"
                               icon={<Icon icon={action.icon} size="sm" />}
+                              onClick={
+                                // A delete needs a confirm step, which this demo does not have.
+                                action.id === 'delete'
+                                  ? undefined
+                                  : () =>
+                                      // Demo only: replace this toast with the call that performs the action.
+                                      showToast({
+                                        body: `Demo: ${action.label} would run on the selected conversations here`,
+                                        uniqueID: `bulk-${action.id}`,
+                                      })
+                              }
                             />
                           ))}
                         </HStack>
@@ -2593,7 +2652,7 @@ export default function SupportInboxTemplate() {
           </LayoutHeader>
         }
         content={
-          <LayoutContent ref={listRef} padding={4} isScrollable>
+          <LayoutContent role="main" ref={listRef} padding={4} isScrollable>
             {isPaneFullWidth && openConversation != null ? (
               <ConversationPane
                 conversation={openConversation}

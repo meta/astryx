@@ -15,7 +15,7 @@ export default function TextAreaValidation() {
   const [errorNoMsgValue, setErrorNoMsgValue] = useState('Invalid content');
 
   return (
-    <Stack direction="vertical" gap={4} style={{width: 400}}>
+    <Stack direction="vertical" gap={4} style={{width: 400, maxWidth: '100%'}}>
       <TextArea
         label="Error message"
         value={errorValue}

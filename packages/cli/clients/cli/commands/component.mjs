@@ -8,9 +8,7 @@
 
 import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 import {findCoreDir} from '../../../foundation/fs/paths.mjs';
-import {
-  resolveImportPath,
-} from '../../../foundation/discovery/component-discovery.mjs';
+import {resolveImportPath} from '../../../foundation/discovery/component-discovery.mjs';
 import {
   formatFull,
   formatCompact,
@@ -21,8 +19,17 @@ import {
 import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, text, list, record, records, code} from '../formatters/index.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {
+  emit,
+  section,
+  text,
+  list,
+  record,
+  records,
+  code,
+} from '../formatters/index.mjs';
+import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -31,6 +38,7 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -167,14 +175,22 @@ function componentDetailBlocks(
       // A block another package owns says which one.
       /** @param {{package: string}} block @param {string} label */
       const owned = (block, label) =>
-        block.package === result.package ? label : `${label} (${block.package})`;
+        block.package === result.package
+          ? label
+          : `${label} (${block.package})`;
       /** @type {import('../formatters/index.mjs').Block[]} */
       const out = [record({package: result.package})];
       if (showcase) {
         out.push(
           section('Showcase'),
           record(
-            {...showcase, displayName: owned(showcase, showcase.displayName)},
+            {
+              ...showcase,
+              displayName: owned(
+                showcase,
+                markNotReady(showcase.displayName, showcase.isReady),
+              ),
+            },
             {fields: ['displayName', 'description']},
           ),
         );
@@ -183,7 +199,10 @@ function componentDetailBlocks(
         out.push(
           section('Examples'),
           records(
-            examples.map(block => ({...block, name: owned(block, block.name)})),
+            examples.map(block => ({
+              ...block,
+              name: owned(block, markNotReady(block.name, block.isReady)),
+            })),
             {fields: ['name', 'description']},
           ),
         );
@@ -193,7 +212,11 @@ function componentDetailBlocks(
           section(
             `Related: ${related.length} blocks that use ${result.data.component}`,
           ),
-          list(related.map(block => owned(block, block.name))),
+          list(
+            related.map(block =>
+              owned(block, markNotReady(block.name, block.isReady)),
+            ),
+          ),
         );
       }
       if (!showcase && examples.length === 0 && related.length === 0) {
@@ -218,7 +241,7 @@ export function registerComponent(program) {
     ) => {
       const run = getCliInvocation();
       const name = names?.length === 1 ? names[0] : undefined;
-      const apiInput = !names?.length ? undefined : name ?? names;
+      const apiInput = !names?.length ? undefined : (name ?? names);
       const zh = program.opts().zh || false;
       const dense = program.opts().dense || false;
       const lang = program.opts().lang || null;
@@ -232,7 +255,10 @@ export function registerComponent(program) {
 
       const validDetails = ['full', 'compact', 'brief'];
       if (!validDetails.includes(detail)) {
-        return cliError(`Invalid --detail value "${detail}". Valid levels: ${validDetails.join(', ')}`, {code: ERROR_CODES.ERR_INVALID_DETAIL});
+        return cliError(
+          `Invalid --detail value "${detail}". Valid levels: ${validDetails.join(', ')}`,
+          {code: ERROR_CODES.ERR_INVALID_DETAIL},
+        );
       }
 
       // Non-blocking nudge: if any configured integration has validation
@@ -248,32 +274,41 @@ export function registerComponent(program) {
       /** @type {ComponentResult} */
       let result;
       try {
-        result = /** @type {ComponentResult} */ (await componentApi(apiInput, {
-          cwd: process.cwd(),
-          list: options.list,
-          category: options.category,
-          package: options.package,
-          props: options.props,
-          source: options.source,
-          showcase: options.showcase,
-          blocks: options.blocks,
-          detail,
-          lang, zh, dense,
-        }));
+        result = /** @type {ComponentResult} */ (
+          await componentApi(apiInput, {
+            cwd: process.cwd(),
+            list: options.list,
+            category: options.category,
+            package: options.package,
+            props: options.props,
+            source: options.source,
+            showcase: options.showcase,
+            blocks: options.blocks,
+            detail,
+            lang,
+            zh,
+            dense,
+          })
+        );
       } catch (e) {
-        const err = /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        return cliError(err.message, {suggestions: err.suggestions, code: err.code});
+        const err =
+          /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
+        return cliError(err.message, {
+          suggestions: err.suggestions,
+          code: err.code,
+        });
       }
 
       const answered = summarize(result);
-      if (
-        result.type === 'component.batch' &&
-        result.data.results.some(row => row.status !== 'found')
-      ) {
-        process.exitCode = 1;
-      }
+      // A batch answers every selector, then fails when one did not resolve:
+      // it records that row's code once the receipt is printed.
+      const unresolved =
+        result.type === 'component.batch'
+          ? result.data.results.find(row => row.status !== 'found')
+          : undefined;
       if (json) {
         jsonOut(result);
+        if (unresolved) failAfterOutput(unresolved.code);
         return answered;
       }
 
@@ -297,7 +332,10 @@ export function registerComponent(program) {
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(
         [
-          `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
+          // The example is a Core import, so a run on another base leaves it out.
+          currentNonCoreBase()
+            ? 'Import from the path shown'
+            : `Import from the path shown (e.g. import {Button} from '@astryxdesign/core/Button')`,
           `Usage: ${run} component <name> [name...]`,
         ].join('\n'),
       );
@@ -352,7 +390,9 @@ export function registerComponent(program) {
             for (const [cat, items] of entries) {
               // Skip the synthetic group header when there's only one ungrouped category
               const isUngrouped =
-                entries.length === 1 && items.length === 1 && items[0]?.name === cat;
+                entries.length === 1 &&
+                items.length === 1 &&
+                items[0]?.name === cat;
               if (!isUngrouped) out.push(section(cat));
               // An entry from another package says which one (cli-surface INV28).
               const named = items.map(item =>
@@ -360,7 +400,9 @@ export function registerComponent(program) {
                   ? item
                   : {...item, import: `${item.import}  [${item.package}]`},
               );
-              out.push(records(named, {fields: ['name', 'import', 'description']}));
+              out.push(
+                records(named, {fields: ['name', 'import', 'description']}),
+              );
             }
             out.push(listFooter);
             emit(...out);
@@ -388,16 +430,22 @@ export function registerComponent(program) {
             // Use a precomputed import when the API supplies one (integration
             // components carry it); only fall back to the core resolver for
             // core components.
-            const importPath = item.import ?? resolveImportPath(coreDir, item.name);
+            const importPath =
+              item.import ?? resolveImportPath(coreDir, item.name);
             const qualify =
-              item.package !== CORE_PKG || (nameCounts.get(item.name)?.size ?? 0) > 1;
+              item.package !== CORE_PKG ||
+              (nameCounts.get(item.name)?.size ?? 0) > 1;
             return qualify ? `${importPath}  [${item.package}]` : importPath;
           };
 
           const firstGroup = Object.entries(groups)[0];
           const entries =
-            options.category && firstGroup ? firstGroup[1] : Object.values(groups).flat();
-          const sorted = [...entries].sort((a, b) => compareText(a.name, b.name));
+            options.category && firstGroup
+              ? firstGroup[1]
+              : Object.values(groups).flat();
+          const sorted = [...entries].sort((a, b) =>
+            compareText(a.name, b.name),
+          );
 
           emit(
             options.category && firstGroup
@@ -467,6 +515,7 @@ export function registerComponent(program) {
             }
           }
           emit(...out);
+          if (unresolved) failAfterOutput(unresolved.code);
           break;
         }
 
@@ -500,11 +549,27 @@ export function registerComponent(program) {
   });
 }
 
-
 // Re-export lib functions for backward compatibility
 // (agent-docs.mjs, tests, and generate-skill-doc.sh import from here)
-export {discoverComponents, discoverExternalComponentsGrouped, findComponentReadme, findComponentSource, findExternalComponentDoc, resolveImportPath} from '../../../foundation/discovery/component-discovery.mjs';
+export {
+  discoverComponents,
+  discoverExternalComponentsGrouped,
+  findComponentReadme,
+  findComponentSource,
+  findExternalComponentDoc,
+  resolveImportPath,
+} from '../../../foundation/discovery/component-discovery.mjs';
 export {discoverExternalPackages} from '../../../foundation/fs/paths.mjs';
 export {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
-export {formatFull, formatCompact, formatBrief, formatProps, formatBriefAll} from '../lib/component-format.mjs';
-export {levenshteinDistance, findClosestComponents, searchComponents} from '../../../foundation/text/string-utils.mjs';
+export {
+  formatFull,
+  formatCompact,
+  formatBrief,
+  formatProps,
+  formatBriefAll,
+} from '../lib/component-format.mjs';
+export {
+  levenshteinDistance,
+  findClosestComponents,
+  searchComponents,
+} from '../../../foundation/text/string-utils.mjs';

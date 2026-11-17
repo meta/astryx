@@ -9,7 +9,8 @@
  *   show succeeds, and none without the popover API or past the copy cap. It
  *   sits on the layer's layout box with fractions, and with the transform and
  *   opacity it was drawn with. No keyframes or transitions replay, there is
- *   one copy per layer, and it is scrolled where the layer was.
+ *   one copy per layer, and it is scrolled where the layer was. It keeps the
+ *   padding, border and colors of what it copies.
  * @position Testing; the browser proofs are in
  *   __tests__/layerExitCopy.interaction.browser.spec.ts
  */
@@ -573,6 +574,31 @@ describe('placeLayerExitCopy', () => {
     const copy = place(element);
     expect(copy.style.getPropertyValue('overflow-y')).toBe('auto');
     expect(copy.scrollTop).toBe(80);
+  });
+
+  it('keeps the padding, border and colors of what it copies, which the popover style would replace', () => {
+    popoverApi(true);
+    const element = layer();
+    // A class, not an inline style, which the clone would carry anyway.
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '.surface { padding: 0px; border: 0px none rgb(0, 0, 0); color: rgb(1, 2, 3); background-color: rgb(4, 5, 6); }';
+    document.body.appendChild(sheet);
+    element.classList.add('surface');
+    const copy = place(element);
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      expect(copy.style.getPropertyValue(`padding-${side}`), side).toBe('0px');
+      expect(copy.style.getPropertyValue(`border-${side}-width`), side).toBe(
+        '0px',
+      );
+      expect(copy.style.getPropertyValue(`border-${side}-style`), side).toBe(
+        'none',
+      );
+    }
+    expect(copy.style.getPropertyValue('color')).toBe('rgb(1, 2, 3)');
+    expect(copy.style.getPropertyValue('background-color')).toBe(
+      'rgb(4, 5, 6)',
+    );
   });
 
   it('takes a form-associated custom element out of every form, as it does a native control', () => {

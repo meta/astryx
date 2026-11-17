@@ -54,7 +54,10 @@ export type ErrorCode =
   | 'ERR_DEP_MISSING'
   | 'ERR_GH_CLI'
   | 'ERR_LAYOUT_PARSE'
-  | 'ERR_LAYOUT_INVALID';
+  | 'ERR_LAYOUT_INVALID'
+  | 'ERR_BASE_CAPABILITY'
+  | 'ERR_BASE_NOT_FOUND'
+  | 'ERR_BASE_AMBIGUOUS';
 
 /** The frozen runtime map of all error codes (keys === values). */
 export declare const ERROR_CODES: Readonly<Record<ErrorCode, ErrorCode>>;

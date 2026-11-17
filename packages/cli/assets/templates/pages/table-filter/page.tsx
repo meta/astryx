@@ -65,6 +65,7 @@ import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -2193,6 +2194,7 @@ export default function TableFilterTemplate() {
   // client render rather than a default that corrects itself afterwards —
   // which is what lets the auto-open effect below trust it.
   const isCompactSurface = useMediaQuery(COMPACT_SURFACE_QUERY);
+  const showToast = useToast();
 
   // --- Filtering -------------------------------------------------------------
   const [filters, setFilters] = useState<PowerSearchFilter[]>(INITIAL_FILTERS);
@@ -4185,12 +4187,26 @@ export default function TableFilterTemplate() {
                 label={NEXT_ACTION[activeJob.status]}
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: “${NEXT_ACTION[activeJob.status]}” would start for ${activeJob.id} here`,
+                    uniqueID: `next-${activeJob.id}`,
+                  })
+                }
               />
               <Button
                 label="Edit job"
                 variant="secondary"
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: editing ${activeJob.id} would open here`,
+                    uniqueID: `edit-${activeJob.id}`,
+                  })
+                }
               />
             </HStack>
           </VStack>
@@ -4469,7 +4485,7 @@ export default function TableFilterTemplate() {
         content={
           /* Default padding (16px) is deliberate: Table bleeds to the edges
              and re-applies it to the first and last cells. */
-          <LayoutContent padding={4} label="Service jobs">
+          <LayoutContent role="main" padding={4} label="Service jobs">
             {results.length === 0 ? (
               <EmptyState
                 icon={<Icon icon={Search} size="lg" />}

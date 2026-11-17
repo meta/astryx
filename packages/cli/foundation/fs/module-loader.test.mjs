@@ -443,21 +443,31 @@ describe('importThemeArtifact', () => {
       "throw new Error('broken theme module');\n",
       /broken theme module/,
     ],
-    [
-      'an asset that is not a stylesheet',
-      "import './logo.svg';\nexport const oceanTheme = {name: 'ocean'};\n",
-      /Unknown file extension "\.svg"/,
-    ],
   ])(
     'still rejects a built module that imports its stylesheet and has %s',
     async (_label, rest, expected) => {
-      write('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>\n');
       write('broken.js', 'export const broken = ;\n');
       write('ocean.js', `import './ocean.css';\n${rest}`);
 
       await expect(importThemeArtifact('./ocean.js', tmpDir)).rejects.toThrow(
         expected,
       );
+    },
+  );
+
+  it.skipIf(
+    typeof (/** @type {any} */ (nodeModule).registerHooks) !== 'function',
+  )(
+    'loads an asset a module imports (an icon’s .svg) as its URL, as a bundler gives it',
+    async () => {
+      write('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>\n');
+      write(
+        'ocean.js',
+        "import './ocean.css';\nimport logo from './logo.svg';\nexport const oceanTheme = {name: 'ocean', logo};\n",
+      );
+
+      const mod = await importThemeArtifact('./ocean.js', tmpDir);
+      expect(mod.oceanTheme.logo).toMatch(/^file:.*\/logo\.svg$/);
     },
   );
 
@@ -578,7 +588,9 @@ describe('loadModuleWithParser', () => {
     const result = schema.safeParse(input);
     if (!result.success) {
       const issues = result.error.issues
-        .map(i => `${i.path.length ? i.path.join('.') : '(root)'}: ${i.message}`)
+        .map(
+          i => `${i.path.length ? i.path.join('.') : '(root)'}: ${i.message}`,
+        )
         .join('; ');
       throw new Error(`${label} is invalid: ${issues}`);
     }

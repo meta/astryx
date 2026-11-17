@@ -127,6 +127,10 @@ layer:
 A React portal changes DOM placement. It is not itself a top-layer host and
 cannot use `z-index` to outrank a native modal dialog.
 
+A layer whose anchor sits in a closed `<dialog>` that renders opens after the
+next commit (a dialog shown in that commit's effects is open by then); one
+whose dialog is not rendered waits until it renders.
+
 `useLayer` keeps a context layer at its JSX position when that position is safe.
 When parsing, interactive-content, or inline-formatting constraints make that
 position unsafe, it portals only beyond the outermost unsafe ancestor. A
@@ -344,7 +348,9 @@ its own light dismiss. A touch presentation whose close stays on screen plays it
 on an exit copy: a static copy of the layer that `placeLayerExitCopy` takes as
 the layer closes. The copy is laid out on the layer's own box and carries the
 transform and opacity the layer is drawn with, so a copy taken while the layer
-is still entering holds where it was drawn. It carries no ids, form names, or
+is still entering holds where it was drawn. It keeps the padding, border, and
+colors of the element it copies, which the popover style would replace.
+It carries no ids, form names, or
 form owner; it is `inert`, hidden from assistive technology, and out of pointer
 reach; it keeps the layer's scroll positions. It is shown only in the top layer,
 as a manual popover, so a clipping, transformed, or sticky ancestor neither cuts

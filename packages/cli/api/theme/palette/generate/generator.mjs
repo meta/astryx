@@ -22,9 +22,24 @@ import {
 /** @typedef {{colors: Record<number, string>, diagnostics: TonalPaletteRampDiagnostics}} GeneratedRamp */
 /** @typedef {{id: string, name: string, seed: string, kind: 'chromatic' | 'neutral', anchors: TonalPaletteAnchor[]}} NormalizedFamily */
 /** @typedef {{id: string, name: string, seed: string, light?: GeneratedRamp, dark?: GeneratedRamp}} GeneratedFamily */
-/** @typedef {{recipe: typeof PALETTE_RECIPE, status: 'candidate', request: NormalizedRequest, families: GeneratedFamily[], coordination: TonalPaletteCoordinationDiagnostics[], errors: {familyId: string, message: string}[]}} PaletteGenerationResult */
+/** @typedef {{recipe: PaletteRecipe, status: 'candidate', request: NormalizedRequest, families: GeneratedFamily[], coordination: TonalPaletteCoordinationDiagnostics[], errors: {familyId: string, message: string}[]}} PaletteGenerationResult */
 
+/** @typedef {'astryx-oklch-v1' | 'astryx-oklch-v2'} PaletteRecipe */
+
+/** The recipe a request that names none runs: the first one. */
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
+/**
+ * The recipe whose pale stops follow the vibrancy and the seed's own
+ * chroma: a stop whose gamut cannot hold the most vivid request gives every
+ * request the same share of it, and coordination never raises a seed's
+ * chroma. A request runs it by naming it.
+ */
+export const PALETTE_RECIPE_V2 = 'astryx-oklch-v2';
+/** Every recipe the generator runs. */
+export const PALETTE_RECIPES = Object.freeze([
+  PALETTE_RECIPE,
+  PALETTE_RECIPE_V2,
+]);
 /**
  * Identity of this generator implementation. `PALETTE_RECIPE` names the
  * normative algorithm; this names the code that ran it, so a receipt can tell
@@ -108,6 +123,7 @@ export function parseStopList(input) {
  * (see TonalPaletteGenerationInput); any other field changes nothing.
  */
 export const GENERATION_INPUT_KEYS = Object.freeze([
+  'recipe',
   'vibrancy',
   'neutralProfile',
   'modeStrategy',
@@ -192,10 +208,30 @@ function vibrancyMultiplier(vibrancy) {
   return 1 + (vibrancy - 50) * 0.0096;
 }
 
-/** @param {number} sourceChroma */
-function coordinatedChroma(sourceChroma) {
-  return sourceChroma * 0.35 + 0.18 * 0.65;
+/**
+ * A family's chroma drawn toward the shared one, so its families sit
+ * together. As v2 shares a narrow stop's gamut it is never raised above the
+ * seed's own, so a dusty seed stays dusty in its pale stops.
+ * @param {number} sourceChroma @param {PaletteRecipe} [recipe]
+ */
+function coordinatedChroma(sourceChroma, recipe = PALETTE_RECIPE) {
+  const drawn = sourceChroma * 0.35 + 0.18 * 0.65;
+  return recipe === PALETTE_RECIPE_V2 ? Math.min(sourceChroma, drawn) : drawn;
 }
+
+/**
+ * How narrow a stop's gamut is for v2 to share it: the most vivid seed at
+ * the default vibrancy asks this many times what the stop holds. From the
+ * first the stop starts to share its gamut in proportion; from the second
+ * it shares it wholly.
+ */
+const V2_SHARED_FROM = 1.3;
+/** v2 shares only stops lighter than this tone: the pale side of a ramp. */
+const V2_SHARED_ABOVE = 50;
+const V2_SHARED_FULL = 2;
+
+/** The chroma of the most vivid seed sRGB holds, as v2 coordinates it. */
+const MOST_VIVID_CHROMA = coordinatedChroma(0.32, PALETTE_RECIPE_V2);
 
 /** @param {string} color @returns {PolarColor} */
 function colorToPolar(color) {
@@ -244,6 +280,7 @@ function anchorPolarAtStop(seed, anchors, stop) {
  * @param {boolean} coordinateWithOtherFamilies
  * @param {number} [chromaMultiplier] Share of its in-gamut chroma the stop
  * keeps (see darkChromaMultiplier).
+ * @param {PaletteRecipe} [recipe]
  */
 function generateCandidate(
   source,
@@ -252,13 +289,16 @@ function generateCandidate(
   vibrancy,
   coordinateWithOtherFamilies,
   chromaMultiplier = 1,
+  recipe = PALETTE_RECIPE,
 ) {
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
+  // Every recipe starts from v1's chroma, so a stop v2 does not share is
+  // drawn exactly as v1 draws it.
   const baseChroma = coordinateWithOtherFamilies
     ? coordinatedChroma(source.chroma)
     : source.chroma;
-  const chroma =
+  let chroma =
     baseChroma *
     vibrancyMultiplier(vibrancy) *
     hueBalanceFactor(adjustedHue) *
@@ -267,6 +307,42 @@ function generateCandidate(
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
   const maxChroma = maxOklchChroma(adjustedHue, lightness);
+  // v2, on the pale side of a ramp (above its middle): the narrower a
+  // stop's gamut is for the most vivid seed at the default vibrancy (a pale
+  // tint), the more every request shares that gamut in proportion (the most
+  // vivid seed at vibrancy 100 takes all of it), so such a stop follows the
+  // seed's chroma, never raised above the seed's own, and the vibrancy,
+  // instead of every request landing on the gamut's edge. A stop whose
+  // gamut holds the most vivid seed at the default vibrancy shares nothing,
+  // and the dark side never shares (role text and dark fills keep their
+  // strength): those stops are drawn exactly as v1 draws them, for every
+  // seed at every vibrancy.
+  if (
+    recipe === PALETTE_RECIPE_V2 &&
+    coordinateWithOtherFamilies &&
+    adjustedTone > V2_SHARED_ABOVE
+  ) {
+    const shape =
+      hueBalanceFactor(adjustedHue) *
+      highToneChromaFactor(adjustedHue, adjustedTone) *
+      toneChromaEnvelope(adjustedTone) *
+      (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
+    const narrow =
+      (MOST_VIVID_CHROMA * vibrancyMultiplier(50) * shape) /
+      Math.max(maxChroma, 1e-6);
+    const share = smoothstep(
+      (narrow - V2_SHARED_FROM) / (V2_SHARED_FULL - V2_SHARED_FROM),
+    );
+    if (share > 0) {
+      const most = MOST_VIVID_CHROMA * vibrancyMultiplier(100) * shape;
+      const own =
+        coordinatedChroma(source.chroma, recipe) *
+        vibrancyMultiplier(vibrancy) *
+        shape;
+      const shared = (own / most) * maxChroma;
+      chroma = (1 - share) * Math.min(chroma, maxChroma) + share * shared;
+    }
+  }
   // A taper scales the chroma the stop shows after gamut mapping, so a stop
   // the gamut already limits loses the same share as any other stop.
   const shownChroma =
@@ -551,6 +627,7 @@ function generateRamp(request, family, mode) {
     request.vibrancy,
     family.kind !== 'neutral',
     darkChromaMultiplier(request.darkChromaTaper, family, mode, 50),
+    request.recipe,
   ).hex;
   for (const stop of request.stops) {
     const source = anchorPolarAtStop(seed, anchors, stop);
@@ -561,6 +638,7 @@ function generateRamp(request, family, mode) {
       request.vibrancy,
       family.kind !== 'neutral',
       darkChromaMultiplier(request.darkChromaTaper, family, mode, stop),
+      request.recipe,
     );
     colors[stop] = generated.hex;
     if (generated.gamutMapped) gamutMappedStops.push(stop);
@@ -744,6 +822,14 @@ export function normalizeGenerationRequest(input) {
   if (!Array.isArray(families) || families.length === 0) {
     throw new Error('Palette generation requires at least one family.');
   }
+  // A request that names no recipe runs the first one, so a config written
+  // before v2 regenerates the same colors.
+  const recipe = /** @type {PaletteRecipe} */ (input.recipe ?? PALETTE_RECIPE);
+  if (!PALETTE_RECIPES.includes(recipe)) {
+    throw new Error(
+      `Unknown palette recipe: ${String(input.recipe)} (known: ${PALETTE_RECIPES.join(', ')}).`,
+    );
+  }
   const modeStrategy = input.modeStrategy ?? 'light-and-dark';
   const modes = modesForStrategy(modeStrategy);
   const stops = validateStops(input.stops ?? DEFAULT_21_STOPS);
@@ -848,7 +934,7 @@ export function normalizeGenerationRequest(input) {
   );
   /** @type {NormalizedRequest} */
   const request = {
-    recipe: PALETTE_RECIPE,
+    recipe,
     vibrancy: input.vibrancy ?? 50,
     neutralProfile,
     modeStrategy,
@@ -887,7 +973,7 @@ export function generatePaletteSet(input) {
     }
   }
   return {
-    recipe: PALETTE_RECIPE,
+    recipe: request.recipe,
     status: 'candidate',
     request,
     families,
@@ -914,7 +1000,7 @@ export function generateTonalPalette(input) {
   return {
     schemaVersion: 1,
     status: 'candidate',
-    recipe: PALETTE_RECIPE,
+    recipe: result.recipe,
     black: PALETTE_BLACK,
     white: PALETTE_WHITE,
     stops: [...result.request.stops],

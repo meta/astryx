@@ -191,11 +191,10 @@ export type TokenValue = string | [light: string, dark: string];
  * The `@light` and `@dark` keys hold a style block (properties and
  * pseudo-class overrides) that applies only where the element's color mode is
  * that mode: the mode `Theme` resolves from its own `mode`, the system
- * preference, or a `MediaTheme` surface. Inside media surfaces it applies as
- * the `onDark` and `onLight` overrides do: inside any surface of its mode, so
- * where surfaces of both modes enclose an element (a light `MediaTheme` inside
- * a dark one) both blocks apply and the light block wins a property both set.
- * Where no enclosing mode matches, the block writes nothing, so every other
+ * preference, or a `MediaTheme` surface. Inside media surfaces the nearest
+ * surface decides, so a light `MediaTheme` inside a dark one takes only the
+ * light block, for up to five surfaces of alternating modes nested one in
+ * another. Where no enclosing mode matches, the block writes nothing, so every other
  * rule applies there as it would without it. Use it
  * for a value that is not a color, or to leave the other mode untouched; a
  * color that differs per mode can also be one `light-dark()` value.
@@ -302,7 +301,9 @@ export interface DefineThemeInput<
    * Unified typography configuration — fonts, scale, and weights.
    *
    * Scale controls sizing; roles (body, heading, code) declare
-   * fonts, fallbacks, and weights. Heading inherits from body if omitted.
+   * fonts, fallbacks, and weights. A heading with no `family` takes the
+   * body's whole font list; with its own `family`, only its own
+   * `fallbacks`. `fallbacks` with no `family` build nothing.
    *
    * Font loading is the consumer's responsibility — add a <link> or
    * @import for your fonts before rendering the theme.
@@ -711,6 +712,17 @@ export const tokenDefaults: Record<string, string> = {
 // =============================================================================
 
 /**
+ * Whether a theme carries a field the theme builders write (`__inputTokens`,
+ * always present on the result of defineTheme() and defineSyntaxTheme()) or a
+ * built theme module's `__built`. A plain object with a name and tokens is
+ * theme input, not a theme: its values are not built (a light/dark pair is
+ * still an array), so it is no base.
+ */
+function isBuiltTheme(theme: DefinedTheme): boolean {
+  return '__inputTokens' in theme || theme.__built === true;
+}
+
+/**
  * Describe a rejected `extends` value for the error message — enough to tell a
  * missed import (`undefined`) from a module namespace or a plain object.
  */
@@ -817,6 +829,16 @@ export function defineTheme<
   // import silently resolving to the wrong module hands over, and the theme
   // then built into a plausible-looking stylesheet missing everything it was
   // supposed to inherit.
+  if (
+    'extends' in input &&
+    isDefinedTheme(input.extends) &&
+    !isBuiltTheme(input.extends)
+  ) {
+    throw new Error(
+      `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got a plain object named "${input.extends.name}", which is theme input, not a theme. ` +
+        `Pass it through defineTheme() first (extends: defineTheme({...})), or import the theme its own file defines.`,
+    );
+  }
   if ('extends' in input && !isDefinedTheme(input.extends)) {
     throw new Error(
       `defineTheme("${input.name}"): \`extends\` must be a theme from defineTheme(), got ${describeBadBase(input.extends)}. ` +
