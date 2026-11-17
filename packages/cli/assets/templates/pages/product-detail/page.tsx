@@ -318,7 +318,7 @@ export default function ProductDetailTemplate() {
       contentWidth={1200}
       content={
         <LayoutContent role="main" padding={6}>
-          <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={5}>
+          <Grid columns={{minWidth: 320, max: 2, repeat: 'fit'}} gap={5}>
             <ImageGallery
               selected={selectedThumb}
               onSelect={setSelectedThumb}

@@ -844,7 +844,7 @@ export default function DataDashboardPage() {
                 icon={UsersIcon}
               />
               <Grid
-                columns={{minWidth: 240, repeat: 'fit'}}
+                columns={{minWidth: 240, max: 4, repeat: 'fit'}}
                 gap={3}
                 xstyle={metricsGridStyles.grid}>
                 {OVERVIEW_METRICS.map(metric => (
@@ -875,7 +875,7 @@ export default function DataDashboardPage() {
                 hint="Share of active users"
                 icon={UsersIcon}
               />
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={4}>
+              <Grid columns={{minWidth: 320, max: 3, repeat: 'fit'}} gap={4}>
                 <BreakdownCard title="Age" data={AGE_DATA} />
                 <BreakdownCard title="Gender" data={GENDER_DATA} />
                 <BreakdownCard title="Device" data={DEVICE_DATA} />

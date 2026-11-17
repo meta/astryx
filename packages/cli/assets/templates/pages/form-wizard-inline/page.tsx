@@ -789,8 +789,10 @@ export default function FormWizardInlinePage() {
                                 <CheckboxListItem
                                   key={t.id}
                                   value={t.id}
-                                  label={t.label}
-                                  description={t.description}
+                                  // Node labels and descriptions wrap on a narrow screen;
+                                  // strings truncate to one line.
+                                  label={<>{t.label}</>}
+                                  description={<>{t.description}</>}
                                 />
                               ))}
                             </CheckboxList>
@@ -818,8 +820,8 @@ export default function FormWizardInlinePage() {
                                 <CheckboxListItem
                                   key={job.id}
                                   value={job.id}
-                                  label={job.label}
-                                  description={job.description}
+                                  label={<>{job.label}</>}
+                                  description={<>{job.description}</>}
                                 />
                               ))}
                             </CheckboxList>

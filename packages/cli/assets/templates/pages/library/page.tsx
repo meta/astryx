@@ -334,7 +334,7 @@ function LibrarySection({
   return (
     <VStack gap={6}>
       <Heading level={2}>{category}</Heading>
-      <Grid columns={{minWidth: 320}} gap={4}>
+      <Grid columns={{minWidth: 320, max: 5}} gap={4}>
         {items.map(item => (
           <LibraryCard key={item.id} item={item} />
         ))}
