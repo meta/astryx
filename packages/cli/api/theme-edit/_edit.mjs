@@ -6794,9 +6794,7 @@ async function changeOnce(
     !s.on &&
     (['text-size', 'type'].includes(s.thing) ||
       /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(s.thing))
-      ? [
-          'phones (touch screens below 1024px wide) keep the base theme reading sizes; this applies on wider or mouse screens',
-        ]
+      ? [PHONE_SIZES_NOTE]
       : []),
     // A scale step far outside reading sizes is named.
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
@@ -7621,6 +7619,10 @@ function problemLines(list) {
   return (list ?? []).map(x => ({problem: x.text, fix: x.fix}));
 }
 
+/** Where a whole-theme size change applies: phones keep their own. */
+const PHONE_SIZES_NOTE =
+  'phones (touch screens below 1024px wide) keep the base theme reading sizes; this applies on wider or mouse screens';
+
 /**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
@@ -8067,6 +8069,17 @@ export async function themeEditShow(theme, options = {}) {
         // draw).
         ...drawnContrastNotes(shots.lowContrast ?? [], checked),
         ...misplacedNotes(theme, data),
+        // (A whole-theme size the theme sets, the text-size or type dial
+        // or a size token, skips phones: a page measured on a touch screen
+        // under 1024px shows the base theme's sizes, which is no fault.)
+        ...(data.settings.some(
+          x =>
+            !x.on &&
+            (['text-size', 'type'].includes(x.thing) ||
+              /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(x.thing)),
+        )
+          ? [`text sizes: ${PHONE_SIZES_NOTE}`]
+          : []),
         ...(noReact
           ? [
               `react and react-dom cannot be found from this app, so the pages and pictures were not made again and the checks that render components were skipped; install them (${installLine(cwd, ['react', 'react-dom'])}), then run show again`,
