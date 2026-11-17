@@ -35,7 +35,14 @@ const cardRule = slug => {
     path.join(cwd, 'themes', slug, `${slug}.css`),
     'utf8',
   );
-  return /\n {2}\.astryx-card \{([^}]*)\}/.exec(css)?.[1] ?? '';
+  // (The plain card: its own rule and its default variant's, where a
+  // surface look puts its fill so the colored variants keep theirs.)
+  return [
+    /\n {2}\.astryx-card \{([^}]*)\}/.exec(css)?.[1] ?? '',
+    /\n {2}\.astryx-card\[data-variant="default"\] \{([^}]*)\}/.exec(
+      css,
+    )?.[1] ?? '',
+  ].join(';');
 };
 /** @param {string} rule @param {string} prop */
 const valueIn = (rule, prop) =>
