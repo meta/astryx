@@ -5,7 +5,8 @@
 /**
  * @file useAutoMediaMode.ts
  * @input Ref to the element whose backdrop should be measured
- * @output 'dark' | 'light' | null (not yet measurable)
+ * @output 'dark' | 'light' | null (not yet measurable), and the side for a
+ *   surface a component paints inverted, before and after a measurement
  * @position Internal; powers `MediaTheme mode="auto"`. Not exported from the
  *   package. Sibling to useImageMode, which does the same for images.
  */
@@ -28,6 +29,7 @@ import {compositeOver} from '../theme/contrast';
 import {useTheme} from '../theme/useTheme';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {
+  pickInvertedSide,
   pickMediaMode,
   type DetectedMediaMode,
   type MediaSidePicker,
@@ -132,6 +134,41 @@ export function useSurfaceMediaMode(
   pick: MediaSidePicker,
 ): DetectedMediaMode | null {
   return useMeasuredMediaMode(() => ref.current, isEnabled, pick);
+}
+
+/**
+ * The media side for a surface that a component paints as inverted, such as
+ * a toast or a tooltip, measured by `pick` once painted. Before a measurement,
+ * the side comes from the theme's resolved `surfaceToken` by the same rule.
+ * When that color is translucent, or a color cannot be read, the side is the
+ * one opposite the color mode, or `'dark'` when `isDarkWhenUnknown`.
+ */
+export function useInvertedSurfaceMediaMode(
+  ref: RefObject<HTMLElement | null>,
+  isEnabled: boolean,
+  pick: MediaSidePicker,
+  surfaceToken: string,
+  isDarkWhenUnknown = false,
+): DetectedMediaMode {
+  const {mode, tokens} = useTheme();
+  const measured = useSurfaceMediaMode(ref, isEnabled, pick);
+  if (measured !== null) {
+    return measured;
+  }
+  const surface = parseColor(tokens[surfaceToken] ?? '');
+  const fromTokens =
+    surface !== null && surface.a >= 1
+      ? pickInvertedSide(
+          surface,
+          null,
+          parseColor(tokens['--color-on-dark'] ?? ''),
+          parseColor(tokens['--color-on-light'] ?? ''),
+        )
+      : null;
+  if (fromTokens === 'dark' || fromTokens === 'light') {
+    return fromTokens;
+  }
+  return isDarkWhenUnknown || mode === 'light' ? 'dark' : 'light';
 }
 
 function useMeasuredMediaMode(

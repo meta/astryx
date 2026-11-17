@@ -5,9 +5,11 @@
  * @file TooltipContentContrast.a11y.chromium.spec.ts
  * @input The built `Core/Tooltip` RichContent story in every shipped theme,
  *   light and dark: a plain string, the docs' `Text` example, default and
- *   secondary `Text`, and an icon with text, each in an open tooltip
+ *   secondary `Text`, an icon with text, and bare text mixed with an element,
+ *   each in an open tooltip
  * @output Chromium proof that text in a tooltip meets WCAG AA (4.5:1) and an
- *   icon meets 3:1 against the tooltip's painted surface
+ *   icon meets 3:1 against the tooltip's painted surface, and that bare text
+ *   keeps the `tooltip` surface's own color
  * @position Content colors come from the media context around the content.
  *   Only a real engine resolves the theme tokens and the painted surface, so
  *   the measure runs in a browser.
@@ -162,7 +164,7 @@ for (const theme of SHIPPED_THEMES) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:${theme};colorMode:${mode}`,
       );
-      await expect(page.getByRole('tooltip')).toHaveCount(5);
+      await expect(page.getByRole('tooltip')).toHaveCount(6);
       await expect(page.getByText('Body text')).toBeVisible();
       await page.evaluate(async () => {
         await document.fonts.ready;
@@ -175,5 +177,49 @@ for (const theme of SHIPPED_THEMES) {
       );
     }
     expect(failures).toEqual([]);
+  });
+}
+
+for (const theme of SHIPPED_THEMES) {
+  test(`bare text keeps the tooltip surface's color in ${theme}, light and dark`, async ({
+    page,
+  }) => {
+    const mismatches: string[] = [];
+    for (const mode of MODES) {
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story&globals=astryxTheme:${theme};colorMode:${mode}`,
+      );
+      await expect(page.getByRole('tooltip')).toHaveCount(6);
+      const found = await page.evaluate(() => {
+        const out: string[] = [];
+        for (const tooltip of document.querySelectorAll('[role="tooltip"]')) {
+          const surface = getComputedStyle(tooltip).color;
+          const walker = document.createTreeWalker(
+            tooltip,
+            NodeFilter.SHOW_TEXT,
+          );
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const text = node.textContent?.trim();
+            const element = node.parentElement;
+            // Only text no component colors: a plain string, or bare text and
+            // plain elements beside it.
+            if (
+              !text ||
+              element == null ||
+              !['Plain string', 'Saved', 'now'].includes(text)
+            ) {
+              continue;
+            }
+            const color = getComputedStyle(element).color;
+            if (color !== surface) {
+              out.push(`"${text}": ${color} instead of ${surface}`);
+            }
+          }
+        }
+        return out;
+      });
+      mismatches.push(...found.map(mismatch => `${mode}: ${mismatch}`));
+    }
+    expect(mismatches).toEqual([]);
   });
 }

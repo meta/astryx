@@ -113,3 +113,25 @@ export function MediaTheme({
 }
 
 MediaTheme.displayName = 'MediaTheme';
+
+/**
+ * A media side's tokens without MediaTheme's text color. Children that read
+ * tokens, such as `Text`, take the side's values, and inherited text keeps
+ * the color of the surface around it. Internal to Core: a surface whose own
+ * text color is a theme target, such as the tooltip, wraps content in it.
+ */
+export function MediaTokens({
+  mode,
+  children,
+}: {
+  mode: 'dark' | 'light' | 'off';
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div
+      {...(mode === 'off' ? null : {[dataAttr('media')]: mode})}
+      {...stylex.props(styles.root)}>
+      {children}
+    </div>
+  );
+}

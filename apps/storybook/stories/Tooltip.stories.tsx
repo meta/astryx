@@ -421,8 +421,8 @@ export const TouchTriggers: Story = {
 
 /**
  * Rich content on the inverted surface: a plain string, the docs' `Text`
- * example, default and secondary `Text`, and an icon with text stay readable
- * in light and dark.
+ * example, default and secondary `Text`, an icon with text, and bare text
+ * mixed with an element stay readable in light and dark.
  */
 export const RichContent: Story = {
   render: () => (
@@ -455,6 +455,15 @@ export const RichContent: Story = {
           }
           isDefaultOpen>
           <Button label="Icon and text" />
+        </Tooltip>
+        <Tooltip
+          content={
+            <>
+              Saved <strong>now</strong>
+            </>
+          }
+          isDefaultOpen>
+          <Button label="Mixed content" />
         </Tooltip>
       </HStack>
     </div>

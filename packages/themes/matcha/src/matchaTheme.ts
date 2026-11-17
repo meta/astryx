@@ -355,5 +355,13 @@ export const matchaTheme = defineTheme({
     },
   },
 
+  // On a light media surface, such as the dark mode's tooltip, the light
+  // mode's secondary text falls below 4.5:1. The darkest neutral reads there.
+  onLight: {
+    tokens: {
+      '--color-text-secondary': neutral.light[20],
+    },
+  },
+
   icons: matchaIconRegistry,
 });

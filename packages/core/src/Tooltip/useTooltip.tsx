@@ -46,11 +46,9 @@ import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
-import {MediaTheme} from '../theme/MediaTheme';
-import {useTheme} from '../theme/useTheme';
-import {useSurfaceMediaMode} from '../hooks/useAutoMediaMode';
+import {MediaTheme, MediaTokens} from '../theme/MediaTheme';
+import {useInvertedSurfaceMediaMode} from '../hooks/useAutoMediaMode';
 import {pickInvertedSide, type MediaSidePicker} from '../hooks/mediaSide';
-import {parseColor} from '../utils/color';
 import {
   colorVars,
   radiusVars,
@@ -67,9 +65,8 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 /**
- * The tooltip surface sets its own text color. That color does not tell
- * whether other text reads on the surface. So only the two on-colors compete,
- * and the content always gets a media side.
+ * The page's primary text is not the color this surface uses. So only the two
+ * on-colors compete, and the content always gets a media side.
  */
 const pickTooltipSide: MediaSidePicker = (
   background,
@@ -79,15 +76,13 @@ const pickTooltipSide: MediaSidePicker = (
 ) => pickInvertedSide(background, null, onDark, onLight);
 
 /**
- * Content on the tooltip surface, inside the media side that reads on it.
- * Token-colored content, such as `Text`, otherwise resolves against the page
- * theme and can take the surface's own color.
- *
- * Before a measurement, the side comes from the theme's resolved inverted
- * surface. When that color is translucent or unreadable, the side is the
- * opposite of the color mode. This component renders only inside the layer,
- * which mounts on the first show, and it measures only while the tooltip
- * shows. So a trigger whose tooltip does not show pays nothing for it.
+ * Content on the tooltip surface, with the tokens of the media side that
+ * reads on it. Token-colored content, such as `Text`, otherwise resolves
+ * against the page theme and can take the surface's own color. Inherited
+ * text keeps the `tooltip` surface's color. This component renders
+ * only inside the layer, which mounts on the first show, and it measures only
+ * while the tooltip shows. So a trigger whose tooltip does not show pays
+ * nothing for it.
  */
 function TooltipMediaContent({
   surfaceRef,
@@ -98,28 +93,13 @@ function TooltipMediaContent({
   isShown: boolean;
   children: ReactNode;
 }): ReactNode {
-  const {mode, tokens} = useTheme();
-  const measured = useSurfaceMediaMode(surfaceRef, isShown, pickTooltipSide);
-  let side = measured;
-  if (side !== 'dark' && side !== 'light') {
-    const surface = parseColor(tokens['--color-background-inverted'] ?? '');
-    side =
-      surface !== null && surface.a >= 1
-        ? pickTooltipSide(
-            surface,
-            null,
-            parseColor(tokens['--color-on-dark'] ?? ''),
-            parseColor(tokens['--color-on-light'] ?? ''),
-          )
-        : null;
-  }
-  const resolved =
-    side === 'dark' || side === 'light'
-      ? side
-      : mode === 'light'
-        ? 'dark'
-        : 'light';
-  return <MediaTheme mode={resolved}>{children}</MediaTheme>;
+  const mode = useInvertedSurfaceMediaMode(
+    surfaceRef,
+    isShown,
+    pickTooltipSide,
+    '--color-background-inverted',
+  );
+  return <MediaTokens mode={mode}>{children}</MediaTokens>;
 }
 
 const styles = stylex.create({
