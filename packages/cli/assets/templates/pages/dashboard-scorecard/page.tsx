@@ -845,16 +845,14 @@ export default function ExecutiveReviewPage() {
             {/* OKR attainment */}
             <VStack gap={6}>
               <SectionHeading title="Goal attainment" hint={okrSummary} />
-              <Card padding={6}>
-                <VStack gap={6}>
-                  {OKRS.map((okr, i) => (
-                    <VStack gap={6} key={okr.objective}>
-                      {i > 0 && <Divider />}
-                      <OkrRow okr={okr} />
-                    </VStack>
-                  ))}
-                </VStack>
-              </Card>
+              <VStack gap={6}>
+                {OKRS.map((okr, i) => (
+                  <VStack gap={6} key={okr.objective}>
+                    {i > 0 && <Divider />}
+                    <OkrRow okr={okr} />
+                  </VStack>
+                ))}
+              </VStack>
             </VStack>
 
             {/* Trend section: 2x2 grid */}
