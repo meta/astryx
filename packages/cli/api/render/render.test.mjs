@@ -2512,6 +2512,65 @@ console.log(JSON.stringify({inside, outside}));
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   }, 60_000);
 
+  it('names every package the page and its own modules need in one refusal, with one install line', () => {
+    fs.writeFileSync(
+      path.join(away, 'many-deps.tsx'),
+      "import {Chart} from './many-deps-chart';\nimport icon from '@not-real-xyz/icons/solid';\nimport type {T} from 'not-real-types-xyz';\nexport default () => <Chart icon={icon} />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'many-deps-chart.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @not-real-xyz/icons and not-real-charts-xyz, which are not installed');
+    expect(run.json.suggestions?.[0]?.name).toBe('npm install @not-real-xyz/icons not-real-charts-xyz');
+  }, 60_000);
+
+  it('counts only imports a TypeScript module uses as values, and a missing package image with the rest', () => {
+    fs.writeFileSync(
+      path.join(away, 'used-deps.tsx'),
+      "import {Metadata} from 'not-real-next-xyz';\nimport {unused} from 'not-real-unused-xyz';\nimport {size} from './used-deps-shapes';\nimport logo from 'not-real-brand-xyz/logo.png';\nimport mark from 'not-real-mark-xyz/mark.svg';\nexport const metadata: Metadata = {title: 'x'};\nexport default () => <img src={logo} data-mark={mark} width={size} alt=\"\" />;\n",
+    );
+    fs.writeFileSync(
+      path.join(away, 'used-deps-shapes.ts'),
+      "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts every import of a JavaScript module, used or not, as JavaScript loads them all', () => {
+    fs.writeFileSync(
+      path.join(away, 'js-deps.jsx'),
+      "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed');
+  }, 60_000);
+
+  it('counts a re-export of a package whose type the module also imports without `import type`', () => {
+    fs.writeFileSync(
+      path.join(away, 're-export-deps.tsx'),
+      "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed');
+  }, 60_000);
+
+  it('names an Astryx package the package set does not hold with the rest, not one at a time', () => {
+    fs.writeFileSync(
+      path.join(away, 'unheld.tsx'),
+      "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
+    );
+    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.json.error).toBe('The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed');
+  }, 60_000);
+
   it("uses only the project's own packages inside a project", async () => {
     const {renderPage} = await import('../../foundation/render/render-page.mjs');
     const page = await renderPage(path.join(dir, 'page.tsx'), {
