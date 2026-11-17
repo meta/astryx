@@ -50,6 +50,7 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {BundleError, bundleForBrowser} from './client-bundle.mjs';
+import {neededImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -1347,6 +1348,7 @@ function packageResolves(spec, file) {
  * @returns {string[]} package names, sorted
  */
 function missingPackages() {
+  const parser = requireFromCli('@babel/parser');
   /** @type {Set<string>} */
   const missing = new Set();
   const seen = new Set([entry]);
@@ -1360,8 +1362,24 @@ function missingPackages() {
     } catch {
       continue;
     }
+    // A static import the module uses only as a type, or not at all, is
+    // dropped as a build drops it.
+    /** @type {{needed: Set<string>, imported: Set<string>} | null} */
+    let staticImports = null;
+    try {
+      const typed = /\.[cm]?tsx?$/.test(file);
+      staticImports = neededImports(
+        parser.parse(source, {
+          sourceType: 'module',
+          plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+        }).program,
+      );
+    } catch {
+      // A module that does not parse is reported where it is compiled.
+    }
     for (const {specifier, typeOnly} of moduleImports(source, file) ?? []) {
       if (typeOnly) continue;
+      if (staticImports?.imported.has(specifier) && !staticImports.needed.has(specifier)) continue;
       const raw = specifier.split('?')[0];
       const target = importedFile(raw, file);
       if (target && path.isAbsolute(target)) {
@@ -1373,9 +1391,9 @@ function missingPackages() {
       }
       if (raw.startsWith('.') || path.isAbsolute(raw) || namesAlias(raw) || /^[@~#]\/|^#/.test(raw)) continue;
       if (raw.startsWith('node:') || builtinModules.includes(raw.split('/')[0])) continue;
-      // A package's stylesheet or image the page imports is a missing-asset
-      // warning when absent, as the render reports it today, not a refusal.
-      if (/\.(css|scss|sass|less|styl)$/i.test(raw) || isAssetPath(raw)) continue;
+      // A package's stylesheet the page imports is a missing-asset warning
+      // when absent, as the render reports it today, not a refusal.
+      if (/\.(css|scss|sass|less|styl)$/i.test(raw)) continue;
       if (!packageResolves(raw, file)) missing.add(packageOf(raw));
     }
   }

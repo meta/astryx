@@ -478,8 +478,11 @@ export async function renderToFile({cwd, input, output, title, absolute = false}
       page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
-      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
-      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+      const detail = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail : null;
+      /** @type {unknown[]} */
+      const missing = Array.isArray(detail?.packages) ? detail.packages : [detail?.package];
+      const integrations = hostedRun()?.integrations ?? [];
+      if (set && 'unavailable' in set && missing.some(name => typeof name === 'string' && isServedPackage(name, integrations))) {
         throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
       }
       throw e;
