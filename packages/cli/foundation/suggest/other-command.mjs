@@ -205,7 +205,7 @@ function bestMatch(command, names, typed) {
  * @param {number} tier
  * @returns {Found}
  */
-function hintFor(command, name, from, tier) {
+export function hintFor(command, name, from, tier) {
   return {
     hint: {
       name: `astryx ${command} ${name}`,
