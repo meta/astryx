@@ -1,11 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Markdown.missingProps.test.tsx
- * @input Markdown, SyntaxTheme, InternationalizationProvider rendered without a required prop
+ * @file Markdown.missingChildren.test.tsx
+ * @input Markdown rendered without a required prop
  * @output In development, the error names the component, the prop and the
- *   fix. In production, the components behave as they did before, and their
- *   bundles carry no check or message.
+ *   fix. In production, the component throws as it did before, and the
+ *   bundle carries no check or message.
  * @position Tests; required-prop errors
  */
 
@@ -24,39 +24,23 @@ afterEach(() => {
 type Loose = ComponentType<Record<string, unknown> & {children?: ReactNode}>;
 
 const CASES: {
+  id: string;
   name: string;
   module: string;
   load: () => Promise<Loose>;
   element: (C: Loose) => ReactElement;
   message: string;
+  productionMessage: string;
 }[] = [
   {
+    id: 'Markdown',
     name: 'Markdown',
     module: 'Markdown/Markdown',
     load: async () => (await import('./Markdown')).Markdown as unknown as Loose,
     element: C => <C />,
     message:
       "Markdown: `children` is required: the Markdown source as a string, for example <Markdown>{'# Title'}</Markdown>.",
-  },
-  {
-    name: 'SyntaxTheme',
-    module: 'theme/syntax/SyntaxTheme',
-    load: async () =>
-      (await import('../theme/syntax/SyntaxTheme'))
-        .SyntaxTheme as unknown as Loose,
-    element: C => <C>code</C>,
-    message:
-      'SyntaxTheme: `theme` is required: a theme from defineSyntaxTheme(), for example <SyntaxTheme theme={myTheme}>.',
-  },
-  {
-    name: 'InternationalizationProvider',
-    module: 'i18n/InternationalizationProvider',
-    load: async () =>
-      (await import('../i18n/InternationalizationProvider'))
-        .InternationalizationProvider as unknown as Loose,
-    element: C => <C>Page</C>,
-    message:
-      'InternationalizationProvider: `locale` is required: a BCP 47 language tag, for example locale="en" or locale="pt-BR".',
+    productionMessage: "Cannot read properties of undefined (reading 'length')",
   },
 ];
 
@@ -71,26 +55,30 @@ function thrownBy(element: ReactElement): string | null {
   }
 }
 
-describe.each(CASES)('$name without its required prop', c => {
+/** The part of the message the component passes to devPropError. */
+function phraseOf(message: string): string {
+  const afterProp = message.slice(
+    message.indexOf('`', message.indexOf('`') + 1) + 1,
+  );
+  return afterProp.trim();
+}
+
+describe.each(CASES)('$id without its required prop', c => {
   it('names the prop and the fix', async () => {
     expect(thrownBy(c.element(await c.load()))).toBe(c.message);
   });
 
-  it('keeps the production behavior', async () => {
+  it('throws in production as it did before', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.resetModules();
-    const message = thrownBy(c.element(await c.load()));
-    expect(message).not.toBeNull();
-    expect(message).not.toBe(c.message);
+    expect(thrownBy(c.element(await c.load()))).toBe(c.productionMessage);
   });
 
   it('keeps the message in a development bundle only', () => {
-    const phrase = c.message.slice(c.message.indexOf('`'));
-    expect(bundleCoreExport(c.module, c.name, 'development')).toContain(
-      phrase.slice(phrase.indexOf(' ') + 1),
-    );
+    const phrase = phraseOf(c.message);
+    expect(bundleCoreExport(c.module, c.name, 'development')).toContain(phrase);
     expect(bundleCoreExport(c.module, c.name, 'production')).not.toContain(
-      phrase.slice(phrase.indexOf(' ') + 1),
+      phrase,
     );
   });
 });
