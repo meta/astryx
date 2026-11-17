@@ -203,11 +203,11 @@ function tiesByFit(ranked, table, blockOf) {
  * words. Among matches of one domain that the lexical ranker scored the same
  * as the first result, and that matched the same query words (the terms
  * their reasons list), the match whose name words hold more of the query's
- * words than the first result's name moves first. A match on the whole
- * query lists no terms, so it keeps its place. A part of the first result
- * never takes its place this way: rootsFirst decides between a family's root
- * and its parts. Only the first place changes, and nothing crosses a block or
- * a domain.
+ * words than the first result's name moves first. A first result whose
+ * reason lists no terms keeps its place: it matched the whole query, or the
+ * query holds its title. A part of the first result never takes its place
+ * this way: rootsFirst decides between a family's root and its parts. Only
+ * the first place changes, and nothing crosses a block or a domain.
  * @param {Item[]} ranked
  * @param {string} query
  * @param {(item: Item) => string} blockOf

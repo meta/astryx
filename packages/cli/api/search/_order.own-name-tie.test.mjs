@@ -104,6 +104,18 @@ describe('tieByOwnName', () => {
     ]);
   });
 
+  it('keeps the order when the query holds the first result title', () => {
+    const named = 'the query names the title "Pebble trays"';
+    const rows = items([
+      ['Glim', 162, named, 'doc'],
+      ['PebbleTray', 162, named, 'doc'],
+    ]);
+    expect(names(tieByOwnName(rows, 'make pebble trays', blockOf))).toEqual([
+      'Glim',
+      'PebbleTray',
+    ]);
+  });
+
   it('never moves a match of another score, run, or domain', () => {
     const rows = items([
       ['Glim', 112],
