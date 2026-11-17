@@ -132,18 +132,27 @@ export function lowContrastText() {
    * color is behind the text.
    * @param {Element} el
    */
+  /**
+   * The page's images, pictures and gradients with their boxes, read once
+   * when first asked: a page has many texts and few of them fail.
+   * @type {Array<[Element, DOMRect]> | null}
+   */
+  let media = null;
+  /** @param {Element} el */
   const overImage = el => {
-    const box = el.getBoundingClientRect();
-    for (const m of document.querySelectorAll('body *')) {
-      if (m.contains(el) || el.contains(m)) continue;
-      const media = m.matches('img, picture, video, canvas, svg image');
-      if (!media) {
+    media ??= [...document.querySelectorAll('body *')]
+      .filter(m => {
+        if (m.matches('img, picture, video, canvas, svg image')) return true;
         const bgi = getComputedStyle(m).backgroundImage;
-        if (!bgi || bgi === 'none') continue;
-      }
-      if (meet(m.getBoundingClientRect(), box)) return true;
-    }
-    return false;
+        return Boolean(bgi) && bgi !== 'none';
+      })
+      .map(
+        m => /** @type {[Element, DOMRect]} */ ([m, m.getBoundingClientRect()]),
+      );
+    const box = el.getBoundingClientRect();
+    return media.some(
+      ([m, r]) => !m.contains(el) && !el.contains(m) && meet(r, box),
+    );
   };
   /**
    * Whether a color is the theme's disabled or placeholder text color where
@@ -151,6 +160,21 @@ export function lowContrastText() {
    * @param {Element} el @param {number[]} c
    */
   const exempt = (el, c) => {
+    // (One probe for each theme scope and color: the tokens are the
+    // scope's.)
+    const scope = el.closest('[data-astryx-theme], [data-theme]');
+    const key = hex(c);
+    const known = exemptSeen.get(scope)?.get(key);
+    if (known != null) return known;
+    const said = exemptAt(el, c);
+    if (!exemptSeen.has(scope)) exemptSeen.set(scope, new Map());
+    /** @type {Map<string, boolean>} */ (exemptSeen.get(scope)).set(key, said);
+    return said;
+  };
+  /** @type {Map<Element | null, Map<string, boolean>>} */
+  const exemptSeen = new Map();
+  /** @param {Element} el @param {number[]} c */
+  const exemptAt = (el, c) => {
     const probe = document.createElement('span');
     el.appendChild(probe);
     try {
@@ -175,6 +199,8 @@ export function lowContrastText() {
   };
   /** @type {Map<string, {part: string, text: string, ratio: number, fg: string, bg: string}>} */
   const found = new Map();
+  /** @type {Set<string>} */
+  const seen = new Set();
   for (const el of document.querySelectorAll('body *')) {
     const text = [...el.childNodes]
       .filter(n => n.nodeType === 3)
@@ -193,16 +219,19 @@ export function lowContrastText() {
     const r = ratio(shown, bg);
     const size = parseFloat(cs.fontSize);
     const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
-    if (r >= (large ? 3 : 4.5) || exempt(el, fg) || overImage(el)) continue;
+    if (r >= (large ? 3 : 4.5)) continue;
+    // (The same text in the same colors is measured once.)
     const key = `${part}\u0000${text}\u0000${hex(shown)}\u0000${hex(bg)}`;
-    if (!found.has(key))
-      found.set(key, {
-        part,
-        text: text.slice(0, 40),
-        ratio: Math.floor(r * 100) / 100,
-        fg: hex(shown),
-        bg: hex(bg),
-      });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (exempt(el, fg) || overImage(el)) continue;
+    found.set(key, {
+      part,
+      text: text.slice(0, 40),
+      ratio: Math.floor(r * 100) / 100,
+      fg: hex(shown),
+      bg: hex(bg),
+    });
     if (found.size >= 60) break;
   }
   return [...found.values()];

@@ -2519,6 +2519,76 @@ export function familyRamp(cwd, slug, data, base, family) {
  * @returns {PaletteMapping | null}
  */
 export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
+  if (!dialFamilies(data).length) return null;
+  // One change asks for the mapping several times (to build, to check, to
+  // say what changed), each with the same inputs: what it reads (the
+  // settings, the base, the color config and saved settings on disk, the
+  // theme's own token values) names it, and an answer is made once. A
+  // config that does not parse is read again each time, so it is named.
+  const config = readText(path.join(cwd, paletteFiles(slug).config));
+  if (config != null && !parsesAsJson(config))
+    return paletteMappingOf(cwd, slug, data, base, tokenDefaults);
+  const key = sha256(
+    JSON.stringify([
+      cwd,
+      slug,
+      data,
+      base,
+      tokenDefaults,
+      config,
+      readText(path.join(cwd, 'themes', slug, `${slug}.settings.json`)),
+      ownSourceTokenValues(cwd, slug),
+    ]),
+  );
+  const kept = MAPPINGS.get(key);
+  if (kept) {
+    MAPPINGS.delete(key);
+    MAPPINGS.set(key, kept);
+    return structuredClone(kept);
+  }
+  const made = paletteMappingOf(cwd, slug, data, base, tokenDefaults);
+  if (made) {
+    MAPPINGS.set(key, structuredClone(made));
+    if (MAPPINGS.size > MAPPINGS_KEPT)
+      MAPPINGS.delete(/** @type {string} */ (MAPPINGS.keys().next().value));
+  }
+  return made;
+}
+
+/** The mappings made last, by what they were made from (paletteMapping). @type {Map<string, PaletteMapping>} */
+const MAPPINGS = new Map();
+/** How many mappings are kept. */
+const MAPPINGS_KEPT = 8;
+
+/** A file's text, or null when it cannot be read. @param {string} file */
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} text */
+function parsesAsJson(text) {
+  try {
+    JSON.parse(text.replace(/^\uFEFF/, ''));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The mapping, made: see {@link paletteMapping}.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {{mode?: string, settings: Setting[]}} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {Record<string, unknown>} tokenDefaults
+ * @returns {PaletteMapping | null}
+ */
+function paletteMappingOf(cwd, slug, data, base, tokenDefaults) {
   const fams = dialFamilies(data);
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));

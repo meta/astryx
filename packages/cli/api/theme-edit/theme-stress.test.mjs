@@ -725,8 +725,18 @@ describe('review fixes', () => {
     () =>
       withRealRenders(async () => {
         await themeEditNew('cc', {cwd, like: 'neutral'});
+        // (The show draws one section of the sheet: two commands still run
+        // at once, each drawing its pages.)
         const [a, b] = await Promise.all([
-          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'show',
+            's',
+            '--section',
+            'actions',
+          ]),
           cli([
             'experimental',
             'theme',
