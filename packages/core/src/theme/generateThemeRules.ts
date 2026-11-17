@@ -1408,7 +1408,6 @@ interface ComponentRuleOptions {
  */
 type ComponentGroup = 'regular' | 'parts';
 
-/** Whether a component entry belongs to the group being lowered. */
 function inGroup(component: string, group: ComponentGroup | undefined) {
   return (
     group === undefined ||
@@ -2437,7 +2436,6 @@ function generateThemeCSSWithContext(
       : onMediaCss.component;
   }
 
-  // The shared-element parts' rules, in the same order, in the later sub-layer.
   const partsCss = [
     parts.length > 0
       ? `@scope (${scopeSelector}) to (${scopeTo}) {\n${parts.join('\n\n')}\n}`

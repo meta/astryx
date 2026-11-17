@@ -306,8 +306,8 @@ Platform-specific details stay inside that compiler.
   by layer order, whatever either selector's specificity, and each sub-layer
   keeps the compiler's root, adaptation, media-surface order. The color-scheme
   rules stay outside both sub-layers. A theme with no such entry keeps the
-  single layer, byte for byte, and so does a CLI build with a core that has no
-  `SHARED_ELEMENT_PARTS`.
+  single layer, byte for byte, and so does a CLI build with a core whose
+  `generateThemeRulesSplit` returns no `parts`.
   The CLI builds with the project's own Core, which it reaches only through
   public exports, so the layered output is public: `generateThemeRulesSplit`,
   `generateAdaptationCSS` and `generateOnMediaCSS` take `{layered: true}` and
