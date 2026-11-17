@@ -45,6 +45,11 @@ describe('the recorder', () => {
     fs.mkdirSync(path.join(work, 'dir'));
     fs.mkdirSync(path.join(work, 'tree'));
     fs.writeFileSync(path.join(work, 'tree', 'fixture.json'), '{}');
+    fs.writeFileSync(path.join(work, 'fork-read.txt'), 'f');
+    fs.writeFileSync(
+      path.join(work, 'forked.mjs'),
+      `import fs from 'node:fs'; fs.readFileSync(${JSON.stringify(path.join(work, 'fork-read.txt'))});`,
+    );
     const child = `
       import fs from 'node:fs';
       fs.readFileSync(${JSON.stringify(path.join(work, 'a.txt'))});
@@ -61,6 +66,13 @@ describe('the recorder', () => {
       fs.cpSync(${JSON.stringify(path.join(work, 'tree'))}, ${JSON.stringify(path.join(work, 'copy'))}, {recursive: true});
       execFileSync(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(child)}]);
       execFileSync('true');
+      // A forked child that keeps the environment records; one given an
+      // environment without the recorder cannot. (No execArgv: this script
+      // runs from -e, which a fork would inherit.)
+      const {fork} = await import('node:child_process');
+      const done = child => new Promise(resolve => child.on('exit', resolve));
+      await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: []}));
+      await done(fork(${JSON.stringify(path.join(work, 'forked.mjs'))}, [], {execArgv: [], env: {PATH: process.env.PATH}}));
     `;
     execFileSync(process.execPath, ['--input-type=module', '-e', script], {
       env: {
@@ -86,7 +98,11 @@ describe('the recorder', () => {
     expect(
       all('writes').some(file => path.basename(file).startsWith('tmp-')),
     ).toBe(true);
-    expect(all('unseen')).toEqual(['runs true']);
+    expect(all('unseen').sort()).toEqual([
+      'forks forked.mjs without its recorder',
+      'runs true',
+    ]);
+    expect(all('reads')).toContain(path.join(work, 'fork-read.txt'));
     // The Node child read the file too, under the same owner.
     expect(
       lines.filter(line => line.reads.includes(path.join(work, 'a.txt')))

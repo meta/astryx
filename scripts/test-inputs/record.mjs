@@ -257,6 +257,17 @@ if (OUT && !globalThis.__astryxTestInputs) {
       return original.call(this, file, ...rest);
     };
   }
+  // A forked child is always Node; it records only when its environment
+  // keeps the recorder.
+  const originalFork = childProcess.fork;
+  childProcess.fork = function (modulePath, ...rest) {
+    if (owner() && !recorded(optionsOf(rest).env)) {
+      unseen.add(
+        `forks ${path.basename(String(modulePath))} without its recorder`,
+      );
+    }
+    return originalFork.call(this, modulePath, ...rest);
+  };
   for (const name of ['exec', 'execSync']) {
     const original = childProcess[name];
     childProcess[name] = function (command, ...rest) {
