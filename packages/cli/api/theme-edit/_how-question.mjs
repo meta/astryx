@@ -16875,6 +16875,29 @@ export function draftAnswer(ctx, env, question) {
     return v != null && typeof v !== 'object' ? String(v).trim() : null;
   }
   /**
+   * A value as a mode shows it: its tokens read in that mode, a
+   * light-dark() pair's half for it.
+   * @param {string} value @param {'light' | 'dark'} mode
+   * @returns {string}
+   */
+  function inMode(value, mode) {
+    let v = String(value);
+    for (let i = 0; i < 6; i++) {
+      const next = v
+        .replace(
+          /var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi,
+          (_m, t, fb) => String(current(t, mode) || fb || ''),
+        )
+        .replace(
+          /light-dark\(\s*((?:[^(),]|\([^()]*\))+)\s*,\s*((?:[^(),]|\([^()]*\))+)\s*\)/gi,
+          (_m, a, b) => (mode === 'dark' ? b : a),
+        );
+      if (next === v) break;
+      v = next;
+    }
+    return v.trim();
+  }
+  /**
    * A part's color as it shows it in a status or variant ("the error
    * banner", "the primary button"): the token it reads there, else its
    * resting value. `when` may name only the value ("?:error"): its axis
@@ -27006,9 +27029,21 @@ export function draftAnswer(ctx, env, question) {
           return modes.filter(m => {
             if (given && given.mode && given.mode !== m) return true;
             // (A see-through fill is read over the page it sits on.)
+            // (The look the base theme writes for the variant, "the
+            // destructive button on the muted error fill", is the fill it
+            // draws, before the token Core reads.)
+            const ownLook = baseOwnLook(
+              one(String(st.on)),
+              'background-color',
+              `variant:${v}`,
+            );
             const raw = given
               ? String(given.value)
-              : String(current(r?.token ?? '--color-background-body', m) ?? '');
+              : ownLook
+                ? inMode(ownLook, m)
+                : String(
+                    current(r?.token ?? '--color-background-body', m) ?? '',
+                  );
             const f0 = parseColor(raw);
             const page = parseColor(
               String(current('--color-background-body', m) ?? ''),
@@ -27334,9 +27369,17 @@ export function draftAnswer(ctx, env, question) {
       if (!ink || !bgTok || !/^--color-/.test(bgTok)) continue;
       // (A see-through fill, a secondary button's wash, shows the page
       // under it.)
+      // (The look the base theme writes for the variant, a destructive
+      // button on the muted error fill, is what it draws there.)
+      const lookRaw = look
+        ? baseOwnLook(one(on), 'background-color', `variant:${look}`)
+        : null;
       /** @param {string} tok @param {'light' | 'dark'} m */
       const groundOf = (tok, m) => {
-        const raw = String(current(tok, m) ?? '');
+        const raw =
+          tok === bgTok && lookRaw
+            ? inMode(lookRaw, m)
+            : String(current(tok, m) ?? '');
         return alphaOf(raw) < 1
           ? parseColor(String(current('--color-background-body', m) ?? ''))
           : parseColor(raw);
