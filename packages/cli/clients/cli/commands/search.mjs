@@ -247,8 +247,13 @@ async function discoverAnswers(query, type) {
  */
 function discoverHint(run, query, type, addable) {
   if (type === 'hook' || addable === false) return [];
+  // A search kept to one kind points at discover kept to the same kind,
+  // which is what the saved copies were checked for.
+  const kind = type ? ` --type ${type}` : '';
   return [
-    text(`More in packages you could add: ${run} discover ${shellWord(query)}`),
+    text(
+      `More in packages you could add: ${run} discover ${shellWord(query)}${kind}`,
+    ),
   ];
 }
 

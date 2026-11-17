@@ -42,7 +42,13 @@ import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-d
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
-import {CLI_ROOT, findInstalledPackage} from '../../foundation/fs/paths.mjs';
+import {
+  CLI_ROOT,
+  findInstalledPackage,
+  realDir,
+} from '../../foundation/fs/paths.mjs';
+import {EXACT_CODEC} from '../../foundation/fs/exact-codec.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
   DISCOVER_KINDS,
   parseDiscoverCatalog,
@@ -260,20 +266,34 @@ export function packageDescription(packageDir) {
  * no components root is included with `components: []`; one that failed to
  * load is left out (the integration-issues nudge and Doctor report it).
  *
+ * Describing them reads every integration's templates, themes and codemods
+ * and the project's whole docs catalog, so the answer is kept between runs
+ * while every file it read is unchanged (foundation/fs/gather-cache.mjs).
+ *
  * @param {Project | undefined} project
  * @param {ScannedPackage[]} scanned the packages {@link discoverPackages} found
- * @param {{docs?: boolean}} [options] `docs: false` leaves out the docs each
- *   package adds, which take a read of the project's whole docs catalog
  * @returns {Promise<InstalledPackage[]>}
  */
-export async function describeInstalled(
-  project,
-  scanned,
-  {docs: withDocs = true} = {},
-) {
+export async function describeInstalled(project, scanned) {
   if (project == null) return scanned;
+  return /** @type {Promise<InstalledPackage[]>} */ (
+    persistedGather(
+      ['discover-installed', realDir(project.cwd), optedIntoIconSets(project)],
+      () => describeInstalledFresh(project, scanned),
+      INSTALLED_CODEC,
+    )
+  );
+}
+
+/**
+ * The installed packages describeInstalled names, worked out from the files.
+ * @param {Project} project
+ * @param {ScannedPackage[]} scanned
+ * @returns {Promise<InstalledPackage[]>}
+ */
+async function describeInstalledFresh(project, scanned) {
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
-  const docs = withDocs ? await projectDocs(project) : null;
+  const docs = await projectDocs(project);
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -381,6 +401,19 @@ async function projectDocs(project) {
     return null;
   }
 }
+
+/** The installed packages, kept exactly, with the shape they need. */
+const INSTALLED_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    Array.isArray(value) &&
+    value.every(
+      (/** @type {any} */ pkg) =>
+        pkg != null &&
+        typeof pkg.name === 'string' &&
+        Array.isArray(pkg.components),
+    ),
+};
 
 /**
  * Whether the project has any discover source: its own `discover` config field,

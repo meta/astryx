@@ -26,7 +26,10 @@
  *   against in Core's component docs,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
- *   the CLI's own docs tree, which `docs` and `search` read,
+ *   the CLI's own docs tree, which `docs` and `search` read, by the discover
+ *   adapter (api/discover/_adapter.mjs) for the integrations a project loads
+ *   and what each adds, which `discover` lists and `search` reads for its
+ *   discover line,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
  *   lookup commands' not-found hint's name index among them

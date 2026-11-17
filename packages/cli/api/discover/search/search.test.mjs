@@ -479,5 +479,18 @@ describe('discover.search leaf, word by word', () => {
     expect(await found('table rows')).toContain('DataGrid');
     expect(await found('Paginatr')).toContain('Paginator');
     expect(await found('entries list')).toContain('EntryList');
+    // A word with a hyphen is read joined, as a keyword spells it.
+    const tags = await search([], 'tags multi-select', {
+      items: [
+        {
+          package: '@acme/x',
+          kind: 'component',
+          name: 'MultiSelector',
+          installed: false,
+          keywords: ['multiselect'],
+        },
+      ],
+    });
+    expect(tags.data.matches.map(m => m.component)).toEqual(['MultiSelector']);
   });
 });

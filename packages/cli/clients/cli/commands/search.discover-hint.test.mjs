@@ -156,6 +156,21 @@ describe('search points at discover by the saved catalog copy', () => {
       expect(none).toBe(withoutHint(before));
       // Hooks never get the line, as before.
       expect(await search(['chart', '--type', 'hook'])).not.toContain(HINT);
+      // A search kept to one kind points at discover kept to it, and shows
+      // the line only when discover kept to it would answer.
+      expect(await search(['bar', 'chart', '--type', 'component'])).toMatch(
+        /^More in packages you could add: .*discover 'bar chart' --type component$/m,
+      );
+      expect(await search(['bar', 'chart', '--type', 'theme'])).not.toContain(
+        HINT,
+      );
+      // The JSON never carries the line.
+      const json = await runCli(['--json', 'search', 'bar', 'chart'], {
+        cwd: project,
+      });
+      expect(json.status).toBe(0);
+      expect(json.stdout).not.toContain(HINT);
+      expect(() => JSON.parse(json.stdout)).not.toThrow();
       // Search read the saved copy; it did not call the source.
       expect(fs.existsSync(marker)).toBe(false);
     },

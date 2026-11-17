@@ -175,11 +175,6 @@ export function answersQueries(project) {
  * no source has a saved copy, or when discover answers every query in the
  * project with the list (FR1), so nothing is known. The search command reads
  * it to point at `discover` only when discover has an answer.
- *
- * The docs each installed package adds take a read of the project's whole
- * docs catalog, so it ranks first without them. A match settles the answer:
- * more items never empty discover's list. Only a query with no match then
- * reads them and ranks again.
  * @param {string} query free text, as search takes it
  * @param {{type?: string}} [options] an item kind, when the search keeps one
  * @returns {Promise<boolean | null>}
@@ -197,24 +192,19 @@ export async function wouldAnswer(query, {type} = {}) {
   )
     ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
     : undefined;
-  /** @param {boolean} docs */
-  const answers = async docs => {
-    const integrations = await describeInstalled(project, scanned, {docs});
-    if (integrations.length === 0 && !hasSources(project)) return null;
-    const packages = withDeclaredOfficial(
-      project,
-      integrations,
-      catalog,
-      declarations,
-      official.packages,
-    );
-    return answersAny(packages, query, {
-      items: searchItems(packages, catalog, declared, declarations.any),
-      type: kind,
-    });
-  };
-  const quick = await answers(false);
-  return quick === false ? answers(true) : quick;
+  const integrations = await describeInstalled(project, scanned);
+  if (integrations.length === 0 && !hasSources(project)) return null;
+  const packages = withDeclaredOfficial(
+    project,
+    integrations,
+    catalog,
+    declarations,
+    official.packages,
+  );
+  return answersAny(packages, query, {
+    items: searchItems(packages, catalog, declared, declarations.any),
+    type: kind,
+  });
 }
 
 /**

@@ -139,25 +139,32 @@ const byMatch = (a, b) => b.matched - a.matched || b.score - a.score;
  * ranking scores far fewer of them. A word of the query, or a synonym search
  * reads for it, matches only text that holds one of its forms, less its last
  * letter (every form search counts as the same word starts so: `spacing`
- * holds `spac` of `space`, `entries` holds `entr` of `entry`). A typo, which
- * search reads only in a query of one word or one identifier, needs a name
- * or keyword within three letters of the query or one of its words in
- * length. A query of stopwords alone tests nothing.
+ * holds `spac` of `space`, `entries` holds `entr` of `entry`); a word with
+ * `-` or `_` counts read joined too, as the scorer reads it (`multi-select`
+ * is the keyword `multiselect`). A typo, which search reads only in a query
+ * of one word or one identifier, needs a name or keyword within three
+ * letters in length of the query, one of its words, or a synonym search
+ * reads for one. A query of stopwords alone tests nothing.
  * @param {ReturnType<typeof queryOf>} words
  * @returns {(item: SearchItem) => boolean}
  */
 function mayMatch({term, tokens}) {
   if (tokens.length === 0) return () => true;
   const prefixes = new Set();
+  /** @type {string[]} */
+  const synonyms = [];
   for (const token of tokens) {
-    for (const word of [token, ...(SYNONYM_INDEX.get(token) ?? [])]) {
+    const joinedToken = token.replace(/[-_]/g, '');
+    const alike = [...(SYNONYM_INDEX.get(token) ?? [])];
+    synonyms.push(...alike);
+    for (const word of new Set([token, joinedToken, ...alike])) {
       for (const form of [word, stem(word), ...wordForms(word)]) {
         prefixes.add(form.slice(0, Math.max(3, form.length - 1)));
       }
     }
   }
   const fuzzy = tokens.length <= 1 || !/\s/.test(term);
-  const lengths = [term, ...tokens]
+  const lengths = [term, ...tokens, ...synonyms]
     .map(word => word.length)
     .filter(length => length >= 5);
   /** @param {string | undefined} text */
@@ -239,10 +246,16 @@ function rankItems(items, words, {type, only}) {
  */
 export function answersAny(packages, query, {items = [], type}) {
   if (!String(query ?? '').trim()) return false;
-  return (
-    rankItems([...installedComponentsOf(packages), ...items], queryOf(query), {
-      type,
-    }).length > 0
+  // The cut that follows the ranking only ever keeps the items that match
+  // every word when there are some, so the list is empty exactly when no
+  // item matches: the first match settles it.
+  const words = queryOf(query);
+  const may = mayMatch(words);
+  return [...installedComponentsOf(packages), ...items].some(
+    item =>
+      (type == null || item.kind === type) &&
+      may(item) &&
+      rank(item, words) != null,
   );
 }
 
