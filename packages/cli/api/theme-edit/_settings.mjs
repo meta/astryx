@@ -10708,7 +10708,19 @@ export async function contrastProblems(ctx, data, res) {
       });
     });
   };
-  return [
+  // Two pairs that read the same (one text on one fill, measured over two
+  // grounds that both resolve to that fill) are one problem, said once.
+  /** @param {ThemeProblem[]} list */
+  const sayOnce = list => {
+    const seen = new Set();
+    return list.filter(x => {
+      const k = `${x.text}\u0000${x.fix ?? ''}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  return sayOnce([
     ...oneNotePerCause(
       problems.map(x => ({
         x,
@@ -11100,7 +11112,7 @@ export async function contrastProblems(ctx, data, res) {
           ),
         ]
       : []),
-  ];
+  ]);
 }
 
 /**
