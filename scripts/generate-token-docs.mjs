@@ -388,6 +388,63 @@ export const docs = ${JSON.stringify(childDoc, null, 2)};
 // 3. Build the namespace doc
 // ---------------------------------------------------------------------------
 
+// The tokens most code reaches for, named on the namespace page itself, so a
+// read of `astryx docs tokens` alone is enough to write styles. Each line's
+// names must exist in the sources (checked below); `<status>` and `<color>`
+// stand for one of a family's names.
+const CORE_TOKEN_LINES = [
+  [
+    'Spacing',
+    '--spacing-0 to --spacing-12 in 0.25rem steps, plus --spacing-0-5 and --spacing-1-5',
+  ],
+  [
+    'Text color',
+    '--color-text-primary, --color-text-secondary, --color-text-accent; status text --color-text-<status>',
+  ],
+  [
+    'Surfaces',
+    '--color-background-body, --color-background-surface, --color-background-card, --color-background-muted',
+  ],
+  ['Borders', '--color-border, --color-border-emphasized, --border-width'],
+  [
+    'Accent and status fills',
+    '--color-accent with --color-on-accent; --color-<status> with --color-on-<status>, where <status> is info, success, warning, or error',
+  ],
+  [
+    'Radius',
+    '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-full',
+  ],
+  [
+    'Control heights',
+    '--size-element-sm, --size-element-md, --size-element-lg',
+  ],
+  ['Shadow', '--shadow-low, --shadow-med, --shadow-high'],
+  [
+    'Type',
+    '--text-heading-1-size to --text-heading-6-size, --text-body-size, --font-weight-semibold',
+  ],
+  [
+    'Charts',
+    '--color-data-categorical-<color> for each series, from dataVars in @astryxdesign/core/theme/dataTokens.stylex',
+  ],
+];
+
+const tokenNames = new Set(
+  groups.flatMap(g =>
+    extractDefaults(g.exportName, g.file).map(([name]) => name),
+  ),
+);
+for (const [label, line] of CORE_TOKEN_LINES) {
+  for (const named of line.match(/--[a-z0-9<>-]+/g) ?? []) {
+    const pattern = new RegExp(`^${named.replace(/<[a-z]+>/g, '[a-z0-9]+')}$`);
+    if (![...tokenNames].some(name => pattern.test(name))) {
+      throw new Error(
+        `generate-token-docs: "${label}" names ${named}, which no token source defines.`,
+      );
+    }
+  }
+}
+
 const namespaceDoc = {
   type: 'namespace',
   name: 'tokens',
@@ -395,6 +452,36 @@ const namespaceDoc = {
   summary:
     'Complete reference for color, data visualization, syntax, spacing, size, border, focus, radius, shadow, motion, and typography tokens.',
   keywords: ['design tokens', 'css variables', 'custom properties'],
+  blocks: [
+    {
+      type: 'prose',
+      text: 'Use tokens in StyleX code by importing their vars; component props take spacing steps instead (`gap={4}` is `--spacing-4`). Never hard-code a color, size, radius, or shadow that a token names.',
+    },
+    {
+      type: 'code',
+      lang: 'tsx',
+      label: 'Token vars in StyleX',
+      code: `import * as stylex from '@stylexjs/stylex';
+import {colorVars, spacingVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
+
+const styles = stylex.create({
+  card: {
+    padding: spacingVars['--spacing-4'],
+    backgroundColor: colorVars['--color-background-surface'],
+    borderRadius: radiusVars['--radius-container'],
+  },
+});`,
+    },
+    {
+      type: 'list',
+      style: 'unordered',
+      items: CORE_TOKEN_LINES.map(([label, line]) => `${label}: ${line}`),
+    },
+    {
+      type: 'prose',
+      text: 'Each category below has every token with its default value.',
+    },
+  ],
   slots: {
     guides: {title: 'Token Categories', accepts: {kinds: ['generic']}},
   },
