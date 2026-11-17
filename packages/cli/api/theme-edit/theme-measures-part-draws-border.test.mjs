@@ -212,7 +212,13 @@ describe('a theme color named as the reference', () => {
   ])(
     '%s',
     async (ask, value) => {
-      const w = writes(await how('ne', ask));
+      // (The fill itself is the one write; a readable-text line the
+      // check adds beside a fill is measured in its own test.)
+      const w = writes(
+        (await how('ne', ask)).filter(
+          r => !/^readable text on that fill/.test(r.text),
+        ),
+      );
       expect(w).toHaveLength(1);
       expect(w[0]).toContain(`'${value}'`);
     },
