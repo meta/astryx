@@ -8293,104 +8293,164 @@ function styleKeyOf(key) {
 }
 
 /**
+ * A selector's text with every `:where(…)` group taken out: Core scopes a
+ * mode-only rule with them (`:where(:scope[data-theme="light"] *)`), and they
+ * add no weight.
+ * @param {string} text
+ */
+function withoutWhere(text) {
+  let out = '';
+  for (let i = 0; i < text.length; ) {
+    if (text.startsWith(':where(', i)) {
+      let depth = 0;
+      let j = i + ':where'.length;
+      for (; j < text.length; j++) {
+        if (text[j] === '(') depth++;
+        else if (text[j] === ')' && --depth === 0) break;
+      }
+      i = j + 1;
+    } else out += text[i++];
+  }
+  return out;
+}
+
+/**
+ * The rules the built stylesheet gives a part's own element under its visual
+ * props or states: one attribute (`.astryx-heading[data-level="1"]`) or
+ * several (`[data-parity="odd"][data-striped="striped"]`), bare or inside the
+ * `:is(…)` and mode `:where(…)` scopes Core writes a mode-only rule in. Each
+ * with its attributes, the one pseudo-class it holds (null at rest) and the
+ * properties it declares. A rule of an element inside the part is none.
+ * @param {string} cssText
+ * @param {string} target
+ * @returns {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[]}>}
+ */
+function variantRules(cssText, target) {
+  const re = new RegExp(
+    `\\.astryx-${target.replace(/-/g, '\\-')}((?:\\[data-[a-z-]+="[^"]*"\\])+)([^{}]*)\\{([^}]*)\\}`,
+    'g',
+  );
+  /** @type {Array<{attrs: Array<[string, string]>, state: string | null, declared: string[]}>} */
+  const out = [];
+  for (const m of cssText.matchAll(re)) {
+    const rest = withoutWhere(m[2]);
+    // After the element's own selector: only the `:is(` close and
+    // pseudo-classes of that element.
+    if (!/^\)?(?::[a-z-]+)*\)?\s*$/.test(rest)) continue;
+    const pseudo = rest.match(/:[a-z-]+/g) ?? [];
+    if (pseudo.length > 1) continue;
+    out.push({
+      attrs: [...m[1].matchAll(/\[data-([a-z-]+)="([^"]*)"\]/g)].map(a => [
+        a[1],
+        a[2],
+      ]),
+      state: pseudo[0] ?? null,
+      declared: [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(d => d[1]),
+    });
+  }
+  return out;
+}
+
+/**
  * A plain part setting can lose to a more specific rule for the same part
  * and property, such as a base theme's `.astryx-heading[data-level="1"]
- * {font-weight}`. Find those rules in the built stylesheet.
+ * {font-weight}` or the theme's own stripe on `parity:odd+striped`. Find
+ * those rules in the built stylesheet. A setting made for one mode (`@light`)
+ * is found with its mode.
  * @param {string} cssText
  * @param {any} theme
- * @returns {Array<{target: string, key: string, prop: string, value: string, state?: string}>}
+ * @returns {Array<{target: string, key: string, prop: string, value: string, state?: string, mode?: 'light' | 'dark'}>}
  */
 export function findOverrides(cssText, theme) {
-  /** @type {Array<{target: string, key: string, prop: string, value: string, state?: string}>} */
+  /** @type {Array<{target: string, key: string, prop: string, value: string, state?: string, mode?: 'light' | 'dark'}>} */
   const extra = [];
+  // A shorthand and its longhands are one property: the last one set
+  // (background after background-color) is the one in effect. Which
+  // longhands a shorthand sets is MDN's data (background-blend-mode is no
+  // part of background).
+  /** @param {string} a @param {string} b */
+  const sameProperty = (a, b) => {
+    const [x, y] = [kebab(a), kebab(b)];
+    return x === y || coversProperty(x, y) || coversProperty(y, x);
+  };
   for (const [target, keys] of Object.entries(
     /** @type {Record<string, any>} */ (theme.components ?? {}),
   )) {
-    const props = Object.keys(keys.base ?? {}).filter(
-      p => !p.startsWith('--') && !p.startsWith(':') && !p.startsWith('@'),
-    );
-    if (!props.length) continue;
-    const re = new RegExp(
-      `\\.astryx-${target.replace(/-/g, '\\-')}\\[data-([a-z-]+)="([^"]+)"\\]\\s*\\{([^}]*)\\}`,
-      'g',
-    );
-    // A shorthand and its longhands are one property: the last one set
-    // (background after background-color) is the one in effect. Which
-    // longhands a shorthand sets is MDN's data (background-blend-mode is
-    // no part of background).
-    /** @param {string} a @param {string} b */
-    const sameProperty = (a, b) => {
-      const [x, y] = [kebab(a), kebab(b)];
-      return x === y || coversProperty(x, y) || coversProperty(y, x);
+    if (!keys.base || typeof keys.base !== 'object') continue;
+    const rules = variantRules(cssText, target);
+    if (!rules.length) continue;
+    // The key a rule's attributes are: the theme's own key for that
+    // selector when it has one, so a copy joins its declarations.
+    /** @param {Array<[string, string]>} attrs */
+    const keyOf = attrs => {
+      const key = attrs.map(([k, v]) => (k === v ? k : `${k}:${v}`)).join('+');
+      return (
+        Object.keys(keys).find(k => styleKeyOf(k) === styleKeyOf(key)) ?? key
+      );
     };
-    const last = props.filter(
-      (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
-    );
-    for (const m of cssText.matchAll(re)) {
-      for (const prop of last) {
-        // A prop named for the property itself (weight for font-weight,
-        // color for color) is the author's own choice: it keeps winning.
-        const css = kebab(prop);
-        if (css === m[1] || css.endsWith(`-${m[1]}`)) continue;
-        // The override may set the property or one of its longhands.
-        const declared = [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(
-          d => d[1],
+    /** A prop named for a rule's own attribute (weight for font-weight, color for color) is the author's choice there: it keeps winning. @param {string} css @param {Array<[string, string]>} attrs */
+    const ownChoice = (css, attrs) =>
+      attrs.some(([k]) => css === k || css.endsWith(`-${k}`));
+    /** @type {Array<[null | 'light' | 'dark', Record<string, any>]>} */
+    const scopes = [[null, keys.base]];
+    for (const m of /** @type {const} */ (['light', 'dark']))
+      if (keys.base[`@${m}`] && typeof keys.base[`@${m}`] === 'object')
+        scopes.push([m, keys.base[`@${m}`]]);
+    for (const [mode, decls] of scopes) {
+      const props = Object.keys(decls).filter(
+        p => !p.startsWith('--') && !p.startsWith(':') && !p.startsWith('@'),
+      );
+      const last = props.filter(
+        (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
+      );
+      for (const r of rules.filter(x => x.state == null))
+        for (const prop of last) {
+          // The override may set the property or one of its longhands.
+          if (ownChoice(kebab(prop), r.attrs)) continue;
+          if (r.declared.some(d => sameProperty(d, kebab(prop))))
+            extra.push({
+              target,
+              key: keyOf(r.attrs),
+              prop,
+              value: decls[prop],
+              ...(mode ? {mode} : {}),
+            });
+        }
+      // A state setting on the plain part (a whole-part hover) loses the
+      // same way to a variant's own rule in that state, and to its resting
+      // rule, which comes after the plain state rule at the same weight or
+      // more: it is repeated there too.
+      for (const [state, decl] of Object.entries(decls)) {
+        if (!/^:[a-z-]+$/.test(state) || !decl || typeof decl !== 'object')
+          continue;
+        const stateProps = Object.keys(decl).filter(
+          p => !p.startsWith('--') && !p.startsWith(':'),
         );
-        if (declared.some(d => sameProperty(d, css)))
-          extra.push({
-            target,
-            key: `${m[1]}:${m[2]}`,
-            prop,
-            value: keys.base[prop],
-          });
+        if (!stateProps.length) continue;
+        const seen = new Set();
+        for (const r of rules.filter(x => x.state == null || x.state === state))
+          for (const prop of stateProps) {
+            const css = kebab(prop);
+            if (ownChoice(css, r.attrs)) continue;
+            const key = keyOf(r.attrs);
+            if (
+              !seen.has(`${key} ${prop}`) &&
+              r.declared.some(d => sameProperty(d, css))
+            ) {
+              seen.add(`${key} ${prop}`);
+              extra.push({
+                target,
+                key,
+                state,
+                prop,
+                value: decl[prop],
+                ...(mode ? {mode} : {}),
+              });
+            }
+          }
       }
     }
   }
-  // A state setting on the plain part (a whole-part hover) loses the same
-  // way to a variant's own rule in that state: it is repeated there too.
-  for (const [target, keys] of Object.entries(
-    /** @type {Record<string, any>} */ (theme.components ?? {}),
-  ))
-    for (const [state, decl] of Object.entries(keys.base ?? {})) {
-      if (!/^:[a-z-]+$/.test(state) || !decl || typeof decl !== 'object')
-        continue;
-      const props = Object.keys(decl).filter(
-        p => !p.startsWith('--') && !p.startsWith(':'),
-      );
-      if (!props.length) continue;
-      const re = new RegExp(
-        `\\.astryx-${target.replace(/-/g, '\\-')}\\[data-([a-z-]+)="([^"]+)"\\](?:${state}(?![\\w-])[^{}]*|\\s*)\\{([^}]*)\\}`,
-        'g',
-      );
-      // The variant's own rule in that state, and its resting rule: that
-      // one comes after the plain state rule at the same weight.
-      const seen = new Set();
-      for (const m of cssText.matchAll(re)) {
-        const declared = [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(
-          d => d[1],
-        );
-        for (const prop of props) {
-          const css = kebab(prop);
-          if (css === m[1] || css.endsWith(`-${m[1]}`)) continue;
-          if (
-            !seen.has(`${m[1]}:${m[2]} ${prop}`) &&
-            declared.some(
-              d =>
-                d === css || coversProperty(d, css) || coversProperty(css, d),
-            )
-          ) {
-            seen.add(`${m[1]}:${m[2]} ${prop}`);
-            extra.push({
-              target,
-              key: `${m[1]}:${m[2]}`,
-              state,
-              prop,
-              value: decl[prop],
-            });
-          }
-        }
-      }
-    }
   return extra;
 }
 
@@ -9378,9 +9438,15 @@ async function buildThemeSteps(ctx, slug, data) {
       // takes the copy, then is written after it (as its sides where the
       // base holds it).
       !Object.entries(
-        (x.state
-          ? ownRule(x.target, x.key)[x.state]
-          : ownRule(x.target, x.key)) ?? {},
+        (() => {
+          // The variant's own declarations where the copy would go: in the
+          // setting's mode block when it has one, and in its state.
+          const rule = ownRule(x.target, x.key);
+          const scoped = x.mode
+            ? {...rule, ...(rule[`@${x.mode}`] ?? {})}
+            : rule;
+          return (x.state ? scoped[x.state] : scoped) ?? {};
+        })(),
       ).some(([k, v]) => {
         if (k.startsWith(':')) return false;
         if (k === x.prop || coversProperty(kebab(k), kebab(x.prop)))
@@ -9401,16 +9467,21 @@ async function buildThemeSteps(ctx, slug, data) {
       // The base value goes before the variant's own declarations, so a
       // longhand or shorthand the variant sets itself (border-color after
       // a base border) still wins over it.
-      const own = t[x.key] ?? {};
+      const variant = t[x.key] ?? {};
+      // A setting made for one mode is repeated in the variant's block for
+      // that mode.
+      const own = x.mode ? (variant[`@${x.mode}`] ?? {}) : variant;
       const ownState = x.state ? (own[x.state] ?? {}) : own;
       // A variant that sets every longhand of the property itself needs
       // none of the base value (and a lifted radius would feed Core's copy
       // of it into the content's radius, after the variant's own).
       const longs = [...longhandsOf(kebab(x.prop))];
       if (longs.length && longs.every(l => camel(l) in ownState)) continue;
-      t[x.key] = x.state
+      const copy = x.state
         ? {...own, [x.state]: {[x.prop]: x.value, ...ownState}}
         : {[x.prop]: x.value, ...own};
+      t[x.key] = x.mode ? {...variant, [`@${x.mode}`]: copy} : copy;
+      const at = x.mode ? t[x.key][`@${x.mode}`] : t[x.key];
       // The variant's own longhands come after the copied shorthand; one
       // the base theme holds would keep the base's earlier place and lose,
       // so it is written as its sides.
@@ -9418,10 +9489,12 @@ async function buildThemeSteps(ctx, slug, data) {
         x.key
       ];
       laterLonghandsAsSides(
-        x.state ? t[x.key][x.state] : t[x.key],
+        x.state ? at[x.state] : at,
         x.state ? baseRule?.[x.state] : baseRule,
       );
-      lifted.push(`${x.target} ${x.key}${x.state ?? ''} ${kebab(x.prop)}`);
+      lifted.push(
+        `${x.target} ${x.key}${x.mode ? ` @${x.mode}` : ''}${x.state ?? ''} ${kebab(x.prop)}`,
+      );
     }
     await step(() => {
       writeWhole(
