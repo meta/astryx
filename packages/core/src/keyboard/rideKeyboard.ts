@@ -30,6 +30,13 @@ export interface RideOptions {
   readonly entrance?: boolean;
 }
 
+// The document timeline's time, the time of the frame in progress.
+function timelineTime(): number | null {
+  const time =
+    typeof document === 'undefined' ? null : document.timeline?.currentTime;
+  return typeof time === 'number' ? time : null;
+}
+
 /**
  * Moves `animator`'s element to `to` with the keyboard: on its curve from
  * `transition.start`, or at once when the keyboard jumps.
@@ -50,13 +57,6 @@ export interface RideOptions {
  * guide.subscribe(t => rideKeyboard(dock.animator, {y: -lift(t.to)}, t));
  * ```
  */
-// The document timeline's time, the time of the frame in progress.
-function timelineTime(): number | null {
-  const time =
-    typeof document === 'undefined' ? null : document.timeline?.currentTime;
-  return typeof time === 'number' ? time : null;
-}
-
 export function rideKeyboard(
   animator: Animator,
   to: MotionValues,
@@ -75,10 +75,10 @@ export function rideKeyboard(
     return null;
   }
   // Safari can date the event that reports the keyboard a little after the
-  // frame that dispatches it. A ride dated after that frame waits in its
-  // before phase there, and a block right after the frame then stops it. So
-  // a reported ride starts no later than the document timeline's time. A
-  // predicted hide after a blur starts ahead on purpose, and keeps its start.
+  // frame that dispatches it. A ride dated after that frame has not started
+  // there. A long task right after the frame then holds it. So a reported
+  // ride starts no later than the document timeline's time. A predicted hide
+  // after a blur starts ahead on purpose, and keeps its start.
   const start = transition.predicted
     ? transition.start
     : Math.min(transition.start, timelineTime() ?? transition.start);

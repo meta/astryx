@@ -316,6 +316,20 @@ describe('the keyboard layout guide in Safari on iOS', () => {
     });
   });
 
+  it('predicts no hide when focus moves into a custom element with no shadow root, whose own field can keep the keyboard up', () => {
+    const custom = document.createElement('x-field');
+    custom.tabIndex = 0;
+    document.body.append(custom);
+    a.focus();
+    report(336);
+    seen.length = 0;
+    custom.focus();
+    vi.advanceTimersByTime(0);
+    expect(document.activeElement).toBe(custom);
+    expect(custom.shadowRoot).toBeNull();
+    expect(seen).toHaveLength(0);
+  });
+
   it('turns a predicted hide back up when focus moves into a frame before the keyboard is down', () => {
     const frame = document.createElement('iframe');
     document.body.append(frame);

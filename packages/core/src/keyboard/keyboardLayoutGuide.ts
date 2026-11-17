@@ -210,9 +210,11 @@ const guides = sharedWeakMap<Window, KeyboardLayoutGuide>(
  * down, or still up, starts nothing. Only the report of the keyboard gone
  * confirms the hide. Focus that comes back still turns it around. A field in
  * a frame, an open shadow host or a custom element can keep up a keyboard
- * the guide cannot see. So focus that moves there predicts no hide, and the
- * report decides. A closed shadow root on a built-in element reads as
- * nothing focused.
+ * the guide cannot see. Under the `uikit` profile, focus that moves there
+ * predicts no hide, and Safari's report decides. Under the `chromium`
+ * profile, the blur still predicts the hide, and the check after the slide
+ * turns it back while the keyboard stays up. A closed shadow root on a
+ * built-in element reads as nothing focused.
  *
  * @example
  * ```
