@@ -111,6 +111,7 @@
  * @property {number} [missedParts] - On how many parts those misses are (a part can miss two ways, its border and its shadow).
  * @property {string[]} [missedOn] - Those parts, in show's order; the text output names them.
  * @property {string[]} [missedWhere] - Where each of those parts keeps the base theme's look: the part, the variant its miss is in when it is one (`type:error`), then the state, or `at rest`; the text output names them.
+ * @property {number} [missedNew] - How many of those misses this change brought (not there before it); the text output says the missed line only when it brought one.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
