@@ -260,6 +260,59 @@ describe('TransferList', () => {
       expect(rowButtons[1]).toHaveAttribute('data-astryx-list-reorder');
     });
 
+    it("puts the handle before the row's label when the owner's object places handles at the start", () => {
+      render(
+        <TransferList
+          label="Columns"
+          options={OPTIONS}
+          value={['name', 'status']}
+          onChange={() => {}}
+          reorderable={createReorderable<string>({
+            onReorder: () => {},
+            handle: {placement: 'start'},
+          })}
+        />,
+      );
+      const row = screen.getByText('Name').closest('li') as HTMLElement;
+      const buttons = within(row).getAllByRole('button');
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0]).toHaveAccessibleName('Reorder Name');
+      expect(buttons[1]).toHaveAccessibleName('Remove Name');
+    });
+
+    it("moves the selected panel's heading into its labels' column for handles at the start, and keeps it while a search pauses reordering", async () => {
+      const user = userEvent.setup();
+      // The panel's heading: the label element with an id, which names the
+      // panel.
+      const heading = () =>
+        screen
+          .getAllByText('Selected columns')
+          .find(element => element.id !== '')?.parentElement;
+      const {unmount} = render(
+        <ControlledTransferList initialValue={['name', 'owner', 'status']} />,
+      );
+      const atEnd = heading()?.className;
+      unmount();
+      render(
+        <TransferList
+          label="Columns"
+          selectedLabel="Selected columns"
+          options={OPTIONS}
+          value={['name', 'owner', 'status']}
+          onChange={() => {}}
+          hasSearch
+          reorderable={createReorderable<string>({
+            onReorder: () => {},
+            handle: {placement: 'start'},
+          })}
+        />,
+      );
+      const atStart = heading()?.className;
+      expect(atStart).not.toBe(atEnd);
+      await user.type(screen.getByRole('searchbox'), 'n');
+      expect(heading()?.className).toBe(atStart);
+    });
+
     it('keeps support metadata out of rows while retaining search and groups', async () => {
       const user = userEvent.setup();
       render(
