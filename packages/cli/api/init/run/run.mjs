@@ -22,14 +22,15 @@ import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
 import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
-import {AGENT_DOC_PATHS, holdsAstryxBlock} from '../../../foundation/agent-docs/agent-doc-state.mjs';
+import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {
   AgentDocsHomeError,
   assertAgentDocsTarget,
   installAgentDocs,
   renderAgentDocsBlock,
   agentDocsTargetDir,
-  parseBlockVersion,
+  readAgentDocTexts,
+  agentDocChange,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
 import {listTemplates} from '../../template/template.mjs';
@@ -91,54 +92,6 @@ function sameFolder(a, b) {
 }
 
 /**
- * The text of a file, or null when it does not exist.
- * @param {string} filePath
- * @returns {string | null}
- */
-function readText(filePath) {
-  try {
-    return fs.readFileSync(filePath, 'utf-8');
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Each agent-doc file's text before init writes, so the receipt can say
- * what changed.
- * @param {string} dir
- * @param {string[]} rels
- * @returns {Map<string, string | null>}
- */
-function readAgentDocs(dir, rels) {
-  return new Map(rels.map(rel => [rel, readText(path.join(dir, rel))]));
-}
-
-/**
- * What init did to one agent-doc file.
- * @param {string} shown the path as the receipt shows it
- * @param {string | null} before
- * @param {string | null} after
- * @returns {import('../init.type.mjs').InitDocsChange}
- */
-function describeChange(shown, before, after) {
-  const had = before != null && holdsAstryxBlock(before);
-  const has = after != null && holdsAstryxBlock(after);
-  const from = had ? parseBlockVersion(before) : null;
-  const to = has ? parseBlockVersion(after) : null;
-  /** @type {import('../init.type.mjs').InitDocsChange['change']} */
-  const change =
-    had && !has
-      ? 'removed'
-      : before == null
-        ? 'added'
-        : before === after
-          ? 'unchanged'
-          : 'updated';
-  return {path: shown, change, from, to};
-}
-
-/**
  * One receipt line for one agent-doc file.
  * @param {import('../init.type.mjs').InitDocsChange} change
  * @returns {string}
@@ -146,7 +99,7 @@ function describeChange(shown, before, after) {
 function changeLine({path: shown, change, from, to}) {
   const version = to ? ` (Astryx ${to})` : '';
   if (change === 'removed') return `${shown}: Astryx block removed, another agent file holds it`;
-  if (change === 'added') return `${shown} added${version}`;
+  if (change === 'created') return `${shown} created${version}`;
   if (change === 'unchanged') return `${shown} already current${version}, nothing changed`;
   if (from && to && from !== to) return `${shown} updated (Astryx ${from} -> ${to})`;
   return `${shown} updated${version}`;
@@ -188,7 +141,7 @@ async function applyAgents(cwd, options, invocation, data) {
     // With explicit paths, installAgentDocs checks each file's own folder.
     if (!paths) assertAgentDocsTarget(targetDir);
     const renderedBlock = await renderAgentDocsBlock(root);
-    const before = readAgentDocs(targetDir, paths ?? AGENT_DOC_PATHS);
+    const before = readAgentDocTexts(targetDir, paths ?? AGENT_DOC_PATHS);
     /** @type {string[]} */
     const skipped = [];
     const files = installAgentDocs(targetDir, {
@@ -209,12 +162,16 @@ async function applyAgents(cwd, options, invocation, data) {
             path.relative(cwd, path.join(targetDir, rel)).split(path.sep).join('/'),
           );
     data.docsWritten = written;
-    data.docsChanges = files.map((rel, i) =>
-      describeChange(written[i], before.get(rel) ?? null, readText(path.join(targetDir, rel))),
-    );
-    for (const change of data.docsChanges) {
-      logger.log(`[ok] AI agent docs: ${changeLine(change)}`);
-    }
+    const after = readAgentDocTexts(targetDir, files);
+    // The receipt names each file from the folder init writes in; the line
+    // names it from where init ran, as docsWritten does.
+    data.docsChanges = files.map(rel => ({
+      path: rel,
+      ...agentDocChange(before.get(rel) ?? null, after.get(rel) ?? null),
+    }));
+    data.docsChanges.forEach((change, i) => {
+      logger.log(`[ok] AI agent docs: ${changeLine({...change, path: written[i]})}`);
+    });
     // A file 0.7.1 did not write (GEMINI.md, or a project-root file when init
     // runs below the root) that resolves outside the project is left as it
     // is, reported in docsError with one note; the exit code stays 0. A file

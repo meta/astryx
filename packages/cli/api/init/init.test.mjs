@@ -10,6 +10,7 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {init, getNextSteps} from './init.mjs';
@@ -247,7 +248,7 @@ describe('init() — logger', () => {
       errSpy.mockRestore();
     }
     const text = lines.join('\n');
-    expect(text).toContain('[ok] AI agent docs: AGENTS.md added (Astryx ');
+    expect(text).toContain('[ok] AI agent docs: AGENTS.md created (Astryx ');
     expect(text).toContain('  Next steps:');
     // The exact next-steps block the CLI prints comes from getNextSteps().
     expect(text).toContain(getNextSteps('npx astryx')[2].slice(0, 20));
@@ -343,9 +344,9 @@ describe('init() — what changed in each agent-doc file', () => {
     asProject();
     const first = await runInit(agentsOnly);
     const [added] = first.receipt.data.docsChanges;
-    expect(added).toMatchObject({path: 'AGENTS.md', change: 'added', from: null});
+    expect(added).toMatchObject({path: 'AGENTS.md', change: 'created', from: null});
     expect(added.to).toMatch(/^\d+\.\d+\.\d+/);
-    expect(first.text).toContain(`[ok] AI agent docs: AGENTS.md added (Astryx ${added.to})`);
+    expect(first.text).toContain(`[ok] AI agent docs: AGENTS.md created (Astryx ${added.to})`);
 
     const second = await runInit(agentsOnly);
     expect(second.receipt.data.docsChanges).toEqual([
@@ -375,7 +376,49 @@ describe('init() — what changed in each agent-doc file', () => {
     asProject();
     const {receipt} = await runInit({});
     const gemini = receipt.data.docsChanges.find(c => c.path === 'GEMINI.md');
-    expect(gemini).toEqual({path: 'GEMINI.md', change: 'added', from: null, to: null});
+    expect(gemini).toEqual({path: 'GEMINI.md', change: 'created', from: null, to: null});
+  });
+
+  it('reads the version from the block, not from a version the project text mentions', async () => {
+    asProject();
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '# AGENTS.md\n\nWe moved from Astryx v0.6.0 last quarter.\n',
+    );
+    const first = await runInit(agentsOnly);
+    const [change] = first.receipt.data.docsChanges;
+    expect(change).toMatchObject({path: 'AGENTS.md', change: 'updated', from: null});
+    expect(change.to).not.toBe('0.6.0');
+    const second = await runInit(agentsOnly);
+    expect(second.receipt.data.docsChanges).toEqual([
+      {path: 'AGENTS.md', change: 'unchanged', from: change.to, to: change.to},
+    ]);
+    expect(second.text).toContain(`AGENTS.md already current (Astryx ${change.to}), nothing changed`);
+  });
+
+  it('says a block was removed when another Claude Code file now holds it', async () => {
+    asProject();
+    execFileSync('git', ['init', '-q'], {cwd: tmpDir});
+    fs.mkdirSync(path.join(tmpDir, '.claude'));
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'CLAUDE.md'), '');
+    await runInit({});
+    expect(read('.claude/CLAUDE.md')).toContain(MARKER_START);
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# CLAUDE.md\n');
+    const {receipt, text} = await runInit({});
+    const removed = receipt.data.docsChanges.find(c => c.path === '.claude/CLAUDE.md');
+    expect(removed).toMatchObject({change: 'removed', to: null});
+    expect(text).toContain('[ok] AI agent docs: .claude/CLAUDE.md: Astryx block removed, another agent file holds it');
+  });
+
+  it('names each file from the project root, even when init runs below it', async () => {
+    asProject();
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    const receipt = await init({}, {cwd: sub});
+    expect(receipt.data.docsWritten).toContain('../../AGENTS.md');
+    const paths = receipt.data.docsChanges.map(c => c.path);
+    expect(paths).toContain('AGENTS.md');
+    expect(paths.every(p => !path.isAbsolute(p) && !p.startsWith('..'))).toBe(true);
   });
 
   it('keeps every field of the earlier receipt, with the same values', async () => {
