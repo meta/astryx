@@ -29,6 +29,7 @@ import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useDevWarning} from '../../../hooks/useDevWarning';
+import {INTERACTIVE_SELECTORS} from '../../../hooks/useClickableContainer';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
@@ -235,9 +236,8 @@ function getNextDirection(
 // Sort Header Button Component
 // =============================================================================
 
-/** Elements a reader can operate on their own: a control nested in the label. */
-const HEADER_CONTROL_SELECTOR =
-  'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
+/** A control nested in the label: Core's interactive elements, or a tab stop. */
+const HEADER_CONTROL_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex]:not([tabindex="-1"])`;
 
 function SortHeaderButton<T extends Record<string, unknown>>({
   column,
@@ -269,7 +269,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   // A header that holds its own control nests that control in the Sort
   // button, which no assistive technology can operate (WCAG 4.1.2). Table has
   // no place outside the Sort control for a caller's header control, so the
-  // column warns instead.
+  // column warns, from the label it first renders.
   const [holdsControl, setHoldsControl] = useState(false);
   const labelRef = useCallback((label: HTMLSpanElement | null) => {
     if (label?.querySelector(HEADER_CONTROL_SELECTOR) != null) {
