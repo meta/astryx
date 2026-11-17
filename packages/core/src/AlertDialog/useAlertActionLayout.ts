@@ -13,6 +13,9 @@
  * A decision never resizes the watched title, but it resizes the row that
  * other observers watch. So a decision that a resize report starts waits for
  * the next frame.
+ *
+ * SYNC: When modified, update useAlertActionLayout.test.tsx and
+ * __tests__/AlertDialog.layout.interaction.browser.spec.ts
  */
 
 import {useCallback, useEffect, useState, type RefObject} from 'react';
