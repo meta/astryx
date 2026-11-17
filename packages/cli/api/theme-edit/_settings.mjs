@@ -10697,7 +10697,28 @@ export async function contrastProblems(ctx, data, res) {
     const causes = new Map();
     /** @type {Array<ThemeProblem | string>} */
     const out = [];
+    /** @type {Map<string, Array<{x: any, problem: ThemeProblem}>>} */
+    const variants = new Map();
     for (const it of list) {
+      // The same text in the same color failing in three or more of its
+      // ground's variants (an accent link in every colored card): one
+      // problem, with each variant's line in one.
+      const onVariant = String(it.x.pair?.groundWhen ?? it.x.when ?? '');
+      if (
+        !it.x.base &&
+        /^variant:/.test(onVariant) &&
+        it.x.fgToken &&
+        it.x.bgPart &&
+        it.problem.fix?.includes(` --on ${it.x.bgPart} --when ${onVariant}`)
+      ) {
+        const k = `variants|${it.x.fgToken}|${it.x.fg}|${it.x.textPart ?? ''}|${it.x.bgPart}|${it.x.sample}|${it.x.mode}`;
+        if (!variants.has(k)) {
+          variants.set(k, []);
+          out.push(k);
+        }
+        /** @type {any[]} */ (variants.get(k)).push(it);
+        continue;
+      }
       if (!it.x.base) {
         out.push(it.problem);
         continue;
@@ -10712,12 +10733,32 @@ export async function contrastProblems(ctx, data, res) {
     /** A base note with the line that fixes it in this theme, where one does. @param {ThemeProblem} n */
     const withLine = n =>
       n.fix ? {...n, text: `${n.text}; to fix it in this theme: ${n.fix}`} : n;
-    return out.map(o => {
-      if (typeof o !== 'string') return o;
+    return out.flatMap(o => {
+      if (typeof o !== 'string') return [o];
+      const across = variants.get(o);
+      if (across) {
+        if (across.length < 3) return across.map(g => g.problem);
+        const [{x}] = across;
+        const ratios = across.map(g => Number(g.x.ratio));
+        const lo = Math.min(...ratios);
+        const hi = Math.max(...ratios);
+        const names = across.map(g =>
+          String(g.x.pair?.groundWhen ?? g.x.when).replace(/^variant:/, ''),
+        );
+        return [
+          {
+            key: o,
+            text: `text ("${x.sample}") in ${x.textPart ?? x.part} on ${names.length} ${x.bgPart} variants (${names.slice(0, 4).join(', ')}${names.length > 4 ? ` and ${names.length - 4} more` : ''}) is ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode} (${x.fg} on each variant's fill); text needs 4.5:1`,
+            // (Each variant's own line: a line on the ground for every
+            // variant does not reach the ones whose own rules set the text.)
+            fix: across.map(g => g.problem.fix).join(' && '),
+          },
+        ];
+      }
       const group = /** @type {Array<{x: any, problem: ThemeProblem}>} */ (
         causes.get(o)
       );
-      if (group.length === 1) return withLine(group[0].problem);
+      if (group.length === 1) return [withLine(group[0].problem)];
       const [{x}] = group;
       const ratios = group.map(g => Number(g.x.ratio));
       const lo = Math.min(...ratios);
@@ -10730,11 +10771,13 @@ export async function contrastProblems(ctx, data, res) {
           ),
         ),
       ];
-      return withLine({
-        key: o,
-        text: `the base theme's ${x.fg} on ${x.bg} is ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode}, in ${texts.length} texts: ${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}; text needs 4.5:1; the base theme draws it so`,
-        fix: group.find(g => g.problem.fix)?.problem.fix ?? null,
-      });
+      return [
+        withLine({
+          key: o,
+          text: `the base theme's ${x.fg} on ${x.bg} is ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode}, in ${texts.length} texts: ${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}; text needs 4.5:1; the base theme draws it so`,
+          fix: group.find(g => g.problem.fix)?.problem.fix ?? null,
+        }),
+      ];
     });
   };
   // Two pairs that read the same (one text on one fill, measured over two
