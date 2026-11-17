@@ -69,7 +69,7 @@ export const doc = {
     {
       type: 'icon.search',
       description:
-        'The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score. No match is an empty list.',
+        "The query, how many icons matched, and the ranked matches, each with its set, id, package, module, export, import line, words, filled names, variants, reason, and score. No match is an empty list. When the project picks a look (`experimental.iconVariant`), a match from a set in the project's list has the module, export, and import of that look; one whose icon lacks the look keeps its own and names both looks in `look` ({asked, used}). With no icon set installed, `reason` says so, `definitions` lists the Astryx icon definitions that match ({name, builtIn, description}), built-in ones first, since Core draws those by name, and `next` says how to get a set.",
     },
     {
       type: 'icon.detail',
@@ -89,7 +89,7 @@ export const doc = {
     {
       type: 'icon.list',
       description:
-        "The project's icon-set state, each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers, and each withdrawn set with its reason.",
+        "The project's icon-set state, each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers, and each withdrawn set with its reason. `next` is present when two or more sets are installed and none is the main set, with the command that chooses one, or when no set is installed, with how to get one.",
     },
   ],
   throws: [

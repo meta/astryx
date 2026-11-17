@@ -377,6 +377,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_avatar-group-overlap',
   '--_field-status-overlap',
   '--_codeblock-gutter-width',
+  // The page's direction, read with :dir(rtl) on the block root so the
+  // gutter mirrors; a theme has no direction to set.
+  '--_codeblock-direction',
   '--_tab-indicator-bottom',
   // Hit-area outset on a ::after overlay, and whether that overlay is
   // generated at all — `inset` and `content` on a pseudo-element are not

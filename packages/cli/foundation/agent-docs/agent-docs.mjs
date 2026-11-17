@@ -49,6 +49,7 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {
   AGENTS_MD,
   AGENT_DOC_PATHS,
+  holdsAstryxBlock,
   CLAUDE_MD,
   CLAUDE_DIR_MD,
   CURSOR_RULES,
@@ -411,7 +412,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
     if (isAgentsImportBlock(rel, content)) continue;
 
     const legacy = !hasNew && hasLegacy;
-    const blockVersion = parseBlockVersion(content);
+    const blockVersion = managedBlockVersion(content);
     let contentMatches = true;
     if (expectedBlock != null) {
       try {
@@ -1576,6 +1577,68 @@ function stripManagedBlock(filePath, compressedIndex) {
     injectXdsBlock(filePath, compressedIndex, {onlyReplace: true});
   }
   return false;
+}
+
+/**
+ * Each agent-doc file's text, or null when it does not exist. Init reads the
+ * files before and after it writes, so its receipt can say what changed.
+ * @param {string} dir
+ * @param {string[]} rels paths relative to `dir`
+ * @returns {Map<string, string | null>}
+ */
+export function readAgentDocTexts(dir, rels) {
+  return new Map(
+    rels.map(rel => {
+      try {
+        return [rel, fs.readFileSync(path.join(dir, rel), 'utf-8')];
+      } catch {
+        return [rel, null];
+      }
+    }),
+  );
+}
+
+/**
+ * The Astryx version the managed block in `content` names. Only the block is
+ * read, so a version that the project's own text mentions never counts. Null
+ * when there is no block, the block is malformed, or it has no version line.
+ * @param {string} content
+ * @returns {string | null}
+ */
+export function managedBlockVersion(content) {
+  try {
+    const block = findManagedBlock(content);
+    return block ? parseBlockVersion(content.slice(block.start, block.end)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a write did to one agent-doc file, from its text before and after.
+ * `removed`: its Astryx block is gone. `created`: the file did not exist.
+ * `unchanged`: the text is the same. `updated`: anything else. `from` and
+ * `to` are the versions the block names before and after.
+ * @param {string | null} before
+ * @param {string | null} after
+ * @returns {{change: 'created' | 'updated' | 'unchanged' | 'removed', from: string | null, to: string | null}}
+ */
+export function agentDocChange(before, after) {
+  const had = before != null && holdsAstryxBlock(before);
+  const has = after != null && holdsAstryxBlock(after);
+  const change =
+    had && !has
+      ? 'removed'
+      : before == null
+        ? 'created'
+        : before === after
+          ? 'unchanged'
+          : 'updated';
+  return {
+    change,
+    from: had ? managedBlockVersion(/** @type {string} */ (before)) : null,
+    to: has ? managedBlockVersion(/** @type {string} */ (after)) : null,
+  };
 }
 
 /**
