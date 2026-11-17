@@ -1390,6 +1390,14 @@ export const FAMILY_SECTIONS = Object.freeze(
 );
 
 /**
+ * The errors of a folder that cannot be written (no permission, read-only,
+ * full): a page the pictures need that cannot be written there is the
+ * pictures' problem, which the picture run names, never a refusal of the
+ * command.
+ */
+export const UNWRITABLE = Object.freeze(['EACCES', 'EPERM', 'EROFS', 'ENOSPC']);
+
+/**
  * One page for each family of components ({@link FAMILY_SECTIONS}), cut
  * from the full sheet just made, so each shows its family as the sheet
  * does, with no render of its own: the sheet's head and bar, then that
@@ -1439,11 +1447,18 @@ export function familyPages(sheet, slug, cwd, only = FAMILY_SECTIONS) {
         `<strong>${slug}: every component</strong>`,
         `<strong>${slug}: every component (${family})</strong>`,
       );
-    writeWhole(
-      html,
-      `${head}${text.slice(at, starts[i + 1]?.at ?? end)}${after}`,
-    );
-    stampSheet(html, slug, cwd);
+    try {
+      writeWhole(
+        html,
+        `${head}${text.slice(at, starts[i + 1]?.at ?? end)}${after}`,
+      );
+      stampSheet(html, slug, cwd);
+    } catch (e) {
+      // A theme folder it cannot write: no family page, and the picture
+      // run names the folder.
+      if (UNWRITABLE.includes(/** @type {any} */ (e)?.code)) break;
+      throw e;
+    }
     pages.push({html, png, family});
   }
   return {pages, problems};

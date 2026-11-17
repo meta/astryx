@@ -20,11 +20,6 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
-import {keepStandIn} from '../../test-utils/theme-render-stub.mjs';
-
-// (Its assertions count a known set of pages: the stand-in stays, even
-// where every page is drawn for real.)
-keepStandIn();
 
 // The renders are stood in for, and a picture is a few bytes where the
 // browser would write it: these tests are about what the result says.
@@ -47,8 +42,12 @@ vi.mock('./_preview.mjs', async importOriginal => {
 });
 
 const T = 240_000;
+// What a change with --png takes: the sample page and the open states.
 const LOOK =
   'open themes/t/preview.png (the sample page, a tooltip, a menu and a list drawn open below it) and themes/t/sheet-overlays.png (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open); the -dark pictures show the dark mode';
+// What show --png takes besides: the family the theme sets a part of (a
+// fresh theme sets none: the buttons').
+const SHOW_LOOK = `open themes/t/sheet-actions.png (one family of components each) and ${LOOK.slice('open '.length)}`;
 
 /** @type {string} */
 let cwd;
@@ -117,7 +116,7 @@ describe('the pictures to open', () => {
     'show --png says it first and last, and in the JSON',
     async () => {
       const r = /** @type {any} */ (await themeEditShow('t', {cwd, png: true}));
-      expect(r.data.look).toBe(LOOK);
+      expect(r.data.look).toBe(SHOW_LOOK);
       const text = (
         await runCli(
           ['experimental', 'theme', 'editor', 'show', 't', '--png'],
@@ -126,8 +125,8 @@ describe('the pictures to open', () => {
       ).stdout
         .trim()
         .split('\n');
-      expect(text[0]).toBe(`look: ${LOOK}`);
-      expect(text.at(-1)).toBe(`look: ${LOOK}`);
+      expect(text[0]).toBe(`look: ${SHOW_LOOK}`);
+      expect(text.at(-1)).toBe(`look: ${SHOW_LOOK}`);
       const without = (
         await runCli(['experimental', 'theme', 'editor', 'show', 't'], cwd)
       ).stdout;

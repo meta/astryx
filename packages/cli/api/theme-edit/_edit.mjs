@@ -253,6 +253,7 @@ import {
   familyPages,
   FAMILY_PICTURE_HEIGHT,
   FAMILY_SECTIONS,
+  UNWRITABLE,
   FAMILY_OVERVIEW,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -7698,12 +7699,7 @@ export async function themeEditShow(theme, options = {}) {
           } catch (e) {
             // A theme folder it cannot write is the pictures' problem: the
             // picture run names the folder, and show stands.
-            if (
-              ['EACCES', 'EPERM', 'EROFS', 'ENOSPC'].includes(
-                /** @type {any} */ (e)?.code,
-              )
-            )
-              return null;
+            if (UNWRITABLE.includes(/** @type {any} */ (e)?.code)) return null;
             throw e;
           }
         })

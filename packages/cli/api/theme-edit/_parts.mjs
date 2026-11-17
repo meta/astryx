@@ -644,6 +644,9 @@ export async function renderGenerated(
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // A theme's image too large for a page is named by the editor (show's
+      // notes); the page goes on without it.
+      leaveLargeStyleAssets: true,
       ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's

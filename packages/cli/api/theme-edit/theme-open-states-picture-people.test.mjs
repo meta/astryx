@@ -25,14 +25,10 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
-import {keepStandIn, realDrawing} from '../../test-utils/theme-render-stub.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
 
-// (These cases read what a drawing returns: drawn for real, with the
-// sample page and the sheet still stood in for.)
-// (Its assertions count a known set of pages: the stand-in stays, even
-// where every page is drawn for real.)
-keepStandIn();
-realDrawing(true);
+// (These cases read drawn components: drawn for real.)
+realRenders(true);
 
 // The renders are stood in for, and a picture is a few bytes where the
 // browser would write it: these tests are about which pictures are taken.
@@ -86,6 +82,10 @@ describe('the open states picture', () => {
         'preview-dark.png',
         'sheet-overlays.png',
         'sheet-overlays-dark.png',
+        // (The family the theme sets a part of: the buttons, when it sets
+        // none or only dials.)
+        'sheet-actions.png',
+        'sheet-actions-dark.png',
       ]);
       const changed = /** @type {any} */ (
         await themeEditSet('t', 'corners', 'square', {cwd, png: true})

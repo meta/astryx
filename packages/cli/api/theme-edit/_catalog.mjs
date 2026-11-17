@@ -525,6 +525,14 @@ export function pageSource({
     'function modes(tree, open) { if (!theme || MODE !== "system") { const one = html(tree, MODE, open); return one == null ? null : {one}; } const light = html(tree, "light", open); const dark = html(tree, "dark", open); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
+  // How the sheet groups the parts drawn into its sections, written into
+  // the page from the functions below (what reads the sheet's sections
+  // reads the same).
+  lines.push(
+    String(openGroupOf),
+    String(sheetGroups),
+    String(sheetSectionClass),
+  );
   lines.push(`const SECTION = ${JSON.stringify(section ?? '')};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
   lines.push(`const SHEET_CSS = ${JSON.stringify(SHEET_CSS)};`);
@@ -552,7 +560,7 @@ export default function Page() {
   // menus and lists show in the pictures.
   // On one family's own page its parts drawn open follow the family, named
   // for it; on the whole sheet they join the overlays.
-  const OPEN_GROUP = SECTION && SECTION !== 'overlays' ? SECTION + ', open' : 'overlays';
+  const OPEN_GROUP = openGroupOf(SECTION);
   const opensPopup = html => html.includes('<template></template>') || (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
   for (const it of rendered) {
     const m = it.markup;
@@ -602,20 +610,8 @@ export default function Page() {
         : null,
     ];
   } else {
-    const groups = [];
-    // In the overlays section the small overlays drawn open beside their
-    // triggers (a tooltip, a menu, a list) come first; a panel over the
-    // whole page (a dialog, a drawer) after them.
-    const small = it => it.opened || (it.open && it.anchored);
-    const ordered = OPEN_GROUP === 'overlays' ? [...drawn.filter(small), ...drawn.filter(it => !small(it))] : [...drawn.filter(it => !it.opened), ...drawn.filter(it => it.opened)];
-    for (const it of ordered) {
-      let g = groups.find(x => x.name === (it.group ?? ''));
-      if (!g) { g = {name: it.group ?? '', cells: []}; groups.push(g); }
-      let c = g.cells.find(x => x.name === it.name);
-      if (!c) { c = {name: it.name, list: []}; g.cells.push(c); }
-      if (!c.list.some(x => x.label === it.label)) c.list.push(it);
-    }
-    body = groups.map(g => h('section', {key: g.name, className: (g.name === OPEN_GROUP ? 'cs-group cs-open-group' : 'cs-group') + ' cs-family-' + g.name.replace(/[^a-z0-9]+/g, '-')},
+    const groups = sheetGroups(drawn, OPEN_GROUP);
+    body = groups.map(g => h('section', {key: g.name, className: sheetSectionClass(g.name, OPEN_GROUP)},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
       h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell', style: {'--cs-examples': c.list.length}},
         h('div', {className: 'cs-name'}, c.name),
@@ -637,6 +633,68 @@ export default function Page() {
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
 }`);
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The section a sheet puts the parts it draws open in: on one family's own
+ * page, that family's open section; on the whole sheet, the overlays.
+ * Written into the page as well (pageSource).
+ * @param {string} section the family the page is of, or ''
+ */
+export function openGroupOf(section) {
+  return section && section !== 'overlays' ? section + ', open' : 'overlays';
+}
+
+/**
+ * The sections of a sheet, in order, with their cells, from the parts it
+ * draws: by each part's group, in the order of the parts. In the overlays
+ * section the small overlays drawn open beside their triggers (a tooltip,
+ * a menu, a list) come first, a panel over the whole page (a dialog, a
+ * drawer) after them; on a family's page its parts drawn open follow it.
+ * Written into the page as well (pageSource).
+ * @param {Array<{name: string, group?: string, label?: string, opened?: boolean, open?: unknown, anchored?: boolean}>} drawn
+ * @param {string} openGroup the section of the parts drawn open
+ * @returns {Array<{name: string, cells: Array<{name: string, list: any[]}>}>}
+ */
+export function sheetGroups(drawn, openGroup) {
+  /** @type {Array<{name: string, cells: Array<{name: string, list: any[]}>}>} */
+  const groups = [];
+  const small = (/** @type {any} */ it) =>
+    it.opened || (it.open && it.anchored);
+  const ordered =
+    openGroup === 'overlays'
+      ? [...drawn.filter(small), ...drawn.filter(it => !small(it))]
+      : [...drawn.filter(it => !it.opened), ...drawn.filter(it => it.opened)];
+  for (const it of ordered) {
+    let g = groups.find((/** @type {any} */ x) => x.name === (it.group ?? ''));
+    if (!g) {
+      g = {name: it.group ?? '', cells: []};
+      groups.push(g);
+    }
+    let c = g.cells.find((/** @type {any} */ x) => x.name === it.name);
+    if (!c) {
+      c = {name: it.name, list: []};
+      g.cells.push(c);
+    }
+    if (!c.list.some((/** @type {any} */ x) => x.label === it.label))
+      c.list.push(it);
+  }
+  return groups;
+}
+
+/**
+ * A sheet section's class: its family's, by which the full sheet is cut
+ * into a page for each family (familyPages). Written into the page as well
+ * (pageSource).
+ * @param {string} name
+ * @param {string} openGroup
+ */
+export function sheetSectionClass(name, openGroup) {
+  return (
+    (name === openGroup ? 'cs-group cs-open-group' : 'cs-group') +
+    ' cs-family-' +
+    name.replace(/[^a-z0-9]+/g, '-')
+  );
 }
 
 /** The light and dark switches, and the contact sheet grid. */

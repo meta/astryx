@@ -29,11 +29,6 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {keepStandIn} from '../../test-utils/theme-render-stub.mjs';
-
-// (Its assertions count a known set of pages: the stand-in stays, even
-// where every page is drawn for real.)
-keepStandIn();
 
 vi.mock('./_preview.mjs', async importOriginal => {
   const original = /** @type {any} */ (await importOriginal());

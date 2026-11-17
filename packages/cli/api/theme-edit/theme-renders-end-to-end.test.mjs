@@ -26,6 +26,9 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {context} from './_context.mjs';
+import {renderSheet} from './_preview.mjs';
+import {loadTheme} from './_settings.mjs';
 import {realRenders} from '../../test-utils/theme-render-stub.mjs';
 
 // (Drawn for real: that is what this file checks.)
@@ -110,6 +113,35 @@ describe('the drawing, end to end', () => {
       );
       expect([...r.data.added, ...r.data.refreshed].length).toBeGreaterThan(0);
       expect(fs.existsSync(path.join(cwd, r.data.folder))).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'the stand-in draws the same sections as the real drawing, so the same family pages are cut from it',
+    async () => {
+      const ctx = await context(cwd);
+      const data = loadTheme(cwd, 't');
+      /** The family sections a drawn sheet holds, in order. @param {string} file */
+      const families = file =>
+        [
+          ...fs
+            .readFileSync(file, 'utf8')
+            .matchAll(/<section\b[^>]*\sclass="[^"]*\bcs-family-([a-z-]+)\b/g),
+        ]
+          .map(m => m[1])
+          .filter(f => f !== 'states');
+      const real = path.join(cwd, 'themes/t/sheet-real.html');
+      const standIn = path.join(cwd, 'themes/t/sheet-stand-in.html');
+      await renderSheet(ctx, 't', data, {out: real});
+      realRenders(false);
+      try {
+        await renderSheet(ctx, 't', data, {out: standIn});
+      } finally {
+        realRenders(true);
+      }
+      expect(families(standIn)).toEqual(families(real));
+      expect(families(real).length).toBeGreaterThan(1);
     },
     T,
   );
