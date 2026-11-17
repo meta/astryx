@@ -163,9 +163,9 @@ work.
   `privateAttributes/ownRing.stylex.ts` instead. Button and the reorder handle
   carry that module's mark, and the row paints no ring while one of them has
   keyboard focus. VisuallyHidden marks its content too, so the row still rings
-  for a control inside it, whose own ring cannot show. A disabled row dims a
-  Button with the rest of its content, so it rings for a focused Button too;
-  the reorder handle keeps the only ring. Implementation gap: the
+  for a control inside it, whose own ring cannot show. A disabled row also
+  rings for a focused Button; the reorder handle keeps the only ring.
+  Implementation gap: the
   clickable and selectable cards, Thumbnail, MultiSelector, SideNavItem, and
   ChatComposer's body write their own ring conditions; a Link or a Switch
   carries no own-ring mark, so such a row rings around it too.

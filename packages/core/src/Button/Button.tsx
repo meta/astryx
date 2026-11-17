@@ -1175,7 +1175,7 @@ export function Button({
         {...describedByProp}
         {...edgeCompAttr}
         // Button rings itself, so a row that rings on focus within leaves
-        // it alone, unless the row is disabled and dims the Button's ring.
+        // it alone. A disabled row still rings, because it can dim this ring.
         {...ownRingUnlessDimmedProps}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
@@ -1209,7 +1209,7 @@ export function Button({
         {...describedByProp}
         {...edgeCompAttr}
         // Button rings itself, so a row that rings on focus within leaves
-        // it alone, unless the row is disabled and dims the Button's ring.
+        // it alone. A disabled row still rings, because it can dim this ring.
         {...ownRingUnlessDimmedProps}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.

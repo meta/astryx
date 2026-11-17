@@ -1030,8 +1030,8 @@ export function Item({
           disabled: isDisabled ? 'disabled' : null,
         }),
         // The row rings only for its own button or link. In delegation mode it
-        // rings for a focused control inside it, but not for a control that
-        // rings itself, such as a Button. Thus one focus move shows one ring.
+        // rings for a focused control inside it, unless that control rings
+        // itself.
         stylex.props(
           isDelegate ? ownRingContainerStyles.focusWithin : focusWithinOwner,
           styles.root,
