@@ -10,6 +10,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {freeRestoreFolder} from '../../foundation/render/restore-folder.mjs';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
@@ -136,15 +137,16 @@ function resolvesCore(dir) {
  * @param {string} file absolute
  * @param {string} cwd
  * @param {string} what
+ * @param {string} [fix] what to do instead
  * @returns {string}
  */
-function confined(file, cwd, what) {
+function confined(file, cwd, what, fix = 'Write inside the folder you run the command from.') {
   try {
     return assertWithin(file, cwd, {allowAbsolute: true, label: what});
   } catch (e) {
     if (e instanceof PathSafetyError) {
       throw new AstryxError(
-        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. Write inside the folder you run the command from.`,
+        `${what} ${shown(cwd, file)} is outside the current folder; nothing was written. ${fix}`,
         [],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
@@ -453,12 +455,17 @@ function servedSet(input) {
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
+ * @param {{cwd: string, input: string, output: string, title?: string, absolute?: boolean}} args absolute paths;
+ *   `absolute`: the caller named the output by an absolute path
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title}) {
+export async function renderToFile({cwd, input, output, title, absolute = false}) {
   readInput(input, cwd);
-  confined(output, cwd, 'The output');
+  // An absolute --out is the caller's choice of place, also outside the
+  // current folder (cli-surface DEC-16). The file there is still never one a
+  // render did not write.
+  const elsewhere = absolute && !isInside(output, cwd);
+  if (!elsewhere) confined(output, cwd, 'The output', 'Write inside the folder you run the command from, or name an absolute path.');
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
@@ -485,7 +492,16 @@ export async function renderToFile({cwd, input, output, title}) {
     }
     recordResolved(name, version, dir, 'package-set');
   }
-  refuseProtected([output], cwd);
+  if (!elsewhere) refuseProtected([output], cwd);
+  // Elsewhere, the file named is the file written: a link there would put the
+  // render wherever the link points.
+  if (elsewhere && fs.lstatSync(output, {throwIfNoEntry: false})?.isSymbolicLink()) {
+    throw new AstryxError(
+      `${shown(cwd, output)} is a symbolic link, so it is not replaced; nothing was written. Name the file itself.`,
+      [],
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
+  }
   // An existing file is replaced only when a render wrote it.
   if (
     fs.existsSync(output) &&
@@ -637,13 +653,7 @@ function aliasedResult(unaliased, page, cwd) {
  * @param {string} input absolute
  */
 function restoreFolder(input) {
-  const stem = path.basename(input).replace(/\.[^.]+$/, '');
-  let folder = path.join(path.dirname(input), `${stem}-restored`);
-  for (let n = 2; fs.existsSync(folder); n++) {
-    removeStaleTemporaries(folder);
-    folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
-  }
-  return folder;
+  return freeRestoreFolder(path.dirname(input), path.basename(input), removeStaleTemporaries);
 }
 
 /**

@@ -63,6 +63,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
+import {projectMapsImport} from '../../../foundation/render/ts-paths.mjs';
 import {STYLESHEET_FILE} from '../../../foundation/fs/stylesheet-file.mjs';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
@@ -3576,70 +3577,6 @@ function importerOf(message) {
     return from.startsWith('file:') ? fileURLToPath(from) : from.trim();
   } catch {
     return null;
-  }
-}
-
-/**
- * Whether the project that holds `from` maps `specifier` itself: the nearest
- * tsconfig.json or jsconfig.json names it in `compilerOptions.paths` (`@app/*`
- * maps `@app/c`), or its `baseUrl` holds the file (`lib/c`). The theme loader
- * maps neither, so such an import is a path alias, never a package.
- * @param {string} specifier
- * @param {string | null} from the importing module
- * @returns {boolean}
- */
-export function projectMapsImport(specifier, from) {
-  if (!from) return false;
-  for (let dir = path.dirname(from); ; dir = path.dirname(dir)) {
-    for (const name of ['tsconfig.json', 'jsconfig.json']) {
-      const file = path.join(dir, name);
-      /** @type {any} */
-      let config;
-      try {
-        // JSON with comments and trailing commas, as TypeScript reads it.
-        config = JSON.parse(
-          fs
-            .readFileSync(file, 'utf8')
-            .replace(
-              /("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-              (m, str) => str ?? '',
-            )
-            .replace(/,(\s*[}\]])/g, '$1'),
-        );
-      } catch {
-        continue;
-      }
-      const options = config?.compilerOptions ?? {};
-      const paths = Object.keys(
-        options.paths && typeof options.paths === 'object' ? options.paths : {},
-      );
-      if (
-        paths.some(pattern =>
-          pattern.endsWith('*')
-            ? specifier.startsWith(pattern.slice(0, -1))
-            : specifier === pattern,
-        )
-      )
-        return true;
-      if (typeof options.baseUrl === 'string') {
-        const base = path.resolve(dir, options.baseUrl, specifier);
-        if (
-          ['', ...THEME_MODULE_EXTENSIONS].some(ext => {
-            try {
-              return fs.statSync(base + ext).isFile();
-            } catch {
-              return false;
-            }
-          }) ||
-          THEME_MODULE_EXTENSIONS.some(ext =>
-            fs.existsSync(path.join(base, `index${ext}`)),
-          )
-        )
-          return true;
-      }
-      return false;
-    }
-    if (path.dirname(dir) === dir) return false;
   }
 }
 

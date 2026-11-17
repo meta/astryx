@@ -135,7 +135,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Run each command from the folder that holds the file: the command writes only inside the folder you run it from, so the page and `--out` must both be inside it. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
+          text: 'Run each command from the folder that holds the file: a relative `--out` stays inside the folder you run it from, and `--reverse` writes only there. An absolute `--out` can name any folder. When the restored page imports a package, such as recharts or an icon set, install it in that folder first; the render names each package that is missing.',
         },
       ],
     },

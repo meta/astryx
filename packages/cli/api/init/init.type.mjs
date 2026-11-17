@@ -22,6 +22,7 @@
  * @property {'default' | 'features'} mode `default` (no flags) or `features` (--features/--all).
  * @property {string[]} features Features that were run, in order.
  * @property {string[]} docsWritten Agent-doc files written, relative to the directory init ran in (empty if agents weren't run or install failed). Without --agent-docs-path they sit at the project root: the nearest folder at or above it whose package.json declares an Astryx package, else the nearest with any package.json, within its repository and never the home folder; with none, the directory init ran in.
+ * @property {'missing' | 'stale' | 'current' | null} agentDocsStatus The agent docs init writes, before this run: `missing` (no Astryx block), `stale` (a block from another release or with other text, or with `--agent-docs-path` a named file without the block), or `current` (every block already matches); null when agent docs were not installed or the write failed.
  * @property {InitDocsChange[]} docsChanges What init did to each file in `docsWritten`, in the same order; each path is relative to the project root.
  * @property {{kind: 'path-safety' | 'install-failed', message?: string} | null} docsError Soft agent-docs failure, if any. `path-safety` also implies a non-zero exit. `install-failed` carries a message when init wrote no agent docs (the home folder, or a settings folder in it outside a project) or skipped a file that resolves outside the project; docsWritten then lists what was written.
  * @property {boolean} theme Whether the theme feature ran.
@@ -29,7 +30,7 @@
  * @property {string | null} themeTemplatePath Relative output path when `themeTemplate === 'created'`.
  * @property {'workflow' | 'created' | 'skipped' | null} template Template outcome (`workflow` is the CLI default; `created`/`skipped` are programmatic).
  * @property {string | null} templatePath Relative output path when `template === 'created'`.
- * @property {boolean} nextSteps Whether the getting-started "Next steps" were emitted (default mode inside a project; false outside one).
+ * @property {boolean} nextSteps Whether the getting-started "Next steps" were emitted (default mode inside a project; false outside one, and false when `agentDocsStatus` is `current`, where init prints the build and search commands instead).
  */
 
 /**
