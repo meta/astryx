@@ -3,14 +3,16 @@
 /**
  * The family roles the census reads from the parts' own structure are
  * groups `--on` takes: each expands to its members, and a look set on one
- * never overwrites a member the theme set the same thing on itself.
- * Against real bundled base themes.
+ * never overwrites a member the theme set the same thing on itself. A look
+ * said of one member (a gradient, a frame, a selected pill) reaches its
+ * family; set on one member names the members without it, with the family
+ * line. The looks are Bootstrap 1.4's. Against real bundled base themes.
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {context} from './_context.mjs';
 import {groupsOf} from './_settings.mjs';
 import {
@@ -94,5 +96,106 @@ describe('family role groups', () => {
       new RegExp(`\\.astryx-${p} \\{[^}]*\\}`).exec(css)?.[0] ?? '';
     expect(rule('button')).toMatch(/linear-gradient\(#ffffff, #e6e6e6\)/);
     expect(rule('toggle-button')).toMatch(/linear-gradient\(red, blue\)/);
+  }, 240_000);
+});
+
+/** @param {string} q @param {string} theme */
+const first = async (q, theme) =>
+  ((await themeEditHow(q, {cwd, theme})).data.results?.[0]?.commands ?? []).map(
+    (/** @type {string} */ c) => c.replace(/^.*? editor /, ''),
+  );
+
+/** @param {string} theme */
+const cssOf = theme =>
+  fs.readFileSync(path.join(cwd, 'themes', theme, `${theme}.css`), 'utf8');
+
+/** @param {string} css @param {string} sel */
+const ruleOf = (css, sel) =>
+  new RegExp(`${sel.replace(/[.[\]"=]/g, '\\$&')} \\{[^}]*\\}`).exec(
+    css,
+  )?.[0] ?? '';
+
+describe('a family look said of one member (Bootstrap 1.4)', () => {
+  it('the button gradient reaches the toggle buttons', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('b', {cwd, like: 'neutral'});
+    const lines = await first(
+      'buttons with a gradient from #ffffff to #e6e6e6',
+      'b',
+    );
+    expect(lines).toEqual([
+      "set b background 'linear-gradient(#ffffff, #e6e6e6)' --on button-like",
+    ]);
+    await themeEditSet('b', 'background', 'linear-gradient(#ffffff, #e6e6e6)', {
+      cwd,
+      on: 'button-like',
+    });
+    expect(ruleOf(cssOf('b'), '.astryx-toggle-button')).toMatch(
+      /linear-gradient\(#ffffff, #e6e6e6\)/,
+    );
+  }, 240_000);
+
+  it('the menu-row gradient reaches every option row', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('o', {cwd, like: 'neutral'});
+    expect(
+      await first('menu rows with a gradient from #049cdb to #0064cd', 'o'),
+    ).toEqual([
+      "set o background 'linear-gradient(#049cdb, #0064cd)' --on option-rows",
+    ]);
+    await themeEditSet('o', 'background', 'linear-gradient(#049cdb, #0064cd)', {
+      cwd,
+      on: 'option-rows',
+    });
+    for (const p of ['typeahead-option', 'selector-option-row'])
+      expect(ruleOf(cssOf('o'), `.astryx-${p}`), p).toMatch(
+        /linear-gradient\(#049cdb, #0064cd\)/,
+      );
+  }, 240_000);
+
+  it('the modal frame reaches the drawer, sheet, popover and hover card', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('d', {cwd, like: 'neutral'});
+    const lines = await first(
+      'dialogs with a 1px solid #4d4d4d border and a 0 3px 7px #4d4d4d shadow',
+      'd',
+    );
+    expect(lines).toEqual([
+      "set d border '1px solid #4d4d4d' --on overlays",
+      "set d box-shadow '0 3px 7px #4d4d4d' --on overlays",
+    ]);
+    // (A shadow alone, or a removal, stays the dialog's.)
+    expect(await first('no shadow on dialogs', 'd')).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/--on overlays/)]),
+    );
+  }, 240_000);
+
+  it('the selected pill, set on one item, names the family and its line', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('p', {cwd, like: 'neutral'});
+    const r = await themeEditSet('p', 'border-radius', '4px', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    const note = JSON.stringify(r.data?.leftOut ?? []);
+    expect(note).toMatch(/calendar-day/);
+    expect(note).toContain('--on selected-items --state selected');
+    for (const [thing, v] of [
+      ['border-radius', '4px'],
+      ['background-color', '#0069d6'],
+      ['color', '#ffffff'],
+    ])
+      await themeEditSet('p', thing, v, {
+        cwd,
+        on: 'selected-items',
+        state: 'selected',
+      });
+    const day = ruleOf(
+      cssOf('p'),
+      '.astryx-calendar-day[data-selected="selected"]',
+    );
+    expect(day).toMatch(/border-radius: 4px/);
+    expect(day).toMatch(/background-color: #0069d6/);
   }, 240_000);
 });

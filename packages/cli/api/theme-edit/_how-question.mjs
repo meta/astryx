@@ -67,6 +67,8 @@ import {
   baseBlocksFor,
   partsOf,
   MOMENT_STATES,
+  groupsOf,
+  GROUP_ROLES,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -12018,9 +12020,101 @@ export function draftAnswer(ctx, env, question) {
       ...(c.except ? {} : {intent: {...intentOf(c, []), from: ref}}),
     };
   };
+  // A look said of a family's member ("gradient buttons", "framed
+  // dialogs", "glossy toggles", "the selected pill"): its layered fill (a
+  // gradient), its frame (a border and a shadow given together) or its
+  // selected pill (corners and a fill given together for the selected
+  // state) goes on the member's family role, so every member that
+  // draws alike takes it (a member the theme set the same thing on keeps
+  // its own). A plain fill, a shadow or border alone, a removal, a step
+  // from the value now, a member said with a variant or a level, or "only"
+  // stays on the member.
+  const groups = groupsOf(ctx);
+  const LOOK_ROLES = ['button-like', 'overlays', 'option-rows'];
+  /** @param {Step} st @param {Step[]} o */
+  const familyOfStep = (st, o) => {
+    if (!st.on || st.when || st.verb !== 'set') return null;
+    const thing = String(st.thing);
+    const value = String(st.value ?? '').trim();
+    if (/^(?:none|0|0px|transparent|initial|unset)$/i.test(value)) return null;
+    const gradient =
+      !st.state &&
+      /^background(?:-image)?$/.test(thing) &&
+      /gradient\(/.test(value);
+    // (A frame: a border and a shadow on the part in the same ask, in one
+    // item or two, neither a removal.)
+    const framed = (/** @type {string} */ aspect) =>
+      clauses.some(
+        x =>
+          !x.except &&
+          !x.neg &&
+          x.aspects.includes(aspect) &&
+          x.parts.some(p => p.on === st.on && !p.when),
+      );
+    const frame =
+      !st.state &&
+      /^(?:border|box-shadow)$/.test(thing) &&
+      framed('border') &&
+      framed('shadow');
+    // (A selected pill: its corners and its fill given together for the
+    // selected state; a selected fill or underline alone stays the
+    // member's.)
+    const sel = (/** @type {Step} */ x) =>
+      x.on === st.on &&
+      !x.when &&
+      /^(?:selected|active)$/.test(String(x.state ?? ''));
+    const selected =
+      sel(st) &&
+      /^(?:background(?:-color|-image)?|border-radius|corners)$/.test(thing) &&
+      o.some(
+        x => sel(x) && /^(?:border-radius|corners)$/.test(String(x.thing)),
+      ) &&
+      o.some(
+        x => sel(x) && /^background(?:-color|-image)?$/.test(String(x.thing)),
+      );
+    if (!gradient && !frame && !selected) return null;
+    return (
+      (selected ? ['selected-items'] : LOOK_ROLES).find(r =>
+        (groups[r] ?? []).includes(String(st.on)),
+      ) ?? null
+    );
+  };
+  /** @param {Draft} d */
+  const familyWide = d => {
+    const c = clauseNow;
+    if (!c || c.except || /\bonly\b/.test(c.text)) return d;
+    const plain = (/** @type {string} */ on) =>
+      c.parts.some(p => p.on === on && !p.when && !p.level);
+    const options = d.options.map(o =>
+      o.map(st => {
+        const role = familyOfStep(st, o);
+        return role && plain(String(st.on)) ? {...st, on: role} : st;
+      }),
+    );
+    if (options.every((o, i) => o.every((st, k) => st === d.options[i][k])))
+      return d;
+    const roles = [
+      ...new Set(
+        options
+          .flatMap(o =>
+            o.filter(st => GROUP_ROLES.includes(/** @type {any} */ (st.on))),
+          )
+          .map(st => String(st.on)),
+      ),
+    ];
+    return {
+      ...d,
+      options,
+      text: `${d.text} (on ${roles.join(', ')}: every part of that family that draws alike, ${roles
+        .map(r => (groups[r] ?? []).join(', '))
+        .join('; ')})`,
+    };
+  };
   /** @param {Draft} input */
   const push = input => {
-    const d1 = keepLineColors(groupCornerEnds(withMode(input, clauseNow)));
+    const d1 = familyWide(
+      keepLineColors(groupCornerEnds(withMode(input, clauseNow))),
+    );
     // The every-word gate, on the steps as they will run (a one-mode ask
     // carries its mode by then, or was refused with its own reason).
     const unread =
