@@ -334,6 +334,19 @@ function args(fn, body) {
   if (channels.length !== 3) return null;
   const read = channels.map(x => num(x, !legacy));
   if (read.some(x => !x)) return null;
+  // The comma (legacy) syntax as CSS Color 4 takes it: rgb() with all
+  // numbers or all percentages, hsl() with a hue and two percentages. Bare
+  // numbers for saturation and lightness, or mixed rgb() channels, are the
+  // space-separated syntax's only: browsers drop them written with commas.
+  if (legacy) {
+    const units = /** @type {Num[]} */ (read).map(x => x.unit);
+    const ok = /^rgba?$/i.test(fn)
+      ? units.every(u => u === '') || units.every(u => u === '%')
+      : ['', 'deg', 'grad', 'rad', 'turn'].includes(units[0]) &&
+        units[1] === '%' &&
+        units[2] === '%';
+    if (!ok) return null;
+  }
   let a = 1;
   if (alpha !== undefined) {
     const v = num(alpha, !legacy);
@@ -840,6 +853,24 @@ export function isClipped(value) {
 }
 
 /**
+ * A comma (legacy) rgb() or hsl() that CSS does not take as written, in the
+ * space-separated syntax CSS reads the same channels in (`hsl(0, 100, 50)`
+ * is `hsl(0 100 50)`); null for any other value.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function colorAsCssReads(value) {
+  const s = String(value ?? '').trim();
+  const fn = /^(rgba?|hsla?)\((.*)\)$/i.exec(s);
+  if (!fn || !fn[2].includes(',') || readColor(s)) return null;
+  const parts = fn[2].split(',').map(x => x.trim());
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const name = fn[1].toLowerCase().replace(/a$/, '');
+  const modern = `${name}(${parts.slice(0, 3).join(' ')}${parts[3] ? ` / ${parts[3]}` : ''})`;
+  return readColor(modern) ? modern : null;
+}
+
+/**
  * Why a value cannot seed a color dial, or null when it is one fixed,
  * opaque color: `opaque` is the color without its alpha, for a suggestion.
  * @param {unknown} value
@@ -954,6 +985,15 @@ export function ratio(a, b) {
 }
 
 /**
+ * A value that is one var() of a custom property and nothing else, with
+ * any spaces inside its brackets as CSS reads them (`var( --x )`).
+ */
+export const LONE_VAR = /^var\(\s*--[a-z0-9-]+\s*\)$/i;
+
+/** A var() of a custom property with a fallback: the fallback, captured. */
+const VAR_FALLBACK = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i;
+
+/**
  * Whether a value is one CSS color: a hex, a color function, a named or
  * system color, a color keyword, or a variable. A function with plain
  * numbers must be well formed; one with `var()`, `calc()`, `env()` or a
@@ -976,10 +1016,10 @@ export const isColorValue = v => {
   return (
     /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ||
     FUNCTIONS.test(s) ||
-    /^var\(--[a-z0-9-]+\)$/i.test(s) ||
+    LONE_VAR.test(s) ||
     // A variable with a color to fall back to.
-    (/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.test(s) &&
-      isColorValue(/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.exec(s)?.[1] ?? '')) ||
+    (VAR_FALLBACK.test(s) &&
+      isColorValue(/** @type {string} */ (VAR_FALLBACK.exec(s)?.[1]))) ||
     Object.hasOwn(NAMED, s.toLowerCase()) ||
     KEYWORDS.includes(s.toLowerCase()) ||
     SYSTEM.includes(s.toLowerCase())
@@ -1002,7 +1042,7 @@ export const isSize = (v, name = '') => {
   const n = cssNumber(s);
   if (n && n.unit && matchType('length-percentage', s) != null)
     return n.value >= 0 || /offset|tracking|letter-spacing|indent/.test(name);
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;
 };
@@ -1016,7 +1056,7 @@ export const isSize = (v, name = '') => {
  */
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
-  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (LONE_VAR.test(s)) return true;
   const n = cssNumber(s);
   // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
@@ -1048,14 +1088,21 @@ export function withoutCssEscapes(v) {
   return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
 }
 
+/** What a value isSafeValue refuses holds, for the refusal's words. */
+export const UNSAFE_VALUE =
+  'it has a ; { } < > or a newline, a comment, !important, an unclosed bracket or quote, or an old browser hack (\\9, \\0) at its end';
+
 /**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
- * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
- * and a base64 data URL are values, and nothing can end the declaration.
+ * `url(data:…)`, no `;{}`; brackets and quotes closed; no old browser hack's
+ * escape at its end (`8px\9`: a browser reads it as part of the last word
+ * and drops the value). So `content: "a;b"` and a base64 data URL are
+ * values, and nothing can end the declaration.
  * @param {string} v
  */
 export function isSafeValue(v) {
+  if (/\\[09]\s*$/.test(v)) return false;
   // A shell comment ("# direct"), as a command run without a shell passes
   // it, is a comment too.
   // `</` (a closing tag), control characters, comments and !important are

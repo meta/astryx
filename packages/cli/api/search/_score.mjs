@@ -87,8 +87,10 @@ export const STRONG_TOKEN_SCORE = 70;
  * @param {Candidate} candidate
  * @param {string[]} [words] - The query's words for compound names (see
  *   compoundHit); empty when the query names an entry outright.
- * @param {{plain?: boolean}} [opts] - `plain`: score without matches on part
- *   of a name or a joined keyword.
+ * @param {{plain?: boolean, tokenHits?: Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>}} [opts] - `plain`: score without matches on part
+ *   of a name or a joined keyword. `tokenHits`: gets each content token's
+ *   bestForToken result (`part` set) and the `fuzzy` it was scored with, so
+ *   domainPriority reads them instead of scoring the same words again.
  * @returns {{score: number, reason: string, matched: number, total: number, alias?: 'partial' | 'keyword', aliasWords?: number} | null}
  *   `matched`/`total` are the query concepts this candidate answered, out of
  *   the concepts the query had. Callers that must distinguish "matched one word
@@ -101,7 +103,7 @@ export function scoreQuery(
   tokens,
   candidate,
   words = phraseWords(term),
-  {plain = false} = {},
+  {plain = false, tokenHits} = {},
 ) {
   const total = Math.max(tokens.length, 1);
   // A whole-phrase hit answered the whole query by definition.
@@ -201,6 +203,7 @@ export function scoreQuery(
   let aliasWords = 0;
   for (const tok of tokens) {
     let h = bestForToken(tok, candidate, {fuzzy, part: true});
+    tokenHits?.set(tok, {fuzzy, hit: h});
     if (
       compound?.covered.has(joined(tok)) &&
       compound.score > (h?.score ?? 0)

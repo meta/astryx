@@ -18,7 +18,15 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter}
+ * Overlays (a tooltip, a menu) render on the server as markers alone; with
+ * `openLayers`, the page is drawn again the same way (or the elements its
+ * `openLayerElements()` export gives, for a page that holds only their
+ * markup) and each overlay they show or open is added after the markup
+ * (layers.mjs). A part the page asks to be drawn open in its own place
+ * (through the global layers.mjs names) is drawn the same way and put where
+ * its marker is, with each overlay it opened after it.
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -28,7 +36,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Module, {createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {format} from 'node:util';
+import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
@@ -37,12 +45,16 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
 /** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
 const {entry, root, scope} = workerData;
+
+// Before React loads: a read of the overlays waits for React's queued tasks.
+countQueuedImmediates();
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -93,6 +105,56 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
+/** @type {{call: string, file: string, line: number}[]} */
+const screenQueries = [];
+
+/** Core's media query hook, and the entries that export it. */
+const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign/core/hooks']), name: 'useMediaQuery'};
+
+/**
+ * The call a page makes to ask a media query in JavaScript, as the warning
+ * names it: Core's `useMediaQuery`, or `matchMedia` (bare or on an object such
+ * as `window`, optional calls included), with its query.
+ * @param {any} p a call expression
+ * @returns {string | null}
+ */
+function screenQuery(p) {
+  const callee = p.node.callee;
+  /** @param {any} spec the binding's path @param {boolean} namespace */
+  const fromCore = (spec, namespace) =>
+    (namespace ? spec?.isImportNamespaceSpecifier() : spec?.isImportSpecifier()) &&
+    MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value);
+  let name = null;
+  if (callee.type === 'Identifier') {
+    const binding = p.scope.getBinding(callee.name);
+    const spec = binding?.path;
+    if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
+    else if (fromCore(spec, false) && (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  } else if ((callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') && !callee.computed) {
+    if (callee.property.name === 'matchMedia') name = 'matchMedia';
+    // `core.useMediaQuery(…)` through `import * as core from '@astryxdesign/core'`.
+    else if (
+      callee.property.name === MEDIA_QUERY_HOOK.name &&
+      callee.object.type === 'Identifier' &&
+      fromCore(p.scope.getBinding(callee.object.name)?.path, true)
+    ) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  }
+  if (!name) return null;
+  const arg = p.node.arguments[0];
+  const query = !arg
+    ? ''
+    : arg.type === 'StringLiteral'
+      ? JSON.stringify(arg.value).replace(/^"|"$/g, "'")
+      : arg.type === 'TemplateLiteral' && arg.expressions.length === 0
+        ? `'${arg.quasis[0].value.cooked}'`
+        : (p.get('arguments.0')?.getSource?.() ?? '');
+  return `${name}(${query})`;
+}
 
 /** Components that show their content only on demand. */
 const HIDING =
@@ -205,11 +267,15 @@ let InChart = null;
  * @type {'aside' | 'page' | 'alone'}
  */
 let mode = 'aside';
+/** The height each chart's box states, by the chart's place. @type {(number | null)[]} */
+let boxes = [];
+/** The place of the chart drawn by itself. */
+let alonePlace = 0;
 
 /**
  * Wrap a recharts chart, or a ResponsiveContainer, so the server render sets
- * it aside and the drawing pass draws it: a container at the size it starts
- * at, in a box that lets the drawing fit the page's width.
+ * it aside and the drawing pass draws it: a container at each size
+ * chartDrawings gives it, in the box a browser gives it.
  * @param {any} Chart
  * @param {boolean} container
  */
@@ -232,9 +298,16 @@ let mode = 'aside';
       pageCharts[place.current] = props;
       if (committed.current) renderedAfterCommit = true;
     }
-    const drawn = container
-      ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
-      : createElement(Chart, props);
+    let drawn = createElement(Chart, props);
+    if (container) {
+      const at = mode === 'alone' ? alonePlace : inside ? null : place.current;
+      const {sizes, style, follows} = chartDrawings(props, at === null ? null : boxes[at]);
+      drawn = createElement(
+        'div',
+        {className: 'recharts-responsive-container', style, [FOLLOWS_WIDTH]: follows ? '' : undefined},
+        ...sizes.map((size, k) => createElement(Chart, {...props, ...size, key: k})),
+      );
+    }
     if (mode === 'alone' || inside) return drawn;
     return createElement('astryx-chart', null, createElement(InChart.Provider, {value: true}, drawn));
   }
@@ -323,11 +396,17 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
-    if (!error) markLegends(host);
+    if (!error) {
+      foldLegends(host);
+      // Drawn by itself, a chart's place in the page is its own place.
+      separateIds(host, mode === 'alone' ? alonePlace : 0);
+      roundCoordinates(host);
+    }
     const out = error ? null : read(host);
     root.unmount();
     return out;
   };
+  boxes = await boxHeights(markup);
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
@@ -347,7 +426,10 @@ async function drawCharts(markup, Page) {
   }
   if (alone) {
     mode = 'alone';
-    drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
+    drawn = charts.map((chart, i) => {
+      alonePlace = i;
+      return drawIn(chart, host => [host.innerHTML])?.[0] ?? '';
+    });
   }
   let failed = 0;
   // A chart that drew no picture counts as failed, once.
@@ -361,6 +443,177 @@ async function drawCharts(markup, Page) {
     failed,
     alone,
   };
+}
+
+/**
+ * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
+ * as nothing when nothing opens), or `mounted`, as the browser shows the part
+ * once it runs, nothing opened.
+ * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean}>}
+ */
+const layers = [];
+/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted'} */ how = false) =>
+  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted'}) - 1);
+
+/**
+ * Run `fn` with a document in place, as a browser page has one, then put
+ * the globals back as they were (none, for a server render). The document
+ * carries the handler property a browser's document has for input events
+ * (`oninput`), which React reads to tell whether fields fire them.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withLoadDocument(fn) {
+  const g = /** @type {any} */ (globalThis);
+  const had = {window: Object.getOwnPropertyDescriptor(g, 'window'), document: Object.getOwnPropertyDescriptor(g, 'document')};
+  try {
+    const {parseHTML} = await import('linkedom');
+    const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+    if (!('oninput' in window.document)) /** @type {any} */ (window.document).oninput = null;
+    g.window = window;
+    g.document = window.document;
+    await fn();
+  } catch {
+    // No client to load (no react-dom): nothing is drawn with it either.
+  } finally {
+    if (had.window) Object.defineProperty(g, 'window', had.window);
+    else delete g.window;
+    if (had.document) Object.defineProperty(g, 'document', had.document);
+    else delete g.document;
+  }
+}
+
+/**
+ * Draw each part the page asked to be drawn open, in the layer document
+ * (layers.mjs), and put each where its marker is: the part as drawn, then
+ * each overlay it shows or a press opens (openLayerMarkup), in place after
+ * it. A part that fails to draw, or has none open, is its server render, or
+ * nothing when the page asked for it only open.
+ * @param {string} markup
+ * @param {any} server react-dom/server
+ * @returns {Promise<string>}
+ */
+async function drawLayers(markup, server) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    client = null;
+  }
+  const g = /** @type {any} */ (globalThis);
+  /** @type {string[]} */
+  const drawings = [];
+  for (const {element, ifOpen, mounted} of layers) {
+    /** @type {string | null} */
+    let out = null;
+    if (client) {
+      const host = g.document.createElement('div');
+      g.document.body.appendChild(host);
+      const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+      try {
+        flushSync(() => root.render(element));
+        if (mounted) {
+          await settled();
+          // A part that draws nothing in this window (a narrow screen's
+          // navigation, in a desktop's) is its server render.
+          out = host.innerHTML.replace(/<template><\/template>/g, '') || null;
+        } else {
+          // Its overlays shown open mount, and each popup a press opens opens.
+          await openLayerMarkup(host, flushSync);
+          const open = [...g.document.querySelectorAll('[data-astryx-layer-root]')].filter(
+            (/** @type {any} */ layer) => layer.__astryxPopoverOpen === true,
+          );
+          if (open.length) {
+            // The part as drawn, then each overlay open now, after it; never a
+            // closed one, nor the markers that place them.
+            const part = host.cloneNode(true);
+            for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+          }
+        }
+      } catch {
+        out = null;
+      }
+      try {
+        root.unmount();
+      } catch {
+        // A part that failed to draw unmounts as nothing.
+      }
+      host.remove();
+    }
+    if (out == null && ifOpen) out = '';
+    if (out == null)
+      try {
+        out = server.renderToStaticMarkup(element);
+      } catch {
+        out = '';
+      }
+    drawings.push(/** @type {string} */ (out));
+  }
+  return markup.replace(LAYER_PLACEHOLDER, (_, i) => drawings[Number(i)] ?? '');
+}
+
+/**
+ * The overlays the elements show open, and those their controls open, drawn
+ * in the layer document (layers.mjs), for after the page's markup in one
+ * element of their own; nothing when they cannot be drawn there. Each
+ * element draws on its own: one that throws leaves the others drawn.
+ * @param {unknown[]} elements
+ * @param {any} React
+ * @returns {Promise<string>}
+ */
+async function drawOpenLayers(elements, React) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    return '';
+  }
+  const g = /** @type {any} */ (globalThis);
+  class Alone extends React.Component {
+    state = {failed: false};
+    static getDerivedStateFromError() {
+      return {failed: true};
+    }
+    render() {
+      return this.state.failed ? null : this.props.children;
+    }
+  }
+  // Each part is drawn on its own, then taken down before the next: the
+  // listeners a drawn part puts on the document (a typeahead's or a menu's
+  // outside press) then hear only the presses on its own controls, never
+  // every other part's, as in a window that shows that part alone.
+  /** @type {string[]} */
+  const layers = [];
+  for (const element of elements) {
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+    try {
+      flushSync(() => root.render(createElement(Alone, null, element)));
+      // (A part that opens nothing on a press and holds a layer, a context
+      // menu's area, is right-clicked, as one drawn in its own place is.)
+      layers.push(...(await openLayerMarkup(host, flushSync)));
+    } catch {
+      // A part that cannot be drawn there adds no overlays.
+    }
+    try {
+      root.unmount();
+    } catch {
+      // Unmounting a part that failed to draw changes nothing.
+    }
+    host.remove();
+  }
+  return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 
 /**
@@ -530,6 +783,10 @@ function pagePlugin(filename) {
             ]),
           );
         }
+      },
+      'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        const call = screenQuery(p);
+        if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
       JSXText(/** @type {any} */ p) {
         const v = cleanText(p.node);
@@ -866,12 +1123,75 @@ function fail(code, message, detail) {
   parentPort?.postMessage({ok: false, error: {code, message, detail}, logs});
 }
 
+/**
+ * A compile error's text without colour codes (Babel colours its code frame
+ * where a terminal or CI asks for colour), and the absolute path Babel puts
+ * before the message, when it names one.
+ * @param {any} err
+ * @returns {{text: string, named?: string}}
+ */
+function compileText(err) {
+  const text = stripVTControlCharacters(String(err?.message ?? err));
+  const lead = /^(.*?): /.exec(text)?.[1];
+  return lead && path.isAbsolute(lead) ? {text: text.slice(lead.length + 2), named: lead} : {text};
+}
+
+/**
+ * Where a compile error points: the file, as a path from the project, and the
+ * line its location or code frame marks (`> 3 |   gap,`), with the token the
+ * carets under that line mark.
+ * @param {any} err
+ * @returns {{file?: string, line?: number, column?: number, token?: string, source?: string}}
+ */
+function compileSite(err) {
+  const {text, named} = compileText(err);
+  const fromRoot = named ? path.relative(root, named) : '';
+  const file = named
+    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
+    : undefined;
+  const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
+  const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
+  const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
+  // An aliased import (`gap as space`) is read by its local name.
+  const token = frame
+    ? frame[2].slice(frame[3].length, frame[3].length + frame[4].length).split(/\s+as\s+/).pop()
+    : undefined;
+  return {
+    ...(file ? {file} : {}),
+    ...(line ? {line} : {}),
+    ...(column ? {column} : {}),
+    ...(token ? {token} : {}),
+    ...(named ? {source: named} : {}),
+  };
+}
+
+/**
+ * The module an import declaration names, read from the line of one of its
+ * names onward (an import can span lines).
+ * @param {string} file
+ * @param {number} line
+ * @returns {string | undefined}
+ */
+function importedFrom(file, line) {
+  let lines;
+  try {
+    lines = fs.readFileSync(file, 'utf8').split('\n').slice(line - 1, line + 40);
+  } catch {
+    return undefined;
+  }
+  for (const text of lines) {
+    const from = /\bfrom\s*(['"])([^'"]+)\1/.exec(text);
+    if (from) return from[2];
+  }
+  return undefined;
+}
+
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
-  if (err?.renderCode) return fail(err.renderCode, String(err.message).replace(/^\/[^:\n]*: /, ''));
+  if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
-  const message = String(err?.message ?? err).replace(/^\/[^:\n]*: /, '');
+  const message = compileText(err).text;
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',
@@ -897,9 +1217,23 @@ function classify(e) {
     return fail('ERR_FILE_NOT_FOUND', `The page imports ${missing[1]}, which does not exist`, {module: missing[1]});
   }
   if (err?.code === 'BABEL_PARSE_ERROR' || err?.reasonCode || /SyntaxError|Unexpected token/.test(`${err?.name} ${message}`)) {
-    const loc = err?.loc ? `:${err.loc.line}:${err.loc.column + 1}` : '';
-    return fail('ERR_RENDER_COMPILE', `The page does not compile${loc ? ` (line ${err.loc.line})` : ''}: ${message.split('\n')[0]}`, {
-      ...(err?.loc ? {line: err.loc.line, column: err.loc.column + 1} : {}),
+    const site = compileSite(err);
+    const where = [site.file, site.line ? `line ${site.line}` : ''].filter(Boolean).join(', ');
+    let reason = message.split('\n')[0];
+    // StyleX reads at build time each value a style uses; an imported value
+    // only from a file it can read, which it says without naming the import.
+    if (reason.startsWith('Could not resolve the path to the imported file')) {
+      const spec = site.source && site.line ? importedFrom(site.source, site.line) : undefined;
+      const value = site.token ? `\`${site.token}\`` : 'an imported value';
+      reason =
+        spec && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)
+          ? `StyleX could not find ${spec}, which ${value} comes from, at build time. Check that the file exists, or that its package is installed where the page is.`
+          : `StyleX could not read ${value}${spec ? ` from ${spec}` : ''} at build time. A value a style uses must be written in the style, or come from a .stylex.ts or .stylex.js file that defines it with stylex.defineVars or stylex.defineConsts.`;
+    }
+    return fail('ERR_RENDER_COMPILE', `The page does not compile${where ? ` (${where})` : ''}: ${reason}`, {
+      ...(site.file ? {file: site.file} : {}),
+      ...(site.line ? {line: site.line} : {}),
+      ...(site.column ? {column: site.column} : {}),
     });
   }
   const browser = /\b(window|document|localStorage|sessionStorage|navigator|location|matchMedia|requestAnimationFrame|IntersectionObserver|ResizeObserver|HTMLElement|customElements) is not defined/.exec(message);
@@ -928,6 +1262,13 @@ function reach(name) {
 try {
   /** @type {any} */
   let mod;
+  // React DOM's client reads what the document supports as it loads (input
+  // events among them). A component that loads it with the page (a toast's
+  // root) would load it with no document, and the drawing could never type
+  // into a field: a typeahead's search would reach no change handler. It is
+  // loaded first, with a document that fires input events as a browser's
+  // does; the page then renders on the server with no document.
+  await withLoadDocument(() => jiti.import('react-dom/client'));
   try {
     reach('importing the page');
     mod = await jiti.import(entry);
@@ -974,6 +1315,23 @@ try {
       const printed = logs.length;
       reach('drawing charts');
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+      logs.length = printed;
+    }
+    if (workerData.openLayers) {
+      const printed = logs.length;
+      reach('drawing open overlays');
+      markup += await drawOpenLayers(
+        typeof mod.openLayerElements === 'function' ? mod.openLayerElements() : [React.createElement(Page)],
+        React,
+      );
+      logs.length = printed;
+    }
+    if (layers.length > 0) {
+      // What the parts print as they open was printed by the server render
+      // of the page, or is about the drawing itself.
+      const printed = logs.length;
+      reach('drawing open overlays in place');
+      markup = await drawLayers(markup, server);
       logs.length = printed;
     }
   } catch (e) {
@@ -1032,6 +1390,7 @@ try {
     aliasImports,
     texts,
     fnTexts,
+    screenQueries,
     logs,
   });
 } catch (e) {

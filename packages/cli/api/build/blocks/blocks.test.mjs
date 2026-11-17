@@ -7,10 +7,12 @@
  * and reason; a block the request writes out by its exact name keeps its slot,
  * as does a block an integration ships; a block the weights were never fitted
  * with is still ranked from its own docs, also by its words the weights do
- * not know; and ties keep build's order.
+ * not know; and ties keep build's order. One test reads the shipped weights
+ * through the picker's loader: they count a doc-fitted block as known.
  */
 
 import {describe, expect, it} from 'vitest';
+import {loadBlockPicker} from '../_adapter.mjs';
 import {pickBlocks, stemOf, termsOf, wordsOf} from './blocks.mjs';
 
 /** Two dims, each byte a weight offset by 128: "chart" words on the first, "table" words on the second. */
@@ -227,6 +229,16 @@ describe('pickBlocks', () => {
     pickBlocks('sales chart', s2, WEIGHTS);
     expect(JSON.stringify(s)).toBe(before);
     expect(JSON.stringify(s2)).toBe(before2);
+  });
+});
+
+describe('the shipped picker weights', () => {
+  it('count a block the doc matrix was fitted with as known', () => {
+    // A block outside `known` is ranked as one the matrices never saw. A
+    // block whose docs the doc matrix was fitted with is not such a block.
+    const shipped = loadBlockPicker();
+    expect(shipped).not.toBeNull();
+    expect(shipped?.known).toContain('InfoTipShowcase');
   });
 });
 

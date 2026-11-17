@@ -36,6 +36,7 @@ import {
   STORED_DOCS_FILE,
 } from '../doc-compiler/stored-docs.mjs';
 import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -59,6 +60,8 @@ export const THEME_DOC_SUFFIX = '.doc.mjs';
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [provider] the component the
+ *   owning integration's manifest names as the one that wires its themes
  */
 
 /**
@@ -1750,6 +1753,8 @@ let bundledThemeCache = null;
 
 /** @returns {DiscoveredTheme[]} */
 export function discoverBundledThemes() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   bundledThemeCache ??= discoverThemeDirectory(
     THEMES_DIR,
     BUNDLED_THEME_PACKAGE,
@@ -1844,5 +1849,6 @@ export async function discoverIntegrationThemes(integration) {
     packageDir: integration.__packageDir,
     packageExports: integration.__packageExports,
     source: /** @type {const} */ ('package'),
+    ...(integration.themeProvider ? {provider: integration.themeProvider} : {}),
   }));
 }

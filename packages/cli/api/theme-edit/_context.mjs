@@ -29,6 +29,7 @@ import {
   FONT_ROLES,
   FONTS,
   OPEN_FONTS,
+  appleFaceGeneric,
   isDesktopFamily,
   oneSystemOf,
   P,
@@ -38,10 +39,18 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {
+  assetRef,
+  CSS_URL,
+  cssUrlRef,
+} from '../../foundation/render/render-page.mjs';
+import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
+  ownTokenEntries,
   builtFontFamilies,
+  builtFontWeights,
   fontPackages,
   fontsourceSuggestion,
   modesOf,
@@ -51,21 +60,32 @@ import {
   themeFiles,
   refuseThemesNotFolder,
   shown,
+  OPEN_SECTION,
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
   copyFontsCss,
   fontPackageSheets,
+  fontPackageWeights,
+  shownWeight,
   baseFontsSheet,
   newPictureRun,
   renderPreview,
+  renderSheet,
   screenshot,
+  pageInTheWay,
+  inTheWayPhrase,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  customPropertyValues,
   fontKey,
   importedFontFamilies,
 } from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  hasGenericFamily,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 
 const E = ERROR_CODES;
 
@@ -124,7 +144,7 @@ export async function context(cwd) {
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
     uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
-      version: 0,
+      censusKey: '',
       coreKey: project.coreKey,
       map: {},
       pairs: [],
@@ -139,6 +159,12 @@ export async function context(cwd) {
     unchecked,
     uncheckedCode,
     derived: await derivedVars(project.coreDir),
+    /**
+     * The pictures the running command takes after its build (its --png),
+     * so the build names as removed only the ones it does not take again.
+     * @type {{sheet: string | null} | null}
+     */
+    takesPictures: null,
   };
 }
 
@@ -163,7 +189,8 @@ async function derivedVars(coreDir) {
 const isRenderFailure = e =>
   e instanceof AstryxError &&
   (e.code === E.ERR_RENDER_FAILED ||
-    e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
+    e.code === E.ERR_RENDER_MISSING_DEPENDENCY ||
+    e.code === E.ERR_RENDER_ASSET_TOO_LARGE);
 
 /**
  * The app a folder belongs to: the nearest folder at or above it whose
@@ -399,16 +426,99 @@ export function reactCopies(project) {
 const notChecked = cause =>
   cause ? {code: E.ERR_THEME_NOT_CHECKED, cause} : null;
 
+/** The sample page, as a note about its pictures names it. */
+export const SAMPLE_PAGE_NAME = 'the sample page';
+
 /**
- * Pictures of HTML files, on request.
+ * Text one page's pictures draw cut short in one part, as the browser
+ * measured it: the page and its picture, the part (null when the text sits
+ * in none), its texts, the one mode it was cut in when only one was, and
+ * whether every text is drawn whole once the part keeps its width
+ * (`flex-shrink: 0`, applied in the page and measured).
+ * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean}} CutShort
+ */
+
+/** The texts named, the first six and how many more. @param {string[]} texts */
+const someTexts = texts =>
+  `${texts
+    .slice(0, 6)
+    .map(t => JSON.stringify(t))
+    .join(', ')}${texts.length > 6 ? `, and ${texts.length - 6} more` : ''}`;
+
+/**
+ * The note for text a page's pictures draw cut short.
+ * @param {CutShort} c
+ */
+export function cutShortNote(c) {
+  const n = c.texts.length;
+  const what = c.part
+    ? `${c.part} label${n === 1 ? '' : 's'}`
+    : `text${n === 1 ? '' : 's'}`;
+  return `${c.page} (${c.file}) draws ${n} ${what} cut short${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text no longer fits ${c.part ? `the ${c.part}` : 'its box'}`;
+}
+
+/**
+ * The problem for text a page's pictures draw cut short, with the line that
+ * keeps it whole: the part keeps its width (`flex-shrink 0` on it), offered
+ * only when the browser measured every text whole with it; else no line,
+ * and that the line was measured and does not.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {CutShort} c
+ * @returns {{problem: string, fix: string | null}}
+ */
+export function cutShortProblem(ctx, slug, c) {
+  const label = c.part ? `${c.part} labels` : 'text';
+  const problem = `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
+  if (c.part && c.whole && ctx.project.target.has(c.part))
+    return {problem, fix: `${P} set ${slug} flex-shrink 0 --on ${c.part}`};
+  return {
+    problem: c.part
+      ? `${problem}; keeping the ${c.part}'s width (flex-shrink 0) was measured and does not draw them whole there, so no one line fixes it`
+      : problem,
+    fix: null,
+  };
+}
+
+/**
+ * Pictures of HTML files, on request. A shot with a `name` is a page laid
+ * out so its text fits in the base theme (the sample page): the text its
+ * pictures draw cut short, as the browser measured it, comes back in
+ * `cutShort`, one entry for each part on each page ({@link cutShortNote},
+ * {@link cutShortProblem}). The sheets (the open
+ * states among them) have no name: their cells are narrow, and the full
+ * sheet cuts long labels short in every theme.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {Array<{html: string, png: string}>} shots
+ * @param {Array<{html: string, png: string, name?: string}>} shots
  * @param {Array<'light' | 'dark'>} modes
- * @returns {Promise<{files: string[], problem: string | null}>}
+ * @returns {Promise<{files: string[], problem: string | null, cutShort: CutShort[]}>}
  */
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /**
+   * The text drawn cut short, by page, then by part: its texts, the modes
+   * it was drawn so in, whether keeping the part's width draws every one
+   * whole, and the page's picture.
+   * @type {Map<string, {file: string, parts: Map<string, {texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   */
+  const cut = new Map();
+  /** One entry for each part on each page, from what was measured. */
+  const cutShortNotes = () =>
+    [...cut].flatMap(([name, page]) =>
+      [...page.parts].map(
+        ([part, {texts, modes: drawnIn, whole}]) =>
+          /** @type {CutShort} */ ({
+            page: name,
+            file: page.file,
+            part: part || null,
+            texts: [...texts],
+            only:
+              modes.length > 1 && drawnIn.size === 1 ? [...drawnIn][0] : null,
+            whole,
+          }),
+      ),
+    );
   /** What a later browser's success says of an earlier one. @type {string[]} */
   const notes = [];
   /** One run for every picture: a browser that failed is not tried again. */
@@ -450,14 +560,30 @@ export async function pictures(project, shots, modes) {
         !editorWrote(project.cwd, /** @type {string} */ (slug), out)
       );
     });
+  // The record of the editor's pictures is a plain file, or none yet.
+  // Something else at its name (a pipe, a folder) is left as it is and
+  // named, and no picture is taken: a picture the record cannot hold would
+  // read as a file of yours on the next run.
+  for (const slug of new Set(shots.map(s => themeOf(s.png)))) {
+    if (!slug) continue;
+    const record = themeFiles(project.cwd, slug).pictures;
+    const st = fs.lstatSync(record, {throwIfNoEntry: false});
+    if (st && !st.isFile())
+      return {
+        files,
+        cutShort: [],
+        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move ${st.isSymbolicLink() ? 'the link' : 'it'}, then run the command again`,
+      };
+  }
   /** Pictures skipped for a link at their name. @type {string[]} */
   const linked = [];
   if (blocked.length)
     return {
       files,
+      cutShort: [],
       problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
     };
-  for (const {html, png} of shots) {
+  for (const {html, png, name} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
       if (isLink(out)) {
@@ -489,6 +615,7 @@ export async function pictures(project, shots, modes) {
       if (fs.existsSync(part) && !fs.lstatSync(part).isFile())
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
       // A folder it cannot write gets no picture: named before the browser
@@ -498,6 +625,7 @@ export async function pictures(project, shots, modes) {
       } catch (e) {
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
@@ -512,6 +640,7 @@ export async function pictures(project, shots, modes) {
           .map(f => path.relative(project.cwd, f).split(path.sep).join('/'));
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: files.length
             ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r.reason}`
             : `No picture was taken: ${r.reason}`,
@@ -523,6 +652,7 @@ export async function pictures(project, shots, modes) {
         fs.rmSync(part, {force: true});
         return {
           files,
+          cutShort: cutShortNotes(),
           problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
         };
       }
@@ -543,7 +673,24 @@ export async function pictures(project, shots, modes) {
         }
         recordWritten(project.cwd, slug, [out]);
       }
-      if (r.note && !notes.includes(r.note)) notes.push(r.note);
+      for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
+      // What the browser measured on a page laid out to fit, kept by page
+      // and part; nothing when its script measured nothing.
+      if (name && r.cutShort?.length) {
+        const page = cut.get(name) ?? {file: r.file, parts: new Map()};
+        cut.set(name, page);
+        for (const {part, text, whole} of r.cutShort) {
+          const at = page.parts.get(part ?? '') ?? {
+            texts: new Set(),
+            modes: new Set(),
+            whole: true,
+          };
+          page.parts.set(part ?? '', at);
+          at.texts.add(text);
+          at.modes.add(m);
+          at.whole &&= whole;
+        }
+      }
     }
   }
   if (linked.length) {
@@ -569,6 +716,7 @@ export async function pictures(project, shots, modes) {
     // Pictures were taken; a note says why an earlier browser did not, and
     // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
+    cutShort: cutShortNotes(),
   };
 }
 
@@ -594,9 +742,69 @@ export function familiesNothingLoads(ctx, data, packages) {
       loaded.has(key) ||
       packages.some(x => fontKey(x.family) === key) ||
       isDesktopFamily(family) ||
-      oneSystemOf(family)
+      oneSystemOf(family) ||
+      appleFaceGeneric(family)
     );
   });
+}
+
+/**
+ * What the previews (preview.html, sheet.html and their pictures) cannot
+ * show of the images and files the theme's built stylesheet names: a
+ * remote file (a page opened from disk loads no network), a file that is
+ * not there, one that is not a regular file, and one too large to carry.
+ * Read from the built stylesheet with the renderer's own reader, so a
+ * preview rendered before says it too.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function themeImageNotes(ctx, slug) {
+  const file = themeFiles(ctx.project.cwd, slug).css;
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const at = {dir: path.dirname(file), root: ctx.project.cwd};
+  const where = shown(ctx.project.cwd, at.dir);
+  /** @type {Map<string, string>} */
+  const notes = new Map();
+  for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
+    const named = assetRef(cssUrlRef(m), at);
+    if (!named || notes.has(named.ref)) continue;
+    if (named.kind === 'remote')
+      notes.set(
+        named.ref,
+        `${named.ref} is loaded from the network: the app loads it, but the previews (preview.html, sheet.html and their pictures) cannot, and show the theme without it.`,
+      );
+    else if (named.kind === 'missing')
+      notes.set(
+        named.ref,
+        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+      );
+    else if (named.kind === 'not-file')
+      notes.set(
+        named.ref,
+        `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else if (named.kind === 'unreadable')
+      notes.set(
+        named.ref,
+        `${shown(ctx.project.cwd, named.file)} cannot be read (no permission), so the previews show the theme without it; make it readable (chmod u+r) to show it.`,
+      );
+    else {
+      const bytes = fs.statSync(named.file).size;
+      if (bytes > MAX_ASSET_BYTES)
+        notes.set(
+          named.ref,
+          `${shown(ctx.project.cwd, named.file)} is ${(bytes / 1048576).toFixed(1)} MB, more than the ${MAX_ASSET_BYTES / 1048576} MB a preview page carries per file; a smaller copy shows in the previews too.`,
+        );
+    }
+  }
+  return [...notes.values()];
 }
 
 /**
@@ -615,8 +823,8 @@ export function fontNotes(ctx, data) {
   // it, when Fontsource's naming gives one.
   /** @param {string} family */
   const unloadedNote = family => {
-    const pkg = fontsourceSuggestion(family);
-    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+    const s = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${s ? ` ${s.known ? '' : 'If Fontsource publishes it, '}${installLine(ctx.project.cwd, [s.pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
   };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
@@ -628,7 +836,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each face the theme's weights show: ${fontPackageSheets(
             ctx,
             data.name,
             pkg,
@@ -675,13 +883,29 @@ export function fontNotes(ctx, data) {
     const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
     const system = oneSystemOf(named);
     const on = s.on ? ` --on ${s.on}` : '';
+    const generic = appleFaceGeneric(named);
+    if (generic) {
+      // Apple systems reach their interface faces only by a generic.
+      const {fallbacks} = fontOf(s.value);
+      const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
+      // The generic once: a stack that already holds it keeps one.
+      const value = [
+        ...new Set(
+          [generic, ...fallbacks.split(',')].map(f => f.trim()).filter(Boolean),
+        ),
+      ].join(', ');
+      notes.push(
+        `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
+      );
+      continue;
+    }
     if (system) {
       // A system font, on one system: the others show the next font.
       const next =
         fontOf(s.value).fallbacks.split(',')[0]?.trim() || 'system-ui';
       notes.push(
         /^(-apple-system|blinkmacsystemfont)$/.test(family)
-          ? `"${named}" names the macOS interface font, which only macOS has: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
+          ? `"${named}" names the interface font of ${system}, and only there: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
           : `"${named}" ships only on ${system}: other systems show the next font in the stack (${next}).${near ? ` The closest open font, which loads everywhere, is ${near}: ${P} set ${data.name} font ${near}${on}` : ''}`,
       );
       continue;
@@ -711,14 +935,129 @@ export function fontNotes(ctx, data) {
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
-      const pkg = fontsourceSuggestion(family);
+      const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
+  notes.push(...baseWeightNotes(ctx, data));
   for (const family of familiesNothingLoads(ctx, data, packages)) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
+  }
+  notes.push(...loneFamilyNotes(ctx, data));
+  return notes;
+}
+
+/** What each font role's family token sets, for a note. */
+const ROLE_TEXT = /** @type {Record<string, string>} */ ({
+  body: 'body text uses',
+  heading: 'headings use',
+  code: 'code uses',
+});
+
+/**
+ * A note for each font role the theme's build gives one family and no
+ * fallback at all (`--font-family-heading: Lora`, as Core builds a heading
+ * family given no fallbacks of its own, or an exact token set so): text in
+ * it has no font while that one loads, or if it is missing. The way to a
+ * list is named where the family came from: the setting, run with a list
+ * (the family's own open-font fallbacks, else the font dial's), or the
+ * theme's own source.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function loneFamilyNotes(ctx, data) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const notes = [];
+  const own = customPropertyValues(css);
+  for (const role of Object.keys(ROLE_TEXT)) {
+    const token = `--font-family-${role}`;
+    const value = own.get(token)?.at(-1);
+    if (!value || /var\(/i.test(value) || hasGenericFamily(value)) continue;
+    const named = namedFontFamilies(value);
+    if (named.length !== 1) continue;
+    const family = named[0].replace(/^["']|["']$/g, '');
+    const fallbacks =
+      Object.values(OPEN_FONTS).find(f => fontKey(f.family) === fontKey(family))
+        ?.fallbacks ?? fontOf(family).fallbacks;
+    const list = `${value.trim()}, ${fallbacks}`;
+    const setting = data.settings.find(
+      s => s.source === 'token' && s.thing === token && !s.on && !s.when,
+    );
+    const typography = ownTokenEntries(ctx.project.cwd, data.name).some(
+      e => e.kind === 'typography' && e.key === `${role}.family`,
+    );
+    const fix = setting
+      ? `give a list: ${P} set ${data.name} ${token} ${quoteCommandArgument(list)}`
+      : typography
+        ? `give typography.${role} its fallbacks in themes/${data.name}/${data.name}.theme.ts (such as fallbacks: '${fallbacks}')`
+        : `give ${token} a list in themes/${data.name}/${data.name}.theme.ts (such as '${list}')`;
+    notes.push(
+      `${ROLE_TEXT[role]} only ${family}, with no fallback while it loads or if it is missing; to fall back, ${fix}`,
+    );
+  }
+  return notes;
+}
+
+/**
+ * A note for each weight the theme uses that a stylesheet loading one of
+ * its families has no face for (it shows as the face CSS font matching
+ * picks): the base theme's font stylesheet, unless an installed package
+ * loads that family, and each installed font package with a stylesheet per
+ * weight.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseWeightNotes(ctx, data) {
+  /** @type {string[]} */
+  const notes = [];
+  const built = builtFontFamilies(ctx, data.name);
+  const packages = fontPackages(ctx, data);
+  /**
+   * @param {string} family @param {string} by what loads it
+   * @param {number[]} faces the weights it loads @param {string} fix
+   */
+  const gap = (family, by, faces, fix) => {
+    // The weights text in this family uses: those set beside it, and the
+    // ones every text reads (never a weight only another family uses).
+    const used = builtFontWeights(ctx, data.name, family) ?? [];
+    const missing = used.filter(w => !faces.includes(w));
+    if (missing.length)
+      notes.push(
+        `${family} is loaded by ${by} at ${faces.join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, faces)}`).join(', ')}${fix}`,
+      );
+  };
+  const base = baseFontsSheet(ctx, data);
+  for (const [family, faces] of base?.weights ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const s = fontsourceSuggestion(family);
+    gap(
+      family,
+      /** @type {{spec: string}} */ (base).spec,
+      faces,
+      s
+        ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it`
+        : '',
+    );
+  }
+  for (const {pkg, family, installed} of packages) {
+    if (!installed || (built && !built.has(family.toLowerCase()))) continue;
+    const faces = fontPackageWeights(ctx, pkg);
+    if (faces) gap(family, pkg, faces, '');
   }
   return notes;
 }
@@ -850,7 +1189,156 @@ export function styledChanges(before, after, base) {
 }
 
 /**
- * Previews after a change: the sample page always, pictures on request.
+ * The line that says which pictures to open after a run that took them:
+ * each family of components' first ({@link familyPages}), then the sample
+ * page's and the open states' (every menu, tooltip, popover and list drawn
+ * open), of the mode shown first (light when the theme has both). Null when
+ * this run took none of them.
+ * @param {string[]} files the pictures taken, as shown (`themes/t/preview.png`)
+ * @returns {string | null}
+ */
+export function lookAtPictures(files) {
+  /** @param {string} name */
+  const one = name =>
+    files.find(f => path.basename(f) === `${name}.png`) ??
+    files.find(f => path.basename(f) === `${name}-dark.png`);
+  const preview = one('preview');
+  const open = one(`sheet-${OPEN_SECTION}`);
+  const families = FAMILY_SECTIONS.map(g => one(`sheet-${g}`)).filter(
+    f => f != null,
+  );
+  if (!preview && !open && !families.length) return null;
+  const dark =
+    files.some(f => /-dark\.png$/.test(f)) &&
+    files.some(f => /(?<!-dark)\.png$/.test(f));
+  return `open ${[
+    // A family's own picture reads whole; the full sheet does not.
+    ...(families.length
+      ? [`${families.join(', ')} (one family of components each)`]
+      : []),
+    ...(preview
+      ? [
+          `${preview} (the sample page, a tooltip, a menu and a list drawn open below it)`,
+        ]
+      : []),
+    ...(open
+      ? [
+          `${open} (each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list, drawn open)`,
+        ]
+      : []),
+  ].join(' and ')}${dark ? '; the -dark pictures show the dark mode' : ''}`;
+}
+
+/**
+ * The page of the theme's open states (every menu, tooltip, popover and
+ * list drawn open: the overlays section of the sheet), made and stamped
+ * with the build it shows, and where its picture goes. The sample page
+ * (preview.png) has no overlay open, and the full sheet is too tall to
+ * read whole, so `--png` takes this picture beside the sample page's.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<{html: string, png: string} | {problem: string}>} the
+ *   page and its picture, or why neither is made: something of yours at the
+ *   page's name (a file the editor did not write, a link, a folder) is never
+ *   written over, as a picture of yours is not
+ */
+export async function openStatesPage(ctx, slug, data) {
+  const f = themeFiles(ctx.project.cwd, slug);
+  const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  const png = path.join(f.dir, `sheet-${OPEN_SECTION}.png`);
+  const shownHtml = shown(ctx.project.cwd, html);
+  const skipped = `so ${shown(ctx.project.cwd, png)} (the open states) was not taken`;
+  const inWay = pageInTheWay(html);
+  if (inWay)
+    return {
+      problem: `${inTheWayPhrase(shownHtml, inWay, 'the open states page')}, ${skipped}; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
+    };
+  await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
+  stampSheet(html, slug, ctx.project.cwd);
+  return {html, png};
+}
+
+/**
+ * The family `show --png` pictures when the theme's settings set no part of
+ * its own (a fresh theme, or only theme-wide settings): the buttons, an
+ * overview of the theme's controls beside the sample page.
+ */
+export const FAMILY_OVERVIEW = 'actions';
+
+/**
+ * The families of components with a picture of their own beside the full
+ * sheet, which is too tall to read whole: each section of the sheet but the
+ * overlays (the open states page shows them) and the pages (the sample page
+ * is preview.png).
+ */
+export const FAMILY_SECTIONS = Object.freeze(
+  SHOWCASE_GROUPS.filter(g => g !== OPEN_SECTION && g !== 'pages'),
+);
+
+/**
+ * One page for each family of components ({@link FAMILY_SECTIONS}), cut
+ * from the full sheet just made, so each shows its family as the sheet
+ * does, with no render of its own: the sheet's head and bar, then that
+ * family's section. Each is written where `show --section <family>` writes
+ * that family's sheet, and stamped with the build it shows. Something of
+ * yours at a family page's name is never written over: that page is left
+ * out and named.
+ * @param {string} sheet the full sheet, as written
+ * @param {string} slug
+ * @param {string} cwd
+ * @param {readonly string[]} [only] the families to make; every one by default
+ * @returns {{pages: Array<{html: string, png: string, family: string}>, problems: string[]}}
+ */
+export function familyPages(sheet, slug, cwd, only = FAMILY_SECTIONS) {
+  /** @type {Array<{html: string, png: string, family: string}>} */
+  const pages = [];
+  /** @type {string[]} */
+  const problems = [];
+  const text = fs.readFileSync(sheet, 'utf8').replace(SHEET_STAMP, '');
+  // Each section of the sheet starts with its own marker, in order, and
+  // holds no section of its own: one ends where the next starts, and the
+  // last at the last section close.
+  const starts = [
+    ...text.matchAll(
+      /<section\b[^>]*\sclass="[^"]*\bcs-family-([a-z-]+)\b[^"]*"[^>]*>/g,
+    ),
+  ].map(m => ({family: m[1], at: /** @type {number} */ (m.index)}));
+  const close = text.lastIndexOf('</section>');
+  if (!starts.length || close < 0) return {pages, problems};
+  const end = close + '</section>'.length;
+  const before = text.slice(0, starts[0].at);
+  const after = text.slice(end);
+  for (const [i, {family, at}] of starts.entries()) {
+    if (!FAMILY_SECTIONS.includes(family) || !only.includes(family)) continue;
+    const html = path.join(path.dirname(sheet), `sheet-${family}.html`);
+    const png = path.join(path.dirname(sheet), `sheet-${family}.png`);
+    const inWay = pageInTheWay(html);
+    if (inWay) {
+      problems.push(
+        `${inTheWayPhrase(shown(cwd, html), inWay, `the ${family} sheet`)}, so ${shown(cwd, png)} was not taken; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
+      );
+      continue;
+    }
+    const head = before
+      .replace('class="cs-page"', `class="cs-page cs-section-${family}"`)
+      .replace(
+        `<strong>${slug}: every component</strong>`,
+        `<strong>${slug}: every component (${family})</strong>`,
+      );
+    writeWhole(
+      html,
+      `${head}${text.slice(at, starts[i + 1]?.at ?? end)}${after}`,
+    );
+    stampSheet(html, slug, cwd);
+    pages.push({html, png, family});
+  }
+  return {pages, problems};
+}
+
+/**
+ * Previews after a change: the sample page always; on request, pictures of
+ * it and of the open states ({@link openStatesPage}).
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -861,23 +1349,53 @@ export async function previewAfter(ctx, slug, data, png) {
   let preview = null;
   let cause = ctx.unchecked ?? null;
   const f0 = themeFiles(ctx.project.cwd, slug);
-  try {
-    preview = await renderPreview(ctx, slug, data);
-  } catch (e) {
-    // The change is already saved: any failure here leaves it unchecked.
-    const code = /** @type {any} */ (e)?.code;
-    cause ??= isRenderFailure(e)
-      ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
-        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
-        : // A folder (or another thing) where preview.html goes: the page
-          // was rendered, and could not be written there.
-          code === ERROR_CODES.ERR_WRITE_FAILED ||
-            (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
-          ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
-          : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  // Something of yours at preview.html (a file, a link, a pipe) is left as
+  // it is: the sample page is not made, so the change is not rendered,
+  // which the result says. (A folder there is named by the write that
+  // fails, below.)
+  const inWay = pageInTheWay(f0.preview);
+  const previewInWay =
+    inWay === 'file' || inWay === 'link' || inWay === 'other' ? inWay : null;
+  if (previewInWay)
+    cause ??= `${inTheWayPhrase(shown(ctx.project.cwd, f0.preview), previewInWay, 'the sample page')}, so the sample page was not made and the change was not rendered; move ${previewInWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug}`;
+  else
+    try {
+      preview = await renderPreview(ctx, slug, data);
+    } catch (e) {
+      // The change is already saved: any failure here leaves it unchecked.
+      const code = /** @type {any} */ (e)?.code;
+      cause ??= isRenderFailure(e)
+        ? renderCause(ctx.project, /** @type {Error} */ (e).message)
+        : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+          ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+          : // A folder (or another thing) where preview.html goes: the page
+            // was rendered, and could not be written there.
+            code === ERROR_CODES.ERR_WRITE_FAILED ||
+              (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
+            ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
+            : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
   const f = themeFiles(ctx.project.cwd, slug);
+  /**
+   * The pages photographed: the sample page, and with it the open states.
+   * @type {Array<{html: string, png: string, name?: string}>}
+   */
+  const shotPages = [
+    {html: f.preview, png: f.previewPng, name: SAMPLE_PAGE_NAME},
+  ];
+  /** Why the open states were not taken, said with the pictures. @type {string | null} */
+  let openProblem = null;
+  // Made before the sections are judged, so it is current, never marked.
+  if (png && preview) {
+    const open = await openStatesPage(ctx, slug, data).catch(e => {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+      return {
+        problem: `the open states page could not be made (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so ${shown(ctx.project.cwd, path.join(f.dir, `sheet-${OPEN_SECTION}.png`))} was not taken`,
+      };
+    });
+    if ('problem' in open) openProblem = open.problem;
+    else shotPages.push(open);
+  }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -887,26 +1405,20 @@ export async function previewAfter(ctx, slug, data, png) {
     fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
   ).filter(n => {
     if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
-    const file = path.join(f.dir, n);
-    try {
-      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
-    } catch {
-      return false;
-    }
-    return markSheetStale(file, slug, ctx.project.cwd);
+    return markSheetStale(path.join(f.dir, n), slug, ctx.project.cwd);
   });
   const shots =
     png && preview
-      ? await pictures(
-          ctx.project,
-          [{html: f.preview, png: f.previewPng}],
-          modesOf(data),
-        )
-      : {files: [], problem: null};
+      ? await pictures(ctx.project, shotPages, modesOf(data))
+      : {files: [], problem: null, cutShort: []};
   return {
     preview,
     pictures: shots.files,
-    pictureProblem: shots.problem,
+    // Text the sample page's pictures draw cut short: a note and a problem
+    // of the change.
+    cutShort: shots.cutShort,
+    pictureProblem:
+      [openProblem, shots.problem].filter(Boolean).join('; ') || null,
     notChecked: notChecked(cause),
     ...(sheetStale && !sectionsStale.length
       ? {
@@ -987,6 +1499,8 @@ export function stampSheet(file, slug, cwd) {
  * @param {string} cwd
  */
 function markSheetStale(file, slug, cwd) {
+  // Only the editor's own sheet: a file of yours there is never written.
+  if (pageInTheWay(file) != null) return false;
   let html;
   try {
     html = fs.readFileSync(file, 'utf8');

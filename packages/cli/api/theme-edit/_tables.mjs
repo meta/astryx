@@ -10,7 +10,14 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  appleFaceGeneric,
+  collectUnloadedFonts,
+  systemFontFamilies,
+} from '../theme/build/font-warning.mjs';
+
+export {appleFaceGeneric, systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -116,6 +123,11 @@ export const CORNERS = [
   ['pill', 9999],
 ];
 /**
+ * The step `corners more` and `less` take between round and pill: half as
+ * round again as round, so one step more from round is not a pill.
+ */
+export const ROUND_TO_PILL_STEP = `${(CORNERS.find(([n]) => n === 'round')?.[1] ?? 16) * 1.5}px`;
+/**
  * The density words, the one table every reading of room uses: words for
  * more room (roomy), for less (dense), and complaints that there is too
  * little (crowded). An ask names the density it wants; after "too" the
@@ -133,6 +145,7 @@ export const DENSITY = /** @type {const} */ ({
     'relaxed',
     'comfortable',
     'sparse',
+    'padded',
     'generous',
     'spread out',
   ],
@@ -214,70 +227,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-      'pingfang sc',
-      'pingfang tc',
-      'pingfang hk',
-      'hiragino sans',
-      'hiragino sans gb',
-      'hiragino kaku gothic pron',
-      'hiragino mincho pron',
-      'apple sd gothic neo',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'segoe ui light',
-      'segoe ui semilight',
-      'segoe ui semibold',
-      'segoe ui black',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-      'microsoft yahei',
-      'microsoft yahei ui',
-      'microsoft jhenghei',
-      'microsoft jhenghei ui',
-      'simsun',
-      'simhei',
-      'nsimsun',
-      'meiryo',
-      'yu gothic',
-      'yu mincho',
-      'ms gothic',
-      'ms mincho',
-      'malgun gothic',
-      '微软雅黑',
-      '宋体',
-      '黑体',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */
@@ -299,7 +251,9 @@ export const oneSystemOf = family =>
  * @param {string} family without quotes
  */
 export const isDesktopFamily = family =>
-  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+  isSystemFamily(family) &&
+  !ONE_SYSTEM_FAMILIES.has(familyKey(family)) &&
+  !appleFaceGeneric(family);
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:
@@ -491,10 +445,13 @@ export const DIALS = wordTable({
   corners: {
     help:
       'How round corners are. Rungs: ' +
-      CORNERS.map(
-        ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
-      ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      CORNERS.flatMap(([n, v]) => [
+        ...(n === 'pill'
+          ? [`${ROUND_TO_PILL_STEP} (the step between round and pill)`]
+          : []),
+        `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
+      ]).join(', ') +
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -526,7 +483,7 @@ export const DIALS = wordTable({
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background follows it too, at the official theme\'s page shade of the gray, so a warm or cool gray reaches the page as it reaches the cards; for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes), which then keeps its color. From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -565,7 +522,7 @@ export const DIALS = wordTable({
   },
   font: {
     help:
-      'The typeface. System presets (always show): ' +
+      'The typeface. System presets (fonts systems ship, so no package loads them; a system with none of a stack shows its own font of that kind, and a picture says when this machine has none): ' +
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +
@@ -830,6 +787,7 @@ export const DESIGN = wordTable(
     gradient: '"linear-gradient(#ffffff, #d1d5db)"',
     glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
     bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
+    'sunken bevel': '"inset 1px 1px 0 #9ca3af, inset -1px -1px 0 #ffffff"',
     raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
     flat: 'none',
     sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
@@ -943,6 +901,53 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'volume-locked',
   'where',
   'xr-overlay',
+]);
+
+/**
+ * The pseudo-elements of CSS (the `::name` forms browsers ship), by name: the
+ * names a part's `::name` block is read against. The four CSS 2 ones also
+ * take one colon.
+ */
+export const CSS_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'backdrop',
+  'before',
+  'checkmark',
+  'column',
+  'cue',
+  'cue-region',
+  'details-content',
+  'file-selector-button',
+  'first-letter',
+  'first-line',
+  'grammar-error',
+  'highlight',
+  'marker',
+  'part',
+  'picker',
+  'picker-icon',
+  'placeholder',
+  'scroll-button',
+  'scroll-marker',
+  'scroll-marker-group',
+  'search-text',
+  'selection',
+  'slotted',
+  'spelling-error',
+  'target-text',
+  'view-transition',
+  'view-transition-group',
+  'view-transition-image-pair',
+  'view-transition-new',
+  'view-transition-old',
+]);
+
+/** The pseudo-elements CSS 2 wrote with one colon, which browsers still read. */
+export const ONE_COLON_PSEUDO_ELEMENTS = new Set([
+  'after',
+  'before',
+  'first-letter',
+  'first-line',
 ]);
 
 /** States every part takes, beyond the ones its doc lists. */

@@ -11,7 +11,7 @@ import {InboxIcon} from '@heroicons/react/24/outline';
 
 export default function CenterInsideACard() {
   return (
-    <Card width={400}>
+    <Card width={400} maxWidth="100%">
       <Center height={200}>
         <Stack direction="vertical" gap={2} hAlign="center">
           <Icon icon={InboxIcon} size="lg" color="secondary" />

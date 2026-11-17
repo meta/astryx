@@ -108,6 +108,45 @@ export function makeCompiler(project, parts) {
     return null;
   }
 
+  /** @type {Map<string, boolean>} */
+  const paintsMemo = new Map();
+  /**
+   * Whether a visual prop changes a color the part paints: two of its
+   * rules that differ only in that prop's value give a color property
+   * different values.
+   * @param {string} target @param {string} prop
+   */
+  function paintsBy(target, prop) {
+    const id = `${target}|${prop}`;
+    const known = paintsMemo.get(id);
+    if (known != null) return known;
+    let found = false;
+    for (const [p, rules] of Object.entries(MAP[target]?.at ?? {})) {
+      if (!/(^|-)color$|^background(-color)?$|^fill$|^stroke$/.test(p))
+        continue;
+      /** @type {Map<string, Set<string>>} */
+      const byRest = new Map();
+      for (const [key, value] of Object.entries(rules)) {
+        const [attrs, ...css] = key.split(' ');
+        const list = attrs.includes('=') ? attrs.split(',') : [];
+        if (!list.some(kv => kv.startsWith(`${prop}=`))) continue;
+        const rest = [
+          ...list.filter(kv => !kv.startsWith(`${prop}=`)),
+          ...css,
+        ].join(' ');
+        const seen = byRest.get(rest) ?? new Set();
+        seen.add(String(value));
+        byRest.set(rest, seen);
+      }
+      if ([...byRest.values()].some(v => v.size > 1)) {
+        found = true;
+        break;
+      }
+    }
+    paintsMemo.set(id, found);
+    return found;
+  }
+
   /** A condition, kept to what a person can act on. @param {string} target @param {string} cond */
   function shortCond(target, cond) {
     if (cond === 'always') return '';
@@ -125,10 +164,11 @@ export function makeCompiler(project, parts) {
         // part in (the part data's aria context conditions); none is the
         // part at rest.
         if (!t?.props.includes(k) || t.states.includes(k)) return true;
-        return (
-          ['variant', 'status', 'tone', 'color'].includes(k) &&
-          (attrs[k]?.length ?? 0) > 1
-        );
+        // A look prop drawn in more than one value that changes a color
+        // the part paints (a variant, a status, a toast's type) tells its
+        // renders apart; one that changes only a size or a weight (a
+        // heading's level) is read as the part, as a size the render used.
+        return (attrs[k]?.length ?? 0) > 1 && paintsBy(target, k);
       },
     );
     const cssPart = (attrPart.includes('=') ? css : [attrPart, ...css])
@@ -146,6 +186,32 @@ export function makeCompiler(project, parts) {
    * @returns {Read[]}
    */
   function partReads(target, group) {
+    // The part data never changes while the compiler lives, and the checks
+    // ask for the same part many times in one command: each answer is made
+    // once, and handed out frozen so no caller can change it for the next.
+    const key = `${target}\0${group ?? ''}`;
+    const known = readsOf.get(key);
+    if (known) return known;
+    const reads = freshReads(target, group);
+    for (const r of reads) {
+      Object.freeze(r.props);
+      Object.freeze(r.when);
+      Object.freeze(r);
+    }
+    Object.freeze(reads);
+    readsOf.set(key, reads);
+    return reads;
+  }
+  /** @type {Map<string, Read[]>} */
+  const readsOf = new Map();
+
+  /**
+   * {@link partReads}, made anew.
+   * @param {string} target
+   * @param {string | null} group
+   * @returns {Read[]}
+   */
+  function freshReads(target, group) {
     const own = MAP[target]?.own ?? {};
     /** @type {Map<string, {token: string, props: Set<string>, when: Set<string>}>} */
     const out = new Map();
@@ -259,9 +325,11 @@ export function makeCompiler(project, parts) {
    * @param {string} token
    * @param {string} value
    * @param {string} P
+   * @param {string} [when] the --when the token is set under (`variant:strong`)
+   * @param {string} [also] the rest of the flags the setting carries (` --state hover --mode dark`), kept on the lines offered
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P) {
+  function checkTokenOn(theme, target, token, value, P, when, also = '') {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -271,6 +339,63 @@ export function makeCompiler(project, parts) {
       };
     }
     const g = groupOfToken(token);
+    // Under a variant: only what the part reads in that variant's rules (or
+    // rules that name no variant) counts.
+    // (Several conditions, `variant:ghost+size:sm`: a rule counts when it
+    // names none of them otherwise; the message names the first.)
+    const whens = String(when ?? '')
+      .split('+')
+      .map(w => w.split(':'))
+      .filter(([p, v]) => p && v);
+    const [wProp, wVal] = whens[0] ?? [];
+    if (wProp && wVal && allReads(target).has(token)) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const inVariant = (/** @type {string} */ c) => {
+        const attrs = c.split(' ')[0].split(',');
+        return whens.every(([p, v]) => {
+          const own = attrs.find(a => a.startsWith(`${p}=`));
+          return !own || own === `${p}=${v}`;
+        });
+      };
+      // (What a line inside the part declares is recorded as the part's
+      // own already; any other part inside it that reads the token takes
+      // it.)
+      const inside =
+        !MAP[target]?.line?.length &&
+        (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (conds.length && !conds.some(inVariant) && !inside) {
+        const there = [
+          ...new Set(
+            Object.values(MAP[target]?.own ?? {}).flatMap(x =>
+              Object.entries(x.tokens ?? {})
+                .filter(([, cs]) =>
+                  /** @type {string[]} */ (cs).some(inVariant),
+                )
+                .map(([t]) => t)
+                .filter(
+                  t =>
+                    groupOfToken(t) === g &&
+                    /^--color-/.test(t) === /^--color-/.test(token),
+                ),
+            ),
+          ),
+        ];
+        return {
+          message: `${target} (${wProp} ${wVal}) never reads ${token}: only its other ${wProp}s do.${there.length ? ` There it reads ${there.slice(0, 4).join(', ')}.` : ''}`,
+          run: there
+            .slice(0, 3)
+            .map(
+              t =>
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}${also}`,
+            ),
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.
@@ -501,12 +626,72 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string, over: string | null}>} */
+    /**
+     * The color a one-layer linear or radial gradient has where centered
+     * text sits: the middle of a linear one, the center of a radial one,
+     * between the stops around that place; null for any other (several
+     * layers, a conic or repeating one, a stop with no fixed color).
+     * @param {string} v
+     * @returns {string | null}
+     */
+    const colorBehindText = v => {
+      const m = /^(linear|radial)-gradient\((.*)\)$/s.exec(v.trim());
+      if (!m || splitTop(v.trim(), ',').length !== 1) return null;
+      const args = splitTop(m[2], ',').map(x => x.trim());
+      if (
+        args[0] &&
+        /^(to\b|at\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+          args[0],
+        )
+      )
+        args.shift();
+      /** @type {Array<{c: [number, number, number], a: number, at: number | null}>} */
+      const stops = [];
+      for (const arg of args) {
+        const pos = /\s(-?[\d.]+)%$/.exec(arg);
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        const c = parseColor(color);
+        if (!c) return null;
+        stops.push({
+          c,
+          a: alphaOf(color),
+          at: pos ? Number(pos[1]) / 100 : null,
+        });
+      }
+      if (stops.length < 2) return null;
+      // Positions a stop leaves out are spread evenly, as CSS spreads them.
+      stops.forEach((x, i) => {
+        if (x.at == null) x.at = i / (stops.length - 1);
+      });
+      const at = m[1] === 'linear' ? 0.5 : 0;
+      const i = stops.findIndex(x => /** @type {number} */ (x.at) >= at);
+      if (i <= 0) {
+        const x = stops[Math.max(0, i)];
+        return `rgba(${x.c.join(', ')}, ${x.a})`;
+      }
+      const [lo, hi] = [stops[i - 1], stops[i]];
+      const span =
+        /** @type {number} */ (hi.at) - /** @type {number} */ (lo.at);
+      const f = span > 0 ? (at - /** @type {number} */ (lo.at)) / span : 0;
+      const mix = lo.c.map((v0, k) => Math.round(v0 + (hi.c[k] - v0) * f));
+      return `rgba(${mix.join(', ')}, ${lo.a + (hi.a - lo.a) * f})`;
+    };
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
+    // A census pair the caller measures again per variant (`replaces`) is
+    // measured only as those.
+    const replaced = new Set(
+      extra.map((/** @type {any} */ x) => x.replaces).filter(Boolean),
+    );
     for (const p of [...parts.pairs, ...extra]) {
+      if (replaced.has(p)) continue;
+      // Text drawn in a disabled color marks an inactive control, which
+      // needs no 4.5:1 (and must stay dimmer than the live text beside it).
+      if (/^--color-(text|icon)-disabled$/.test(String(p.fg.tokens[0])))
+        continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -524,15 +709,24 @@ export function makeCompiler(project, parts) {
         // one is measured as the pair itself already is.
         if (
           region &&
+          !(/** @type {any} */ (p).mediaOf) &&
           alphaOf(whole) >= 1 &&
           !/gradient|url\(/.test(String(whole))
         )
           continue;
-        // A gradient is measured at each of its color stops, the worst one
-        // counting; an image, or a stop with no fixed color, is not checked.
-        const stops = /gradient|url\(/.test(String(whole))
-          ? gradientStops(String(whole))
-          : [whole];
+        // A gradient is measured where the text sits on it: a linear or
+        // radial one at the color it has under the text (its middle, or its
+        // center), so a glossy highlight at an edge is not taken for the
+        // ground; any other at each of its color stops, the worst one
+        // counting. An image, or a stop with no fixed color, is not checked.
+        const behind = /gradient/.test(String(whole))
+          ? colorBehindText(String(whole))
+          : null;
+        const stops = behind
+          ? [behind]
+          : /gradient|url\(/.test(String(whole))
+            ? gradientStops(String(whole))
+            : [whole];
         if (!stops) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
           continue;
@@ -577,7 +771,10 @@ export function makeCompiler(project, parts) {
           baseBeneath,
         );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${beneath}|${m}`;
+        // Pairs alike in color are one problem only when they read the same
+        // token on the same part: text on another token or on another part
+        // is another fix, and shows as they part ways.
+        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${p.bg.target ?? ''}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -598,18 +795,26 @@ export function makeCompiler(project, parts) {
             region && alphaOf(bg) < 1
               ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
               : null,
-          bg:
-            stops.length > 1
+          bg: behind
+            ? `${bg}, its gradient where the text sits`
+            : stops.length > 1
               ? `${bg}, a stop of its gradient`
               : bg !== baseValue(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
+          // What a fix needs: the token the text reads, the part that draws
+          // it, the variant it was measured in, and the opaque color the
+          // text sits on.
+          fgToken: p.fg.tokens[0] ?? null,
+          textPart: p.fg.target ?? null,
+          when: /** @type {any} */ (p).when ?? null,
+          ground: pair[1],
+          pair: p,
         });
       }
     }
     return {
-      problems: out.slice(0, 8),
-      more: Math.max(0, out.length - 8),
+      problems: out,
       unchecked: [...unchecked],
     };
   }
