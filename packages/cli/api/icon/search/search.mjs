@@ -111,7 +111,7 @@ export function rankIconSets(sets, withdrawn, query, {set, limit, looks = {}}) {
   if (sets.length === 0 && withdrawn.length === 0) {
     return noIconSet(query, limit);
   }
-  const ranked = rankIcons(searched, query);
+  const ranked = rankIcons(searched, query, {words: true});
   // A word start (`start` for `star`) answers only when nothing matches a
   // whole word, and a partial match (`pin` inside `shopping`) only when
   // nothing matches a whole word or a word start.
@@ -164,11 +164,7 @@ function inLook(match, sets, looks) {
  * @returns {import('../icon.type.mjs').IconSearchResponse}
  */
 function noIconSet(query, limit) {
-  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
-  const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
-  const found = answeringMatches(rankIcons([definitionSet(docs)], query)).map(
-    match => /** @type {(typeof docs)[number]} */ (byId.get(match.id)),
-  );
+  const found = definitionMatches(query).map(match => match.doc);
   const ordered = [
     ...found.filter(doc => doc.builtIn),
     ...found.filter(doc => !doc.builtIn),
@@ -188,6 +184,23 @@ function noIconSet(query, limit) {
       next: noIconSetNext(),
     },
   };
+}
+
+/**
+ * The Astryx icon definitions that answer a query, each with its score,
+ * ranked as the search ranks a set's icons (FR6).
+ * @param {string} query
+ * @returns {Array<{doc: import('../../../authoring/doctypes/icon-definition/type').IconDefinitionDoc, score: number}>}
+ */
+export function definitionMatches(query) {
+  const docs = astryxIconDefinitions().definitions.map(each => each.doc);
+  const byId = new Map(docs.map(doc => [definitionId(doc.name), doc]));
+  return answeringMatches(
+    rankIcons([definitionSet(docs)], query, {words: true}),
+  ).map(match => ({
+    doc: /** @type {(typeof docs)[number]} */ (byId.get(match.id)),
+    score: match.score,
+  }));
 }
 
 /**

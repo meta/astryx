@@ -190,8 +190,12 @@ export type TokenValue = string | [light: string, dark: string];
  *
  * The `@light` and `@dark` keys hold a style block (properties and
  * pseudo-class overrides) that applies only where the element's color mode is
- * that mode: the mode `Theme` resolves from its own `mode`, the system
- * preference, or a `MediaTheme` surface. Inside media surfaces the nearest
+ * that mode: the mode a `Theme` sets with `light` or `dark`, or a `MediaTheme`
+ * surface. Under a `system` Theme a block follows the reader's preference,
+ * which is the page's scheme whenever the page follows the reader (with
+ * `reset.css`, or a root or meta `color-scheme` that names both schemes); on a
+ * page that names no scheme, a `@dark` block still applies for a dark reader.
+ * Inside media surfaces the nearest
  * surface decides, so a light `MediaTheme` inside a dark one takes only the
  * light block, for up to five surfaces of alternating modes nested one in
  * another. Where no enclosing mode matches, the block writes nothing, so every other

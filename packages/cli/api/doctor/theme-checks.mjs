@@ -45,6 +45,7 @@ import {
   dependencyInstallFor,
   coreAddCommand,
   packageInstallCommand,
+  packageInstallStep,
   themeBuild,
   themeRecordOwner,
   themeShippedImportFindings,
@@ -1007,6 +1008,19 @@ export async function themeImportWiring(cwd) {
 }
 
 /**
+ * The fix line for a project with no installed theme: the install command in
+ * the project's package manager, or `npm install` with a note when its
+ * lockfiles disagree.
+ * @param {string} cwd
+ * @param {string} run the CLI invocation stem
+ * @returns {string}
+ */
+function themeInstallFix(cwd, run) {
+  const {line, note} = packageInstallStep(['@astryxdesign/theme-neutral'], cwd);
+  return `Install a theme, e.g. \`${line}\`${note ? ` (${note})` : ''}, then add it to the app with \`${run} theme add neutral\`.`;
+}
+
+/**
  * The pass message's list of themes wired by import, each with the file that
  * imports it.
  * @param {Array<{slug: string, file: string, wiredBy?: string}>} wired
@@ -1140,7 +1154,7 @@ export function checkThemes(
       label,
       status: 'warn',
       message: 'No @astryxdesign/theme-* packages are installed.',
-      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral\`.`,
+      fix: themeInstallFix(cwd, run),
     };
   }
   const names = packages.join(', ');
@@ -1361,7 +1375,21 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          // Each cause the findings hold is named: a theme can have both.
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${[
+            ...(unshipped.some(
+              finding => finding.code === 'relative_import_not_shipped',
+            )
+              ? ['it or its stylesheet names a file the package does not ship']
+              : []),
+            ...(unshipped.some(
+              finding => finding.code === 'built_module_imports_typescript',
+            )
+              ? ['it imports TypeScript source']
+              : []),
+          ].join(
+            ', and ',
+          )}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);

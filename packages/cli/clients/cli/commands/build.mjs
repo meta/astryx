@@ -20,6 +20,7 @@ import {
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
+  docText,
   emit,
   formatDeprecation,
   section,
@@ -210,14 +211,19 @@ export function registerBuild(program) {
           'description',
           'command',
         ],
-        format: {command: formatCliCommand, deprecated: formatDeprecation},
+        format: {
+          command: formatCliCommand,
+          description: docText,
+          deprecated: formatDeprecation,
+        },
       };
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
         format: {
           command: formatCliCommand,
-          description: firstSentence,
+          description: (/** @type {string} */ value) =>
+            docText(firstSentence(value)),
           deprecated: formatDeprecation,
         },
       });
@@ -265,7 +271,7 @@ export function registerBuild(program) {
                     'fit',
                     'command',
                   ],
-                  format: {command: formatCliCommand},
+                  format: {command: formatCliCommand, description: docText},
                 }
               : brief(['name', 'package', 'description', 'command']),
           ),

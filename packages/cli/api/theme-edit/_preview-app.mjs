@@ -90,6 +90,7 @@ import {
   analyzeTemplateNeeds,
   extractImportedPackages,
   parsedSpecifiers,
+  referencedPaths,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {
@@ -251,8 +252,8 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
 /**
  * The modules a file imports, from its import statements: a script's
  * through the shared reader of import statements (its syntax tree, so a
- * comment or a string says nothing), or the `@import` rules of a stylesheet
- * (comments left out).
+ * comment or a string says nothing) with the files its leading reference
+ * comments name, or the `@import` rules of a stylesheet (comments left out).
  * @param {string} file
  * @param {string} text
  * @returns {string[]}
@@ -264,7 +265,8 @@ function importSpecifiers(file, text) {
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g),
     ].map(m => m[1]);
-  return parsedSpecifiers(text);
+  // The new app's type check reads a referenced file as it reads an import.
+  return [...parsedSpecifiers(text), ...referencedPaths(text)];
 }
 
 /**

@@ -244,9 +244,13 @@ Platform-specific details stay inside that compiler.
 - **INV18 — A color-mode block applies only in its mode.** The web compiler
   writes a component style key's `@light` or `@dark` block (properties,
   pseudo-class overrides, and pseudo-elements) as rules that match only where
-  the element's color mode is that mode, as Theme resolves it. Outside media
-  surfaces the theme root's `data-theme` decides, and a root mode other than
-  `light` or `dark` follows the system preference. Inside the theme's media
+  the element's color mode is that mode. Outside media surfaces the theme
+  root's `data-theme` decides. Under a root mode other than `light` or `dark`,
+  a block follows the reader's preference (`prefers-color-scheme`). That is
+  the page's scheme whenever the page follows the reader: with `reset.css`,
+  or a root `color-scheme` or `<meta name="color-scheme">` that names both
+  schemes. On a page that names no scheme, the page and the theme's tokens
+  stay light, and a `@dark` block still applies for a dark reader. Inside the theme's media
   surfaces the nearest surface decides: a block applies where the closest
   media surface around the element is of its mode, so a light surface inside
   a dark one takes only the light block. This holds for up to five surfaces

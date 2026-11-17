@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import {logger} from '../../logger.mjs';
 import {themeBuild} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -200,13 +201,16 @@ describe('F43-09: a spread of a package theme', () => {
 });
 
 describe('F43-10: a stylesheet the theme source imports', () => {
-  it('is named as one the built outputs do not carry', async () => {
-    write('p/brand.css', '.brand { color: red; }\n');
-    write('p/p.ts', `import './brand.css';\n${THEME}`);
-    const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
-    expect(r.err).toBeUndefined();
-    expect(r.result.data.warnings.join('\n')).toContain(
-      'p/p.ts imports p/brand.css, which the built outputs do not carry',
-    );
-  });
+  it.skipIf(!hasModuleHooks)(
+    'is named as one the built outputs do not carry',
+    async () => {
+      write('p/brand.css', '.brand { color: red; }\n');
+      write('p/p.ts', `import './brand.css';\n${THEME}`);
+      const r = await captured(() => themeBuild('p/p.ts', {}, {cwd: dir}));
+      expect(r.err).toBeUndefined();
+      expect(r.result.data.warnings.join('\n')).toContain(
+        'p/p.ts imports p/brand.css, which the built outputs do not carry',
+      );
+    },
+  );
 });

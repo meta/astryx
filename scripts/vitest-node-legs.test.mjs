@@ -2,6 +2,7 @@
 
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
@@ -28,6 +29,8 @@ import {
   projectedLegMinutes,
   planNodeLegs,
   readDurations,
+  RECORDS,
+  recordProblem,
   stepOutputs,
 } from './vitest-node-legs.mjs';
 import {partitionByDuration} from './vitest-shard-sequencer.mjs';
@@ -281,5 +284,30 @@ describe('the Node leg plan', () => {
     const cost = nodeFileCost(guards, seconds);
     const share = guards.reduce((sum, file) => sum + cost(file), 0);
     expect(share / plan.total).toBeGreaterThan(0.5);
+  });
+});
+
+describe('a recorded-times file the plan can use', () => {
+  const write = text => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-times-'));
+    const file = path.join(dir, 'vitest-node-durations.json');
+    fs.writeFileSync(file, text);
+    return file;
+  };
+
+  it('accepts a map of seconds per file, and names what is wrong otherwise', () => {
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": 1.5}}'))).toBeNull();
+    expect(recordProblem(write('{"seconds": '))).toMatch(/cannot be read/);
+    expect(recordProblem(write('{"secs": {}}'))).toMatch(/no map of seconds/);
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": "1"}}'))).toMatch(
+      /records "1" seconds for a.test.mjs/,
+    );
+    expect(recordProblem(write('{"seconds": {"a.test.mjs": -1}}'))).toMatch(
+      /records -1 seconds/,
+    );
+  });
+
+  it('holds for the repository records', () => {
+    for (const file of RECORDS) expect(recordProblem(file), file).toBeNull();
   });
 });
