@@ -72,7 +72,7 @@ import {installGuidanceFor} from '../../foundation/env/cli-command.mjs';
  * @property {boolean} deprecated - Its doc marks it deprecated: another part replaces it.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>, description: string}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), the elements the doc suggests for it, and its description.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -285,6 +285,8 @@ async function readComponents(coreDir) {
               required: p.required === true,
               default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+              description:
+                typeof p.description === 'string' ? p.description : '',
             },
           ]),
         ),

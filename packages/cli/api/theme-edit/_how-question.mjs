@@ -3922,6 +3922,59 @@ function oneModeLine(C, TARGET, part, width, color, mode, state) {
   return {value: `inset 0 0 0 ${width} ${half}${own}`, when: flat};
 }
 
+/** @type {WeakMap<object, (text: string) => boolean>} */
+const STRIPE_NAMES = new WeakMap();
+/**
+ * Whether words name a table's stripes, read from the doc of the prop that
+ * turns them on: the prop whose description names the `parity` a row's
+ * stripe is, whose description leads with the stripes' plain names
+ * ("Stripes alternate rows (every other row, zebra striping): …"). A name
+ * matches by its words no other prop of that component uses, or, when all its
+ * words are common ("every other row"), as the whole phrase.
+ * @param {{components?: Record<string, any>}} project
+ * @returns {(text: string) => boolean}
+ */
+function stripeNamesOf(project) {
+  const known = STRIPE_NAMES.get(project);
+  if (known) return known;
+  /** @param {string} t */
+  const wordsOf = t =>
+    String(t)
+      .toLowerCase()
+      .match(/[a-z][a-z-]*/g) ?? [];
+  /** @type {RegExp[]} */
+  const names = [];
+  for (const info of Object.values(project.components ?? {})) {
+    const props = Object.values(info?.props ?? {});
+    const flag = props.find(pr =>
+      /`parity`/.test(String(pr?.description ?? '')),
+    );
+    if (!flag) continue;
+    const others = new Set(
+      props.filter(pr => pr !== flag).flatMap(pr => wordsOf(pr?.description)),
+    );
+    const lead = String(flag.description).split(':')[0];
+    for (const phrase of lead
+      .split(/[(),]/)
+      .map(x => x.trim())
+      .filter(Boolean)) {
+      const words = wordsOf(phrase);
+      const own = words.filter(w => !others.has(w));
+      names.push(
+        own.length
+          ? new RegExp(`\\b(?:${own.join('|')})\\b`)
+          : new RegExp(
+              `\\b${words.map(w => w.replace(/s$/, '')).join('s?\\s+')}s?\\b`,
+            ),
+      );
+    }
+  }
+  /** @param {string} text */
+  const test = text => names.some(re => re.test(String(text).toLowerCase()));
+  STRIPE_NAMES.set(project, test);
+  return test;
+}
+
 /**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -8505,6 +8558,14 @@ export function draftAnswer(ctx, env, question) {
       c.lengths.length
     )
       c.aspects = ['size'];
+  // "alternate row shading": the stripes the doc names, a fill ask.
+  for (const c of clauses)
+    if (
+      !c.aspects.includes('background') &&
+      c.parts.some(p => p.on === 'table-row') &&
+      stripeNamesOf(ctx.project)(c.text)
+    )
+      c.aspects = [...c.aspects, 'background'];
   // "shadow opacity 0.2", "card shadows with 30% alpha", "dialog shadows
   // 50% transparent": the layer's alpha is the ask, not the layer.
   for (const c of clauses)
@@ -20883,7 +20944,25 @@ export function draftAnswer(ctx, env, question) {
               [set(innerOnly, innerColor, {on: innerPart, ...modeOf(c)})],
             ],
           };
-        if (/\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text)) {
+        // The stripe a table row carries (its `parity`, odd or even, as
+        // Core marks body rows), when the installed Core marks it: the
+        // values are the part data's, so an ask naming one ("odd rows") is
+        // a stripe ask too.
+        const parityOn =
+          [on ? one(on) : null, 'table-row'].find(
+            p => p && (C.variantValues(p)?.parity ?? []).length,
+          ) ?? null;
+        const parities = parityOn
+          ? /** @type {string[]} */ (C.variantValues(parityOn).parity)
+          : [];
+        const paritySaid = parities.filter(v =>
+          new RegExp(`\\b${v}\\b`).test(noMode(c.text)),
+        );
+        if (
+          /\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text) ||
+          stripeNamesOf(ctx.project)(c.text) ||
+          (parityOn && paritySaid.length === 1)
+        ) {
           // The token Core paints every other row with, read from the part
           // data (a row's fill under an nth-child condition): set on the part,
           // it colors the stripes alone, and transparent takes them away.
@@ -20895,12 +20974,49 @@ export function draftAnswer(ctx, env, question) {
                   r.when.some(w => /:nth-child\(/.test(w)),
                 ),
             ) ?? null;
-          const stripe = stripeOn
+          const stripeRead = stripeOn
             ? C.partReads(stripeOn, 'background').find(r =>
                 r.when.some(w => /:nth-child\(/.test(w)),
-              )?.token
+              )
             : null;
+          const stripe = stripeRead?.token ?? null;
+          // The rows Core's own stripe is on, read from its condition.
+          const coreParity =
+            stripeRead?.when
+              .map(w => /:nth-child\((odd|even)\b/.exec(w)?.[1])
+              .find(Boolean) ?? null;
           const value = c.neg ? 'transparent' : colorFor(c, 'fill');
+          // One stripe named ("odd rows #f9f9f9", "zebra rows, odd ones
+          // shaded"): that stripe's fill on the row, in every table, and the
+          // other stripe of a striped table cleared, where Core draws its
+          // own. A theme with no stripe of its own and no color keeps Core's.
+          if (parityOn && paritySaid.length === 1 && value) {
+            const p = paritySaid[0];
+            const other = parities.find(v => v !== p);
+            const steps = [
+              set('background-color', value, {
+                on: parityOn,
+                when: `parity:${p}`,
+                ...modeOf(c),
+              }),
+              ...(!c.neg && coreParity && other === coreParity
+                ? [
+                    set('background-color', 'transparent', {
+                      on: parityOn,
+                      when: `parity:${other}`,
+                      state: 'striped',
+                    }),
+                  ]
+                : []),
+            ];
+            return {
+              text: c.neg
+                ? `no stripe on the ${p} rows of ${parityOn}`
+                : `a stripe on the ${p} rows of ${parityOn} (the first body row is odd), in every table${steps.length > 1 ? `; the ${other} rows of a striped table, where Core paints its own stripe, are cleared` : ''}; add --state striped to stripe only the tables the app marks isStriped`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+          }
           if (stripeOn && stripe && value)
             return {
               text: `${c.neg ? 'no stripes' : 'the stripe color'} on ${stripeOn}: ${stripe}, which Core paints every other row with`,
@@ -20935,8 +21051,32 @@ export function draftAnswer(ctx, env, question) {
                 sequence: steps.length > 1,
               };
           }
+          // "zebra rows" with no color: the stripe Core already draws, in
+          // every table, with the theme's own stripe color.
+          // (Only when no clause of the ask names a stripe: "zebra rows,
+          // odd rows #f9f9f9" is that one stripe.)
+          if (
+            parityOn &&
+            coreParity &&
+            stripe &&
+            !c.neg &&
+            !parities.some(v => new RegExp(`\\b${v}\\b`).test(noMode(q)))
+          )
+            return {
+              text: `stripes on every table: the ${coreParity} rows of ${parityOn} in ${stripe}, the color Core stripes a table marked isStriped with (the first body row is odd; for the odd rows, name them)`,
+              options: [
+                [
+                  set('background-color', `var(${stripe})`, {
+                    on: parityOn,
+                    when: `parity:${coreParity}`,
+                  }),
+                ],
+              ],
+            };
           return {
-            text: 'striped rows need a style on every other row, and set has no condition for that; a row background colors every row',
+            text: parityOn
+              ? `a stripe on table rows is set on the stripe: background-color <color> --on ${parityOn} --when parity:odd (or parity:even)`
+              : 'striped rows need a style on every other row, and this Core marks no stripe on its rows (a newer Core does: then --when parity:odd); a row background colors every row',
             options: [],
           };
         }

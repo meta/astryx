@@ -314,7 +314,49 @@ const QUESTIONS = [
       adds: /button\.variant:\w+\.@(light|dark)\.:hover\./,
     },
   ],
-  ['table rows striped', {parts: ['table-row'], top: null}],
+  // Table rows carry their stripe (parity) in Core: a stripe ask sets it.
+  [
+    'table rows striped',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=var\(--color-background-muted\)/,
+    },
+  ],
+  [
+    'odd rows light gray #f9f9f9',
+    {
+      parts: ['table-row'],
+      // (The odd stripe, and Core's own even stripe of a striped table
+      // cleared, run in order.)
+      top: /^set q background-color '#f9f9f9' --on table-row --when parity:odd --mode light && set q background-color transparent --on table-row --when parity:even --state striped$/,
+      adds: /table-row\.parity:odd\.@light\.backgroundColor=#f9f9f9/,
+    },
+  ],
+  // The stripes' plain names come from the doc of the prop that turns them
+  // on (Table's isStriped).
+  [
+    'alternate row shading',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'shade every other row',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color 'var\(--color-background-muted\)' --on table-row --when parity:even$/,
+    },
+  ],
+  [
+    'no stripes on even rows',
+    {
+      parts: ['table-row'],
+      top: /^set q background-color transparent --on table-row --when parity:even$/,
+      adds: /table-row\.parity:even\.backgroundColor=transparent/,
+    },
+  ],
   [
     'table header gray background',
     {
