@@ -306,7 +306,9 @@ export function tempFor(file) {
 /**
  * A color dial's family: its seed, and the source token that gives it when
  * the theme's own source sets the family's fill (null when the setting does).
- * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null}} DialFamily
+ * An accent set as a token carries its own dark value and the one mode it is
+ * for.
+ * @typedef {{id: string, dial: string, seed: string, value: string, source: string | null, dark?: string, only?: 'light' | 'dark'}} DialFamily
  */
 
 /**
@@ -474,6 +476,42 @@ function dialFamilies(data, own = {}) {
         source: inEffect ? paletteToken(dial) : null,
       });
   }
+  // A whole-theme --color-accent set as a token is the accent too: the
+  // accent's shades (links, selected rows, tints) grow from it as from the
+  // dial, and the token itself keeps the exact value it was given. A dark
+  // value of its own anchors the dark shades (planPalette).
+  if (!out.some(f => f.id === 'accent')) {
+    const raws = data.settings.filter(
+      x =>
+        x?.source === 'token' &&
+        x.thing === '--color-accent' &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
+    const last = (/** @type {(m: unknown) => boolean} */ ok) =>
+      [...raws].reverse().find(x => ok(x.mode));
+    const light = last(m => !m || m === 'light') ?? last(m => m === 'dark');
+    const dark = last(m => m === 'dark');
+    const seed = light && seedOf(light.value);
+    const darkSeed = dark && dark !== light ? seedOf(dark.value) : null;
+    // Set for one mode only, it moves that mode only.
+    const modes = new Set(raws.map(x => x.mode ?? 'both'));
+    const only =
+      modes.size === 1 && (modes.has('light') || modes.has('dark'))
+        ? /** @type {'light' | 'dark'} */ ([...modes][0])
+        : null;
+    if (light && seed)
+      out.unshift({
+        id: 'accent',
+        dial: 'accent',
+        seed,
+        value: light.value,
+        source: null,
+        ...(darkSeed && !sameColor(darkSeed, seed) ? {dark: darkSeed} : {}),
+        ...(only ? {only} : {}),
+      });
+  }
   return out;
 }
 
@@ -485,7 +523,11 @@ function dialFamilies(data, own = {}) {
  * @param {{settings: Setting[]}} data
  */
 export function seedsInEffect(cwd, slug, data) {
-  return dialFamilies(data, ownSourceTokenValues(cwd, slug));
+  // (A color setting's families only: an accent set as a token keeps its
+  // exact value, so it is not a seed a dial such as vibrancy moves.)
+  return dialFamilies(data, ownSourceTokenValues(cwd, slug)).filter(f =>
+    data.settings.some(x => x?.source === 'dial' && x.thing === f.dial),
+  );
 }
 
 /**
