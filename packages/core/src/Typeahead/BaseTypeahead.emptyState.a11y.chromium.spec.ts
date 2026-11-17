@@ -56,7 +56,10 @@ for (const label of [
       });
       await page.clock.runFor(1000);
       await expect(listbox).toBeVisible();
-      await expect(listbox.getByRole('option')).toHaveText('No results found');
+      // The message is shown but is not an option: a listbox owns only
+      // options, and the live region speaks the message.
+      await expect(listbox).toHaveText('No results found');
+      await expect(listbox.getByRole('option')).toHaveCount(0);
       await page.clock.runFor(32);
       await expect(
         page.locator('[data-astryx-live-region="polite"]'),
@@ -116,13 +119,8 @@ for (const label of [
           ).toBeVisible();
         }
       } else {
-        await expect(listbox.getByRole('option')).toHaveText(
-          'No results found',
-        );
-        await expect(listbox.getByRole('option')).toHaveAttribute(
-          'aria-disabled',
-          'true',
-        );
+        await expect(listbox).toHaveText('No results found');
+        await expect(listbox.getByRole('option')).toHaveCount(0);
         await expect(
           page.locator('[data-astryx-live-region="polite"]'),
         ).toHaveText('No results found');

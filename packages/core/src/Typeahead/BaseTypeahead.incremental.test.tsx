@@ -120,6 +120,13 @@ function optionLabels() {
     .map(option => option.textContent);
 }
 
+/** The "nothing matched" message: shown in the popup, never an option. */
+function emptyMessage() {
+  return screen
+    .queryByRole('listbox', {hidden: true})
+    ?.querySelector('[role="presentation"]')?.textContent;
+}
+
 function liveRegion() {
   return document.querySelector('[data-astryx-live-region="polite"]');
 }
@@ -262,7 +269,8 @@ describe('BaseTypeahead incremental results (spec:AST-092)', () => {
     expect(input).toHaveAttribute('aria-busy', 'true');
 
     await settle(latest(), []);
-    expect(optionLabels()).toEqual(['No results found']);
+    expect(optionLabels()).toEqual([]);
+    expect(emptyMessage()).toBe('No results found');
   });
 
   it('keeps the last non-empty list when the answer fails (FR9)', async () => {
@@ -330,7 +338,8 @@ describe('BaseTypeahead incremental results (spec:AST-092)', () => {
     await act(async () => {
       latest().reject(new Error('offline'));
     });
-    expect(optionLabels()).toEqual(['No results found']);
+    expect(optionLabels()).toEqual([]);
+    expect(emptyMessage()).toBe('No results found');
   });
 
   it('warns in development when a later list moves shown rows, and shows it as given (FR2)', async () => {

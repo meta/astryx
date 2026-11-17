@@ -41,9 +41,10 @@ export interface SearchableItem<TAuxData = unknown> {
   /**
    * The item's secondary control as one node the caller renders and names;
    * the same key with the same type as `SelectorOptionData.action`
-   * (`spec:AST-058`). The typeahead panel does not render it yet and warns in
-   * development when an item carries one. Absent and `null` mean the same:
-   * none.
+   * (`spec:AST-058`). Once a result carries one, the typeahead panel is a
+   * grid: each row has the option and, after it, this control, which arrow
+   * keys and a press reach without selecting the item. Give the control an
+   * accessible name. Absent and `null` mean the same: none.
    */
   action?: ReactNode;
 
