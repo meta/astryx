@@ -1481,6 +1481,19 @@ jobs:
           pnpm -F @astryxdesign/build build
           pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
 
+      # render-interaction-parity.browser.test.mjs builds one page into a Vite
+      # app and renders it to one file, then takes the same clicks, keys and
+      # typing in both in Chromium, the file inside a sandboxed frame under a
+      # strict content security policy, and compares what shows after each
+      # step. It needs the build package's Vite plugin, built in the step
+      # before. The Node legs skip it; with ASTRYX_RENDER_PARITY_BROWSER set,
+      # a missing browser fails it.
+      - name: Render interaction parity browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_PARITY_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/render-interaction-parity.browser.test.mjs --maxWorkers=1
+
       # template-noscript-first-paint.browser.test.mjs renders the page
       # templates people share as a file to static HTML and checks their
       # first paint with script off at a phone's and a desktop's width. The

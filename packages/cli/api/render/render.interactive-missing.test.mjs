@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `render()` with `interactive` where no esbuild it can use is
- * installed: it refuses through the API, with the install command as its
- * suggestion, and writes nothing.
+ * @file `render()` where the CLI's install left esbuild out: it refuses
+ * through the API and writes nothing, since every render carries the page's
+ * script.
  */
 
 import * as fs from 'node:fs';
@@ -15,10 +15,13 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 
-vi.mock('../../foundation/render/esbuild-peer.mjs', async importOriginal => ({
-  .../** @type {object} */ (await importOriginal()),
-  findEsbuild: () => null,
-}));
+vi.mock(
+  '../../foundation/render/esbuild-dependency.mjs',
+  async importOriginal => ({
+    .../** @type {object} */ (await importOriginal()),
+    findEsbuild: () => null,
+  }),
+);
 
 /** @type {string} */
 let dir;
@@ -40,20 +43,17 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
-describe('render() with interactive and no esbuild', () => {
-  it('refuses with the install command as its suggestion, and writes nothing', async () => {
+describe('render() when the install left esbuild out', () => {
+  it('refuses, says why, and writes nothing', async () => {
     let error;
     try {
-      await render('page.tsx', {cwd: dir, out: 'page.html', interactive: true});
+      await render('page.tsx', {cwd: dir, out: 'page.html'});
     } catch (e) {
       error = /** @type {any} */ (e);
     }
     expect(error?.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(error?.message).toContain('esbuild');
     expect(error?.message).toContain('nothing was written');
-    expect(error?.suggestions?.[0]?.name).toMatch(
-      /^(npm install|pnpm add|yarn add|bun add) esbuild/,
-    );
-    expect(error?.suggestions?.[0]?.reason).toContain('esbuild');
     expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
   });
 });

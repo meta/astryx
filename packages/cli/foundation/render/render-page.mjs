@@ -8,9 +8,9 @@
  * images become data: URIs; and the page's source rides along so
  * `--reverse` can give it back exactly.
  *
- * A static file needs no network and runs no script, so it works inside a
- * sandboxed frame with a strict content security policy; an interactive one
- * also carries the page's script. Its colors follow
+ * The file needs no network, and it carries the page's script, which draws
+ * the live page over the markup, so it works inside a sandboxed frame that
+ * allows scripts under a strict content security policy. Its colors follow
  * `color-scheme` (and a `data-theme` of `light` or `dark` on the root), since
  * Astryx tokens use light-dark().
  *
@@ -34,7 +34,7 @@ import {
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {ROOT_ID} from './client-bundle.mjs';
-import {CLI_DIR, esbuildMissing, findEsbuild} from './esbuild-peer.mjs';
+import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
@@ -68,8 +68,8 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
- * @property {number} [scriptBytes] - With `interactive`: bytes of the page's script.
- * @property {number} [scriptModules] - With `interactive`: the modules the page's script holds.
+ * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
+ * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
  */
 
 /** An error carrying a render error code. */
@@ -675,7 +675,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean, interactive?: boolean, esbuild?: string}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean, buildScript?: boolean, esbuild?: string}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -693,6 +693,23 @@ async function runPage(input, timeoutMs, warnings) {
     throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
   warnings.push(segmenterWarning());
   return again;
+}
+
+/**
+ * The markup with each link out of the file opening in a new tab, as the
+ * file's script opens it once it runs (client-bundle.mjs): a viewer's frame
+ * cannot follow a link out. A link that names its own target keeps it.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function linksOpenNewTabs(markup) {
+  return markup.replace(/<a\b([^>]*)>/g, (tag, /** @type {string} */ attrs) => {
+    const href = /\shref="([^"]*)"/.exec(attrs)?.[1];
+    if (href === undefined || /\starget="/.test(attrs) || !/^\s*(https?:|mailto:|tel:|\/\/)/i.test(href)) return tag;
+    const rel = /\srel="([^"]*)"/.exec(attrs);
+    const rels = new Set([...(rel ? rel[1].split(/\s+/).filter(Boolean) : []), 'noopener', 'noreferrer']);
+    return `<a${rel ? attrs.replace(rel[0], '') : attrs} target="_blank" rel="${[...rels].join(' ')}">`;
+  });
 }
 
 /**
@@ -883,7 +900,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, interactive?: boolean, esbuildFrom?: string[]}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, markupOnly?: boolean, esbuildFrom?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -892,14 +909,15 @@ const SCHEME_CSS =
  *   With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
- *   the page rendered with, and the markup as rendered. With `interactive`,
- *   the file also carries the page's script (client-bundle.mjs): it draws
- *   the page over its markup in the browser, so the page's controls work.
- *   The markup sits in one element the script draws into, and the stylesheet
- *   keeps the rules any of the page's modules can use, not only the markup's.
- *   esbuild builds the script; it is an optional peer, found from each folder
- *   of `esbuildFrom` in turn (default: the page's folder, then the CLI's),
- *   and the render refuses before it runs the page when there is none.
+ *   the page rendered with, and the markup as rendered. The file also
+ *   carries the page's script (client-bundle.mjs): it draws the page over
+ *   its markup in the browser, so the page's controls work. The markup sits
+ *   in one element the script draws into, and the stylesheet keeps the rules
+ *   any of the page's modules can use, not only the markup's. esbuild, a
+ *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
+ *   resolves from); a page whose script cannot be built fails the render.
+ *   `markupOnly` renders the markup and its styles without the script, for a
+ *   caller that shows the markup itself (the theme editor); it writes no file.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -913,16 +931,17 @@ export async function renderPage(entry, options = {}) {
   const warnings = [];
   /** @type {string | undefined} */
   let esbuild;
-  if (options.interactive) {
-    const found = findEsbuild(options.esbuildFrom ?? [dir, CLI_DIR]);
-    if (!found || 'older' in found) {
-      const {message, install} = esbuildMissing(found, dir);
-      throw new RenderError('ERR_RENDER_MISSING_DEPENDENCY', message, {package: 'esbuild', ...(install ? {install} : {})});
+  if (!options.markupOnly) {
+    esbuild = findEsbuild(options.esbuildFrom) ?? undefined;
+    if (!esbuild) {
+      throw new RenderError(
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
+      );
     }
-    esbuild = found.main;
   }
   const message = await runPage(
-    {entry, root, scope, served, openLayers: options.openLayers === true, interactive: options.interactive === true, esbuild},
+    {entry, root, scope, served, openLayers: options.openLayers === true, buildScript: esbuild !== undefined, esbuild},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );
@@ -934,7 +953,7 @@ export async function renderPage(entry, options = {}) {
     );
   }
   /** @type {string} */
-  let markup = message.markup;
+  let markup = linksOpenNewTabs(message.markup);
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
@@ -1031,7 +1050,7 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
-  /** The page's script, with `interactive`. @type {string | null} */
+  /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
   // The script draws what the markup does not show yet (a menu as it opens,
   // the next tab), so the rules every class name it holds needs stay too.
@@ -1118,10 +1137,10 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
-  // A static file runs no script, so a media query the page asks in
-  // JavaScript keeps the answer it got on the server, whatever the reader's
-  // screen. An interactive file paints that answer first and asks again when
-  // its script runs; a viewer that blocks scripts keeps the server answer.
+  // A media query the page asks in JavaScript gets its server answer in the
+  // markup. The file paints that answer first and asks again when its script
+  // runs; a viewer that blocks scripts keeps the server answer, and so does
+  // a markup-only render.
   const screenQueries = [
     ...new Set(/** @type {{call: string}[]} */ (message.screenQueries ?? []).map(q => q.call)),
   ];
@@ -1134,8 +1153,8 @@ export async function renderPage(entry, options = {}) {
     });
   }
   // A chart the render did not draw is an empty box: a ResponsiveContainer
-  // holds only its sizing box, and a chart of fixed size an empty wrapper. An
-  // interactive file's script draws it when it runs.
+  // holds only its sizing box, and a chart of fixed size an empty wrapper. The
+  // file's script draws it when it runs.
   const blankCharts =
     (
       markup.match(
@@ -1369,7 +1388,6 @@ export async function renderPage(entry, options = {}) {
         .filter(([name]) => !isServedPackage(name, []))
         .map(([name, version]) => `${name}@${version}`),
       ...(options.title === undefined ? {} : {title: options.title}),
-      ...(script ? {interactive: true} : {}),
     };
     // The file each alias import named, for the files the page carries, so a
     // reverse where no alias names it still finds the file.
@@ -1393,7 +1411,6 @@ export async function renderPage(entry, options = {}) {
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
-      ...(script ? {interactive: true} : {}),
       markup: {
         sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),

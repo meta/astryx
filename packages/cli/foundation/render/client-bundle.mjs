@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The page's script for an interactive render: the page's modules and
- * the modules they use, bundled by esbuild (an optional peer, loaded only
+ * @file The page's script in a rendered file: the page's modules and the
+ * modules they use, bundled by esbuild (a dependency of the CLI, loaded only
  * here) into one script that draws the page in the browser over its server
  * markup, so state, effects and event handlers work. No network, no `eval`,
  * no other file.
@@ -15,8 +15,60 @@
 import * as path from 'node:path';
 import vm from 'node:vm';
 
-/** The id of the element that holds the page's markup in an interactive file. */
+/** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
+
+/**
+ * What the file does so that the page works in a viewer's sandboxed frame as
+ * it works in an app. A link out of the file opens in a new tab, since the
+ * frame cannot follow it; a link the page handles itself (it cancels the
+ * click) or gives a target keeps its way. A form submits through its submit
+ * event: the file cancels the browser's own submission and fires the event
+ * itself, since a frame that blocks form submission never fires it, and a
+ * file has no server to send a form to; a form whose action is another
+ * site's address submits as the browser submits it. Enter in a form's only text field
+ * submits a form with no submit button, as a browser does; with a button,
+ * the browser clicks it.
+ */
+export const IN_A_VIEWER = `{
+const out = /^(https?:|mailto:|tel:|\\/\\/)/i;
+const typed = /^(text|search|url|tel|email|password|date|month|week|time|datetime-local|number)$/;
+const elsewhere = (form, submitter) =>
+  out.test(((submitter && submitter.getAttribute('formaction')) ?? form.getAttribute('action') ?? '').trim());
+const submit = (form, submitter) => {
+  if (!form.noValidate && !(submitter && submitter.formNoValidate) && !form.reportValidity()) return;
+  form.dispatchEvent(typeof SubmitEvent === 'function'
+    ? new SubmitEvent('submit', {bubbles: true, cancelable: true, submitter})
+    : new Event('submit', {bubbles: true, cancelable: true}));
+};
+document.addEventListener('click', event => {
+  if (event.defaultPrevented || !(event.target instanceof Element)) return;
+  const link = event.target.closest('a[href]');
+  if (link) {
+    if (!link.hasAttribute('target') && out.test(link.getAttribute('href').trim())) {
+      link.target = '_blank';
+      link.rel = [...new Set([...link.rel.split(/\\s+/).filter(Boolean), 'noopener', 'noreferrer'])].join(' ');
+    }
+    return;
+  }
+  const button = event.target.closest('button, input');
+  if (!button || !button.form || (button.type !== 'submit' && button.type !== 'image')) return;
+  if (elsewhere(button.form, button)) return;
+  event.preventDefault();
+  submit(button.form, button);
+});
+document.addEventListener('keydown', event => {
+  const field = event.target;
+  if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing) return;
+  if (!(field instanceof HTMLInputElement) || !field.form || !typed.test(field.type)) return;
+  const controls = [...field.form.elements];
+  if (controls.some(c => c.type === 'submit' || c.type === 'image')) return;
+  if (controls.filter(c => c instanceof HTMLInputElement && typed.test(c.type)).length !== 1) return;
+  if (elsewhere(field.form, null)) return;
+  event.preventDefault();
+  submit(field.form, null);
+});
+}`;
 
 /** Files a package may import for their address; the page's own are inlined before esbuild sees them. */
 const ASSET_LOADERS = Object.fromEntries(
@@ -100,6 +152,7 @@ export async function bundleForBrowser({
 }) {
   const mount =
     `import {createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `${IN_A_VIEWER}` +
     `createRoot(document.getElementById(${JSON.stringify(ROOT_ID)})).render(createElement(Page));`;
   /** @type {any} */
   const plugin = {
@@ -129,7 +182,8 @@ export async function bundleForBrowser({
         });
         // A module a package maps to `false` comes back with no namespace:
         // esbuild's own resolution gives it as an empty module.
-        if (found.errors.length === 0) return found.namespace === '' ? undefined : found;
+        if (found.errors.length === 0)
+          return found.namespace === '' ? undefined : found;
         if (builtin(name)) {
           return {
             errors: [
@@ -167,6 +221,9 @@ export async function bundleForBrowser({
       metafile: true,
       format: 'iife',
       platform: 'browser',
+      // Browsers that viewers run; syntax newer than this, such as a class
+      // decorator, is lowered.
+      target: 'es2022',
       minify: true,
       charset: 'ascii',
       legalComments: 'eof',

@@ -240,19 +240,13 @@ describe('this repository', () => {
     expect(result.status).toBe(0);
   });
 
-  it('gives the CLI two optional peers: Core, kept at "*" until the next minor, and esbuild, which only an interactive render loads', () => {
+  it('gives the CLI one optional peer, Core, kept at "*" until the next minor', () => {
     const cli = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'packages/cli/package.json'), 'utf8'),
     );
-    // esbuild is of any version, so npm never adds or moves a project's own
-    // copy; `experimental render --interactive` checks the version it needs.
-    expect(cli.peerDependencies).toEqual({
-      '@astryxdesign/core': '*',
-      esbuild: '*',
-    });
+    expect(cli.peerDependencies).toEqual({'@astryxdesign/core': '*'});
     expect(cli.peerDependenciesMeta).toEqual({
       '@astryxdesign/core': {optional: true},
-      esbuild: {optional: true},
     });
   });
 

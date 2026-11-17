@@ -527,6 +527,9 @@ export async function renderGenerated(
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // The editor shows the markup itself and writes no file, so it needs
+      // no script.
+      markupOnly: true,
       ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's

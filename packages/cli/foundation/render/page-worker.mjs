@@ -26,11 +26,11 @@
  * (through the global layers.mjs names) is drawn the same way and put where
  * its marker is, with each overlay it opened after it.
  *
- * With `interactive`, the page's modules and the modules they use are also
+ * With `buildScript`, the page's modules and the modules they use are also
  * bundled for the browser by esbuild (client-bundle.mjs) into one script,
  * which draws the page over its markup in the browser.
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers, interactive, esbuild}
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers, buildScript, esbuild}
  * @output one message: {ok: true, markup, css, files, texts, logs, script} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -1349,7 +1349,7 @@ try {
   // stylesheet below.
   /** @type {{code: string, modules: number} | null} */
   let script = null;
-  if (workerData.interactive) {
+  if (workerData.buildScript) {
     reach("building the page's script");
     try {
       const loaded = await import(pathToFileURL(workerData.esbuild).href);
@@ -1365,10 +1365,10 @@ try {
       });
     } catch (e) {
       if (e instanceof BundleError) {
-        fail('ERR_RENDER_INTERACTIVE', e.message, e.detail);
+        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
       } else {
         const message = e instanceof Error ? e.message : String(e);
-        fail('ERR_RENDER_INTERACTIVE', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
+        fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
       }
       throw null;
     }

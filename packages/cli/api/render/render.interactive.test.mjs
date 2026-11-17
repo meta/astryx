@@ -21,9 +21,9 @@ import {
 } from '../../foundation/render/source-block.mjs';
 import {ROOT_ID, scriptSafe} from '../../foundation/render/client-bundle.mjs';
 import {
-  ESBUILD_RANGE,
+  ESBUILD_MISSING,
   findEsbuild,
-} from '../../foundation/render/esbuild-peer.mjs';
+} from '../../foundation/render/esbuild-dependency.mjs';
 import {RenderError, renderPage} from '../../foundation/render/render-page.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
@@ -98,11 +98,7 @@ beforeAll(async () => {
   ]);
   put('src/counter.tsx', COUNTER);
   put('src/label.ts', LABEL);
-  result = await render('src/counter.tsx', {
-    cwd: dir,
-    out: 'counter.html',
-    interactive: true,
-  });
+  result = await render('src/counter.tsx', {cwd: dir, out: 'counter.html'});
   html = read('counter.html');
 }, 120_000);
 
@@ -110,10 +106,9 @@ afterAll(() => {
   removeLinkedFixture(dir);
 });
 
-describe('an interactive render', () => {
+describe("a render, which carries the page's script", () => {
   it('reports the script it carried', () => {
     expect(result.type).toBe('render.page');
-    expect(result.data).toMatchObject({interactive: true});
     expect(result.data.scriptBytes).toBeGreaterThan(10_000);
     expect(result.data.scriptModules).toBeGreaterThan(3);
     expect(result.data.bytes).toBe(Buffer.byteLength(html));
@@ -133,21 +128,16 @@ describe('an interactive render', () => {
     );
   });
 
-  it("says in its note that it runs the page's own script, and how to render it again the same way", () => {
+  it("says in its note that it runs the page's own script, and how to render it again", () => {
     const note = html.slice(html.indexOf('<!--'), html.indexOf('-->') + 3);
     expect(note).toContain(
       "The page's own script, at the end of the file, draws the page when it",
     );
     expect(note).not.toContain('It runs no script');
-    expect(note).toContain(
-      `experimental render counter-restored/counter.tsx --out counter.html --interactive`,
+    expect(note).toMatch(
+      /experimental render counter-restored\/counter\.tsx --out counter\.html\n/,
     );
     expect(note).toContain("before the page's script");
-  });
-
-  it('records the mode, so a reverse knows it', () => {
-    const read = readSourceBlock(html);
-    expect(read).toMatchObject({found: true, source: {interactive: true}});
   });
 
   it('holds no path from this machine and nothing that ends its script early', () => {
@@ -163,15 +153,11 @@ describe('an interactive render', () => {
   });
 
   it('writes the same bytes when rendered again', async () => {
-    await render('src/counter.tsx', {
-      cwd: dir,
-      out: 'counter.html',
-      interactive: true,
-    });
+    await render('src/counter.tsx', {cwd: dir, out: 'counter.html'});
     expect(read('counter.html')).toBe(html);
   }, 120_000);
 
-  it('gives the page back exactly, and the command to render it again keeps --interactive', async () => {
+  it('gives the page back exactly, with the command to render it again', async () => {
     const back = /** @type {any} */ (
       await render('counter.html', {
         cwd: dir,
@@ -183,8 +169,8 @@ describe('an interactive render', () => {
       mode: 'embedded',
       exact: true,
       edited: false,
-      interactive: true,
     });
+    expect(back.data.interactive).toBeUndefined();
     expect(read('back/counter.tsx')).toBe(COUNTER);
     expect(read('back/label.ts')).toBe(LABEL);
     const {stdout, status} = await runCli(
@@ -199,10 +185,8 @@ describe('an interactive render', () => {
       dir,
     );
     expect(status).toBe(0);
-    expect(stdout).toMatch(/^interactive:\s+true$/m);
-    expect(stdout).toMatch(
-      /^Render it again: .* --out counter\.html --interactive$/m,
-    );
+    expect(stdout).not.toMatch(/^interactive:/m);
+    expect(stdout).toMatch(/^Render it again: .* --out counter\.html$/m);
   }, 120_000);
 
   it('runs in a browser: the page draws itself over its markup and its button works', async () => {
@@ -233,35 +217,91 @@ describe('an interactive render', () => {
     dom.window.close();
   });
 
-  it('shows the script in the CLI output, and refuses --interactive with --reverse', async () => {
+  it('opens a link out of the file in a new tab, and submits a form itself, also on Enter', async () => {
+    put(
+      'src/form.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [sent, setSent] = useState('nothing');
+  const [name, setName] = useState('');
+  return (
+    <main>
+      <a href="https://example.com/docs">Docs</a>
+      <a href="#top">Top</a>
+      <a href="https://example.com/self" target="_self">Self</a>
+      <form onSubmit={e => { e.preventDefault(); setSent(name || 'empty'); }}>
+        <input aria-label="Name" value={name} onChange={e => setName(e.target.value)} />
+        <button type="submit">Send</button>
+      </form>
+      <form onSubmit={e => { e.preventDefault(); setSent('searched'); }}>
+        <input aria-label="Search" />
+      </form>
+      <p id="sent">{sent}</p>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/form.tsx', {cwd: dir, out: 'form.html'});
+    const file = read('form.html');
+    // The first paint opens it in a new tab too, before the script runs.
+    const markup = renderedMarkupOf(file) ?? '';
+    expect(markup).toContain(
+      '<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer">Docs</a>',
+    );
+    expect(markup).toContain('<a href="#top">Top</a>');
+    expect(markup).toContain(
+      '<a href="https://example.com/self" target="_self">Self</a>',
+    );
+    const dom = new JSDOM(file, {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    const settle = () =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 50));
+    await settle();
+    const doc = dom.window.document;
+    const sent = () => doc.getElementById('sent')?.textContent;
+    const docs = /** @type {HTMLAnchorElement} */ (
+      doc.querySelector('a[href="https://example.com/docs"]')
+    );
+    // The link the script drew has no target until it is clicked.
+    expect(docs.hasAttribute('target')).toBe(false);
+    docs.dispatchEvent(
+      new dom.window.MouseEvent('click', {bubbles: true, cancelable: true}),
+    );
+    expect(docs.getAttribute('target')).toBe('_blank');
+    expect(docs.getAttribute('rel')).toBe('noopener noreferrer');
+    /** @type {HTMLButtonElement} */ (doc.querySelector('button')).click();
+    await settle();
+    expect(sent()).toBe('empty');
+    doc.querySelector('input[aria-label="Search"]')?.dispatchEvent(
+      new dom.window.KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await settle();
+    expect(sent()).toBe('searched');
+    dom.window.close();
+  }, 120_000);
+
+  it('shows the script in the CLI output, and has no option to leave it out', async () => {
     const page = await runCli(
-      [
-        'experimental',
-        'render',
-        'src/counter.tsx',
-        '--out',
-        'cli.html',
-        '--interactive',
-      ],
+      ['experimental', 'render', 'src/counter.tsx', '--out', 'cli.html'],
       dir,
     );
     expect(page.status).toBe(0);
-    expect(page.stdout).toMatch(/^interactive:\s+true$/m);
     expect(page.stdout).toMatch(/^scriptBytes:\s+[\d.]+ KB$/m);
     expect(page.stdout).toMatch(/^scriptModules:\s+\d+$/m);
-    const both = await runCli(
-      [
-        '--json',
-        'experimental',
-        'render',
-        '--reverse',
-        'counter.html',
-        '--interactive',
-      ],
-      dir,
-    );
-    expect(both.status).toBe(1);
-    expect(JSON.parse(both.stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    for (const flag of ['--static', '--interactive']) {
+      const refused = await runCli(
+        ['experimental', 'render', 'src/counter.tsx', flag],
+        dir,
+      );
+      expect(refused.status, flag).toBe(1);
+    }
   }, 120_000);
 
   it('refuses a page whose script needs Node, naming the module, and writes nothing', async () => {
@@ -270,25 +310,20 @@ describe('an interactive render', () => {
       `import {readFileSync} from 'node:fs';\nexport default function Page() {\n  return <button onClick={() => readFileSync('x')}>Read</button>;\n}\n`,
     );
     const error = await errorOf(() =>
-      render('src/node-page.tsx', {
-        cwd: dir,
-        out: 'node-page.html',
-        interactive: true,
-      }),
+      render('src/node-page.tsx', {cwd: dir, out: 'node-page.html'}),
     );
-    expect(error?.code).toBe('ERR_RENDER_INTERACTIVE');
+    expect(error?.code).toBe('ERR_RENDER_SCRIPT');
     expect(error?.message).toContain(
       'node-page.tsx loads node:fs, which is part of Node and not of a browser',
     );
     expect(fs.existsSync(path.join(dir, 'node-page.html'))).toBe(false);
   }, 120_000);
 
-  it('composes with --title: the note, the record and the reverse keep both', async () => {
+  it('composes with --title: the note, the record and the reverse keep it', async () => {
     const title = "Ops' counter";
     await render('src/counter.tsx', {
       cwd: dir,
       out: 'titled.html',
-      interactive: true,
       title,
     });
     const titled = read('titled.html');
@@ -297,14 +332,14 @@ describe('an interactive render', () => {
       titled.indexOf('-->') + 3,
     );
     expect(note).toContain(
-      "--out titled.html --title 'Ops'\\''' counter' --interactive".replace(
+      "--out titled.html --title 'Ops'\\''' counter'".replace(
         "'\\''' ",
         "'\\'' ",
       ),
     );
     expect(readSourceBlock(titled)).toMatchObject({
       found: true,
-      source: {title, interactive: true},
+      source: {title},
     });
     const {stdout} = await runCli(
       [
@@ -318,9 +353,7 @@ describe('an interactive render', () => {
       dir,
     );
     expect(stdout).toMatch(/^title:\s+Ops' counter$/m);
-    expect(stdout).toMatch(
-      /--out titled\.html --title 'Ops'\\'' counter' --interactive$/m,
-    );
+    expect(stdout).toMatch(/--out titled\.html --title 'Ops'\\'' counter'$/m);
   }, 120_000);
 
   it('lets a package map a Node module away for the browser, and an installed package stand in for one', async () => {
@@ -353,10 +386,9 @@ describe('an interactive render', () => {
       await render('src/ready.tsx', {
         cwd: dir,
         out: 'ready.html',
-        interactive: true,
       })
     );
-    expect(ready.data.interactive).toBe(true);
+    expect(ready.data.scriptBytes).toBeGreaterThan(0);
     expect(scriptOf(read('ready.html'))).toContain(
       'events-polyfill-in-the-browser',
     );
@@ -374,7 +406,6 @@ describe('an interactive render', () => {
     await render('src/lazy.tsx', {
       cwd: dir,
       out: 'lazy.html',
-      interactive: true,
     });
     expect(read('lazy.html')).toMatch(/color:\s*rgb\(1,\s*2,\s*3\)/);
     const back = /** @type {any} */ (
@@ -397,7 +428,6 @@ describe('an interactive render', () => {
       await render('src/narrow.tsx', {
         cwd: dir,
         out: 'narrow.html',
-        interactive: true,
       })
     );
     const warning = narrow.data.warnings.find(
@@ -408,7 +438,7 @@ describe('an interactive render', () => {
     );
   }, 120_000);
 
-  it('says a chart the render could not draw is drawn by the script, and stays empty in a static file', async () => {
+  it('says a chart the render could not draw is drawn by the script', async () => {
     put(
       'src/blank-chart.tsx',
       'import * as R from \'recharts\';\nconst data = [{v: 1}, {v: 2}];\nexport default function Page() {\n  return (\n    <R.ResponsiveContainer width="100%" height={150}>\n      <R.LineChart data={data}>\n        <R.Line dataKey="v" />\n      </R.LineChart>\n    </R.ResponsiveContainer>\n  );\n}\n',
@@ -417,7 +447,6 @@ describe('an interactive render', () => {
       await render('src/blank-chart.tsx', {
         cwd: dir,
         out: 'blank-live.html',
-        interactive: true,
       })
     );
     expect(
@@ -426,86 +455,40 @@ describe('an interactive render', () => {
     ).toMatch(
       /^A chart could not be drawn without a browser, so the file paints it empty and its script draws it when it runs; a viewer that blocks scripts keeps it empty\./,
     );
-    const still = /** @type {any} */ (
-      await render('src/blank-chart.tsx', {cwd: dir, out: 'blank-static.html'})
-    );
-    expect(
-      still.data.warnings.find(
-        (/** @type {any} */ w) => w.code === 'chart-size',
-      )?.message,
-    ).toMatch(
-      /^A chart could not be drawn without a browser, so it is empty here:/,
-    );
   }, 120_000);
-
-  it('keeps a static render as it was: no script and no element around the markup', async () => {
-    await render('src/counter.tsx', {cwd: dir, out: 'static.html'});
-    const plain = read('static.html');
-    expect(plain).not.toContain(ROOT_ID);
-    expect(plain.match(/<script\b/g)).toHaveLength(1);
-    expect(plain).toContain('This is one static file. It runs no script');
-  });
 });
 
-describe('esbuild, the optional peer that builds the script', () => {
-  it('is declared an optional peer of any version, and the render checks its own range', () => {
+describe('esbuild, the dependency that builds the script', () => {
+  it('is a dependency of the CLI, not a peer, and resolves beside it', () => {
     const pkg = JSON.parse(
       fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
     );
-    // Any version, so npm never adds or moves an esbuild a project has.
-    expect(pkg.peerDependencies.esbuild).toBe('*');
-    expect(pkg.peerDependenciesMeta.esbuild).toEqual({optional: true});
-    expect(pkg.dependencies.esbuild).toBeUndefined();
-    expect(ESBUILD_RANGE).toBe('>=0.25.0 <1.0.0');
+    expect(pkg.dependencies.esbuild).toBeDefined();
+    expect(pkg.peerDependencies.esbuild).toBeUndefined();
+    const entry = findEsbuild();
+    expect(entry).not.toBeNull();
+    expect(fs.existsSync(/** @type {string} */ (entry))).toBe(true);
   });
 
-  it('refuses before it runs the page when esbuild is not installed, with the install command', async () => {
+  it('refuses before it runs the page when the install left esbuild out', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-no-esbuild-'));
     try {
-      expect(findEsbuild([empty])).toBeNull();
+      expect(findEsbuild(empty)).toBeNull();
       const error = await errorOf(() =>
         renderPage(path.join(dir, 'src/counter.tsx'), {
-          interactive: true,
-          esbuildFrom: [empty],
+          esbuildFrom: empty,
           output: path.join(dir, 'never.html'),
           cwd: dir,
         }),
       );
       expect(error).toBeInstanceOf(RenderError);
       expect(error.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-      expect(error.message).toContain(
-        "--interactive builds the page's script with esbuild, an optional peer of the CLI, and esbuild is not installed here; nothing was written.",
+      expect(error.message).toBe(
+        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
       );
-      expect(error.detail).toMatchObject({package: 'esbuild'});
-      expect(error.detail.install).toMatch(
-        /^(npm install|pnpm add|yarn add|bun add) esbuild/,
-      );
-      expect(error.message).toContain(error.detail.install);
+      expect(fs.existsSync(path.join(dir, 'never.html'))).toBe(false);
     } finally {
       fs.rmSync(empty, {recursive: true, force: true});
-    }
-  });
-
-  it('refuses an esbuild older than its range, naming both', () => {
-    const old = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-old-esbuild-'));
-    try {
-      const pkg = path.join(old, 'node_modules', 'esbuild');
-      fs.mkdirSync(path.join(pkg, 'lib'), {recursive: true});
-      fs.writeFileSync(
-        path.join(pkg, 'package.json'),
-        JSON.stringify({
-          name: 'esbuild',
-          version: '0.19.0',
-          main: 'lib/main.js',
-        }),
-      );
-      fs.writeFileSync(
-        path.join(pkg, 'lib', 'main.js'),
-        'module.exports = {};\n',
-      );
-      expect(findEsbuild([old])).toEqual({older: '0.19.0'});
-    } finally {
-      fs.rmSync(old, {recursive: true, force: true});
     }
   });
 
@@ -522,16 +505,17 @@ describe('esbuild, the optional peer that builds the script', () => {
     expect(JSON.stringify(report)).not.toContain('esbuild');
   });
 
-  it('is never loaded by a static render', async () => {
+  it('is never looked for by a markup-only render, which writes no file', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-no-esbuild-'));
     try {
       const page = await renderPage(path.join(dir, 'src/counter.tsx'), {
-        esbuildFrom: [empty],
-        output: path.join(dir, 'x.html'),
+        markupOnly: true,
+        esbuildFrom: empty,
         cwd: dir,
         version: cliVersion(),
       });
       expect(page.scriptBytes).toBeUndefined();
+      expect(page.html).not.toContain(ROOT_ID);
     } finally {
       fs.rmSync(empty, {recursive: true, force: true});
     }

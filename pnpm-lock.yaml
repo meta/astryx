@@ -841,6 +841,9 @@ importers:
       css-tree:
         specifier: 3.2.1
         version: 3.2.1
+      esbuild:
+        specifier: '>=0.28.1'
+        version: 0.28.2
       globals:
         specifier: 17.14.0
         version: 17.14.0
@@ -893,9 +896,6 @@ importers:
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
-      esbuild:
-        specifier: '>=0.28.1'
-        version: 0.28.2
       lucide-react:
         specifier: ^1.66.0
         version: 1.67.0(@types/react@19.3.0)(react@19.3.1)

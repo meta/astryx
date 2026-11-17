@@ -15,7 +15,6 @@
  * @property {boolean} [reverse] - Turn a rendered HTML file back into a page module.
  * @property {string} [title] - The rendered page's title (default: its first heading, else the file name). Rendering only.
  * @property {boolean} [overwrite] - Replace the existing page module when reversing (never a protected file, and never a file other than the page, which always goes into a new folder). Rendering replaces an existing HTML file only when a render wrote it.
- * @property {boolean} [interactive] - Rendering only: the file also carries the page's script, which draws the page in the browser over its markup, so its state, effects and event handlers work. Still one file, and the render adds no network request; it needs esbuild (an optional peer) installed where the page or the CLI is.
  */
 
 /**
@@ -53,9 +52,8 @@
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
- * @property {boolean} [data.interactive] - With `interactive`: the file carries the page's script.
- * @property {number} [data.scriptBytes] - With `interactive`: size of the page's script, which `bytes` includes.
- * @property {number} [data.scriptModules] - With `interactive`: how many modules the page's script holds (the page's own, its packages', React's).
+ * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
+ * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
  */
 
 /**
@@ -89,7 +87,6 @@
  * @property {string} [data.renderedBy] - Embedded only: the version of the CLI that rendered the file, when the file names it.
  * @property {string[]} [data.packages] - Embedded only, when the file records them: the packages the page rendered with, as `name@version`.
  * @property {string} [data.title] - Embedded only: the title given with --title when the page was rendered, which a render again needs too.
- * @property {boolean} [data.interactive] - Embedded only: the page was rendered with --interactive, which a render again needs too.
  * @property {boolean} [data.edited] - Embedded only, when the file records the page as rendered: whether someone changed its markup, title or styles after the render. The restored files are always the page as rendered, without those changes.
  * @property {boolean} [data.stylesEdited] - With `edited`: whether the styles (the <style> element) changed after the render.
  * @property {RenderEdit[]} [data.edits] - When `edited`: each run of text that changed after the render (at most 50, the title first), so the change can be made in the source. Empty when only styles, attributes, elements or formatting changed.

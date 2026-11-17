@@ -223,7 +223,9 @@ export default function Page() {
 }
 `,
       );
-      await renderPage(file, {openLayers: true, timeoutMs: 60_000});
+      // The page reads Node's fs, which no script in a browser can, so only
+      // its markup is drawn.
+      await renderPage(file, {openLayers: true, markupOnly: true, timeoutMs: 60_000});
       expect(fs.readFileSync(heard, 'utf8')).toBe('');
     } finally {
       removeLinkedFixture(dir);

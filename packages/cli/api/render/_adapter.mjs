@@ -412,7 +412,7 @@ function asAstryxError(e) {
     const suggestions = [];
     if (e.code === 'ERR_RENDER_MISSING_DEPENDENCY' && typeof e.detail?.package === 'string') {
       // The install command in the project's package manager, when the
-      // render named one (esbuild for --interactive).
+      // render named one.
       suggestions.push(
         typeof e.detail.install === 'string'
           ? {name: e.detail.install, reason: `install ${e.detail.package}, which this render needs`}
@@ -453,10 +453,10 @@ function servedSet(input) {
 
 /**
  * Render a page module to one HTML file and write it.
- * @param {{cwd: string, input: string, output: string, title?: string, interactive?: boolean}} args absolute paths
+ * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
  */
-export async function renderToFile({cwd, input, output, title, interactive = false}) {
+export async function renderToFile({cwd, input, output, title}) {
   readInput(input, cwd);
   confined(output, cwd, 'The output');
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
@@ -464,7 +464,7 @@ export async function renderToFile({cwd, input, output, title, interactive = fal
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd, interactive});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
@@ -523,9 +523,8 @@ export async function renderToFile({cwd, input, output, title, interactive = fal
     cssBytes: page.cssBytes,
     images: page.images,
     warnings: page.warnings,
-    ...(page.scriptBytes === undefined
-      ? {}
-      : {interactive: true, scriptBytes: page.scriptBytes, scriptModules: page.scriptModules ?? 0}),
+    scriptBytes: page.scriptBytes ?? 0,
+    scriptModules: page.scriptModules ?? 0,
   };
 }
 
@@ -934,7 +933,6 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         ...(renderedBy ? {renderedBy} : {}),
         ...(packages ? {packages} : {}),
         ...(typeof source.title === 'string' ? {title: source.title} : {}),
-        ...(source.interactive === true ? {interactive: true} : {}),
         ...pageChanges(source, html, texts),
       };
     }
