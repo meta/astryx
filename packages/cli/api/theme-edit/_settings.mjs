@@ -9411,9 +9411,10 @@ async function runBuild(ctx, slug, data) {
  * (the same build, compared and not written), or null when they match.
  * @param {Ctx} ctx
  * @param {string} slug
+ * @param {string[]} [warnings] takes the warnings of that build
  * @returns {Promise<string | null>}
  */
-export async function outputsDrift(ctx, slug) {
+export async function outputsDrift(ctx, slug, warnings) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   const silent = logger.silent;
@@ -9424,7 +9425,7 @@ export async function outputsDrift(ctx, slug) {
       {check: true},
       {cwd},
       {compact: true},
-      {colorModes: buildColorModes(cwd, slug)},
+      {colorModes: buildColorModes(cwd, slug), warnings},
     );
     const first = /** @type {any} */ (receipt)?.data?.stale?.[0];
     if (!first) return null;
