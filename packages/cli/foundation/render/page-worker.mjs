@@ -1441,7 +1441,9 @@ try {
         describe: describeFile,
       });
     } catch (e) {
-      if (e instanceof BundleError) {
+      if (e instanceof BundleError && e.compile !== undefined) {
+        classify(e.compile);
+      } else if (e instanceof BundleError) {
         fail('ERR_RENDER_SCRIPT', e.message, e.detail);
       } else {
         const message = e instanceof Error ? e.message : String(e);

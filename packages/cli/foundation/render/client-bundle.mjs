@@ -13,10 +13,14 @@
  */
 
 import * as path from 'node:path';
+import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
 
 /** The id of the element that holds the page's markup in a rendered file. */
 export const ROOT_ID = 'astryx-render-root';
+
+/** An address that leaves the file: another site, mail or a phone call. */
+export const LINK_OUT = /^(https?:|mailto:|tel:|\/\/)/i;
 
 /**
  * What the file does so that the page works in a viewer's sandboxed frame as
@@ -31,7 +35,7 @@ export const ROOT_ID = 'astryx-render-root';
  * the browser clicks it.
  */
 export const IN_A_VIEWER = `{
-const out = /^(https?:|mailto:|tel:|\\/\\/)/i;
+const out = ${LINK_OUT};
 const typed = /^(text|search|url|tel|email|password|date|month|week|time|datetime-local|number)$/;
 const elsewhere = (form, submitter) =>
   out.test(((submitter && submitter.getAttribute('formaction')) ?? form.getAttribute('action') ?? '').trim());
@@ -98,10 +102,13 @@ export class BundleError extends Error {
   /**
    * @param {string} message
    * @param {Record<string, unknown>} [detail]
+   * @param {unknown} [compile] the error of one of the page's own files that
+   *   does not compile, which the render reports as a static import's
    */
-  constructor(message, detail = {}) {
+  constructor(message, detail = {}, compile = undefined) {
     super(message);
     this.detail = detail;
+    this.compile = compile;
   }
 }
 
@@ -150,10 +157,16 @@ export async function bundleForBrowser({
   builtin,
   describe,
 }) {
+  // A page whose script throws, in render or in an effect (a frame that
+  // blocks storage, say), keeps its first paint: React would empty the root.
   const mount =
-    `import {createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
     `${IN_A_VIEWER}` +
-    `createRoot(document.getElementById(${JSON.stringify(ROOT_ID)})).render(createElement(Page));`;
+    `const root = document.getElementById(${JSON.stringify(ROOT_ID)});const painted = root.innerHTML;` +
+    `class FirstPaint extends Component {constructor(props) {super(props);this.state = {failed: false};}` +
+    `static getDerivedStateFromError() {return {failed: true};}` +
+    `render() {return this.state.failed ? createElement('div', {style: {display: 'contents'}, dangerouslySetInnerHTML: {__html: painted}}) : this.props.children;}}` +
+    `createRoot(root).render(createElement(FirstPaint, null, createElement(Page)));`;
   /** @type {any} */
   const plugin = {
     name: 'astryx-page',
@@ -200,10 +213,15 @@ export async function bundleForBrowser({
         contents: '',
         loader: 'js',
       }));
-      build.onLoad(
-        {filter: /\.[cm]?[jt]sx?$/},
-        (/** @type {any} */ args) => source(args.path) ?? undefined,
-      );
+      build.onLoad({filter: /\.[cm]?[jt]sx?$/}, (/** @type {any} */ args) => {
+        try {
+          return source(args.path) ?? undefined;
+        } catch (e) {
+          // A page file that does not compile, such as one the page loads
+          // lazily: the render reports it as a static import's.
+          return {errors: [{text: describe(args.path), detail: {compile: e}}]};
+        }
+      });
     },
   };
   /** @type {any} */
@@ -236,11 +254,19 @@ export async function bundleForBrowser({
   } catch (e) {
     const first = /** @type {any} */ (e)?.errors?.[0];
     if (!first) throw e;
+    if (first.detail?.compile) {
+      throw new BundleError(first.text, {}, first.detail.compile);
+    }
     const where = first.location?.file
       ? `${describe(path.resolve(first.location.file))}:${first.location.line}: `
       : '';
+    // A message that leads with a file's absolute path names it as the page does.
+    const text = stripVTControlCharacters(first.text).replace(
+      /^(\S+): /,
+      (lead, file) => (path.isAbsolute(file) ? `${describe(file)}: ` : lead),
+    );
     throw new BundleError(
-      `The page's script cannot be built for the browser: ${where}${first.text}`,
+      `The page's script cannot be built for the browser: ${where}${text}`,
       {
         ...(first.location?.file
           ? {

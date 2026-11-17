@@ -1,16 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for `render --interactive`: the file carries the page's own
- * script, which draws the live page over its markup in a browser, and stays
- * one self-describing, reversible file. Also how the render refuses when
- * esbuild, the optional peer that builds the script, is missing or too old.
+ * @file Tests for the page's script in a rendered file: every render carries
+ * the page's own script, which draws the live page over its markup in a
+ * browser, and the file stays one self-describing, reversible file. Also how
+ * the render refuses when esbuild, the CLI's dependency that builds the
+ * script, is missing.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {JSDOM} from 'jsdom';
+import {JSDOM, VirtualConsole} from 'jsdom';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {doctor} from '../doctor/doctor.mjs';
@@ -287,6 +288,104 @@ export default function Page() {
     dom.window.close();
   }, 120_000);
 
+  it('keeps showing an image the page names by a string path once the script draws the page', async () => {
+    // A 1x1 PNG beside the page, named by a string, not imported.
+    put(
+      'src/photo.png',
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    put(
+      'src/pictured.tsx',
+      `export default function Page() {
+  return (
+    <main>
+      <img src="./photo.png" alt="Photo" />
+      <img srcSet="./photo.png 1x, ./photo.png 2x" alt="Sharp" />
+    </main>
+  );
+}
+`,
+    );
+    await render('src/pictured.tsx', {cwd: dir, out: 'pictured.html'});
+    const dom = new JSDOM(read('pictured.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const doc = dom.window.document;
+    const photo = doc.querySelector(`#${ROOT_ID} img[alt="Photo"]`);
+    const sharp = doc.querySelector(`#${ROOT_ID} img[alt="Sharp"]`);
+    expect(photo?.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+    expect(sharp?.getAttribute('srcset')).toMatch(
+      /^data:image\/png;base64,\S+ 1x, data:image\/png;base64,\S+ 2x$/,
+    );
+    // The script drew them: they are not the first paint's elements.
+    expect(doc.getElementById(ROOT_ID)?.innerHTML).not.toContain('./photo.png');
+    dom.window.close();
+  }, 120_000);
+
+  it("keeps the first paint when the page's script throws, as in a frame that blocks storage", async () => {
+    put(
+      'src/saves.tsx',
+      `import {useEffect} from 'react';
+export default function Page() {
+  useEffect(() => {
+    window.localStorage.setItem('seen', '1');
+  }, []);
+  return (
+    <main>
+      <h1>Saved notes</h1>
+      <p>Kept on screen</p>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/saves.tsx', {cwd: dir, out: 'saves.html'});
+    // An opaque origin, as in a frame without allow-same-origin: storage throws.
+    const dom = new JSDOM(read('saves.html'), {
+      runScripts: 'dangerously',
+      pretendToBeVisual: true,
+      virtualConsole: new VirtualConsole(),
+    });
+    await new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    expect(() => dom.window.localStorage).toThrow();
+    const root = dom.window.document.getElementById(ROOT_ID);
+    expect(root?.textContent).toContain('Saved notes');
+    expect(root?.textContent).toContain('Kept on screen');
+  }, 120_000);
+
+  it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
+    put(
+      'src/later.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [panel, setPanel] = useState('closed');
+  return <button onClick={() => import('./panel').then(m => setPanel(m.default()))}>{panel}</button>;
+}
+`,
+    );
+    put(
+      'src/panel.tsx',
+      'export default function Panel() {\n  return "open";\n}\nconst broken = (;\n',
+    );
+    let error;
+    try {
+      await render('src/later.tsx', {cwd: dir, out: 'later.html'});
+    } catch (e) {
+      error = /** @type {any} */ (e);
+    }
+    expect(error?.code).toBe('ERR_RENDER_COMPILE');
+    expect(error?.message).toContain('panel.tsx, line 4');
+    expect(error?.message).not.toContain(dir);
+    // eslint-disable-next-line no-control-regex
+    expect(error?.message).not.toMatch(/\u001b\[/);
+    expect(fs.existsSync(path.join(dir, 'later.html'))).toBe(false);
+  }, 120_000);
+
   it('shows the script in the CLI output, and has no option to leave it out', async () => {
     const page = await runCli(
       ['experimental', 'render', 'src/counter.tsx', '--out', 'cli.html'],
@@ -302,7 +401,7 @@ export default function Page() {
       );
       expect(refused.status, flag).toBe(1);
       const error = JSON.parse(refused.stdout);
-      expect(error.code, flag).toBe('ERR_INVALID_ARGUMENT');
+      expect(error.code, flag).toBe('ERR_INVALID_OPTION');
       expect(error.error, flag).toBe(
         `${flag} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
       );

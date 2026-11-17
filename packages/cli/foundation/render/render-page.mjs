@@ -33,7 +33,7 @@ import {
 } from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
-import {ROOT_ID} from './client-bundle.mjs';
+import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
 import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
@@ -705,11 +705,32 @@ async function runPage(input, timeoutMs, warnings) {
 export function linksOpenNewTabs(markup) {
   return markup.replace(/<a\b([^>]*)>/g, (tag, /** @type {string} */ attrs) => {
     const href = /\shref="([^"]*)"/.exec(attrs)?.[1];
-    if (href === undefined || /\starget="/.test(attrs) || !/^\s*(https?:|mailto:|tel:|\/\/)/i.test(href)) return tag;
+    if (href === undefined || /\starget="/.test(attrs) || !LINK_OUT.test(href.trim())) return tag;
     const rel = /\srel="([^"]*)"/.exec(attrs);
     const rels = new Set([...(rel ? rel[1].split(/\s+/).filter(Boolean) : []), 'noopener', 'noreferrer']);
     return `<a${rel ? attrs.replace(rel[0], '') : attrs} target="_blank" rel="${[...rels].join(' ')}">`;
   });
+}
+
+/**
+ * The page's script with each string the markup's rewrite replaced (an
+ * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
+ * same carried data, so the page the script draws shows what the first paint
+ * showed. Only a quoted string that is exactly that value changes, never a
+ * longer string that holds it.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @returns {string}
+ */
+export function withCarriedPaths(script, rewrites) {
+  let out = script;
+  for (const [was, now] of rewrites) {
+    if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
+    for (const quote of ['"', "'", '`']) {
+      out = out.split(`${quote}${was}${quote}`).join(`${quote}${now}${quote}`);
+    }
+  }
+  return out;
 }
 
 /**
@@ -795,9 +816,11 @@ export function assetRef(ref, at) {
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean}} ctx
+ * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>}} ctx
  *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
- *   as it is and named, as a missing one is, rather than refused
+ *   as it is and named, as a missing one is, rather than refused;
+ *   `rewrites`: each attribute value the markup's rewrite replaced, as the
+ *   page wrote it, with what it became
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
@@ -866,11 +889,14 @@ function inlineAssets(text, kind, ctx) {
     });
   if (kind === 'css') return urls(text);
   return text
-    .replace(/\s(src|poster)="([^"]*)"/g, (whole, attr, ref) => {
+    // React writes `srcSet` as it is spelled in JSX; HTML reads attribute
+    // names in any case.
+    .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
       const uri = resolveRef(ref);
+      if (uri) ctx.rewrites?.set(decodeAttr(ref), uri);
       return uri ? ` ${attr}="${uri}"` : whole;
     })
-    .replace(/\ssrcset="([^"]*)"/g, (whole, set) => {
+    .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
       const parts = decodeAttr(set)
         .split(',')
         .map(part => {
@@ -878,7 +904,9 @@ function inlineAssets(text, kind, ctx) {
           const uri = ref ? resolveRef(ref) : null;
           return [uri ?? ref, ...rest].join(' ');
         });
-      return ` srcset="${parts.join(', ').replace(/"/g, '&quot;')}"`;
+      const rewritten = parts.join(', ');
+      if (rewritten !== decodeAttr(set)) ctx.rewrites?.set(decodeAttr(set), rewritten);
+      return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
     })
     .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
       // The attribute holds escaped text: rewrite the CSS it means, then
@@ -1040,6 +1068,7 @@ export async function renderPage(entry, options = {}) {
     counted: new Set(),
     localAssets: /** @type {Set<string>} */ (new Set()),
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
+    rewrites: /** @type {Map<string, string>} */ (new Map()),
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
@@ -1075,6 +1104,9 @@ export async function renderPage(entry, options = {}) {
   const used = classesIn(markup);
   /** The page's script; none in a markup-only render. @type {string | null} */
   const script = typeof message.script === 'string' ? message.script : null;
+  // The script draws the page again with the paths the page wrote, so each
+  // image the first paint shows from its carried data keeps showing.
+  const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
   // The script draws what the markup does not show yet (a menu as it opens,
   // the next tab), so the rules every class name it holds needs stay too.
   const kept = script ? new Set([...used, ...(script.match(/[A-Za-z_][\w-]*/g) ?? [])]) : used;
@@ -1375,7 +1407,7 @@ export async function renderPage(entry, options = {}) {
   // With a script, the markup sits in the one element the script draws into,
   // which takes no box of its own.
   const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
-  const scriptTag = script ? `<script>${script}</script>\n` : '';
+  const scriptTag = drawn ? `<script>${drawn}</script>\n` : '';
   let html;
   if (options.output) {
     // The charset and generator metas come first: a browser reads the
@@ -1475,6 +1507,6 @@ export async function renderPage(entry, options = {}) {
     ]).size,
     warnings,
     fromSet: message.fromSet ?? [],
-    ...(script ? {scriptBytes: Buffer.byteLength(script), scriptModules: message.scriptModules ?? 0} : {}),
+    ...(drawn ? {scriptBytes: Buffer.byteLength(drawn), scriptModules: message.scriptModules ?? 0} : {}),
   };
 }

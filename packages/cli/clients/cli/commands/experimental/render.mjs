@@ -46,7 +46,7 @@ export function registerExperimentalRender(group, program) {
       if (removed) {
         return cliError(
           `${removed} is no longer an option: every render carries the page's script now. Drop the flag and run the command again.`,
-          {code: ERROR_CODES.ERR_INVALID_ARGUMENT},
+          {code: ERROR_CODES.ERR_INVALID_OPTION},
         );
       }
       /** @type {Awaited<ReturnType<typeof renderApi>>} */
