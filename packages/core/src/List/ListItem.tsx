@@ -41,6 +41,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
   colorVars,
+  focusVars,
   spacingVars,
   typeScaleVars,
   borderVars,
@@ -254,6 +255,12 @@ const styles = stylex.create({
     '::after': {
       zIndex: {default: null, '@media (pointer: coarse)': 1},
     },
+  },
+  // List clips its rows in the inline axis for swipe actions. The row owns
+  // the focus ring, so inset it on every side while it is inside that clip;
+  // otherwise the ring's positive offset disappears at the list edges.
+  focusRingInside: {
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   withDivider: {
     borderBlockEndWidth: borderVars['--border-width'],
@@ -642,6 +649,7 @@ export function ListItem({
           isTouchTarget && touchHitAreaStyles.layer,
           isTouchTarget && isInList && styles.bandRaised,
           isRaisedSwipeRow && travellingStyles.raisedSwipeRow,
+          isInList && styles.focusRingInside,
           edge === 'flush' && styles.edgeFlush,
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,

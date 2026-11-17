@@ -97,6 +97,7 @@ async function rowFacts(page: Page, label: string) {
       ),
       background: style.backgroundColor,
       outline: `${style.outlineStyle} ${style.outlineWidth}`,
+      outlineOffset: style.outlineOffset,
       ariaCurrent: row.getAttribute('aria-current'),
       ariaDisabled: row.getAttribute('aria-disabled'),
       control:
@@ -249,6 +250,10 @@ for (const [mode, direction] of [
       check(
         /^solid ([2-9]|\d{2,})(\.\d+)?px$/.test(focused.outline),
         `focused row ring ${focused.outline}`,
+      );
+      check(
+        Number.parseFloat(focused.outlineOffset) < 0,
+        `focused row ring offset ${focused.outlineOffset}`,
       );
       await frame('focus-visible', {focused});
     },

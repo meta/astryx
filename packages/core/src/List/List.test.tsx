@@ -454,6 +454,19 @@ describe('List', () => {
     }
   });
 
+  it("keeps an interactive row's focus ring inside the list's inline clip", () => {
+    render(
+      <List>
+        <ListItem label="Focusable" onClick={() => {}} />
+      </List>,
+    );
+
+    const row = screen.getByRole('listitem');
+    expect(rulesDeclaredFor(row).join('\n')).toMatch(
+      /outline-offset: calc\(-1 \* var\(--focus-outline-width\)\)/,
+    );
+  });
+
   it('treats the deprecated edgeCompensation="inline" as edge="outset" without a runtime warning', () => {
     // Plain use is reported statically by the @deprecated type; rendering
     // never warns merely because the old name is used (spec:AST-017 FR29a).
