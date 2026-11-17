@@ -95,6 +95,11 @@ export {
 } from './agent-docs-target.mjs';
 
 const MAX_PROJECT_AGENT_DOC_LINES = 32;
+
+/** The block's last line: how an agent removes the block from every agent file. */
+const REMOVE_LINE =
+  'To remove this block from every agent file, run `astryx init --remove-agents`; do not delete or edit it by hand.';
+
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
@@ -745,6 +750,10 @@ export function generateCompressedIndex(
       }
     }
   }
+  // Last, so it follows any integration lines. Without it, an agent asked to
+  // take Astryx's text out deletes agent files or cuts one copy by hand and
+  // leaves the copies in the other files.
+  lines.push(REMOVE_LINE);
   lines.push(MARKER_END);
 
   return lines.join('\n');

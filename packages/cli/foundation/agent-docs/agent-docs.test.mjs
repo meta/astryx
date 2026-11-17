@@ -345,6 +345,22 @@ describe('generateCompressedIndex', () => {
     );
   });
 
+  it('ends with the remove line, after any integration lines', () => {
+    const REMOVE_LINE =
+      'To remove this block from every agent file, run `astryx init --remove-agents`; do not delete or edit it by hand.';
+    const endsWith = (/** @type {string} */ block) =>
+      block.endsWith(`\n${REMOVE_LINE}\n<!-- ASTRYX:END -->`);
+    expect(endsWith(generateCompressedIndex('1.0.0', {topics: []}))).toBe(true);
+    expect(
+      endsWith(
+        generateCompressedIndex('1.0.0', {
+          topics: [],
+          agentDocs: [{package: '@acme/first', append: ['first one']}],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it('caps the configured project at 32 integration lines', () => {
     const agentDocs = Array.from({length: 5}, (_, packageIndex) => ({
       package: `@acme/package-${packageIndex}`,
