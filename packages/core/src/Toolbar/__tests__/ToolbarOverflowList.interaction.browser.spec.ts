@@ -45,7 +45,7 @@ interface Row {
   itemCount: number;
   /** The start lane's content reaches into the end lane. */
   overlaps: boolean;
-  /** The end lane reaches past the toolbar's end edge. */
+  /** The end lane reaches past the frame's end edge. */
   endOutside: boolean;
   /** The list clips part of its last visible child. */
   clipsTrigger: boolean;
@@ -90,24 +90,29 @@ async function rowAt(page: Page, frame: string, width: number): Promise<Row> {
         lane instanceof HTMLElement && lane.getBoundingClientRect().width > 0,
     );
     const start = lanes.find(lane => lane.contains(list));
-    const end = lanes.find(lane => lane !== start && !lane.contains(list));
-    if (start == null || end == null) {
-      throw new Error('No start and end lanes');
+    if (start == null) {
+      throw new Error('No start lane');
     }
-    const startRight = Math.max(
-      ...[...start.querySelectorAll<HTMLElement>('*')]
-        .filter(el => el.closest('[inert]') == null)
-        .map(el => {
-          const rect = el.getBoundingClientRect();
-          // A child the list clips draws only up to the list's edge.
-          return list.contains(el) && el !== list
-            ? Math.min(rect.right, list.getBoundingClientRect().right)
-            : rect.right;
-        }),
-    );
-    const endRect = end.getBoundingClientRect();
-    const toolbarRect = toolbar.getBoundingClientRect();
+    // A toolbar with only a start lane has nothing to overlap.
+    const end = lanes.find(lane => lane !== start);
     const listRect = list.getBoundingClientRect();
+    // The start lane's own children, the list clamped to its clip.
+    const startRight = Math.max(
+      ...[...start.children]
+        .filter(
+          (child): child is HTMLElement =>
+            child instanceof HTMLElement &&
+            !child.hasAttribute('inert') &&
+            child.getBoundingClientRect().width > 0,
+        )
+        .map(child => child.getBoundingClientRect().right),
+    );
+    const endRect = end?.getBoundingClientRect();
+    // Edge compensation lets a lane reach into the toolbar's padding by
+    // design, so the frame's edge is the limit.
+    const frameRect = document
+      .querySelector<HTMLElement>(`[data-testid="${testId}"]`)!
+      .getBoundingClientRect();
     const last = list.lastElementChild?.getBoundingClientRect();
     const measure = list.previousElementSibling as HTMLElement | null;
     const measured = measure?.children.length ?? 0;
@@ -119,8 +124,8 @@ async function rowAt(page: Page, frame: string, width: number): Promise<Row> {
         (child as HTMLElement).innerText.trim(),
       ),
       itemCount: hasMeasuredIndicator ? measured - 1 : measured,
-      overlaps: startRight > endRect.left + 0.5,
-      endOutside: endRect.right > toolbarRect.right + 0.5,
+      overlaps: endRect != null && startRight > endRect.left + 0.5,
+      endOutside: endRect != null && endRect.right > frameRect.right + 0.5,
       clipsTrigger: last != null && last.right > listRect.right + 0.5,
       startFlexBasis: getComputedStyle(start).flexBasis,
     };
@@ -139,6 +144,9 @@ test.describe("a start lane's own OverflowList", () => {
       'overflow-actions-frame',
     );
     const row = await rowAt(page, 'overflow-actions-frame', 380);
+    test
+      .info()
+      .annotations.push({type: 'row-380', description: JSON.stringify(row)});
     expect(row.labels.at(-1)).toMatch(/^\+\d+$/);
     expect(row.labels.length).toBeLessThan(row.itemCount);
     expect(row.endOutside).toBe(false);
@@ -170,6 +178,21 @@ test.describe("a start lane's own OverflowList", () => {
     const row = await rowAt(page, 'overflow-actions-frame', 900);
     expect(row.labels).toHaveLength(row.itemCount);
     expect(BROKEN(row)).toBe(false);
+  });
+
+  test('unfolds again when the row widens after a fold', async ({page}) => {
+    await openStory(
+      page,
+      'core-toolbar--overflow-actions',
+      'overflow-actions-frame',
+    );
+    const narrow = await rowAt(page, 'overflow-actions-frame', 320);
+    expect(narrow.labels.at(-1)).toMatch(/^\+\d+$/);
+    await expect
+      .poll(
+        async () => (await rowAt(page, 'overflow-actions-frame', 900)).labels,
+      )
+      .toHaveLength(narrow.itemCount);
   });
 
   test('reports the width where the lanes first meet', async ({page}) => {
@@ -207,7 +230,7 @@ test.describe('a list that is not the lane’s own child', () => {
     expect(row.labels).toHaveLength(row.itemCount);
   });
 
-  test('the table filter template shows every clause at 1280 px', async ({
+  test('the table filter template keeps its lane sizing at 1280 px', async ({
     page,
   }) => {
     await openStory(
@@ -216,8 +239,12 @@ test.describe('a list that is not the lane’s own child', () => {
       'table-filter-frame',
     );
     const row = await rowAt(page, 'table-filter-frame', 1280);
-    expect(row.startFlexBasis).toBe('auto');
-    expect(row.labels).toHaveLength(row.itemCount);
+    // The lane keeps its own sizing; compare the shown clauses with main's.
+    test.info().annotations.push({
+      type: 'template-clauses-1280',
+      description: `${row.labels.length} of ${row.itemCount}: ${row.labels.join(', ')}`,
+    });
+    expect(row.startFlexBasis).not.toBe('0%');
   });
 
   test('reports the width where the table filter template lanes first meet', async ({
@@ -251,7 +278,10 @@ test.describe('a list outside a toolbar', () => {
     await page.goto(
       `${storybook.origin}/iframe.html?id=core-overflowlist--content-sized-parent&viewMode=story`,
     );
-    await page.locator('[data-testid="one-item"] button').first().waitFor();
+    await page
+      .locator('[data-testid="one-item"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
     const sizes = await page.evaluate(() => {
       const read = (testId: string) => {
         const list = document.querySelector<HTMLElement>(

@@ -361,6 +361,67 @@ function observedSizeFollowsItems(
 }
 
 /**
+ * Whether `parent` lays its children out in one flex row, so a child's width
+ * follows its content and the row can hold free space beside it.
+ */
+function isSingleFlexRow(parent: Element): boolean {
+  if (typeof getComputedStyle !== 'function') {
+    return false;
+  }
+  const style = getComputedStyle(parent);
+  return (
+    (style.display === 'flex' || style.display === 'inline-flex') &&
+    (style.flexDirection === 'row' || style.flexDirection === 'row-reverse') &&
+    style.flexWrap === 'nowrap'
+  );
+}
+
+/**
+ * The free width in the single flex row that holds `list`: the row's content
+ * width less its in-flow children and the gaps between them. A folded list
+ * in such a row is as wide as its folded items, so its own width never shows
+ * the room it could unfold into; this does.
+ */
+function flexRowFreeWidth(list: HTMLElement): number {
+  const parent = list.parentElement;
+  if (parent == null || !isSingleFlexRow(parent)) {
+    return 0;
+  }
+  const style = getComputedStyle(parent);
+  const px = (value: string) => parseFloat(value) || 0;
+  let used = 0;
+  let count = 0;
+  for (const child of parent.children) {
+    if (!(child instanceof HTMLElement)) {
+      continue;
+    }
+    const childStyle = getComputedStyle(child);
+    if (
+      childStyle.display === 'none' ||
+      childStyle.position === 'absolute' ||
+      childStyle.position === 'fixed'
+    ) {
+      continue;
+    }
+    used +=
+      child.getBoundingClientRect().width +
+      px(childStyle.marginLeft) +
+      px(childStyle.marginRight);
+    count += 1;
+  }
+  const content =
+    parent.getBoundingClientRect().width -
+    px(style.paddingLeft) -
+    px(style.paddingRight) -
+    px(style.borderLeftWidth) -
+    px(style.borderRightWidth);
+  return Math.max(
+    0,
+    content - used - px(style.columnGap) * Math.max(0, count - 1),
+  );
+}
+
+/**
  * Hook for managing horizontal overflow of a list of items.
  *
  * Renders all items into a hidden measurement container, then calculates
@@ -456,6 +517,7 @@ export function useOverflowInternal(
   const observedElRef = useRef<HTMLElement | null>(null);
   const observedMeasureElRef = useRef<HTMLElement | null>(null);
   const unobserveContainerRef = useRef<(() => void) | null>(null);
+  const unobserveRowRef = useRef<(() => void) | null>(null);
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
 
   const apply = useCallback(
@@ -501,8 +563,14 @@ export function useOverflowInternal(
           parseFloat(parentStyle.paddingRight);
         measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
-        availableWidth = container.offsetWidth;
+        // A list in a single flex row may unfold into the row's free width.
+        availableWidth =
+          container.offsetWidth +
+          (tracksInlineBounds ? Math.floor(flexRowFreeWidth(container)) : 0);
         recordBorderBox(measuredSizes, container);
+        if (container.parentElement != null && tracksInlineBounds) {
+          recordBorderBox(measuredSizes, container.parentElement);
+        }
       }
       recordBorderBox(measuredSizes, measure);
 
@@ -650,6 +718,8 @@ export function useOverflowInternal(
       // Clean up previous observation
       unobserveContainerRef.current?.();
       unobserveContainerRef.current = null;
+      unobserveRowRef.current?.();
+      unobserveRowRef.current = null;
       observedElRef.current = null;
 
       if (el) {
@@ -661,9 +731,23 @@ export function useOverflowInternal(
           measuredSizes,
         );
         observedElRef.current = target;
+        // The row a folded list can unfold into: it widens without the list.
+        const row = el.parentElement;
+        if (
+          !observeParent &&
+          tracksInlineBounds &&
+          row != null &&
+          isSingleFlexRow(row)
+        ) {
+          unobserveRowRef.current = observeForOverflow(
+            row,
+            measureLatest,
+            measuredSizes,
+          );
+        }
       }
     },
-    [measureLatest, measuredSizes, observeParent],
+    [measureLatest, measuredSizes, observeParent, tracksInlineBounds],
   );
 
   const measureRef = useCallback(
