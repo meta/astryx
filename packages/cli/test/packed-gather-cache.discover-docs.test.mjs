@@ -136,5 +136,65 @@ describe.skipIf(process.platform !== 'linux')(
         fs.rmSync(dir, {recursive: true, force: true});
       }
     }, 240_000);
+
+    it("shows search's discover line from the saved copy as it is now", () => {
+      const tmp = keptTmp('saved-search');
+      const other = makeProject();
+      /** @param {string[]} names the components the project's own source lists */
+      const writeSource = names =>
+        fs.writeFileSync(
+          path.join(other.dir, 'astryx.config.mjs'),
+          `export default {
+  integrations: ['@acme/widgets'],
+  async discover() {
+    return {
+      schemaVersion: 1,
+      source: {name: 'Test catalog', generatedAt: '2026-09-30T00:00:00.000Z', complete: true},
+      packages: [{
+        package: '@acme/kit',
+        integration: 'acme-kit',
+        aliases: [],
+        latest: '1.0.0',
+        description: 'Parts for apps.',
+        versions: [{version: '1.0.0', publishedAt: '2026-09-20T00:00:00.000Z', prerelease: false, status: 'ok'}],
+        contributions: ${JSON.stringify(
+          names.map(name => ({
+            kind: 'component',
+            name,
+            summary: `The ${name} component.`,
+          })),
+        )},
+      }],
+    };
+  },
+};
+`,
+        );
+      const hint = () => {
+        const result = run(['search', 'bar', 'chart'], {
+          tmp,
+          cwd: other.dir,
+          json: false,
+        });
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout.includes('More in packages you could add');
+      };
+      try {
+        writeSource(['BarChart']);
+        // No saved copy yet: the line shows, as it always did.
+        expect(hint()).toBe(true);
+        expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
+        expect(hint()).toBe(true);
+        expect(hint()).toBe(true);
+        // The source stops listing the chart; discover saves the new copy,
+        // and the very next search reads it.
+        writeSource(['Stepper']);
+        expect(run(['discover'], {tmp, cwd: other.dir}).status).toBe(0);
+        expect(hint()).toBe(false);
+        expect(hint()).toBe(false);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    }, 240_000);
   },
 );

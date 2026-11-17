@@ -419,7 +419,8 @@ works on is `spec:AST-040` FR9's.
     record names (on Linux, kept by any command that delivers a debug
     record), the CLI's own docs tree, each stored doc's checked contents,
     keyed by its text, discover's record of the integrations a project loads
-    and what each adds (which `search` also reads for its discover line), and
+    and what each adds, and what it searches in its sources' saved copies
+    (which `search` reads for its discover line), and
     doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a

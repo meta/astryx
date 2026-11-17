@@ -196,10 +196,11 @@ function validateDocs(docs) {
  * configured" (`false`) from "configured but nothing discovered" (`true`),
  * which the list leaf surfaces as `meta`.
  *
+ * @param {Project} [project] the project, when the caller has loaded it
  * @returns {Promise<{packages: ScannedPackage[], configured: boolean, project: Project}>}
  */
-export async function discoverPackages() {
-  const project = await Project.load();
+export async function discoverPackages(project) {
+  project ??= await Project.load();
   const loadedIntegrations =
     /** @type {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} */ (
       project.loadedIntegrations
@@ -761,7 +762,13 @@ function sourceOrigins(project) {
   /** @type {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>} */
   const origins = [];
   if (typeof project?.config?.discover === 'function') {
-    origins.push({from: 'astryx.config', source: project.config.discover});
+    // A project's own source is the project's: its saved copies are kept per
+    // project root, so one project's catalog never answers for another's.
+    origins.push({
+      from: 'astryx.config',
+      key: `astryx.config\n${realDir(project.cwd)}`,
+      source: project.config.discover,
+    });
   }
   for (const integration of project?.loadedIntegrations ?? []) {
     if (integration.__discoverError) {
@@ -827,6 +834,38 @@ export function savedCatalog(
     ...packages,
     ...officialNotCovered(packages, official),
   ]);
+}
+
+/**
+ * What `discover <query>` searches when its sources answer from their saved
+ * copies, worked out by `build` and kept between runs while every file it
+ * read is unchanged (foundation/fs/gather-cache.mjs), so search's discover
+ * line reads one kept record instead of scanning the project and parsing
+ * the copies on every run. Null when no source of the project has a saved
+ * copy of its full catalog; the copies are only looked for then, never read.
+ * @template T
+ * @param {(project: Project) => Promise<T>} build
+ * @param {(value: unknown) => boolean} valid the shape a kept value needs
+ * @returns {Promise<T | null>}
+ */
+export async function keptSavedSearch(build, valid) {
+  const project = await Project.load();
+  const cacheDir = defaultCacheDir();
+  const copies = sourceOrigins(project)
+    .filter(origin => origin.source != null)
+    .map(({from, key = from}) => savedCopyPath(cacheDir, key, {}));
+  if (!copies.some(file => fs.existsSync(file))) return null;
+  return /** @type {Promise<T>} */ (
+    persistedGather(
+      [
+        'discover-saved-search',
+        realDir(project.cwd),
+        optedIntoIconSets(project),
+      ],
+      () => build(project),
+      {...EXACT_CODEC, valid},
+    )
+  );
 }
 
 /**

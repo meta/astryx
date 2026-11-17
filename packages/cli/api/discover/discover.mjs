@@ -33,6 +33,7 @@ import {
   discoverPackages,
   findComponent,
   hasSources,
+  keptSavedSearch,
   loadReadKinds,
   officialDeclarations,
   STABLE_KINDS,
@@ -49,16 +50,20 @@ import {
   searchItems,
   withLatest,
 } from './_catalog-view.mjs';
-import {list} from './list/list.mjs';
-import {detail} from './detail/detail.mjs';
-import {doc, docFromResult} from './detail/doc/doc.mjs';
-import {item} from './detail/item/item.mjs';
 import {answersAny, search} from './search/search.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 
 const DEFAULT_LIMIT = 20;
+
+// The list, detail, doc and item leaves load only for an answer that needs
+// them: search's discover line imports this module on every search and
+// needs none of them.
+const listLeaf = () => import('./list/list.mjs');
+const detailLeaf = () => import('./detail/detail.mjs');
+const docLeaf = () => import('./detail/doc/doc.mjs');
+const itemLeaf = () => import('./detail/item/item.mjs');
 
 /**
  * Split a package-shaped query: `name`, `name@version`, or `name/item`, with an
@@ -180,20 +185,39 @@ export function answersQueries(project) {
  * @returns {Promise<boolean | null>}
  */
 export async function wouldAnswer(query, {type} = {}) {
-  const {packages: scanned, project} = await discoverPackages();
-  const official = officialList({project});
-  const saved = savedCatalog(project, {official});
-  if (saved == null) return null;
-  const catalog = {sources: [], packages: saved};
-  const declarations = officialDeclarations(project, official.packages);
-  const declared = declaredDependencies(project);
+  const input = await keptSavedSearch(savedSearchInput, isSavedSearchInput);
+  if (input == null || input.packages == null) return null;
   const kind = /** @type {readonly string[]} */ (DISCOVER_KINDS).includes(
     type ?? '',
   )
     ? /** @type {import('../../authoring/discover/type').DiscoverKind} */ (type)
     : undefined;
+  return answersAny(input.packages, query, {items: input.items, type: kind});
+}
+
+/**
+ * @typedef {{packages: import('./_adapter.mjs').InstalledPackage[], items: import('./_catalog-view.mjs').SearchItem[]} | {packages: null}} SavedSearchInput
+ */
+
+/**
+ * What discover searches over the saved copies: the packages the project
+ * has, with the official packages declared in it, and every item those and
+ * the copies list. `packages: null` when nothing is known: no copy reads
+ * back, or discover answers every query with the list (FR1).
+ * @param {import('../../foundation/config/project.mjs').Project} project
+ * @returns {Promise<SavedSearchInput>}
+ */
+async function savedSearchInput(project) {
+  const {packages: scanned} = await discoverPackages(project);
+  const official = officialList({project});
+  const saved = savedCatalog(project, {official});
+  if (saved == null) return {packages: null};
+  const catalog = {sources: [], packages: saved};
+  const declarations = officialDeclarations(project, official.packages);
   const integrations = await describeInstalled(project, scanned);
-  if (integrations.length === 0 && !hasSources(project)) return null;
+  if (integrations.length === 0 && !hasSources(project)) {
+    return {packages: null};
+  }
   const packages = withDeclaredOfficial(
     project,
     integrations,
@@ -201,10 +225,28 @@ export async function wouldAnswer(query, {type} = {}) {
     declarations,
     official.packages,
   );
-  return answersAny(packages, query, {
-    items: searchItems(packages, catalog, declared, declarations.any),
-    type: kind,
-  });
+  return {
+    packages,
+    items: searchItems(
+      packages,
+      catalog,
+      declaredDependencies(project),
+      declarations.any,
+    ),
+  };
+}
+
+/**
+ * The shape a kept {@link savedSearchInput} needs.
+ * @param {any} value
+ * @returns {boolean}
+ */
+function isSavedSearchInput(value) {
+  return (
+    value != null &&
+    (value.packages === null ||
+      (Array.isArray(value.packages) && Array.isArray(value.items)))
+  );
 }
 
 /**
@@ -291,6 +333,7 @@ export async function discover(query, options = {}) {
       entry => entry.name,
     );
     const named = new Set(fromSources.map(entry => entry.name));
+    const {list} = await listLeaf();
     return list(withLatest(packages, catalog), {
       configured,
       type,
@@ -315,6 +358,9 @@ export async function discover(query, options = {}) {
   }
 
   const target = splitTarget(query);
+  // A query of several words is free text, even when it starts with a
+  // scoped name (FR4): no package or item has a space in its name.
+  const packageShaped = !/\s/.test(query);
 
   /**
    * One package, one version, or one item, once `target.name` is known to be
@@ -363,7 +409,11 @@ export async function discover(query, options = {}) {
       add: entry?.official ? addOfficial : add,
       installedAs,
     };
-    if (!target.item) return detail(packages, target.name, context);
+    if (!target.item) {
+      const {detail} = await detailLeaf();
+      return detail(packages, target.name, context);
+    }
+    const {item} = await itemLeaf();
     const found = item(packages, target.name, target.item, context);
     if (found) return found;
     // An installed icon set that was withdrawn answers nothing; say why
@@ -394,18 +444,24 @@ export async function discover(query, options = {}) {
         ERROR_CODES.ERR_UNKNOWN_COMPONENT,
       );
     }
+    const {doc} = await docLeaf();
     return await doc(integrations, target.name, target.item, {lang, zh});
   };
 
   // An installed component keeps resolving to its full doc, before any source
   // is asked anything.
-  const installedPkg = integrations.find(p => p.name === target.name);
+  const installedPkg = packageShaped
+    ? integrations.find(p => p.name === target.name)
+    : undefined;
   if (installedPkg && target.item && !target.version) {
     const resolved = findComponent([installedPkg], target.item);
-    if (resolved) return await docFromResult(resolved, {lang, zh});
+    if (resolved) {
+      const {docFromResult} = await docLeaf();
+      return await docFromResult(resolved, {lang, zh});
+    }
   }
 
-  if (target.scoped) {
+  if (target.scoped && packageShaped) {
     return await packageView(
       await catalogFor({package: target.name, version: target.version}),
     );
@@ -413,8 +469,9 @@ export async function discover(query, options = {}) {
 
   const listing = await catalogFor();
   const isPackage =
-    installedPkg != null ||
-    listing.packages.some(p => p.package === target.name);
+    packageShaped &&
+    (installedPkg != null ||
+      listing.packages.some(p => p.package === target.name));
   if (isPackage && (target.version || target.item || target.name === query)) {
     return await packageView(
       await catalogFor({package: target.name, version: target.version}),

@@ -122,12 +122,16 @@ describe('discover reads every word of an unquoted query', () => {
         type: 'discover.item',
         data: {package: '@acme/charts', name: 'BarChart'},
       });
-      // More than one word after it is no item path: it is not read as one.
+      // More than one word after it is free text, searched as one query.
       const more = await runCli(
         ['discover', '@acme/charts', 'bar', 'chart', '--json'],
         {cwd: project},
       );
-      expect(more.stdout).not.toContain('@acme/charts/bar/chart');
+      expect(more.status, more.stdout + more.stderr).toBe(0);
+      expect(JSON.parse(more.stdout)).toMatchObject({
+        type: 'discover.search',
+        data: {query: '@acme/charts bar chart'},
+      });
     },
     TIMEOUT,
   );
@@ -234,6 +238,47 @@ describe('search points at discover by the saved catalog copy', () => {
         expect(shown, query).toBe(found.status === 0);
       }
       expect((await search(['frobnicator'])).includes(HINT)).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "keeps each project's own source copy apart: one project's catalog never answers for another",
+    async () => {
+      // A second project whose own source lists nothing to add.
+      const other = path.join(tmpDir, 'other');
+      fs.mkdirSync(other, {recursive: true});
+      fs.writeFileSync(
+        path.join(other, 'package.json'),
+        JSON.stringify({name: 'other', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(other, 'astryx.config.mjs'),
+        config(marker).replace(
+          /packages: \[[\s\S]*?\n {6}\],\n/,
+          'packages: [],\n',
+        ),
+      );
+      const searchIn = async (/** @type {string} */ cwd) => {
+        const r = await runCli(['search', 'bar', 'chart'], {cwd});
+        expect(r.status).toBe(0);
+        return r.stdout.includes(HINT);
+      };
+      // Each project saves its own copy; the order they run in changes
+      // nothing.
+      expect(
+        (await runCli(['discover', '--json'], {cwd: project})).status,
+      ).toBe(0);
+      expect((await runCli(['discover', '--json'], {cwd: other})).status).toBe(
+        0,
+      );
+      expect(await searchIn(project)).toBe(true);
+      expect(await searchIn(other)).toBe(false);
+      expect(
+        (await runCli(['discover', '--json'], {cwd: project})).status,
+      ).toBe(0);
+      expect(await searchIn(other)).toBe(false);
+      expect(await searchIn(project)).toBe(true);
     },
     TIMEOUT,
   );

@@ -152,7 +152,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   it discover ignores `icon-set` entries and those fields as unknown.
 - **FR8 — A saved copy covers an unreachable source.** After a source answers,
   discover MUST save that answer, per source and per request, in the per-user
-  cache directory of the platform, never in the project. When the source later
+  cache directory of the platform, never in the project. A project's own
+  source (its `astryx.config` `discover`) is saved per project root, so one
+  project's answer never stands for another's. When the source later
   fails, discover MUST use the saved answer for the same request and say when
   it was saved. With no saved answer, the source adds nothing and discover says
   so. Installed integrations always appear, with or without a source.

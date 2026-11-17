@@ -28,7 +28,8 @@
  *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
  *   the CLI's own docs tree, which `docs` and `search` read, by the discover
  *   adapter (api/discover/_adapter.mjs) for the integrations a project loads
- *   and what each adds, which `discover` lists and `search` reads for its
+ *   and what each adds, which `discover` lists, and for what discover
+ *   searches in its sources' saved copies, which `search` reads for its
  *   discover line,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
