@@ -91,8 +91,9 @@ public behavior and evidence, without privately replacing the Table renderer.
 - Mixed structural row models: when plugins declare two different non-flat row
   models, such as tree with detail or grouped rows, `TableRenderContext.rowModel`
   is `custom` rather than the first declaration in plugin order (FR17).
-  First-party plugins check only for `flat`, so their output does not change; a
-  third-party plugin that reads `tree`, `detail` or `grouped` there reads `custom`.
+  Released first-party plugins check only for `flat`, so their output does not
+  change; a third-party plugin that reads `tree`, `detail` or `grouped` there
+  reads `custom`.
 - Controlled/uncontrolled behavior: caller data, ordering, selection, activation,
   expansion and loading remain caller-owned. Dataset/order changes use new data
   references in the opt-in identity/windowing path; mutable-compatible `T[]` types
