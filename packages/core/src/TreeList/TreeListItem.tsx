@@ -130,10 +130,9 @@ const styles = stylex.create({
       ':has(:focus-visible)': 2,
     },
   },
-  // A plain row's ring and lift come only from its treeitem's own focus,
-  // through the variables `publishFocusVisibleVars` sets on `wrapper`: a
-  // control in its start or end content rings itself. One focus move shows
-  // one ring.
+  // A plain row rings and lifts only on its own treeitem's focus, from the
+  // variables `publishFocusVisibleVars` sets on `wrapper`. A control in its
+  // start or end content rings itself.
   plainRowFocusRing: {
     outline: 'var(--_focus-outline, none)',
     outlineOffset: 'var(--_focus-outline-offset, 0)',
@@ -757,9 +756,8 @@ export function TreeListItem({
                   isSelected && styles.selected,
                   xstyle,
                 )
-              : // A plain row has no action, but it is still a tab stop in the
-                // tree's roving focus, so it draws the focus ring when the
-                // treeitem itself has focus.
+              : // A plain row has no action, but it is a stop in the roving
+                // focus. It rings while its treeitem has focus.
                 stylex.props(
                   styles.plainRowFocusRing,
                   styles.contentWrapper,
