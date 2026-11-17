@@ -20,6 +20,7 @@ import {
   themeEditUndo,
 } from './theme-edit.mjs';
 import {context} from './_context.mjs';
+import {unreadableReach} from './_edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -276,6 +277,57 @@ describe('family reach by default', () => {
       state: 'selected',
     });
     expect(r.data.parts).toEqual(['top-nav-item']);
+  }, 240_000);
+
+  it('a spread never makes text unreadable on a member it reaches', () => {
+    // (Keys name a problem's parts and end with its mode.)
+    const p = (/** @type {string} */ ...k) => ({key: k.join('|')});
+    expect(
+      unreadableReach(
+        'side-nav-item',
+        ['side-nav-item', 'top-nav-item', 'pagination-dot'],
+        [p('text', 'top-nav-item', '', '', 'top-nav-item', '', '', 'Inbox', 'light')],
+      ),
+    ).toEqual(['top-nav-item']);
+    // Even where the part named fails too, the member is kept out.
+    expect(
+      unreadableReach(
+        'side-nav-item',
+        ['side-nav-item', 'top-nav-item'],
+        [
+          p('text', 'side-nav-item', '', '', 'side-nav-item', '', '', 'Home', 'light'),
+          p('text', 'top-nav-item', '', '', 'top-nav-item', '', '', 'Inbox', 'light'),
+        ],
+      ),
+    ).toEqual(['top-nav-item']);
+  });
+
+  it('a member a spread would make unreadable keeps its own look, named, in one undo step', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('cg', {cwd, like: 'neutral'});
+    // (The top nav's selected text stays dark on this blue: it is kept.)
+    const r = await themeEditSet('cg', 'background-color', '#0069d6', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    expect(r.data.setting.keep).toContain('top-nav-item');
+    expect(r.data.parts).not.toContain('top-nav-item');
+    expect(r.data.notes.join(' ')).toMatch(
+      /top-nav-item[^.]*would make text there unreadable/,
+    );
+    const show = await themeEditShow('cg', {cwd});
+    expect(show.data.settings[0].reach?.kept).toContain('top-nav-item');
+    expect(ruleOf(cssOf('cg'), 'top-nav-item')).not.toContain('#0069d6');
+    // The same setting again keeps it out; one undo takes it all back.
+    await themeEditSet('cg', 'background-color', '#0069d6', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    expect(settingsOf('cg')).toHaveLength(1);
+    await themeEditUndo('cg', {cwd});
+    expect(settingsOf('cg')).toEqual([]);
   }, 240_000);
 
   it('a member that draws the thing differently is left as Core draws it', async ctx => {

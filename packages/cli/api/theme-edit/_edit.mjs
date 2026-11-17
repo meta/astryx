@@ -2420,6 +2420,28 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * The members a spreading change made unreadable: each reached part other
+ * than the one named with a new contrast failure (a problem's key names its
+ * parts and ends with its mode).
+ * @param {string} named
+ * @param {string[]} reached the parts the change writes, the named one included
+ * @param {Array<{key: string}>} newProblems
+ * @returns {string[]}
+ */
+export function unreadableReach(named, reached, newProblems) {
+  const modes = (/** @type {string} */ part) =>
+    new Set(
+      newProblems
+        .map(p => p.key.split('|'))
+        .filter(k => k.includes(part))
+        .map(k => k.at(-1) ?? ''),
+    );
+  // (Even where the part named fails too: a spread never adds a failure on
+  // a member the setting did not name.)
+  return reached.filter(m => m !== named && modes(m).size > 0);
+}
+
+/**
  * The parts a setting reaches because their element is drawn as one of the
  * parts it writes (the census saw both targets on one element: a calendar's
  * nav arrow is a button), and which keep no setting of the same thing of
@@ -6499,7 +6521,10 @@ async function changeOnce(
     }
   } else if (
     prev &&
-    JSON.stringify(prev) === JSON.stringify(s) &&
+    // (The members the saved setting keeps out, where it would make text
+    // unreadable, are the editor's: the same setting again is the same.)
+    JSON.stringify({...prev, keep: undefined}) ===
+      JSON.stringify({...s, keep: undefined}) &&
     // A later setting that covers the same parts hides it: set again, it
     // moves last and wins.
     !data.settings
@@ -6704,7 +6729,59 @@ async function changeOnce(
   const sizeBefore = borderAdded
     ? await sizeSheet(ctx, slug, data, 'before')
     : null;
-  const r = await commitTheme(ctx, slug, data, {history: true});
+  let r = await commitTheme(ctx, slug, data, {history: true});
+  // A setting that reaches its group or family never makes text unreadable
+  // on a member it reached: such a member keeps its own look (the setting
+  // keeps it out, `keep`), the build is written again without it in the
+  // same undo step, and the result names it with the line that gives it the
+  // look anyway.
+  /** @type {string[]} */
+  const keptForText = [];
+  // (Only a family role's reach: an always-alike group or a group named
+  // takes the change as one.)
+  const roleReach =
+    sub === 'set' && s.on && !s.only && !groupsOf(ctx)[s.on]
+      ? reachGroupOf(ctx, s)
+      : null;
+  if (roleReach && !AUTO_SPREAD.includes(roleReach) && r.newProblems.length) {
+    const failing = unreadableReach(
+      String(s.on),
+      partsOf(ctx, s),
+      r.newProblems,
+    );
+    if (failing.length) {
+      keptForText.push(...failing);
+      // (The entry the settings hold: this one, or the same setting saved
+      // before it when nothing else changed.)
+      const entry =
+        data.settings.find(x => x === s) ??
+        [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x.thing === s.thing &&
+              x.on === s.on &&
+              (x.when ?? '') === (s.when ?? '') &&
+              (x.state ?? '') === (s.state ?? '') &&
+              (x.mode ?? '') === (s.mode ?? '') &&
+              Boolean(x.only) === Boolean(s.only),
+          ) ??
+        s;
+      entry.keep = [...new Set([...(entry.keep ?? []), ...failing])];
+      s.keep = entry.keep;
+      const r2 = await commitTheme(ctx, slug, data, {history: false});
+      r = /** @type {typeof r} */ ({
+        ...r,
+        problems: r2.problems,
+        problemList: r2.problemList,
+        newProblems: r.newProblems.filter(
+          p => !failing.some(m => p.key.split('|').includes(m)),
+        ),
+        lifted: r2.lifted,
+        warnings: r2.warnings,
+      });
+    }
+  }
   await sayNextStepClears(ctx, slug, s, r);
   const sizeNote =
     borderAdded && sizeBefore
@@ -7224,6 +7301,10 @@ async function changeOnce(
       ? `${P} set ${slug} ${setArgs({...s, only: true}, String(s.value))}`
       : null;
   if (s.note) notes.push(s.note);
+  if (keptForText.length)
+    notes.push(
+      `${keptForText.join(', ')} ${keptForText.length > 1 ? 'keep their' : 'keeps its'} own ${s.thing}: this would make text there unreadable, so the change does not reach ${keptForText.length > 1 ? 'them' : 'it'}; to give it anyway: ${keptForText.map(m => `\`${P} set ${slug} ${setArgs({...s, on: m, only: true, keep: undefined}, String(s.value))}\``).join(', ')}`,
+    );
   if (onlyLine && parts.length > 1)
     notes.push(
       `reaches ${s.on}'s family (${group}), the parts drawn alike: ${parts.join(', ')}; for ${s.on} alone: \`${onlyLine}\``,
@@ -7768,7 +7849,7 @@ async function changeOnce(
         ? {
             name: group,
             members: parts,
-            kept: keptOwn,
+            kept: [...keptOwn, ...keptForText],
             onlyHint: Boolean(onlyLine),
             ...(onlyLine ? {only: onlyLine} : {}),
           }
@@ -8430,7 +8511,7 @@ export async function themeEditShow(theme, options = {}) {
                     drillIn: true,
                     over: over ? describe(over) : null,
                   }
-                : {family, parts, kept: keptOwn};
+                : {family, parts, kept: [...keptOwn, ...(s.keep ?? [])]};
             return {
               ...s,
               parts,

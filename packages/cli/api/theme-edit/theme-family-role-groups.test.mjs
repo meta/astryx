@@ -199,10 +199,18 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
       {cwd, on: 'dropdown-menu-item'},
     );
     expect(r.data.group?.name).toBe('option-rows');
+    // (Each option row takes it, or keeps its own where its text would not
+    // read on it, named.)
+    const kept = /** @type {string[]} */ (r.data.setting.keep ?? []);
     for (const p of ['typeahead-option', 'selector-option-row'])
-      expect(ruleOf(cssOf('o'), `.astryx-${p}`), p).toMatch(
-        /linear-gradient\(#049cdb, #0064cd\)/,
-      );
+      if (kept.includes(p)) expect(r.data.group?.kept).toContain(p);
+      else
+        expect(ruleOf(cssOf('o'), `.astryx-${p}`), p).toMatch(
+          /linear-gradient\(#049cdb, #0064cd\)/,
+        );
+    expect([...r.data.parts, ...kept]).toEqual(
+      expect.arrayContaining(['typeahead-option', 'selector-option-row']),
+    );
   }, 240_000);
 
   it('the modal frame reaches the drawer, sheet, popover and hover card', async ctx => {
@@ -235,7 +243,9 @@ describe('a family look said of one member (Bootstrap 1.4)', () => {
       state: 'selected',
     });
     expect(r.data.group?.name).toBe('selected-items');
-    expect(r.data.parts).toEqual(
+    // (The top nav's selected item draws the same fill; it takes it, or
+    // keeps its own where its text would not read on it, named.)
+    expect([...r.data.parts, ...(r.data.setting.keep ?? [])]).toEqual(
       expect.arrayContaining(['side-nav-item', 'top-nav-item']),
     );
     // (A color is the part's own: a calendar day selected in another color
@@ -269,7 +279,9 @@ describe('alerts and overlay headers (Bootstrap 1.4)', () => {
       'linear-gradient(#fceec1, #eedc94)',
       {cwd, on: 'banner'},
     );
-    expect(g.data.parts).toEqual(expect.arrayContaining(['banner', 'toast']));
+    expect([...g.data.parts, ...(g.data.setting.keep ?? [])]).toEqual(
+      expect.arrayContaining(['banner', 'toast']),
+    );
     const r = await themeEditSet('a', 'border-bottom', '1px solid #eeeeee', {
       cwd,
       on: 'dialog-header',

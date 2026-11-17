@@ -172,6 +172,9 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
  * @property {boolean} [only]
+ * @property {string[]} [keep] - Members of the group or family it reaches
+ *   that keep their own look: the editor writes it when reaching them would
+ *   make their text unreadable.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note]
  */
@@ -1709,6 +1712,12 @@ export function settingsProblem(
       return `${s.thing} has mode ${s.mode}, but a dial is the same in light and dark, so set takes no --mode for it`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
+    if (
+      s.keep != null &&
+      (!Array.isArray(s.keep) ||
+        !s.keep.every((/** @type {unknown} */ x) => typeof x === 'string' && x))
+    )
+      return `${s.thing} has keep ${JSON.stringify(s.keep)}, not a list of parts`;
     if (s.only === true && !onlyFits(s))
       return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one part, never a group or the whole theme`;
     const key = keyOf(s);
@@ -1823,6 +1832,7 @@ const ENTRY_FIELDS = [
   'state',
   'mode',
   'only',
+  'keep',
 ];
 
 /**
@@ -4688,12 +4698,28 @@ export function membersOf(ctx, name) {
 /**
  * The parts a setting styles: the group when `--on` names one; set on one
  * member of a family (reachGroupOf), the members that draw it alike, unless
- * `--only`; else the one part.
+ * `--only`; else the one part. Members the setting keeps (`keep`) are left
+ * out.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null}} s
  * @returns {string[]}
  */
 export function partsOf(ctx, s) {
+  const all = reachedPartsOf(ctx, s);
+  // (Members the setting keeps out, where it would make text unreadable.)
+  const keep = /** @type {any} */ (s).keep;
+  return Array.isArray(keep) && keep.length
+    ? all.filter(t => t === s.on || !keep.includes(t))
+    : all;
+}
+
+/**
+ * The parts a setting reaches before any it keeps out (partsOf).
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'only' | 'thing'> & {when?: string | null, state?: string | null}} s
+ * @returns {string[]}
+ */
+function reachedPartsOf(ctx, s) {
   if (!s.on) return [];
   if (s.thing === 'font') return [];
   const has = (/** @type {string} */ t) => ctx.project.target.has(t);
@@ -4721,13 +4747,31 @@ export function partsOf(ctx, s) {
         return Array.isArray(vals) && vals.map(String).includes(value);
       });
   };
-  if (fam)
+  if (fam) {
+    const members = groupsOf(ctx)[fam] ?? [];
+    /** @type {Record<string, any> | undefined} */
+    const MAP = /** @type {any} */ (ctx).C?.MAP;
+    // (A member whose element other parts are drawn as, parts outside the
+    // family that mark the asked state themselves, is not reached through
+    // the family: a rule on it would give their own state this look (an
+    // Item's selected fill on a radio list's checked row). It still takes a
+    // setting named on it.)
+    const sharedState = (/** @type {string} */ m) =>
+      Boolean(s.state) &&
+      m !== s.on &&
+      (MAP?.[m]?.drawnAs ?? []).some(
+        (/** @type {string} */ x) =>
+          !members.includes(x) &&
+          (ctx.project.target.get(x)?.states ?? []).includes(String(s.state)),
+      );
     return spread(
-      (groupsOf(ctx)[fam] ?? [])
+      members
         .filter(has)
         .filter(m => drawnAlike(ctx, s, m))
+        .filter(m => !sharedState(m))
         .filter(takesWhen),
     );
+  }
   return [s.on];
 }
 

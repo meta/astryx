@@ -18,7 +18,8 @@
  * @property {string} [when] - `<prop>:<value>`: only that variant.
  * @property {string} [state] - Only that state.
  * @property {'light' | 'dark'} [mode] - Only that color mode.
- * @property {boolean} [only] - One member of an always-alike group, not the whole group.
+ * @property {boolean} [only] - On that part alone, not the group or family a setting on it reaches.
+ * @property {string[]} [keep] - Members of the group or family it reaches that keep their own look, because it would make their text unreadable; the editor writes it.
  * @property {string} [axis] - For the `headings` dial: `weight` or `tracking`.
  * @property {string} [note] - What the check found worth saying (what the token feeds, parts it misses).
  */
@@ -96,7 +97,7 @@
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it writes: a group's members, or, set on one member of a family, the members that draw it alike; less the members that keep a setting of their own.
- * @property {{name: string, members: string[], kept: string[], onlyHint: boolean, only?: string} | null} group - The group or family it reached: `members` the parts written, `kept` the members that keep their own setting of the same thing (a part's own setting wins over its group's or family's, whatever the order); set on one member, `onlyHint` and `only`, the line that styles that member alone.
+ * @property {{name: string, members: string[], kept: string[], onlyHint: boolean, only?: string} | null} group - The group or family it reached: `members` the parts written, `kept` the members that keep their own setting of the same thing (a part's own setting wins over its group's or family's, whatever the order) or that it would make unreadable (the setting keeps them out, `keep`); set on one member, `onlyHint` and `only`, the line that styles that member alone.
  * @property {Array<{part: string, as: string, keep: string}>} [embedded] - The parts drawn as one of the parts written, inside other components (a calendar's nav arrow and a pagination cell are buttons): a rule on the part reaches them too. Each with the part it is drawn as and the line that keeps it as Core draws it (its own entry wins). Left out when none.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`. The category colors (badges, tokens, card tints) and chart colors that moved with the look are counted in one line each.
  * @property {string[]} [changedPartTokens] - Changes to the custom properties the built stylesheet sets on parts, `name on <rule> (mode): before -> after` (a readable text color on a selected row). With `changedTokens`, every custom property whose built value moved.
