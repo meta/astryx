@@ -334,6 +334,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // gives its block padding only to a direct first or last Table.
   '--_container-bleed-block-start',
   '--_container-bleed-block-end',
+  // Badge FR5 and Button FR2: a primary or destructive Button passes its fill
+  // pair to a neutral Badge in its content, which paints the pair inverted.
+  '--_button-fill',
+  '--_button-on-fill',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

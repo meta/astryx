@@ -320,8 +320,8 @@ const elevationStyles = stylex.create({
  * Focus outline is shared across variants for consistent keyboard affordance.
  */
 const variants = stylex.create({
-  // A solid fill publishes its colour pair to its content. A neutral Badge in
-  // the content paints the pair inverted, so it keeps the pair's contrast.
+  // Primary and destructive pass their colour pair to their content. A neutral
+  // Badge there paints the pair inverted, so it keeps the pair's contrast.
   primary: {
     backgroundColor: colorVars['--color-accent'],
     color: colorVars['--color-on-accent'],

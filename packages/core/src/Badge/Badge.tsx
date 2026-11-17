@@ -91,8 +91,9 @@ const styles = stylex.create({
  */
 const variants = stylex.create({
   // Semantic variants
-  // In a solid Button, the neutral tint over the fill misses 4.5:1. There the
-  // badge paints the Button's colour pair inverted, which keeps its contrast.
+  // In a primary or destructive Button, the neutral tint over the fill misses
+  // 4.5:1. There the badge paints the Button's colour pair inverted, which
+  // keeps its contrast.
   neutral: {
     backgroundColor: `var(--_button-on-fill, ${colorVars['--color-neutral']})`,
     color: `var(--_button-fill, ${colorVars['--color-text-primary']})`,
