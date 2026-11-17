@@ -324,4 +324,36 @@ describe('Button label truncation tooltip', () => {
     });
     expect([...openLayers][0]).toHaveTextContent(LABEL);
   });
+
+  it('drops a hover when a mouse press arrives with it', async () => {
+    restore = withOverflow(true);
+    const openLayers = new Set<HTMLElement>();
+    const proto = HTMLElement.prototype;
+    vi.spyOn(proto, 'showPopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.add(this);
+    });
+    vi.spyOn(proto, 'hidePopover').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      openLayers.delete(this);
+    });
+    render(<Button label={LABEL} />);
+    const button = screen.getByRole('button');
+    // A scripted click: the pointer arrives and presses in one task.
+    act(() => {
+      fireEvent.pointerOver(button, {pointerType: 'mouse'});
+      fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+      fireEvent.mouseOver(button);
+      fireEvent.mouseEnter(button);
+      fireEvent.pointerDown(button, {pointerType: 'mouse'});
+      fireEvent.mouseDown(button);
+      fireEvent.pointerUp(button, {pointerType: 'mouse'});
+      fireEvent.mouseUp(button);
+      fireEvent.click(button);
+    });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(openLayers.size).toBe(0);
+  });
 });

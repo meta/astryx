@@ -137,6 +137,16 @@ export function useTruncationTooltipInterest(
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      if (isCutOnInterest != null) {
+        // Measured on interaction: a tap presses the element and opens
+        // nothing, and a mouse press drops a hover not yet shown, as a
+        // mounted tooltip does.
+        tapRecognizer.forget();
+        if (event.pointerType === 'mouse') {
+          forget('hover');
+        }
+        return;
+      }
       if (!isEnabled || interestRef.current.isRead) {
         tapRecognizer.forget();
         return;
@@ -152,7 +162,7 @@ export function useTruncationTooltipInterest(
         forget('hover');
       }
     },
-    [isEnabled, tapRecognizer, want, forget],
+    [isEnabled, isCutOnInterest, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {
