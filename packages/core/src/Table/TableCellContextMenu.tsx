@@ -158,9 +158,9 @@ type HeldTouch = {
 };
 
 /**
- * Adds a touch event to a held press. Every move is kept: a press that strays
- * past the move tolerance and comes back must cancel the long press on
- * replay, as it does on a loaded cell.
+ * Adds a touch event to a held press. Every move is kept. A press that
+ * strays past the move tolerance and comes back cancels the long press on
+ * replay, as on a loaded cell.
  */
 function holdTouchEvent(
   held: HeldTouch | null,
