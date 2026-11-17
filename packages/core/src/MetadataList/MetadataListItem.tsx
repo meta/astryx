@@ -97,11 +97,15 @@ const styles = stylex.create({
     minHeight: 24,
     overflowWrap: VALUE_OVERFLOW_WRAP,
   },
-  // Stacked layout wrapper (label on top)
+  // Stacked layout wrapper (label on top). A grid or flex item's narrowest
+  // width is its longest word unless it sets `min-width: 0`; without it, a URL
+  // or ID wider than the list would widen the wrapper past the list instead
+  // of wrapping inside it.
   stackedWrapper: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
+    minWidth: 0,
   },
   // Stacked label
   stackedLabel: {
