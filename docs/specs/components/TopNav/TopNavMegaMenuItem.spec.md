@@ -48,7 +48,7 @@ usage lives in `TopNavMegaMenuItem.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `no` — FR1 closes the panel on a pick and returns focus to the trigger. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Released default preserved: `no` — FR1 closes the panel on a pick and returns focus to the trigger. Decider: josephfarina, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
 - Compatibility class: nonbreaking behavior change; one new prop, `hasCloseOnSelect` (default `true`)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: a builder who needs the panel to stay open after a pick sets `hasCloseOnSelect: false`

@@ -49,7 +49,7 @@ that promotes one destination. Consumer usage lives in
 
 ## Compatibility and migration
 
-- Released default preserved: `no` — FR3 closes the panel when the link is followed inside it. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Released default preserved: `no` — FR3 closes the panel when the link is followed inside it. Decider: josephfarina, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
 - Compatibility class: nonbreaking behavior change; no public API change
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none: a builder who needs the panel to stay open renders their own control in `children`

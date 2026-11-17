@@ -60,7 +60,7 @@ expandable group in the mobile drawer. Consumer usage lives in
 
 ## Compatibility and migration
 
-- Released default preserved: `no` — FR4 closes the menu on a pick and returns focus to the trigger. Decider: maintainers, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
+- Released default preserved: `no` — FR4 closes the menu on a pick and returns focus to the trigger. Decider: josephfarina, 2026-11-16: the close applies to every pointer type, mouse and trackpad included, as well as touch and the keyboard, as DropdownMenuItem's does.
 - Compatibility class: nonbreaking behavior change; one new item field, `hasCloseOnSelect` (default `true`)
 - Controlled/uncontrolled behavior: open and expanded states are internal
 - Migration decision: a builder who needs the menu to stay open after a pick sets the item's `hasCloseOnSelect: false`
