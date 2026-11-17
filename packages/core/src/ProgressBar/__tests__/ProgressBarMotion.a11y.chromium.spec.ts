@@ -732,7 +732,7 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
   );
 });
 
-test('at the pulse floor every tone with 3:1 against the track keeps it, light and dark, on the body and the surface', async ({
+test('every tone reaches 3:1 against the track and keeps it at the pulse floor, light and dark, on the body and the surface', async ({
   page,
 }) => {
   // In the light and dark default themes: the base tokens, Storybook's "None"
@@ -831,8 +831,14 @@ test('at the pulse floor every tone with 3:1 against the track keeps it, light a
     );
   }
   expect(rows).toHaveLength(20);
-  const qualifying = rows.filter(row => row.full >= 3);
-  expect(qualifying.length).toBeGreaterThan(0);
+  // Every enabled tone reaches 3:1 at full opacity (FR4, AR1).
+  for (const row of rows) {
+    expect(
+      row.full,
+      `${row.tone}, ${row.mode}, ${row.surface}: ${row.full.toFixed(3)}:1`,
+    ).toBeGreaterThanOrEqual(3);
+  }
+  const qualifying = rows;
   for (const row of qualifying) {
     expect(
       row.atFloor,

@@ -181,8 +181,8 @@ describe('butter color token mapping completeness', () => {
 });
 
 describe('butter progress fills', () => {
-  // The banner stops read at 1.2:1 to 2.6:1 on the progress track, so each
-  // fill takes the stop in the banner family that reaches 3:1 on it.
+  // In light mode the banner stops read at 1.2:1 to 2.6:1 on the progress
+  // track, so each fill takes a stop in the banner family that reaches 3:1.
   const {green, neutral, red, yellow} = butterModePalettes;
   const track = {light: neutral.light[85], dark: neutral.dark[40]};
   const fills = {

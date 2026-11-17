@@ -168,9 +168,9 @@ const styles = stylex.create({
   svgIndeterminate: {
     display: 'block',
   },
-  // One muted track for every variant, as ProgressBar has. A theme's status
-  // muted roles can be opaque tints of the status color, so a status-tinted
-  // track reads at about 1:1 against its own fill in some themes.
+  // One muted track for every variant: the base track ProgressBar uses. A
+  // theme's status muted roles can be opaque tints of the status color, so a
+  // status-tinted track reads at about 1:1 against its own fill in some themes.
   track: {
     fill: 'none',
     stroke: colorVars['--color-background-muted'],
@@ -308,8 +308,8 @@ const variantStyles = stylex.create({
   error: {
     stroke: colorVars['--color-text-error'],
   },
-  // The secondary text role reaches 3:1 on the neutral track in every bundled
-  // theme and mode; the disabled text role is close to the track's own color.
+  // The secondary text role reaches 3:1 on the track in every bundled theme
+  // and mode; the disabled text role is close to the track's own color.
   // A disabled ring takes the same fill and dims as a whole.
   neutral: {
     stroke: colorVars['--color-text-secondary'],

@@ -242,10 +242,11 @@ const styles = stylex.create({
     position: 'relative',
     width: '100%',
   },
-  // A disabled bar dims its track, fill and marks as Slider and Switch dim a
-  // disabled track. Forced colors drop opacity, so the fill outline turns
-  // GrayText there.
-  trackContainerDisabled: {
+  // A disabled bar dims its track and fill as Slider and Switch dim a disabled
+  // track. Marks stay at full opacity because a mark can take focus, and its
+  // focus ring must keep its contrast. Forced colors replace the fill color,
+  // so a GrayText outline marks the disabled fill there.
+  trackDisabled: {
     opacity: 0.5,
   },
   fillDisabled: {
@@ -463,8 +464,8 @@ const variantStyles = stylex.create({
   },
   // The secondary text role reaches 3:1 on the track in every bundled theme
   // and mode. The disabled text role does not: it is the track's own color in
-  // some themes. A disabled bar takes the same fill and dims as a whole
-  // (`trackContainerDisabled`).
+  // some themes. A disabled bar takes the same fill and dims its track
+  // (`trackDisabled`).
   neutral: {
     backgroundColor: colorVars['--color-text-secondary'],
   },
@@ -711,11 +712,7 @@ export function ProgressBar({
         <VisuallyHidden id={labelId}>{label}</VisuallyHidden>
       )}
 
-      <div
-        {...stylex.props(
-          styles.trackContainer,
-          isDisabled && styles.trackContainerDisabled,
-        )}>
+      <div {...stylex.props(styles.trackContainer)}>
         <div
           role="progressbar"
           aria-valuenow={isIndeterminate ? undefined : clampedValue}
@@ -726,7 +723,7 @@ export function ProgressBar({
           ref={touch.trackRef}
           {...mergeProps(
             themeProps('progress-bar-track'),
-            stylex.props(styles.track),
+            stylex.props(styles.track, isDisabled && styles.trackDisabled),
           )}>
           {isIndeterminate ? (
             <div
