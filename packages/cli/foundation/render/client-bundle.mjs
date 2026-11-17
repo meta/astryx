@@ -116,8 +116,67 @@ export const VIEWER_STORAGE = `for (const name of ['localStorage', 'sessionStora
   }
 }`;
 
-/** The namespace of the module that gives a page storage in a viewer that blocks it. */
-const STORAGE = 'astryx-viewer-storage';
+/**
+ * Copying for a page in a viewer that blocks the Clipboard API. A sandboxed
+ * frame can leave `navigator.clipboard` out, so a page's own Copy button
+ * throws. Then `writeText` copies through the copy command, as Core's
+ * clipboard fallback does: it resolves when the text was copied and rejects
+ * with NotAllowedError when it was not, so the page's own error path runs.
+ * `readText` rejects with NotAllowedError, as a browser does. Where the API
+ * is there, only a `writeText` that throws at once falls back.
+ */
+export const VIEWER_CLIPBOARD = `{
+const copy = text =>
+  new Promise((resolve, reject) => {
+    let written = false;
+    const write = event => {
+      if (event.clipboardData == null) return;
+      event.clipboardData.setData('text/plain', String(text));
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      written = true;
+    };
+    window.addEventListener('copy', write, true);
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    } finally {
+      window.removeEventListener('copy', write, true);
+    }
+    if (copied && written) resolve();
+    else reject(new DOMException('The browser did not copy the text.', 'NotAllowedError'));
+  });
+const clipboard = navigator.clipboard;
+if (clipboard == null) {
+  const fallback = {
+    writeText: copy,
+    readText: () => Promise.reject(new DOMException('This frame does not let a page read the clipboard.', 'NotAllowedError')),
+  };
+  try {
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, enumerable: true, get: () => fallback});
+  } catch {
+    // A navigator that refuses the property keeps what it has.
+  }
+} else if (typeof clipboard.writeText === 'function') {
+  const writeText = clipboard.writeText;
+  try {
+    clipboard.writeText = function (text) {
+      try {
+        return writeText.call(this, text);
+      } catch {
+        return copy(text);
+      }
+    };
+  } catch {
+    // A clipboard that refuses the property keeps its own writeText.
+  }
+}
+}`;
+
+/** The namespace of the module that fills in what a viewer's frame blocks: storage and the clipboard. */
+const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
 /** The namespace of the module that mounts the page. */
@@ -248,7 +307,7 @@ export async function bundleForBrowser({
   // A page whose script throws, in render or in an effect (a frame that
   // blocks storage, say), keeps its first paint: React would empty the root.
   const mount =
-    `import 'astryx:viewer-storage';import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `import 'astryx:viewer';import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
     `${IN_A_VIEWER}` +
     `const root = document.getElementById(${JSON.stringify(ROOT_ID)});const painted = root.innerHTML;` +
     `class FirstPaint extends Component {constructor(props) {super(props);this.state = {failed: false};}` +
@@ -305,8 +364,8 @@ export async function bundleForBrowser({
     setup(/** @type {any} */ setupBuild) {
       build = setupBuild;
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
-      build.onResolve({filter: /^astryx:viewer-storage$/, namespace: MOUNT}, () => ({path: 'storage', namespace: STORAGE}));
-      build.onLoad({filter: /.*/, namespace: STORAGE}, () => ({contents: VIEWER_STORAGE, loader: 'js'}));
+      build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

@@ -356,6 +356,78 @@ export default function Page() {
     expect(root?.textContent).toContain('Kept on screen');
   }, 120_000);
 
+  it('copies through the copy command in a frame without the Clipboard API, so the page\u2019s own success and error paths run', async () => {
+    put(
+      'src/copy.tsx',
+      `import {useState} from 'react';
+export default function Page() {
+  const [status, setStatus] = useState('idle');
+  const [read, setRead] = useState('');
+  return (
+    <main>
+      <button type="button" onClick={() => navigator.clipboard.writeText('a,b\\n1,2').then(() => setStatus('copied'), e => setStatus(e.name))}>Copy CSV</button>
+      <button type="button" onClick={() => navigator.clipboard.readText().then(setRead, e => setRead(e.name))}>Paste</button>
+      <p id="status">{status}</p>
+      <p id="read">{read}</p>
+    </main>
+  );
+}
+`,
+    );
+    await render('src/copy.tsx', {cwd: dir, out: 'copy.html'});
+    const settle = (/** @type {any} */ dom) =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    /** @param {boolean} works */
+    const open = works => {
+      /** @type {string[]} */
+      const copied = [];
+      const dom = new JSDOM(read('copy.html'), {
+        runScripts: 'dangerously',
+        pretendToBeVisual: true,
+        beforeParse(window) {
+          // JSDOM has no copy command: this one fires the copy event, as a browser does.
+          window.document.execCommand = () => {
+            const event = new window.Event('copy', {cancelable: true});
+            Object.defineProperty(event, 'clipboardData', {
+              value: {
+                setData: (
+                  /** @type {string} */ _type,
+                  /** @type {string} */ text,
+                ) => copied.push(text),
+              },
+            });
+            window.dispatchEvent(event);
+            return works;
+          };
+        },
+      });
+      return {dom, copied};
+    };
+    const working = open(true);
+    await settle(working.dom);
+    const [copyButton, pasteButton] =
+      working.dom.window.document.querySelectorAll('button');
+    copyButton.click();
+    pasteButton.click();
+    await settle(working.dom);
+    expect(working.copied).toEqual(['a,b\n1,2']);
+    expect(
+      working.dom.window.document.getElementById('status')?.textContent,
+    ).toBe('copied');
+    expect(
+      working.dom.window.document.getElementById('read')?.textContent,
+    ).toBe('NotAllowedError');
+    working.dom.window.close();
+    const refused = open(false);
+    await settle(refused.dom);
+    refused.dom.window.document.querySelector('button')?.click();
+    await settle(refused.dom);
+    expect(
+      refused.dom.window.document.getElementById('status')?.textContent,
+    ).toBe('NotAllowedError');
+    refused.dom.window.close();
+  }, 120_000);
+
   it('gives a page storage that lasts until it closes in a frame that blocks storage, and keeps real storage elsewhere', async () => {
     put(
       'src/filter.tsx',
@@ -377,7 +449,8 @@ export default function Page() {
 `,
     );
     await render('src/filter.tsx', {cwd: dir, out: 'filter.html'});
-    const settle = (/** @type {any} */ dom) => new Promise(resolve => dom.window.setTimeout(resolve, 100));
+    const settle = (/** @type {any} */ dom) =>
+      new Promise(resolve => dom.window.setTimeout(resolve, 100));
     // An opaque origin, as in a frame without allow-same-origin: storage throws.
     const blocked = new JSDOM(read('filter.html'), {
       runScripts: 'dangerously',
