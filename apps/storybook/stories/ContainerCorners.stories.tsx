@@ -256,7 +256,7 @@ const roundedTopCard = defineTheme({
 /** A theme that rounds only a Card's start-start corner, written logically. */
 const startCornerCard = defineTheme({
   name: 'container-corners-start-corner-card',
-  components: {card: {base: {borderRadius: 0, borderStartStartRadius: '20px'}}},
+  components: {card: {base: {borderRadius: '0', borderStartStartRadius: '20px'}}},
 });
 
 /** A theme that rounds only a Dialog's bottom corners. */
