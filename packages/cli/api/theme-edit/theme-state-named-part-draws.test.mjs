@@ -156,23 +156,20 @@ describe('every line, followed, leaves the part readable', () => {
   );
 
   it(
-    'the info banner: its own color generated, never the accent',
+    'the info banner: its color grows from the look and reads, at any vibrancy',
     async () => {
-      // (With the vibrancy moved, the info dial builds a color of its own;
-      // at the base's vibrancy it gives the base's back, and the banner is
-      // drawn as the base draws it.)
-      expect(named(await missed('t'))).not.toContain('banner');
-      await themeEditSet('t', 'vibrancy', '80', {cwd});
-      const m = (await missed('t')).find(x => x.part === 'banner');
-      expect(m?.line).toMatch(/ set t info /);
-      await follow(/** @type {string} */ (m?.line));
-      for (const r of await contrastOf(
-        't',
-        '--color-on-info-muted',
-        '--color-info-muted',
-      ))
-        expect(r).toBeGreaterThanOrEqual(4.5);
-      expect(named(await missed('t'))).not.toContain('banner');
+      // Info is a status role the theme leaves unset, so the look grows it
+      // with the accent: the banner follows at every vibrancy.
+      for (const vibrancy of [null, '80']) {
+        if (vibrancy) await themeEditSet('t', 'vibrancy', vibrancy, {cwd});
+        expect(named(await missed('t'))).not.toContain('banner');
+        for (const r of await contrastOf(
+          't',
+          '--color-on-info-muted',
+          '--color-info-muted',
+        ))
+          expect(r).toBeGreaterThanOrEqual(4.5);
+      }
     },
     T,
   );
@@ -187,20 +184,19 @@ describe('a setting takes a part off only for the aspect the list is about', () 
       await themeEditSet('u', 'vibrancy', '80', {cwd});
       await themeEditSet('u', 'background-color', '#ff0000', {
         cwd,
-        on: 'banner',
+        on: 'side-nav-item',
         state: 'hover',
       });
       await themeEditSet('u', 'border-radius', '4px', {cwd, on: 'toast'});
       const shown = /** @type {any} */ (await themeEditShow('u', {cwd})).data;
-      expect(shown.unreached).toContain('banner');
+      expect(shown.unreached).toContain('side-nav-item');
       expect(shown.unreached).toContain('toast');
-      expect(named(shown.missed)).toContain('banner');
       await themeEditSet('u', 'background-color', '#eeeeee', {
         cwd,
-        on: 'banner',
+        on: 'side-nav-item',
       });
       const after = /** @type {any} */ (await themeEditShow('u', {cwd})).data;
-      expect(named(after.missed)).not.toContain('banner');
+      expect(after.unreached).not.toContain('side-nav-item');
     },
     T,
   );

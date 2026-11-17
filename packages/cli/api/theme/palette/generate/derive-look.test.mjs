@@ -15,10 +15,12 @@ import {
   CATEGORY_STOPS,
   HUE_SEEDS,
   deriveLookColors,
+  deriveStatusColors,
   isLookFamily,
   lookSeeds,
+  statusSeeds,
 } from './derive-look.mjs';
-import {generatePaletteSet} from './generator.mjs';
+import {generatePaletteSet, perceptualDelta} from './generator.mjs';
 import {hexToOklch} from './color.mjs';
 
 const THEMES = path.resolve(
@@ -156,5 +158,66 @@ describe('derived look colors', () => {
     });
     expect(r.tokens['--color-background-blue']).toBeUndefined();
     expect(r.tokens['--color-text-blue']).toBeDefined();
+  });
+
+  it('turns a status role away from an accent of its hue, keeping its family', () => {
+    const base = {info: '#0074e2', danger: '#c9303a'};
+    const near = statusSeeds(base, '#0052cc');
+    const far = statusSeeds(base, '#7c3aed');
+    const gap = (/** @type {string} */ a, /** @type {string} */ b) =>
+      Math.abs(((hexToOklch(a).H - hexToOklch(b).H + 540) % 360) - 180);
+    expect(gap(near.info, '#0052cc')).toBeGreaterThanOrEqual(29);
+    expect(gap(near.info, base.info)).toBeLessThanOrEqual(40);
+    expect(gap(far.info, base.info)).toBeLessThan(2);
+    expect(gap(near.danger, base.danger)).toBeLessThan(2);
+  });
+
+  it('derives readable status colors apart from the accent', () => {
+    const seeds = statusSeeds(
+      {
+        info: '#0074e2',
+        success: '#198100',
+        warning: '#ffce2f',
+        danger: '#c9303a',
+      },
+      '#0052cc',
+    );
+    const {palette, stops} = grow(seeds);
+    const white = {stop: 100, color: '#ffffff', family: 'white'};
+    const black = {stop: 0, color: '#000000', family: 'black'};
+    const r = deriveStatusColors({
+      palette,
+      stops,
+      modes: ['light', 'dark'],
+      roles: ['info', 'success', 'warning', 'danger'],
+      grounds: m => page[m],
+      inks: (m, id) =>
+        id === 'warning' || m === 'dark' ? [black, white] : [white, black],
+      accent: m => (m === 'light' ? '#0052cc' : '#7aabff'),
+    });
+    expect(r.roles).toEqual({
+      info: 'derived',
+      success: 'derived',
+      warning: 'derived',
+      danger: 'derived',
+    });
+    expect(r.tokens['--color-on-warning'].light.family).toBe('black');
+    expect(r.tokens['--color-error']).toBeDefined();
+    // A role whose fill would be drawn like the accent takes the nearest
+    // stop that stands apart from it instead.
+    const taken = r.tokens['--color-info'].light.color;
+    const apart = deriveStatusColors({
+      palette,
+      stops,
+      modes: ['light'],
+      roles: ['info'],
+      grounds: m => page[m],
+      inks: () => [white, black],
+      accent: () => taken,
+    });
+    expect(apart.roles.info).toBe('derived');
+    expect(
+      perceptualDelta(apart.tokens['--color-info'].light.color, taken),
+    ).toBeGreaterThanOrEqual(10);
   });
 });
