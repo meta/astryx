@@ -35,8 +35,10 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
+  LIKE,
   wordTable,
 } from './_tables.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
 import {
   PALETTE_DIALS,
   familyRamp,
@@ -27543,7 +27545,8 @@ export function draftAnswer(ctx, env, question) {
   // never a picture: the answer says what to say of it, with a line to
   // start from; what the words beside it ask is kept.
   const pictureLook =
-    /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/.test(q) ||
+    // (The file is read as typed: the reader drops its dot.)
+    /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/i.test(question) ||
     /\b(?:like|match(?:es|ing)?|copy|from|as in|the look of|looks? of)\s+(?:this|that|the|my|our|a|an|these|those)\s+(?:pictures?|screenshots?|images?|photos?|mock-?ups?|png|jpe?g|screen ?caps?|snapshots?)\b/.test(
       q,
     );
@@ -27644,9 +27647,11 @@ export function draftAnswer(ctx, env, question) {
     // look", names something how cannot see: its colors are asked for,
     // never guessed.)
     const lookWrites = result.some(r => r.options.some(o => o.length));
+    // (A describing word, "minimal", "playful", is a look, never a name.)
     const namedFor = notTaken.filter(
       w =>
         !lookWrites &&
+        !describes(w) &&
         new RegExp(
           String.raw`\b${w.replace(/-like$/, '')}(?:-like)?\s+${LOOK_NOUNS}\b|\b(?:like|as)\s+${w}\b`,
         ).test(q.toLowerCase()),
@@ -27732,6 +27737,32 @@ export function draftAnswer(ctx, env, question) {
       text: 'the theme editor has no screen-size, print or device conditions: this applies on every screen; a media query needs your own CSS',
       options: [],
     });
+  // ("start from the butter look", "a matcha theme", "base stone"): a
+  // built-in theme named as the look is the base dial; every setting is
+  // kept (the base dial's own rule), and a base not installed here is
+  // named with the line that installs it.
+  const baseSaid = new RegExp(
+    String.raw`\b(${LIKE.join('|')})\b(?=\s+${LOOK_NOUNS}\b)|\bbase\s+(?:to\s+|of\s+)?(${LIKE.join('|')})\b`,
+    // (Read in the whole question: a clause after it, "but keep our
+    // colors", may have taken the reader's place.)
+  ).exec(question.toLowerCase());
+  const base = baseSaid ? (baseSaid[1] ?? baseSaid[2]) : null;
+  if (base && base !== env.data?.like) {
+    const here = baseInstalled(ctx.project, base);
+    const answer = here
+      ? {
+          text: `the base: ${env.slug} builds on ${base}, and every setting it has is kept`,
+          options: [[set('base', base)]],
+        }
+      : {
+          text: `${base} is a built-in theme that is not installed here: ${installLine(ctx.project.cwd, [`@astryxdesign/theme-${base}`])}, then set ${env.slug} base ${base}; every setting ${env.slug} has is kept`,
+          options: [],
+          lookup: `${HOW} base`,
+        };
+    if (unsure || !result.some(r => r.options.some(o => o.length)))
+      result.splice(0, result.length, answer);
+    else result.unshift(answer);
+  }
   if (pictureLook) {
     const note = {
       text: 'how reads words, never a picture: say what the picture shows, its colors (as hex, or color names: the accent, the page, the text), its font, how round its corners are and how roomy it is, and how writes each; the line below shows the shape',
