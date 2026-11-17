@@ -325,6 +325,12 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   it.** The `Project` seam loads each integration independently and records
   the failure, and the command's own work proceeds without that integration's
   contributions. The diagnostic command is the exception by purpose (INV29).
+  A manifest key the running CLI does not know is ignored, and the rest of the
+  manifest loads. It is not an integration issue: everyday commands do not
+  warn about it, and project `doctor` does not list it. `doctor integration
+validate` and `integration check` list it as an `unknown_manifest_key` note
+  that fails nothing; a key one edit from a known key is a `next` note with
+  its fix.
   A command whose own module cannot load (a broken install) still answers
   every run of it with the load error: whatever other options and words it
   was given, it exits 1; `--help` prints its usage with the load error.
