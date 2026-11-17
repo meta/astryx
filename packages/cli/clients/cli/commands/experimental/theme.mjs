@@ -614,6 +614,7 @@ function changeBlocks(r) {
   // reach it, before the rest a head-cut output drops.
   const {
     newProblems = [],
+    leftProblems = [],
     leftOut = [],
     fontNotLoaded = [],
     missed: _missed,
@@ -631,6 +632,13 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    // Problems it moved but left failing: said under the new ones.
+    ...(leftProblems.length
+      ? [
+          `still failing after this change (${leftProblems.length}):`,
+          ...problemList(leftProblems),
+        ]
+      : []),
     ...(fontNotLoaded.length
       ? [
           list(
