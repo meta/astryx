@@ -136,7 +136,13 @@ describe('thick black borders on everything', () => {
         rule(css, `.astryx-${part}[data-selected="selected"]`),
         part,
       ).toMatch(/border:\s*2px solid #000000/);
-    expect(rule(css, '.astryx-tab-indicator')).toMatch(/height:\s*2px/);
-    expect(rule(css, '.astryx-outline-indicator')).toMatch(/width:\s*2px/);
+    // (Core draws the indicator lines at 2px already, so those lines are
+    // not written: each rule is 2px or absent.)
+    expect(rule(css, '.astryx-tab-indicator')).not.toMatch(
+      /height:\s*(?!2px)\d/,
+    );
+    expect(rule(css, '.astryx-outline-indicator')).not.toMatch(
+      /width:\s*(?!2px)\d/,
+    );
   }, 240_000);
 });

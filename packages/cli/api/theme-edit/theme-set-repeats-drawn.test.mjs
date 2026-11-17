@@ -1,11 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A part setting that writes what Core already draws there at rest
- * (pill corners on a badge, which is round already) says it changes
- * nothing you see; one that changes the drawing lists what it styled.
+ * @file A new part setting that writes only what Core already draws there
+ * at rest (pill corners on a badge, which is round already) changes nothing
+ * on screen, so it is not written, and the result says what is drawn and
+ * what to do instead; one that changes the drawing is written and lists
+ * what it styled.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
@@ -37,17 +41,23 @@ afterAll(() => {
 });
 
 describe('a part setting Core already draws', () => {
-  it('pill corners on a badge change nothing you see', async () => {
+  it('pill corners on a badge are not written', async () => {
     if (unbuilt) return;
     const r = /** @type {any} */ (
       await themeEditSet('t', 'corners', 'pill', {cwd, on: 'badge'})
     );
     const text = JSON.stringify(r);
-    expect(text).toContain('this changes nothing you see');
-    expect(r.data?.styled ?? r.styled).toEqual([]);
+    expect(text).toContain(
+      'no change: badge already draws border-radius 9999px at rest, so corners = pill on badge was not written; to change it, set another value',
+    );
+    const saved = fs.readFileSync(
+      path.join(cwd, 'themes/t/t.settings.json'),
+      'utf8',
+    );
+    expect(saved).not.toContain('badge');
   }, 240_000);
 
-  it('square corners on a badge are styled', async () => {
+  it('square corners on a badge are written and styled', async () => {
     if (unbuilt) return;
     const r = /** @type {any} */ (
       await themeEditSet('t', 'corners', 'square', {cwd, on: 'badge'})

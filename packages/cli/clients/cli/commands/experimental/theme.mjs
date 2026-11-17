@@ -586,9 +586,15 @@ function changeBlocks(r) {
   const unchanged = /** @type {any} */ (d.notes ?? []).some(
     (/** @type {string} */ n) => n.startsWith('no change: '),
   );
+  const drawnAlready = /** @type {any} */ (d.notes ?? []).some(
+    (/** @type {string} */ n) =>
+      n.startsWith('no change: ') && n.includes(' already draws '),
+  );
   const done =
     unchanged && d.action === 'set'
-      ? `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
+      ? drawnAlready
+        ? `[ok] ${d.theme}: ${describe(s)} already shows; nothing written`
+        : `[ok] ${d.theme}: ${describe(s)} was already set; nothing changed`
       : d.was != null
         ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
         : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}${alsoRemovedText(d)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;

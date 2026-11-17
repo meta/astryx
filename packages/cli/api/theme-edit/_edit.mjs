@@ -6350,15 +6350,6 @@ async function changeOnce(
             (x.state ?? '') === (s.state ?? ''),
         )
       : [];
-  const r = await commitTheme(ctx, slug, data, {history: true});
-  await sayNextStepClears(ctx, slug, s, r);
-  const compiledAfter = compileTheme(ctx, data, base);
-  // What the spacing dial said of the sizes it could not keep apart.
-  // What the build said of settings it could not write as they are.
-  const compileNotes = buildNotes(ctx).filter(n => !notesBefore.has(n));
-  const sizeNotes =
-    /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
-      .sizeNotes ?? [];
   /**
    * What Core draws for a part's property at rest, in both modes the same,
    * read from the part data with the base theme's tokens; null when the
@@ -6396,6 +6387,45 @@ async function changeOnce(
     );
     return all.size === 1 ? [...all][0] || null : null;
   };
+  // A new plain part setting that only writes what Core already draws
+  // there at rest (pill corners on a badge that is round already) changes
+  // nothing on screen: it is not written.
+  /** @type {string[] | null} */
+  let drawnAlready = null;
+  if (
+    sub === 'set' &&
+    !prev &&
+    s.on &&
+    !s.when &&
+    !s.state &&
+    !s.mode &&
+    s.source !== 'token' &&
+    !alsoReplaced.length &&
+    !covered.length &&
+    !longhands.length &&
+    !covers.length
+  ) {
+    const trial = compileTheme(ctx, data, base);
+    const raw = styledChanges(compiledBefore, trial, base);
+    if (
+      raw.length &&
+      JSON.stringify(trial?.tokens ?? null) ===
+        JSON.stringify(compiledBefore?.tokens ?? null) &&
+      !styledChanges(compiledBefore, trial, base, drawnAtRest).length
+    ) {
+      drawnAlready = raw;
+      data.settings = data.settings.filter(x => x !== s);
+    }
+  }
+  const r = await commitTheme(ctx, slug, data, {history: true});
+  await sayNextStepClears(ctx, slug, s, r);
+  const compiledAfter = compileTheme(ctx, data, base);
+  // What the spacing dial said of the sizes it could not keep apart.
+  // What the build said of settings it could not write as they are.
+  const compileNotes = buildNotes(ctx).filter(n => !notesBefore.has(n));
+  const sizeNotes =
+    /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
+      .sizeNotes ?? [];
   const styled = styledChanges(
     compiledBefore,
     compiledAfter,
@@ -6841,7 +6871,9 @@ async function changeOnce(
       : []),
     ...(r.unchanged
       ? [
-          `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+          drawnAlready
+            ? `no change: ${s.on} already draws ${drawnAlready.map(x => x.replace(/^[^:]*:\s*/, '')).join(', ')} at rest, so ${describe(s)} was not written; to change it, set another value`
+            : `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
         ]
       : []),
     ...r.notes,
