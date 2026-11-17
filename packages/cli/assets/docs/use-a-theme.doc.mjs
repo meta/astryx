@@ -130,6 +130,10 @@ export const docs = {
           text: "Use [light, dark] tuples in token values for automatic mode switching. Use mode='system' (default) on Theme to follow OS preference. A theme with one color mode (its built module exports `colorModes`) is listed in the generated module's `themeModes`, and the wiring `theme add` prints passes `mode={themeModes[defaultThemeSlug] ?? 'system'}`, so the selected theme shows its own mode.",
         },
         {
+          type: 'prose',
+          text: 'To make dark mode the default, pass `mode="dark"` to the root `Theme`. The root `Theme` also sets `data-theme` on `<html>` in the browser, so the browser\'s own colors (the page canvas, scrollbars and form controls) match. A server-rendered app also sets `<html data-theme="dark">` in its root layout, so the first paint is dark before the app runs.',
+        },
+        {
           type: 'code',
           lang: 'tsx',
           label: 'Light/dark tuple',
