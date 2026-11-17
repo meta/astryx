@@ -331,6 +331,9 @@ jobs:
           # (spec:AST-110 FR7).
           SWIZZLE_PROOF_ALL: ${{ inputs.recheck && '1' || '' }}
           SWIZZLE_PROOF_BROWSER: ${{ inputs.recheck && '1' || '' }}
+          # The full run draws the theme editor's pages for real in every
+          # test (a pull request's tests stand in for the drawing).
+          THEME_EDIT_REAL_RENDERS: '1'
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its

@@ -5,6 +5,7 @@
  * @input None: `cutShortText` runs in the page the picture is taken of.
  * @output `cutShortText`: each text the browser draws cut short (an ellipsis
  *   or a line clamp, or text drawn past the side of a box that clips it),
+ *   and each word it breaks across two lines inside the word (`broken`),
  *   with the part it sits in and whether keeping that part's width
  *   (`flex-shrink: 0` on it, the line the editor offers) draws it whole;
  *   `CUT_SHORT_PREFIX`, the line prefix a picture script prints it after.
@@ -28,8 +29,12 @@ export const CUT_SHORT_PREFIX = 'astryx-cut-short:';
  * or null. `whole` says whether the text is drawn whole once every element
  * of that part keeps its width (`flex-shrink: 0`), measured by applying it
  * in the page and taking it back.
+ * A word drawn broken across lines inside it ("Headi" then "ng": a box
+ * narrower than the word) comes back too, the word as its `text`, with
+ * `broken`; a word broken where it may break (at a hyphen, a slash, a soft
+ * hyphen) is not counted.
  * Runs in the page: it uses nothing from outside its own body.
- * @returns {Array<{part: string | null, text: string, whole: boolean}>}
+ * @returns {Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}
  */
 export function cutShortText() {
   /** @param {Element} el */
@@ -92,13 +97,43 @@ export function cutShortText() {
   };
   /** @param {HTMLElement} el */
   const cutShort = el => ellipsized(el) || clipped(el);
-  /** @type {Array<{el: HTMLElement, part: string | null, text: string}>} */
+  /**
+   * The words of an element's own text drawn on more than one line: the
+   * boxes of a word's letters sit on lines with different tops.
+   * @param {HTMLElement} el
+   * @returns {string[]}
+   */
+  const brokenWords = el => {
+    /** @type {string[]} */
+    const out = [];
+    for (const n of el.childNodes) {
+      if (n.nodeType !== 3) continue;
+      const s = n.textContent ?? '';
+      for (const m of s.matchAll(/\S+/g)) {
+        const word = m[0];
+        if (word.length < 3 || /[-/\u00AD\u200B\u2010-\u2014]/.test(word))
+          continue;
+        const range = document.createRange();
+        range.setStart(n, m.index ?? 0);
+        range.setEnd(n, (m.index ?? 0) + word.length);
+        const tops = [...range.getClientRects()]
+          .filter(r => r.width > 0 && r.height > 0)
+          .map(r => Math.round(r.top));
+        if (tops.some(t => Math.abs(t - tops[0]) > 2)) out.push(word);
+      }
+    }
+    return out;
+  };
+  /** @type {Array<{el: HTMLElement, part: string | null, text: string, broken?: boolean}>} */
   const found = [];
   for (const el of document.body.querySelectorAll('*')) {
     if (!(el instanceof HTMLElement)) continue;
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (text && cutShort(el) && drawn(el))
-      found.push({el, part: partOf(el), text});
+    if (!text || !drawn(el)) continue;
+    if (cutShort(el)) found.push({el, part: partOf(el), text});
+    else
+      for (const word of brokenWords(el))
+        found.push({el, part: partOf(el), text: word, broken: true});
   }
   /** Whether each text is whole with its part's width kept. @type {Map<string | null, boolean>} */
   const whole = new Map();
@@ -112,13 +147,18 @@ export function cutShortText() {
     document.head.append(keep);
     whole.set(
       part,
-      found.filter(f => f.part === part).every(f => !cutShort(f.el)),
+      found
+        .filter(f => f.part === part)
+        .every(f =>
+          f.broken ? !brokenWords(f.el).includes(f.text) : !cutShort(f.el),
+        ),
     );
     keep.remove();
   }
-  return found.map(({part, text}) => ({
+  return found.map(({part, text, broken}) => ({
     part,
     text,
     whole: whole.get(part) ?? false,
+    ...(broken ? {broken: true} : {}),
   }));
 }

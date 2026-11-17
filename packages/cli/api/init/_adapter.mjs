@@ -32,6 +32,13 @@ import {installStepFor} from '../../foundation/discovery/template-needs.mjs';
 
 export {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP, displayHomePath};
 
+// What the run leaf reads before it writes agent docs: the state of the files
+// it is about to write.
+export {
+  inspectAgentDocs,
+  resolveAgentPaths,
+} from '../../foundation/agent-docs/agent-docs.mjs';
+
 /**
  * Write or refresh the computer-level agent text, or remove it, and record
  * the setting and the links Astryx made; after a write, record the release

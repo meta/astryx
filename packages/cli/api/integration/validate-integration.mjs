@@ -477,8 +477,12 @@ async function validateAtPackageDir(
   // `integration check --strict` fails on any warning, and a new failure code
   // joins only in a minor release (architecture:cli-surface INV35). Doctor's
   // project check still warns about it.
+  // A manifest key this CLI does not know is a note too, never an issue:
+  // a key from a newer CLI is normal version skew.
   const contribution = await validateLoadedIntegrationListed(loaded);
   (result.listed ??= []).push(...contribution.listed);
+  if (contribution.notes.length > 0)
+    (result.notes ??= []).push(...contribution.notes);
   for (const issue of contribution.issues) {
     if (issue.code === INVALID_CLI_COMMAND) {
       (result.notes ??= []).push({code: issue.code, message: issue.message});
@@ -757,7 +761,7 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * @param {string} [cwd]
  * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
  *   `iconSets`: check the package's experimental icon sets; by default only
- *   when the project at `cwd` sets `experimental.iconSet`.
+ *   where icon features are on in the project at `cwd`.
  *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */

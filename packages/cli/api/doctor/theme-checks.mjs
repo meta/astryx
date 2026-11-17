@@ -1375,7 +1375,21 @@ export async function checkAppThemes(cwd) {
         unshippedImports.push({
           slug,
           owner,
-          message: `Theme "${slug}" from ${owner}: its built module loads, but ${unshipped.some(finding => finding.code === 'relative_import_not_shipped') ? 'it or its stylesheet names a file the package does not ship' : 'it imports TypeScript source'}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+          // Each cause the findings hold is named: a theme can have both.
+          message: `Theme "${slug}" from ${owner}: its built module loads, but ${[
+            ...(unshipped.some(
+              finding => finding.code === 'relative_import_not_shipped',
+            )
+              ? ['it or its stylesheet names a file the package does not ship']
+              : []),
+            ...(unshipped.some(
+              finding => finding.code === 'built_module_imports_typescript',
+            )
+              ? ['it imports TypeScript source']
+              : []),
+          ].join(
+            ', and ',
+          )}, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
         });
       }
       resolved.push(resolvedTheme);
