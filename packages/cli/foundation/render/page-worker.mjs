@@ -1476,6 +1476,63 @@ function reach(name) {
   parentPort?.postMessage({stage: name});
 }
 
+/**
+ * The first named import of a StyleX variables module (`.stylex`) in the
+ * page's own files that the module does not export. StyleX compiles such a
+ * value to a variable that nothing defines, so the page would show without
+ * that style and no error; a bundler would refuse the import.
+ * @returns {Promise<{file: string, line: number, module: string, names: string[]} | null>}
+ */
+async function missingStylexExports() {
+  const parser = requireFromCli('@babel/parser');
+  for (const file of localFiles) {
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let ast;
+    try {
+      const typed = /\.[cm]?tsx?$/.test(file);
+      ast = parser.parse(fs.readFileSync(file, 'utf8'), {
+        sourceType: 'module',
+        plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+      });
+    } catch {
+      // A file that does not parse is reported where it is compiled.
+      continue;
+    }
+    for (const node of ast.program.body) {
+      if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
+      const spec = String(node.source.value).split('?')[0];
+      if (!/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
+      const named = node.specifiers.filter(
+        (/** @type {any} */ s) => s.type === 'ImportSpecifier' && s.importKind !== 'type',
+      );
+      if (named.length === 0) continue;
+      const target = importedFile(spec, file);
+      /** @type {any} */
+      let exports;
+      try {
+        exports = await jiti.import(target && path.isAbsolute(target) ? target : spec);
+      } catch {
+        // A module that does not load is reported where it is loaded.
+        continue;
+      }
+      const names = new Set(Object.keys(exports ?? {}));
+      const missing = named.filter(
+        (/** @type {any} */ s) => !names.has(s.imported.type === 'Identifier' ? s.imported.name : s.imported.value),
+      );
+      if (missing.length > 0) {
+        const fromRoot = path.relative(root, file);
+        return {
+          file: (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(file) : fromRoot).split(path.sep).join('/'),
+          line: missing[0].loc.start.line,
+          module: spec,
+          names: missing.map((/** @type {any} */ s) => (s.imported.type === 'Identifier' ? s.imported.name : s.imported.value)),
+        };
+      }
+    }
+  }
+  return null;
+}
+
 try {
   /** @type {any} */
   let mod;
@@ -1497,6 +1554,15 @@ try {
   } catch (e) {
     if (e === null) throw null;
     classify(e);
+    throw null;
+  }
+  const absent = await missingStylexExports();
+  if (absent) {
+    fail(
+      'ERR_RENDER_COMPILE',
+      `The page does not compile (${absent.file}, line ${absent.line}): ${absent.module} has no export ${absent.names.join(', ')}`,
+      {file: absent.file, line: absent.line},
+    );
     throw null;
   }
   const Page = mod?.default ?? (typeof mod === 'function' ? mod : undefined);
@@ -1597,7 +1663,7 @@ try {
       if (e instanceof BundleError && e.compile !== undefined) {
         classify(e.compile);
       } else if (e instanceof BundleError) {
-        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
+        fail(e.code, e.message, e.detail);
       } else {
         const message = e instanceof Error ? e.message : String(e);
         fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
