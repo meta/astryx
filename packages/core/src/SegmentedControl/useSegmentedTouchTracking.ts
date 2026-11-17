@@ -22,8 +22,8 @@ import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {usePressTracker} from '../gestures/usePressTracker';
 import {
   createActionGroupTracker,
-  type ActionGroupTarget,
   type ActionGroupTracker,
+  type ActionGroupTrackerOptions,
 } from '../hooks/actionGroupTracker';
 import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -122,17 +122,20 @@ export function segmentTargetAt(
 
 /**
  * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
- * control's lift `area`, the segment whose own box holds the lift, else the
- * one `segmentTargetAt` counts it for; outside them, none. The own-box test
- * keeps a tap on its segment when a caller's style wraps the segments onto
- * more than one row. The tracker counts a held pointer on the control's
- * center line, so a press never lands outside.
+ * control's lift `area`, the segment whose own box holds the `finger`, else
+ * the one `segmentTargetAt` counts (`x`, `y`) for; outside them, none. The
+ * tracker passes (`x`, `y`) on the control's center line, so a press never
+ * lands outside and a drift off the control keeps its horizontal position.
+ * `finger` is where the pointer really is (it defaults to (`x`, `y`)): the
+ * own-box test on it keeps a tap on its segment when a caller's style wraps
+ * the segments onto more than one row.
  */
 export function liftTargetAt(
   x: number,
   y: number,
   area: ReadonlyArray<ControlBounds>,
   segments: ReadonlyArray<SegmentSpan>,
+  finger: {readonly x: number; readonly y: number} = {x, y},
 ): HTMLElement | null {
   const isInside = area.some(
     box => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
@@ -144,10 +147,10 @@ export function liftTargetAt(
     ({left, right, top, bottom}) =>
       top != null &&
       bottom != null &&
-      x >= left &&
-      x <= right &&
-      y >= top &&
-      y <= bottom,
+      finger.x >= left &&
+      finger.x <= right &&
+      finger.y >= top &&
+      finger.y <= bottom,
   );
   if (under != null) {
     return isDisabled(under.element) ? null : under.element;
@@ -156,6 +159,26 @@ export function liftTargetAt(
 }
 
 const NO_AREA: ReadonlyArray<ControlBounds> = [];
+
+/**
+ * The tracker options that pick the segment a lift commits: `onMove` keeps
+ * the pointer's own position, which the tracker reports before it moves the
+ * point onto the control's center line, and `resolveTarget` runs
+ * `liftTargetAt` with both.
+ */
+export function createSegmentLiftTarget(
+  area: () => ReadonlyArray<ControlBounds>,
+  segments: () => ReadonlyArray<SegmentSpan>,
+): Pick<ActionGroupTrackerOptions, 'onMove' | 'resolveTarget'> {
+  let finger: {x: number; y: number} | null = null;
+  return {
+    onMove: (x, y) => {
+      finger = {x, y};
+    },
+    resolveTarget: (x, y) =>
+      liftTargetAt(x, y, area(), segments(), finger ?? {x, y}),
+  };
+}
 
 /** A measured hit inset on `element`, px (0 when none is written). */
 function hitInset(element: HTMLElement, side: keyof HitInsets): number {
@@ -225,6 +248,12 @@ export function useSegmentedTouchTracking(
   /** The lift area as the finger found it. */
   const areaRef = useRef<ReadonlyArray<ControlBounds>>(NO_AREA);
   const trackerRef = useRef<ActionGroupTracker | null>(null);
+  const [liftTarget] = useState(() =>
+    createSegmentLiftTarget(
+      () => areaRef.current,
+      () => segmentsRef.current,
+    ),
+  );
   const tracker = (trackerRef.current ??= createActionGroupTracker(() => ({
     roots: () => [trackRef.current],
     itemSelector: SEGMENT_SELECTOR,
@@ -245,11 +274,7 @@ export function useSegmentedTouchTracking(
       }
       motion.cancel();
     },
-    resolveTarget: (
-      x: number,
-      y: number,
-      _targets: ReadonlyArray<ActionGroupTarget>,
-    ) => liftTargetAt(x, y, areaRef.current, segmentsRef.current),
+    ...liftTarget,
     onActivated: (item, cancelled) => {
       const track = trackRef.current;
       const value = item.dataset.value;

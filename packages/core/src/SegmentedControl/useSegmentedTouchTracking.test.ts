@@ -9,8 +9,13 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {createActionGroupTracker} from '../hooks/actionGroupTracker';
+import {SEGMENT_SELECTOR} from './useSegmentedSelectionMotion';
 import {
+  createSegmentLiftTarget,
   liftTargetAt,
+  measureLiftArea,
+  measureSegments,
   segmentTargetAt,
   type SegmentSpan,
 } from './useSegmentedTouchTracking';
@@ -101,36 +106,6 @@ describe('liftTargetAt', () => {
     expect(liftAt(150, 35, spans(layout, ['list']))).toBeNull();
   });
 
-  it('commits the segment a lift lands on when the segments wrap onto two rows', () => {
-    // A caller's style wraps five segments: A B C on the first row, D E on
-    // the second, E under B.
-    const box = (
-      value: string,
-      left: number,
-      right: number,
-      top: number,
-    ): SegmentSpan => {
-      const element = document.createElement('button');
-      element.dataset.value = value;
-      return {element, left, right, top, bottom: top + 36};
-    };
-    const wrapped = [
-      box('a', 12, 108, 22),
-      box('b', 112, 208, 22),
-      box('c', 212, 308, 22),
-      box('d', 12, 108, 62),
-      box('e', 112, 208, 62),
-    ];
-    const area = [{left: 10, top: 20, right: 310, bottom: 100}];
-    const lift = (x: number, y: number) =>
-      liftTargetAt(x, y, area, wrapped)?.dataset.value ?? null;
-    expect(lift(160, 80)).toBe('e');
-    expect(lift(60, 80)).toBe('d');
-    expect(lift(160, 40)).toBe('b');
-    // In a gap between the rows, the horizontal rule decides.
-    expect(lift(160, 60)).toBe('b');
-  });
-
   it("commits on a segment's own touch band, never on the box around every band", () => {
     const segments = spans(layout);
     // Grid's band stops 4 px above the control (a neighbor clamped it);
@@ -146,5 +121,85 @@ describe('liftTargetAt', () => {
     expect(lift(250, 11)).toBe('table');
     // Above Grid, past its band but within Table's reach: nothing.
     expect(lift(60, 11)).toBeNull();
+  });
+});
+
+describe('a lift through the tracker, when a caller wraps the segments', () => {
+  type Box = {left: number; top: number; right: number; bottom: number};
+  function withRect<T extends Element>(element: T, box: Box): T {
+    element.getBoundingClientRect = () => ({
+      ...box,
+      x: box.left,
+      y: box.top,
+      width: box.right - box.left,
+      height: box.bottom - box.top,
+      toJSON: () => box,
+    });
+    return element;
+  }
+  /** A track of rows of three 96 px segments, 36 px tall, 4 px apart. */
+  function wrappedTrack(rows: ReadonlyArray<ReadonlyArray<string>>) {
+    const track = document.createElement('div');
+    rows.forEach((row, r) => {
+      row.forEach((value, c) => {
+        const segment = document.createElement('button');
+        segment.setAttribute('role', 'radio');
+        segment.dataset.value = value;
+        const left = 12 + c * 100;
+        const top = 22 + r * 40;
+        track.append(
+          withRect(segment, {left, top, right: left + 96, bottom: top + 36}),
+        );
+      });
+    });
+    withRect(track, {
+      left: 10,
+      top: 20,
+      right: 310,
+      bottom: 22 + rows.length * 40,
+    });
+    document.body.append(track);
+    return track;
+  }
+  function liftAt(track: HTMLElement, x: number, y: number): string | null {
+    const segments = measureSegments(track);
+    const area = measureLiftArea(track, segments);
+    // One lift target for the press, as the hook keeps one for its tracker.
+    const liftTarget = createSegmentLiftTarget(
+      () => area,
+      () => segments,
+    );
+    const tracker = createActionGroupTracker(() => ({
+      roots: () => [track],
+      itemSelector: SEGMENT_SELECTOR,
+      highlightExpansion: 0,
+      tracksAlong: 'x',
+      paintsHighlight: () => false,
+      ...liftTarget,
+    }));
+    tracker.begin(x, y);
+    const lifted = tracker.end();
+    tracker.dispose();
+    track.remove();
+    return lifted?.dataset.value ?? null;
+  }
+
+  it('commits the second-row segment a tap lands on in two rows', () => {
+    const rows = [
+      ['a', 'b', 'c'],
+      ['d', 'e'],
+    ];
+    // E sits under B; the tracker's center line falls between the rows.
+    expect(liftAt(wrappedTrack(rows), 160, 80)).toBe('e');
+    expect(liftAt(wrappedTrack(rows), 60, 80)).toBe('d');
+    expect(liftAt(wrappedTrack(rows), 160, 40)).toBe('b');
+  });
+
+  it('commits the first-row segment a tap lands on in three rows', () => {
+    const rows = [['a', 'b', 'c'], ['d', 'e', 'f'], ['g']];
+    // The center line falls inside the second row.
+    expect(liftAt(wrappedTrack(rows), 160, 40)).toBe('b');
+    expect(liftAt(wrappedTrack(rows), 160, 80)).toBe('e');
+    expect(liftAt(wrappedTrack(rows), 60, 120)).toBe('g');
   });
 });
