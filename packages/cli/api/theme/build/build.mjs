@@ -49,8 +49,9 @@
  *
  * With `{check: true}`, it compiles the same outputs in memory but writes
  * nothing: it compares each generated file against what is on disk (ignoring
- * the `@generated` header's volatile `Command:` line and its `CLI:` line,
- * which names the CLI release that built the file) and returns a
+ * the `@generated` header's volatile `Command:` line, the release its `CLI:`
+ * line names, and the command a built module's built-by line names) and
+ * returns a
  * `theme.build.check` receipt listing any stale or missing outputs. This is
  * the CI guard for committed, generated theme CSS: the source of truth is
  * `<theme>.ts`, and `theme build --check` fails when the committed
@@ -855,29 +856,51 @@ function headerText(line) {
 export const BUILT_BY_LINE =
   /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
 
+/** The `@generated` header's line that names the CLI release that built it. */
+export const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
+
+/**
+ * `lines` with the command in a built module's built-by line as
+ * `<command>`, when exactly one line is a built-by line; otherwise unchanged,
+ * so a second or a malformed line stays significant.
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
+export function withBuiltByCommandPlaceholder(lines) {
+  if (lines.filter(line => BUILT_BY_LINE.test(line)).length !== 1) return lines;
+  return lines.map(line => line.replace(BUILT_BY_LINE, '$1<command>$3$4'));
+}
+
 /**
  * Normalize generated file content for staleness comparison: without the
- * header's `Command:` line ({@link withoutBuildCommandLine}) and its `CLI:`
- * line, which names the CLI release that built the file, and with the command
- * in a built module's one {@link BUILT_BY_LINE} left out. Which release
+ * header's `Command:` line ({@link withoutBuildCommandLine}), with the release
+ * that the header's one `CLI:` line names as `<version>`, and with the command
+ * in a built module's one {@link BUILT_BY_LINE} as `<command>`. Which release
  * answers, and the command that starts it, depend on how the CLI was started
  * (a global install, a tool that runs it, or the project's own copy) and
  * change with each update, so the same outputs built another way are not
- * stale. Everything else, the `Core:` line and all real content included, is
- * compared verbatim. Used only by `--check`: any real content drift reports a
- * file as stale.
+ * stale. A header with no `CLI:` line or with two stays significant.
+ * Everything else, the `Core:` line and all real content included, is compared
+ * verbatim. Used only by `--check`: any real content drift reports a file as
+ * stale.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
-  const lines = withoutBuildCommandLine(content)
-    .split('\n')
-    .filter(line => !headerText(line).startsWith('CLI: @astryxdesign/cli@'));
-  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
+  const lines = withBuiltByCommandPlaceholder(
+    withoutBuildCommandLine(content).split('\n'),
+  );
+  if (lines[0] !== '/*' && lines[0] !== '/**') return lines.join('\n');
+  const close = lines.indexOf(' */', 1);
+  if (close === -1) return lines.join('\n');
+  const releaseLines = lines
+    .slice(1, close)
+    .filter(line => CLI_VERSION_LINE.test(line)).length;
+  if (releaseLines !== 1) return lines.join('\n');
   return lines
-    .map(line =>
-      builtBy === 1 && BUILT_BY_LINE.test(line)
-        ? line.replace(BUILT_BY_LINE, '$1<command>$3$4')
+    .map((line, index) =>
+      index < close && CLI_VERSION_LINE.test(line)
+        ? line.replace(CLI_VERSION_LINE, '$1<version>$3')
         : line,
     )
     .join('\n');
@@ -6254,7 +6277,8 @@ async function themeBuildInternal(
 
   // Check mode: compare generated content against what's on disk instead of
   // writing. A file is "stale" if it's missing or its content differs once the
-  // @generated header's `Command:` and `CLI:` lines are ignored. Returns a
+  // @generated header's `Command:` line, the release its `CLI:` line names, and
+  // the command a built module's built-by line names are ignored. Returns a
   // receipt listing stale/missing outputs so callers (CI) can fail on drift.
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);

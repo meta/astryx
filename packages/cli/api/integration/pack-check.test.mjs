@@ -152,6 +152,26 @@ describe('verify-only generated CSS header normalization', () => {
     expect(released).not.toBe(current);
   });
 
+  it('build --check keeps a missing CLI line, a second one, and one outside the header significant', () => {
+    const current = generatedCssArtifact();
+    const cliLine = ' * CLI: @astryxdesign/cli@0.6.6\n';
+    for (const other of [
+      current.replace(cliLine, ''),
+      current.replace(cliLine, cliLine + ' * CLI: @astryxdesign/cli@0.6.5\n'),
+    ]) {
+      expect(normalizeThemeBuildForCompare(other)).not.toBe(
+        normalizeThemeBuildForCompare(current),
+      );
+    }
+    const inBody = (/** @type {string} */ version) =>
+      generatedCssArtifact({
+        body: `:root { color: red; }\n * CLI: @astryxdesign/cli@${version}`,
+      });
+    expect(normalizeThemeBuildForCompare(inBody('0.7.0'))).not.toBe(
+      normalizeThemeBuildForCompare(inBody('0.6.6')),
+    );
+  });
+
   it('build --check leaves out only the CLI line, which names the release that built the file', () => {
     const current = generatedCssArtifact();
     expect(
