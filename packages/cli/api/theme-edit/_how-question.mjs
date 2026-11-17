@@ -571,6 +571,45 @@ function colorsIn(c) {
     .map(([, v]) => v);
 }
 
+/** The sides each count of per-side colors names, as CSS gives them out. */
+const SIDE_ORDER = /** @type {Record<number, string>} */ ({
+  2: 'top and bottom, then left and right',
+  3: 'top, then left and right, then bottom',
+  4: 'top, right, bottom, left',
+});
+
+/**
+ * A border color written one per side, as CSS writes it (`#eee #eee #ddd`,
+ * `rgba(0,0,0,.1) rgba(0,0,0,.1) rgba(0,0,0,.25)`): two to four written
+ * colors (hex or a color function) with nothing but spaces between them,
+ * as typed; null for a clause without one, or with more than four.
+ * @param {string} text a clause, as typed
+ * @returns {string[] | null}
+ */
+function sideColorsIn(text) {
+  const lower = text.toLowerCase();
+  const written = colorsFound(lower)
+    .filter(([at, v, typed]) => typed && lower.slice(at, at + v.length) === v)
+    .sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < written.length; ) {
+    let j = i;
+    while (
+      j + 1 < written.length &&
+      /^\s+$/.test(
+        lower.slice(written[j][0] + written[j][1].length, written[j + 1][0]),
+      )
+    )
+      j++;
+    const run = written.slice(i, j + 1);
+    if (run.length >= 2)
+      return run.length > 4
+        ? null
+        : run.map(([at, v]) => text.slice(at, at + v.length));
+    i = j + 1;
+  }
+  return null;
+}
+
 /** A pronoun or a chat word ("button it", "cards thx", "plz"). */
 const PRONOUN_WORD =
   /^(?:it|its|me|my|you|your|ur|we|us|our|they|them|their|this|that|these|those|thx|thanks|thank|plz|pls|please|lol|okay|ok|yeah|yes|hey|hi)$/;
@@ -3253,6 +3292,28 @@ function clausesOf(q, partWords, words = null) {
         ? `${a} & ${b} ${noun}`
         : m,
   );
+  // "a border on top and sides", "the left and right edges", "top, left
+  // and right": the sides of one part's border said in a list are one
+  // ask, as two states of one part are. (A list of padding sides is the
+  // spacing reader's, which reads one side.)
+  const SIDE = String.raw`(?:top|bottom|left|right|sides)`;
+  const sideLists = bothStates.replace(
+    new RegExp(
+      String.raw`\b${SIDE}(?:(?:\s*,\s*|\s+and\s+|\s*,\s*and\s+)${SIDE}\b)+`,
+      'gi',
+    ),
+    (m, at, all) => {
+      const from = Math.max(0, String(all).lastIndexOf(';', at) + 1);
+      const end = String(all).slice(at).search(/[;.](?:\s|$)/);
+      const sentence = String(all).slice(
+        from,
+        end < 0 ? undefined : at + end,
+      );
+      return /\b(?:borders?|edges?|outlines?)\b/i.test(sentence)
+        ? m.replace(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/gi, ' & ')
+        : m;
+    },
+  );
   // (Each piece keeps the words that joined it to the one before, "with",
   // "and", a comma or a sentence's end: the clause-scope reader reads them.)
   /** @type {Array<{text: string, joint: string}>} */
@@ -3262,9 +3323,9 @@ function clausesOf(q, partWords, words = null) {
     // ask of its own: a font stack starts with a family's name, never a
     // color.)
     const split = (
-      /\bswap\b/.test(bothStates)
-        ? bothStates.replace(/\band\b/g, '&')
-        : sharedAsk(bothStates, partWords)
+      /\bswap\b/.test(sideLists)
+        ? sideLists.replace(/\band\b/g, '&')
+        : sharedAsk(sideLists, partWords)
     )
       .replace(
         /([a-z#0-9]+)(\s*),(?=\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy)\b)/gi,
@@ -7525,12 +7586,13 @@ export function draftAnswer(ctx, env, question) {
       return 'theme';
     const j = joinOf.get(c) ?? {sep: 'comma', list: null};
     const own = ownAspects.get(c) ?? c.aspects;
-    // ("cards square on top, 6px rounded at the bottom": a corner or edge
-    // look said of a side is the side of the part before, never the whole
-    // theme's.)
+    // ("cards square on top, 6px rounded at the bottom", "input border
+    // #dddddd, bottom border #999999": a corner, edge or border look said
+    // of a side is the side of the part before, never the whole theme's;
+    // a theme has no bottom border.)
     if (
       own.some(a => a === 'corners' || a === 'border') &&
-      /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b/.test(
+      /\b(?:on|at|along)\s+(?:the\s+)?(?:top|bottom|left|right|sides?)\b|\b(?:top|bottom)\s+(?:corners?|edges?)\b|\b(?:top|bottom|left|right)\s+(?:borders?|lines?)\b/.test(
         c.text,
       )
     )
@@ -13507,6 +13569,37 @@ export function draftAnswer(ctx, env, question) {
       m[1] ?? (m[2] ? 'bottom' : 'top')
     );
   };
+  /**
+   * Every side of a part a clause names, in the order said: "top and
+   * sides" is the top, left and right; "the sides" are the left and right.
+   * Every side ("all sides", "all four sides") is the whole border: none.
+   * @param {string} text
+   * @returns {Array<'top' | 'bottom' | 'left' | 'right'>}
+   */
+  const sidesOf = text => {
+    let t = ` ${text.toLowerCase()} `;
+    for (const [re] of lex.parts) {
+      const m = re.exec(t);
+      if (m && /\b(?:top|bottom|left|right|sides?)\b/.test(m[0]))
+        t = t.replace(m[0], ' ');
+    }
+    if (/\b(?:all|every|each|four)\s+(?:four\s+)?sides?\b/.test(t)) return [];
+    /** @type {Set<'top' | 'bottom' | 'left' | 'right'>} */
+    const out = new Set();
+    for (const m of t.matchAll(
+      /\b(top|bottom|left|right)\b|\b(under(?:neath)?|below|beneath)\b|\b(above)\b|\b(sides)\b/g,
+    ))
+      if (m[4]) {
+        out.add('left');
+        out.add('right');
+      } else
+        out.add(
+          /** @type {'top' | 'bottom' | 'left' | 'right'} */ (
+            m[1] ?? (m[2] ? 'bottom' : 'top')
+          ),
+        );
+    return out.size === 4 ? [] : [...out];
+  };
   // A subject how does not know ("lozenges: subtle gray background",
   // "flurbles bold"): a plural noun leading the clause, or its label, that
   // names no part, look, setting or color. That clause, and the clauses of
@@ -13839,7 +13932,7 @@ export function draftAnswer(ctx, env, question) {
   for (const c of clauses)
     if (
       c.parts.length &&
-      (c.colors.length || c.dir) &&
+      (c.colors.length || c.dir || /\btransparent\b/.test(c.text)) &&
       sideOf(c.text) &&
       !/\b(?:background|backgrounds|fill|fills|bg|text|labels?|shadows?)\b/.test(
         c.text,
@@ -21440,6 +21533,14 @@ export function draftAnswer(ctx, env, question) {
         }
         // "remove the top border", "no border on the right side": that side.
         const borderSide = sideOf(c.text);
+        // ("no border on the sides": each side said.)
+        const negSides = sidesOf(c.text);
+        if (c.neg && negSides.length > 1 && !outline)
+          return {
+            text: `no ${negSides.join(' or ')} border${where}: ${negSides.map(x => `border-${x}`).join(', ')} none (the other sides keep theirs)`,
+            options: [negSides.map(x => set(`border-${x}`, 'none', f))],
+            sequence: true,
+          };
         if (c.neg && borderSide && !outline)
           return {
             text: `no ${borderSide} border${where}: border-${borderSide} none (the other sides keep theirs)`,
@@ -21460,7 +21561,29 @@ export function draftAnswer(ctx, env, question) {
               ...(outline ? [[set('outline', 'none', f)]] : []),
             ],
           };
-        const color = colorFor(c, 'border');
+        // ("border-color #eee #eee #ddd", "a rgba(0,0,0,.1) rgba(0,0,0,.1)
+        // rgba(0,0,0,.25) border"): colors written one per side, as CSS
+        // writes them, are that one border color, every side as written; a
+        // part that draws no border is given one by set.
+        const perSide = outline ? null : sideColorsIn(c.text);
+        if (perSide && !c.lengths.length)
+          return {
+            text: `the border colors${where}, one per side as written (${SIDE_ORDER[perSide.length]}): border-color`,
+            options: [
+              [set('border-color', perSide.join(' '), {...f, ...modeOf(c)})],
+            ],
+          };
+        // ("a transparent bottom border", "with a transparent bottom"): a
+        // side said transparent is that side's line drawn see-through, never
+        // a fainter border or the fill.
+        const color =
+          colorFor(c, 'border') ??
+          (sideOf(c.text) &&
+          /(?<!\b(?:more|less|semi|half|\d+\s?%)[\s-]?)\btransparent\b/.test(
+            c.text,
+          )
+            ? 'transparent'
+            : null);
         // "outline buttons", "the danger buttons outline only": the outline
         // look, never a border added over the fill. All buttons: the
         // buttons dial's outline rung; one variant: its fill cleared, and
@@ -21604,6 +21727,7 @@ export function draftAnswer(ctx, env, question) {
         // at a lower alpha, on the part (the looks that draw no border
         // stay without one); a part that draws none has none to fade.
         if (
+          color !== 'transparent' &&
           visibilityAsk(c.text)?.stronger === false &&
           !/\b(?:thin|thick|width|wide|px)\w*/.test(c.text)
         ) {
@@ -21703,6 +21827,23 @@ export function draftAnswer(ctx, env, question) {
             : null);
         const side = sideOf(c.text);
         const prop = side ? `border-${side}` : 'border';
+        // ("a #dddddd border on top and sides"): each side said takes the
+        // border, the others keep theirs.
+        const sides = sidesOf(c.text);
+        if (sides.length > 1 && (color || width || style))
+          return {
+            text: `a border on its ${sides.join(', ').replace(/, (?=[^,]*$)/, ' and ')}${where}: ${sides.map(x => `border-${x}`).join(', ')} (the other sides keep theirs)`,
+            options: [
+              sides.map(x =>
+                set(
+                  `border-${x}`,
+                  `${width ?? '1px'} ${style ?? 'solid'} ${color ?? keptColor}`,
+                  f,
+                ),
+              ),
+            ],
+            sequence: true,
+          };
         // "inputs should have only a bottom border": no border on the other
         // sides, then that side's.
         if (
