@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {postcss} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
+  addMatchingCore,
   collectUnloadedFonts,
   fontPackagesInstallLine,
   discoverDoctorThemes,
@@ -126,8 +127,21 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
       ? null
       : dependencyInstallFor(projectDir, owner);
     if (install) return install;
-    const selector = theme?.package ?? owner;
-    return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
+    // The package is added the way the project adds it, at the release its
+    // Core peer needs, then the theme again; by its owner only when another
+    // package owns the same slug. The recorded owner counts even when it is
+    // not installed, so a bundled theme with the same slug still needs it.
+    const owners = new Set([
+      owner,
+      ...available
+        .filter(candidate => candidate.slug === slug)
+        .map(themeRecordOwner),
+    ]);
+    const add =
+      owners.size > 1
+        ? `${run} theme add ${slug} --package ${owner}`
+        : `${run} theme add ${slug}`;
+    return `${addMatchingCore(projectDir, owner)}; ${add}`;
   }
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))

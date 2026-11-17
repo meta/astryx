@@ -401,7 +401,10 @@ function MiniSparkline({data, color}: {data: SparkPoint[]; color: string}) {
   return (
     <div aria-hidden="true">
       <ResponsiveContainer width="100%" height={48}>
-        <LineChart data={data} margin={{top: 4, right: 0, left: 0, bottom: 0}}>
+        <LineChart
+          data={data}
+          margin={{top: 4, right: 0, left: 0, bottom: 0}}
+          accessibilityLayer={false}>
           <Line
             type="linear"
             dataKey="v"
@@ -832,7 +835,7 @@ export default function DataDashboardPage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6}>
               <SectionHeading
