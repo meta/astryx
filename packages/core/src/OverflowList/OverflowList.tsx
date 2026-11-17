@@ -70,6 +70,13 @@ const styles = stylex.create({
   },
 });
 
+// A single-row list never shrinks below the width it takes folded as far as
+// it can fold, so a squeezed row clips no part of its indicator. The floor is
+// never wider than the unfolded items, so a list with room is unchanged.
+const inlineFloor = stylex.create({
+  publish: (width: number) => ({minWidth: `${width}px`}),
+});
+
 const multiRowHeight = stylex.create({
   height: (maxRows: number, rowHeight: number, gapPx: number) => ({
     maxHeight: `calc(${rowHeight}px * ${maxRows} + ${gapPx}px * ${maxRows - 1})`,
@@ -306,6 +313,7 @@ export function OverflowList({
     visibleCount,
     hasOverflow,
     rowHeight,
+    inlineBounds,
     remeasure,
   } = useOverflowInternal(
     itemCount,
@@ -319,6 +327,7 @@ export function OverflowList({
     },
     {
       tracksRows: isMultiRow,
+      tracksInlineBounds: !isMultiRow,
       // The measured key moves with the measurement's result, so the report
       // never sees a key that is ahead of the visible set.
       onMeasure: () => setMeasuredKey(measurementKey),
@@ -406,6 +415,11 @@ export function OverflowList({
               rowHeight > 0 &&
               maxRows != null &&
               multiRowHeight.height(maxRows, rowHeight, gapPx),
+            !isMultiRow &&
+              inlineBounds.rendered > 0 &&
+              inlineFloor.publish(
+                Math.min(inlineBounds.collapsed, inlineBounds.rendered),
+              ),
             observeParent && hasOverflow && styles.fillParent,
             xstyle,
           ),

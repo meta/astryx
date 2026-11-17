@@ -16,6 +16,8 @@ import {LayoutHeader} from '@astryxdesign/core/Layout';
 import {LayoutContent} from '@astryxdesign/core/Layout';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Heading} from '@astryxdesign/core/Text';
+import {OverflowList} from '@astryxdesign/core/OverflowList';
+import ToolbarTableFilter from '../../../packages/cli/assets/templates/blocks/components/Toolbar/ToolbarTableFilter';
 import {
   Cog6ToothIcon,
   FunnelIcon,
@@ -515,4 +517,87 @@ export const CenterTabNavigationEndOnly: Story = {
       </Card>
     );
   },
+};
+
+const OVERFLOW_ACTIONS = [
+  'Save',
+  'Edit',
+  'Duplicate',
+  'Share',
+  'Archive',
+  'Delete',
+];
+
+function overflowActions() {
+  return (
+    <OverflowList
+      gap={2}
+      overflowRenderer={items => (
+        <Button label={`+${items.length}`} variant="ghost" size="sm" />
+      )}>
+      {OVERFLOW_ACTIONS.map(action => (
+        <Button key={action} label={action} variant="ghost" size="sm" />
+      ))}
+    </OverflowList>
+  );
+}
+
+/** Bulk selection with an OverflowList of actions in the start lane: the actions fold into a "+N" trigger beside the end lane instead of pushing it out. Resize the frame to see it. */
+export const OverflowActions: Story = {
+  name: 'Composition: Bulk Selection with Overflow Actions',
+  render: () => (
+    <div
+      data-testid="overflow-actions-frame"
+      style={{
+        width: 480,
+        maxWidth: '100%',
+        resize: 'horizontal',
+        overflow: 'auto',
+      }}>
+      <Toolbar
+        label="Bulk actions"
+        size="sm"
+        variant="muted"
+        startContent={
+          <>
+            <Badge label="5 selected" />
+            {overflowActions()}
+          </>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
+};
+
+/** The same actions inside a wrapper in the start lane: the lane keeps its content width, as before, because the list is not the lane's own child. */
+export const NestedOverflowActions: Story = {
+  name: 'Composition: Nested Overflow Actions',
+  render: () => (
+    <div data-testid="nested-overflow-frame" style={{width: 1280}}>
+      <Toolbar
+        label="Bulk actions"
+        size="sm"
+        startContent={
+          <span style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <Badge label="5 selected" />
+            {overflowActions()}
+          </span>
+        }
+        endContent={<Button label="Clear" variant="ghost" size="sm" />}
+      />
+    </div>
+  ),
+};
+
+/** The CLI's table filter toolbar template, whose clause list sits inside its own row in the start lane. */
+export const TableFilterTemplate: Story = {
+  name: 'Template: Table Filter',
+  render: () => (
+    <div
+      data-testid="table-filter-frame"
+      style={{width: 1280, maxWidth: '100%'}}>
+      <ToolbarTableFilter />
+    </div>
+  ),
 };

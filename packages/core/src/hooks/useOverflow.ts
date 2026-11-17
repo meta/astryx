@@ -89,6 +89,45 @@ export interface UseOverflowReturn {
 }
 
 /**
+ * A single-row list's inline bounds, in whole pixels rounded up from the
+ * measure copy: `collapsed` is the list folded as far as it can fold (the
+ * minimum items and the indicator), `rendered` is every item unfolded.
+ * Both are 0 until the list measures.
+ */
+export interface OverflowInlineBounds {
+  collapsed: number;
+  rendered: number;
+}
+
+const NO_INLINE_BOUNDS: OverflowInlineBounds = {collapsed: 0, rendered: 0};
+
+/** The bounds of a single-row set, from sub-pixel widths. */
+function inlineBoundsOf(
+  widths: ReadonlyArray<number>,
+  indicatorWidth: number,
+  gap: number,
+  minVisibleItems: number,
+  collapseFrom: 'start' | 'end',
+): OverflowInlineBounds {
+  const span = (set: ReadonlyArray<number>) =>
+    set.reduce((sum, width) => sum + width, 0) +
+    gap * Math.max(0, set.length - 1);
+  const kept = Math.min(minVisibleItems, widths.length);
+  const keptWidths =
+    collapseFrom === 'end'
+      ? widths.slice(0, kept)
+      : widths.slice(widths.length - kept);
+  const folds = kept < widths.length;
+  const collapsed = folds
+    ? span(keptWidths) + (keptWidths.length > 0 ? gap : 0) + indicatorWidth
+    : span(widths);
+  return {
+    collapsed: Math.ceil(collapsed),
+    rendered: Math.ceil(span(widths)),
+  };
+}
+
+/**
  * Why a list measures:
  * - `'commit'`: a React commit mounted or changed it. Its result applies with
  *   the others.
@@ -370,8 +409,19 @@ export function useOverflow(
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows, onMeasure}: {tracksRows: boolean; onMeasure?: () => void},
-): UseOverflowReturn & {remeasure: () => void} {
+  {
+    tracksRows,
+    tracksInlineBounds = false,
+    onMeasure,
+  }: {
+    tracksRows: boolean;
+    tracksInlineBounds?: boolean;
+    onMeasure?: () => void;
+  },
+): UseOverflowReturn & {
+  inlineBounds: OverflowInlineBounds;
+  remeasure: () => void;
+} {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -395,6 +445,9 @@ export function useOverflowInternal(
   const [measuredSizes] = useState<MeasuredSizes>(() => new WeakMap());
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
+  const [inlineBounds, setInlineBounds] =
+    useState<OverflowInlineBounds>(NO_INLINE_BOUNDS);
+  const appliedBoundsRef = useRef<OverflowInlineBounds>(NO_INLINE_BOUNDS);
   // The values last written to state. A measurement that matches them writes
   // nothing, so a resize that changes nothing renders nothing.
   const appliedRef = useRef({visibleCount: itemCount, rows: 1, rowHeight: 0});
@@ -471,6 +524,25 @@ export function useOverflowInternal(
       }
 
       const widths = children.map(child => child.offsetWidth);
+      if (tracksInlineBounds) {
+        const bounds = inlineBoundsOf(
+          children.map(child => child.getBoundingClientRect().width),
+          hasIndicator
+            ? allChildren[allChildren.length - 1].getBoundingClientRect().width
+            : 0,
+          gap,
+          minVisibleItems,
+          collapseFrom,
+        );
+        const applied = appliedBoundsRef.current;
+        if (
+          applied.collapsed !== bounds.collapsed ||
+          applied.rendered !== bounds.rendered
+        ) {
+          appliedBoundsRef.current = bounds;
+          setInlineBounds(bounds);
+        }
+      }
       const measuredRowHeight = children.reduce(
         (max, child) => Math.max(max, child.offsetHeight || 0),
         0,
@@ -554,6 +626,7 @@ export function useOverflowInternal(
       observeParent,
       apply,
       measuredSizes,
+      tracksInlineBounds,
     ],
   );
 
@@ -637,6 +710,7 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    inlineBounds: tracksInlineBounds ? inlineBounds : NO_INLINE_BOUNDS,
     remeasure,
   };
 }

@@ -457,3 +457,44 @@ export const StandingAnchor: Story = {
     );
   },
 };
+
+/** A shrink-to-fit parent sizes to the list's items, and a one-item list keeps its own width. Contributed in #11996. */
+export const ContentSizedParent: Story = {
+  render: () => (
+    <div style={{width: 700, padding: 8}}>
+      <div
+        data-testid="content-sized"
+        style={{display: 'inline-block', verticalAlign: 'top'}}>
+        <OverflowList
+          gap={2}
+          overflowRenderer={overflowItems => (
+            <Button
+              label={`+${overflowItems.length}`}
+              variant="ghost"
+              size="sm"
+            />
+          )}>
+          <Button label="Save" size="sm" />
+          <Button label="Edit" size="sm" />
+          <Button label="Duplicate" size="sm" />
+          <Button label="Share" size="sm" />
+          <Button label="Archive" size="sm" />
+          <Button label="Delete" size="sm" />
+        </OverflowList>
+      </div>
+      <div data-testid="one-item" style={{display: 'flex', marginTop: 8}}>
+        <OverflowList
+          gap={2}
+          overflowRenderer={overflowItems => (
+            <Button
+              label={`+${overflowItems.length} more`}
+              variant="ghost"
+              size="sm"
+            />
+          )}>
+          <Button label="Go" size="sm" />
+        </OverflowList>
+      </div>
+    </div>
+  ),
+};

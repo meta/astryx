@@ -51,6 +51,10 @@ const spacingStepToVar: Record<SpacingStep, keyof typeof spacingVars> = {
   10: '--spacing-10',
 };
 
+// A lane that holds an OverflowList as its own child. OverflowList's theme
+// class marks the list's visible row.
+const HOLDS_OVERFLOW_LIST = ':has(> .astryx-overflow-list)';
+
 const styles = stylex.create({
   // Two-slot layout (no centerContent): flex row, space-between
   baseFlex: {
@@ -114,6 +118,14 @@ const styles = stylex.create({
   // When only startContent is present, let it fill
   startOnly: {
     flex: '1 1 0%',
+  },
+  // A start lane that holds an OverflowList takes the width the end lane
+  // leaves, and its automatic minimum stops counting the list's unfolded
+  // items. The list then folds to that width, down to its own floor.
+  startFolds: {
+    flexGrow: {default: null, [HOLDS_OVERFLOW_LIST]: 1},
+    flexBasis: {default: null, [HOLDS_OVERFLOW_LIST]: '0%'},
+    minWidth: {default: null, [HOLDS_OVERFLOW_LIST]: 0},
   },
   // When only endContent, push to end
   endOnly: {
@@ -454,6 +466,7 @@ export function Toolbar({
                   {...stylex.props(
                     styles.startSlot,
                     !hasEndContent && styles.startOnly,
+                    orientation === 'horizontal' && styles.startFolds,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>
