@@ -323,6 +323,64 @@ const ROWS = [
       saysNot: /contradict/,
     },
   ],
+  [
+    'a part word before another part word names a kind of it',
+    {
+      q: 'label badges: pill shaped, 12px medium text, 1px #d1d9e0 border, transparent background',
+      has: ['font-size 12px --on badge'],
+      never: /--on field-label/,
+    },
+  ],
+  [
+    'an underline nav is a row of tabs',
+    {
+      q: 'underline nav: 2px #fd8c73 underline on the selected item, #59636e text on the rest, 14px text',
+      has: ['font-size 14px --on tab'],
+      never: /^(?:text-size|--color-text-primary)/,
+    },
+  ],
+  [
+    'a navigation rail is the side nav',
+    {
+      q: 'navigation rail: #fef7ff background, 80px wide; the selected item gets a #e8def8 pill',
+      has: ["background-color '#fef7ff' --on side-nav --mode light"],
+      never: /--color-background-body|--on item /,
+    },
+  ],
+  [
+    'the top nav is the bar, never the frame that holds it',
+    {
+      q: 'the top nav: #111827 background, white text, and the current item #1f2937 with white text',
+      has: ["background-color '#111827' --on top-nav"],
+      never: /--on app-shell$/,
+    },
+  ],
+  [
+    'a color with a state and no look is the fill in that state',
+    {
+      q: 'tables: 1px #dee2e6 borders, 8px cell padding, #f8f9fa header background, and a #f8f9fa hover',
+      has: [
+        "background-color '#f8f9fa' --on table-row --state hover --mode light",
+      ],
+      never: /--color-border '#f8f9fa'/,
+    },
+  ],
+  [
+    'the product word before the colon is no page',
+    {
+      q: 'live sports scores page: high energy, dense, bold headings, team colors red #c8102e and blue #003da5 as accents, live badge in red',
+      has: ["accent '#c8102e'", 'headings bold'],
+      never: /--color-background-body|--on app-shell|^color .* --on heading/,
+    },
+  ],
+  [
+    'a body font said with headings is the body’s',
+    {
+      q: 'serif headings with a sans-serif body',
+      has: ['font serif --on heading', 'font system --on body'],
+      saysNot: /contradict/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
