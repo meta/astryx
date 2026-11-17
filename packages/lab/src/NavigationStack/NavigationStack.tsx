@@ -1615,9 +1615,9 @@ export function NavigationStack<T>({
   // icon remembers the control itself.
   const rememberActivation = useCallback((event: SyntheticEvent) => {
     // A transition this click or key starts runs in its task: React commits
-    // it before the task ends, and the next task clears the mark. The mark
-    // does not depend on when an engine clears window.event around the
-    // microtask in which React commits.
+    // it before the task ends, and the next task clears the mark. A click
+    // from script commits after window.event is restored. The mark still
+    // sees that task.
     inputTaskRef.current = true;
     const view = containerRef.current?.ownerDocument.defaultView;
     view?.setTimeout(() => {

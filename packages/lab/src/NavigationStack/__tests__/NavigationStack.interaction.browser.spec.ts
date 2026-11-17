@@ -1156,7 +1156,9 @@ test('a push whose commit blocks the main thread starts from its first frame', a
   // A heavy screen blocks the main thread in the task that pushes it (here
   // for 300 ms, right after the stack mounts it). The push starts when that
   // task ends, so its first frames show it near where it starts. Dated
-  // before the block, it would show almost all of its travel at once.
+  // before the block, it would show almost all of its travel at once. The
+  // check reads the time since the block with the position, because an
+  // engine's first frames after a long task can take far longer than 16 ms.
   const {driver, width} = await openStack(page, 'settings');
   await page.evaluate(() => {
     const observer = new MutationObserver(() => {
@@ -1171,14 +1173,15 @@ test('a push whose commit blocks the main thread starts from its first frame', a
       while (performance.now() < until) {
         // Hold the main thread, as a heavy commit does.
       }
+      (window as Window & {blockEnd?: number}).blockEnd = performance.now();
     });
     observer.observe(document.body, {childList: true, subtree: true});
   });
   await driver.tap(await rowCenter(page, 'General'));
-  // The second frame after the block: the push has run for about a frame.
-  const x = await page.evaluate(
+  // The second frame after the block, and how long after the block it ran.
+  const {x, sinceBlock} = await page.evaluate(
     () =>
-      new Promise<number>(resolve => {
+      new Promise<{x: number; sinceBlock: number}>(resolve => {
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
             const pushed = document.querySelector(
@@ -1186,14 +1189,23 @@ test('a push whose commit blocks the main thread starts from its first frame', a
             );
             const value =
               pushed == null ? 'none' : getComputedStyle(pushed).translate;
-            resolve(value === 'none' ? 0 : parseFloat(value));
+            const blockEnd =
+              (window as Window & {blockEnd?: number}).blockEnd ?? 0;
+            resolve({
+              x: value === 'none' ? 0 : parseFloat(value),
+              sinceBlock: performance.now() - blockEnd,
+            });
           }),
         );
       }),
   );
   // Critically damped from the trailing edge: about 70 % of the width is
-  // still to travel after 33 ms; under 1 % after the 300 ms block.
-  expect(Math.abs(x) / width).toBeGreaterThan(0.5);
+  // still to travel after 33 ms. The share left `ms` into the push:
+  const leftAt = (ms: number) => (1 + ms / 30) * Math.exp(-ms / 30);
+  // Started at the block's end, at least half of what the spring leaves at
+  // that time is still to travel. Dated before the 300 ms block, almost none
+  // would be.
+  expect(Math.abs(x) / width).toBeGreaterThan(0.5 * leftAt(sinceBlock));
 });
 
 test('a push keeps advancing every frame while the main thread is blocked', async ({
