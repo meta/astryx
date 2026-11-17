@@ -26,7 +26,7 @@ const RESET_CSS = fs.readFileSync(
 // No Astryx CSS is loaded, so --color-text-secondary is undefined and a
 // placeholder takes the reset's fallback: the token's own light-dark() default.
 const PLACEHOLDER_FALLBACK = {
-  light: 'rgb(78, 96, 111)',
+  light: 'rgb(68, 85, 100)',
   dark: 'rgb(170, 175, 181)',
 };
 
