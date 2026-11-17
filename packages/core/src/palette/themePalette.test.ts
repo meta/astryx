@@ -269,10 +269,24 @@ describe("themePalette's reading of Core's defaults", () => {
         plan.fills,
         context,
       );
+      // (themePalette spells a value kept at Core's own as it spells a
+      // stop: lowercase hex, with any alpha.)
+      const spell = (c: string): string => {
+        const read = parseColor(c);
+        if (!read) {
+          return c;
+        }
+        const rgb = hex([read.r, read.g, read.b]);
+        return read.a < 1
+          ? `${rgb}${Math.round(read.a * 255)
+              .toString(16)
+              .padStart(2, '0')}`
+          : rgb;
+      };
       const tokens = Object.fromEntries(
         Object.entries(mapping.tokens).map(([token, {light, dark}]) => [
           token,
-          [light.color, dark.color],
+          [spell(light.color), spell(dark.color)],
         ]),
       );
       expect(palette.tokens, JSON.stringify(input)).toEqual(tokens);
