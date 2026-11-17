@@ -359,7 +359,7 @@ function dialVibrancy(settings) {
 }
 
 /** The Core token word of each status family. */
-const STATUS_TOKEN = wordTable(
+export const STATUS_TOKEN = wordTable(
   /** @type {Record<string, string>} */ ({
     success: 'success',
     warning: 'warning',

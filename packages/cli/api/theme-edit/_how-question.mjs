@@ -12267,16 +12267,22 @@ export function draftAnswer(ctx, env, question) {
     };
   };
   // A look said of a family's member ("gradient buttons", "framed
-  // dialogs", "glossy toggles", "the selected pill"): its layered fill (a
-  // gradient), its frame (a border and a shadow given together) or its
+  // dialogs", "glossy toggles", "the selected pill", "alerts with a
+  // gradient", "a rule under the dialog header"): its layered fill (a
+  // gradient), its frame (a border and a shadow given together), its
   // selected pill (corners and a fill given together for the selected
-  // state) goes on the member's family role, so every member that
+  // state) or a header's rule goes on the member's family role, so every member that
   // draws alike takes it (a member the theme set the same thing on keeps
   // its own). A plain fill, a shadow or border alone, a removal, a step
   // from the value now, a member said with a variant or a level, or "only"
   // stays on the member.
   const groups = groupsOf(ctx);
-  const LOOK_ROLES = ['button-like', 'overlays', 'option-rows'];
+  const LOOK_ROLES = [
+    'button-like',
+    'overlays',
+    'option-rows',
+    'status-surfaces',
+  ];
   /** @param {Step} st @param {Step[]} o */
   const familyOfStep = (st, o) => {
     if (!st.on || st.when || st.verb !== 'set') return null;
@@ -12318,6 +12324,12 @@ export function draftAnswer(ctx, env, question) {
       o.some(
         x => sel(x) && /^background(?:-color|-image)?$/.test(String(x.thing)),
       );
+    // (A header's rule: the line under or over an overlay's header.)
+    const rule =
+      !st.state &&
+      /^border-(?:bottom|top|block-end|block-start)$/.test(thing) &&
+      (groups['overlay-headers'] ?? []).includes(String(st.on));
+    if (rule) return 'overlay-headers';
     if (!gradient && !frame && !selected) return null;
     return (
       (selected ? ['selected-items'] : LOOK_ROLES).find(r =>

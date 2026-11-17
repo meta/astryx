@@ -1725,13 +1725,24 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
  * - `selected-items`: a part with a selected (or active) state whose
  *   selected look fills it;
  * - `accent-fills`: a part filled with the accent at rest;
- * - `inset-fields`: the inputs and the parts filled with the track color.
+ * - `inset-fields`: the inputs and the parts filled with the track color;
+ * - `status-surfaces`: a part holding a message with a control of its own
+ *   whose fill follows a prop whose values name the theme's status roles
+ *   (info, success, warning, error);
+ * - `overlay-headers`: an Overlay component's part, not its surface, that
+ *   holds a heading and a control (its title and its close button).
  * @param {{MAP: Record<string, any>}} C
  * @param {{target: Map<string, any>, components: Record<string, any>}} project
  * @param {string[]} inputs the inputs group's members
- * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields', string[]>}
+ * @param {string[]} statusWords the theme's status role words
+ * @returns {Record<'button-like' | 'overlays' | 'option-rows' | 'selected-items' | 'accent-fills' | 'inset-fields' | 'status-surfaces' | 'overlay-headers', string[]>}
  */
-export function familyRoles(C, project, inputs = []) {
+export function familyRoles(
+  C,
+  project,
+  inputs = [],
+  statusWords = ['info', 'success', 'warning', 'error'],
+) {
   /** @type {Record<string, string[]>} */
   const out = {
     'button-like': [],
@@ -1740,6 +1751,8 @@ export function familyRoles(C, project, inputs = []) {
     'selected-items': [],
     'accent-fills': [],
     'inset-fields': [],
+    'status-surfaces': [],
+    'overlay-headers': [],
   };
   /** @param {string} key @param {string} prop @param {(cond: string) => boolean} keep */
   const values = (key, prop, keep) =>
@@ -1817,6 +1830,42 @@ export function familyRoles(C, project, inputs = []) {
       rest.some(v => /^var\(--color-track\)$/.test(v))
     )
       out['inset-fields'].push(key);
+    // (A status prop: one whose values are the theme's status words; the
+    // fill follows it when it differs between them or reads a status
+    // token.)
+    const statusProps = Object.entries(rec.attrs ?? {})
+      .filter(
+        ([, vals]) =>
+          Array.isArray(vals) &&
+          vals.some(v => statusWords.includes(String(v))),
+      )
+      .map(([k]) => k);
+    if (statusProps.length) {
+      const fills = Object.entries(rec.at?.['background-color'] ?? {}).filter(
+        ([cond]) => !/[\s:[]/.test(cond),
+      );
+      const statusFill = new RegExp(
+        `--color-(?:background-)?(?:${statusWords.join('|')})\\b`,
+      );
+      const byStatus = fills.filter(([cond]) =>
+        statusProps.some(k => new RegExp(`(?:^|,)${k}=`).test(cond)),
+      );
+      // (A surface: it holds a message with a control of its own, a dismiss
+      // or an action; a badge or a dot is a mark, not a surface.)
+      if (
+        (rec.contains ?? []).includes('button') &&
+        (byStatus.some(([, v]) => statusFill.test(String(v))) ||
+          new Set(fills.map(([, v]) => String(v))).size > 1)
+      )
+        out['status-surfaces'].push(key);
+    }
+    if (
+      comp?.category === 'Overlay' &&
+      !own &&
+      (rec.contains ?? []).includes('heading') &&
+      (rec.contains ?? []).includes('button')
+    )
+      out['overlay-headers'].push(key);
   }
   return /** @type {any} */ (out);
 }
