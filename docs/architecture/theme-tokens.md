@@ -222,7 +222,10 @@ then have contradictory winners.
   defaults and in every theme built from a colour scale, `--color-text-secondary`
   meets 4.5:1 on each default `--color-background-<hue>` tint, painted over
   the default surface and over the page body, in light and dark mode. A value
-  a hand-written theme sets is that theme's own.
+  a hand-written theme sets is that theme's own. Core's light default,
+  `#445564`, has the hue and chroma of `--color-icon-secondary` (`#4E606F`)
+  and is the smallest drop in CIE L* that meets 4.5:1 on every default tint.
+  The lowest pair is `--color-background-gray` over the page body (4.52:1).
 
 This record does not own:
 
