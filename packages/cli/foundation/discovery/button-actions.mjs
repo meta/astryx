@@ -178,14 +178,49 @@ function attributeName(attribute) {
 }
 
 /**
+ * What an expression in a button's props stands for: the value of a `const`
+ * that is a string or a function, or of a function declaration, when the
+ * name is one of those in the module; else the expression itself.
+ * @param {any} expression
+ * @param {any} path the button's JSXElement path, whose scope holds the name
+ * @returns {any}
+ */
+function constantValue(expression, path) {
+  if (expression?.type !== 'Identifier') return expression;
+  const binding = path.scope.getBinding(expression.name);
+  if (binding?.kind === 'hoisted' && binding.path.isFunctionDeclaration()) return binding.path.node;
+  if (binding?.kind !== 'const' || !binding.path.isVariableDeclarator()) return expression;
+  let init = binding.path.node.init;
+  while (
+    init?.type === 'TSAsExpression' ||
+    init?.type === 'TSSatisfiesExpression' ||
+    init?.type === 'TSTypeAssertion' ||
+    init?.type === 'ParenthesizedExpression'
+  ) {
+    init = init.expression;
+  }
+  const isValue =
+    init?.type === 'StringLiteral' ||
+    (init?.type === 'TemplateLiteral' && init.expressions.length === 0) ||
+    init?.type === 'ArrowFunctionExpression' ||
+    init?.type === 'FunctionExpression';
+  return isValue ? init : expression;
+}
+
+/**
  * Whether an attribute value is a handler that does nothing: a function with
  * an empty body, or one that returns `undefined`, `null` or `void 0`.
  * @param {any} value a JSXAttribute value
+ * @param {any} path the button's JSXElement path
  */
-function isEmptyHandler(value) {
+function isEmptyHandler(value, path) {
   if (value?.type !== 'JSXExpressionContainer') return false;
-  const fn = value.expression;
-  if (fn?.type !== 'ArrowFunctionExpression' && fn?.type !== 'FunctionExpression') {
+  const fn = constantValue(value.expression, path);
+  if (
+    fn?.type !== 'ArrowFunctionExpression' &&
+    fn?.type !== 'FunctionExpression' &&
+    fn?.type !== 'FunctionDeclaration'
+  ) {
     return false;
   }
   const body = fn.body;
@@ -198,17 +233,28 @@ function isEmptyHandler(value) {
 }
 
 /**
- * Whether an `href` goes nowhere: `#` alone, an empty link, or a
- * `javascript:` link. A link to an anchor on the page, such as `#features`,
- * goes somewhere, and so does `#` in an app that routes by the hash, where it
- * opens the first page.
+ * The link an `href` holds when the source states it: a string, or a `const`
+ * string in the module. Null when the link is computed.
  * @param {any} value a JSXAttribute value
+ * @param {any} path the button's JSXElement path
+ * @returns {{href: string, name: string | null} | null}
+ */
+function linkOf(value, path) {
+  const expression = value?.type === 'JSXExpressionContainer' ? value.expression : null;
+  const href = staticText(expression?.type === 'Identifier' ? constantValue(expression, path) : value);
+  if (href == null) return null;
+  return {href: href.trim(), name: expression?.type === 'Identifier' ? expression.name : null};
+}
+
+/**
+ * Whether a link goes nowhere: `#` alone, an empty link, or a `javascript:`
+ * link. A link to an anchor on the page, such as `#features`, goes
+ * somewhere, and so does `#` in an app that routes by the hash, where it
+ * opens the first page.
+ * @param {string} href
  * @param {ScanContext} context
  */
-function isPlaceholderLink(value, context) {
-  const text = staticText(value);
-  if (text == null) return false;
-  const href = text.trim();
+function goesNowhere(href, context) {
   return href === '' || (href === '#' && !context.hashRouting) || /^javascript:/i.test(href);
 }
 
@@ -640,13 +686,14 @@ function missingAction(path, context) {
     const name = attributeName(attribute);
     if (name == null) return null;
     if (ACTION_PROPS.has(name)) {
-      if (!isEmptyHandler(attribute.value)) return null;
+      if (!isEmptyHandler(attribute.value, path)) return null;
       note = `empty ${name}`;
       continue;
     }
     if (name === 'href') {
-      if (!isPlaceholderLink(attribute.value, context)) return null;
-      note ??= `href="${staticText(attribute.value)?.trim() ?? ''}"`;
+      const link = linkOf(attribute.value, path);
+      if (link == null || !goesNowhere(link.href, context)) return null;
+      note ??= link.name == null ? `href="${link.href}"` : `${link.name} is "${link.href}"`;
       continue;
     }
     if (name === 'type') {

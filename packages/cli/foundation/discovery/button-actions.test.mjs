@@ -73,6 +73,30 @@ function page(body, imports = '') {
 /** @param {string} body @param {string} [imports] */
 const onPage = (body, imports) => deadButtons({'page.tsx': page(body, imports)});
 
+describe('a name in its props', () => {
+  it.each([
+    ['a const link that goes nowhere', "const START = '#';", '<Button label="Start" href={START} />', ['page.tsx:6 Start']],
+    ['a const link cast as const', "const START = '#' as const;", '<Button label="Start" href={START} />', ['page.tsx:6 Start']],
+    ['a const empty handler', 'const noop = () => {};', '<Button label="Save" onClick={noop} />', ['page.tsx:6 Save']],
+    ['an empty function declaration', 'function noop() {}', '<Button label="Save" onClick={noop} />', ['page.tsx:6 Save']],
+    ['a const link that goes somewhere', "const DOCS = '/docs';", '<Button label="Docs" href={DOCS} />', []],
+    ['a let link', "let START = '#';", '<Button label="Start" href={START} />', []],
+    ['a const handler that acts', 'const save = () => post();', '<Button label="Save" onClick={save} />', []],
+    ['a computed const link', "const START = base + '#';", '<Button label="Start" href={START} />', []],
+    ['a link from props', '', '<Button label="Start" href={START} />', []],
+  ])('%s', (_, declaration, body, expected) => {
+    expect(onPage(body, declaration)).toEqual(expected);
+  });
+
+  it('names the constant that goes nowhere', () => {
+    const scan = scanButtonActions(page('<Button label="Start" href={START} />', "const START = '#';"), {
+      isOwnCode: () => false,
+      stem: 'page',
+    });
+    expect(scan?.buttons.map(button => button.note)).toEqual(['START is "#"']);
+  });
+});
+
 describe('a button with no action', () => {
   it.each([
     ['a label only', '<Button label="Try it" />', ['page.tsx:6 Try it']],
