@@ -29,6 +29,7 @@ import {CollapsibleGroupContext} from './CollapsibleGroupContext';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {matchesMediaQuery} from '../utils/coarsePointer';
+import {sharedMap} from '../utils/sharedRealm';
 
 /**
  * Configuration for collapsible behavior.
@@ -197,8 +198,14 @@ function suppressAnimation(node: HTMLElement): () => void {
   };
 }
 
-/** Content elements that wait for a height measurement, with their property. */
-const pendingHeights = new Map<HTMLElement, string>();
+/**
+ * Content elements that wait for a height measurement, with their property.
+ * Every copy of Core on the page shares the pass.
+ */
+const pendingHeights = sharedMap<HTMLElement, string>(
+  'collapsible/use-collapsible/pending-heights',
+  1,
+);
 
 /**
  * Measures every content element that changes in one commit in one pass:
