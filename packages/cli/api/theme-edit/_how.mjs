@@ -1538,7 +1538,13 @@ function toolAnswer(t, env, targets) {
     )
   )
     return 'list';
-  if (/\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/.test(q))
+  // (Only an ask about color-blind readers alone: in a list of asks,
+  // "…, statuses that work for color-blind operators, 13px text, …", the
+  // other pieces are answered, never swallowed by this one.)
+  if (
+    /\b(colou?r[- ]?blind\w*|cvd|deuteran\w*|protan\w*|tritan\w*)\b/.test(q) &&
+    q.split(/[,;:]/).filter(x => x.trim()).length < 2
+  )
     return [
       {
         text: `color-blind readers: the editor checks that the status fills (info, success, warning, danger) stay apart for someone red-weak or green-weak, and show and set note a pair that may look alike, with a line that moves one of them lighter or darker. Status parts also carry an icon and words, so a state never rests on color alone. To choose the colors yourself, set each status color; keep warning light and danger dark so lightness, not only hue, tells them apart.`,
