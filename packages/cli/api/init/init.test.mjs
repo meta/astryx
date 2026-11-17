@@ -15,6 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {init, getNextSteps} from './init.mjs';
 import {logger} from '../logger.mjs';
+import {inspectAgentDocs} from '../../foundation/agent-docs/agent-docs.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
@@ -394,6 +395,8 @@ describe('init() — what changed in each agent-doc file', () => {
       {path: 'AGENTS.md', change: 'unchanged', from: change.to, to: change.to},
     ]);
     expect(second.text).toContain(`AGENTS.md already current (Astryx ${change.to}), nothing changed`);
+    // upgrade's staleness check reads the block the same way.
+    expect(inspectAgentDocs(tmpDir, change.to).status).toBe('current');
   });
 
   it('says a block was removed when another Claude Code file now holds it', async () => {
@@ -419,6 +422,15 @@ describe('init() — what changed in each agent-doc file', () => {
     const paths = receipt.data.docsChanges.map(c => c.path);
     expect(paths).toContain('AGENTS.md');
     expect(paths.every(p => !path.isAbsolute(p) && !p.startsWith('..'))).toBe(true);
+  });
+
+  it('names an --agent-docs-path file from the project root when init runs below it', async () => {
+    asProject();
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    const receipt = await init({features: 'agents', agentDocsPath: ['NOTES.md']}, {cwd: sub});
+    expect(receipt.data.docsWritten).toEqual(['NOTES.md']);
+    expect(receipt.data.docsChanges.map(c => c.path)).toEqual(['src/app/NOTES.md']);
   });
 
   it('keeps every field of the earlier receipt, with the same values', async () => {

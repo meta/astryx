@@ -412,7 +412,7 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
     if (isAgentsImportBlock(rel, content)) continue;
 
     const legacy = !hasNew && hasLegacy;
-    const blockVersion = parseBlockVersion(content);
+    const blockVersion = managedBlockVersion(content);
     let contentMatches = true;
     if (expectedBlock != null) {
       try {

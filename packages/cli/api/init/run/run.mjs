@@ -163,10 +163,10 @@ async function applyAgents(cwd, options, invocation, data) {
           );
     data.docsWritten = written;
     const after = readAgentDocTexts(targetDir, files);
-    // The receipt names each file from the folder init writes in; the line
-    // names it from where init ran, as docsWritten does.
+    // The receipt names each file from the project root; the line names it
+    // from where init ran, as docsWritten does.
     data.docsChanges = files.map(rel => ({
-      path: rel,
+      path: path.relative(root, path.join(targetDir, rel)).split(path.sep).join('/'),
       ...agentDocChange(before.get(rel) ?? null, after.get(rel) ?? null),
     }));
     data.docsChanges.forEach((change, i) => {
