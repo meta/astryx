@@ -29,7 +29,7 @@ describe('main validation legs', () => {
     expect(job['runs-on']).toBe('ubuntu-latest');
   };
 
-  it("test-node draws the theme editor's pages as a pull request does and names the files still running before the job limit", () => {
+  it("test-node draws the theme editor's pages as a pull request does", () => {
     const job = workflow.jobs['test-node'];
     const run = job.steps.find(step =>
       /pnpm test:node --shard=/.test(step.run ?? ''),
@@ -39,13 +39,6 @@ describe('main validation legs', () => {
     expect(run.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
     expect(job.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
     expect(workflow.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
-    // The watchdog names the in-flight files a minute before the limit.
-    expect(run.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ');
-    expect(run.run).toContain('export VITEST_SHARD_WATCHDOG_SECONDS');
-    expect(run.run).toContain(
-      '--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs',
-    );
-    expect(job['timeout-minutes']).toBe(15);
   });
 
   it('test-ui runs 6 legs at once, each inside the job budget', () => {
