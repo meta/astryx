@@ -8,8 +8,8 @@
  * some commands take, a command deeper in the tree, or a name another command
  * reads. Otherwise it names the commands with a near name, else every
  * command. It only suggests: it runs nothing, and it names no experimental
- * command except the one spec:AST-017 FR27's shareable-page exception lets a
- * share word name.
+ * command except the ones spec:AST-017 FR27's shareable-page exception lets a
+ * share word or a way-back word name.
  *
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints

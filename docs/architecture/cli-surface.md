@@ -91,7 +91,9 @@ theme matcha` is `theme add matcha`) and the table of their words in
    suggests: it runs nothing and names no experimental command, except that a
    share word (`export`, `render`, `share`, `bundle`, `snapshot`,
    `standalone`) names `experimental export` under `spec:AST-017` FR27's
-   shareable-page exception.
+   shareable-page exception, and a way-back word (`import`, `back`,
+   `restore`, `unrender`, `reverse`) names `experimental import` under the
+   same exception.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
