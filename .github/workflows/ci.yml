@@ -169,7 +169,9 @@ jobs:
         with:
           # scripts/lib brings the scripts/ files beside it too: the Node leg
           # planner, the modules it imports and the recorded Node times;
-          # .github/scripts/lib holds the glob matcher it shares.
+          # .github/scripts/lib holds the glob matcher it shares, and brings
+          # the .github/scripts files the release-critical label check reads
+          # (run-labels.cjs and review-signal-decision.cjs).
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
@@ -243,9 +245,11 @@ jobs:
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
     runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
+    # pull-requests: read reads who applied a release-critical label.
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       full: ${{ steps.rest.outputs.full }}
       # How many legs of each widening matrix run at once (ci-admission).
@@ -261,7 +265,12 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 8
         with:
-          sparse-checkout: .github/actions/ci-admission
+          # .github/scripts/lib brings the .github/scripts files beside it, the
+          # ones the release-critical label check reads (run-labels.cjs and
+          # review-signal-decision.cjs).
+          sparse-checkout: |
+            .github/actions/ci-admission
+            .github/scripts/lib
           path: .ci-admission
           persist-credentials: false
 
@@ -1066,6 +1075,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
@@ -1196,19 +1211,21 @@ jobs:
               .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). Vitest walks the module graph once, for the list; a
+            # second `--changed` walk would cost each leg as long again.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/ui-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/ui-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -1236,12 +1253,12 @@ jobs:
       # (its `leg-widths`).
       max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
       # As many legs as the recorded Node times need for each leg to finish
-      # inside the job limit, at most eight (room's Node leg plan,
+      # inside the job limit, at most twelve (room's Node leg plan,
       # scripts/vitest-node-legs.mjs). The fallback, the most legs a plan
       # gives, applies only when room did not plan, and then every leg stops
-      # at its first step.
+      # before any setup.
       matrix:
-        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}
+        shard: ${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]') }}
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1250,6 +1267,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       # A Node suite that does not fit its legs fails every leg with room's
       # reason, before any setup, so the run cannot pass on legs that would
       # outrun their job limit.
@@ -1362,12 +1385,14 @@ jobs:
             # share of guards.
             # The lists go through files so a failing lister fails the step.
             # Every leg splits the same list, so a leg that cannot list the
-            # tests fails rather than split a different one.
+            # tests fails rather than split a different one. Vitest runs
+            # directly, each path its own argument: a package script joins
+            # them into one shell string, which Linux caps at 128 KiB.
             .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm exec vitest run --project node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
@@ -1481,6 +1506,30 @@ jobs:
           pnpm -F @astryxdesign/build build
           pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
 
+      # render-interaction-parity.browser.test.mjs builds one page into a Vite
+      # app and renders it to one file, then takes the same clicks, keys and
+      # typing in both in Chromium, the file inside a sandboxed frame under a
+      # strict content security policy, and compares what shows after each
+      # step. It needs the build package's Vite plugin, built in the step
+      # before. The Node legs skip it; with ASTRYX_RENDER_PARITY_BROWSER set,
+      # a missing browser fails it.
+      - name: Render interaction parity browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_PARITY_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/render-interaction-parity.browser.test.mjs --maxWorkers=1
+
+      # template-noscript-first-paint.browser.test.mjs renders the page
+      # templates people share as a file to static HTML and checks their
+      # first paint with script off at a phone's and a desktop's width. The
+      # Node legs skip it; with ASTRYX_TEMPLATE_NOSCRIPT_BROWSER set, a
+      # missing browser fails it.
+      - name: Template no-script first paint browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_NOSCRIPT_BROWSER: '1'
+        run: pnpm exec vitest run .github/scripts/template-noscript-first-paint.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -1572,6 +1621,12 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Another run's admission counts at most this many live legs of this
+      # matrix: GitHub lists the legs max-parallel holds back as queued, but
+      # they hold no runner (count.mjs AT_ONCE_STEP).
+      - name: Run at most ${{ strategy.max-parallel }} legs at once
+        run: echo "This matrix runs at most ${{ strategy.max-parallel }} legs at once."
+
       - uses: actions/checkout@v7
         timeout-minutes: 8
         with:
@@ -1847,13 +1902,15 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
-      # join still runs: it requires the release bump's own validation.
+      # join still runs: it requires the release bump's own validation. So
+      # does a change only to the recorded Node test times: the Node leg
+      # plan's check, which fails test-node, is the check that gates it.
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}
@@ -3548,7 +3605,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
@@ -3887,7 +3948,11 @@ jobs:
         timeout-minutes: 8
         with:
           path: .heavy-caps
-          sparse-checkout: .github/actions/heavy-caps
+          # .github/scripts/lib brings the .github/scripts files beside it,
+          # the ones the release-critical label check reads.
+          sparse-checkout: |
+            .github/actions/heavy-caps
+            .github/scripts/lib
           persist-credentials: false
 
       - name: Per-author heavy-suite caps

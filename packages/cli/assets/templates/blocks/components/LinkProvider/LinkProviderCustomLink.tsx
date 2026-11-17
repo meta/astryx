@@ -4,6 +4,7 @@
 
 import type {AnchorHTMLAttributes} from 'react';
 import {Link, LinkProvider} from '@astryxdesign/core/Link';
+import {useToast} from '@astryxdesign/core/Toast';
 
 /**
  * A stand-in for a framework router link (e.g. Next.js `Link` or React
@@ -18,13 +19,14 @@ function RouterLink({
   children,
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const showToast = useToast();
   return (
     <a
       href={href}
       onClick={e => {
         e.preventDefault();
         onClick?.(e);
-        alert(`RouterLink intercepted navigation to: ${href}`);
+        showToast({body: `Demo: your router would navigate to ${href} here`});
       }}
       {...props}>
       {children}

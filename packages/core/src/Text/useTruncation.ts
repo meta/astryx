@@ -128,8 +128,24 @@ export function useTruncationMeasure(
   options: TruncationMeasureOptions,
 ): TruncationMeasureReturn {
   const {maxLines, isExpanded = false, measuresOnInterest = false} = options;
-  const [isTruncated, setIsTruncated] = useState(false);
-  const [fullText, setFullText] = useState('');
+  const [isTruncated, setTruncatedState] = useState(false);
+  const [fullText, setFullTextState] = useState('');
+  // The values last set as state. A measurement that finds the same values
+  // sets nothing, so a list that mounts many texts dispatches no updates
+  // that would change nothing.
+  const shownRef = useRef({isTruncated: false, fullText: ''});
+  const setIsTruncated = useCallback((value: boolean) => {
+    if (shownRef.current.isTruncated !== value) {
+      shownRef.current.isTruncated = value;
+      setTruncatedState(value);
+    }
+  }, []);
+  const setFullText = useCallback((value: string) => {
+    if (shownRef.current.fullText !== value) {
+      shownRef.current.fullText = value;
+      setFullTextState(value);
+    }
+  }, []);
   const elementRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const unobserveContentRef = useRef<(() => void) | null>(null);
@@ -152,7 +168,7 @@ export function useTruncationMeasure(
       answerRef.current.isTruncated = measureTruncation(element, maxLines);
       setIsTruncated(answerRef.current.isTruncated);
     },
-    [maxLines],
+    [maxLines, setIsTruncated, setFullText],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -217,7 +233,14 @@ export function useTruncationMeasure(
         setFullText('');
       }
     },
-    [maxLines, isExpanded, measuresOnInterest, checkTruncation],
+    [
+      maxLines,
+      isExpanded,
+      measuresOnInterest,
+      checkTruncation,
+      setIsTruncated,
+      setFullText,
+    ],
   );
 
   // Measures the attached text at a hover, tap or focus. The first call also

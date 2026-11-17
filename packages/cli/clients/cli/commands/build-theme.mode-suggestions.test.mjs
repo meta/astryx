@@ -144,10 +144,9 @@ describe('a write build refusal keeps --icons-specifier and quotes the source', 
       expect(n).toContain(` theme build ${source}`);
       expect(n).toContain('--icons-specifier ./icons.mjs');
     }
-    // One of them drops --out: the outputs beside the source.
-    expect(names.some((/** @type {string} */ n) => !n.includes('--out'))).toBe(
-      true,
-    );
+    // Each names a free --out path: never the same paths, nor the build
+    // beside the source, which could replace a file there.
+    for (const n of names) expect(n).toContain('--out');
   });
 });
 

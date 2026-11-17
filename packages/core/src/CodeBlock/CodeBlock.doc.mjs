@@ -224,6 +224,13 @@ export const docs = {
         default: '2ch',
         private: true,
       },
+      {
+        name: '--_codeblock-direction',
+        description:
+          "The page's direction where the block sits, so the gutter, its divider and the diff marker mirror with the page while the code viewport stays left to right.",
+        default: 'ltr',
+        private: true,
+      },
     ],
     componentIcons: [
       {

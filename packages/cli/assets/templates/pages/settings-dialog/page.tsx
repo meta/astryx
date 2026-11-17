@@ -55,9 +55,12 @@
  * preview per `SelectableCard`; many choices use one `Selector` and one live
  * preview below it. Prefer the real component being configured so the sample
  * cannot drift. For detail most readers do not need, expand a `Collapsible`
- * inside the row. Never open a dialog from this dialog: nested focus traps and
- * two overlapping dismiss paths are not progressive disclosure. If the detail
- * is too large to expand in place, it belongs on a page.
+ * inside the row. Never open a dialog from this dialog to show more detail:
+ * nested focus traps and two overlapping dismiss paths are not progressive
+ * disclosure. If the detail is too large to expand in place, it belongs on a
+ * page. The one exception is an `AlertDialog` that confirms a destructive
+ * action, such as deleting the account: it asks one question, and Escape
+ * closes only the alert, never this dialog.
  */
 
 import {Button} from '@astryxdesign/core/Button';
@@ -92,6 +95,7 @@ import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {Token} from '@astryxdesign/core/Token';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {VStack} from '@astryxdesign/core/VStack';
+import {useImperativeAlertDialog} from '@astryxdesign/core/AlertDialog';
 import {
   ArrowDownOnSquareIcon,
   ArrowDownTrayIcon,
@@ -1979,6 +1983,7 @@ function LanguagePanel({settings, update}: PanelProps) {
 
 function PrivacyPanel({settings, update}: PanelProps) {
   const showToast = useToast();
+  const confirm = useImperativeAlertDialog();
   return (
     <VStack gap={5}>
       <SettingsCard title="Visibility">
@@ -2060,9 +2065,32 @@ function PrivacyPanel({settings, update}: PanelProps) {
           title="Delete my account"
           description="Permanent, and it takes the workspace with it."
           icon={TrashIcon}
-          control={<Button label="Delete" variant="destructive" size="sm" />}
+          control={
+            <Button
+              label="Delete"
+              variant="destructive"
+              size="sm"
+              onClick={() =>
+                confirm.show({
+                  title: 'Delete your account?',
+                  description:
+                    "This demo won't delete anything. In your app, this would permanently delete your account and the workspace with it.",
+                  actionLabel: 'Delete account',
+                  onAction: () => {
+                    confirm.hide();
+                    // Demo only: replace this toast with the call that performs the action.
+                    showToast({
+                      body: 'Demo: your account would be deleted here',
+                      uniqueID: 'delete-account',
+                    });
+                  },
+                })
+              }
+            />
+          }
         />
       </SettingsCard>
+      {confirm.element}
     </VStack>
   );
 }
@@ -2442,7 +2470,7 @@ function SettingsSideNav({
         <HStack gap={2} align="center" paddingInline={2} minHeight={32}>
           {/* Also the dialog's accessible name (`aria-labelledby`), so the
               painted title and the announced one cannot drift apart. */}
-          <Heading level={4} id={titleId}>
+          <Heading level={4} accessibilityLevel={1} id={titleId}>
             Settings
           </Heading>
         </HStack>
@@ -2605,10 +2633,9 @@ function SettingsNarrowShell({
     <VStack gap={0} height="100%">
       <HStack gap={2} align="center" paddingInline={3} paddingBlock={3}>
         <StackItem size="fill">
-          {/* The element `aria-labelledby` points at in this shell. A title row,
-              not the head of a navigation column, so it stays a label — the
-              phone layout's only heading should be the panel's own. */}
-          <Text type="label" id={titleId}>
+          {/* The element `aria-labelledby` points at in this shell, and the
+              page's level-1 heading; it keeps the label look. */}
+          <Text type="label" as="h1" id={titleId}>
             Settings
           </Text>
         </StackItem>
@@ -2690,7 +2717,7 @@ export default function SettingsDialogTemplate() {
   return (
     // `Center` is the page root — the rubric's root for a content page, and
     // what puts the inline dialog in the middle of the page it stands in for.
-    <Center height="100dvh">
+    <Center role="main" height="100dvh">
       <Dialog
         isOpen
         // `isInline` renders this same dialog WITHOUT the `<dialog>` element, so
@@ -2699,7 +2726,8 @@ export default function SettingsDialogTemplate() {
         // transform or `overflow: hidden` can clip — an open one inside a scaled
         // preview tile paints over the whole gallery instead of inside its tile.
         // The docsite's own preview is also a Dialog, which a modal here would
-        // then nest inside, and Astryx forbids nesting dialogs.
+        // then nest inside, and Astryx does not nest dialogs, apart from an
+        // AlertDialog that confirms a destructive action.
         //
         // Everything else on this page is the composition you want: drop
         // `isInline`, drive `isOpen` from state, hand `onOpenChange` the setter,

@@ -12,7 +12,6 @@
 
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, expect} from 'vitest';
@@ -92,6 +91,9 @@ export function makeProject() {
 /** This file's own user config folder (settings and state), in its work folder. */
 export const userConfig = () => path.join(work, 'config');
 
+/** This file's compiled-module cache, in its work folder (see run()). */
+const compileCache = () => path.join(work, 'compile-cache');
+
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
@@ -120,9 +122,12 @@ export function run(
         TMP: tmp,
         TEMP: tmp,
         NO_UPDATE_NOTIFIER: '1',
-        // Node's compile cache (bin/astryx.mjs) keeps its own folder in the
-        // same temp folder; these runs look only at the catalog's.
-        NODE_DISABLE_COMPILE_CACHE: '1',
+        // The compiled modules stay warm across this file's runs, as a user's
+        // do across their commands. The cache changes how a module compiles,
+        // never what it loads or prints, and it lives outside every temp
+        // folder the cases inspect. compile-cache.test.mjs covers the bin's
+        // own cache folder.
+        NODE_COMPILE_CACHE: compileCache(),
         // The kept catalogs live in the user's cache folder.
         XDG_CACHE_HOME: tmp,
         // A gather reads the user's settings and state files: they are this
@@ -163,7 +168,7 @@ export function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
           TMP: tmp,
           TEMP: tmp,
           NO_UPDATE_NOTIFIER: '1',
-          NODE_DISABLE_COMPILE_CACHE: '1',
+          NODE_COMPILE_CACHE: compileCache(),
           XDG_CACHE_HOME: tmp,
           XDG_CONFIG_HOME: userConfig(),
           ...env,
@@ -513,8 +518,7 @@ export async function expectSameAsFresh(tmp, options = {}) {
 // keeps none and gathers fresh each run. The cases that need a kept catalog or
 // kept check results skip there, and packed-gather-cache.records.test.mjs
 // proves the fresh gather.
-export const hasModuleHooks =
-  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+export {hasModuleHooks} from './module-hooks.mjs';
 
 /** Packs and installs the CLI and makes the project before this file's cases. */
 export function usePackedCli() {
