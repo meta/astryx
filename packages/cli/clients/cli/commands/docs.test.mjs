@@ -5,7 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {Command} from 'commander';
-import {formatBlock, registerDocs} from './docs.mjs';
+import {formatBlock, registerDocs, WHOLE_READ_MAX_BYTES} from './docs.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {displayWidth} from '../formatters/index.mjs';
 
@@ -131,16 +131,36 @@ describe('progressive reads', () => {
     expect(stdout).toMatch(/^## Wrap your app in a theme/m);
   }, SLOW);
 
-  it("lists a topic's sections by default; --full prints the whole topic", async () => {
+  it('prints a topic whole by default; --index lists its sections', async () => {
+    const whole = await runCli(['docs', 'theme']);
+    expect(whole.status).toBe(0);
+    expect(whole.stdout).toMatch(/^## Wrap your app in a theme/m);
+    expect((await runCli(['docs', 'theme', '--full'])).stdout).toBe(whole.stdout);
     const index = await runCli(['docs', 'theme', '--index']);
-    expect((await runCli(['docs', 'theme'])).stdout).toBe(index.stdout);
-    const full = await runCli(['docs', 'theme', '--full']);
-    expect(full.status).toBe(0);
-    expect(full.stdout).toMatch(/^## Wrap your app in a theme/m);
-    expect(full.stdout.length).toBeGreaterThan(index.stdout.length);
-    expect((await runCli(['--detail', 'full', 'docs', 'theme', '--full'])).stdout).toBe(
-      full.stdout,
+    expect(index.stdout).toMatch(/Read one section: /);
+    expect(whole.stdout.length).toBeGreaterThan(index.stdout.length);
+    // A guide from the docs tree reads the same way, and a whole read ends
+    // with its moves down: one section, and the section list.
+    const guide = await runCli(['docs', 'layout/responsive']);
+    expect(guide.stdout).toMatch(/^## Breakpoints/m);
+    expect(guide.stdout).not.toContain('Read everything:');
+    expect(guide.stdout).toMatch(
+      /^Read one section: .*docs layout\/responsive <section>$/m,
     );
+    expect(guide.stdout).toMatch(
+      /^List its sections: .*docs layout\/responsive --index$/m,
+    );
+  }, SLOW);
+
+  it('lists the sections of a topic whose whole text is over the limit; --full prints it whole', async () => {
+    const route = 'author-a-theme';
+    const full = await runCli(['docs', route, '--full']);
+    expect(Buffer.byteLength(full.stdout)).toBeGreaterThan(WHOLE_READ_MAX_BYTES);
+    const bare = await runCli(['docs', route]);
+    expect(bare.status).toBe(0);
+    expect(bare.stdout).toBe((await runCli(['docs', route, '--index'])).stdout);
+    expect(full.stdout.length).toBeGreaterThan(bare.stdout.length);
+    expect(full.stdout).not.toContain('Read everything:');
   }, SLOW);
 
   it('returns the matching envelopes as JSON', async () => {
@@ -327,7 +347,7 @@ describe('the docs tree, one level at a time', () => {
     for (const args of [['--dense', 'docs', 'theme'], ['--lang', 'dense', 'docs', 'theme']]) {
       const {status, stdout} = await runCli(args);
       expect(status).toBe(0);
-      expect(stdout).not.toContain('Read one section:');
+      expect(stdout).not.toContain('Read everything:');
     }
   }, SLOW);
 
@@ -354,14 +374,18 @@ describe('the docs tree, one level at a time', () => {
     expect(guide.stdout).toMatch(
       /Read one section: .*docs authoring\/building-blocks\/codemods <section>/,
     );
-    // A bare read is one level too: the sections, and how to read it all.
+    // A bare read prints the guide whole, as --full does.
     const bare = await runCli([
       'docs',
       'authoring/building-blocks/codemods',
     ]);
     expect(bare.status).toBe(0);
-    expect(bare.stdout).toBe(guide.stdout);
-    expect(bare.stdout).toMatch(
+    expect(bare.stdout).toBe(
+      (await runCli(['docs', 'authoring/building-blocks/codemods', '--full']))
+        .stdout,
+    );
+    expect(bare.stdout).toMatch(/^## Choose when a codemod runs$/m);
+    expect(guide.stdout).toMatch(
       /Read everything: +.*docs authoring\/building-blocks\/codemods --full$/m,
     );
     const one = await runCli([
@@ -387,7 +411,7 @@ describe('the docs tree, one level at a time', () => {
     ]);
     expect(full.status).toBe(0);
     expect(full.stdout).toMatch(/^## Add a codemod$/m);
-    expect(full.stdout.length).toBeGreaterThan(bare.stdout.length * 2);
+    expect(full.stdout.length).toBeGreaterThan(guide.stdout.length * 2);
     const old = await runCli(['docs', 'cli-integrations']);
     expect(old.status).toBe(1);
     expect(old.stderr).toContain('Unknown topic "cli-integrations"');

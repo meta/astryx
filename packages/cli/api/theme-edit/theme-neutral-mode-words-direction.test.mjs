@@ -227,7 +227,7 @@ describe('wrong writes that are no longer accepted', () => {
     async test => {
       needsBase(test);
       expect((await answer('blue card background')).first[0]).toBe(
-        "set t background-color '#2563eb' --on card",
+        "set t background-color '#2563eb' --on card --when variant:default",
       );
     },
     T,
@@ -321,8 +321,12 @@ describe('clear asks it used to drop', () => {
         (await answer('card background: light mode #eee, dark mode #222'))
           .first,
       ).toEqual([
-        "set t background-color '#eee' --on card --mode light",
-        "set t background-color '#222' --on card --mode dark",
+        "set t background-color '#eee' --on card --when variant:default --mode light",
+        "set t background-color '#eee' --on card --when variant:transparent --mode light",
+        "set t background-color '#eee' --on card --when variant:muted --mode light",
+        "set t background-color '#222' --on card --when variant:default --mode dark",
+        "set t background-color '#222' --on card --when variant:transparent --mode dark",
+        "set t background-color '#222' --on card --when variant:muted --mode dark",
       ]);
     },
     T,
