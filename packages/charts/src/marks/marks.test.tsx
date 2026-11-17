@@ -172,6 +172,29 @@ describe('line', () => {
   });
 });
 
+describe('default curve', () => {
+  // Straight segments by default: a smoothed curve invents values between
+  // the data points. A cubic segment would show up as a `C` command.
+  it('joins line points with straight segments', () => {
+    const {plot} = renderMarks([line('v')]);
+    const d = plot.querySelector('path')?.getAttribute('d') ?? '';
+    expect(d).toMatch(/^M/);
+    expect(d).not.toMatch(/C/);
+  });
+
+  it('joins area points with straight segments', () => {
+    const {plot} = renderMarks([area('v')]);
+    for (const path of plot.querySelectorAll('path')) {
+      expect(path.getAttribute('d') ?? '').not.toMatch(/C/);
+    }
+  });
+
+  it('still smooths when a page asks for it', () => {
+    const {plot} = renderMarks([line('v', {curve: 'monotone'})]);
+    expect(plot.querySelector('path')?.getAttribute('d') ?? '').toMatch(/C/);
+  });
+});
+
 describe('dot', () => {
   it('renders one circle per datum with the configured radius', () => {
     const {plot} = renderMarks([dot('v', {radius: 5})]);

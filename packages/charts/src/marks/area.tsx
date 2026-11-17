@@ -32,6 +32,7 @@ const CURVES = {
 export interface AreaOptions {
   color?: string;
   opacity?: number;
+  /** How points join. Default `'linear'`: straight segments. */
   curve?: keyof typeof CURVES;
   stack?: string;
   gradient?: boolean;
@@ -52,7 +53,7 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
     typeof options.opacity === 'number' && Number.isFinite(options.opacity)
       ? Math.min(1, Math.max(0, options.opacity))
       : 0.3;
-  const curve = options.curve ?? 'monotone';
+  const curve = options.curve ?? 'linear';
   const gradient = options.gradient ?? false;
   const stroke = options.stroke ?? true;
 
@@ -89,7 +90,7 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
       if (resolved.length === 0) {
         return null;
       }
-      const curveFactory = CURVES[curve] ?? curveMonotoneX;
+      const curveFactory = CURVES[curve] ?? curveLinear;
 
       const areaGen = d3Area<ResolvedPoint>()
         .defined(isFinitePoint)
