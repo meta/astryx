@@ -5,6 +5,7 @@ import {hydrateRoot, type Root} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import type * as DefineThemeModule from './defineTheme';
@@ -99,6 +100,18 @@ describe('Theme', () => {
     );
     const wrapper = container.querySelector('[data-astryx-theme="test"]');
     expect(wrapper).toBeTruthy();
+  });
+
+  it("gives text inside that only inherits its size the theme's body size", () => {
+    const {container} = render(
+      <Theme theme={testTheme}>
+        <span>child</span>
+      </Theme>,
+    );
+    const wrapper = container.querySelector<HTMLElement>(
+      '[data-astryx-theme="test"]',
+    );
+    expect(declaredValue(wrapper!, 'font-size')).toMatch(/--text-body-size/);
   });
 
   // =========================================================================
