@@ -424,6 +424,23 @@ describe('useTheme system follows the page root', () => {
     }
   });
 
+  it('takes the first color-scheme meta that names a scheme, as the browser does', () => {
+    rootScheme = 'normal';
+    stubRootScheme();
+    vi.mocked(useMediaQuery).mockReturnValue(false);
+    for (const content of ['', 'dark']) {
+      const meta = document.createElement('meta');
+      meta.setAttribute('name', 'color-scheme');
+      meta.setAttribute('content', content);
+      meta.setAttribute('data-probe', '');
+      document.head.append(meta);
+    }
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    expect(result.current.mode).toBe('dark');
+  });
+
   it('leaves the preference to decide when the root names both schemes, or the engine reports none', () => {
     stubRootScheme();
     for (const scheme of ['light dark', '']) {

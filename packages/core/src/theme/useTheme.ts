@@ -11,9 +11,11 @@
  * Provides synchronous access to theme token values resolved for the
  * current color mode, with no double render. The returned `mode` is always
  * 'light' | 'dark'. 'system', and any value outside the union, resolves the
- * way a system Theme's CSS does: to the one scheme the page root names (a
- * host that draws the page dark), else the OS preference; under a Theme that
- * forces light or dark, to the OS preference.
+ * way a system Theme's CSS does: to the scheme the page draws in (the one
+ * the page root names, such as a host that draws the page dark, else the one
+ * the page's color-scheme meta names, else light), and to the OS preference
+ * when that names both; under a Theme that forces light or dark, to the OS
+ * preference.
  * Without a reachable ThemeContext it consults `<html data-theme>` and
  * `<html data-astryx-theme>` (kept in sync by Theme) via shared, refcounted
  * MutationObservers before assuming OS preference/default tokens. A consumer
@@ -269,9 +271,18 @@ function getRootSchemeSnapshot(): 'light' | 'dark' | null {
   if (declared !== 'normal') {
     return oneScheme(declared) ?? null;
   }
-  const meta = document.querySelector(SCHEME_META)?.getAttribute('content');
-  const fromMeta = meta == null ? undefined : oneScheme(meta);
-  return fromMeta === undefined ? 'light' : fromMeta;
+  // The first meta whose content names a scheme decides, as in a browser.
+  for (const meta of document.querySelectorAll(SCHEME_META)) {
+    const content = meta.getAttribute('content') ?? '';
+    const fromMeta = oneScheme(content);
+    if (fromMeta !== undefined) {
+      return fromMeta;
+    }
+    if (/(^|\s)normal(\s|$)/i.test(content)) {
+      return 'light';
+    }
+  }
+  return 'light';
 }
 
 /**
@@ -433,9 +444,11 @@ export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
  * (e.g. Vega, D3, Chart.js) that need concrete values rather than
  * CSS custom property references.
  *
- * When called outside a <Theme> provider, resolves mode from the root
- * Theme's `<html data-theme>` when one is present, falling back to the
- * current system color mode otherwise.
+ * Under a `system` Theme, the mode is the scheme the page draws in: the
+ * root's `color-scheme`, else the page's color-scheme meta, else light, and
+ * the system color mode when that names both. When called outside a <Theme>
+ * provider, resolves mode from the root Theme's `<html data-theme>` when one
+ * is present, falling back to the current system color mode otherwise.
  *
  * @example
  * ```

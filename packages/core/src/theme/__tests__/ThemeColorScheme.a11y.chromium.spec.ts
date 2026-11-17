@@ -228,7 +228,7 @@ test.describe('the reader prefers dark', () => {
       'system-under-system': LIGHT,
     });
     await expect
-      .poll(() => hookModes(page))
+      .poll(async () => hookModes(page))
       .toEqual({
         'root-system': 'light',
         'forced-light': 'light',
@@ -254,7 +254,7 @@ test.describe('the reader prefers dark', () => {
       'system-under-system': DARK,
     });
     await expect
-      .poll(() => hookModes(page))
+      .poll(async () => hookModes(page))
       .toEqual({
         'root-system': 'dark',
         'forced-light': 'light',
