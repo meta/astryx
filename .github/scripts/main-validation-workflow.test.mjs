@@ -29,6 +29,18 @@ describe('main validation legs', () => {
     expect(job['runs-on']).toBe('ubuntu-latest');
   };
 
+  it("test-node draws the theme editor's pages as a pull request does", () => {
+    const job = workflow.jobs['test-node'];
+    const run = job.steps.find(step =>
+      /pnpm test:node --shard=/.test(step.run ?? ''),
+    );
+    // The legs are planned from times measured without real drawing
+    // everywhere, so they run that way too.
+    expect(run.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(job.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+    expect(workflow.env ?? {}).not.toHaveProperty('THEME_EDIT_REAL_RENDERS');
+  });
+
   it('test-ui runs 6 legs at once, each inside the job budget', () => {
     const job = workflow.jobs['test-ui'];
     expect(job.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
