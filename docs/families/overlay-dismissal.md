@@ -225,7 +225,7 @@ this record's current membership snapshot must be updated with it.
   scrollers but is not wholly inside it, the return scrolls it just into view
   (the nearest edge), whichever input closed the surface: the person keeps
   their place at the control they return to. A return target larger than that
-  visible area, such as a scrollable table viewport, is not scrolled. A return target that is not a Tab stop is
+  visible area, such as a scrollable table viewport taller than the screen, is not scrolled. A return target that is not a Tab stop is
   never scrolled to: a browser may record a focusable ancestor of the pressed
   control as the return target (WebKit focuses the nearest focusable ancestor
   of a tapped button, such as a `tabindex="-1"` main region), and a reveal of
@@ -302,8 +302,8 @@ this record's current membership snapshot must be updated with it.
 | DropdownMenuSubMenu, PowerSearchEditPopover                                                                                                                                                                                                                                          | local only                                                    | Must migrate from component-specific listeners or registries to the shared owner                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 FR9 gap: Dialog, BottomSheet, BottomSheetSwitcher, Lightbox and DropdownMenu return focus with
-`preventScroll: true`, so a Tab-stop return target outside the visible area is
-not revealed.
+`preventScroll: true`, so a Tab-stop return target that fits the visible area
+but is not wholly inside it is not revealed.
 
 The rows marked partial or local are current adoption gaps against FR1, and the
 rows naming an implementation gap are gaps against FR8 or FR9. They are not
@@ -368,14 +368,14 @@ where the person acted.
 
 Rejected: one order across documents, where a press in one window dismisses a surface in another.
 
-### DEC-3 — A returning focus reveals a hidden Tab stop, never another target
+### DEC-3 — A returning focus reveals a hidden Tab stop that fits the view, never another target
 
 **Decider:** `cixzhang`, `2026-11-17 08:02 PT`
 
 When a surface closes after the page behind it scrolled, focus returns to an
 opener now off screen, and the person loses their place: a keyboard user's next
 key acts out of view, and a pointer or touch user cannot see where focus went.
-A Tab-stop opener that fits the visible area is therefore scrolled just into view, whichever input closed the surface; a larger target, such as a scrollable table viewport, is not, since revealing it jumps the page to its edge. A return target that is not a Tab stop
+A Tab-stop opener that fits the visible area is therefore scrolled just into view, whichever input closed the surface; a larger target, such as a scrollable table viewport taller than the screen, is not, since revealing it jumps the page to its edge. A return target that is not a Tab stop
 is most often a region WebKit recorded in place of the pressed control, and
 revealing it jumps the page to that region's top edge, so it is never scrolled
 to.
