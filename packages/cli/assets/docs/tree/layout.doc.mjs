@@ -38,26 +38,15 @@ export const docs = {
       type: 'list',
       style: 'ordered',
       items: [
-        'Scaffold: pick the frame and give every fixed region a width budget. AppShell for apps with navigation (SideNav by default; TopNav for a shallow nav over a control-heavy page), Layout with a LayoutPanel in its start or end slot for multi-pane tools, and a plain content column for documents and forms. Data views take the full width of their region; text, forms and lists sit in a column capped by Layout contentWidth (640 for text and forms, 960 for mixed content)',
-        'Structure: one lead and one primary action per region. Section is the default unit, with no border; records render as rows (Table for columns, List for single lines), never one Card each; Card is for a self-contained widget or a hard boundary. Body copy is plain Text with no props: rank with weight and the secondary color, not smaller text',
-        "Spacing: the container owns padding, and children zero their margins. Hold one content line per region and use tokens inside regions (raw px only for structural widths). Tight gaps (gap={1} to {2}) bind; generous gaps (gap={4} to {6}) separate. Pin a header or footer with LayoutHeader and LayoutFooter in Layout's slots",
-        "Breakpoints: write down what each region does as width changes. Navigation becomes MobileNav at AppShell's mobileNav breakpoint, a side panel becomes a Dialog or BottomSheet (useMediaQuery), and columns that must reflow use Grid columns={{minWidth, max}}: a number of columns never reflows",
+        'Scaffold: pick the frame before any content, and give every fixed region a width budget. Use AppShell when the app has navigation: SideNav by default, TopNav for a shallow nav. Data views take the whole width of their region; text and forms sit in a column capped by contentWidth',
+        'Structure: give each region one lead and one primary action. Records render as rows, not one box per record. Rank text with weight and the secondary color, not with smaller sizes',
+        'Spacing: the container owns the padding, and children zero their margins. Keep one content line per region. Small gaps bind related items; large gaps separate groups. Use tokens inside regions',
+        'Breakpoints: decide what each region does as the width changes. Navigation becomes MobileNav, a side panel moves into an overlay, and columns reflow by a minimum width, never by a fixed count',
       ],
     },
     {
-      type: 'code',
-      lang: 'tsx',
-      label: 'A three-region tool frame',
-      code: `<AppShell sideNav={<SideNav>{/* nav items */}</SideNav>}>
-  <Layout
-    content={<LayoutContent>{/* table fills its region */}</LayoutContent>}
-    end={<LayoutPanel width={380} hasDivider isScrollable>{/* detail */}</LayoutPanel>}
-  />
-</AppShell>`,
-    },
-    {
       type: 'prose',
-      text: 'Each guide below has the rules, examples and checks for one step. This guide decides layout, not component APIs. Run `{@command build "<idea>"}` to start from the closest template for your app type, and `{@command component <Name>}` for a component\'s props.',
+      text: 'Each guide below has the components, examples, and checks for one step. This guide decides layout, not component APIs. Run `{@command build "<idea>"}` to start from the closest template for your app type, and `{@command component <Name>}` for a component\'s props.',
     },
   ],
   slots: {
