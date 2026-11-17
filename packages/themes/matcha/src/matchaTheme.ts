@@ -276,6 +276,8 @@ export const matchaTheme = defineTheme({
     '--radius-element': '12px',
     '--radius-container': '18px',
     '--radius-page': '42px',
+    // Chat surfaces stay rounder than cards.
+    '--radius-chat': '28px',
 
     // No explicit --font-size-* overrides — font sizes come from
     // typography.scale above, keeping the scale the single source of truth.

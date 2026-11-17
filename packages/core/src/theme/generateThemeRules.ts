@@ -519,7 +519,8 @@ function joinDeclarations(
 
 /**
  * Public tokens whose canonical default references another public token: the
- * status roles and `--duration-exit`. StyleX owns the document defaults. A
+ * status roles, `--duration-exit` and `--radius-chat`. StyleX owns the
+ * document defaults. A
  * theme that authors a source repeats its omitted token at the theme root so
  * nested Theme regions bind the alias locally without changing authored-token
  * metadata.
@@ -550,6 +551,7 @@ const SCOPED_REFERENCE_DEFAULTS: ReadonlyArray<
   ['--color-border-warning', '--color-text-warning'],
   ['--color-border-error', '--color-text-error'],
   ['--duration-exit', '--duration-fast'],
+  ['--radius-chat', '--radius-container'],
 ];
 
 const SCOPED_REFERENCE_SOURCES = new Map(SCOPED_REFERENCE_DEFAULTS);

@@ -10,7 +10,7 @@
  *
  * Layout shell for a chat composer. Arranges slots (drawer, header,
  * input, footer actions, send button, status) in a vertical stack with
- * page-radius container, hover/focus shadows, and concentric inner radius.
+ * chat-radius container, hover/focus shadows, and concentric inner radius.
  *
  * Component CSS vars (themeable via defineTheme):
  * - `--_chat-composer-radius` (default: --radius-chat) — outer border radius
@@ -144,14 +144,13 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     // Component CSS vars — themeable via defineTheme({ components: { 'chat-composer': { base: {...} } } })
-    // Uses the dedicated chat radius (28px) rather than --radius-page, so chat
-    // rounding is decoupled from page-level containers but unchanged today. #2072
+    // The drawer, the status bar and the buttons inside read this copy.
     '--_chat-composer-radius': radiusVars['--radius-chat'],
     '--_chat-composer-padding': spacingVars['--spacing-3'],
     // Concentric radius: buttons follow the outer shell's curvature.
     // Sets --_button-radius (not --radius-element) so only buttons are
     // affected — other components in slots keep their own radius.
-    // Default: 28px - 12px = 16px (fully rounds a 32px button).
+    // A corner no larger than the padding leaves buttons at --radius-element.
     '--_button-radius': `max(${radiusVars['--radius-element']}, calc(var(--_chat-composer-radius) - var(--_chat-composer-padding)))`,
   },
 
