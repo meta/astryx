@@ -5,7 +5,8 @@
  * @input None: `cutShortText` runs in the page the picture is taken of.
  * @output `cutShortText`: each text the browser draws cut short (an ellipsis
  *   or a line clamp, or text drawn past the side of a box that clips it),
- *   and each word it breaks across two lines inside the word (`broken`),
+ *   each word it breaks across two lines inside the word (`broken`), and
+ *   each text drawn over its neighbor's text (`overlaps`),
  *   with the part it sits in and whether keeping that part's width
  *   (`flex-shrink: 0` on it, the line the editor offers) draws it whole;
  *   `CUT_SHORT_PREFIX`, the line prefix a picture script prints it after.
@@ -33,8 +34,12 @@ export const CUT_SHORT_PREFIX = 'astryx-cut-short:';
  * narrower than the word) comes back too, the word as its `text`, with
  * `broken`; a word broken where it may break (at a hyphen, a slash, a soft
  * hyphen) is not counted.
+ * A text that runs past the side of its own box onto the text of a box
+ * beside it (weekday names wider than their calendar column) comes back
+ * too, with `overlaps`. Boxes placed out of the flow (absolute or fixed)
+ * are left out: they overlap on purpose.
  * Runs in the page: it uses nothing from outside its own body.
- * @returns {Array<{part: string | null, text: string, whole: boolean, broken?: boolean}>}
+ * @returns {Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>}
  */
 export function cutShortText() {
   /** @param {Element} el */
@@ -124,13 +129,46 @@ export function cutShortText() {
     }
     return out;
   };
-  /** @type {Array<{el: HTMLElement, part: string | null, text: string, broken?: boolean}>} */
+  /** Whether a box sits in the flow (not absolute or fixed). @param {Element} el */
+  const inFlow = el =>
+    !/^(?:absolute|fixed)$/.test(getComputedStyle(el).position);
+  /** The boxes of a node's text, one for each line. @param {Node} node */
+  const textBoxes = node => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0);
+  };
+  /**
+   * Own text drawn past the side of its own box and over the text of a box
+   * beside it (a sibling in the flow).
+   * @param {HTMLElement} el
+   */
+  const overlapping = el => {
+    if (!ownText(el) || !inFlow(el) || !el.parentElement) return false;
+    const box = el.getBoundingClientRect();
+    const own = textBoxes(el);
+    if (!own.some(t => t.left < box.left - 1 || t.right > box.right + 1))
+      return false;
+    for (const sib of el.parentElement.children) {
+      if (sib === el || !inFlow(sib) || !drawn(sib)) continue;
+      for (const s of textBoxes(sib))
+        for (const t of own) {
+          const w = Math.min(t.right, s.right) - Math.max(t.left, s.left);
+          const h = Math.min(t.bottom, s.bottom) - Math.max(t.top, s.top);
+          if (w > 1 && h > 1) return true;
+        }
+    }
+    return false;
+  };
+  /** @type {Array<{el: HTMLElement, part: string | null, text: string, broken?: boolean, overlaps?: boolean}>} */
   const found = [];
   for (const el of document.body.querySelectorAll('*')) {
     if (!(el instanceof HTMLElement)) continue;
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (!text || !drawn(el)) continue;
     if (cutShort(el)) found.push({el, part: partOf(el), text});
+    else if (overlapping(el))
+      found.push({el, part: partOf(el), text, overlaps: true});
     else
       for (const word of brokenWords(el))
         found.push({el, part: partOf(el), text: word, broken: true});
@@ -150,15 +188,20 @@ export function cutShortText() {
       found
         .filter(f => f.part === part)
         .every(f =>
-          f.broken ? !brokenWords(f.el).includes(f.text) : !cutShort(f.el),
+          f.broken
+            ? !brokenWords(f.el).includes(f.text)
+            : f.overlaps
+              ? !overlapping(f.el)
+              : !cutShort(f.el),
         ),
     );
     keep.remove();
   }
-  return found.map(({part, text, broken}) => ({
+  return found.map(({part, text, broken, overlaps}) => ({
     part,
     text,
     whole: whole.get(part) ?? false,
     ...(broken ? {broken: true} : {}),
+    ...(overlaps ? {overlaps: true} : {}),
   }));
 }

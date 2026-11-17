@@ -132,7 +132,10 @@ export const FIT_CELLS = `(() => {
  * after its part (a toolbar's menu) moves along the row to sit under the
  * control that opens it, as a browser places it, as far as its item has
  * room for what it draws. A flyout drawn beside its menu stays there. A
- * panel as wide as the window is drawn as wide as its cell.
+ * panel as wide as the window is drawn as wide as its cell. A dialog drawn
+ * in its cell is not in the top layer, so the browser draws no backdrop
+ * for it: one with no background of its own (a lightbox, its controls
+ * drawn for the dark backdrop) gets its backdrop's colour as its own.
  */
 export const PLACE_LAYERS = `(() => {
   for (const layer of document.querySelectorAll('.cs-item [data-astryx-layer-root]')) {
@@ -154,6 +157,12 @@ export const PLACE_LAYERS = `(() => {
   for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
     if (dialog.getBoundingClientRect().width >= window.innerWidth - 0.5)
       dialog.style.setProperty('width', '100%', 'important');
+  }
+  const clear = color => /^transparent$|rgba\\([^)]*,\\s*0\\)$/.test(color.trim());
+  for (const dialog of document.querySelectorAll('.cs-cell dialog')) {
+    const backdrop = getComputedStyle(dialog, '::backdrop').backgroundColor;
+    if (clear(getComputedStyle(dialog).backgroundColor) && backdrop && !clear(backdrop))
+      dialog.style.setProperty('background-color', backdrop, 'important');
   }
 })()`;
 

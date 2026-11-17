@@ -444,7 +444,8 @@ export const SAMPLE_PAGE_NAME = 'the sample page';
  * whether every text is drawn whole once the part keeps its width
  * (`flex-shrink: 0`, applied in the page and measured). `broken`: the
  * texts are words drawn broken across two lines inside the word, not cut.
- * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean, broken?: boolean}} CutShort
+ * `overlaps`: the texts run past their own box over a neighbor's text.
+ * @typedef {{page: string, file: string, part: string | null, texts: string[], only: 'light' | 'dark' | null, whole: boolean, broken?: boolean, overlaps?: boolean}} CutShort
  */
 
 /** The texts named, the first six and how many more. @param {string[]} texts */
@@ -463,6 +464,8 @@ export function cutShortNote(c) {
   const what = c.part
     ? `${c.part} label${n === 1 ? '' : 's'}`
     : `text${n === 1 ? '' : 's'}`;
+  if (c.overlaps)
+    return `${c.page} (${c.file}) draws ${n} ${what} over the text beside ${n === 1 ? 'it' : 'them'}${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text is wider than the space ${c.part ? `the ${c.part}` : 'its box'} gives it`;
   if (c.broken)
     return `${c.page} (${c.file}) breaks ${n} word${n === 1 ? '' : 's'} across lines inside the word${c.part ? ` in the ${c.part}` : ''}${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the word is wider than the space ${c.part ? `the ${c.part}` : 'its box'} has`;
   return `${c.page} (${c.file}) draws ${n} ${what} cut short${c.only ? ` in ${c.only} mode only` : ''} (${someTexts(c.texts)}); the text no longer fits ${c.part ? `the ${c.part}` : 'its box'}`;
@@ -480,9 +483,11 @@ export function cutShortNote(c) {
  */
 export function cutShortProblem(ctx, slug, c) {
   const label = c.part ? `${c.part} labels` : 'text';
-  const problem = c.broken
-    ? `words broken across lines inside the word${c.part ? ` in the ${c.part}` : ''} in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
-    : `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
+  const problem = c.overlaps
+    ? `${label} drawn over the text beside them in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
+    : c.broken
+      ? `words broken across lines inside the word${c.part ? ` in the ${c.part}` : ''} in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`
+      : `${label} cut short in ${c.page}'s pictures (${c.file}${c.only ? `, ${c.only} mode` : ''}): ${someTexts(c.texts)}`;
   if (c.part && c.whole && ctx.project.target.has(c.part))
     return {problem, fix: `${P} set ${slug} flex-shrink 0 --on ${c.part}`};
   return {
@@ -500,7 +505,8 @@ export function cutShortProblem(ctx, slug, c) {
  * `cutShort`, one entry for each part on each page ({@link cutShortNote},
  * {@link cutShortProblem}). The sheets (the open
  * states among them) have no name: their cells are narrow, and the full
- * sheet cuts long labels short in every theme.
+ * sheet cuts long labels short in every theme, so from a sheet only text
+ * drawn over the text beside it comes back.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Array<{html: string, png: string, name?: string, most?: number}>} shots
  *   `most`: the tallest the page's picture may be; a taller one is cut into
@@ -515,15 +521,15 @@ export async function pictures(project, shots, modes) {
    * The text drawn cut short, by page, then by part: its texts, the modes
    * it was drawn so in, whether keeping the part's width draws every one
    * whole, and the page's picture.
-   * Keyed by part, and apart for words broken across lines.
-   * @type {Map<string, {file: string, parts: Map<string, {part: string, broken: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
+   * Keyed by part, and apart for words broken across lines and for text drawn over its neighbor.
+   * @type {Map<string, {file: string, parts: Map<string, {part: string, broken: boolean, overlaps: boolean, texts: Set<string>, modes: Set<'light' | 'dark'>, whole: boolean}>}>}
    */
   const cut = new Map();
   /** One entry for each part on each page, from what was measured. */
   const cutShortNotes = () =>
     [...cut].flatMap(([name, page]) =>
       [...page.parts.values()].map(
-        ({part, broken, texts, modes: drawnIn, whole}) =>
+        ({part, broken, overlaps, texts, modes: drawnIn, whole}) =>
           /** @type {CutShort} */ ({
             page: name,
             file: page.file,
@@ -533,6 +539,7 @@ export async function pictures(project, shots, modes) {
               modes.length > 1 && drawnIn.size === 1 ? [...drawnIn][0] : null,
             whole,
             ...(broken ? {broken: true} : {}),
+            ...(overlaps ? {overlaps: true} : {}),
           }),
       ),
     );
@@ -713,16 +720,20 @@ export async function pictures(project, shots, modes) {
         }
       }
       for (const n of r.notes ?? []) if (!notes.includes(n)) notes.push(n);
-      // What the browser measured on a page laid out to fit, kept by page
-      // and part; nothing when its script measured nothing.
-      if (name && r.cutShort?.length) {
-        const page = cut.get(name) ?? {file: r.file, parts: new Map()};
-        cut.set(name, page);
-        for (const {part, text, whole, broken} of r.cutShort) {
-          const key = `${part ?? ''}${broken ? '\0broken' : ''}`;
+      // What the browser measured, kept by page and part; nothing when its
+      // script measured nothing. A sheet's narrow cells cut long labels in
+      // every theme, so a sheet keeps only text drawn over its neighbor.
+      const measured = (r.cutShort ?? []).filter(c => name || c.overlaps);
+      if (measured.length) {
+        const label = name ?? 'the sheet';
+        const page = cut.get(label) ?? {file: r.file, parts: new Map()};
+        cut.set(label, page);
+        for (const {part, text, whole, broken, overlaps} of measured) {
+          const key = `${part ?? ''}${broken ? '\0broken' : ''}${overlaps ? '\0overlaps' : ''}`;
           const at = page.parts.get(key) ?? {
             part: part ?? '',
             broken: Boolean(broken),
+            overlaps: Boolean(overlaps),
             texts: new Set(),
             modes: new Set(),
             whole: true,

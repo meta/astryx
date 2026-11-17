@@ -134,9 +134,13 @@ describe('a panel as wide as the window', () => {
       querySelectorAll: (/** @type {string} */ q) =>
         q.includes('dialog') ? [wide, narrow] : [],
     };
-    new Function('document', 'window', PLACE_LAYERS)(document, {
-      innerWidth: 1280,
-    });
+    // Panels with backgrounds of their own: no backdrop colour to draw.
+    const getComputedStyle = () => ({backgroundColor: 'rgb(255, 255, 255)'});
+    new Function('document', 'window', 'getComputedStyle', PLACE_LAYERS)(
+      document,
+      {innerWidth: 1280},
+      getComputedStyle,
+    );
     expect(wide.set.width).toBe('100%');
     expect(narrow.set.width).toBeUndefined();
   });
