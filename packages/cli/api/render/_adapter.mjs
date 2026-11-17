@@ -873,18 +873,24 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // whatever its name.
       const {reached, missing: unreached} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
       // A file the render could not carry is missing too, also when no
-      // import here names it (an alias this reverse cannot resolve). One an
-      // import already names is named once: as written, without an extension
-      // an extensionless import resolves to, or as its folder's index file.
-      const named = new Set(unreached);
+      // import here names it (an alias this reverse cannot resolve). An
+      // import already in missing names one recorded file, the one it
+      // resolves to as the walk resolves it (the path as written, then each
+      // extension in order, then its folder's index), so only that file is
+      // not listed again.
+      const recordedOut = (Array.isArray(source.notCarried) ? source.notCarried : []).filter(
+        (/** @type {unknown} */ file) => typeof file === 'string' && file !== '',
+      );
+      const recordedSet = new Set(recordedOut);
+      /** @param {string} spec */
+      const recordedFileOf = spec =>
+        [spec, ...RESOLVE_EXTENSIONS.map(ext => spec + ext), ...RESOLVE_EXTENSIONS.map(ext => `${spec}/index${ext}`)].find(
+          candidate => recordedSet.has(candidate),
+        );
+      const covered = new Set(unreached.map(recordedFileOf).filter(Boolean));
       const missing = [...unreached];
-      for (const file of Array.isArray(source.notCarried) ? source.notCarried : []) {
-        if (typeof file !== 'string' || file === '') continue;
-        const ext = path.posix.extname(file);
-        const bare = RESOLVE_EXTENSIONS.includes(ext) ? file.slice(0, -ext.length) : null;
-        const folder = bare?.endsWith('/index') ? bare.slice(0, -'/index'.length) : null;
-        if (named.has(file) || (bare && named.has(bare)) || (folder && named.has(folder))) continue;
-        named.add(file);
+      for (const file of recordedOut) {
+        if (covered.has(file) || missing.includes(file)) continue;
         missing.push(file);
       }
       // A carried image, font or media file needs no import to be part of the

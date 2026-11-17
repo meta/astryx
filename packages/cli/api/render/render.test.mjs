@@ -2646,6 +2646,44 @@ describe('render(): a page outside a project', () => {
     expect(back.json.data).toMatchObject({exact: false, missing: ['site.config']});
   }, 60_000);
 
+  it('keeps a recorded JSON file that shares its stem with an imported module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-json');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import data from './rows.json';\nexport const rows: string[] = data;\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.json', '../lib/rows.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    // The import names rows.ts, the file it resolves to first; rows.json is
+    // named by itself.
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows.json']);
+  }, 60_000);
+
+  it('keeps a recorded folder index beside a same-named module on the way back', () => {
+    const tree = path.join(away, 'outside-stem-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './rows/index';\nexport const rows = ['North', south];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect([...run.json.data.notCarried].sort()).toEqual(['../lib/rows.ts', '../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect([...back.json.data.missing].sort()).toEqual(['../lib/rows', '../lib/rows/index.ts']);
+  }, 60_000);
+
   it('keeps a recorded image that shares its stem with an imported module on the way back', () => {
     const tree = path.join(away, 'outside-stem');
     fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
