@@ -368,7 +368,8 @@ This record does not own:
   including portable and theme-local declarations in the same scoped block.
 - `Theme.tsx` mounts compiled CSS for themes that were not built ahead of time.
 - `derivedVarRegistry.ts` owns checked mappings from guaranteed public properties
-  to private component variables.
+  to private component variables. A style key's pseudo-class blocks (`:hover`)
+  take the same derived variables as its resting rule.
 - Component `.doc.mjs` `theming.derived[]` mirrors those mappings;
   `theming.vars[]` distinguishes reviewed public semantic variables from private
   implementation variables.

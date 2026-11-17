@@ -145,7 +145,7 @@ describe('table-row parity in a data-driven table', () => {
     ]);
   });
 
-  it("keeps Core's stripe in a pinned column: a pinned cell replays only the row's --table-row-overlay", () => {
+  it("reaches a pinned column: a theme's row fill also writes the --table-row-overlay a pinned cell replays", () => {
     function Pinned() {
       const sticky = useTableStickyColumns<Person>({startKeys: ['name']});
       return (
@@ -163,28 +163,35 @@ describe('table-row parity in a data-driven table', () => {
     }
     const {container} = render(<Pinned />);
     const rows = bodyRows(container);
-    // Every row still says its stripe, pinned cells included in it.
+    // Every row says its stripe, the pinned cell in it included.
     expect(parities(rows)).toEqual(['odd', 'even', 'odd', 'even', 'odd']);
-    // A theme's parity rule sets the row's own background and nothing a
-    // pinned cell reads: the cell paints an opaque base plus the row's
-    // --table-row-overlay, which only Core's stripe and hover set.
+    for (const tr of rows) {
+      expect(tr.querySelector<HTMLElement>('td')?.style.insetInlineStart).toBe(
+        '0px',
+      );
+    }
+    // A pinned cell paints an opaque base plus the row's
+    // --table-row-overlay: a theme's row fill, at rest and in :hover, writes
+    // that variable too.
     const css = generateThemeCSS(
       defineTheme({
         name: 'zebra',
         components: {
-          'table-row': {'parity:odd+striped': {backgroundColor: '#f9f9f9'}},
+          'table-row': {
+            base: {':hover': {backgroundColor: '#f5f5f5'}},
+            'parity:odd+striped': {backgroundColor: '#f9f9f9'},
+          },
         },
       }),
     ).component;
-    const rule = /\.astryx-table-row\[data-parity="odd"\][^{]*\{([^}]*)\}/.exec(
-      css,
-    )?.[1];
-    expect(rule).toMatch(/background-color:\s*#f9f9f9/);
-    expect(rule).not.toMatch(/--table-row-overlay/);
-    for (const tr of rows) {
-      const pinned = tr.querySelector<HTMLElement>('td');
-      expect(pinned?.style.insetInlineStart).toBe('0px');
-    }
+    const stripe =
+      /\.astryx-table-row\[data-parity="odd"\]\[data-striped="striped"\] \{([^}]*)\}/.exec(
+        css,
+      )?.[1];
+    expect(stripe).toMatch(/background-color:\s*#f9f9f9/);
+    expect(stripe).toMatch(/--table-row-overlay:\s*#f9f9f9/);
+    const hover = /\.astryx-table-row:hover[^{]*\{([^}]*)\}/.exec(css)?.[1];
+    expect(hover).toMatch(/--table-row-overlay:\s*#f5f5f5/);
   });
 
   it('reads parity from the logical row in a windowed table', () => {

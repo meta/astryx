@@ -1129,7 +1129,21 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles);
+          // A pseudo-class block takes the same derived variables as its
+          // rule at rest: a hovered table row's fill reaches its pinned cells
+          // through --table-row-overlay as the resting fill does.
+          const pseudoEntries = pseudo.startsWith(':')
+            ? expandComponentDeclarations(
+                component,
+                Object.entries(pseudoStyles).map(([k, v]) => [
+                  k,
+                  typeof v === 'object' && v !== null
+                    ? JSON.stringify(v)
+                    : `${v}`,
+                ]),
+                resetInheritedPaddingSpecificity,
+              )
+            : [];
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,
