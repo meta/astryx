@@ -4742,6 +4742,22 @@ export function draftAnswer(ctx, env, question) {
     // "a calm, dark theme with a violet accent": a theme said to be dark
     // (or light) is the theme's mode, a piece of its own; never a mode
     // that scopes the asks beside it. ("Light and dark" asks both.)
+    // (So is the product said to be dark, "a dark editorial analytics
+    // dashboard": the words between describe it; a page, a screen or a
+    // view said dark is that surface, never the mode.)
+    .replace(
+      new RegExp(
+        String.raw`\b(dark|light)(?:[- ]mode)?\s+((?:(?!(?:of|for|in|on|at|the|a|an|and|or|with|to|by)\s)[a-z-]+\s+){0,3}?)(${PRODUCT_WORDS})\b(?!\s*(?:only\b|:))`,
+        'gi',
+      ),
+      (m, w, between, n, _at, whole) =>
+        /^(?:views?|pages?|screens?|layouts?)$/i.test(n) ||
+        /\b(?:light and dark|dark and light|light\s*[+/&]\s*dark|dark\s*[+/&]\s*light|both modes)\b/i.test(
+          String(whole),
+        )
+          ? m
+          : `${String(w).toLowerCase()}-only theme, ${between}${n},`,
+    )
     .replace(
       /\b(dark|light)(?:[- ]mode)?\s+(theme|look|ui|interface|design)\b(?!\s*(?:only\b|:))/gi,
       (m, w, n, _at, whole) =>
@@ -27281,11 +27297,20 @@ export function draftAnswer(ctx, env, question) {
   // no part of the theme's; written for the whole theme it would change
   // what was never asked, so it is said, with the parts that show an
   // image.
+  // ("make our app look like this picture: ./look.png", "match the
+  // screenshot"): a picture given as the look to match. how reads words,
+  // never a picture: the answer says what to say of it, with a line to
+  // start from; what the words beside it ask is kept.
+  const pictureLook =
+    /(?:^|[\s(])\S+\.(?:png|jpe?g|webp|gif|avif|heic)\b/.test(q) ||
+    /\b(?:like|match(?:es|ing)?|copy|from|as in|the look of|looks? of)\s+(?:this|that|the|my|our|a|an|these|those)\s+(?:pictures?|screenshots?|images?|photos?|mock-?ups?|png|jpe?g|screen ?caps?|snapshots?)\b/.test(
+      q,
+    );
   {
     const photo = /\b(photos?|images?|pictures?|thumbnails?|pics)\b/.exec(
       q,
     )?.[1];
-    if (photo && !partsSeen.length) {
+    if (photo && !partsSeen.length && !pictureLook) {
       const holders = [...ctx.project.target.keys()].filter(k =>
         /avatar|image|thumbnail|media/.test(k),
       );
@@ -27421,6 +27446,17 @@ export function draftAnswer(ctx, env, question) {
       text: 'the theme editor has no screen-size, print or device conditions: this applies on every screen; a media query needs your own CSS',
       options: [],
     });
+  if (pictureLook) {
+    const note = {
+      text: 'how reads words, never a picture: say what the picture shows, its colors (as hex, or color names: the accent, the page, the text), its font, how round its corners are and how roomy it is, and how writes each; the line below shows the shape',
+      options: [],
+      lookup: `${HOW} "accent #2563eb, page #f8fafc, font Inter, corners round, spacing compact"`,
+    };
+    // (What the words beside it ask is kept, when they ask a change.)
+    const writes = !unsure && result.some(r => r.options.some(o => o.length));
+    if (writes) result.push(note);
+    else result.splice(0, result.length, note);
+  }
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
