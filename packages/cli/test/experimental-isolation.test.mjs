@@ -16,7 +16,10 @@
  *   (titles, summaries, descriptions, snippets), so main's ordinary doc and
  *   command wording edits rewrite none of them. Help, the
  *   manifest, and the `astryx docs cli` listing gain only the experimental
- *   group or namespace, the one marked entry point FR27 allows.
+ *   group or namespace, the one marked entry point FR27 allows. The rows for
+ *   an installed icon-set package keep their goldens in the same folder: they
+ *   hold what the package's sets add, with prose removed in the same way, so
+ *   an icon definition's wording edit rewrites none of them.
  *
  * Updating the goldens has two phases.
  *
@@ -1447,7 +1450,7 @@ describe.skipIf(REGENERATING)(
       ]);
       // One exit code for both; the text golden holds it.
       expect(json.status).toBe(text.status);
-      await expect(json.stdout).toMatchFileSnapshot(
+      await expect(asGolden(skeleton(body))).toMatchFileSnapshot(
         path.join(GOLDEN, 'validate-installed-set.json'),
       );
       await expect(
