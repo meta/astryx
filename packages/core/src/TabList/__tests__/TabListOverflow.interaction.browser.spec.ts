@@ -149,7 +149,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
     const lastVisible = before.map(tab => tab.visible).lastIndexOf(true);
     expect(lastVisible).toBeLessThan(before.length - 1);
     // Enter the strip from the keyboard, then arrow to the last visible tab.
-    await page.locator('.astryx-tab-strip [tabindex="0"]').first().focus();
+    await page.keyboard.press('Tab');
+    const enteredStrip = await page.evaluate(
+      () =>
+        document.activeElement?.closest('.astryx-tab-strip') != null &&
+        document.activeElement.getAttribute('tabindex') === '0',
+    );
+    expect(enteredStrip).toBe(true);
     for (let i = 0; i < 20; i += 1) {
       const now = await tabsInView();
       if (now.findIndex(tab => tab.focused) >= lastVisible) {
@@ -157,6 +163,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
       }
       await page.keyboard.press(forward);
     }
+    // The next tab is still hidden just before the last press.
+    expect((await tabsInView())[lastVisible + 1].visible).toBe(false);
     await page.keyboard.press(forward);
     await page.waitForTimeout(400);
     const after = await tabsInView();
