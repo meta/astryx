@@ -430,10 +430,19 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderWidth: 0,
     borderStyle: 'none',
-    outline: 'none',
+    outlineStyle: 'none',
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
+  },
+  // The fill alone does not reach 3:1 against the listbox. After keyboard
+  // input, the active option also draws the standard focus ring, inside the
+  // row by its own width, as Selector's active option does.
+  itemKeyboardHighlighted: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   itemDisabled: {
     opacity: 0.5,
@@ -1909,12 +1918,30 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     setHighlightedIndex(-1);
   }
 
+  // Modality changes only on a key or a press, so a hover alone still reads
+  // as keyboard. The option the mouse enters therefore draws no ring until a
+  // key moves the highlight again. Entering the option that is already
+  // active, as when a key scrolls it under a still mouse, changes nothing.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (...args: Parameters<typeof onComboboxKeyDown>) => {
+      setHoveredIndex(null);
+      onComboboxKeyDown(...args);
+    },
+    [onComboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
+      const index = args[1];
+      if (index !== highlightedIndex) {
+        setHoveredIndex(index);
+      }
+      onComboboxItemMouseEnter(...args);
+    },
+    [onComboboxItemMouseEnter, highlightedIndex],
+  );
   const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
-    useKeyboardHighlight(
-      readModality,
-      onComboboxKeyDown,
-      onComboboxItemMouseEnter,
-    );
+    useKeyboardHighlight(readModality, keyDownAfterHover, mouseEnterOption);
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2226,6 +2253,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
               isSelectAll ? selectAllSizeStyles[size] : itemSizeStyles[size],
               isSelectAll && styles.selectAllWrapper,
               isHighlighted && styles.itemHighlighted,
+              // In a grid the action cell draws its own ring when it is the
+              // active cell.
+              isHighlighted &&
+                isKeyboardHighlight &&
+                flatIndex !== hoveredIndex &&
+                !(isGrid && highlightedCell === 'action') &&
+                styles.itemKeyboardHighlighted,
               item.disabled && styles.itemDisabled,
               isGrid && styles.gridRow,
             ),
@@ -2269,6 +2303,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       isGrid,
       highlightedCell,
       isKeyboardHighlight,
+      hoveredIndex,
       getActionCellId,
       renderOption,
       indicatorPosition,
