@@ -7,7 +7,7 @@
  * @input  a text the render did not draw, with the components around it, and
  *         the folder of the Core the page rendered with
  * @output the component that drops the text, `null` when the text is the
- *         first paint's to leave out, or `undefined` when no doc says
+ *         first paint's to leave out, or `undefined` when a doc is missing
  * @position foundation/render; render-page.mjs asks it only for a text that
  *           is missing, so a page with no such text reads no docs
  */
@@ -36,7 +36,11 @@ export function childrenReader(coreDir) {
   /** @type {Map<string, Promise<boolean | null>>} */
   const known = new Map();
   return entry => {
-    if (!coreDir || !entry.from || (entry.from !== CORE && !entry.from.startsWith(`${CORE}/`)))
+    if (
+      !coreDir ||
+      !entry.from ||
+      (entry.from !== CORE && !entry.from.startsWith(`${CORE}/`))
+    )
       return Promise.resolve(null);
     let answer = known.get(entry.name);
     if (!answer) {
@@ -59,9 +63,14 @@ async function takesChildren(coreDir, name) {
     const doc = await loadComponentDoc(path.resolve(docPath));
     // A doc lists a component's props at its top, or in the entry its
     // `components` gives the component (Stack's doc for VStack; Link's own).
-    const own = [doc, ...(Array.isArray(doc?.components) ? doc.components : [])].find(
+    const own = [
+      doc,
+      ...(Array.isArray(doc?.components) ? doc.components : []),
+    ].find(
       (/** @type {any} */ e) =>
-        (e?.name === name || e?.name === `XDS${name}`) && Array.isArray(e.props) && e.props.length > 0,
+        (e?.name === name || e?.name === `XDS${name}`) &&
+        Array.isArray(e.props) &&
+        e.props.length > 0,
     );
     if (!own) return null;
     return own.props.some((/** @type {any} */ p) => p?.name === 'children');
@@ -72,15 +81,17 @@ async function takesChildren(coreDir, name) {
 
 /**
  * The component that drops a missing text: the innermost one around it whose
- * doc lists props without `children`. `null` when the text's own component
- * takes children, so the text is there for a later paint (a collapsed panel,
- * an inactive tab or route). `undefined` when the docs cannot say.
+ * doc lists props without `children`. `null` when every component around the
+ * text takes children, so the text is there for a later paint (a collapsed
+ * panel, an inactive tab or route). `undefined` when a component around it
+ * has no doc that says (the page's own, or another package's).
  * @param {ChainEntry[]} chain the element first, then the components around it
  * @param {(entry: ChainEntry) => Promise<boolean | null>} takes
  * @returns {Promise<ChainEntry | null | undefined>}
  */
 export async function dropperOf(chain, takes) {
   for (const entry of chain) if ((await takes(entry)) === false) return entry;
-  if (chain.length > 0 && (await takes(chain[0])) === true) return null;
-  return undefined;
+  for (const entry of chain)
+    if ((await takes(entry)) !== true) return undefined;
+  return chain.length > 0 ? null : undefined;
 }

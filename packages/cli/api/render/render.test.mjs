@@ -111,9 +111,16 @@ export default function Page() {
       <Badge>
         <Text>Finalized</Text>
       </Badge>
+      <StatCard title="Q3">
+        <Text>Revenue grew 12%</Text>
+      </StatCard>
       {view === 'settings' ? <Settings /> : <Text>Home</Text>}
     </div>
   );
+}
+
+function StatCard({title}: {title: string; children?: unknown}) {
+  return <section>{title}</section>;
 }
 `;
 
@@ -130,8 +137,14 @@ describe('render(): text a component did not draw', () => {
   }, 60_000);
 
   it('names the component whose docs list no children, not the text inside it', () => {
-    expect(dropped.map(w => w.message)).toEqual([
+    expect(dropped[0].message).toBe(
       '<Badge> on line 22 did not render the text "Finalized" it was given; Badge takes no children, so pass the text through one of its props (astryx component Badge).',
+    );
+  });
+
+  it('still warns when a component of the page around the text drops it', () => {
+    expect(dropped.slice(1).map(w => w.message)).toEqual([
+      '<Text> on line 26 did not render the text "Revenue grew 12%" it was given; it takes that text through a prop (often label=), so check its props.',
     ]);
   });
 
