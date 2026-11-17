@@ -300,6 +300,14 @@ const ROWS = [
       never: /'#1b1b1b'/,
     },
   ],
+  [
+    'a strip said as a noun takes nothing away',
+    {
+      q: 'pagination pages in one bordered strip',
+      says: /not used: "pagination pages in one bordered strip"/,
+      never: /border-width 0/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
