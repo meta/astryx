@@ -7414,7 +7414,9 @@ export function compileTheme(ctx, data, base) {
    */
   const shownHalf = (k, side) => {
     const held = base[side][k];
-    const ref = /^var\((--[\w-]+)\)$/.exec(String(TOKENS[k] ?? '').trim());
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(
+      String(TOKENS[k] ?? '').trim(),
+    );
     if (ref && (held == null || base[side][ref[1]] === held)) return TOKENS[k];
     return held ?? TOKENS[k];
   };
@@ -7555,7 +7557,7 @@ export function compileTheme(ctx, data, base) {
   const shown = (k, m) => {
     let v = String(tok[k]?.[m] ?? base[m]?.[k] ?? '');
     for (let i = 0; i < 4; i++) {
-      const ref = /^var\((--[\w-]+)\)$/.exec(v.trim())?.[1];
+      const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v.trim())?.[1];
       if (!ref) break;
       v = String(tok[ref]?.[m] ?? base[m]?.[ref] ?? '');
     }
@@ -7563,7 +7565,7 @@ export function compileTheme(ctx, data, base) {
     return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
   };
   for (const t of SURFACE_PARTS) {
-    const own = /^var\((--[\w-]+)\)$/.exec(
+    const own = /^var\(\s*(--[\w-]+)\s*\)$/.exec(
       String(ctx.C.MAP[t]?.own?.['background-color']?.values?.[0] ?? ''),
     )?.[1];
     for (const b of Object.values(
@@ -9448,7 +9450,7 @@ export async function mediaSurfaceSides(ctx, slug, data) {
   const colorOf = (raw, m) => {
     const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(raw.trim());
     const side = split ? split[m === 'dark' ? 2 : 1].trim() : raw.trim();
-    const ref = /^var\((--[\w-]+)\)$/.exec(side);
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(side);
     return ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : side;
   };
   for (const t of parts) {
@@ -9854,7 +9856,7 @@ export async function contrastProblems(ctx, data, res) {
     if (v == null) return null;
     const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(String(v).trim());
     const side = split ? split[m === 'dark' ? 2 : 1].trim() : String(v).trim();
-    const ref = /^var\((--[\w-]+)\)$/.exec(side);
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(side);
     return ref
       ? (within[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? side)
       : side;
