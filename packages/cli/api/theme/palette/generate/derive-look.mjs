@@ -78,6 +78,7 @@ import {perceptualDelta} from './generator.mjs';
  * @property {ReadonlyArray<number>} stops The palette's stops.
  * @property {ReadonlyArray<Mode>} modes
  * @property {(m: Mode) => string[]} text The theme's text and secondary text colors (opaque hex) in a mode.
+ * @property {string | null} [accent] The look's accent seed: how deep its card tints sit (tintStops).
  * @property {(m: Mode) => string[]} grounds The surfaces text sits on in a mode: page, surface, card (opaque hex).
  * @property {(token: string) => boolean} [wanted] Whether a token is written (Core has it and the theme does not set it by hand).
  */
@@ -224,19 +225,80 @@ function strengthScale(accent) {
 /**
  * The seeds of the derived hues: Core's hues at the strength of the accent,
  * in steps of 0.05 so an accent of about the same strength leaves them as
- * they are; Core's strength without a colored accent.
+ * they are, turned a little toward the accent's and a tinted neutral's hue
+ * (hueLean); Core's strength without a colored accent.
  * @param {string | null | undefined} accent
+ * @param {string | null} [neutral]
  * @returns {Record<string, string>}
  */
-export function lookSeeds(accent) {
+export function lookSeeds(accent, neutral) {
   const hues = Object.keys(HUE_SEEDS);
   const scale = strengthScale(accent);
+  const lean = hueLean(accent, neutral);
   return Object.fromEntries(
     hues.map(h => {
       const {L, C, H} = hexToOklch(HUE_SEEDS[h]);
-      return [h, oklchClampedHex(L, C * scale, H)];
+      return [h, oklchClampedHex(L, C * scale, lean(H))];
     }),
   );
+}
+/** The most a look turns a hue toward its accent, and toward its neutral. */
+const LEAN_TO_ACCENT = 10;
+const LEAN_TO_NEUTRAL = 6;
+/**
+ * How the look turns each hue: a share of the way toward the accent's hue
+ * (at most 10°), and toward a tinted neutral's (at most 6°), so a slate
+ * theme's colors run cool and a warm gray's warm, and two looks with the
+ * same strength still differ. Rounded to whole degrees so a nearby color
+ * leaves the hues as they are.
+ * @param {string | null | undefined} accent
+ * @param {string | null | undefined} neutral
+ * @returns {(hue: number) => number}
+ */
+function hueLean(accent, neutral) {
+  const toward =
+    /**
+     * @param {string | null | undefined} c
+     * @param {number} share
+     * @param {number} most
+     * @returns {((hue: number) => number)}
+     */
+    (c, share, most) => {
+      if (!c) {
+        return () => 0;
+      }
+      const {C, H} = hexToOklch(c);
+      if (C < GRAY_CHROMA) {
+        return () => 0;
+      }
+      return hue => {
+        const gap = ((H - hue + 540) % 360) - 180;
+        return Math.max(-most, Math.min(most, gap * share));
+      };
+    };
+  const a = toward(accent, 0.15, LEAN_TO_ACCENT);
+  const n = toward(neutral, 0.1, LEAN_TO_NEUTRAL);
+  return hue => (Math.round(hue + a(hue) + n(hue)) + 360) % 360;
+}
+/**
+ * Where a look's card tints start, `[light, dark]`: a strong or dark
+ * accent draws them a step deeper, a pale accent a step paler; the
+ * official neutral theme's stops otherwise.
+ * @param {string | null | undefined} accent
+ * @returns {readonly [number, number]}
+ */
+export function tintStops(accent) {
+  if (!accent || hexToOklch(accent).C < GRAY_CHROMA) {
+    return CATEGORY_STOPS.background;
+  }
+  const {L} = hexToOklch(accent);
+  if (strengthScale(accent) >= 1.1 || L < 0.4) {
+    return [80, 30];
+  }
+  if (L > 0.8) {
+    return [90, 20];
+  }
+  return CATEGORY_STOPS.background;
 }
 /**
  * Whether a family is one lookSeeds grows: an id, a name and a seed at
@@ -268,7 +330,11 @@ export function isLookFamily(family) {
   const b = hexToOklch(core);
   const turn = Math.abs(((a.H - b.H + 540) % 360) - 180);
   // A weak seed's hue moves a little when written as hex.
-  const slack = 2 + (Math.atan2(0.004, Math.max(a.C, 1e-6)) * 180) / Math.PI;
+  const slack =
+    2 +
+    LEAN_TO_ACCENT +
+    LEAN_TO_NEUTRAL +
+    (Math.atan2(0.004, Math.max(a.C, 1e-6)) * 180) / Math.PI;
   return Math.abs(a.L - b.L) < 0.02 && (turn < slack || a.C < GRAY_CHROMA);
 }
 /**
@@ -278,6 +344,7 @@ export function isLookFamily(family) {
  */
 export function deriveLookColors({
   palette,
+  accent = null,
   stops,
   modes,
   text,
@@ -288,6 +355,7 @@ export function deriveLookColors({
    * @type {Record<string, DerivedToken>}
    */
   const tokens = {};
+  const tint = tintStops(accent);
   /**
    * @type {UnreadableColor[]}
    */
@@ -448,7 +516,9 @@ export function deriveLookColors({
           return pair[m === 'light' ? 0 : 1];
         };
       const fill = each(m => {
-        const s0 = near(start('background', m));
+        const s0 = near(
+          h === 'gray' ? start('background', m) : tint[m === 'light' ? 0 : 1],
+        );
         // Paler first in light, darker first in dark: a tint, never a solid
         // fill, since it is also the card's tint.
         const order = [...sorted].sort(

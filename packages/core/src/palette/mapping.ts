@@ -1013,7 +1013,10 @@ export function planPaletteRequest(
   }
   // The category and chart hues grow with the look, after the theme's own
   // colors.
-  const derived = lookSeeds(dials.find(d => d.id === 'accent')?.seed);
+  const derived = lookSeeds(
+    dials.find(d => d.id === 'accent')?.seed,
+    dials.find(d => d.id === 'neutral')?.seed,
+  );
   for (const [id, seed] of Object.entries(derived)) {
     if (!config.families.some(f => f?.id === id)) {
       config.families.push({
@@ -2063,6 +2066,7 @@ export function mapPalette(
       text: m => lookColors(LOOK_TEXT, m),
       grounds: m => lookColors(LOOK_GROUNDS, m),
       wanted: k => has(k) && !setExactly(k),
+      accent: dials.find(f => f.id === 'accent')?.seed ?? null,
     });
     for (const [k, v] of Object.entries(derived.tokens)) {
       tokens[k] = {family: v.family, light: v.light, dark: v.dark};
