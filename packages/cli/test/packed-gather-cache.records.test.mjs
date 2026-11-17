@@ -33,9 +33,23 @@ import {
   QUERIES,
   hasModuleHooks,
   readKept,
+  templatesEntry,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
+
+/**
+ * The kept template discovery records in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function templateEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter(name => templatesEntry(path.join(dir, name)));
+}
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
@@ -272,7 +286,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
+  it('records nothing for theme, discover or docs in a project with no integration, and keeps only template discovery for component and template', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -307,17 +321,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 `,
       );
       const env = {NODE_OPTIONS: `--require ${strict}`};
-      for (const ask of [
-        ['template', '--list'],
-        ['component', 'Button'],
-        ['theme', 'list'],
-        ['discover'],
-        ['docs'],
-      ]) {
-        // Stdout and status: a once-a-day notice may go to stderr.
-        const answer = (
-          /** @type {{status: number | null, stdout: string}} */ r,
-        ) => [r.status, r.stdout];
+      // Stdout and status: a once-a-day notice may go to stderr.
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      for (const ask of [['theme', 'list'], ['discover'], ['docs']]) {
         const fresh = answer(
           run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
         );
@@ -330,6 +338,23 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       }
       expect(entries(tmp).size).toBe(0);
       expect(issuesEntries(tmp).size).toBe(0);
+      expect(templateEntries(tmp)).toHaveLength(0);
+      // Template discovery reads each of the CLI's template docs, so the
+      // lookups keep it in the existing folder, and never make the folder.
+      for (const ask of [
+        ['template', '--list'],
+        ['component', 'Button'],
+        ['component', 'Buttn'],
+      ]) {
+        const first = freshTmp();
+        const fresh = answer(run(ask, {tmp: first, cwd: bare, json: false}));
+        if (ask[1] !== 'Buttn') {
+          expect(fs.existsSync(path.join(first, CACHE_NAME))).toBe(false);
+        }
+        expect(answer(run(ask, {tmp, cwd: bare, json: false}))).toEqual(fresh);
+        expect(answer(run(ask, {tmp, cwd: bare, json: false}))).toEqual(fresh);
+      }
+      expect(templateEntries(tmp)).toHaveLength(hasModuleHooks ? 1 : 0);
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
