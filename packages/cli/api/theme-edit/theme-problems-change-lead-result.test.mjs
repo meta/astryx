@@ -114,7 +114,7 @@ describe('problems a change makes', () => {
         /^\[ok\] t: background-color = #FFE600 on card, but it made \d+ new problems:$/,
       );
       expect(lines.slice(1, 4).join('\n')).toContain(
-        'text in heading ("This week") is 1.27:1 in dark (--color-text-primary on card\'s #FFE600)',
+        'text in heading ("This week") is 1.26:1 in dark (--color-text-primary on card\'s #FFE600)',
       );
 
       const r = await cli([

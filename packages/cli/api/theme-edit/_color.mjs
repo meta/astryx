@@ -997,6 +997,17 @@ export const hex = rgb =>
     .join('')}`;
 
 /**
+ * A contrast ratio as a result says it: cut down to two decimals, never
+ * rounded up, so a ratio just under what a check needs (4.497) never reads
+ * as meeting it ("4.5:1, needs 4.5:1").
+ * @param {number} r
+ * @returns {string}
+ */
+export function ratioWords(r) {
+  return (Math.floor(r * 100 + 1e-9) / 100).toFixed(2);
+}
+
+/**
  * The WCAG contrast ratio of two colors.
  * @param {number[]} a
  * @param {number[]} b

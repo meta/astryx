@@ -73,6 +73,7 @@ import {compareText} from '../../foundation/text/compare-text.mjs';
 import {PICTURE_TAKEN} from '../../foundation/render/picture-window.mjs';
 import {FONT_PROBE_PREFIX} from '../../foundation/render/font-probe.mjs';
 import {CUT_SHORT_PREFIX} from '../../foundation/render/cut-short.mjs';
+import {LOW_CONTRAST_PREFIX} from '../../foundation/render/drawn-contrast.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -2140,7 +2141,7 @@ export async function screenshot(
 }
 
 /**
- * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>} | {ok: false, reason: string, stopped?: string}} PictureResult
+ * @typedef {{ok: true, file: string, notes?: string[], cutShort?: Array<{part: string | null, text: string, whole: boolean, broken?: boolean, overlaps?: boolean}>, lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>} | {ok: false, reason: string, stopped?: string}} PictureResult
  */
 
 /** The time a batch adds to its browser's bound for each page after the first. */
@@ -2268,6 +2269,7 @@ export async function screenshots(project, jobs, run = newPictureRun()) {
           ...pictureFontNotes(out),
         ],
         ...measuredCutShort(out),
+        ...measuredLowContrast(out),
       });
     }
     if (results.length === jobs.length) return results;
@@ -2377,6 +2379,37 @@ function measuredCutShort(stdout) {
         ...(x.broken === true ? {broken: true} : {}),
         ...(x.overlaps === true ? {overlaps: true} : {}),
       })),
+  };
+}
+
+/**
+ * The text a picture script measured too faint to read, from the line it
+ * prints after `LOW_CONTRAST_PREFIX`; nothing when it printed none that
+ * reads.
+ * @param {string} stdout what the picture script printed
+ * @returns {{lowContrast?: Array<{part: string, text: string, ratio: number, fg: string, bg: string}>}}
+ */
+function measuredLowContrast(stdout) {
+  const line = stdout.split('\n').find(l => l.startsWith(LOW_CONTRAST_PREFIX));
+  if (!line) return {};
+  /** @type {unknown} */
+  let found;
+  try {
+    found = JSON.parse(line.slice(LOW_CONTRAST_PREFIX.length));
+  } catch {
+    return {};
+  }
+  if (!Array.isArray(found)) return {};
+  return {
+    lowContrast: found.filter(
+      x =>
+        x &&
+        typeof x.part === 'string' &&
+        typeof x.text === 'string' &&
+        typeof x.ratio === 'number' &&
+        /^#[0-9a-f]{6}$/.test(String(x.fg)) &&
+        /^#[0-9a-f]{6}$/.test(String(x.bg)),
+    ),
   };
 }
 

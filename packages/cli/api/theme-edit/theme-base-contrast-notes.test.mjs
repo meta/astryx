@@ -39,7 +39,7 @@ afterAll(() => {
 });
 
 const MUTED =
-  /^the base theme's .* on --color-background-muted is 1\.25:1 in dark, in \d+ texts: /;
+  /^the base theme's .* on --color-background-muted is 1\.2\d:1 in dark, in \d+ texts: /;
 
 describe("the base theme's own contrast failures", () => {
   it(

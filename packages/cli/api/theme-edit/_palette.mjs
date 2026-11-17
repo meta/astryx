@@ -2165,7 +2165,8 @@ function over(name, r, under) {
 }
 
 /** @param {number} r */
-const round = r => Math.round(r * 100) / 100;
+/** A ratio cut down to two decimals, never rounded up past a need. @param {number} r */
+const round = r => Math.floor(r * 100 + 1e-9) / 100;
 
 /** A stop as text: a layout may hold 16.666666666666668. @param {number} s */
 const shade = s => String(round(s));

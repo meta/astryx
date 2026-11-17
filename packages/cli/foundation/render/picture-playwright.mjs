@@ -17,6 +17,7 @@
 
 import {pathToFileURL} from 'node:url';
 import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {LOW_CONTRAST_PREFIX, lowContrastText} from './drawn-contrast.mjs';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 import {
   FIT_CELLS,
@@ -96,6 +97,13 @@ try {
         try {
           const cut = await page.evaluate(cutShortText);
           say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(cut)}`);
+        } catch {
+          // Not measured.
+        }
+        // The text the picture draws too faint to read, the same way.
+        try {
+          const faint = await page.evaluate(lowContrastText);
+          say(i, `${LOW_CONTRAST_PREFIX}${JSON.stringify(faint)}`);
         } catch {
           // Not measured.
         }

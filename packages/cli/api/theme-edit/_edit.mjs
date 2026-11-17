@@ -7937,7 +7937,7 @@ export async function themeEditShow(theme, options = {}) {
           }
         })
       : null;
-  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[]}} */
+  /** @type {{files: string[], problem: string | null, cutShort: import('./_context.mjs').CutShort[], lowContrast?: import('./_context.mjs').LowContrast[]}} */
   const shots =
     png && !noPages
       ? await pictures(
@@ -8049,6 +8049,10 @@ export async function themeEditShow(theme, options = {}) {
         ...sheet.notes,
         // Text the sample page's pictures draw cut short.
         ...shots.cutShort.map(cutShortNote),
+        // Text the pictures draw too faint to read that no check above
+        // measures (a state, an open overlay, a variant the checks do not
+        // draw).
+        ...drawnContrastNotes(shots.lowContrast ?? [], checked),
         ...misplacedNotes(theme, data),
         ...(noReact
           ? [
@@ -8891,6 +8895,41 @@ function passingDialValue(ctx, slug, data, base, step) {
       f => f?.thing === step.thing && !f.mode && typeof f.value === 'string',
     );
   return better?.value ?? step.value;
+}
+
+/**
+ * Notes for the text the pictures draw too faint to read that no contrast
+ * check measured: one for each part and mode, its texts, its ratios and
+ * colors as drawn, and the picture it is on, with `how` for the part. A
+ * part a check already names in that mode is left out: its problem or note
+ * says it.
+ * @param {import('./_context.mjs').LowContrast[]} drawn
+ * @param {Array<{text: string}>} checked every contrast check's problem and note
+ * @returns {string[]}
+ */
+function drawnContrastNotes(drawn, checked) {
+  /** @type {Map<string, import('./_context.mjs').LowContrast[]>} */
+  const byPart = new Map();
+  for (const x of drawn) {
+    const named = checked.some(
+      c =>
+        new RegExp(`(^|[\\s(])${x.part}\\b`).test(c.text) &&
+        c.text.includes(` in ${x.mode}`),
+    );
+    if (named) continue;
+    const k = `${x.part}\u0000${x.mode}`;
+    byPart.set(k, [...(byPart.get(k) ?? []), x]);
+  }
+  return [...byPart.values()].map(list => {
+    const [x] = list;
+    const ratios = list.map(y => y.ratio);
+    const lo = Math.min(...ratios);
+    const hi = Math.max(...ratios);
+    const texts = [...new Set(list.map(y => `"${y.text}"`))];
+    // (The pictures' paths come as the results show them.)
+    const files = [...new Set(list.map(y => y.file))];
+    return `the pictures draw text in ${x.part} (${texts.slice(0, 3).join(', ')}${texts.length > 3 ? ` and ${texts.length - 3} more` : ''}) at ${lo === hi ? lo : `${lo}–${hi}`}:1 in ${x.mode} (${x.fg} on ${x.bg}, in ${files.join(', ')}), which no check above measures; text needs 4.5:1; what draws it: ${P} how ${x.part}`;
+  });
 }
 
 /**

@@ -874,7 +874,8 @@ export function makeCompiler(project, parts) {
         out.push({
           part: p.text,
           mode: m,
-          ratio: Number(r.toFixed(2)),
+          // (Cut down, never rounded up: just under a need never meets it.)
+          ratio: Math.floor(r * 100 + 1e-9) / 100,
           sample: p.sample,
           // A side the theme changed is named by the value it set, not the
           // token the part reads without it.
