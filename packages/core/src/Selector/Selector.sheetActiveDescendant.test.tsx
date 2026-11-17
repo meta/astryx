@@ -32,9 +32,10 @@ const sheetModule = vi.hoisted(() => {
   };
 });
 
-vi.mock('../BottomSheet/BottomSheet', async importOriginal => {
+vi.mock('./SelectorBottomSheetFrame', async importOriginal => {
   await sheetModule.released;
-  const module = await importOriginal();
+  const module =
+    await importOriginal<typeof import('./SelectorBottomSheetFrame')>();
   sheetModule.markReady();
   return module;
 });
@@ -45,7 +46,7 @@ import {Selector} from './Selector';
 // test transform can take seconds on a busy machine. The file loads the real
 // module before any test runs, so that load counts against no wait or time
 // limit. The mock above still holds the module until the test releases it.
-await vi.importActual('../BottomSheet/BottomSheet');
+await vi.importActual('./SelectorBottomSheetFrame');
 
 // jsdom has no modal dialogs or media queries; stand in for them the way
 // Selector.test.tsx does.
