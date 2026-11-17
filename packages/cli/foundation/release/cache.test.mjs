@@ -209,6 +209,36 @@ describe('ensureRelease', () => {
     expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
   });
 
+  it("with a scope registry set, names the registry npm's error names, and changing only npm's registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=https://astryx.example/\nregistry=${registry}\n`, stderr: ''};
+      }
+      installs.push(args);
+      if (registry.startsWith('http://127.0.0.1')) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'npm error code ECONNREFUSED\nnpm error request to http://127.0.0.1:9/react failed, reason: connect ECONNREFUSED',
+        };
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
   it("refuses a release this computer's Node cannot run", () => {
     const cacheDir = tempDir('cache');
     const result = ensureRelease('0.9.0', {
