@@ -1343,8 +1343,9 @@ function installLocked(version, {cacheDir, run, nodeVersion}) {
 
 /**
  * One sentence on why npm failed, naming the registry: the one in npm's
- * own error when it names a URL, else the registry npm installs the CLI
- * from.
+ * own error when it names a URL, else the one registry setting when only
+ * one is set or both agree; with two different settings and no URL, the
+ * sentence names none.
  * @param {NpmResult} result
  * @param {{scoped: string | null, registry: string | null}} [registries]
  * @returns {string}
@@ -1354,8 +1355,14 @@ function npmFailure(result, registries = {scoped: null, registry: null}) {
     return 'npm, which installs releases, was not found';
   }
   const text = `${result.stderr}\n${result.stdout}`;
-  const named = text.match(/request to (https?:\/\/[^\s/]+)/i);
-  const registry = named ? `${named[1]}/` : (registries.scoped ?? registries.registry);
+  // npm names the address it failed at in one of these forms; without one,
+  // the registry is named only when the two settings agree on it.
+  const named = text.match(/(?:request to|network timeout at:|GET)\s+(https?:\/\/[^\s/]+)/i);
+  const registry = named
+    ? `${named[1]}/`
+    : registries.scoped && registries.registry && registries.scoped !== registries.registry
+      ? null
+      : (registries.scoped ?? registries.registry);
   if (/E404|404 Not Found|No matching version|ETARGET/i.test(text)) {
     return registry ? `the registry ${registry} does not have it` : 'the registry does not have it';
   }

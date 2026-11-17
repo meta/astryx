@@ -200,7 +200,8 @@ describe('ensureRelease', () => {
       return fakeNpm({outcome: scoped.startsWith('http://127.0.0.1') ? 'offline' : 'ok'}).run(args, opts);
     };
     const first = ensureRelease('0.6.8', {cacheDir, run});
-    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    // npm's error names no address and the two settings differ: no registry is named.
+    expect('reason' in first && first.reason).toBe('the registry could not be reached');
     ensureRelease('0.6.8', {cacheDir, run});
     expect(installs).toHaveLength(1);
     scoped = 'https://astryx.example/';
@@ -237,6 +238,24 @@ describe('ensureRelease', () => {
     const fixed = ensureRelease('0.6.8', {cacheDir, run});
     expect(installs).toHaveLength(2);
     expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it("names the registry from npm's timeout and 404 forms, and none when npm names none and the settings differ", () => {
+    const cases = /** @type {const} */ ([
+      ['npm error code ETIMEDOUT\nnpm error network timeout at: https://deps.example/react', 'the registry https://deps.example/ could not be reached'],
+      ['npm error code E404\nnpm error 404 Not Found - GET https://deps.example/react - Not found', 'the registry https://deps.example/ does not have it'],
+      ['npm error code ENOTFOUND\nnpm error network request failed', 'the registry could not be reached'],
+    ]);
+    for (const [stderr, reason] of cases) {
+      const cacheDir = tempDir('cache');
+      /** @type {import('./cache.mjs').runNpm} */
+      const run = args =>
+        args[0] === 'config'
+          ? {status: 0, stdout: '@astryxdesign:registry=https://astryx.example/\nregistry=https://deps.example/\n', stderr: ''}
+          : {status: 1, stdout: '', stderr};
+      const result = ensureRelease('0.6.8', {cacheDir, run});
+      expect('reason' in result && result.reason).toBe(reason);
+    }
   });
 
   it("refuses a release this computer's Node cannot run", () => {
