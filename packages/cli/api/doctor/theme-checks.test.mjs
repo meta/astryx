@@ -13,6 +13,7 @@ import {
   themeImportWiring,
 } from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
+import {recordDeclaredSettings} from '../../foundation/env/cli-command.mjs';
 import {themeAdd} from '../theme/add/add.mjs';
 import {themeEject} from '../theme/eject/eject.mjs';
 import {themeBuild} from '../theme/build/build.mjs';
@@ -180,6 +181,16 @@ describe('the released themes check', () => {
       message: 'No @astryxdesign/theme-* packages are installed.',
       fix: expect.stringContaining('theme add neutral`.'),
     });
+    recordDeclaredSettings(dir, [
+      {
+        name: '@acme/ui',
+        installGuidance: 'Add {packages} to package.json, then relock',
+      },
+    ]);
+    expect(checkThemes(dir, await checkAppThemes(dir)).fix).toContain(
+      '`Add @astryxdesign/theme-neutral to package.json, then relock`',
+    );
+    recordDeclaredSettings(dir, []);
 
     installThemePackage(dir, 'neutral');
     const unwired = checkThemes(dir, await checkAppThemes(dir));

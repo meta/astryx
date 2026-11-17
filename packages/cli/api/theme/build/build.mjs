@@ -133,6 +133,7 @@ import {
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
+  installStepFor,
   parsedSpecifiers,
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
@@ -609,6 +610,15 @@ function inAstryxRepository(cwd) {
 }
 
 /**
+ * The step that installs Core in the project at `cwd`, as message text.
+ * @param {string} cwd
+ */
+function coreInstallText(cwd) {
+  const {line, note} = installStepFor(['@astryxdesign/core'], cwd);
+  return note ? `\`${line}\` (${note})` : `\`${line}\``;
+}
+
+/**
  * Why `theme build` has no Core to generate with, and the fix for where it
  * ran: the Astryx repository builds Core, an app installs it, and an installed
  * Core that will not load is named.
@@ -635,7 +645,7 @@ export function coreUnavailableMessage(cwd, importError) {
   }
   return (
     `This project does not have @astryxdesign/core installed: ${why}. Install ` +
-    `it: \`npm install @astryxdesign/core\` (or yarn/pnpm/bun).${detail}`
+    `it: ${coreInstallText(cwd)}.${detail}`
   );
 }
 
@@ -3516,14 +3526,15 @@ function themeLoadSuggestions(error, shown, cwd, mode = {}) {
     ];
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
-    const {installCommand} = installCommandFor(
+    const {installCommand, installGuidance} = installCommandFor(
       [missing],
       findPackageRoot(cwd) ?? cwd,
     );
-    if (installCommand) {
+    const install = installGuidance ?? installCommand;
+    if (install) {
       return [
         {
-          name: installCommand,
+          name: install,
           reason: `install ${missing}, which the theme imports`,
         },
       ];
