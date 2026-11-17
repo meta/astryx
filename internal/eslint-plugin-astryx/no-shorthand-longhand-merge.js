@@ -55,9 +55,19 @@ SHORTHANDS.inset = [
   ...LOGICAL.map(s => 'inset' + s),
 ];
 SHORTHANDS.insetBlock = ['insetBlockStart', 'insetBlockEnd', 'top', 'bottom'];
-SHORTHANDS.insetInline = ['insetInlineStart', 'insetInlineEnd', 'left', 'right'];
+SHORTHANDS.insetInline = [
+  'insetInlineStart',
+  'insetInlineEnd',
+  'left',
+  'right',
+];
 SHORTHANDS.gap = ['rowGap', 'columnGap'];
-SHORTHANDS.overflow = ['overflowX', 'overflowY', 'overflowBlock', 'overflowInline'];
+SHORTHANDS.overflow = [
+  'overflowX',
+  'overflowY',
+  'overflowBlock',
+  'overflowInline',
+];
 SHORTHANDS.borderRadius = [
   'borderTopLeftRadius',
   'borderTopRightRadius',
@@ -172,7 +182,13 @@ function styleProperties(value) {
  * Style references (`styles.key`, `styles.key(x)`) inside an argument, in
  * merge order. Each carries the conditional branches it sits in.
  */
-function collectRefs(node, out, branches = [], locals = new Map(), seen = new Set()) {
+function collectRefs(
+  node,
+  out,
+  branches = [],
+  locals = new Map(),
+  seen = new Set(),
+) {
   if (!node) return;
   const next = (child, childBranches = branches) =>
     collectRefs(child, out, childBranches, locals, seen);
@@ -193,7 +209,12 @@ function collectRefs(node, out, branches = [], locals = new Map(), seen = new Se
         !node.computed &&
         node.property.type === 'Identifier'
       ) {
-        out.push({node, object: node.object.name, key: node.property.name, branches});
+        out.push({
+          node,
+          object: node.object.name,
+          key: node.property.name,
+          branches,
+        });
       }
       return;
     case 'CallExpression':
@@ -220,7 +241,9 @@ function collectRefs(node, out, branches = [], locals = new Map(), seen = new Se
 /** True when two references sit in different branches of one conditional. */
 function exclusive(a, b) {
   return a.branches.some(([node, side]) =>
-    b.branches.some(([other, otherSide]) => other === node && otherSide !== side),
+    b.branches.some(
+      ([other, otherSide]) => other === node && otherSide !== side,
+    ),
   );
 }
 
