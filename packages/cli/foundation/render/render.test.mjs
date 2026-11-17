@@ -11,7 +11,7 @@ import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {RENDER_FORMAT, readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
-import {renderPage} from './render-page.mjs';
+import {renderPage, withCarriedPaths} from './render-page.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
@@ -231,4 +231,15 @@ export default function Page() {
       removeLinkedFixture(dir);
     }
   }, 120_000);
+});
+
+describe('withCarriedPaths', () => {
+  it('rewrites an image path the script names, and leaves text the page shows as written', () => {
+    const rewrites = new Map([['./photo.png', 'data:image/png;base64,AAAA']]);
+    expect(
+      withCarriedPaths(`a({src:"./photo.png",children:"./photo.png"});b('./photo.png');c({children: \`./photo.png\`})`, rewrites),
+    ).toBe(
+      `a({src:"data:image/png;base64,AAAA",children:"./photo.png"});b('data:image/png;base64,AAAA');c({children: \`./photo.png\`})`,
+    );
+  });
 });

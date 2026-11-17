@@ -727,7 +727,14 @@ export function withCarriedPaths(script, rewrites) {
   for (const [was, now] of rewrites) {
     if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
     for (const quote of ['"', "'", '`']) {
-      out = out.split(`${quote}${was}${quote}`).join(`${quote}${now}${quote}`);
+      const literal = `${quote}${was}${quote}`;
+      // Text the page shows (`children: "./photo.png"`) stays as written.
+      out = out
+        .split(literal)
+        .map((part, i, parts) =>
+          i === parts.length - 1 ? part : /\bchildren:\s*$/.test(part) ? `${part}${literal}` : `${part}${quote}${now}${quote}`,
+        )
+        .join('');
     }
   }
   return out;

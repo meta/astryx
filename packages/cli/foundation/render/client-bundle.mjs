@@ -12,6 +12,8 @@
  * @position foundation/render — used by page-worker.mjs
  */
 
+import * as fs from 'node:fs';
+import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import {stripVTControlCharacters} from 'node:util';
 import vm from 'node:vm';
@@ -73,6 +75,32 @@ document.addEventListener('keydown', event => {
   submit(field.form, null);
 });
 }`;
+
+/** The namespace of the page's own files in the build. */
+const PAGE = 'astryx-page';
+
+/** The namespace of the module that mounts the page. */
+const MOUNT = 'astryx-mount';
+
+/** An import of a module that is part of Node. */
+const NODE_MODULE = new RegExp(
+  `^(node:.*|(${builtinModules.filter(name => !name.startsWith('_')).map(escapeRegExp).join('|')})(/.*)?)$`,
+);
+
+/**
+ * An import of one of `names`, or of a file inside one.
+ * @param {string[]} names
+ */
+const packageFilter = names => new RegExp(`^(${names.map(escapeRegExp).join('|')})(/.*)?$`);
+
+/** @param {string} text */
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+}
+
+/** @param {string} file */
+const loaderFor = file =>
+  /\.[cm]?tsx$/.test(file) ? 'tsx' : /\.[cm]?ts$/.test(file) ? 'ts' : 'jsx';
 
 /** Files a package may import for their address; the page's own are inlined before esbuild sees them. */
 const ASSET_LOADERS = Object.fromEntries(
@@ -137,14 +165,19 @@ export function scriptSafe(code) {
  *   packageDir: (name: string, importerDir: string) => string | null,
  *   builtin: (name: string) => boolean,
  *   describe: (file: string) => string,
+ *   oneCopy?: string[],
  * }} options
  *   `source` compiles one of the page's own files as the server compiled it
- *   (null for any other file, which esbuild loads); `isPageFile` tells
- *   those files; `resolveFile` finds a relative import of one of them with
+ *   (null for any other file, which esbuild loads); `isPageFile` tells the
+ *   files `source` compiles (the page's own, and a module outside
+ *   node_modules that the project's path aliases reach), which alone go
+ *   through the build's plugin; `resolveFile` finds a relative import of one of them with
  *   the extensions the server tries; `packageDir`
  *   names the folder a package import resolves from when it must come from
  *   the copy the server loaded (React outside a project), else null;
- *   `builtin` tells a Node built-in; `describe` names a file for a message.
+ *   `builtin` tells a Node built-in; `describe` names a file for a message;
+ *   `oneCopy` names the packages every module, a package's too, takes from
+ *   the one copy `packageDir` names (React outside a project).
  * @returns {Promise<{code: string, modules: number}>}
  */
 export async function bundleForBrowser({
@@ -156,6 +189,7 @@ export async function bundleForBrowser({
   packageDir,
   builtin,
   describe,
+  oneCopy = [],
 }) {
   // A page whose script throws, in render or in an effect (a frame that
   // blocks storage, say), keeps its first paint: React would empty the root.
@@ -167,73 +201,99 @@ export async function bundleForBrowser({
     `static getDerivedStateFromError() {return {failed: true};}` +
     `render() {return this.state.failed ? createElement('div', {style: {display: 'contents'}, dangerouslySetInnerHTML: {__html: painted}}) : this.props.children;}}` +
     `createRoot(root).render(createElement(FirstPaint, null, createElement(Page)));`;
+  // Only the page's own files and the mount go through this plugin: esbuild
+  // resolves and loads every package file itself, which keeps the build fast.
+  // A package file comes back here only for an import every module must take
+  // from one copy (`oneCopy`) or for a Node module, which is refused.
+  /** @param {any} args */
+  const resolveImport = async args => {
+    if (args.pluginData?.astryx) return undefined;
+    const name = args.path.split('?')[0];
+    if (name.startsWith('.') || path.isAbsolute(name)) {
+      const file = resolveFile(name, args.resolveDir);
+      if (!file) return undefined;
+      return isPageFile(file) ? {path: file, namespace: PAGE} : {path: file};
+    }
+    const resolveDir = packageDir(name, args.resolveDir) ?? args.resolveDir;
+    // A package can map a Node module for the browser (`"browser": {"fs":
+    // false}`), and an installed package can stand in for one (`events`),
+    // so a Node module is refused only when nothing resolves it.
+    const found = await build.resolve(name, {
+      kind: args.kind,
+      resolveDir,
+      importer: args.importer,
+      pluginData: {astryx: true},
+    });
+    // A module a package maps to `false` comes back with no namespace:
+    // esbuild's own resolution gives it as an empty module.
+    if (found.errors.length === 0) {
+      if (found.namespace === '') return undefined;
+      return found.namespace === 'file' && isPageFile(found.path)
+        ? {...found, namespace: PAGE}
+        : found;
+    }
+    if (builtin(name)) {
+      return {
+        errors: [
+          {
+            text: `${describe(args.importer && args.namespace !== MOUNT ? args.importer : entry)} loads ${name}, which is part of Node and not of a browser.`,
+          },
+        ],
+      };
+    }
+    return {errors: found.errors};
+  };
+  /** @type {any} */
+  let build;
   /** @type {any} */
   const plugin = {
     name: 'astryx-page',
-    setup(/** @type {any} */ build) {
-      build.onResolve({filter: /.*/}, async (/** @type {any} */ args) => {
-        if (args.pluginData?.astryx || args.kind === 'entry-point')
-          return undefined;
-        const name = args.path.split('?')[0];
-        if (name.startsWith('.') || path.isAbsolute(name)) {
-          // A package's own imports resolve as esbuild resolves them, which
-          // keeps what its package.json says (`sideEffects`, `browser`), so
-          // the modules the page does not use are left out.
-          if (args.importer && !isPageFile(args.importer)) return undefined;
-          const file = resolveFile(name, args.resolveDir);
-          return file ? {path: file} : undefined;
-        }
-        const resolveDir = packageDir(name, args.resolveDir) ?? args.resolveDir;
-        // A package can map a Node module for the browser (`"browser": {"fs":
-        // false}`), and an installed package can stand in for one (`events`),
-        // so a Node module is refused only when nothing resolves it.
-        const found = await build.resolve(name, {
-          kind: args.kind,
-          resolveDir,
-          importer: args.importer,
-          pluginData: {astryx: true},
-        });
-        // A module a package maps to `false` comes back with no namespace:
-        // esbuild's own resolution gives it as an empty module.
-        if (found.errors.length === 0)
-          return found.namespace === '' ? undefined : found;
-        if (builtin(name)) {
-          return {
-            errors: [
-              {
-                text: `${describe(args.importer || entry)} loads ${name}, which is part of Node and not of a browser.`,
-              },
-            ],
-          };
-        }
-        return {errors: found.errors};
-      });
-      // Stylesheets are already in the page.
-      build.onLoad({filter: /\.(css|scss|sass|less)$/i}, () => ({
-        contents: '',
+    setup(/** @type {any} */ setupBuild) {
+      build = setupBuild;
+      build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
+      build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
+        contents: mount,
         loader: 'js',
+        resolveDir: path.dirname(entry),
       }));
-      build.onLoad({filter: /\.[cm]?[jt]sx?$/}, (/** @type {any} */ args) => {
+      build.onResolve({filter: /.*/, namespace: MOUNT}, resolveImport);
+      build.onResolve({filter: /.*/, namespace: PAGE}, resolveImport);
+      if (oneCopy.length > 0) {
+        build.onResolve({filter: packageFilter(oneCopy)}, resolveImport);
+      }
+      build.onResolve({filter: NODE_MODULE}, resolveImport);
+      build.onLoad({filter: /.*/, namespace: PAGE}, (/** @type {any} */ args) => {
+        const resolveDir = path.dirname(args.path);
+        // Stylesheets are already in the page.
+        if (/\.(css|scss|sass|less)$/i.test(args.path)) return {contents: '', loader: 'js'};
+        if (/\.json$/i.test(args.path)) {
+          return {contents: fs.readFileSync(args.path), loader: 'json', resolveDir};
+        }
+        const asset = ASSET_LOADERS[path.extname(args.path).toLowerCase()];
+        if (asset) return {contents: fs.readFileSync(args.path), loader: asset, resolveDir};
         try {
-          return source(args.path) ?? undefined;
+          const compiled = source(args.path);
+          return compiled
+            ? {...compiled, resolveDir}
+            : {contents: fs.readFileSync(args.path), loader: loaderFor(args.path), resolveDir};
         } catch (e) {
           // A page file that does not compile, such as one the page loads
           // lazily: the render reports it as a static import's.
           return {errors: [{text: describe(args.path), detail: {compile: e}}]};
         }
       });
+      // A package's own stylesheet import adds nothing to the script.
+      build.onLoad({filter: /\.(css|scss|sass|less)$/i}, () => ({
+        contents: '',
+        loader: 'js',
+      }));
     },
   };
   /** @type {any} */
   let result;
   try {
     result = await esbuild.build({
-      stdin: {
-        contents: mount,
-        resolveDir: path.dirname(entry),
-        sourcefile: 'astryx-mount.js',
-        loader: 'js',
-      },
+      entryPoints: ['astryx:mount'],
       bundle: true,
       write: false,
       metafile: true,

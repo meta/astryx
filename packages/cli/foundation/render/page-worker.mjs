@@ -1434,11 +1434,20 @@ try {
         esbuild: loaded.default ?? loaded,
         entry,
         source: browserSource,
-        isPageFile: file => isLocal(path.normalize(file)),
+        // The files compilePageModule compiles: the page's own, and, when
+        // the project has path aliases, every module outside node_modules.
+        isPageFile: file => {
+          const filename = path.normalize(file);
+          return (
+            isLocal(filename) ||
+            (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename))
+          );
+        },
         resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
         packageDir: browserPackageDir,
         builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
         describe: describeFile,
+        oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
       });
     } catch (e) {
       if (e instanceof BundleError && e.compile !== undefined) {
