@@ -385,6 +385,13 @@ export default function Page() {
     expect(component?.code).toBe('ERR_RENDER_COMPILE');
     expect(component?.message).toContain('line 1): @astryxdesign/core has no export Chart');
     put(
+      'src/no-member.tsx',
+      "import {Button} from '@astryxdesign/core/Button';\nexport default function Page() {\n  return <main><Button.Icon /></main>;\n}\n",
+    );
+    const member = await errorOf(() => render('src/no-member.tsx', {cwd: dir, out: 'no-member.html'}));
+    expect(member?.code).toBe('ERR_RENDER_COMPILE');
+    expect(member?.message).toContain('line 3): @astryxdesign/core/Button has no export Button.Icon');
+    put(
       'src/types-only.tsx',
       "import {Button, ButtonProps} from '@astryxdesign/core/Button';\nimport Y, {helper} from './lib-y';\nconst props: ButtonProps = {label: String(helper())};\nexport default function Page() { return <main><Button {...props} /><Y /></main>; }\n",
     );

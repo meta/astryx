@@ -1354,13 +1354,18 @@ const TYPE_NODES = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 
  * @param {Set<string>} names
  */
 function valueUses(program, names) {
-  /** @type {Set<string>} */
+  /** @type {Set<string> & {members?: {name: string, member: string, line: number}[]}} */
   const used = new Set();
+  /** Each `<Name.Member>` element the module draws, for a name in `names`. */
+  used.members = [];
   /** @param {any} node @param {any} parent @param {string} key @param {boolean} inType */
   const walk = (node, parent, key, inType) => {
     if (!node || typeof node.type !== 'string') return;
     if (node.type === 'ImportDeclaration') return;
     const typed = inType || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
+    if (node.type === 'JSXMemberExpression' && node.object?.type === 'JSXIdentifier' && names.has(node.object.name)) {
+      used.members?.push({name: node.object.name, member: node.property.name, line: node.loc?.start.line ?? 0});
+    }
     if ((node.type === 'Identifier' || node.type === 'JSXIdentifier') && names.has(node.name) && !typed) {
       const isKey =
         ((parent?.type === 'MemberExpression' || parent?.type === 'OptionalMemberExpression' || parent?.type === 'JSXMemberExpression') && key === 'property' && !parent.computed) ||
@@ -1440,14 +1445,20 @@ async function missingNamedExports() {
       const missing = needed.filter(
         (/** @type {any} */ s) => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))),
       );
+      const fromRoot = path.relative(root, file);
+      const shown = (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(file) : fromRoot).split(path.sep).join('/');
       if (missing.length > 0) {
-        const fromRoot = path.relative(root, file);
-        return {
-          file: (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(file) : fromRoot).split(path.sep).join('/'),
-          line: missing[0].loc.start.line,
-          module: spec,
-          names: missing.map(nameOf),
-        };
+        return {file: shown, line: missing[0].loc.start.line, module: spec, names: missing.map(nameOf)};
+      }
+      // An element drawn as `<Name.Member>` whose export has no such member
+      // renders as "Element type is invalid" too.
+      for (const s of needed) {
+        const value = exports[nameOf(s)];
+        if (value == null || (typeof value !== 'object' && typeof value !== 'function')) continue;
+        const absentMember = (used.members ?? []).find(m => m.name === s.local.name && value[m.member] === undefined);
+        if (absentMember) {
+          return {file: shown, line: absentMember.line, module: spec, names: [`${nameOf(s)}.${absentMember.member}`]};
+        }
       }
     }
   }
