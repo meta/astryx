@@ -3259,6 +3259,23 @@ function clausesOf(q, partWords, words = null) {
       joint = '';
     }
   }
+  // ("make dialogs wider, their titles bigger": "their" and "its" point back
+  // to the part said last, so the piece is that part's own: "dialogs'
+  // titles".)
+  {
+    let lastWord = '';
+    for (const piece of pieces) {
+      const own = /^(?:their|its)\s+/i.exec(piece.text);
+      if (own && lastWord)
+        piece.text = `${lastWord}${/s$/i.test(lastWord) ? "'" : "'s"} ${piece.text.slice(own[0].length)}`;
+      const t = ` ${piece.text.toLowerCase()} `;
+      const found = partWords
+        .map(([re]) => re.exec(t))
+        .filter(m => m != null)
+        .sort((x, y) => (y.index ?? 0) - (x.index ?? 0))[0];
+      if (found) lastWord = found[0].trim();
+    }
+  }
   return pieces.map(({text, joint}) => {
     /** @type {Clause['parts']} */
     const parts = [];
@@ -13406,6 +13423,26 @@ export function draftAnswer(ctx, env, question) {
       if (status) c.parts = [{...c.parts[0], when: `variant:${status}`}];
     }
   }
+  // ("hovered tabs with a #0969da bottom", "a darker bottom edge": a color
+  // said of one side of a part, with no fill word, is that side's line,
+  // never the part's fill.)
+  for (const c of clauses)
+    if (
+      c.parts.length &&
+      (c.colors.length || c.dir) &&
+      sideOf(c.text) &&
+      !/\b(?:background|backgrounds|fill|fills|bg|text|labels?|shadows?)\b/.test(
+        c.text,
+      ) &&
+      (!c.aspects.length ||
+        c.aspects.every(x => x === 'background' || x === 'border'))
+    ) {
+      c.aspects = ['border'];
+      if (!/\bborders?\b|\blines?\b/.test(c.text))
+        c.text = `${c.text.replace(/\b(?:edges?)\b/g, ' ')} border`
+          .replace(/\s+/g, ' ')
+          .trim();
+    }
   // ("tables: 1px borders, …, and a #f8f9fa hover": a color said with a
   // state and no look word of its own is the part's fill in that state,
   // never the look a clause before it named.)

@@ -53,12 +53,13 @@ const answer = async q => {
       .map(c => c.replace(/^.* editor (?:set|undo) \S+ /, ''));
   return {
     all: results.flatMap(r => lines(r.commands)),
+    first: lines(results[0]?.commands ?? []),
     text: results.map(r => r.text).join('\n'),
   };
 };
 
 /**
- * @typedef {{q: string, has?: string[], says?: RegExp, saysNot?: RegExp, saysOrHas?: RegExp[], never?: RegExp}} Row
+ * @typedef {{q: string, has?: string[], says?: RegExp, saysNot?: RegExp, saysOrHas?: RegExp[], firstHas?: string[], never?: RegExp}} Row
  * @type {Array<[string, Row]>}
  */
 const ROWS = [
@@ -381,6 +382,28 @@ const ROWS = [
       saysNot: /contradict/,
     },
   ],
+  [
+    'their titles are the titles of the part said before',
+    {
+      q: 'make dialogs wider, their titles bigger, and the backdrop darker',
+      never: /^--text-heading-\d-size [^ ]+$/,
+    },
+  ],
+  [
+    'a color said of one side is that side’s line',
+    {
+      q: 'hovered tab border #eeeeee with a #dddddd bottom',
+      has: ["border-bottom '1px solid #dddddd' --on tab --state hover"],
+      never: /background-color '#dddddd'/,
+    },
+  ],
+  [
+    'per-side colors are lines, never a fill',
+    {
+      q: 'primary button border color rgba(0,0,0,0.1) on top and sides and rgba(0,0,0,0.25) on the bottom',
+      never: /^background-color/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
@@ -395,6 +418,8 @@ describe('every clause answered', () => {
       for (const line of row.has ?? []) expect(r.all, row.q).toContain(line);
       if (row.says) expect(r.text, row.q).toMatch(row.says);
       if (row.saysNot) expect(r.text, row.q).not.toMatch(row.saysNot);
+      for (const line of row.firstHas ?? [])
+        expect(r.first, row.q).toContain(line);
       for (const re of row.saysOrHas ?? [])
         expect(
           re.test(r.text) || r.all.some(line => re.test(line)),
