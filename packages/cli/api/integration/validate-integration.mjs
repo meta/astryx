@@ -477,8 +477,12 @@ async function validateAtPackageDir(
   // `integration check --strict` fails on any warning, and a new failure code
   // joins only in a minor release (architecture:cli-surface INV35). Doctor's
   // project check still warns about it.
+  // A manifest key this CLI does not know is a note too, never an issue:
+  // a key from a newer CLI is normal version skew.
   const contribution = await validateLoadedIntegrationListed(loaded);
   (result.listed ??= []).push(...contribution.listed);
+  if (contribution.notes.length > 0)
+    (result.notes ??= []).push(...contribution.notes);
   for (const issue of contribution.issues) {
     if (issue.code === INVALID_CLI_COMMAND) {
       (result.notes ??= []).push({code: issue.code, message: issue.message});
