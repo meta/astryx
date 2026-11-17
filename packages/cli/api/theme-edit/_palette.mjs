@@ -62,6 +62,7 @@ import {
   fillAt,
   grownGrays,
   isGray,
+  isLookToken,
   mapPalette,
   nearestShade,
   paletteToken,
@@ -327,6 +328,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {Array<{token: string, mode: Mode, pair: string, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
@@ -560,15 +562,7 @@ export function exactTokens(data) {
     .map(x => x.thing);
 }
 
-/**
- * Whether a token is one the look derives: a category color (Badge, Token,
- * Card tint) or a chart color.
- * @param {string} token
- */
-export const isLookToken = token =>
-  /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+)$/.test(
-    token,
-  );
+export {isLookToken};
 
 /**
  * A change's token lines with the look's own (category and chart colors)
@@ -2019,7 +2013,7 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   ].filter(Boolean);
   if (dial === 'accent' && derived.length)
     out.push(
-      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay pale enough for your text, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
+      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
     );
   /** The first pairs drawn alike, and how many more. @param {boolean} chart */
   const pairs = chart => {
@@ -2039,6 +2033,14 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
     out.push(
       `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
     );
+  const held = pal.kept ?? [];
+  if (held.length) {
+    const tokensHeld = [...new Set(held.map(h => h.token))];
+    const pairs = [...new Set(held.map(h => `${h.pair} (${h.mode})`))];
+    out.push(
+      `${tokensHeld.length} of the colors the look grows keep the base theme's where the base theme draws its own text with them, so it stays readable: ${pairs.slice(0, 3).join(', ')}${pairs.length > 3 ? `, and ${pairs.length - 3} more` : ''}`,
+    );
+  }
   const st = pal.statuses;
   const grown = ['info', 'success', 'warning', 'danger'].filter(
     role => st?.roles[role] === 'derived',
