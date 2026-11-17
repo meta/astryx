@@ -45,7 +45,7 @@ system_specs: [spec:AST-005/DEC-1, spec:AST-020, spec:AST-085]
 | Behavior                | A `role="menu"` list of `menuitem` rows inside a heading popover, with arrow, Home, End, typeahead, Enter, Space, and Escape support. Selecting an enabled item runs it and, where the host heading supplies a close action, closes the heading menu.                 |
 | End-user impact         | Users switch products or accounts from the heading menu by pointer or keyboard; keyboard and typeahead reach disabled rows, which are announced as disabled and do nothing (FR6).                                                                                     |
 | Builder impact          | None.                                                                                                                                                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled item gains `tabindex="-1"` (FR6). Four implementation gaps (see Current-state impact).                                                                                                                            |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled item gains `tabindex="-1"` (FR6). Three implementation gaps (see Current-state impact).                                                                                                                           |
 | Review checks           | Reject losing `menu`/`menuitem` roles to caller props, keyboard movement or typeahead that skips a disabled item, a disabled item that acts or closes the menu, or a caller `onKeyDown` that silently disables the keyboard model.                                    |
 | Governing rules         | `family:navigation-destinations` FR7; `architecture:interaction-modality`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                                                    |
 
@@ -64,8 +64,9 @@ covers both.
 - Released default preserved: `no` for disabled items: the keyboard reaches a
   disabled item and the item carries `tabindex="-1"` (FR5, FR6), a defect fix
   under `component:DropdownMenu` DEC-11 (owner decision, 2026-11-04)
-- Compatibility class: records shipped behavior; no public API, styling, or
-  target change; a disabled item gains `tabindex="-1"` (FR6)
+- Compatibility class: records shipped behavior; no public API or target
+  change; a disabled item gains `tabindex="-1"` (FR6), and a keyboard-focused
+  item draws the shared focus ring (AR4)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -240,7 +241,7 @@ owns the layer lifecycle and supplies the close callback through context.
 | Target inventory    | Source inspection and `themingTargets.test.ts`                                                                                                         | Menu, Item, and delegated Icon targets                                       | Runtime and documented target metadata drift fails target validation.                                                                                                                                  | `audit:NavHeadingMenu/theming`  |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                          | Canonical anatomy and both current local targets                             | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                                                                                | `audit:NavHeadingMenu/theming`  |
 | FR8                 | `NavHeadingMenu.test.tsx` action-group suite (touch and mouse slides)                                                                                  | Touch and mouse slides across items; a disabled item; undraggable link items | Removing the adoption fails the slide tests.                                                                                                                                                           | —                               |
-| AR4                 | `NavHeadingMenu.test.tsx` focus-ring case: each item's `:focus-visible` ring, inset by its own width, and its color against the menu in light and dark | A link item and an action item; light and dark                               |
+| AR4                 | `NavHeadingMenu.test.tsx` focus-ring case: each item's `:focus-visible` ring, inset by its own width, and its color against the menu in light and dark | A link item and an action item; light and dark                               | Removing the ring, drawing it outside the item, or a ring color under 3:1 against the menu fails.                                                                                                      | —                               |
 | RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `NavMenu / With icons`                                                        | A menu item icon and its label; LTR and RTL                                  | An icon that is not at the inline start of its label fails D2.                                                                                                                                         | `audit:NavHeadingMenu/i18n-rtl` |
 
 Read from source, with no focused test yet:
