@@ -939,12 +939,18 @@ function finish(env, drafts) {
   const kept = new Set();
   /** @type {Map<object, string[]>} */
   const unmetOf = new Map();
+  // ("…, and make headings bigger": where an answer's first line fails the
+  // check and a later line of it passes, a joined answer takes that line
+  // in its place, never drops the ask unsaid.)
+  /** @type {Map<string, import('./_how-commands.mjs').Step[]>} */
+  const joinsInstead = new Map();
   if (typeof env.measure === 'function')
     for (const d of drafts) {
       if (!d.intent) continue;
       const intent = d.intent;
       /** @type {string[]} */
       const unmet = [];
+      const first = d.options[0];
       d.options = d.options.flatMap(o => {
         const why = env.measure(o, intent);
         if (why) {
@@ -966,6 +972,8 @@ function finish(env, drafts) {
         if (why) unmet.push(why);
         return why ? [] : [o];
       });
+      if (first?.length === 1 && d.options.length && d.options[0] !== first)
+        joinsInstead.set(key(first[0]), d.options[0]);
       // One change in growing amounts: the first kept is the answer, and
       // the smaller amounts that fell short are no reason to tell.
       if (d.smallest && d.options.length) {
@@ -977,7 +985,13 @@ function finish(env, drafts) {
   for (const d of drafts) {
     if (!d.intent && dropped.size) {
       d.options = d.options
-        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .map(o =>
+          o.flatMap(st =>
+            !dropped.has(key(st)) || kept.has(key(st))
+              ? [st]
+              : (joinsInstead.get(key(st)) ?? []),
+          ),
+        )
         .filter(o => o.length);
       // A joined answer left holding what another answer already says is
       // that answer: it is not given twice (and never as "all of it").

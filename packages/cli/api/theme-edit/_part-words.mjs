@@ -16,6 +16,8 @@
  * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string, missing?: string}]>}
  */
 export const OVERRIDES = [
+  // (A page's title is its top heading, never the page.)
+  [/\bpage (?:titles?|headings?|headers?)\b/, {on: 'heading', level: '1'}],
   [/\b(?:dividers?|separators?)\b/, {on: 'divider'}],
   // (An action, "a toast's action", is the button it holds: before
   // "button" or at the end of a phrase only. "Action items", "the actions
