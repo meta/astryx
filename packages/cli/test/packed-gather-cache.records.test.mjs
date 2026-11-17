@@ -60,13 +60,25 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       "what theme build checks a theme against in Core's component docs",
     );
-    // The row names the one other command that can make the folder.
     expect(plain).toContain(
-      "A lookup command's not-found path may also create the folder, for its name index.",
+      "the JavaScript theme build compiles from a theme's local TypeScript or JSX modules",
+    );
+    expect(plain).toContain(
+      "what theme build finds when it checks a theme's pseudo-class keys and token names",
+    );
+    expect(plain).toContain(
+      "npm's list of the files an integration package packs",
+    );
+    expect(plain).toContain(
+      'On Linux, when a debug handler is set, runs also keep the locale and time zone here.',
+    );
+    // The row names the other checks that can make the folder.
+    expect(plain).toContain(
+      "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's `integration check` of itself, for npm's list.",
     );
     // The CLI's build id stands for its own files' contents.
     expect(plain).toContain(
-      "the installed CLI's own files judged by its build id (an upgrade or reinstall changes it; in-place edits aren't supported)",
+      "the installed CLI's own files judged by its build id and folder (an upgrade, a reinstall or a copy in another folder changes them; in-place edits aren't supported)",
     );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');

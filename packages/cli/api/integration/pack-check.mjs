@@ -26,6 +26,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {npmCommand} from '../../foundation/release/cache.mjs';
+import {runNpmPackJson} from '../../foundation/integrations/pack-state.mjs';
 import {commandTokensIn} from '../../foundation/doc-compiler/doc-syntax.mjs';
 import {resolvePackageDir} from '../../foundation/integrations/integrations.mjs';
 import {
@@ -279,28 +280,26 @@ function npmPackErrorDetail(output) {
  * the artifact `npm publish` would produce. npm starts the way the CLI starts
  * it everywhere else (`npmCommand`): npm's own entry file run with this Node
  * when one is found, so an `npm` earlier on the PATH that is not npm itself
- * cannot answer for it. Uses spawnSync with an args array — no shell — so
- * paths with metacharacters cannot inject.
+ * cannot answer for it. npm runs with an args array — no shell — so paths
+ * with metacharacters cannot inject, and its output goes to a file, so a
+ * package of any size is listed.
  *
  * @param {string} packageDir
  * @param {string} destDir
  * @returns {{filename: string, fileCount: number, size: number, unpackedSize: number, packedPaths: Set<string>}}
  */
 function runNpmPack(packageDir, destDir) {
-  const npm = npmCommand();
-  const result = spawnSync(
-    npm.command,
+  const result = runNpmPackJson(
+    npmCommand(),
+    packageDir,
     [
-      ...npm.prefix,
-      'pack',
-      '--json',
       '--silent',
       // Lifecycle scripts still run; background mode keeps their output off
       // the stdout that carries the JSON result.
       '--foreground-scripts=false',
       `--pack-destination=${destDir}`,
     ],
-    {cwd: packageDir, encoding: 'utf-8', shell: false, timeout: 60_000},
+    {timeout: 60_000},
   );
   if (result.error) {
     throw new Error(`Could not start npm pack: ${result.error.message}`);
@@ -583,6 +582,23 @@ function declaredThemeBuildOutputs(integration, theme, themeCount) {
 }
 
 /**
+ * The name the package's own build gave a theme's stylesheet, which the
+ * built module's usage comment names: the stylesheet the package exports,
+ * else the one a build writes beside its module (named as the module is),
+ * else the theme's slug. The expected build names its stylesheet the same,
+ * so the module it writes compares byte for byte.
+ * @param {string} slug
+ * @param {{stylesheetFile?: string | null, moduleFile?: string | null}} files
+ * @returns {string}
+ */
+function builtStylesheetName(slug, {stylesheetFile, moduleFile}) {
+  if (stylesheetFile) return path.basename(stylesheetFile);
+  if (moduleFile)
+    return `${path.basename(moduleFile).replace(/\.[cm]?js$/, '')}.css`;
+  return `${slug}.css`;
+}
+
+/**
  * Check every declared path in an incomplete export pair without making the
  * missing partner a publication error.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} localTheme
@@ -635,7 +651,15 @@ async function validateIncompleteThemeExports(
   const expectedDir = fs.mkdtempSync(
     path.join(os.tmpdir(), `astryx-theme-${localTheme.slug}-`),
   );
-  const expectedCss = path.join(expectedDir, `${localTheme.slug}.css`);
+  const expectedCss = path.join(
+    expectedDir,
+    builtStylesheetName(localTheme.slug, {
+      stylesheetFile: outputs.find(output => output.kind === 'stylesheet')
+        ?.inspected.target,
+      moduleFile: outputs.find(output => output.kind === 'module')?.inspected
+        .target,
+    }),
+  );
   let expectedModule = path.join(expectedDir, `${localTheme.slug}.js`);
   try {
     if (outputs.some(output => output.kind !== 'font stylesheet')) {
@@ -1079,7 +1103,10 @@ async function validatePackedThemeExports(
     const expectedDir = fs.mkdtempSync(
       path.join(os.tmpdir(), `astryx-theme-${localTheme.slug}-`),
     );
-    const expectedCss = path.join(expectedDir, `${localTheme.slug}.css`);
+    const expectedCss = path.join(
+      expectedDir,
+      builtStylesheetName(localTheme.slug, localImports),
+    );
     try {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.

@@ -138,7 +138,7 @@ extension Theme {
         overlayHover: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0.050980392156862744),
         overlayPressed: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0.10196078431372549),
         shadow: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0.10196078431372549),
-        skeleton: Color(.sRGB, red: 0.9450980392156862, green: 0.9450980392156862, blue: 0.9450980392156862, opacity: 1),
+        skeleton: Color(.sRGB, red: 0.8313725490196079, green: 0.8313725490196079, blue: 0.8313725490196079, opacity: 1),
         success: Color(.sRGB, red: 0.09803921568627451, green: 0.5058823529411764, blue: 0, opacity: 1),
         successMuted: Color(.sRGB, red: 0.7372549019607844, green: 0.8784313725490196, blue: 0.7333333333333333, opacity: 1),
         syntaxAdded: Color(.sRGB, red: 0.7372549019607844, green: 0.8784313725490196, blue: 0.7333333333333333, opacity: 0.25098039215686274),

@@ -70,8 +70,31 @@ describe('theme build with color-mode blocks', () => {
     expect(css).toContain(
       `${ghost}:where(:scope[data-theme="dark"] *)${OUTSIDE_SURFACES} {`,
     );
+    // A system root under no forced mode: from the scheme the root Theme
+    // names, with no media query; while none is named, from the reader's
+    // preference; under a forced mode, from the reader's preference.
+    const escape = (/** @type {string} */ text) =>
+      text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const system = ':scope:not([data-theme="light"], [data-theme="dark"])';
+    const forcedAround = ':is([data-theme="light"], [data-theme="dark"])';
+    const unforced = `${ghost}:where(${system}:not(${forcedAround} *) *)${OUTSIDE_SURFACES}`;
+    expect(css).toContain(
+      `${unforced}:where(html[data-astryx-scheme="dark"] *) {`,
+    );
+    expect(css).not.toMatch(
+      new RegExp(
+        `@media \\(prefers-color-scheme: dark\\) \\{\\s*${escape(`${unforced}:where(html[data-astryx-scheme="dark"] *)`)}`,
+      ),
+    );
     expect(css).toMatch(
-      /@media \(prefers-color-scheme: dark\) \{\s*:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope:not\(\[data-theme="light"\], \[data-theme="dark"\]\) \*\)/,
+      new RegExp(
+        `@media \\(prefers-color-scheme: dark\\) \\{\\s*${escape(`${unforced}:where(html:not([data-astryx-scheme]) *) {`)}`,
+      ),
+    );
+    expect(css).toMatch(
+      new RegExp(
+        `@media \\(prefers-color-scheme: dark\\) \\{\\s*${escape(`${ghost}:where(${forcedAround} ${system} *)${OUTSIDE_SURFACES} {`)}`,
+      ),
     );
     expect(css).toMatch(
       /:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope \[data-astryx-media="dark"\] \*:not\(:scope \[data-astryx-media="dark"\] \[data-astryx-media="light"\] \*\)[^{]*\) \{\s*background-color: #ff00ff;/,

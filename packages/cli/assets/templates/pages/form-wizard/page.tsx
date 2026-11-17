@@ -83,6 +83,7 @@ import {Heading, Text} from '@astryxdesign/core/Text';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {useToast} from '@astryxdesign/core/Toast';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,7 @@ function parseEmails(raw: string): string[] {
 }
 
 export default function FormWizardPage() {
+  const showToast = useToast();
   const isNarrow = useMediaQuery('(max-width: 640px)');
 
   // Field wraps controls that have no label of their own; it needs an id to
@@ -327,9 +329,25 @@ export default function FormWizardPage() {
       return;
     }
 
-    if (!isLastStep) {
-      setStep(s => s + 1);
+    if (isLastStep) {
+      // An earlier step can still have problems after a jump through the
+      // stepper. Send the person to the first one instead of finishing.
+      const firstBroken = errorsByStep.findIndex(
+        errors => Object.keys(errors).length > 0,
+      );
+      if (firstBroken !== -1) {
+        markAttempted(firstBroken);
+        setStep(firstBroken);
+        return;
+      }
+      // Demo only: replace this toast with the call that performs the action.
+      showToast({
+        body: 'Demo: your workspace would be created here',
+        uniqueID: 'create-workspace',
+      });
+      return;
     }
+    setStep(s => s + 1);
   };
 
   // Skip is not Next with a different label. Next asserts the step is done and
@@ -378,7 +396,17 @@ export default function FormWizardPage() {
               <StackItem size="fill">
                 <Heading level={1}>Create workspace</Heading>
               </StackItem>
-              <Button label="Cancel" variant="ghost" onClick={() => {}} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: 'Demo: leaving workspace setup would return you to the app here',
+                    uniqueID: 'cancel-workspace',
+                  })
+                }
+              />
             </HStack>
             {/* Indicators sit on the track, and the steps carry a label
                 only. A pinned header pays for every line it keeps, and a

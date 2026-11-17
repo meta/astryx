@@ -378,3 +378,102 @@ export function withPngText(bytes, keyword, text) {
   }
   return Buffer.concat([PNG_SIGNATURE, ...chunks]);
 }
+
+/**
+ * The bytes of a PNG holding a picture's RGBA pixels, 8 bits a channel, each
+ * row unfiltered.
+ * @param {Picture} pic
+ * @returns {Buffer}
+ */
+export function encodePng({width, height, rgba}) {
+  /** @param {string} type @param {Buffer} data */
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const stride = width * 4;
+  const rows = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++)
+    rows.set(rgba.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(rows)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/**
+ * A tall picture cut into pictures, in order, each cut only at the top of a
+ * row of parts: the end of a run of at least `gap` rows of one color (the
+ * page between two rows of cells; a cell's dashed edge breaks every run
+ * inside it). A piece ends at the lowest row top within `most` pixels; a
+ * row taller than that is a piece of its own, never cut through. A last
+ * piece shorter than `least` joins the one before it. A picture no taller
+ * than `most` is itself alone.
+ * @param {Picture} pic
+ * @param {number} most
+ * @param {{gap?: number, least?: number}} [options]
+ * @returns {Picture[]}
+ */
+export function cutTall(pic, most, {gap = 10, least = 300} = {}) {
+  const {width, height, rgba} = pic;
+  if (height <= most) return [pic];
+  const stride = width * 4;
+  /** @param {number} y */
+  const plain = y => {
+    const row = new Uint32Array(
+      rgba.buffer,
+      rgba.byteOffset + y * stride,
+      width,
+    );
+    const first = row[0];
+    for (let x = 1; x < width; x++) if (row[x] !== first) return false;
+    return true;
+  };
+  // Where a row of parts starts: the end of each run of `gap` plain rows.
+  /** @type {number[]} */
+  const rowTops = [];
+  for (let y = 0, run = 0; y < height; y++) {
+    if (plain(y)) run++;
+    else {
+      if (run >= gap && y - run > 0) rowTops.push(y);
+      run = 0;
+    }
+  }
+  /** Where each piece ends. @type {number[]} */
+  const ends = [];
+  for (let top = 0; top < height;) {
+    const limit = top + most;
+    let end = height;
+    if (limit < height) {
+      // The lowest row top the piece reaches; a row taller than `most`
+      // is a piece of its own, never cut.
+      const within = rowTops.filter(y => y > top && y <= limit);
+      end = within.length
+        ? within[within.length - 1]
+        : (rowTops.find(y => y > limit) ?? height);
+    }
+    ends.push(end);
+    top = end;
+  }
+  if (ends.length > 1 && height - ends[ends.length - 2] < least)
+    ends.splice(ends.length - 2, 1);
+  return ends.map((end, i) => {
+    const top = i ? ends[i - 1] : 0;
+    return {
+      width,
+      height: end - top,
+      rgba: rgba.slice(top * stride, end * stride),
+    };
+  });
+}

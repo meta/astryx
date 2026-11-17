@@ -73,6 +73,14 @@ describe('sameUrlPage', () => {
     expect(sameUrlPage(dir, app, path.join(app, 'signup'))).toBeNull();
   });
 
+  it('finds a page served at the URL through a route group and a catch-all', () => {
+    write('app/settings/profile/page.tsx');
+    write('app/(shop)/login/[[...rest]]/page.tsx');
+    expect(
+      sameUrlPage(dir, path.join(dir, 'app'), path.join(dir, 'app', 'login')),
+    ).toBe(path.join(dir, 'app', '(shop)', 'login', '[[...rest]]', 'page.tsx'));
+  });
+
   it('finds a Pages Router file that serves the same URL', () => {
     const app = path.join(dir, 'app');
     mkdir('app');

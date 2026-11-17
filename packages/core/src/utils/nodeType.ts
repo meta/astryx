@@ -4,7 +4,8 @@
  * @file nodeType.ts
  * @input A value that may be a DOM node from any window
  * @output isNode, isElement, isHTMLElement, isDocument and isShadowRoot:
- *   type guards that hold for a node from any window
+ *   type guards that hold for a node from any window; and the `<dialog>`
+ *   display checks that the layer runtime and the focus trap share
  * @position Shared DOM checks for code that handles nodes and events from
  *   another window's document, such as a same-origin iframe's or a popup's
  *
@@ -46,4 +47,31 @@ export function isHTMLElement(value: unknown): value is HTMLElement {
   return (
     isElement(value) && value.namespaceURI === 'http://www.w3.org/1999/xhtml'
   );
+}
+
+/** Whether `element` is shown as a popover (`:popover-open`). */
+export function isShownAsPopover(element: Element): boolean {
+  try {
+    return element.matches(':popover-open');
+  } catch {
+    // An engine without the pseudo-class has no popovers to be shown as.
+    return false;
+  }
+}
+
+/**
+ * Whether `dialog` is in the top layer: open, or shown as a popover. A
+ * non-modal Drawer is shown with `showPopover()` and never sets `open`.
+ */
+export function isDialogShown(dialog: HTMLDialogElement): boolean {
+  return dialog.open || isShownAsPopover(dialog);
+}
+
+/**
+ * Whether `dialog` stays closed while the page displays it in flow. Such a
+ * dialog has a box, and its content renders and takes focus. A closed dialog
+ * with `display: none` has no box and displays nothing.
+ */
+export function isDisplayedWhileClosed(dialog: HTMLDialogElement): boolean {
+  return !isDialogShown(dialog) && dialog.getClientRects().length > 0;
 }

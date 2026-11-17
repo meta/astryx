@@ -9,7 +9,12 @@
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
-import {classifyVisualDiff, JSX_CAP} from './classify-visual.js';
+import {
+  classifyVisualDiff,
+  JSX_CAP,
+  styleContextLines,
+  styleContextPaths,
+} from './classify-visual.js';
 
 // Build a minimal unified diff for a single file. Lines are raw content;
 // they get prefixed with +/- here.
@@ -725,6 +730,451 @@ describe('classifyVisualDiff', () => {
   });
 });
 
+// A diff that adds a whole file, with the bytes the style-context test reads.
+function addedFile(file, lines) {
+  return {
+    diff: [
+      `diff --git a/${file} b/${file}`,
+      'new file mode 100644',
+      '--- /dev/null',
+      `+++ b/${file}`,
+      `@@ -0,0 +1,${lines.length} @@`,
+      ...lines.map(l => `+${l}`),
+    ].join('\n'),
+    styleSources: {[file]: {head: lines.join('\n')}},
+  };
+}
+
+// A diff that removes `removed` (0-based line indexes) from a file.
+function removedLines(file, lines, removed) {
+  const hunks = removed.map((at, i) =>
+    [`@@ -${at + 1},1 +${at + 1 - i},0 @@`, `-${lines[at]}`].join('\n'),
+  );
+  return {
+    diff: [
+      `diff --git a/${file} b/${file}`,
+      'index 1111111..2222222 100644',
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      ...hunks,
+    ].join('\n'),
+    styleSources: {[file]: {base: lines.join('\n')}},
+  };
+}
+
+const cssCount = ({diff, styleSources}) =>
+  classifyVisualDiff(diff, {styleSources}).signals.cssProperties;
+
+describe('CSS-named keys count only in a style context', () => {
+  it('scores a route that removes data objects with a `content` key at 0', () => {
+    // The docs site's old MCP route built its results as
+    // `{content: [{type: 'text', text}]}`.
+    const route = [
+      "import {createMcpHandler} from 'mcp-handler';",
+      '',
+      'const handler = createMcpHandler(server => {',
+      "  server.tool('search', 'Search', {query: z.string()}, async ({query}) => {",
+      '    const results = search(query);',
+      '    return {',
+      "      content: [{type: 'text' as const, text: JSON.stringify(results)}],",
+      '    };',
+      '  });',
+      "  server.tool('get', 'Get', {name: z.string()}, async ({name}) => {",
+      '    const result = get(name);',
+      '    if (!result) {',
+      '      return {',
+      '        content: [',
+      "          {type: 'text' as const, text: `No match for ${name}`},",
+      '        ],',
+      '        isError: true,',
+      '      };',
+      '    }',
+      "    return {content: [{type: 'text' as const, text: JSON.stringify(result)}]};",
+      '  });',
+      '});',
+      '',
+      'export {handler as GET, handler as POST};',
+    ];
+    const file = 'apps/docsite/src/app/mcp/route.ts';
+    const change = removedLines(file, route, [6, 13]);
+    const result = classifyVisualDiff(change.diff, {
+      styleSources: change.styleSources,
+    });
+    expect(result.signals.cssProperties).toBe(0);
+    expect(result.score).toBe(0);
+    expect(result.bucket).toBe('non-visual');
+    // The same diff without the file's bytes counts as before.
+    expect(classifyVisualDiff(change.diff).signals.cssProperties).toBe(2);
+  });
+
+  it('scores a stylex.create declaration as before', () => {
+    const lines = [
+      "import * as stylex from '@stylexjs/stylex';",
+      'const styles = stylex.create({',
+      '  root: {',
+      "    padding: '8px',",
+      '    opacity: 0.5,',
+      '  },',
+      '});',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(2);
+  });
+
+  it('scores the other stylex style calls, a theme and Web Animations keyframes', () => {
+    const lines = [
+      "const vars = stylex.defineVars({color: 'red'});",
+      'const fade = stylex.keyframes({',
+      '  from: {opacity: 0},',
+      '  to: {',
+      '    opacity: 1,',
+      '  },',
+      '});',
+      'export const theme = defineTheme({',
+      '  components: {',
+      '    button: {',
+      "      borderRadius: 'var(--radius-full)',",
+      '    },',
+      '  },',
+      '});',
+      'element.animate(',
+      '  [',
+      '    {',
+      '      opacity: 0,',
+      '    },',
+      '  ],',
+      '  {duration: 200},',
+      ');',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/motion.ts', lines))).toBe(3);
+  });
+
+  it('scores a JSX style, xstyle or named style attribute, and a style property', () => {
+    const lines = [
+      'export function A() {',
+      '  return (',
+      "    <div style={{color: 'red',",
+      '      padding: 4}} title="don\'t">',
+      '      <B',
+      '        xstyle={{',
+      '          margin: 0,',
+      '        }}',
+      '        contentStyle={{',
+      '          width: 10,',
+      '        }}',
+      '      />',
+      '    </div>',
+      '  );',
+      '}',
+      'const props = {',
+      '  style: {',
+      "    height: '1em',",
+      '  },',
+      '};',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(4);
+  });
+
+  it('scores Object.assign onto an element style', () => {
+    const lines = [
+      'Object.assign(shield.style, {',
+      "  position: 'fixed',",
+      "  inset: '0',",
+      '});',
+      'Object.assign(options, {',
+      '  width: 10,',
+      '});',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/shield.ts', lines))).toBe(2);
+  });
+
+  it('scores a named object typed as style, or read inside a style context, and a function whose result is', () => {
+    const lines = [
+      "import type {CSSProperties} from 'react';",
+      'const root: CSSProperties = {',
+      "  height: '100dvh',",
+      '};',
+      'const SECONDARY = {',
+      "  backgroundColor: 'transparent',",
+      '};',
+      'const sizing = (width: number) => ({',
+      '  width: `${width}px`,',
+      '});',
+      'const rect = {',
+      '  left: 0,',
+      '};',
+      'export const theme = defineTheme({',
+      '  button: {secondary: SECONDARY},',
+      '});',
+      'export function A() {',
+      '  return <div style={{...root, ...sizing(4)}} />;',
+      '}',
+      'measure(rect);',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/A.tsx', lines))).toBe(3);
+  });
+
+  it('scores motion targets, SVG presentation props spread onto an intrinsic element, and values passed to a dynamic style', () => {
+    const lines = [
+      "import * as stylex from '@stylexjs/stylex';",
+      'panel.play({',
+      '  opacity: between(progress, 0, 1),',
+      '});',
+      'const svgProps = {',
+      "  fill: 'none',",
+      '};',
+      'export const Icon = () => <svg {...svgProps} />;',
+      'const sheet = stylex.create({',
+      '  size: (width: string) => ({width}),',
+      '});',
+      'function resolveSizing(width: number) {',
+      '  return {',
+      '    width: `${width}px`,',
+      '  };',
+      '}',
+      'const sizing = resolveSizing(4);',
+      'export const A = () => <div {...stylex.props(sheet.size(sizing.width))} />;',
+      'const data = {',
+      '  height: 3,',
+      '};',
+      'export const B = () => <Chart {...data} />;',
+    ];
+    const covered = styleContextLines(lines.join('\n'), true);
+    // The motion target, the spread props, the dynamic style's own body and
+    // the helper whose result it is given; not a data object spread onto a
+    // component.
+    for (const at of [3, 6, 10, 14])
+      expect(covered.has(at), String(at)).toBe(true);
+    expect(covered.has(20)).toBe(false);
+  });
+
+  it('scores a .css file and a .stylex.ts file throughout', () => {
+    expect(
+      cssCount(
+        addedFile('packages/core/src/A/A.css', ['.a {', '  color: red;', '}']),
+      ),
+    ).toBe(1);
+    expect(
+      cssCount(
+        addedFile('packages/core/src/A/tokens.stylex.ts', [
+          'export const sizes = {',
+          '  width: 4,',
+          '};',
+        ]),
+      ),
+    ).toBe(1);
+  });
+
+  it('ignores a CSS-named key in a data object, a type and a geometry helper', () => {
+    const lines = [
+      'type Rect = {left: number; top: number};',
+      'export function grow(rect: Rect, by: number): Rect {',
+      '  return {',
+      '    left: rect.left - by,',
+      '    top: rect.top - by,',
+      '  };',
+      '}',
+      'const column = {',
+      '  position: 3,',
+      '};',
+    ];
+    expect(cssCount(addedFile('packages/core/src/A/geometry.ts', lines))).toBe(
+      0,
+    );
+  });
+
+  it('keeps counting when the bytes do not hold the line or do not lex', () => {
+    const lines = ['const x = {', '  opacity: 1,', '};'];
+    const file = 'packages/core/src/A/a.ts';
+    const {diff} = addedFile(file, lines);
+    // Bytes of another revision: the line is not where the diff puts it.
+    expect(
+      classifyVisualDiff(diff, {
+        styleSources: {[file]: {head: ['', ...lines].join('\n')}},
+      }).signals.cssProperties,
+    ).toBe(1);
+    // An unclosed string: the file does not lex.
+    expect(styleContextLines("const a = 'open\n", false)).toBeNull();
+    expect(
+      classifyVisualDiff(diff, {
+        styleSources: {[file]: {head: `${lines.join('\n')}\nconst a = '`}},
+      }).signals.cssProperties,
+    ).toBe(1);
+  });
+
+  it('reads JSX text, comments, strings, regular expressions and generics without moving a boundary', () => {
+    const lines = [
+      'const pattern = /[{(]/g;',
+      'const quote = "}";',
+      '// a stray brace }',
+      'const pick = <T,>(value: T) => value;',
+      'export function A() {',
+      '  return (',
+      "    <p>Don't {'move'} }</p>",
+      '  );',
+      '}',
+      'const styles = stylex.create({',
+      '  a: {',
+      '    color: `${pattern}`,',
+      '  },',
+      '});',
+    ];
+    const covered = styleContextLines(lines.join('\n'), true);
+    expect(covered).not.toBeNull();
+    expect([...covered]).toEqual([10, 11, 12, 13, 14]);
+  });
+
+  it('names the file revisions a diff needs', () => {
+    const file = 'packages/core/src/A/A.tsx';
+    const diff = [
+      `diff --git a/${file} b/${file}`,
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      '@@ -1,2 +1,2 @@',
+      '-  width: 1,',
+      '+  width: 2,',
+      `diff --git a/packages/core/src/A/A.css b/packages/core/src/A/A.css`,
+      '@@ -1,1 +1,1 @@',
+      '+  color: red;',
+      'diff --git a/packages/core/src/A/plain.ts b/packages/core/src/A/plain.ts',
+      '@@ -1,1 +1,1 @@',
+      '+  label: 2,',
+    ].join('\n');
+    expect(styleContextPaths(diff)).toEqual({[file]: {base: true, head: true}});
+  });
+});
+
+// The style-context test reads a pull request's files inside the review job,
+// so its cost must grow with the file, never faster, for every construct it
+// walks. Each case builds an input of size n and 10n and compares the times,
+// not a fixed limit: a linear pass grows about 10 times, a quadratic one about
+// 100 times. The best of three runs keeps a slow moment from deciding.
+describe('style-context limits', () => {
+  it('reads a style context with more names than a call can take as arguments', () => {
+    // Names are queued one at a time; spreading them into one call would
+    // overflow the call stack past about 120,000.
+    const source = [
+      'const styles = stylex.create({',
+      ...Array.from({length: 130000}, (_, i) => `  n${i}: {width: 1},`),
+      '});',
+    ].join('\n');
+    expect(styleContextLines(source, false)).not.toBeNull();
+  });
+});
+
+describe('style-context cost grows with the file', () => {
+  const best = source => {
+    let fastest = Infinity;
+    for (let run = 0; run < 3; run += 1) {
+      const started = performance.now();
+      styleContextLines(source, true);
+      fastest = Math.min(fastest, performance.now() - started);
+    }
+    return fastest;
+  };
+  const lines = (count, each) => Array.from({length: count}, (_, i) => each(i));
+  // Each construct the test walks, as an input of size n.
+  const CONSTRUCTS = {
+    'plain code': n =>
+      lines(n, i => `const value${i} = compute(${i}) + 1;`).join('\n'),
+    'strings, templates, comments and regular expressions': n =>
+      lines(
+        n,
+        i => `const s${i} = '}' + \`\${a}{\` + /[{(]/.test(b); // } {`,
+      ).join('\n'),
+    'nested brackets and style contexts': n =>
+      [
+        'const styles = stylex.create({',
+        ...lines(n, () => 'a: {'),
+        'width: 1',
+        ...lines(n, () => '}'),
+        '});',
+      ].join('\n'),
+    'nested style-named properties': n =>
+      [
+        'const props = {',
+        ...lines(n, () => 'style: {'),
+        'width: 1',
+        ...lines(n, () => '}'),
+        '};',
+      ].join('\n'),
+    'nested functions': n =>
+      [
+        ...lines(n, i => `function f${i}() {`),
+        'return {width: 1};',
+        ...lines(n, () => '}'),
+        'const styles = stylex.create({x: f0()});',
+      ].join('\n'),
+    'many names in one style context (fan-out)': n =>
+      [
+        'const styles = stylex.create({',
+        ...lines(n, i => `  n${i}: {width: 1},`),
+        '});',
+      ].join('\n'),
+    'a chain of named objects': n =>
+      [
+        ...lines(n, i => `const o${i} = {a: o${i + 1}};`),
+        `const o${n} = {color: 1};`,
+        'const styles = stylex.create({x: o0});',
+      ].join('\n'),
+    'many bindings of one name, read many times': n =>
+      [
+        ...lines(n, () => '{ const s = {width: 1}; }'),
+        ...lines(n * 6, () => 'use(s);'),
+        'const styles = stylex.create({x: s});',
+      ].join('\n'),
+    'call results and the functions they call': n =>
+      [
+        ...lines(n, () => 'function make() { return {width: 1}; }'),
+        ...lines(n, i => `const r${i} = make();`),
+        `const styles = stylex.create({${lines(n, i => `a${i}: r${i}`).join(', ')}});`,
+      ].join('\n'),
+    'spreads onto intrinsic elements': n =>
+      [
+        'const svgProps = {fill: "none"};',
+        'export const A = () => (',
+        '  <div>',
+        ...lines(n, () => '    <svg {...svgProps} />'),
+        '  </div>',
+        ');',
+      ].join('\n'),
+    'deep JSX with style attributes': n =>
+      [
+        'export const A = () => (',
+        ...lines(n, () => '<div style={{color: "red"}}>text\'s {"x"}'),
+        ...lines(n, () => '</div>'),
+        ');',
+      ].join('\n'),
+    'generic arrows and type arguments': n =>
+      lines(
+        n,
+        i =>
+          `const p${i} = <T,>(v: T) => v; const t${i} = <Table<Row> rows={r} />;`,
+      ).join('\n'),
+    'declarations with conditional calls': n =>
+      lines(
+        n,
+        i =>
+          `const sizing${i} = ready ? ${'?'.repeat(60)} : resolve${i}(${i});`,
+      ).join('\n'),
+  };
+
+  for (const [construct, build] of Object.entries(CONSTRUCTS)) {
+    it(`grows about linearly for ${construct}`, () => {
+      const n = 6000;
+      const small = build(n);
+      const large = build(n * 10);
+      // Warm the function so the first run's compile time is not measured.
+      styleContextLines(small, true);
+      const ratio = best(large) / Math.max(best(small), 1);
+      // Linear is about 10; quadratic is about 100.
+      expect(
+        ratio,
+        `${construct}: ${ratio.toFixed(1)}x for 10x the input`,
+      ).toBeLessThan(30);
+    });
+  }
+});
+
 describe('review-signal loading contract', () => {
   // review-signal.yml has no checkout: it fetches this file from the base ref
   // via the API and instantiates it with new Function(module, exports, require).
@@ -743,5 +1193,21 @@ describe('review-signal loading contract', () => {
       makeDiff('packages/core/src/Button/Button.tsx', ['opacity: 0.5,']),
     );
     expect(result.signals.cssProperties).toBe(1);
+  });
+
+  it('is given the bytes of every file the style-context test needs', () => {
+    const workflow = readFileSync(
+      fileURLToPath(
+        new URL('../../workflows/review-signal.yml', import.meta.url),
+      ),
+      'utf8',
+    );
+    // A classifier loaded from an older base has no styleContextPaths.
+    expect(workflow).toContain(
+      "typeof mod.exports.styleContextPaths === 'function'",
+    );
+    expect(workflow).toMatch(
+      /classifyVisualDiff\(String\(diff\), \{[^}]*styleSources,/,
+    );
   });
 });

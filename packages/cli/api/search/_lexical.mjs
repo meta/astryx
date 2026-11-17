@@ -101,6 +101,8 @@ import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
  * @property {'page'|'block'} [_kind]
  * @property {string} [_resultName]
  * @property {string} [_commandName]
+ * @property {true} [_notReady] - A template whose doc sets `isReady: false`.
+ *   Its result's `isReady` is false; ranking never reads it.
  * @property {'file'|'doc'} [_hold] - How an integration component holds its
  *   name, for the owner rule.
  * @property {string} [_docPath] - An integration component's doc.
@@ -274,7 +276,10 @@ export function rankLexical(query, options, catalog) {
   /** @type {{result: any, priority: 0 | 1 | 2, key: number, alias: 'partial' | 'keyword' | false, aliasWords: number, candidate: Candidate, span: [number, number] | null, word: [number, number] | null}[]} */
   const ranked = [];
   for (const candidate of all) {
-    const asWords = scoreQuery(term, tokens, candidate, words);
+    // What scoreQuery scored each token as, for domainPriority below.
+    /** @type {Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>} */
+    const tokenHits = new Map();
+    const asWords = scoreQuery(term, tokens, candidate, words, {tokenHits});
     const asWhole =
       wholeTokens && mentioned.has(candidate)
         ? scoreQuery(
@@ -298,7 +303,14 @@ export function rankLexical(query, options, catalog) {
           hit.total,
           catalog.outside,
         ),
-        priority: domainPriority(term, tokens, candidate, hit, words),
+        priority: domainPriority(
+          term,
+          tokens,
+          candidate,
+          hit,
+          words,
+          tokenHits,
+        ),
         key: hit.score,
         alias: hit.alias ?? false,
         aliasWords: hit.aliasWords ?? 0,
