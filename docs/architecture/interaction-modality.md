@@ -157,7 +157,12 @@ work.
   no component writes the attribute or its selector itself. When layout puts
   the control one level down, as in a numbered Item whose own button or link
   sits in the cell beside its marker, the wrapper marks that cell with the
-  module's group props, so the ring still reaches the control. Implementation
+  module's group props, so the ring still reaches the control. A Core row that
+  rings for focus anywhere inside it, such as a reorderable List row or an
+  Item row that delegates to a nested control, takes its ring from
+  `privateAttributes/ownRing.stylex.ts` instead. A control that rings itself,
+  such as a Button or a reorder handle, carries that module's mark, and the
+  row paints no ring while such a control has keyboard focus. Implementation
   gap: the clickable and selectable cards, Thumbnail, MultiSelector,
   SideNavItem, and ChatComposer's body write their own ring conditions.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
@@ -317,6 +322,10 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - `privateAttributes/focusOwner.stylex.ts` — owns the private focus-owner attribute, its
   selector, and the one shared wrapper ring for INV3's primary-control owners;
   it is not exported from the package.
+- `privateAttributes/ownRing.stylex.ts` — owns the private own-ring attribute,
+  which marks a control that rings itself, and the row ring for INV3's rows
+  that ring for focus anywhere inside them; it is not exported from the
+  package.
 - `hooks/useFocusReturnVisibility.ts` — applies last-input visibility when focus
   returns from adaptive surfaces.
 - `hooks/useIndicatorFocusRing.tsx` — lets the semantic owner guarantee paint on

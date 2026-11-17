@@ -4,12 +4,12 @@
  * @file privateAttributes/ownRing.stylex.ts
  * @input The focus tokens (theme/tokens.stylex.ts)
  * @output ownRingProps, which marks a control that rings itself, and
- *   ownRingContainerStyles: a reorderable List row's focus-within ring,
- *   which leaves such a control alone
+ *   ownRingContainerStyles: a row's focus-within ring, which leaves such a
+ *   control alone
  * @position Owner module of the private own-ring attribute: the only file
- *   that writes its name. ListReorderHandle marks the handle and composes the
- *   row's ring, and only createReorderable's engine imports it, so a List
- *   without `reorderable` carries none of it. No package entry exports it.
+ *   that writes its name. Button and ListReorderHandle mark themselves. A
+ *   reorderable List row and an Item row that delegates to a nested control
+ *   take the container ring. No package entry exports it.
  *
  * SYNC: When modified, keep the ring equal to utils/focusOutline.stylex.ts's
  * focus outline.
@@ -29,10 +29,10 @@ export const ownRingProps: Readonly<Record<string, string>> = {
 /**
  * A container that rings itself on focus within. A focused descendant marked
  * `data-astryx-own-ring` is left alone: a control that rings itself, such as
- * a List row's reorder handle. Without it the two rings stack for one tab
- * stop. An ancestor that clips its inline overflow (List) also cuts the
- * container's ring to two lines. It is its own object, so only the reorder
- * that uses it carries it.
+ * a Button or a List row's reorder handle. Without it the two rings stack for
+ * one tab stop. An ancestor that clips its inline overflow (List) also cuts
+ * the container's ring to two lines. It is not part of the shared focus
+ * outline styles, so only a file that imports this module carries it.
  */
 export const ownRingContainerStyles = stylex.create({
   focusWithin: {

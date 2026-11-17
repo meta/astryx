@@ -7,7 +7,7 @@
  * @position Storybook examples and Item/List regression evidence
  */
 
-import {useMemo, useState, type ReactNode} from 'react';
+import {useMemo, useRef, useState, type ReactNode} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
@@ -387,6 +387,29 @@ export const NumberedWithActions: Story = {
       </List>
     </div>
   ),
+};
+
+/**
+ * A row that delegates to the Button in its end slot: a press anywhere on the
+ * row presses Open. Open is the row's only tab stop, and its own ring is the
+ * only ring while it has keyboard focus.
+ */
+export const DelegatedEndButton: Story = {
+  render: function DelegatedEndButtonStory() {
+    const openRef = useRef<HTMLButtonElement | null>(null);
+    return (
+      <div style={{maxWidth: 420}}>
+        <Item
+          label="Invoice 42"
+          description="Due in 3 days"
+          interactiveRef={openRef}
+          endContent={
+            <Button ref={openRef} label="Open" size="sm" onClick={() => {}} />
+          }
+        />
+      </div>
+    );
+  },
 };
 
 /** Disabled items. */

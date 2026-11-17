@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Selector|Item|Token)/ ^packages/core/src/privateAttributes/focusOwner ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token)
+// @pr-a11y scope ^packages/core/src/(Selector|Item|Token)/ ^packages/core/src/privateAttributes/(focusOwner|ownRing) ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Selector|Item|Token)
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
@@ -10,8 +10,10 @@
  *   tab stop in a Selector trigger, an Item row or a Token shows exactly one
  *   focus ring. The wrapper rings for its own control only; a control inside
  *   it (a clear button, an end action, a remove button) rings itself, and the
- *   wrapper stays unringed
- * @position Regression proof for focusWithinOwner in Selector, Item and Token
+ *   wrapper stays unringed. A row that delegates to its end Button leaves
+ *   the ring to the Button
+ * @position Regression proof for focusWithinOwner in Selector, Item and
+ *   Token, and for the own-ring row ring in a delegating Item
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -110,6 +112,17 @@ for (const width of [1280, 390]) {
     for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
       expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
     }
+  });
+
+  test(`at ${width} px, a row that delegates to its end Button shows only the Button's ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-item--delegated-end-button', width);
+    // Open is the row's only tab stop.
+    await page.keyboard.press('Tab');
+    const rings = await ringedElements(page);
+    expect(rings, 'rings while Open is focused').toHaveLength(1);
+    expect(rings[0]?.isFocused, 'the one ring is on Open itself').toBe(true);
   });
 
   test(`at ${width} px, each tab stop in a Token shows one ring`, async ({

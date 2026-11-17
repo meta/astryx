@@ -70,12 +70,12 @@ import {
 } from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
   focusOwnerGroupProps,
   focusOwnerProps,
   focusWithinOwner,
 } from '../privateAttributes/focusOwner.stylex';
+import {ownRingContainerStyles} from '../privateAttributes/ownRing.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
@@ -1030,9 +1030,10 @@ export function Item({
           disabled: isDisabled ? 'disabled' : null,
         }),
         // The row rings only for its own button or link. In delegation mode it
-        // rings for the nested control. Other controls ring themselves.
+        // rings for a focused control inside it, but not for a control that
+        // rings itself, such as a Button. Thus one focus move shows one ring.
         stylex.props(
-          isDelegate ? focusOutlineStyles.focusWithin : focusWithinOwner,
+          isDelegate ? ownRingContainerStyles.focusWithin : focusWithinOwner,
           styles.root,
           densityStyles[density],
           align === 'start' && styles.alignStart,
