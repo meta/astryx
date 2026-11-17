@@ -1515,7 +1515,7 @@ describe('themeBuild() — outputs it may replace', () => {
   it('replaces a header-less output at its default path, as an output of a release that wrote no header', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'ocean.css'),
-      '@scope ([data-xds-theme="ocean"]) to ([data-xds-theme]) {\n  :scope {}\n}\n',
+      '@layer xds-theme {\n@scope ([data-xds-theme="ocean"]) to ([data-xds-theme]) {\n  :scope {}\n}\n}\n',
     );
     await expect(
       themeBuild('ocean.mjs', {}, {cwd: tmpDir}),

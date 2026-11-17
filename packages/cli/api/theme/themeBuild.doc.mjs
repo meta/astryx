@@ -108,7 +108,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'an output path, beside the source or one that out names, holds a non-empty file no release of theme build wrote (no build header, and not the content a release without a header wrote), such as your own stylesheet or module of the same name, package.json or app source; nothing is written and the file is left as it is. The message says to build to another place with out, or to move or rename the file; the suggestion names a free out path. At family output paths a header-less file is replaced, with a warning naming it',
+      when: 'an output path, beside the source or one that out names, holds a non-empty file theme build did not write (no build header; beside the source, also not an output of the CLI before it was named Astryx), such as your own stylesheet or module of the same name, package.json or app source; nothing is written and the file is left as it is. The message says to build to another place with out, or to move or rename the file; the suggestion names a free out path. At family output paths a header-less file is replaced, with a warning naming it',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',

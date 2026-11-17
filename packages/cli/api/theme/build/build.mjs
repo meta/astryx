@@ -692,18 +692,26 @@ function headerRoot(outDir, cwd) {
 
 /**
  * Whether a file is an output of some released `theme build`: its header has
- * the build's mark (the CLI's name before Astryx included), or, for releases
- * that wrote no header, its content has the shape they wrote: a stylesheet
- * scoped to `[data-xds-theme=…]`, a module that says it was built by
- * `xds theme build`, or declarations of a built theme only.
+ * the build's mark, or, with `legacy`, a mark or shape of the CLI before it
+ * was named Astryx: its header's mark, or for its releases that wrote no
+ * header, the shape they wrote: a stylesheet in the `xds.theme`,
+ * `xds-theme` or `reset` layer scoped to `[data-xds-theme=…]`, a module
+ * that says it was built by `xds theme build` (`xds build-theme` at first),
+ * or declarations of a built theme with their import.
  * @param {string} file
+ * @param {{legacy?: boolean}} [options]
  */
-function isBuildOutput(file) {
+function isBuildOutput(file, {legacy = false} = {}) {
   const head = fileHead(file);
-  if (head.includes(GENERATED_MARKER) || head.includes(LEGACY_BUILD_MARKER))
-    return true;
+  if (head.includes(GENERATED_MARKER)) return true;
+  if (!legacy) return false;
+  if (head.includes(LEGACY_BUILD_MARKER)) return true;
   const text = head.trimStart();
-  if (/\.css$/i.test(file)) return text.startsWith('@scope ([data-xds-theme=');
+  if (/\.css$/i.test(file))
+    return (
+      /^@layer (?:xds\.theme|xds-theme|reset) \{/.test(text) &&
+      text.includes('[data-xds-theme=')
+    );
   if (/\.d\.ts$/i.test(file)) {
     const lines = text
       .split('\n')
@@ -721,7 +729,7 @@ function isBuildOutput(file) {
     );
   }
   if (/\.js$/i.test(file))
-    return /theme — built by `[^`]*xds theme build`/.test(head);
+    return /theme — built by `[^`]*xds (?:theme build|build-theme)`/.test(head);
   return false;
 }
 
@@ -1498,10 +1506,12 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, warnUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, warnUnmarked?: boolean, acceptLegacy?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
  *   them; `rerun`: this build's command with another --out, or without one;
- *   `warnUnmarked` (with `refuseUnmarked`): a header-less file is replaced
+ *   `acceptLegacy`: an output of the CLI before it was named Astryx counts
+ *   as the build's own (the default paths, where the build always replaced
+ *   them); `warnUnmarked` (with `refuseUnmarked`): a header-less file is replaced
  *   with a warning naming it, as a family build has always replaced one;
  *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
  *   the editor-folder warning instead of the logger (a watcher prints it
@@ -1516,6 +1526,7 @@ function assertOutputsReplaceable(
     rerun,
     refuseUnmarked = false,
     warnUnmarked = false,
+    acceptLegacy = false,
     elsewhere = '--out',
     onEditorFolder,
     onWarning,
@@ -1615,9 +1626,7 @@ function assertOutputsReplaceable(
     // tool's: only the user can say it may go.
     // A family build keeps its released rule: a file without the current
     // mark is replaced with a warning naming it.
-    const ours = warnUnmarked
-      ? fileHead(write.dest).includes(GENERATED_MARKER)
-      : isBuildOutput(write.dest);
+    const ours = isBuildOutput(write.dest, {legacy: acceptLegacy});
     if (refuseUnmarked && stat.size > 0 && !ours) {
       if (warnUnmarked) {
         unmarkedReplaced.push(rel(write.dest));
@@ -6147,6 +6156,10 @@ async function themeBuildInternal(
       claimed: handOff.claimedOutputs,
       rerun,
       refuseUnmarked: !handOff.ownsOutputs,
+      // At the default paths the build always replaced what was there, so an
+      // output of the CLI before it was named Astryx is still its own; a path
+      // --out names keeps its released rule (the current mark only).
+      acceptLegacy: !options.out,
       onEditorFolder: editorFolderListener ?? undefined,
       // The result's warnings carry what text prints.
       onWarning: message => warningMessages.push(message),
