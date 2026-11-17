@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/TopNav/TopNav.test.tsx,
     packages/core/src/TopNav/__tests__/TopNavMobileLongHeading.a11y.chromium.spec.ts,
     packages/core/src/TopNav/__tests__/TopNavMobileLongHeading.interaction.browser.spec.ts,
+    packages/core/src/TopNav/__tests__/TopNavMobileEndSearch.interaction.browser.spec.ts,
     packages/core/src/TopNav/__tests__/TopNavTextSize.interaction.browser.spec.ts,
     packages/core/src/AppShell/AppShell.test.tsx,
     apps/storybook/stories/TopNav.stories.tsx,

@@ -141,9 +141,9 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  // The end content takes its full width while the heading can yield, but
-  // never more than the bar, so an end item that can narrow (a fluid search
-  // field) narrows instead of pushing the toggle off screen.
+  // The end content keeps its full width while the heading can yield.
+  // It is never wider than the bar. A fluid end item then narrows,
+  // so the toggle stays on screen.
   mobileBarEnd: {
     display: 'flex',
     alignItems: 'center',
