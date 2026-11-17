@@ -578,6 +578,16 @@ describe('a word matches whole words (FR6)', () => {
       score: 90,
     });
     expect(answer(set, 'XMarkIcon')).toEqual(['x-mark']);
+    // An export name with a digit reads as the id its set names it by.
+    const numbered = setOf([
+      {id: 'bars-3'},
+      {id: 'cog-8-tooth'},
+      {id: 'squares-2x2'},
+      {id: 'bars-arrow-up'},
+    ]);
+    expect(answer(numbered, 'Bars3Icon')).toEqual(['bars-3']);
+    expect(answer(numbered, 'Cog8ToothIcon')).toEqual(['cog-8-tooth']);
+    expect(answer(numbered, 'Squares2X2Icon')).toEqual(['squares-2x2']);
   });
 
   it('keeps the reading whose best match scores higher, the word as typed on a tie', () => {

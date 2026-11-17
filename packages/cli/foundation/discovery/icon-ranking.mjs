@@ -69,6 +69,7 @@
 
 import {definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {iconIdOf} from '../text/icon-id.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
@@ -275,16 +276,15 @@ export function iconQuery(query) {
 }
 
 /**
- * The query with each export name split into its words: a capital letter
- * after a lower-case letter or a digit starts a word, and so does the last
- * capital of a run of capitals that a lower-case letter follows
- * (`XMarkIcon` is `X Mark Icon`).
+ * The query with each word that holds a capital letter read as the icon id
+ * its export name stands for, split into its words: `XMarkIcon` reads
+ * `x mark` and `Bars3Icon` reads `bars 3` ({@link iconIdOf}).
  * @param {string} query
  */
 function exportNameWords(query) {
-  return query
-    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/gu, '$1 $2');
+  return query.replace(/[A-Za-z0-9]+/gu, word =>
+    /[A-Z]/u.test(word) ? iconIdOf(word).replace(/-/gu, ' ') : word,
+  );
 }
 
 /**
@@ -414,7 +414,9 @@ export function rankIcons(sets, query, {words = false} = {}) {
   const answered = asNamed.length > 0 ? asNamed : asTyped;
   const spelled = iconQuery(exportNameWords(query));
   const asSpelled =
-    spelled === named || spelled === typed ? [] : rankTerm(sets, spelled);
+    spelled === '' || spelled === named || spelled === typed
+      ? []
+      : rankTerm(sets, spelled);
   const best = topScore(asSpelled) > topScore(answered) ? asSpelled : answered;
   if (best.length > 0) return best;
   if (!words) return [];
