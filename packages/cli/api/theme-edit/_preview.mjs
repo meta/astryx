@@ -65,6 +65,7 @@ import {
 } from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -479,16 +480,13 @@ export function baseFontsSheet(ctx, data) {
   // own `@font-face` rules (a base that ships its font files); with the
   // theme's build at hand, the sheet is imported only while the build still
   // names one of them.
-  const faces = [...text.matchAll(/@font-face\s*\{([^}]*)\}/g)].map(m => ({
-    family: /font-family:\s*['"]?([^'";]+?)['"]?\s*;/.exec(m[1])?.[1],
-    weight: /font-weight:\s*([^;]+);/.exec(m[1])?.[1].trim() ?? '400',
-  }));
+  const faces = fontFaces(text);
   const families = [
     ...new Set([
       ...[...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
         decodeURIComponent(m[1].replace(/\+/g, ' ')),
       ),
-      ...faces.flatMap(f => (f.family ? [f.family] : [])),
+      ...faces.map(f => f.family),
     ]),
   ];
   /** @type {string | null} */
@@ -527,13 +525,12 @@ export function baseFontsSheet(ctx, data) {
         [...new Set(list)].sort((a, b) => a - b),
       );
   }
-  // The weights a face of the sheet's own loads: one weight each; a range
-  // (`100 900`) is a variable face, every weight in it.
+  // The weights the sheet's own faces load: one weight each; a range
+  // (`100 900`) is a variable face, every weight in it, so none is listed.
   for (const family of new Set(faces.map(f => f.family))) {
-    if (!family) continue;
-    const own = faces.filter(f => f.family === family).map(f => f.weight);
-    if (own.some(w => /\s/.test(w))) continue;
-    const list = own.map(Number).filter(n => Number.isInteger(n));
+    const own = faces.filter(f => f.family === family).map(f => f.weights);
+    if (own.some(w => !w || w[0] !== w[1])) continue;
+    const list = own.flatMap(w => (w ? [w[0]] : []));
     if (list.length)
       weights.set(
         family,
@@ -629,19 +626,9 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaces(text).flatMap(face =>
+    face.weights ? [face.weights] : [],
+  );
   return spans.length ? spans : null;
 }
 

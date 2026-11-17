@@ -11,6 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, describe, expect, it} from 'vitest';
 import {baseFontsSheet} from './_preview.mjs';
+import {fontFaces} from '../../foundation/fonts/font-stylesheet.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-fonts-'));
 afterAll(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -61,6 +62,18 @@ describe("a base theme's font stylesheet", () => {
     expect(sheet?.weights.has('Fraunces')).toBe(false);
   });
 
+  it('reads weight keywords as their numbers', () => {
+    const ctx = project(
+      'keywords',
+      face('Figtree', 'normal', 'a.woff2') + face('Figtree', 'bold', 'b.woff2'),
+    );
+    const sheet = baseFontsSheet(
+      ctx,
+      /** @type {any} */ ({like: 'b', name: 't'}),
+    );
+    expect(sheet?.weights.get('Figtree')).toEqual([400, 700]);
+  });
+
   it('that asks a font service reads the same', () => {
     const ctx = project(
       'service',
@@ -73,5 +86,23 @@ describe("a base theme's font stylesheet", () => {
     expect(sheet?.families).toEqual(['Figtree']);
     expect(sheet?.remote).toHaveLength(1);
     expect(sheet?.weights.get('Figtree')).toEqual([400, 700]);
+  });
+});
+
+describe('the shared font face reader', () => {
+  it('reads each face once: family as written, key, and weight span', () => {
+    expect(
+      fontFaces(
+        face('Figtree', 'bold', 'a.woff2') +
+          face('Fraunces', '100 900', 'b.woff2') +
+          "@font-face { font-family: 'Gill\\ Sans'; src: url(c.woff2); }\n" +
+          face('Odd', 'heavy', 'd.woff2'),
+      ),
+    ).toEqual([
+      {family: 'Figtree', key: 'figtree', weights: [700, 700]},
+      {family: 'Fraunces', key: 'fraunces', weights: [100, 900]},
+      {family: 'Gill Sans', key: 'gill sans', weights: [400, 400]},
+      {family: 'Odd', key: 'odd', weights: null},
+    ]);
   });
 });
