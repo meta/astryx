@@ -24,6 +24,7 @@ import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import postcss from 'postcss';
+import {importUrl} from '../fs/import-url.mjs';
 import {
   assetDataUri,
   isAssetBytes,
@@ -951,7 +952,7 @@ function inlineAssets(text, kind, ctx) {
 /**
  * The function Core's naming module builds a part's class with, from the Core
  * the page uses, so the namespace comes from Core and not from the CLI. Null
- * when the page has no Core, or its Core has no naming module.
+ * when the page has no Core, or its Core has no naming module that loads.
  * @param {string} entry
  * @param {ServedSet | null} served
  * @returns {Promise<((part: string) => string) | null>}
@@ -959,8 +960,13 @@ function inlineAssets(text, kind, ctx) {
 async function coreClassNamer(entry, served) {
   const file = resolveServed('@astryxdesign/core/naming', entry, served);
   if (!file) return null;
-  const {stableClassName} = await import(pathToFileURL(file).href);
-  return typeof stableClassName === 'function' ? stableClassName : null;
+  try {
+    const {stableClassName} = await importUrl(pathToFileURL(file).href);
+    return typeof stableClassName === 'function' ? stableClassName : null;
+  } catch {
+    // A Core whose naming module does not load keeps the cut as before.
+    return null;
+  }
 }
 
 /**
