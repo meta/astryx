@@ -513,3 +513,28 @@ export const indicatorPressPaintStyles = stylex.create({
     },
   },
 });
+
+export const persistentSelectedPressStyles = stylex.create({
+  /**
+   * A selected control on the neutral fill (TopNavItem in the bar). It
+   * keeps that fill under hover and through every phase of a press, and
+   * paints no pressed overlay, for a mouse and a finger alike. Compose it
+   * after `interactionOverlayStyles.backgroundColor`.
+   */
+  neutral: {
+    backgroundColor: {
+      default: colorVars['--color-neutral'],
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        [HOVER_HOVER]: colorVars['--color-neutral'],
+      },
+      ':active': colorVars['--color-neutral'],
+      [PRESSED_ON]: colorVars['--color-neutral'],
+      [PRESSED_FADING]: colorVars['--color-neutral'],
+    },
+    backgroundImage: {
+      default: null,
+      [PRESSED_ON]: 'none',
+      [PRESSED_FADING]: 'none',
+    },
+  },
+});

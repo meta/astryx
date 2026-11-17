@@ -17,7 +17,7 @@ const PRESS_SELECTOR =
   /data-astryx-press|['"`]:active['"`]|ancestor\(\s*['"`]:active/;
 
 /** Components that paint their press only through a recipe export. */
-const RECIPE_USERS = ['TabList/Tab.tsx'];
+const RECIPE_USERS = ['TabList/Tab.tsx', 'TopNav/TopNavItem.tsx'];
 
 describe('press recipe users', () => {
   it.each(RECIPE_USERS)('%s reads no press selector of its own', file => {
