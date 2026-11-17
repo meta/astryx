@@ -271,7 +271,7 @@ export default function PaymentFormPage() {
     <Layout
       height="fill"
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <Center axis="horizontal">
             <Section
               variant="transparent"

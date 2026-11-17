@@ -155,7 +155,8 @@
  * `package` is the source selector; bundled themes retain `@astryxdesign/cli`.
  * `missingPackages` names the packages the fork imports that the app does not
  * declare (empty when none); `installCommand` installs them, and is null when
- * none are missing or the package manager is undetermined.
+ * none are missing, when the package manager is undetermined, or when no
+ * package.json holds the folder.
  * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null}} data
  */
 

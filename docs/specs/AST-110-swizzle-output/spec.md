@@ -37,7 +37,8 @@ A product team runs `astryx swizzle <Name>` to own a component's source. The
 copy builds in their app with no edits, answers to the same theme targets and
 class names, and behaves like the package component it came from until they
 change it. Core and the CLI keep that true for every component swizzle offers,
-and the repository proves it before a change that could break it merges.
+and the repository proves it on `main` after merge and in full before every
+release.
 
 ## Non-goals
 
@@ -136,14 +137,13 @@ and the repository proves it before a change that could break it merges.
 - **FR6 — Behavior matches the package.** Until the product edits it, the copy's
   keyboard handling, focus, roles, names, states, announcements, and events match
   the package component of the same version.
-- **FR7 — Every offered component is proven before merge.** Before a change to
-  a component package's source or to the swizzle copy merges, every component
-  swizzle can copy is ejected into a clean
-  project, type-checked, bundled with a StyleX compiler, and rendered once on the
-  server; a failure blocks the merge through a required check. Release checks run
-  the same proof for every component and also render each copy in a real
-  browser. The proof adds no required context and no wall-clock time to a pull
-  request's slowest required check.
+- **FR7 — Every offered component is proven on main.** After a change to a
+  component package's source or to the swizzle copy merges, `main`'s checks
+  eject every component swizzle can copy into a clean project, type-check it,
+  bundle it with a StyleX compiler, and render it once on the server; a failure
+  there is fixed forward on `main` (DEC-3). A pull request runs no swizzle
+  proof. Release checks run the same proof for every component and also render
+  each copy in a real browser.
   Every component swizzle can copy means Core's components as `swizzle --list`
   offers them (`spec:AST-035` FR12) and every component of each integration
   package in the repository, copied with `--package`.
@@ -160,17 +160,22 @@ and the repository proves it before a change that could break it merges.
   behaves as FR1 and FR6 state, but its rules land in the product's layer, above
   `astryx-theme`. A copy kept across a Core upgrade is outside FR1 and FR6.
 - Browser evidence: a real-browser render of every copy at release time (FR7);
-  server rendering is the pull-request smoke evidence.
+  server rendering on `main` is the smoke evidence.
 
 ## Current-state impact
 
 - The CLI's swizzle copy follows the component's module graph (FR1–FR2, FR4),
   and writes no test, story, spec, or doc file. The CLI owner implements and
   owns these changes.
-- The FR7 proof joins the repository's existing required test lane
-  (`spec:AST-030` FR11), selected by the shared change-scope classification and
-  reported in the single pull-request report, with the full proof at release
-  time.
+- The FR7 proof runs in `main`'s heavy lanes (`spec:AST-030` FR21) and in
+  full in a release re-check.
+- FR7 gap: a pull request's required test lane (`spec:AST-030` FR11) runs the
+  swizzle proof, which FR7 leaves out of pull requests. `main`'s unit run proves
+  only the copies its named commit's own change affects, so a covered change
+  that no unit run names is first proven by a release re-check. A release
+  publishes on a release-check and a unit run of its cut commit, which prove
+  only that commit's own change, so a release cut without a re-check can ship
+  an unproven copy.
 - `architecture:layer-runtime`: the layer stack, the modal outlet, and the
   layer contexts (`LayerProvider` and its consumers, such as `useToast`) keep
   their state and context objects under versioned keys (FR3, DEC-2).
@@ -229,10 +234,10 @@ and the repository proves it before a change that could break it merges.
 | FR5      | Render package and copy side by side under a theme with component overrides; compare                                                                                                                                                                                                                                                                                                                              | Default; each variant; a theme component override; a copy built by `@astryxdesign/build`                                                                                                                                                                                                                                                                                                                                                         | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                                                                                                                                                                                                                                                                                                                      |
 | FR5      | Swizzle into a new folder, an empty one, a marked one, and one holding a product module; read the folder and the `swizzle.copy` result                                                                                                                                                                                                                                                                            | Default output; `--output` to a product folder; a folder of earlier copies with no marker                                                                                                                                                                                                                                                                                                                                                        | A marker lands in a folder that holds a product module, a new, empty or marked folder is left unmarked, or the result omits what a skipped folder holds                                                                                                                                                                                                                                                                                                     |
 | FR6      | The component's own interaction and accessibility checks run against the copy                                                                                                                                                                                                                                                                                                                                     | Keyboard, pointer, screen-reader tree                                                                                                                                                                                                                                                                                                                                                                                                            | A check that passes on the package fails on the copy                                                                                                                                                                                                                                                                                                                                                                                                        |
-| FR7      | The required test lane's swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package`                                                                                                                                                                                                                                                          | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                                                                                                                                                                                                                                                                               | An offered component missing from the proof, a failure that does not block, a new required context, the proof adding wall-clock time to the slowest required check, or the proof pushing its job past the pull-request time budget                                                                                                                                                                                                                          |
+| FR7      | `main`'s swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package`                                                                                                                                                                                                                                                                          | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                                                                                                                                                                                                                                                                               | An offered component missing from the proof, a pull request that runs the proof, `main`'s proof not running after a change to component source or to the swizzle copy merges, or a release that publishes without a passing proof                                                                                                                                                                                                                           |
 | FR7      | `scripts/shared-identity.test.mjs` over the source of the packages swizzle copies from, against its baseline                                                                                                                                                                                                                                                                                                      | A module-local `Symbol()` brand in an FR3 module; the same brand under `sharedKey`; a module-scope registry an exported register function writes                                                                                                                                                                                                                                                                                                 | The module-local brand or registry passes, the `sharedKey` brand fails, or a baseline entry the source no longer has stays listed                                                                                                                                                                                                                                                                                                                           |
 
-Known verification gap: only FR3's shared-context checks (`sharedContexts.test.tsx`) and FR7's source check (`scripts/shared-identity.test.mjs`) exist; the other rows have no check on `main`.
+Known verification gap: FR3's shared-context checks (`sharedContexts.test.tsx`), FR7's source check (`scripts/shared-identity.test.mjs`), the swizzle proof (the FR1 and FR7 rows, in `main`'s unit run and the release re-check, and in the pull-request lane the FR7 gap names) and FR3's `packages/core/src/utils/sharedRealm.test.ts` exist; the other rows have no check.
 
 ## Decision log
 
@@ -264,6 +269,19 @@ Rejected: never copying stateful modules and importing a contained package
 instance instead, because it needs a public runtime entry with a compatibility
 promise only copies need, and leaves a copy on another version without the
 state it needs.
+
+### DEC-3 — The swizzle proof runs on main and fixes forward
+
+**Reference:** `spec:AST-110/DEC-3`
+**Decider:** `cixzhang`, `2026-11-17 08:01 PT`
+
+The proof ejects and builds every offered component, which is heavy work for
+each pull request while CI room is held to about ninety jobs
+(`spec:AST-030` DEC-16). It runs in
+`main`'s checks instead, and a failure there is fixed forward; release checks
+keep the full proof, so no release ships an unproven copy.
+
+Rejected: keeping it as a required pull-request check.
 
 ## Open questions
 
