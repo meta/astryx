@@ -145,6 +145,13 @@ const sortStyles = stylex.create({
     textAlign: 'inherit',
     borderRadius: radiusVars['--radius-inner'],
   },
+  // The label truncates before the sort indicator, so the indicator stays
+  // visible in a narrow column.
+  label: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
   // The button is a full-width flex container, so the `textAlign` a column's
   // `align` puts on the <th> cannot position its contents. Mirror the column
   // alignment onto the main axis, or an `align: 'end'` numeric column ends up
@@ -163,6 +170,7 @@ const sortStyles = stylex.create({
     display: {default: 'inline-flex', ':empty': 'none'},
     alignItems: 'center',
     blockSize: 0,
+    flexShrink: 0,
   },
   iconWrapperUnsorted: {
     opacity: {
@@ -303,7 +311,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         )}
         aria-describedby={rank != null ? priorityId : undefined}
         onClick={handleClick}>
-        <span>{children}</span>
+        <span {...stylex.props(sortStyles.label)}>{children}</span>
         <span
           {...stylex.props(
             sortStyles.iconWrapper,

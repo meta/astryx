@@ -126,6 +126,14 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
     minWidth: 0,
+    maxWidth: '100%',
+  },
+  // The label gives up width first, so the "after" controls stay inside the
+  // cell and can be reached when the column is narrow.
+  headerLabel: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
 });
 
@@ -910,7 +918,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
       const labelRow = isRenderable(after) ? (
         <div {...stylex.props(styles.headerLabelRow)}>
-          {resolvedContent}
+          <span {...stylex.props(styles.headerLabel)}>{resolvedContent}</span>
           {after}
         </div>
       ) : (

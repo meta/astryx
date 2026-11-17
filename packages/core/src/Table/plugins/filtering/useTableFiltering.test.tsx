@@ -14,6 +14,8 @@ import userEvent from '@testing-library/user-event';
 import {FormLayout} from '../../../FormLayout/FormLayout';
 import {Table} from '../../Table';
 import {useTableFiltering, toSearchFilters} from './useTableFiltering';
+import {useTableSortable} from '../sortable/useTableSortable';
+import type {TableSortState} from '../sortable/useTableSortable';
 import type {
   TableFilterState,
   TableFilterVariant,
@@ -383,5 +385,88 @@ describe('date filter editor inside a FormLayout', () => {
     const input = screen.getByRole('combobox', {name: /Due/});
     fireEvent.change(input, {target: {value: '02/31/2026'}});
     expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+/**
+ * The CSS declarations that apply to an element's own classes. StyleX runs
+ * with runtime injection under vitest, so the rules are in the document's
+ * style sheets.
+ */
+function cssDeclarationsOf(el: Element): string[] {
+  const classes = new Set(
+    (el as HTMLElement).className.split(/\s+/).filter(Boolean),
+  );
+  const declarations: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      const text = rule.cssText;
+      const brace = text.indexOf('{');
+      if (brace === -1) {
+        continue;
+      }
+      const selector = text.slice(0, brace).replaceAll(':not(#\\#)', '').trim();
+      const match = /^\.([\w-]+)$/.exec(selector);
+      if (!match || !classes.has(match[1])) {
+        continue;
+      }
+      declarations.push(
+        ...text
+          .slice(brace + 1, text.lastIndexOf('}'))
+          .split(';')
+          .map(part => part.trim())
+          .filter(Boolean),
+      );
+    }
+  }
+  return declarations;
+}
+
+function SortFilterTable() {
+  const [sort, setSort] = useState<TableSortState>([]);
+  const [filters, setFilters] = useState<TableFilterState>({});
+  const sortPlugin = useTableSortable<TestRow>({sort, onSortChange: setSort});
+  const filterPlugin = useTableFiltering<TestRow>({
+    filters,
+    onFilterChange: (key, value) =>
+      setFilters(prev => ({...prev, [key]: value ?? undefined})),
+    variant: 'popover',
+    searchConfig,
+  });
+  return (
+    <Table
+      data={testData}
+      columns={[{key: 'name', header: 'Name', filter: 'name', sortable: true}]}
+      idKey="id"
+      plugins={{sort: sortPlugin, filter: filterPlugin}}
+    />
+  );
+}
+
+describe('header with a filter button in a narrow column', () => {
+  it('truncates the label so the filter button stays inside its cell', () => {
+    render(<SortFilterTable />);
+    const filterButton = screen.getByRole('button', {name: /filter name/i});
+    const sortButton = screen
+      .getAllByRole('button')
+      .find(b => b !== filterButton && b.closest('th') != null)!;
+    const label = sortButton.parentElement!;
+    const labelRow = label.parentElement!;
+
+    expect(labelRow.contains(filterButton)).toBe(true);
+    expect(cssDeclarationsOf(labelRow)).toContain('max-width: 100%');
+    expect(cssDeclarationsOf(label)).toEqual(
+      expect.arrayContaining([
+        'min-width: 0',
+        'overflow: hidden',
+        'text-overflow: ellipsis',
+      ]),
+    );
+
+    const [sortLabel, sortIcon] = Array.from(sortButton.children);
+    expect(cssDeclarationsOf(sortLabel)).toEqual(
+      expect.arrayContaining(['overflow: hidden', 'text-overflow: ellipsis']),
+    );
+    expect(cssDeclarationsOf(sortIcon)).toContain('flex-shrink: 0');
   });
 });
