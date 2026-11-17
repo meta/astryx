@@ -74,12 +74,37 @@ export const EXAMPLE_THEME = 'my-theme';
  * The theme's own token values in each mode: the base theme's, with the
  * theme's settings applied (a whole-theme corners setting, an exact
  * token), as `compile` builds them.
+ * A type scale the theme writes (the text-size and type dials write one)
+ * is expanded the way Core expands it, so a heading size reads as the
+ * scale draws it, not as the base theme's.
  * @param {any} compiled
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {any} [core] the project's Core module, which expands the scale
  * @returns {{light: Record<string, string>, dark: Record<string, string>}}
  */
-function ownTokens(compiled, base) {
+function ownTokens(compiled, base, core) {
   const out = {light: {...base.light}, dark: {...base.dark}};
+  const scale = compiled?.typography?.scale;
+  if (
+    scale &&
+    typeof scale.base === 'number' &&
+    typeof scale.ratio === 'number' &&
+    typeof core?.expandTypeScale === 'function'
+  ) {
+    try {
+      const expanded = core.expandTypeScale({
+        base: scale.base,
+        ratio: scale.ratio,
+      });
+      for (const [k, v] of Object.entries(expanded ?? {}))
+        if (typeof v === 'string' && /^--font-size-|^--text-.*-size$/.test(k)) {
+          out.light[k] = v;
+          out.dark[k] = v;
+        }
+    } catch {
+      // (A Core that cannot expand the scale leaves the base sizes.)
+    }
+  }
   for (const [k, v] of Object.entries(compiled?.tokens ?? {})) {
     const pair = Array.isArray(v)
       ? v
@@ -209,7 +234,7 @@ export async function howTheme(ctx, cwd, name) {
           : 'last-changed',
     data: theme,
     base,
-    own: ownTokens(compileTheme(ctx, theme, base), base),
+    own: ownTokens(compileTheme(ctx, theme, base), base, ctx.project?.core),
     undoSteps: exists
       ? readHistory(themeFiles(cwd, slug).history).steps.length
       : 0,
@@ -260,7 +285,7 @@ export async function howTheme(ctx, cwd, name) {
         return null;
       }
       const now = compileTheme(ctx, d, base);
-      const toks = ownTokens(now, base);
+      const toks = ownTokens(now, base, ctx.project?.core);
       const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
       /** @type {Record<string, any>} */
       const rules = {
@@ -788,8 +813,8 @@ const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
  * @param {'light' | 'dark' | null} [visible] the one mode a one-mode theme shows
  */
 function measureFit(ctx, base, was, now, intent, steps, visible = null) {
-  const tw = ownTokens(was, base);
-  const tn = ownTokens(now, base);
+  const tw = ownTokens(was, base, ctx.project?.core);
+  const tn = ownTokens(now, base, ctx.project?.core);
   const C = ctx.C;
   /** @param {string} part */
   const members = part => FAMILIES[part] ?? [part];
