@@ -45,6 +45,15 @@ const TEXT_BLOCK_SPACE = `calc(${spacingVars['--spacing-3']})`;
 const WIDE_BLOCK_SPACE = `calc(${spacingVars['--spacing-4']})`;
 const LIST_ITEM_SPACE = `calc(${spacingVars['--spacing-1']})`;
 const TASK_BOX_SIZE = '20px';
+
+/**
+ * The document's own direction, set on the editor root by
+ * `BlockDirectionPlugin` and read by a block that has none of its own. A
+ * custom property is what carries it: it arrives unchanged through a list or
+ * a table whose direction differs, where `inherit` would hand the block its
+ * container's direction instead.
+ */
+export const DOCUMENT_DIRECTION_VAR = '--astryx-richtext-document-direction';
 const LIST_ROW_GAP = `calc(${spacingVars['--spacing-0-5']})`;
 const LIST_ROW_FLUSH = `calc(${spacingVars['--spacing-0']})`;
 const NESTED_LIST_SPACE = `calc(${spacingVars['--spacing-2']})`;
@@ -67,8 +76,20 @@ const editorTheme = stylex.create({
   // right-to-left document's start edge.
   blockDirection: {
     direction: {
+      // A block with no direction of its own reads the way the document
+      // reads, at any depth, as `Markdown` resolves one against the
+      // provider. Lexical leaves such a block at `dir="auto"` at the top
+      // level and writes no attribute at all below it, so the rule is the
+      // default here and the written directions are the exception. The
+      // fallback covers a root the plugin has not set yet.
       default: null,
-      ':is([dir="auto"])': 'inherit',
+      // Lexical leaves a block at `dir="auto"` at the top level and writes
+      // no attribute at all below it, so both spellings mean the same thing:
+      // this block's own text decided nothing. A block that did decide
+      // carries `ltr` or `rtl` and is left alone, so its attribute drives
+      // the layout, and the caret and insets with it.
+      ':is([dir="auto"])': `var(${DOCUMENT_DIRECTION_VAR}, inherit)`,
+      ':not([dir])': `var(${DOCUMENT_DIRECTION_VAR}, inherit)`,
     },
   },
   // A container orders its contents in its parent's direction whatever they
@@ -550,9 +571,11 @@ export function sharedEditorTheme(): EditorThemeClasses {
     list: {
       ul: container(editorTheme.ul),
       ol: container(editorTheme.ol),
-      listitem: stylex.props(editorTheme.listItem).className,
+      // An item is prose: it reads the way its own text reads, and the
+      // document's way when its text decides nothing.
+      listitem: block(editorTheme.listItem),
       nested: {
-        listitem: stylex.props(editorTheme.listItem).className,
+        listitem: block(editorTheme.listItem),
       },
       // Lexical picks the class at `depth % 3` (spec:AST-061 DEC-6).
       ulDepth: [

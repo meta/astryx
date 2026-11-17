@@ -2136,21 +2136,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
       // Each item reads the way its own text reads.
       expect(byText.get('\u05e9\u05dc\u05d5\u05dd')?.resolved).toBe('rtl');
       expect(byText.get('English')?.resolved).toBe('ltr');
-      // A neutral item has no direction written on it, so nothing about its
-      // own text is stored, and it follows the list it sits in rather than
-      // whichever language its neighbours happen to use. The list hangs from
-      // `Parent item`, so that is what it follows.
-      //
-      // FR6 words this as the provider's direction. The two agree unless the
-      // parent item reads against the provider, as it does in the
-      // right-to-left run here: a neutral item under an English parent reads
-      // left-to-right there. Writing the provider's direction onto the block
-      // instead would store a value its text does not carry and freeze it
-      // for a reader who opens the document the other way round.
+      // A neutral item carries no written direction, so nothing its text
+      // does not say is stored, and it reads the way the document reads
+      // (FR6) rather than taking the direction of the list it sits in or of
+      // whichever language its neighbours happen to use. `Markdown`
+      // resolves such a block against the provider, so the two agree.
       expect(byText.get('123')?.written).toBeNull();
-      expect(byText.get('123')?.resolved).toBe(
-        byText.get('Parent item')?.resolved,
-      );
+      expect(byText.get('123')?.resolved).toBe(direction);
       // The nested list anchors on its parent item, so an item that agrees
       // with the document still steps in one inset past it.
       expect(byText.get('Parent item')?.start).toBe(

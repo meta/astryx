@@ -331,7 +331,12 @@ export default defineConfig(
   // gesture, motion and touch-support source are for Core and Lab only.
   {
     files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
-    ignores: ['packages/core/**', 'packages/lab/**', '**/dist/**'],
+    ignores: [
+      'packages/core/**',
+      'packages/lab/**',
+      'packages/richtext/**',
+      '**/dist/**',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },

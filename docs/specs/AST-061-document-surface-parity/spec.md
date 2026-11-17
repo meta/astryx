@@ -199,15 +199,24 @@ stored so a reopened document reads as it was written. A render-time
 resolver cannot do either, so `BlockDirectionPlugin.tsx` registers the
 transforms that write it, and `RichTextEditor` and `RichTextView` mount it.
 
-Implementation gap: `Markdown` and RichText lay every block out in the
-provider's direction (FR6, and FR5's opposite-edge clause); RichText's `direction: inherit` override in
-`editorTheme.ts` is part of that gap.
-`Markdown` renders fenced code through `component:CodeBlock`, which gives
-each line its own direction from that line's first strong character inside a
-left-to-right code viewport, with the gutter following the page
-(`component:CodeBlock` FR16), so `Markdown` meets FR6's per-line rule for
-fence lines. RichText's fenced code lines still take the frame's direction,
-so RichText does not meet that rule yet.
+Both surfaces give a prose block the direction of its own text, and a block
+with no strongly directional character the provider's.
+
+Both meet FR6's per-line rule for fenced code, by different means.
+`Markdown` renders fences through `component:CodeBlock`, which puts each
+line's code in a `dir="auto"` element inside a left-to-right viewport, with
+the gutter following the page (`component:CodeBlock` FR16). RichText has no
+per-line node to carry a direction, so its theme gives the block
+`unicode-bidi: plaintext`, which puts each line in its own bidi paragraph
+and takes that line's first strong character. A line with no strong
+character reads left to right on both.
+
+FR5 gap: the two surfaces hold a list's themed inset in different places.
+`Markdown` pads the list on its start side; RichText insets each item on its
+own start side, which is the side that item's marker is drawn on. The text
+starts agree for a list whose items all read with it, and differ by one inset
+for an item that reads against it, which is also where `Markdown` draws that
+item's marker outside the list.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.
