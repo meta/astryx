@@ -7,7 +7,7 @@ import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
-import type * as DefineThemeModule from './defineTheme';
+import type * as GenerateThemeRulesModule from './generateThemeRules';
 import {dynamicTypeScaleRule} from './dynamicType';
 import {__resetDevWarnings} from '../utils/devWarning';
 
@@ -15,8 +15,8 @@ const {generateThemeCSSSpy} = vi.hoisted(() => ({
   generateThemeCSSSpy: vi.fn(),
 }));
 
-vi.mock('./defineTheme', async importOriginal => {
-  const actual = await importOriginal<typeof DefineThemeModule>();
+vi.mock('./generateThemeRules', async importOriginal => {
+  const actual = await importOriginal<typeof GenerateThemeRulesModule>();
   generateThemeCSSSpy.mockImplementation(actual.generateThemeCSS);
   return {...actual, generateThemeCSS: generateThemeCSSSpy};
 });

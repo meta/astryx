@@ -19,7 +19,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {typography} from './uikitTypography';
-import {defineTheme, generateThemeCSS} from './defineTheme';
+import {defineTheme} from './defineTheme';
+import {generateThemeCSS} from './generateThemeRules';
 import {generateOnMediaCSS} from './generateThemeRules';
 import {
   FONT_SIZE_STEP_STYLES,
