@@ -3394,7 +3394,13 @@ const QUESTIONS_K = [
     },
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
-  ['error text red', {top: null, text: /error text belong to the parts/}],
+  // (The error text has a token of its own, as success and warning text
+  // do: a color for it sets that token; without one, the parts are named.)
+  ['error text red', {top: /^set q --color-text-error '#[0-9a-f]{6}'/}],
+  [
+    'error messages bigger',
+    {top: null, text: /error text belong to the parts/},
+  ],
   // ("labels" said bare reads a form label or a badge: both are offered,
   // neither written; "form labels smaller" is the field label.)
   ['labels smaller', {top: null, text: /"labels" reads two parts/}],
