@@ -813,7 +813,8 @@ function writingDirection(element: HTMLElement | null): 'ltr' | 'rtl' {
  * pointer.
  *
  * Accessibility: covered screens are `inert`. A push moves focus to the new
- * screen's title; a pop returns it to the control that pushed the screen.
+ * screen's title, unless focus is already in that screen; a pop returns it
+ * to the control that pushed the screen.
  * The back button is a real button named by the screen it returns to.
  */
 export function NavigationStack<T>({
@@ -1337,6 +1338,17 @@ export function NavigationStack<T>({
       if (container == null || !isFocusLost(container)) {
         return;
       }
+      // Nor from the screen now on top: focus a person moved into it before
+      // the transition settled (a tap on its field mid-push) stays there.
+      const target = revealed ?? key;
+      const active = container.ownerDocument.activeElement;
+      // This stack's own cards only: a stack nested in a screen has cards too.
+      const topCard = [...(cardsRef.current?.children ?? [])].find(
+        card => card.getAttribute('data-navigation-screen') === target,
+      );
+      if (topCard != null && active != null && topCard.contains(active)) {
+        return;
+      }
       // The moved focus shows its ring by the last input, as Core's overlays
       // do. After a key it shows; after a tap it does not.
       const modality = readModality();
@@ -1356,7 +1368,6 @@ export function NavigationStack<T>({
       }
       // Else the screen now on top (the one pushed, or the one revealed): its
       // visible title, the large title while it shows, else the bar's.
-      const target = revealed ?? key;
       const layers = layersOf(target);
       const large = layers?.largeTitleElement;
       const title =

@@ -46,7 +46,7 @@ export default function GalleryHero() {
   return (
     <Layout
       content={
-        <LayoutContent padding={6}>
+        <LayoutContent role="main" padding={6}>
           <VStack gap={10}>
             <VStack gap={6} hAlign="center">
               <VStack gap={3} hAlign="center">

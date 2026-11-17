@@ -88,7 +88,7 @@ export default function LoginSimple() {
   };
 
   return (
-    <Center axis="both" padding={6} style={pageStyle}>
+    <Center role="main" axis="both" padding={6} style={pageStyle}>
       <VStack gap={4} hAlign="center" style={contentStyle}>
         {/* Logo */}
         <VStack gap={2} hAlign="center">
@@ -103,7 +103,9 @@ export default function LoginSimple() {
           <VStack gap={4} hAlign="stretch">
             {/* Header */}
             <VStack gap={1} hAlign="center">
-              <Heading level={2}>Welcome back</Heading>
+              <Heading level={2} accessibilityLevel={1}>
+                Welcome back
+              </Heading>
               <Text type="body" color="secondary" size="sm">
                 Sign in to your account
               </Text>

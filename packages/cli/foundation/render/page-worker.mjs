@@ -48,8 +48,9 @@ import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
-import {importSpecifiers} from './embedded-imports.mjs';
+import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
 import {BundleError, bundleForBrowser} from './client-bundle.mjs';
+import {droppedImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
@@ -1318,6 +1319,110 @@ function browserPackageDir(name, importerDir) {
 }
 
 /**
+ * Whether a package import resolves for the module that makes it: installed
+ * where the module is, served from the package set, or found by Node.
+ * @param {string} spec the import as written, without a query
+ * @param {string} file the importing module
+ */
+function packageResolves(spec, file) {
+  const pkg = packageOf(spec);
+  if (findNodeModulesPackage(path.dirname(file), pkg)) return true;
+  // A package the set serves counts only when the set holds it.
+  if (served && pkg in SINGLE_COPY_ALIASES) return true;
+  if (served && isServedPackage(pkg, served.integrations) && resolveServed(spec, file, served)) return true;
+  const require = createRequire(file);
+  for (const request of [spec, `${pkg}/package.json`]) {
+    try {
+      require.resolve(request);
+      return true;
+    } catch {
+      // Not found by this request: try the next one.
+    }
+  }
+  return false;
+}
+
+/**
+ * One of the page's modules as Babel parses it: TypeScript in a TypeScript
+ * file, JSX in a `.jsx` or `.tsx` file and in JavaScript.
+ * @param {string} source
+ * @param {string} file
+ */
+function parseModule(source, file) {
+  const typed = /\.[cm]?tsx?$/.test(file);
+  return requireFromCli('@babel/parser').parse(source, {
+    sourceType: 'module',
+    plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+  });
+}
+
+/**
+ * Every package the page's own modules import that does not resolve, found
+ * before the page loads, so one refusal names them all.
+ * @returns {string[]} package names, sorted
+ */
+function missingPackages() {
+  /** @type {Set<string>} */
+  const missing = new Set();
+  const seen = new Set([entry]);
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = /** @type {string} */ (queue.shift());
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    // TypeScript drops a static import that the module uses only as a type,
+    // or not at all; JavaScript loads every import.
+    /** @type {Set<string>} */
+    let dropped = new Set();
+    if (/\.[cm]?tsx?$/.test(file)) {
+      try {
+        dropped = droppedImports(parseModule(source, file));
+      } catch {
+        // A module that does not parse is reported where it is compiled.
+      }
+    }
+    for (const {specifier, typeOnly, declaration} of moduleImports(source, file) ?? []) {
+      if (typeOnly || (declaration && dropped.has(specifier))) continue;
+      const raw = specifier.split('?')[0];
+      const target = importedFile(raw, file);
+      if (target && path.isAbsolute(target)) {
+        if (isLocal(target) && !seen.has(target)) {
+          seen.add(target);
+          queue.push(target);
+        }
+        continue;
+      }
+      if (raw.startsWith('.') || path.isAbsolute(raw) || namesAlias(raw) || /^[@~#]\/|^#/.test(raw)) continue;
+      if (raw.startsWith('node:') || builtinModules.includes(raw.split('/')[0])) continue;
+      // A package's stylesheet the page imports is a missing-asset warning
+      // when absent, as the render reports it today, not a refusal.
+      if (/\.(css|scss|sass|less|styl)$/i.test(raw)) continue;
+      if (!packageResolves(raw, file)) missing.add(packageOf(raw));
+    }
+  }
+  return [...missing].sort();
+}
+
+/**
+ * The refusal for packages the page imports that are not installed.
+ * @param {string[]} packages sorted, at least one
+ */
+function failMissing(packages) {
+  const names =
+    packages.length === 1 ? packages[0] : `${packages.slice(0, -1).join(', ')} and ${packages[packages.length - 1]}`;
+  fail(
+    'ERR_RENDER_MISSING_DEPENDENCY',
+    `The page imports ${names}, which ${packages.length === 1 ? 'is' : 'are'} not installed`,
+    {package: packages[0], packages},
+  );
+}
+
+/**
  * A file named for a message: a path from the page's folder for the page's
  * own files, else the package that holds it.
  * @param {string} file
@@ -1350,8 +1455,14 @@ try {
   await withLoadDocument(() => jiti.import('react-dom/client'));
   try {
     reach('importing the page');
+    const notInstalled = missingPackages();
+    if (notInstalled.length > 0) {
+      failMissing(notInstalled);
+      throw null;
+    }
     mod = await jiti.import(entry);
   } catch (e) {
+    if (e === null) throw null;
     classify(e);
     throw null;
   }
