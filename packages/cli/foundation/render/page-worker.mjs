@@ -1513,13 +1513,20 @@ const TYPE_KEYS = new Set(['typeAnnotation', 'returnType', 'typeParameters', 'ty
 const TYPE_NODES = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSDeclareFunction', 'TSImportType', 'TSTypeQuery', 'TSTypeReference']);
 
 /**
+ * The names a module uses as values, and each `<Name.Member>` element it
+ * draws.
+ * @typedef {Set<string> & {members?: {name: string, member: string, line: number}[]}} ValueUses
+ */
+
+/**
  * The names among `names` that a module uses as values: in an expression or
  * JSX, not only in a type, a property key or an import.
  * @param {any} program the module's AST
  * @param {Set<string>} names
+ * @returns {ValueUses}
  */
 function valueUses(program, names) {
-  /** @type {Set<string> & {members?: {name: string, member: string, line: number}[]}} */
+  /** @type {ValueUses} */
   const used = new Set();
   /** Each `<Name.Member>` element the module draws, for a name in `names`. */
   used.members = [];
@@ -1575,7 +1582,7 @@ async function missingNamedExports() {
       // A file that does not parse is reported where it is compiled.
       continue;
     }
-    /** @type {Set<string> | undefined} */
+    /** @type {ValueUses | undefined} */
     let used;
     for (const node of ast.program.body) {
       if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
