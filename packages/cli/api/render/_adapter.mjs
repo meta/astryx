@@ -880,7 +880,10 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       for (const file of Array.isArray(source.notCarried) ? source.notCarried : []) {
         if (typeof file !== 'string' || file === '') continue;
         const bare = file.replace(/\.[^./]+$/, '');
-        if (named.has(file) || named.has(bare)) continue;
+        // An import names a folder by its index file: `../lib/rows` for
+        // `../lib/rows/index.ts`.
+        const folder = /\/index$/.test(bare) ? bare.slice(0, -'/index'.length) : null;
+        if (named.has(file) || named.has(bare) || (folder && named.has(folder))) continue;
         named.add(file);
         missing.push(file);
       }

@@ -794,6 +794,12 @@ non-interactive guarantee.
   verification.
 - `foundation/discovery/theme-discovery.mjs` and `api/theme` — typed integration
   theme descriptor discovery, package-aware selection, source copy, and build.
+- `api/render` and `foundation/render` — `astryx experimental render`, which
+  writes a page as one HTML file that records the files it could not carry,
+  and `--reverse`, which gives the page back. Its `missing` lists every file
+  the restored page imports that it lacks, and every file the rendered file
+  records as not carried; `exact` is true only when `missing` is empty and
+  every restored file matches its recorded checksum.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).

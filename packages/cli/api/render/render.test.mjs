@@ -2613,6 +2613,23 @@ describe('render(): a page outside a project', () => {
     expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
   }, 60_000);
 
+  it('names a folder the page imports from above the carried folder once on the way back', () => {
+    const tree = path.join(away, 'outside-index');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'lib/rows'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'lib/rows/index.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../lib/rows/index.ts']);
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['../lib/rows']});
+  }, 60_000);
+
   it('in a project, tells the reader to move a file from outside the project inside it', () => {
     const tree = path.join(away, 'outside-project');
     fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
