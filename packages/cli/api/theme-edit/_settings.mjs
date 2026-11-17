@@ -32,7 +32,14 @@ import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {coreVarValues, familyRoles} from './_parts.mjs';
+import {
+  barRows,
+  blockSides,
+  coreVarValues,
+  drawnValue,
+  familyRoles,
+  partHeightPx,
+} from './_parts.mjs';
 import {
   hexToOklch,
   oklabCoordinates,
@@ -7976,6 +7983,7 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
+  barReach(ctx, theme, data);
   // A longhand set after a shorthand that covers it is the one in effect,
   // as the result says. The build merges these blocks over the base
   // theme's, and a key the base holds keeps the base's (earlier) place, so
@@ -8001,6 +8009,110 @@ export function compileTheme(ctx, data, base) {
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
+}
+
+/** The block-direction padding keys of a compiled rule block. */
+const BLOCK_PADDING_KEYS = [
+  'padding',
+  'paddingBlock',
+  'paddingTop',
+  'paddingBottom',
+  'paddingBlockStart',
+  'paddingBlockEnd',
+];
+
+/**
+ * A bar's height and vertical padding reach the row it holds. A part's
+ * plain rule that gives it a height (or a vertical padding) makes it a bar;
+ * the one row the part map says it holds (a part laying its items out in a
+ * centered row across it, through frames that draw no box: the top nav in
+ * the app's header) then fills the bar: it is at least as tall as the bar
+ * leaves inside its padding, and the bar's padding stands for the row's own
+ * vertical padding. The items the row centers sit in the middle of the bar.
+ * A value the theme gives the row itself stays its own, a setting made with
+ * --only stays on its part, and a bar holding more than one row writes none
+ * of them and names them. Each reach is said in the build notes.
+ * @param {Ctx} ctx
+ * @param {any} theme the compiled theme, changed in place
+ * @param {ThemeData} data
+ */
+function barReach(ctx, theme, data) {
+  const map = /** @type {Record<string, any> | undefined} */ (ctx.C?.MAP);
+  if (!map || !theme.components) return;
+  const comps = /** @type {Record<string, Record<string, any>>} */ (
+    theme.components
+  );
+  for (const [holder, keys] of Object.entries(comps)) {
+    const b = keys?.base;
+    if (!b || typeof b !== 'object') continue;
+    const height = b.height ?? b.blockSize ?? b.minHeight;
+    const pads = BLOCK_PADDING_KEYS.filter(k => b[k] != null);
+    if (height == null && !pads.length) continue;
+    const exact = data.settings.some(
+      x =>
+        x.only &&
+        x.source === 'property' &&
+        !x.when &&
+        !x.state &&
+        /^(height|min-height|block-size|padding(-block|-top|-bottom)?(-start|-end)?)$/.test(
+          x.thing,
+        ) &&
+        partsOf(ctx, x).includes(holder),
+    );
+    if (exact) continue;
+    const said = height != null ? `height ${height}` : 'its vertical padding';
+    const rows = barRows(map, holder);
+    if (rows.length > 1) {
+      (ctx.compileNotes ??= []).push(
+        `${said} on ${holder} reaches none of the rows inside it, as more than one fills it (${rows.join(', ')}): set the height on the one you mean`,
+      );
+      continue;
+    }
+    if (!rows.length) continue;
+    const row = rows[0];
+    const rb = ((comps[row] ??= {}).base ??= {});
+    /** @type {string[]} */
+    const written = [];
+    if (!BLOCK_PADDING_KEYS.some(k => rb[k] != null)) {
+      rb.paddingBlock = '0';
+      written.push('padding-block 0');
+    }
+    if (
+      height != null &&
+      rb.height == null &&
+      rb.minHeight == null &&
+      rb.blockSize == null
+    ) {
+      // What the bar leaves inside its padding: the theme's padding when it
+      // gives one, else the padding Core draws the bar with.
+      const sides = blockSides(
+        prop =>
+          pads.length
+            ? (b[prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] ??
+              null)
+            : drawnValue(map[holder], prop),
+        'padding',
+      ).filter(v => v != null && !/^0(px|rem|em)?$/.test(String(v).trim()));
+      // A bar of a fixed height holds its row at that height (its items
+      // center in it, and anything taller shows past both edges alike); a
+      // bar with a least height gives its row that least height.
+      const key = (b.height ?? b.blockSize) != null ? 'height' : 'minHeight';
+      rb[key] = sides.length
+        ? `calc(${height} - ${sides.join(' - ')})`
+        : String(height);
+      written.push(`${key === 'height' ? 'height' : 'min-height'} ${rb[key]}`);
+      // A row that wraps centers its lines too, so a part taller than the
+      // bar (a heading with roomy padding) leaves the others in the middle.
+      if (rb.alignContent == null) {
+        rb.alignContent = 'center';
+        written.push('align-content center');
+      }
+    }
+    if (written.length)
+      (ctx.compileNotes ??= []).push(
+        `${said} on ${holder} reaches ${row}, the row inside it (${written.join(', ')}), so the items it holds sit in the middle of the bar; a value you set on ${row} itself stays yours`,
+      );
+  }
 }
 
 /**
@@ -11542,6 +11654,7 @@ export async function contrastProblems(ctx, data, res) {
     ...buttonStyleProblems(ctx, data, res),
     ...placeholderProblems(ctx, data, res, base),
     ...leakedButtonProblems(ctx, data, res),
+    ...barFitProblems(ctx, data, res),
     ...destructiveLookalike(),
     // Pairs styled for one state or condition whose colors cannot be read
     // as one color, and the button styles, are not measured yet.
@@ -11568,6 +11681,131 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ]);
+}
+
+/**
+ * Parts taller than the bar they sit in: for a part given a height on its
+ * plain rule that holds one bar row (see barReach), each part inside that
+ * row whose measured height (the part map's, with the theme's own values)
+ * is more than the bar leaves inside its padding and the row's own. The
+ * fix makes the part fit (its vertical padding, when its text fits) or the
+ * bar as tall as the part.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @returns {ThemeProblem[]}
+ */
+function barFitProblems(ctx, data, res) {
+  const map = /** @type {Record<string, any> | undefined} */ (ctx.C?.MAP);
+  if (!map) return [];
+  const tokens = {...ctx.project.core.tokenDefaults, ...res.light};
+  /** @param {string} v */
+  const pxOf = v => sizePx(v, /** @type {Record<string, string>} */ (tokens));
+  /**
+   * The theme's own value of a property on a part's plain rule (the latest
+   * setting), else null.
+   * @param {string} part @param {string} prop
+   */
+  const own = (part, prop) => {
+    const hit = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.source === 'property' &&
+          x.thing === prop &&
+          !x.when &&
+          !x.state &&
+          (!x.mode || x.mode === 'light') &&
+          partsOf(ctx, x).includes(part),
+      );
+    return hit ? String(hit.value) : null;
+  };
+  /** @param {string | null} v */
+  const len = v => (v == null ? 0 : (pxOf(v) ?? 0));
+  /** @param {(prop: string) => string | null} get */
+  const padSum = get => blockSides(get, 'padding').reduce((a, v) => a + len(v), 0);
+  /** @param {string} part */
+  const ownsPadding = part =>
+    BLOCK_PADDING_KEYS.some(
+      k => own(part, k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)) != null,
+    );
+  /** @type {ThemeProblem[]} */
+  const out = [];
+  for (const holder of Object.keys(map)) {
+    const height = own(holder, 'height') ?? own(holder, 'block-size');
+    const barPx = height == null ? null : pxOf(height);
+    if (barPx == null) continue;
+    const rows = barRows(map, holder);
+    if (rows.length !== 1) continue;
+    const row = rows[0];
+    const holderPad = padSum(prop =>
+      ownsPadding(holder) ? own(holder, prop) : drawnValue(map[holder], prop),
+    );
+    // The row's vertical padding is the bar's (barReach), unless the theme
+    // gives the row one of its own.
+    const rowPad = ownsPadding(row) ? padSum(prop => own(row, prop)) : 0;
+    const room = barPx - holderPad - rowPad;
+    for (const child of map[row]?.contains ?? []) {
+      // The tokens set on the part itself feed its own values.
+      const at = {
+        ...tokens,
+        ...Object.fromEntries(
+          data.settings
+            .filter(
+              x =>
+                x.source === 'token' &&
+                x.on &&
+                !x.when &&
+                !x.state &&
+                partsOf(ctx, x).includes(child),
+            )
+            .map(x => [x.thing, String(x.value)]),
+        ),
+      };
+      /** @param {string} v */
+      const pxAt = v => sizePx(v, /** @type {Record<string, string>} */ (at));
+      const tall = partHeightPx(map, child, p => own(child, p), at, pxAt);
+      const bare = partHeightPx(
+        map,
+        child,
+        p => (/^padding/.test(p) ? '0' : own(child, p)),
+        at,
+        pxAt,
+      );
+      // A part that paints a box (a fill in some state, or a border) shows
+      // its whole box; one that paints none shows only its text.
+      const paints =
+        Object.entries(map[child]?.at ?? {}).some(
+          ([k, v]) =>
+            (/^background(-color|-image)?$/.test(k) &&
+              Object.values(/** @type {Record<string, string>} */ (v)).some(
+                x => !/^(transparent|none|initial|inherit)$/.test(String(x)),
+              )) ||
+            (/^border(-(top|bottom|block))?-width$/.test(k) &&
+              Object.values(/** @type {Record<string, string>} */ (v)).some(
+                x => (pxAt(String(x)) ?? 0) > 0,
+              )),
+        ) ||
+        data.settings.some(
+          x =>
+            x.source === 'property' &&
+            /^(background|background-color|border)$/.test(x.thing) &&
+            partsOf(ctx, x).includes(child),
+        );
+      const shown = paints ? tall : bare;
+      if (tall == null || shown == null || shown <= room + 0.5) continue;
+      const fix =
+        bare != null && bare <= room
+          ? `${P} set ${data.name} padding-block ${Math.floor((room - bare) / 2)}px --on ${child}`
+          : `${P} set ${data.name} height ${Math.ceil(tall + holderPad + rowPad)}px --on ${holder}`;
+      out.push({
+        key: `bar|${holder}|${row}|${child}`,
+        text: `${child} is ${Math.round(tall)}px tall, taller than the ${Math.round(room)}px ${holder} leaves for ${row} (its height ${height}${holderPad + rowPad ? ' less the padding' : ''}): it hangs out of the bar`,
+        fix,
+      });
+    }
+  }
+  return out;
 }
 
 /**
