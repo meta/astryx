@@ -35,18 +35,13 @@ describe('component audit scope', () => {
     ['packages/charts/src/Chart.tsx', 'charts'],
     ['packages/richtext/src/RichTextEditor.tsx', 'richtext'],
     ['packages/vega/src/VegaChart.tsx', 'vega'],
-  ])(
-    'routes a source-only %s change through component and RTL audits',
-    file => {
-      expect(
-        classifyComponentAuditScope([file], COMPONENT_PACKAGES),
-      ).toMatchObject({
-        has_components: true,
-        has_rtl_components: true,
-        force_full_component_audits: false,
-      });
-    },
-  );
+  ])('routes a source-only %s change through component and RTL audits', file => {
+    expect(classifyComponentAuditScope([file], COMPONENT_PACKAGES)).toMatchObject({
+      has_components: true,
+      has_rtl_components: true,
+      force_full_component_audits: false,
+    });
+  });
 
   it('fails closed when a PR mutates the registry while changing a removed package', () => {
     const changedPaths = [
@@ -121,10 +116,7 @@ describe('component audit scope', () => {
 
   it('keeps root scripts on full component audits', () => {
     expect(
-      classifyComponentAuditScope(
-        ['scripts/build-css.mjs'],
-        COMPONENT_PACKAGES,
-      ),
+      classifyComponentAuditScope(['scripts/build-css.mjs'], COMPONENT_PACKAGES),
     ).toEqual(FULL_AUDIT_SCOPE);
   });
 
@@ -154,7 +146,10 @@ describe('component audit scope', () => {
   });
 
   it.each([
-    ['routing-test-only', ['.github/scripts/component-audit-scope.test.mjs']],
+    [
+      'routing-test-only',
+      ['.github/scripts/component-audit-scope.test.mjs'],
+    ],
     ['trusted classifier dependency', ['.github/scripts/change-scope.cjs']],
     ['accessibility harness', ['.github/scripts/accessibility-audit.js']],
     ['target-only route policy', ['apps/storybook/rtl-audit/targets.json']],

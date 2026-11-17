@@ -181,9 +181,7 @@ describe('fast PR accessibility scope', () => {
     ]);
     expect(() =>
       resolvePrA11yComponents(source, process.cwd(), routes.slice(1)),
-    ).toThrow(
-      'No scoped Storybook route for core/NavHeadingMenu or core/NavMenu',
-    );
+    ).toThrow('No scoped Storybook route for core/NavHeadingMenu or core/NavMenu');
   });
 
   it.each([
