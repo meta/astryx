@@ -481,7 +481,7 @@ export const DIALS = wordTable({
           : []),
         `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ]).join(', ') +
-      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
+      `, or a size like 6px. more and less step through them in that order, ${ROUND_TO_PILL_STEP} included. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark. Feel: round feels friendly and playful; square feels crisp, precise, serious and technical.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -496,7 +496,7 @@ export const DIALS = wordTable({
     help:
       'How much room there is: padding, gaps and control heights together. Rungs: ' +
       SPACING.map(([n, f]) => `${n} (x${f})`).join(', ') +
-      '. Whole theme: scales every spacing token and control height (a denser theme has shorter controls; the small, medium and large sizes stay apart and in order, none under 24px). With --on <part or group>: only inside it.',
+      '. Whole theme: scales every spacing token and control height (a denser theme has shorter controls; the small, medium and large sizes stay apart and in order, none under 24px). With --on <part or group>: only inside it. Feel: roomy feels airy and minimal; compact feels dense, efficient and busy.',
     values: 'tight|compact|medium|roomy|spacious|more|less',
     examples: [
       'set my spacing compact',
@@ -544,7 +544,7 @@ export const DIALS = wordTable({
     words: 'info information notice help blue status',
   },
   vibrancy: {
-    help: 'How saturated the generated colors are: 0 is gray, 100 the most vivid, 50 the default; more and less step by 10. Every color the theme sets (accent, neutral, success, warning, danger, info) is generated again; each exact color you gave stays as given at its own shade, and the shades around it get more or less color. more at 100 and less at 0 change nothing, so they are refused. The whole theme only, and only once the theme sets a color; undoing the last color removes vibrancy too.',
+    help: 'How saturated the generated colors are: 0 is gray, 100 the most vivid, 50 the default; more and less step by 10. Every color the theme sets (accent, neutral, success, warning, danger, info) is generated again; each exact color you gave stays as given at its own shade, and the shades around it get more or less color. more at 100 and less at 0 change nothing, so they are refused. The whole theme only, and only once the theme sets a color; undoing the last color removes vibrancy too. Feel: more feels bright, energetic and playful; less feels muted, understated, sober and serious.',
     values: '<0-100>|more|less',
     examples: ['set my vibrancy 70', 'set my vibrancy less'],
     words:
@@ -586,7 +586,7 @@ export const DIALS = wordTable({
       'heading headings title titles display headline bold heavy weight tracking letter spacing tight',
   },
   surfaces: {
-    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill (menus, popovers and dialogs, which float over the page, keep their own fill and a hairline border instead). outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once.',
+    help: 'How panels (cards, dialogs, popovers, menus, the banner) sit on the page. flat: no border, no shadow, a tinted fill (menus, popovers and dialogs, which float over the page, keep their own fill and a hairline border instead). outlined: a 1px border, no shadow. raised: no border, a soft shadow. glass: see-through fill with a blur and a faint light edge. Moves every container at once. Feel: flat feels minimal and minimalist; outlined feels structured; raised feels layered and tactile; glass feels futuristic.',
     values: Object.keys(SURFACES).join('|'),
     examples: ['set my surfaces outlined', 'set my surfaces raised'],
     words:
@@ -599,7 +599,7 @@ export const DIALS = wordTable({
     words: 'cta solid outline outlined soft tint caps uppercase filled',
   },
   type: {
-    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
+    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes. Feel: editorial feels editorial, refined and elegant; display feels cinematic, dramatic and loud.',
     values: Object.keys(TYPE_STYLES).join('|'),
     examples: ['set my type display', 'set my type editorial'],
     words:
@@ -628,6 +628,33 @@ export const DIALS = wordTable({
     words: 'mode light dark only night day scheme',
   },
 });
+
+/**
+ * The feel each dial's own help gives its rungs ("Feel: round feels soft,
+ * friendly and playful; square feels crisp …"): a word for a feel, said for
+ * the whole theme, is that dial at that rung. Read from the help users see
+ * in `how <dial>`, so the words live in one place.
+ * @type {Map<string, Array<{dial: string, value: string}>>}
+ */
+export const FEELS = (() => {
+  /** @type {Map<string, Array<{dial: string, value: string}>>} */
+  const out = new Map();
+  for (const [dial, d] of Object.entries(DIALS)) {
+    const feel = /\bFeel: ([^.]*)\./.exec(d.help)?.[1];
+    if (!feel) continue;
+    for (const piece of feel.split(';')) {
+      const m = /^\s*(\S+) feels (.+)$/.exec(piece);
+      if (!m) continue;
+      for (const w of m[2].split(/,\s*|\s+and\s+/))
+        if (w.trim())
+          out.set(w.trim(), [
+            ...(out.get(w.trim()) ?? []),
+            {dial, value: m[1]},
+          ]);
+    }
+  }
+  return out;
+})();
 
 /** CSS properties grouped by the aspect of a part they change. */
 export const GROUPS = wordTable(
