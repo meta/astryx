@@ -283,10 +283,21 @@ describe('useHotkeys', () => {
         ),
       );
 
+      // Chrome and Safari report an Option dead key with key code 229.
       for (const code of ['KeyN', 'KeyE', 'KeyU', 'KeyI', 'Backquote']) {
-        press('Dead', {code, altKey: true});
+        press('Dead', {code, altKey: true, keyCode: 229});
       }
       expect(onPress).toHaveBeenCalledTimes(5);
+    });
+
+    it('still ignores a key that composes text with an input method', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+e', onPress}]));
+
+      press('Dead', {code: 'KeyE', altKey: true, isComposing: true});
+      press('Process', {code: 'KeyE', altKey: true, keyCode: 229});
+      expect(onPress).not.toHaveBeenCalled();
     });
 
     it('fires alt+1 on Option+1, which types "¡"', () => {
@@ -362,20 +373,31 @@ describe('useHotkeys', () => {
       expect(onPress).toHaveBeenCalledTimes(1);
     });
 
-    it('matches the plain ASCII character Option types, not the key position (German Mac Option+L types "@")', () => {
+    it('does not match the key position for a plain ASCII character Option types (German Mac Option+L types "@")', () => {
+      stubApplePlatform();
+      const onL = vi.fn();
+      renderHook(() => useHotkeys([{keys: 'alt+l', onPress: onL}]));
+
+      press('@', {code: 'KeyL', altKey: true});
+      expect(onL).not.toHaveBeenCalled();
+    });
+
+    it('matches the plain ASCII character Option types (German Mac Option+L fires alt+@)', () => {
       stubApplePlatform();
       const onAt = vi.fn();
-      const onL = vi.fn();
-      renderHook(() =>
-        useHotkeys([
-          {keys: 'alt+@', onPress: onAt},
-          {keys: 'alt+l', onPress: onL},
-        ]),
-      );
+      renderHook(() => useHotkeys([{keys: 'alt+@', onPress: onAt}]));
 
       press('@', {code: 'KeyL', altKey: true});
       expect(onAt).toHaveBeenCalledTimes(1);
-      expect(onL).not.toHaveBeenCalled();
+    });
+
+    it('does not match the key position for a combo without alt (AZERTY Mac: Digit2 types "é")', () => {
+      stubApplePlatform();
+      const onPress = vi.fn();
+      renderHook(() => useHotkeys([{keys: '2', onPress}]));
+
+      press('é', {code: 'Digit2'});
+      expect(onPress).not.toHaveBeenCalled();
     });
 
     it('does not use the key position on other platforms, so an AltGr letter fires no shortcut', () => {

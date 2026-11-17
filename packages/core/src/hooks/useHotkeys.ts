@@ -102,6 +102,15 @@ function physicalKeyCode(key: string): string | null {
 }
 
 /**
+ * Whether the event is an Option dead key on macOS (Option+E, for example).
+ * Chrome and Safari report it with the IME key code 229, but it starts no
+ * composition of its own, so an alt combo may still match it.
+ */
+function isOptionDeadKey(event: KeyboardEvent): boolean {
+  return event.key === 'Dead' && event.altKey && event.isComposing !== true;
+}
+
+/**
  * Whether the event target is a typing surface where global shortcuts
  * should stay silent by default.
  */
@@ -162,11 +171,9 @@ function matchesCombo(
     return true;
   }
   // On macOS, Option changes the character a key types: Option+A types "å",
-  // Option+1 types "¡", and some keys are dead keys. So there an alt combo
-  // also matches the key's US position, when Option rewrote the character.
-  // A key that typed a plain character keeps layout-following matching.
-  // Elsewhere Alt changes no character, and AltGr (Ctrl+Alt) types letters
-  // that must not fire shortcuts, so no other platform uses the position.
+  // Option+1 types "¡", and some keys are dead keys. Elsewhere Alt changes no
+  // character, and AltGr (Ctrl+Alt) types letters that must not fire
+  // shortcuts.
   const isRewrittenByOption =
     event.key === 'Dead' ||
     (event.key.length === 1 && event.key.charCodeAt(0) > 0x7e);
@@ -220,7 +227,10 @@ export function useHotkeys(hotkeys: Hotkey[]): void {
     const isApple = isApplePlatform();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isImeKeyEvent(event)) {
+      if (
+        event.defaultPrevented ||
+        (isImeKeyEvent(event) && !isOptionDeadKey(event))
+      ) {
         return;
       }
       const isTyping = isTypingTarget(event.target);
