@@ -315,6 +315,14 @@ const ROWS = [
       never: /border-width 0/,
     },
   ],
+  [
+    'controls and overlays are the two corner sizes Core keeps apart',
+    {
+      q: 'controls 4px corners, overlays 8px corners',
+      has: ['--radius-element 4px', '--radius-container 8px'],
+      saysNot: /contradict/,
+    },
+  ],
 ];
 
 describe('every clause answered', () => {
