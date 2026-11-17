@@ -16,6 +16,7 @@ export const doc = {
       param: 'kind',
       required: true,
       description: 'component, doc, template, codemod, agent-doc, or theme',
+      requires: {theme: ['themes.scaffold']},
     },
     {
       name: 'name',

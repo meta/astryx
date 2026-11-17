@@ -5,7 +5,8 @@
  * an info banner's fill) is contrast-checked like any other: the part's
  * text measured on its fill there, in each mode, with the nearest readable
  * color as its line, set on what draws the text in that state or
- * condition. Following the line ends the problem.
+ * condition; and the primary button the button style draws (soft,
+ * outline). Following the line ends the problem.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -99,4 +100,31 @@ describe('a change for one state', () => {
     },
     T,
   );
+});
+
+describe('the button style', () => {
+  for (const look of ['soft', 'outline'])
+    it(
+      `buttons ${look} measures the primary button's text and its line ends it`,
+      async () => {
+        const slug = `s${look}`;
+        await themeEditNew(slug, {cwd, like: 'neutral'});
+        await themeEditSet(slug, '--color-text-accent', '#facc15', {cwd});
+        const r = /** @type {any} */ (
+          await themeEditSet(slug, 'buttons', look, {cwd})
+        ).data;
+        expect(JSON.stringify(r.notes ?? [])).not.toMatch(
+          /not checked: text contrast/,
+        );
+        const p = r.newProblems.find((/** @type {any} */ x) =>
+          x.problem.includes(`variant primary, buttons ${look}`),
+        );
+        expect(p?.fix).toMatch(
+          /color '#[0-9a-f]{6}' --on button --when variant:primary/,
+        );
+        const left = await follow(p.fix);
+        expect(left.filter(x => x.includes(`buttons ${look}`))).toEqual([]);
+      },
+      T,
+    );
 });

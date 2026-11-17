@@ -32,6 +32,7 @@ import {
   pixel,
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ArrowDownTrayIcon,
   DocumentDuplicateIcon,
@@ -413,7 +414,7 @@ export default function SimpleTableTemplate() {
     },
     {
       key: 'actions',
-      header: '',
+      header: <VisuallyHidden>Actions</VisuallyHidden>,
       width: pixel(56),
       renderCell: member => (
         <DropdownMenu

@@ -613,7 +613,7 @@ export default function IncidentConsolePage() {
         </LayoutHeader>
       }
       content={
-        <LayoutContent padding={0}>
+        <LayoutContent role="main" padding={0}>
           <VStack gap={0} style={styles.contentFill}>
             <HStack style={styles.searchRow}>
               <StackItem size="fill">
@@ -661,6 +661,7 @@ export default function IncidentConsolePage() {
             <LayoutPanel
               width={inspectorPanel.size}
               padding={0}
+              role="complementary"
               label="Incident details">
               {inspector ?? (
                 <EmptyState

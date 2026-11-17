@@ -72,7 +72,11 @@ describe('N8: a size token without a unit', () => {
 });
 
 describe('N9: text-size in other spellings', () => {
-  it.each(['20px', '2e1', '+20', '1.25rem'])('%s suggests 20', async v => {
+  it('20px is 20, the pixels text-size takes', async () => {
+    const r = await themeEditSet('b', 'text-size', '20px', {cwd});
+    expect(r.data.setting.value).toBe('20');
+  });
+  it.each(['2e1', '+20', '1.25rem'])('%s suggests 20', async v => {
     const err = await refusal(() => themeEditSet('b', 'text-size', v, {cwd}));
     expect(names(err)).toContainEqual(
       expect.stringMatching(/ set b text-size 20$/),

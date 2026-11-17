@@ -337,13 +337,181 @@ describe('useTheme root-attribute observer lifecycle', () => {
     const first = renderHook(() => useTheme());
     const second = renderHook(() => useTheme());
 
-    expect(ObserverSpy).toHaveBeenCalledTimes(2);
-    expect(observe).toHaveBeenCalledTimes(2);
+    // <html data-theme>, <html data-astryx-theme>, and the root's scheme for
+    // 'system' (the root's attributes and the head).
+    expect(ObserverSpy).toHaveBeenCalledTimes(3);
+    expect(observe).toHaveBeenCalledTimes(4);
 
     first.unmount();
     expect(disconnect).not.toHaveBeenCalled();
 
     second.unmount();
-    expect(disconnect).toHaveBeenCalledTimes(2);
+    expect(disconnect).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('useTheme system follows the page root', () => {
+  /** What the page root's computed `color-scheme` names. */
+  let rootScheme = '';
+
+  function stubRootScheme(): void {
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = real(element, pseudo);
+        if (element === document.documentElement) {
+          Object.defineProperty(style, 'colorScheme', {
+            configurable: true,
+            get: () => rootScheme,
+          });
+        }
+        return style;
+      },
+    );
+  }
+
+  afterEach(() => {
+    rootScheme = '';
+    vi.mocked(useMediaQuery).mockReturnValue(false);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    resetThemes();
+    for (const node of document.head.querySelectorAll('[data-probe]')) {
+      node.remove();
+    }
+  });
+
+  it('resolves system to the one scheme the page root names', () => {
+    rootScheme = 'dark';
+    stubRootScheme();
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    expect(result.current.mode).toBe('dark');
+    expect(result.current.token('--color-accent')).toBe('#FF5555');
+  });
+
+  it('leaves the preference to decide when the root names both schemes or none', () => {
+    stubRootScheme();
+    for (const scheme of ['light dark', 'normal', '']) {
+      rootScheme = scheme;
+      vi.mocked(useMediaQuery).mockReturnValue(true);
+      const dark = renderHook(() => useTheme(), {
+        wrapper: ({children}) => wrapper({children, mode: 'system'}),
+      });
+      expect(dark.result.current.mode).toBe('dark');
+      dark.unmount();
+      vi.mocked(useMediaQuery).mockReturnValue(false);
+      const light = renderHook(() => useTheme(), {
+        wrapper: ({children}) => wrapper({children, mode: 'system'}),
+      });
+      expect(light.result.current.mode).toBe('light');
+      light.unmount();
+    }
+  });
+
+  it('ignores the root under a Theme that forces light or dark, and follows the preference', () => {
+    rootScheme = 'dark';
+    stubRootScheme();
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => (
+        <Theme theme={testTheme} mode="light">
+          <Theme theme={testTheme} mode="system">
+            <Theme theme={testTheme} mode="system">
+              {children}
+            </Theme>
+          </Theme>
+        </Theme>
+      ),
+    });
+    expect(result.current.mode).toBe('light');
+  });
+
+  it('reads the root again when a stylesheet in the head changes it', async () => {
+    stubRootScheme();
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    expect(result.current.mode).toBe('light');
+    rootScheme = 'dark';
+    act(() => {
+      const style = document.createElement('style');
+      style.setAttribute('data-probe', '');
+      style.textContent = ':root { color-scheme: dark; }';
+      document.head.append(style);
+    });
+    await waitFor(() => expect(result.current.mode).toBe('dark'));
+  });
+
+  it('reads the root again when a linked stylesheet loads, and when a stylesheet link changes', async () => {
+    stubRootScheme();
+    const {result} = renderHook(() => useTheme(), {
+      wrapper: ({children}) => wrapper({children, mode: 'system'}),
+    });
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'host.css';
+    link.setAttribute('data-probe', '');
+    act(() => {
+      document.head.append(link);
+    });
+    // The sheet applies when it loads, not when its element arrives.
+    expect(result.current.mode).toBe('light');
+    rootScheme = 'dark';
+    act(() => {
+      link.dispatchEvent(new Event('load'));
+    });
+    await waitFor(() => expect(result.current.mode).toBe('dark'));
+    rootScheme = '';
+    act(() => {
+      link.media = 'print';
+    });
+    await waitFor(() => expect(result.current.mode).toBe('light'));
+    link.remove();
+  });
+
+  it('shares one observer across system consumers, and disconnects it after the last', () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    const ObserverSpy = vi.fn().mockImplementation(function () {
+      return {observe, disconnect};
+    });
+    vi.stubGlobal('MutationObserver', ObserverSpy);
+    function Consumer() {
+      useTheme();
+      return null;
+    }
+    const {rerender, unmount} = render(
+      <Theme theme={testTheme} mode="system">
+        <Consumer />
+        <Consumer />
+      </Theme>,
+    );
+    expect(ObserverSpy).toHaveBeenCalledTimes(1);
+    // The root's attributes and the head.
+    expect(observe).toHaveBeenCalledTimes(2);
+    rerender(
+      <Theme theme={testTheme} mode="system">
+        <Consumer />
+      </Theme>,
+    );
+    expect(disconnect).not.toHaveBeenCalled();
+    unmount();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates no observer for a system consumer under a forced Theme', () => {
+    const ObserverSpy = vi.fn();
+    vi.stubGlobal('MutationObserver', ObserverSpy);
+    renderHook(() => useTheme(), {
+      wrapper: ({children}) => (
+        <Theme theme={testTheme} mode="dark">
+          <Theme theme={testTheme} mode="system">
+            {children}
+          </Theme>
+        </Theme>
+      ),
+    });
+    expect(ObserverSpy).not.toHaveBeenCalled();
   });
 });
