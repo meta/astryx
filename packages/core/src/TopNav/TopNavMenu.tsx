@@ -37,7 +37,7 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
-import {pickCloses, useTopNavSlot} from './TopNavContext';
+import {useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -278,10 +278,9 @@ export interface TopNavMenuItemData {
   onClick?: () => void;
 
   /**
-   * Whether a keyboard, finger or pen pick on the item closes the menu and
-   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
-   * for an action that reports its result on the item itself, as with
-   * DropdownMenuItem.
+   * Whether picking the item closes the menu and returns focus to the
+   * trigger. Set `false` for an action that reports its result on the item
+   * itself, as with DropdownMenuItem.
    * @default true
    */
   hasCloseOnSelect?: boolean;
@@ -646,14 +645,10 @@ export function TopNavMenu({
                 // A menu row is never a draggable link: a mouse press that
                 // slides to another item would start a drag instead.
                 draggable={item.href != null ? false : undefined}
-                // A keyboard, finger or pen pick ends the menu; a mouse pick
-                // leaves it open.
-                onClick={event => {
+                // A pick ends the menu, as in DropdownMenu.
+                onClick={() => {
                   item.onClick?.();
-                  if (
-                    item.hasCloseOnSelect !== false &&
-                    pickCloses(event.currentTarget)
-                  ) {
+                  if (item.hasCloseOnSelect !== false) {
                     close();
                   }
                 }}

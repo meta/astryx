@@ -30,7 +30,7 @@ import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
-import {TopNavMegaMenuCloseContext, pickCloses} from './TopNavContext';
+import {TopNavMegaMenuCloseContext} from './TopNavContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
@@ -150,10 +150,9 @@ export interface TopNavMegaMenuItemProps extends Omit<
   /** Callback when item is clicked. */
   onClick?: () => void;
   /**
-   * Whether a keyboard, finger or pen pick on the item closes the panel and
-   * returns focus to the trigger (a mouse pick leaves it open). Set `false`
-   * for an action that reports its result on the item itself, as with
-   * DropdownMenuItem.
+   * Whether picking the item closes the panel and returns focus to the
+   * trigger. Set `false` for an action that reports its result on the item
+   * itself, as with DropdownMenuItem.
    * @default true
    */
   hasCloseOnSelect?: boolean;
@@ -263,16 +262,10 @@ export function TopNavMegaMenuItem({
   // Default mode — desktop popover item with large icon + description
   // =========================================================================
   const Element = href ? LinkComponent : onClick ? 'button' : 'div';
-  // A custom link component may call `onClick()` without the event.
-  const handleDesktopClick = (event?: React.MouseEvent<HTMLElement>) => {
+  const handleDesktopClick = () => {
     onClick?.();
-    // A keyboard, finger or pen pick ends the panel, as in TopNavMenu; a
-    // mouse pick leaves it open.
-    if (
-      hasCloseOnSelect &&
-      (href != null || onClick != null) &&
-      pickCloses(event?.currentTarget ?? null)
-    ) {
+    // A pick ends the panel, as in TopNavMenu.
+    if (hasCloseOnSelect && (href != null || onClick != null)) {
       closePanel?.();
     }
   };

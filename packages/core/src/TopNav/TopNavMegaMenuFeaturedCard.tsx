@@ -29,7 +29,7 @@ import {
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {TopNavMegaMenuCloseContext, pickCloses} from './TopNavContext';
+import {TopNavMegaMenuCloseContext} from './TopNavContext';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -182,14 +182,8 @@ export function TopNavMegaMenuFeaturedCard({
         {linkLabel && linkHref && (
           <LinkComponent
             href={linkHref}
-            // Following the card's link with the keyboard, a finger or a pen
-            // ends the panel, as an item pick does.
-            // A custom link component may call `onClick()` without the event.
-            onClick={(event?: React.MouseEvent<HTMLElement>) => {
-              if (pickCloses(event?.currentTarget ?? null)) {
-                closePanel?.();
-              }
-            }}
+            // Following the card's link ends the panel, as an item pick does.
+            onClick={closePanel ?? undefined}
             {...stylex.props(styles.link)}>
             {linkLabel}{' '}
             {/* The arrow points toward the inline end, so it mirrors in RTL
