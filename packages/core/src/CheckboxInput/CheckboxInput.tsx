@@ -24,6 +24,7 @@ import {
   useCallback,
   useOptimistic,
   useRef,
+  useState,
   useTransition,
   type ChangeEvent,
   type FocusEvent,
@@ -389,10 +390,13 @@ export function CheckboxInput({
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // The disabled reason describes the input from the first markup on, server
-  // and hydration included, through a visually hidden copy. The tooltip only
-  // shows it, and mounts only while it can, so a checkbox with no reason runs
+  // and hydration included: a visually hidden copy until the tooltip's text is
+  // in the document, then the tooltip itself, so the reason renders once. The
+  // tooltip mounts only while it can show, so a checkbox with no reason runs
   // none of the tooltip's work.
-  const disabledMessageID = useId();
+  const hiddenReasonID = useId();
+  const [tooltipReasonID, setTooltipReasonID] = useState('');
+  const disabledMessageID = tooltipReasonID || hiddenReasonID;
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -652,13 +656,16 @@ export function CheckboxInput({
       )}
       {isDisabled && disabledMessage ? (
         <>
-          <VisuallyHidden id={disabledMessageID}>
-            {disabledMessage}
-          </VisuallyHidden>
+          {tooltipReasonID ? null : (
+            <VisuallyHidden id={hiddenReasonID}>
+              {disabledMessage}
+            </VisuallyHidden>
+          )}
           <DisabledMessageTooltip
             message={disabledMessage}
             rowRef={rowElementRef}
             inputRef={inputRef}
+            onDescribing={setTooltipReasonID}
           />
         </>
       ) : null}
@@ -670,17 +677,20 @@ interface DisabledMessageTooltipProps {
   readonly message: string;
   readonly rowRef: RefObject<HTMLElement | null>;
   readonly inputRef: RefObject<HTMLElement | null>;
+  /** Called with the tooltip's id once its text is in the document. */
+  readonly onDescribing: (id: string) => void;
 }
 
 /**
  * A disabled checkbox's message as a tooltip: hover or focus anywhere on the
- * row opens it above the checkbox. Its text is hidden from assistive
- * technology, because the visually hidden copy already describes the input.
+ * row opens it above the checkbox. Once its text is in the document, it
+ * describes the input in place of the parent's visually hidden copy.
  */
 function DisabledMessageTooltip({
   message,
   rowRef,
   inputRef,
+  onDescribing,
 }: DisabledMessageTooltipProps): ReactNode {
   const tooltip = useTooltip({
     placement: 'above',
@@ -688,7 +698,7 @@ function DisabledMessageTooltip({
     // native checkbox, so always attach focus listeners.
     focusTrigger: 'always',
   });
-  const {interactionRef, positionRef} = tooltip;
+  const {interactionRef, positionRef, describedBy} = tooltip;
   // Attaches the tooltip to the row and the checkbox, which the parent
   // renders.
   useIsomorphicLayoutEffect(() => {
@@ -699,7 +709,38 @@ function DisabledMessageTooltip({
       positionRef(null);
     };
   }, [interactionRef, positionRef, rowRef, inputRef]);
-  return tooltip.renderTooltip(<span aria-hidden="true">{message}</span>);
+  // Hands the description to the tooltip once its text is in the document.
+  // The layer can mount its text a commit after this one, so the effect
+  // watches the document until the text arrives.
+  useIsomorphicLayoutEffect(() => {
+    const doc = inputRef.current?.ownerDocument;
+    if (!describedBy || doc == null) {
+      return;
+    }
+    const isInDocument = () => doc.getElementById(describedBy) != null;
+    if (isInDocument()) {
+      onDescribing(describedBy);
+      return () => {
+        onDescribing('');
+      };
+    }
+    const view = doc.defaultView;
+    if (view == null) {
+      return;
+    }
+    const observer = new view.MutationObserver(() => {
+      if (isInDocument()) {
+        observer.disconnect();
+        onDescribing(describedBy);
+      }
+    });
+    observer.observe(doc.body, {childList: true, subtree: true});
+    return () => {
+      observer.disconnect();
+      onDescribing('');
+    };
+  }, [describedBy, inputRef, onDescribing]);
+  return tooltip.renderTooltip(message);
 }
 
 CheckboxInput.displayName = 'CheckboxInput';

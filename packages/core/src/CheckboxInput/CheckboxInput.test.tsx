@@ -683,6 +683,31 @@ describe('CheckboxInput', () => {
       );
     });
 
+    it('renders the reason once, in the tooltip, after mount', async () => {
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Terms are managed by your administrator"
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      const tooltip = screen.getByRole('tooltip', h);
+      await waitFor(() =>
+        expect(
+          screen.getAllByText('Terms are managed by your administrator', {
+            ignore: false,
+          }),
+        ).toHaveLength(1),
+      );
+      expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Terms are managed by your administrator',
+      );
+    });
+
     it('blocks toggling while focusable-disabled', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
