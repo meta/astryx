@@ -434,12 +434,29 @@ function readInputFields(themeDir) {
  */
 export function importPathOf(project, name) {
   const spec =
-    project.components[name]?.importPath ??
-    oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
-      resolveImportPath(project.coreDir, name),
-    );
+    project.components[name]?.importPath ?? coreImportPath(project, name);
   return spec && spec !== '@astryxdesign/core' ? spec : null;
 }
+
+/**
+ * Where a component's own module is in the installed Core: the same for as
+ * long as that Core is installed (its key names its version and files), so
+ * it is found once in a process for each Core and name.
+ * @param {ThemeProject} project
+ * @param {string} name
+ * @returns {string | null | undefined}
+ */
+function coreImportPath(project, name) {
+  const key = `${project.coreKey}\0${project.coreDir}\0${name}`;
+  if (CORE_IMPORT_PATHS.has(key)) return CORE_IMPORT_PATHS.get(key);
+  const spec = oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
+    resolveImportPath(project.coreDir, name),
+  );
+  if (project.coreKey) CORE_IMPORT_PATHS.set(key, spec);
+  return spec;
+}
+/** @type {Map<string, string | null | undefined>} */
+const CORE_IMPORT_PATHS = new Map();
 
 /**
  * The built module of a base's theme package, resolved the way the theme

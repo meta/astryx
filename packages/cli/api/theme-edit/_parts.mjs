@@ -750,22 +750,43 @@ function deepFreeze(value) {
  * @param {PartData} parts
  */
 export function addCensusStates(project, parts) {
-  for (const [part, rec] of Object.entries(parts.map)) {
+  const named = censusStateNames(parts);
+  for (const [part, names] of named) {
     const t = project.target.get(part);
     if (!t) continue;
     const props = new Set(t.props);
+    for (const name of names)
+      if (!props.has(name) && !t.states.includes(name)) t.states.push(name);
+  }
+}
+
+/**
+ * The names each part's rules write as a state (`selected=selected`), read
+ * from the part data: partData hands out the same frozen data while its
+ * file is unchanged, so they are read once for each.
+ * @param {PartData} parts
+ * @returns {Map<string, Set<string>>}
+ */
+function censusStateNames(parts) {
+  const kept = STATE_NAMES.get(parts.map);
+  if (kept) return kept;
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map();
+  for (const [part, rec] of Object.entries(parts.map)) {
     /** @type {Set<string>} */
     const found = new Set();
     for (const byCond of Object.values(rec.at ?? {}))
       for (const cond of Object.keys(byCond ?? {}))
         for (const pair of cond.split(/\s/)[0].split(','))
-          if (/^([a-z][\w-]*)=\1$/.test(pair)) {
-            const name = pair.slice(0, pair.indexOf('='));
-            if (!props.has(name)) found.add(name);
-          }
-    for (const name of found) if (!t.states.includes(name)) t.states.push(name);
+          if (/^([a-z][\w-]*)=\1$/.test(pair))
+            found.add(pair.slice(0, pair.indexOf('=')));
+    if (found.size) out.set(part, found);
   }
+  STATE_NAMES.set(parts.map, out);
+  return out;
 }
+/** @type {WeakMap<object, Map<string, Set<string>>>} */
+const STATE_NAMES = new WeakMap();
 
 /**
  * The part data for the installed Core, from the cache or built now.
