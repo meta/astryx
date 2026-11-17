@@ -405,6 +405,18 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
     agents' skill folders) is not a project's agent docs: only
     `astryx init --user` and the global copy's background step write it, as
     INV10 and FR8 state.
+  - Before it writes, init reads the state of the agent docs it is about to
+    write, against the block it writes: `missing` (no Astryx block), `stale`
+    (a block from another release or with other text, or, with
+    `--agent-docs-path`, a named file without the block), or `current`
+    (every block already matches). The `init.run` receipt reports it as
+    `agentDocsStatus`, null when agent docs were not installed or the write
+    failed. Inside a project, a default run whose agent docs were `current`
+    treats the app as set up: it prints the build and search commands
+    instead of the getting-started steps, and `nextSteps` is false. A
+    `missing` or `stale` run writes the block and prints the steps; feature
+    runs (`--features`, `--all`) are unchanged. The exit code is 0 in every
+    case.
   - Upgrade refreshes every copy where it is and moves none.
   - The managed block is Astryx-owned: `spec:AST-040`'s protections cover
     consumer-owned content, not the block; INV10 still confines every write.
