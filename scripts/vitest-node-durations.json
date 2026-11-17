@@ -1733,5 +1733,6 @@
     "scripts/vitest-shard-watchdog.test.mjs": 11.2
   },
   "packages/cli/api/theme-edit/theme-edit-refusal-lines-keep-typed-scope.test.mjs": 20000,
-  "packages/cli/api/theme-edit/theme-edit-color-opacity-shorthand.test.mjs": 20000
+  "packages/cli/api/theme-edit/theme-edit-color-opacity-shorthand.test.mjs": 20000,
+  "packages/cli/api/theme-edit/theme-built-variant-gradient-longhands.test.mjs": 60000
 }
