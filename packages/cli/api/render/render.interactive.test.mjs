@@ -685,6 +685,30 @@ export default function Page() {
     );
     await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
     expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
+    // A package subpath the package does not export is refused as a build
+    // refuses it, with no installed path in the message.
+    put(
+      'src/no-subpath.tsx',
+      "import {Chart} from '@astryxdesign/core/Chart';\nexport default function Page() { return <main><Chart /></main>; }\n",
+    );
+    const subpath = await errorOf(() =>
+      render('src/no-subpath.tsx', {cwd: dir, out: 'no-subpath.html'}),
+    );
+    expect(subpath?.code).toBe('ERR_RENDER_COMPILE');
+    expect(subpath?.message).toBe(
+      'The page does not compile (src/no-subpath.tsx, line 1): @astryxdesign/core has no export ./Chart',
+    );
+    put(
+      'src/no-stylex-subpath.tsx',
+      "import * as stylex from '@stylexjs/stylex';\nimport {spacing} from '@astryxdesign/core/tokens/spacing.stylex';\nconst styles = stylex.create({p: {padding: spacing.md}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
+    );
+    const stylexSubpath = await errorOf(() =>
+      render('src/no-stylex-subpath.tsx', {cwd: dir, out: 'no-stylex-subpath.html'}),
+    );
+    expect(stylexSubpath?.code).toBe('ERR_RENDER_COMPILE');
+    expect(stylexSubpath?.message).toBe(
+      'The page does not compile (src/no-stylex-subpath.tsx, line 2): @astryxdesign/core has no export ./tokens/spacing.stylex',
+    );
     // A missing name the page calls as it loads is named as a build names it.
     put('src/lib-load.ts', 'export const other = 1;\n');
     put(

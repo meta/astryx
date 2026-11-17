@@ -305,8 +305,9 @@ export class BundleError extends Error {
    * @param {Record<string, unknown>} [detail]
    * @param {unknown} [compile] the error of one of the page's own files that
    *   does not compile, which the render reports as a static import's
-   * @param {{source: string, line: number, names: string[]}} [missingExport]
-   *   that import: the page's file that makes it, the line and the names
+   * @param {{source: string, line: number, names: string[], module?: string}} [missingExport]
+   *   a named import or a package subpath that its module does not export:
+   *   the page's file that imports it, the line, the names and the module
    */
   constructor(message, detail = {}, compile = undefined, missingExport = undefined) {
     super(message);
@@ -516,6 +517,19 @@ export async function bundleForBrowser({
         source: located,
         line: first.location.line,
         names: [noExport[1]],
+      });
+    }
+    // A package subpath the package's `exports` do not list, likewise.
+    const notes = (first.notes ?? []).map((/** @type {any} */ note) => note.text).join('\n');
+    const unexported = /^Could not resolve "[^"]+"$/.test(first.text)
+      ? /The path "([^"]+)" is not exported by package "([^"]+)"/.exec(notes)
+      : null;
+    if (unexported && located && isPageFile(located)) {
+      throw new BundleError(first.text, {}, undefined, {
+        source: located,
+        line: first.location.line,
+        names: [unexported[1]],
+        module: unexported[2],
       });
     }
     const where = located ? `${describe(located)}:${first.location.line}: ` : '';

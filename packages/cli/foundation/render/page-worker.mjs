@@ -1282,12 +1282,77 @@ function importedFrom(file, line) {
   return undefined;
 }
 
+/**
+ * A package subpath that the package's `exports` do not list, as Node names
+ * it, with the import in the page's own files that asks for it when one does.
+ * @param {string} message
+ * @returns {{module: string, subpath: string, source?: string, line?: number} | null}
+ */
+function unexportedSubpath(message) {
+  const named = /Package subpath '([^']+)' is not defined by "exports" in (\S+package\.json)/.exec(message);
+  if (!named) return null;
+  const [, subpath, manifest] = named;
+  /** @type {string} */
+  let module;
+  try {
+    module = String(JSON.parse(fs.readFileSync(manifest, 'utf8')).name);
+  } catch {
+    module = describeFile(manifest);
+  }
+  const spec = `${module}${subpath.slice(1)}`;
+  for (const file of new Set([entry, ...localFiles])) {
+    let records;
+    try {
+      records = moduleImports(fs.readFileSync(file, 'utf8'), file);
+    } catch {
+      continue;
+    }
+    const asked = records?.find(record => record.specifier.split('?')[0] === spec);
+    if (asked) return {module, subpath, source: file, line: asked.line ?? 1};
+  }
+  return {module, subpath};
+}
+
+/**
+ * The subpath of a package import that the package's `exports` do not list,
+ * when Node refuses the import for that reason, as the importing file or the
+ * served Core sees it.
+ * @param {string} spec
+ * @param {string} file the importing file
+ * @returns {string | null} the subpath, as `./tokens/spacing.stylex`
+ */
+function notExportedSubpath(spec, file) {
+  if (spec.startsWith('.') || path.isAbsolute(spec)) return null;
+  const pkg = packageOf(spec);
+  const attempts = [() => createRequire(file).resolve(spec)];
+  if (served && isServedPackage(pkg, served.integrations)) {
+    attempts.push(() => createRequire(path.join(served.dir, 'package.json')).resolve(spec, {paths: [served.dir]}));
+  }
+  for (const attempt of attempts) {
+    try {
+      attempt();
+      return null;
+    } catch (e) {
+      if (/** @type {any} */ (e)?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') return `.${spec.slice(pkg.length)}`;
+    }
+  }
+  return null;
+}
+
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
   if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
   const message = compileText(err).text;
+  // A build refuses an import of a subpath the package does not export.
+  const unexported = unexportedSubpath(message);
+  if (unexported?.source && unexported.line) {
+    return failMissingExport({source: unexported.source, line: unexported.line, module: unexported.module, names: [unexported.subpath]});
+  }
+  if (unexported) {
+    return fail('ERR_RENDER_COMPILE', `The page does not compile: ${unexported.module} has no export ${unexported.subpath}`);
+  }
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',
@@ -1320,6 +1385,10 @@ function classify(e) {
     // only from a file it can read, which it says without naming the import.
     if (reason.startsWith('Could not resolve the path to the imported file')) {
       const spec = site.source && site.line ? importedFrom(site.source, site.line) : undefined;
+      const subpath = spec && site.source && site.line ? notExportedSubpath(spec, site.source) : null;
+      if (spec && subpath && site.source && site.line) {
+        return failMissingExport({source: site.source, line: site.line, module: packageOf(spec), names: [subpath]});
+      }
       const value = site.token ? `\`${site.token}\`` : 'an imported value';
       reason =
         spec && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)
@@ -1515,16 +1584,11 @@ function reach(name) {
  * @returns {Promise<{source: string, line: number, module: string, names: string[]} | null>}
  */
 async function missingNamedExports() {
-  const parser = requireFromCli('@babel/parser');
   for (const file of localFiles) {
     if (!moduleFiles.has(file)) continue;
     let ast;
     try {
-      const typed = /\.[cm]?tsx?$/.test(file);
-      ast = parser.parse(fs.readFileSync(file, 'utf8'), {
-        sourceType: 'module',
-        plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
-      });
+      ast = parseModule(fs.readFileSync(file, 'utf8'), file);
     } catch {
       // A file that does not parse is reported where it is compiled.
       continue;
