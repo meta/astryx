@@ -562,6 +562,17 @@ describe('short answer (compact)', () => {
     );
   });
 
+  it('prints no usage for a component with no example and no required prop', () => {
+    const optional = {
+      name: 'Spacer',
+      props: [{name: 'size', type: "'sm' | 'md'"}],
+    };
+    expect(shortUsage(optional, 'Spacer')).toBeNull();
+    expect(formatCompact(optional, 'Spacer', '@acme/s')).not.toContain(
+      '## Usage',
+    );
+  });
+
   it('prints no usage for a hook without examples', () => {
     expect(shortUsage({name: 'useThing', props: []}, 'useThing')).toBeNull();
   });

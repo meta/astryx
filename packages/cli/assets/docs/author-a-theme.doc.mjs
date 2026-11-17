@@ -78,7 +78,7 @@ export const docs = {
         {type: 'code', lang: 'tsx', label: 'Component overrides with standard CSS', code: "components: {\n  card: {\n    base: { borderRadius: '20px', padding: '24px' },\n  },\n  button: {\n    base: {\n      borderRadius: '9999px',\n      textTransform: 'uppercase',\n      '--button-focus-offset': '3px',\n    },\n    'variant:ghost': { borderWidth: '2px', borderStyle: 'solid' },\n  },\n}"},
         {type: 'prose', text: "Run `{@command theme targets}` for every themeable key in the system (`{@command theme targets <Name>}` to scope it, `--json` to lint a theme against it), and `{@command component <Name> --detail full}` for one component's theming targets, public CSS variables, and which standard CSS properties are supported."},
         {type: 'list', style: 'do', items: ['Write standard CSS properties (borderRadius, padding); the pipeline expands them into internal vars.', 'Set public CSS vars directly when no standard property equivalent exists.']},
-        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name>}`.']},
+        {type: 'list', style: 'dont', items: ['Set private CSS vars (prefixed --_) directly. Use standard CSS properties instead. `{@command theme build}` will error.', 'Set a public CSS var the component does not define. It compiles to CSS that never applies, and the build does not warn. Take the names from `{@command component <Name> --detail full}`.']},
       ],
     },
     {

@@ -270,8 +270,8 @@ export const myTheme = defineTheme({
   // (`astryx-button` → `button`, `astryx-side-nav-item` → `side-nav-item`),
   // including inner parts like `progress-bar-fill`.
   //
-  // `astryx component <Name>` IS THE REFERENCE HERE. It prints that
-  // component's theming targets, the visual props and states you can key on,
+  // `astryx component <Name> --detail full` IS THE REFERENCE HERE. It prints
+  // that component's theming targets, the visual props and states you can key on,
   // its public CSS variables with defaults, and which standard CSS properties
   // it expands. `astryx component --list` names every component, and
   // `astryx docs styling` covers the escape hatches outside a theme.
@@ -290,17 +290,17 @@ export const myTheme = defineTheme({
   // Write ordinary CSS properties: `borderRadius` and `padding` expand into
   // the component's internal vars for you, concentric radius math included.
   // Set a public CSS var directly when no standard property reaches it — take
-  // the name from `astryx component <Name>`, since a var no component defines
-  // compiles to CSS that never applies. Never set a private `--_`-prefixed
-  // var; the build rejects it.
+  // the name from `astryx component <Name> --detail full`, since a var no
+  // component defines compiles to CSS that never applies. Never set a private
+  // `--_`-prefixed var; the build rejects it.
   // ───────────────────────────────────────────────────────────────────────
   components: {
     button: {
       base: {
         borderRadius: 'var(--radius-full)',
         fontWeight: 'var(--font-weight-semibold)',
-        // A public var from `astryx component Button` — no CSS-property
-        // equivalent exists for it.
+        // A public var from `astryx component Button --detail full` — no
+        // CSS-property equivalent exists for it.
         '--button-focus-offset': '2px',
         // Interaction states live inside the same block.
         ':hover': {transform: 'translateY(-1px)'},

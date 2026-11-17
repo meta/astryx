@@ -570,7 +570,8 @@ const SHORT_EXAMPLE_MAX_LINES = 20;
 /**
  * The common-use code for the short answer: the doc's first example when it
  * runs on its own and is short, else one element built from the required
- * props. `...` marks each value the caller fills in.
+ * props, or nothing when it has none. `...` marks each value the caller
+ * fills in.
  * @param {any} docs
  * @param {string} name - the component's export name
  * @returns {string | null}
@@ -600,6 +601,9 @@ export function shortUsage(docs, name) {
         : `${p.name}={...}`,
     );
   }
+  // A line with no required prop and no children shows nothing the import
+  // does not, so the answer prints no usage.
+  if (!attrs.length && !hasChildren) return null;
   const open = [name, ...attrs].join(' ');
   return hasChildren ? `<${open}>...</${name}>` : `<${open} />`;
 }
