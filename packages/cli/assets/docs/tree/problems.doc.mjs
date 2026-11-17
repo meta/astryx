@@ -103,7 +103,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'text',
-          code: "astryx: could not get Astryx 0.6.8 to match this project's Core (the registry could not be reached); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the registry does not have it); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the release cache /home/me/.cache/astryx/releases cannot be written (EACCES)); answering with CLI 0.7.2 instead",
+          code: "astryx: could not get Astryx 0.6.8 to match this project's Core (the registry https://registry.npmjs.org/ could not be reached); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the registry https://registry.npmjs.org/ does not have it); answering with CLI 0.7.2 instead\nastryx: could not get Astryx 0.6.8 to match this project's Core (the release cache /home/me/.cache/astryx/releases cannot be written (EACCES)); answering with CLI 0.7.2 instead",
         },
         {
           type: 'prose',

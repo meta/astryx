@@ -544,18 +544,26 @@ export function failedInstallWaitMs(failures) {
 }
 
 /**
- * The registry npm installs releases from, as npm reads it in the folder
- * releases install in; null when npm cannot say. A failed install is
- * remembered for this registry only, so a run after the registry changes
- * installs at once.
+ * The registry npm installs releases from: the `@astryxdesign` scope's
+ * registry when one is set, else npm's registry, as npm reads its user and
+ * global settings; null when npm cannot say. A failed install is remembered
+ * for this registry only, so a run after the registry changes installs at
+ * once.
  * @param {typeof runNpm} run
  * @returns {string | null}
  */
 function npmRegistry(run) {
   try {
-    const result = run(['config', 'get', 'registry'], {timeoutMs: 15_000});
-    const url = result.status === 0 ? String(result.stdout ?? '').trim() : '';
-    return /^https?:\/\/\S+$/.test(url) ? url : null;
+    const result = run(['config', 'get', '@astryxdesign:registry', 'registry'], {timeoutMs: 15_000});
+    if (result.status !== 0) return null;
+    /** @type {Record<string, string>} */
+    const values = {};
+    for (const line of String(result.stdout ?? '').split('\n')) {
+      const at = line.indexOf('=');
+      if (at > 0) values[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+    }
+    const url = [values['@astryxdesign:registry'], values.registry].find(v => /^https?:\/\/\S+$/.test(v ?? ''));
+    return url ?? null;
   } catch {
     return null;
   }
@@ -1077,7 +1085,7 @@ export function ensureRelease(version, options = {}) {
     const minutes = Math.max(1, Math.round((Date.now() - failed.at) / 60_000));
     return {
       version,
-      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago. It is tried again after ${failed.waitMs / 60_000} minutes, or at once when npm's registry changes`,
+      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes or at once when npm's registry changes`,
     };
   }
   try {

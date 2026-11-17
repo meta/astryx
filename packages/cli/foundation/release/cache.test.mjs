@@ -166,7 +166,9 @@ describe('ensureRelease', () => {
     const installs = [];
     /** @type {import('./cache.mjs').runNpm} */
     const run = (args, opts = {}) => {
-      if (args[0] === 'config') return {status: 0, stdout: `${registry}\n`, stderr: ''};
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      }
       installs.push(args);
       return (registry.startsWith('http://127.0.0.1') ? offline : online).run(args, opts);
     };
@@ -174,14 +176,37 @@ describe('ensureRelease', () => {
     expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
     const again = ensureRelease('0.6.8', {cacheDir, run});
     expect(installs).toHaveLength(1);
-    expect('reason' in again && again.reason).toMatch(
-      /^the registry http:\/\/127\.0\.0\.1:9\/ could not be reached; last tried 1 minute ago\. It is tried again after 2 minutes, or at once when npm's registry changes$/,
+    expect('reason' in again && again.reason).toBe(
+      "the registry http://127.0.0.1:9/ could not be reached; last tried 1 minute ago, tried again after 2 minutes or at once when npm's registry changes",
     );
     registry = 'https://registry.npmjs.org/';
     const fixed = ensureRelease('0.6.8', {cacheDir, run});
     expect(installs).toHaveLength(2);
     expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
     expect(fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'))).toBe(false);
+  });
+
+  it("reads the @astryxdesign scope's registry first: changing only that registry retries at once", () => {
+    const cacheDir = tempDir('cache');
+    let scoped = 'http://127.0.0.1:9/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') {
+        return {status: 0, stdout: `@astryxdesign:registry=${scoped}\nregistry=https://registry.npmjs.org/\n`, stderr: ''};
+      }
+      installs.push(args);
+      return fakeNpm({outcome: scoped.startsWith('http://127.0.0.1') ? 'offline' : 'ok'}).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    scoped = 'https://astryx.example/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
   });
 
   it("refuses a release this computer's Node cannot run", () => {
