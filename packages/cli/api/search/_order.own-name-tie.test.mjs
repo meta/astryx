@@ -53,6 +53,24 @@ describe('tieByOwnName', () => {
     expect(names(out)).toEqual(['PebbleTray', 'Glim', 'Quark', 'Fizz']);
   });
 
+  it('keeps every match, score and reason; only the order moves', () => {
+    const rows = items([
+      ['Glim', 112],
+      ['Quark', 112],
+      ['PebbleTray', 112],
+      ['Fizz', 100, 'matches 1/3 terms: glow'],
+    ]);
+    const before = rows.map(it => ({...it.res}));
+    const out = tieByOwnName(rows, 'pebble trays glow', blockOf, FAMILIES);
+    expect(names(out)).toEqual(['PebbleTray', 'Glim', 'Quark', 'Fizz']);
+    expect(out).toHaveLength(rows.length);
+    expect(new Set(out)).toEqual(new Set(rows));
+    const key = (/** @type {any} */ r) => `${r.domain}:${r.name}`;
+    const sorted = (/** @type {any[]} */ list) =>
+      [...list].sort((a, b) => (key(a) < key(b) ? -1 : 1));
+    expect(sorted(out.map(it => it.res))).toEqual(sorted(before));
+  });
+
   it('keeps the order when the tied matches matched other words', () => {
     const rows = items([
       ['Glim', 98, 'matches 1/2 terms: glow'],

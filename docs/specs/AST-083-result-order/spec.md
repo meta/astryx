@@ -62,8 +62,9 @@ owns response fields and compatibility.
   query word, in any plural or stem form, is a word of the part's name that
   does not start a word of the root's name. Among matches of the first
   result's domain that tie with it on score and on the query words they
-  matched, the match whose own name holds more query words leads, unless it is
-  a part of the first result.
+  matched, the match whose own name holds more query words leads. A first
+  result that matched the whole query (a name, keyword, or title hit) keeps
+  its place, and a part of the first result never takes it.
 - **FR3 — a whole name keeps today's answer.** A query that is an entry's
   whole name or title, read with dashes and spaces alike, gets the lexical
   ranker's answer unchanged.
