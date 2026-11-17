@@ -88,7 +88,10 @@ rather than left to the command author.
 theme matcha` is `theme add matcha`) and the table of their words in
    `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
    uses it and no word is a command or a command's plural. The answer only
-   suggests: it runs nothing and never names an experimental command.
+   suggests: it runs nothing and names no experimental command, except that a
+   share word (`export`, `render`, `share`, `bundle`, `snapshot`,
+   `standalone`) names `experimental export` under `spec:AST-017` FR27's
+   shareable-page exception.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the

@@ -63,7 +63,7 @@ function program() {
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
   experimental.command('icon').argument('[query...]');
-  experimental.command('render').argument('[page]');
+  experimental.command('export').argument('[page]');
   return root;
 }
 
@@ -246,18 +246,21 @@ describe('words from another command line', () => {
 
   it('leaves a read word before a group alone to the name lookup', async () => {
     for (const verb of ['info', 'show', 'view', 'describe'])
-      expect(await names([verb, 'theme'])).toEqual([
-        'astryx component Theme',
-      ]);
+      expect(await names([verb, 'theme'])).toEqual(['astryx component Theme']);
   });
 
   it('names no experimental command from a verb before the group', async () => {
-    for (const words of [
-      ['render', 'experimental'],
-      ['icons', 'experimental'],
-    ])
-      for (const name of (await names(words)) ?? [])
-        expect(name).not.toMatch(/^astryx experimental\b/);
+    for (const name of (await names(['icons', 'experimental'])) ?? [])
+      expect(name).not.toMatch(/^astryx experimental\b/);
+  });
+
+  it('names experimental export for a share word, once, whatever follows (FR27)', async () => {
+    expect(await names(['render', 'experimental'])).toEqual([
+      'astryx experimental export',
+    ]);
+    expect(await names(['share', 'page.tsx'])).toEqual([
+      'astryx experimental export page.tsx',
+    ]);
   });
 
   it('keeps the program options after the name in the props, add and template-kind runs', async () => {
@@ -335,7 +338,9 @@ describe('the CLI', () => {
     const meant = await runCli(['--json', 'component', 'Button']);
     expect(meant.status).toBe(0);
 
-    const group = JSON.parse((await runCli(['--json', 'info', 'theme'])).stdout);
+    const group = JSON.parse(
+      (await runCli(['--json', 'info', 'theme'])).stdout,
+    );
     expect(group.suggestions[0].name).toBe('astryx --json component Theme');
   });
 

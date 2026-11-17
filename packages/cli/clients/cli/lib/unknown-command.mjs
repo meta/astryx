@@ -7,8 +7,9 @@
  * a word from the table in other-cli-words.mjs, a command's plural, an option
  * some commands take, a command deeper in the tree, or a name another command
  * reads. Otherwise it names the commands with a near name, else every
- * command. It only suggests: it runs nothing, and it never names an
- * experimental command.
+ * command. It only suggests: it runs nothing, and it names no experimental
+ * command except the one spec:AST-017 FR27's shareable-page exception lets a
+ * share word name.
  *
  * @input the program and the words of the run after the program name
  * @output the message and the suggestions the unknown-command error prints
@@ -108,8 +109,9 @@ function everyCommand(program) {
   /** @param {CommandLike} node @param {string[]} words */
   const walk = (node, words) => {
     for (const child of visible(node)) {
-      // A stable answer names no experimental command: without the opt-in,
-      // the experimental group is the one entry point stable output shows.
+      // A stable answer names no experimental command by its place in the
+      // tree: the experimental group is the one entry point stable output
+      // shows. FR27's shareable-page exception is the word table below.
       if (words.length === 0 && child.name() === 'experimental') continue;
       const path = [...words, child.name()];
       all.push({words: path, cmd: child});
@@ -352,8 +354,8 @@ function filled(template, words) {
  * @returns {Promise<Array<{words: string[], reason: string}>>}
  */
 async function otherCliWords({word, before, after: rest}, program, findEntry) {
-  // A stable answer names no experimental command, so no rule here reads
-  // the experimental group.
+  // No rule here reads the experimental group: a stable answer names an
+  // experimental command only through FR27's shareable-page word table.
   const top = visible(program).filter(c => c.name() !== 'experimental');
   /** @param {string} name */
   const command = name => top.find(c => c.name() === name);
@@ -624,15 +626,18 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   const asked = NAMED_EXPERIMENTAL.find(e =>
     spellings(word).some(w => e.asks.includes(w)),
   );
-  if (asked && runParses(program, [...before, ...asked.words]))
+  if (asked && runParses(program, [...before, ...asked.words])) {
+    // `render experimental page.tsx` already named the group.
+    const carried = rest.filter(w => w !== asked.words[0]);
     return [
       run(
-        runParses(program, [...before, ...asked.words, ...rest])
-          ? [...asked.words, ...rest]
+        runParses(program, [...before, ...asked.words, ...carried])
+          ? [...asked.words, ...carried]
           : [...asked.words, '--help'],
         asked.reason,
       ),
     ];
+  }
 
   // A name another command reads: the next word (`info Text`), else the
   // word itself (`astryx tokens`).

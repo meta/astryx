@@ -91,11 +91,11 @@ describe('experimental export is the name', () => {
   );
 
   it.each(['render', 'export', 'share', 'bundle', 'snapshot', 'standalone'])(
-    'an unknown `astryx %s` names experimental export',
+    'an unknown `astryx %s page.tsx` suggests experimental export page.tsx',
     async word => {
-      const {status, stdout, stderr} = await runCli([word]);
+      const {status, stdout, stderr} = await runCli([word, 'page.tsx']);
       expect(status).toBe(1);
-      expect(stdout + stderr).toMatch(/experimental export/u);
+      expect(stdout + stderr).toMatch(/experimental export page\.tsx/u);
     },
   );
 });
