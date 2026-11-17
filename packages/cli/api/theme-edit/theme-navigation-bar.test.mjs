@@ -69,8 +69,9 @@ describe('the navigation bar', () => {
     ).toEqual([
       "set v border-bottom '1px solid var(--color-border)' --on app-shell-header",
     ]);
+    // (A nav bar is TopNav's own name too: its fill goes there as well.)
     const see = await answer('nav bar translucent white', 'v');
-    expect(see.parts).toEqual(['app-shell-header']);
+    expect(see.parts).toEqual(['app-shell-header', 'top-nav']);
     expect(see.text).not.toMatch(/no part is called/);
   }, 240_000);
 });

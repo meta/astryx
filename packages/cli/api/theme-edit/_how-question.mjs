@@ -2435,8 +2435,60 @@ export function partLexicon(ctx) {
     }
     return out;
   };
+  // "Segmented buttons": a word that begins one catalog component's name
+  // and only that one ("segmented": segmented-control), said before a
+  // one-word part noun that component draws one of its parts as (its
+  // segments are buttons, by the census), names that component, never the
+  // noun's own part. (A word that is a part itself, or that begins several
+  // names, is no such word; nor a noun the component draws only as a plain
+  // box, "status badges".)
+  const tagsOf = (/** @type {string} */ key) =>
+    [...(ctx.C?.MAP?.[key]?.tags ?? [])].filter(
+      (/** @type {string} */ t) => t !== 'div' && t !== 'span',
+    );
+  /** @type {Array<[RegExp, PartRef]>} */
+  const qualified = [];
+  {
+    /** @type {Map<string, Set<string>>} */
+    const roots = new Map();
+    for (const key of project.target.keys()) {
+      if (!key.includes('-')) continue;
+      const [w, w2] = key.split('-');
+      const set = roots.get(w) ?? new Set();
+      set.add(`${w}-${w2}`);
+      roots.set(w, set);
+    }
+    for (const [w, set] of roots) {
+      const root = [...set][0];
+      if (
+        set.size !== 1 ||
+        !project.target.has(root) ||
+        project.target.has(w) ||
+        other(w) ||
+        DESIGN_WORDS.includes(w)
+      )
+        continue;
+      const drawn = new Set(
+        [...project.target.keys()]
+          .filter(key => key === root || key.startsWith(`${root}-`))
+          .flatMap(tagsOf),
+      );
+      const nouns = [...project.target.keys()].filter(
+        key =>
+          !key.includes('-') &&
+          tagsOf(key).length > 0 &&
+          tagsOf(key).every(t => drawn.has(t)),
+      );
+      if (nouns.length)
+        qualified.push([
+          new RegExp(`\\b${w}[\\s-]+(?:${nouns.join('|')})(?:e?s)?\\b`),
+          {on: root},
+        ]);
+    }
+  }
   /** @type {Array<[RegExp, PartRef]>} */
   const phrases = [
+    ...qualified,
     // A catalog name of two or more words said in full ("toggle
     // buttons", "code block header", "hover card") is that part.
     ...derived.filter(
@@ -4702,6 +4754,32 @@ export function draftAnswer(ctx, env, question) {
     );
   const {C} = ctx;
   const TARGET = ctx.project.target;
+  /**
+   * Whether a part belongs to a component the container's own component
+   * names in one of its slots (AppShell's top nav slot holds TopNav, so a
+   * top nav item is the app shell header's own).
+   * @param {string} container
+   * @param {string} part
+   */
+  const slotHeld = (container, part) => {
+    const comps = Object.entries(ctx.project.components);
+    const ownerOf = (/** @type {string} */ t) =>
+      comps
+        .filter(([, info]) =>
+          (info.targets ?? []).some(x => x.className === `astryx-${t}`),
+        )
+        .flatMap(([name, info]) => [name, info.subComponentOf ?? name]);
+    const slotted = new Set(
+      ownerOf(container).flatMap(name =>
+        Object.values(ctx.project.components[name]?.props ?? {}).flatMap(pr =>
+          (pr.slots ?? []).map((/** @type {any} */ el) =>
+            String(el?.__element ?? ''),
+          ),
+        ),
+      ),
+    );
+    return ownerOf(part).some(name => slotted.has(name));
+  };
   const TOKENS = ctx.project.core.tokenDefaults;
   // "--brand-primary: #4f46e5; --brand-bg: #f9fafb": a custom property of
   // the app's own (no token of the editor's) is read by its last word, the
@@ -8870,6 +8948,41 @@ export function draftAnswer(ctx, env, question) {
         }
       }
     }
+    // "navigation bar: #f3edf7 background; the selected item gets a pill":
+    // after a ";" that goes on with a part's colon list, a part named by a
+    // noun the head's part holds a part of (its top nav's items) is that
+    // held part, inside the head, as "the selected item in the navigation
+    // bar" says it.
+    if (
+      !c.container &&
+      c.parts.length === 1 &&
+      joinOf.get(c)?.sep === 'break' &&
+      /;/.test(String(c.joint ?? '')) &&
+      asked0.includes(';')
+    ) {
+      let k = clauses.indexOf(c) - 1;
+      if (k >= 0 && joinOf.get(clauses[k])?.list === 'colon') {
+        while (
+          k > 0 &&
+          !['none', 'break'].includes(String(joinOf.get(clauses[k])?.sep))
+        )
+          k--;
+        const holder = clauses[k]?.parts[0]?.on;
+        const noun = c.parts[0].on;
+        const held =
+          holder && holder !== noun
+            ? (C.MAP[holder]?.contains ?? []).find((/** @type {string} */ x) =>
+                x.endsWith(`-${noun}`),
+              )
+            : undefined;
+        if (holder && held) {
+          c.parts = [{...c.parts[0], on: held}];
+          c.container = holder;
+          c.placeStrict = {holder, part: held};
+          continue;
+        }
+      }
+    }
     // An element of a place ("the selected option row in the selector",
     // "the close button of toasts", "the tabs' indicator", "the hovered
     // item in menus in cards"): the part that place draws it as, never the
@@ -10061,10 +10174,11 @@ export function draftAnswer(ctx, env, question) {
         );
     }
   }
-  // "The top bar with white text": a bar said in two words that Core's docs
-  // give, run together, as another bar component's own name ("topbar":
-  // TopNav's) is that component too, for its text color, so the text
-  // reaches its items wherever it sits.
+  // "The top bar navy with white text": a bar said in two words that Core's
+  // docs give, run together, as another bar component's own name
+  // ("topbar": TopNav's) is that component too, for its fill and its text
+  // color, so the text reaches its items wherever it sits and always reads
+  // on the bar's own fill.
   for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
     if (
@@ -10072,7 +10186,7 @@ export function draftAnswer(ctx, env, question) {
       c.except ||
       c.state ||
       c.parts.length !== 1 ||
-      !c.aspects.includes('text') ||
+      !c.aspects.some(a => a === 'text' || a === 'background') ||
       // (Only a bar whose text is its items', drawing no text color of its
       // own: a label or a mark is itself.)
       C.MAP[c.parts[0].on]?.at?.color
@@ -10113,16 +10227,25 @@ export function draftAnswer(ctx, env, question) {
           on &&
           TARGET.has(on) &&
           !C.MAP[on]?.at?.color &&
-          !clauses.some(o => o.parts.some(p => p.on === on)),
+          // (Not twice for one look: "navy, with white text" adds the fill
+          // and the text each once.)
+          !clauses.some(
+            o =>
+              o.parts.some(p => p.on === on) &&
+              o.aspects.some(
+                a =>
+                  c.aspects.includes(a) && (a === 'text' || a === 'background'),
+              ),
+          ),
       );
-    // (Its text alone: the bar's own fill stays the bar's.)
+    // (Its fill and text only.)
     clauses.splice(
       i + 1,
       0,
       ...[...new Set(also)].map(on => ({
         ...c,
         parts: [{on}],
-        aspects: ['text'],
+        aspects: c.aspects.filter(a => a === 'text' || a === 'background'),
       })),
     );
   }
@@ -16133,7 +16256,11 @@ export function draftAnswer(ctx, env, question) {
           c.placeStrict &&
           p &&
           d.options.length &&
-          p.on.startsWith(`${c.container}-`)
+          (p.on.startsWith(`${c.container}-`) ||
+            // (A part of a component the container's own component is made
+            // to hold in a slot, the top bar's top nav items, is the
+            // container's own too.)
+            slotHeld(/** @type {string} */ (c.container), p.on))
         )
           keptInPlace.add(c);
         else if (d && c.container && c.placeStrict && p && d.options.length) {
@@ -18354,6 +18481,11 @@ export function draftAnswer(ctx, env, question) {
         /^(background|background-color|background-image|color|fill|stroke|border-color|border|outline-color)$/.test(
           k,
         ),
+      ) &&
+      // (A bar holding parts of its own, a top nav with its heading and
+      // items, is a surface: a fill on it paints behind them.)
+      !(C.MAP[one(on)].contains ?? []).some((/** @type {string} */ x) =>
+        x.startsWith(`${one(on)}-`),
       ) &&
       // (Nor one an element inside it paints, a keyboard key's chip.)
       !Object.entries(C.MAP[one(on)].inside ?? {}).some(
