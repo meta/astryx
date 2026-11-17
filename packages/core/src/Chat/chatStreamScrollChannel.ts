@@ -10,11 +10,11 @@
  *   position, and a windowed list reads no layout on the scroll path.
  */
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
-import {sharedWeakMap} from '../utils/sharedRealm';
+import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 
 // The scrollers whose stream scroll follows the newest message now, kept in
 // step with each hook's lock.
-const following = new WeakSet<Element>();
+const following = sharedWeakSet<Element>('chat/following', 1);
 
 /**
  * Whether the stream scroll on `scroller` follows its newest message now, as

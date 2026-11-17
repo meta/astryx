@@ -33,6 +33,10 @@ import {isFollowingNewest} from './chatStreamScrollChannel';
 // ---------------------------------------------------------------------------
 
 const layout = {
+  /** ChatLayout scrolls the page: the document element is the scroller. */
+  page: false,
+  /** How many times the windowed body's box was read. */
+  bodyReads: 0,
   viewport: 600,
   /** The windowed body's top in the scroller's content. */
   listTop: 40,
@@ -43,7 +47,12 @@ const layout = {
 };
 const scrollTops = new WeakMap<Element, number>();
 
-const isScroller = (el: Element) => el.classList.contains('astryx-chat-layout');
+const isScroller = (el: Element) =>
+  layout.page
+    ? el === document.documentElement
+    : el.classList.contains('astryx-chat-layout');
+const scrollerOf = (el: Element) =>
+  layout.page ? document.documentElement : el.closest('.astryx-chat-layout');
 const isBody = (el: Element) =>
   typeof el.className === 'string' &&
   el.className.includes('ChatMessageListWindow__styles.body');
@@ -187,12 +196,13 @@ beforeAll(() => {
   });
   override('getBoundingClientRect', {
     value(this: HTMLElement) {
-      const scroller = this.closest('.astryx-chat-layout');
+      const scroller = scrollerOf(this);
       const scrolled = scroller == null ? 0 : (scrollTops.get(scroller) ?? 0);
       if (isScroller(this)) {
         return rect(0, layout.viewport);
       }
       if (isBody(this)) {
+        layout.bodyReads += 1;
         return rect(bodyTop() - scrolled, heightOf(this));
       }
       if (isRow(this)) {
@@ -223,6 +233,9 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  layout.page = false;
+  layout.bodyReads = 0;
+  scrollTops.delete(document.documentElement);
   layout.viewport = 600;
   layout.sizes.clear();
   frames = [];
@@ -283,10 +296,13 @@ function App({
   const virtualization = useChatMessageListVirtualization();
   const [items, setItems] = useState(initial);
   const handleRef = useRef<ChatMessageListHandle>(null);
+  const pageRef = useRef<HTMLElement>(document.documentElement);
   controls.setItems = setItems;
   controls.handle = handleRef;
   return (
-    <ChatLayout composer={<div>composer</div>}>
+    <ChatLayout
+      composer={<div>composer</div>}
+      scrollRef={layout.page ? pageRef : undefined}>
       <ChatMessageList
         items={items}
         getItemKey={keyOf}
@@ -313,7 +329,9 @@ async function mount(
     <App initial={initial} scrollToTopAction={scrollToTopAction} />,
   );
   await flushMicrotasks();
-  const scroller = document.querySelector<HTMLElement>('.astryx-chat-layout')!;
+  const scroller = layout.page
+    ? document.documentElement
+    : document.querySelector<HTMLElement>('.astryx-chat-layout')!;
   return {...utils, scroller};
 }
 
@@ -797,5 +815,37 @@ describe('ChatMessageList windowing while the reader scrolls', () => {
     await resized([above]);
     expect(scroller.scrollTop).toBe(position + 200);
     expect(screenTop(reading)).toBe(top);
+  });
+});
+
+describe('ChatMessageList windowing when ChatLayout scrolls the page', () => {
+  beforeEach(() => {
+    layout.page = true;
+    // The resize settles on a timer; the test advances it.
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+  });
+  afterEach(() => {
+    layout.page = false;
+    vi.useRealTimers();
+  });
+
+  it('reads no layout while the window resizes, and keeps the end once the resize settles', async () => {
+    const {scroller} = await mount(messages(5000));
+    flushFrame();
+    expect(distanceFromEnd(scroller)).toBe(0);
+    layout.bodyReads = 0;
+    layout.viewport = 500;
+    for (let event = 0; event < 10; event++) {
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+    }
+    expect(layout.bodyReads).toBe(0);
+    await act(async () => {
+      vi.advanceTimersByTime(150);
+    });
+    await flushMicrotasks();
+    expect(layout.bodyReads).toBe(1);
+    expect(distanceFromEnd(scroller)).toBe(0);
   });
 });

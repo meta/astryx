@@ -19,6 +19,7 @@ import {useMemo, useState, useSyncExternalStore, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
+import {isNode} from '../utils/nodeType';
 import {
   scrollEventTarget,
   scrollportTop,
@@ -49,6 +50,8 @@ const MIN_OVERSCAN = 200;
 const EPSILON = 0.5;
 /** A scroll ends this long after its last event where no `scrollend` fires. */
 const SCROLL_END_FALLBACK_MS = 150;
+/** A window resize settles this long after its last `resize` event. */
+const RESIZE_SETTLE_MS = 150;
 
 /** How the hook moves the scroll position. The consumer owns the writes. */
 export interface MeasuredListWindowWriter {
@@ -212,6 +215,7 @@ function createMeasuredListEngine() {
   // row anchor's write now would stop a finger's momentum.
   let isMoving = false;
   let motionTimer: ReturnType<typeof setTimeout> | undefined;
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   // The position to keep when the holder gives back the correction it held.
   let pendingHold: Hold | undefined;
 
@@ -511,6 +515,7 @@ function createMeasuredListEngine() {
       stop();
     }
     stops = [];
+    clearTimeout(resizeTimer);
     connected = undefined;
   }
 
@@ -537,7 +542,8 @@ function createMeasuredListEngine() {
     const view = doc.defaultView;
     if (scrollEventTarget(scroller) === doc) {
       if (view != null) {
-        // The page's scroll ends at the document, and resizes at the window.
+        // The page's scroll ends at the document. Only the window's own resize
+        // reports: its event has no node as its target.
         stops.push(
           subscribeInput(view, 'scrollend', event => {
             if (event.target === doc) {
@@ -545,8 +551,11 @@ function createMeasuredListEngine() {
             }
           }),
           subscribeInput(view, 'resize', event => {
-            if (event.target === view) {
-              onResize();
+            if (!isNode(event.target)) {
+              // A resize path reads no layout: the page's geometry is read
+              // once, when the resize settles.
+              clearTimeout(resizeTimer);
+              resizeTimer = setTimeout(onResize, RESIZE_SETTLE_MS);
             }
           }),
         );
