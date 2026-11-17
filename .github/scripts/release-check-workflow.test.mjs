@@ -47,6 +47,8 @@ const releaseJobs = [
   'pr-rtl-shard',
   'pr-rtl-merge',
   'pr-rtl',
+  // The full swizzle proof of the cut commit (spec:AST-110/DEC-3).
+  'release-swizzle-proof',
   'release-check',
 ];
 const fullOutputs = {
@@ -479,7 +481,40 @@ describe('exact main and release branch completion', () => {
       'a11y-contracts',
       'pr-a11y-audit',
       'pr-rtl',
+      'release-swizzle-proof',
     ]);
+  });
+
+  it('requires the full swizzle proof of the cut commit, every target in Chromium (spec:AST-110/DEC-3)', () => {
+    const proof = jobs['release-swizzle-proof'];
+    expect(proof.needs).toEqual(['admission']);
+    expect(proof.if).toBe(
+      "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'",
+    );
+    expect(proof.strategy.matrix.slice).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    const run = proof.steps.find(
+      s => s.name === 'Prove every swizzle target in this slice',
+    );
+    expect(run.env).toEqual({
+      SWIZZLE_PROOF_ALL: '1',
+      SWIZZLE_PROOF_BROWSER: '1',
+    });
+    expect(run.run).toBe(
+      'pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs',
+    );
+    expect(proof.steps.map(s => s.run)).toContain(
+      'npx playwright install chromium',
+    );
+    expect(join).toContain("'release-swizzle-proof'");
+  });
+
+  it('fails a release-check whose full swizzle proof did not pass', async () => {
+    for (const result of ['failure', 'skipped', 'cancelled'])
+      await expect(
+        githubScript(join, {
+          needs: {...complete, 'release-swizzle-proof': {result}},
+        }),
+      ).rejects.toThrow(/release-swizzle-proof did not succeed/);
   });
 
   it('accepts complete exact-main evidence before a cut', async () => {

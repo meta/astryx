@@ -222,7 +222,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -289,7 +289,7 @@ jobs:
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
           wide: ${{ needs.room.outputs.wide }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 47 || 19 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -1660,6 +1660,44 @@ jobs:
       - name: Check the recorded time of this slice
         if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
         run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
+
+  # Every release proves every swizzle target (spec:AST-110 FR7, DEC-3): the
+  # release-check of the commit a release is cut from runs the full swizzle
+  # proof, Chromium included, one slice per leg, and release-check requires
+  # every leg. A pull request runs the proof only with ci:run-swizzle
+  # (swizzle-proof, above), and Main's Node legs prove the targets each main
+  # commit affects; this is the one run that proves them all before a cut.
+  release-swizzle-proof:
+    name: release-swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission]
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+    strategy:
+      fail-fast: false
+      # One leg per swizzle-proof.<n>.test.mjs file, as swizzle-proof.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    # Every target and its Chromium render: longer than a pull request's slice.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Install Chromium for the swizzle proof
+        run: npx playwright install chromium
+
+      - name: Prove every swizzle target in this slice
+        env:
+          SWIZZLE_PROOF_ALL: '1'
+          SWIZZLE_PROOF_BROWSER: '1'
+        run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
   # this decides on a free slim runner whether native Swift changed, and
@@ -6129,6 +6167,7 @@ jobs:
         a11y-contracts,
         pr-a11y-audit,
         pr-rtl,
+        release-swizzle-proof,
       ]
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' }}
     runs-on: ubuntu-slim
@@ -6146,7 +6185,7 @@ jobs:
         with:
           script: |
             const needs = JSON.parse(process.env.RELEASE_NEEDS);
-            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl']) {
+            for (const name of ['release-authority', 'test-registry-e2e', 'build-storybook', 'typecheck', 'pr-visual', 'pr-a11y', 'a11y-contracts', 'pr-a11y-audit', 'pr-rtl', 'release-swizzle-proof']) {
               if (needs[name]?.result !== 'success') {
                 throw new Error(`Required release job ${name} did not succeed: ${needs[name]?.result}`);
               }
