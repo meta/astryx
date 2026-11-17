@@ -147,12 +147,15 @@ export class BundleError extends Error {
    *   does not compile, which the render reports as a static import's
    * @param {string} [code] the render's error code: a named import that the
    *   module does not export is ERR_RENDER_COMPILE, as a build refuses it
+   * @param {{source: string, line: number, names: string[]}} [missingExport]
+   *   that import: the page's file that makes it, the line and the names
    */
-  constructor(message, detail = {}, compile = undefined, code = 'ERR_RENDER_SCRIPT') {
+  constructor(message, detail = {}, compile = undefined, code = 'ERR_RENDER_SCRIPT', missingExport = undefined) {
     super(message);
     this.detail = detail;
     this.compile = compile;
     this.code = code;
+    this.missingExport = missingExport;
   }
 }
 
@@ -335,17 +338,15 @@ export async function bundleForBrowser({
     }
     const located = first.location?.file ? locatedFile(first.location.file) : null;
     // A named import its module does not export, in one of the page's own
-    // files: refused as a build refuses it, naming the module as written.
+    // files: refused as a build refuses it. The worker names the file and
+    // the module, as for the same import on the server.
     const noExport = /^No matching export in "[^"]+" for import "([^"]+)"$/.exec(first.text);
     if (noExport && located && isPageFile(located)) {
-      const file = describe(located);
-      const module = /\bfrom\s*(['"])([^'"]+)\1/.exec(first.location.lineText ?? '')?.[2] ?? 'its module';
-      throw new BundleError(
-        `The page does not compile (${file}, line ${first.location.line}): ${module} has no export ${noExport[1]}`,
-        {file, line: first.location.line},
-        undefined,
-        'ERR_RENDER_COMPILE',
-      );
+      throw new BundleError(first.text, {}, undefined, 'ERR_RENDER_COMPILE', {
+        source: located,
+        line: first.location.line,
+        names: [noExport[1]],
+      });
     }
     const where = located ? `${describe(located)}:${first.location.line}: ` : '';
     // A message that leads with a file's absolute path names it as the page does.

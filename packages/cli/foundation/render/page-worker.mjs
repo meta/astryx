@@ -93,6 +93,8 @@ const importedCss = [];
 /** Every local (non-package) module the page loaded, page first. */
 /** @type {string[]} */
 const localFiles = [];
+/** The page's own files that load as modules, not as text (`?raw`) or data. @type {Set<string>} */
+const moduleFiles = new Set();
 /** Package stylesheets the page imports, by specifier and importing file. */
 /** @type {{spec: string, from: string}[]} */
 const packageCss = [];
@@ -1072,6 +1074,7 @@ const jiti = createJiti(entry, {
 function compilePageModule(source, filename, browser = false) {
   if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
     if (!localFiles.includes(filename)) localFiles.push(filename);
+    moduleFiles.add(filename);
     const ts = /\.(tsx?|mts|cts)$/.test(filename);
     const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
     const result = transformSync(source, {
@@ -1180,10 +1183,7 @@ function compileText(err) {
  */
 function compileSite(err) {
   const {text, named} = compileText(err);
-  const fromRoot = named ? path.relative(root, named) : '';
-  const file = named
-    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
-    : undefined;
+  const file = named ? siteFile(named) : undefined;
   const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
   const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
   const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
@@ -1198,6 +1198,33 @@ function compileSite(err) {
     ...(token ? {token} : {}),
     ...(named ? {source: named} : {}),
   };
+}
+
+/**
+ * A file as a compile error names it: a path from the project, or its name
+ * when it lies outside the project.
+ * @param {string} named
+ */
+function siteFile(named) {
+  const fromRoot = path.relative(root, named);
+  return (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot)
+    .split(path.sep)
+    .join('/');
+}
+
+/**
+ * Refuse a page that imports a name its module does not export, as a build
+ * refuses it.
+ * @param {{source: string, line: number, names: string[], module?: string}} absent
+ */
+function failMissingExport(absent) {
+  const file = siteFile(absent.source);
+  const module = absent.module ?? importedFrom(absent.source, absent.line) ?? 'its module';
+  fail(
+    'ERR_RENDER_COMPILE',
+    `The page does not compile (${file}, line ${absent.line}): ${module} has no export ${absent.names.join(', ')}`,
+    {file, line: absent.line},
+  );
 }
 
 /**
@@ -1362,7 +1389,10 @@ function valueUses(program, names) {
   const walk = (node, parent, key, inType) => {
     if (!node || typeof node.type !== 'string') return;
     if (node.type === 'ImportDeclaration') return;
-    const typed = inType || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
+    // `export type {A}` and `export {type A}` name a type, as a type position does.
+    const typeExport =
+      (node.type === 'ExportNamedDeclaration' || node.type === 'ExportSpecifier') && node.exportKind === 'type';
+    const typed = inType || typeExport || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
     if (node.type === 'JSXMemberExpression' && node.object?.type === 'JSXIdentifier' && names.has(node.object.name)) {
       used.members?.push({name: node.object.name, member: node.property.name, line: node.loc?.start.line ?? 0});
     }
@@ -1390,12 +1420,12 @@ function valueUses(program, names) {
  * missing component renders as "Element type is invalid", and StyleX
  * compiles a missing value to a variable that nothing defines; a bundler
  * would refuse the import in both cases.
- * @returns {Promise<{file: string, line: number, module: string, names: string[]} | null>}
+ * @returns {Promise<{source: string, line: number, module: string, names: string[]} | null>}
  */
 async function missingNamedExports() {
   const parser = requireFromCli('@babel/parser');
   for (const file of localFiles) {
-    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    if (!moduleFiles.has(file)) continue;
     let ast;
     try {
       const typed = /\.[cm]?tsx?$/.test(file);
@@ -1445,10 +1475,8 @@ async function missingNamedExports() {
       const missing = needed.filter(
         (/** @type {any} */ s) => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))),
       );
-      const fromRoot = path.relative(root, file);
-      const shown = (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(file) : fromRoot).split(path.sep).join('/');
       if (missing.length > 0) {
-        return {file: shown, line: missing[0].loc.start.line, module: spec, names: missing.map(nameOf)};
+        return {source: file, line: missing[0].loc.start.line, module: spec, names: missing.map(nameOf)};
       }
       // An element drawn as `<Name.Member>` whose export has no such member
       // renders as "Element type is invalid" too.
@@ -1457,7 +1485,7 @@ async function missingNamedExports() {
         if (value == null || (typeof value !== 'object' && typeof value !== 'function')) continue;
         const absentMember = (used.members ?? []).find(m => m.name === s.local.name && value[m.member] === undefined);
         if (absentMember) {
-          return {file: shown, line: absentMember.line, module: spec, names: [`${nameOf(s)}.${absentMember.member}`]};
+          return {source: file, line: absentMember.line, module: spec, names: [`${nameOf(s)}.${absentMember.member}`]};
         }
       }
     }
@@ -1479,16 +1507,16 @@ try {
     reach('importing the page');
     mod = await jiti.import(entry);
   } catch (e) {
-    classify(e);
+    // A missing name the page calls as it loads throws here; it is named as
+    // a build names it, not by what it broke.
+    const absent = await missingNamedExports().catch(() => null);
+    if (absent) failMissingExport(absent);
+    else classify(e);
     throw null;
   }
   const absent = await missingNamedExports();
   if (absent) {
-    fail(
-      'ERR_RENDER_COMPILE',
-      `The page does not compile (${absent.file}, line ${absent.line}): ${absent.module} has no export ${absent.names.join(', ')}`,
-      {file: absent.file, line: absent.line},
-    );
+    failMissingExport(absent);
     throw null;
   }
   const Page = mod?.default ?? (typeof mod === 'function' ? mod : undefined);
@@ -1588,6 +1616,8 @@ try {
     } catch (e) {
       if (e instanceof BundleError && e.compile !== undefined) {
         classify(e.compile);
+      } else if (e instanceof BundleError && e.missingExport) {
+        failMissingExport(e.missingExport);
       } else if (e instanceof BundleError) {
         fail(e.code, e.message, e.detail);
       } else {

@@ -364,39 +364,104 @@ export default function Page() {
       'src/no-export.tsx',
       "import {a, b} from './lib-x';\nexport default function Page() { return <p>{a}{String(b)}</p>; }\n",
     );
-    const local = await errorOf(() => render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}));
+    const local = await errorOf(() =>
+      render('src/no-export.tsx', {cwd: dir, out: 'no-export.html'}),
+    );
     expect(local?.code).toBe('ERR_RENDER_COMPILE');
     expect(local?.message).toContain('line 1): ./lib-x has no export b');
     put(
       'src/no-token.tsx',
       "import * as stylex from '@stylexjs/stylex';\nimport {colors} from '@astryxdesign/core/theme/tokens.stylex';\nconst styles = stylex.create({p: {color: colors.text}});\nexport default function Page() { return <p {...stylex.props(styles.p)}>x</p>; }\n",
     );
-    const token = await errorOf(() => render('src/no-token.tsx', {cwd: dir, out: 'no-token.html'}));
+    const token = await errorOf(() =>
+      render('src/no-token.tsx', {cwd: dir, out: 'no-token.html'}),
+    );
     expect(token?.code).toBe('ERR_RENDER_COMPILE');
-    expect(token?.message).toContain('line 2): @astryxdesign/core/theme/tokens.stylex has no export colors');
+    expect(token?.message).toContain(
+      'line 2): @astryxdesign/core/theme/tokens.stylex has no export colors',
+    );
     expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
     expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
     put(
       'src/no-component.tsx',
       "import {Button, Chart, type ButtonProps} from '@astryxdesign/core';\nimport {helper, type Shape} from './lib-y';\nconst props: ButtonProps = {label: 'Go'};\nconst shape: Shape = {n: helper()};\nexport default function Page() { return <main><Button {...props} /><Chart data={[shape]} /></main>; }\n",
     );
-    put('src/lib-y.ts', 'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\n');
-    const component = await errorOf(() => render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}));
+    put(
+      'src/lib-y.ts',
+      'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\n',
+    );
+    const component = await errorOf(() =>
+      render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}),
+    );
     expect(component?.code).toBe('ERR_RENDER_COMPILE');
-    expect(component?.message).toContain('line 1): @astryxdesign/core has no export Chart');
+    expect(component?.message).toContain(
+      'line 1): @astryxdesign/core has no export Chart',
+    );
     put(
       'src/no-member.tsx',
       "import {Button} from '@astryxdesign/core/Button';\nexport default function Page() {\n  return <main><Button.Icon /></main>;\n}\n",
     );
-    const member = await errorOf(() => render('src/no-member.tsx', {cwd: dir, out: 'no-member.html'}));
+    const member = await errorOf(() =>
+      render('src/no-member.tsx', {cwd: dir, out: 'no-member.html'}),
+    );
     expect(member?.code).toBe('ERR_RENDER_COMPILE');
-    expect(member?.message).toContain('line 3): @astryxdesign/core/Button has no export Button.Icon');
+    expect(member?.message).toContain(
+      'line 3): @astryxdesign/core/Button has no export Button.Icon',
+    );
     put(
       'src/types-only.tsx',
       "import {Button, ButtonProps} from '@astryxdesign/core/Button';\nimport Y, {helper} from './lib-y';\nconst props: ButtonProps = {label: String(helper())};\nexport default function Page() { return <main><Button {...props} /><Y /></main>; }\n",
     );
     await render('src/types-only.tsx', {cwd: dir, out: 'types-only.html'});
     expect(fs.existsSync(path.join(dir, 'types-only.html'))).toBe(true);
+    // A type re-exported as a type, and a file the page reads as text, are no value uses.
+    put(
+      'src/types-re.ts',
+      "import {ButtonProps} from '@astryxdesign/core/Button';\nexport type {ButtonProps};\nexport {type ButtonProps as Props};\n",
+    );
+    put(
+      'src/snippet.tsx',
+      "import {Nope} from '@astryxdesign/core';\nexport const shown = <Nope />;\n",
+    );
+    put(
+      'src/re-and-raw.tsx',
+      "import type {ButtonProps} from './types-re';\nimport snippet from './snippet.tsx?raw';\nconst props: ButtonProps = {label: 'Go'};\nexport default function Page() { return <main><pre>{snippet}</pre><p>{props.label}</p></main>; }\n",
+    );
+    await render('src/re-and-raw.tsx', {cwd: dir, out: 're-and-raw.html'});
+    expect(fs.existsSync(path.join(dir, 're-and-raw.html'))).toBe(true);
+    // A missing name the page calls as it loads is named as a build names it.
+    put('src/lib-load.ts', 'export const other = 1;\n');
+    put(
+      'src/load-call.tsx',
+      "import {other, makeLabel} from './lib-load';\nconst label = makeLabel(other);\nexport default function Page() { return <main>{label}</main>; }\n",
+    );
+    const atLoad = await errorOf(() =>
+      render('src/load-call.tsx', {cwd: dir, out: 'load-call.html'}),
+    );
+    expect(atLoad?.code).toBe('ERR_RENDER_COMPILE');
+    expect(atLoad?.message).toContain(
+      '(src/load-call.tsx, line 1): ./lib-load has no export makeLabel',
+    );
+    // The script's build names a multi-line import's module, as the server does.
+    put(
+      'node_modules/esm-only/package.json',
+      JSON.stringify({name: 'esm-only', type: 'module', exports: './index.js'}),
+    );
+    put(
+      'node_modules/esm-only/index.js',
+      'export const shout = s => s.toUpperCase();\n',
+    );
+    put(
+      'src/script-only.tsx',
+      "import {\n  shout,\n  whisper,\n} from 'esm-only';\nexport default function Page() { return <button onClick={() => whisper(shout('a'))}>Go</button>; }\n",
+    );
+    const scripted = await errorOf(() =>
+      render('src/script-only.tsx', {cwd: dir, out: 'script-only.html'}),
+    );
+    expect(scripted?.code).toBe('ERR_RENDER_COMPILE');
+    expect(scripted?.message).toContain(
+      '(src/script-only.tsx, line 3): esm-only has no export whisper',
+    );
   });
 
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
