@@ -1,5 +1,31 @@
 # @astryxdesign/richtext
 
+# 0.7.17
+
+#### New Features
+
+- In `RichTextEditor`, a Markdown block marker typed at the start of a list item now re-marks it and keeps its text: `- `, `1. `, or `[ ] ` switches the item's list between bullets, numbers, and tasks, and `# ` or `> ` takes a top-level item out of its list as a heading or a quote, the rest of the list continuing after it. Each change is one undo step, back to the marker as typed.
+
+#### Fixes
+
+- Apps that install the rich text package no longer see "Warning: @astryxdesign/richtext has N integration issue(s)" on `astryx search`, `component`, `template`, `theme`, `discover` and `upgrade`. The editor's internal plugins now live in a folder the CLI does not read as components, so the integration check reports no issues. The public components and imports are unchanged.
+- A line break typed with Shift+Enter at the end of a paragraph, list item or quote no longer saves as a backslash that comes back as a literal `\` the next time the Markdown loads. Markdown has no line break at the end of a block, so the editor leaves it out of the Markdown; a line break inside a block still saves and loads as a line break.
+
+#### Other Changes
+
+- Internal: the toolbar's link popover, its URL form, the link address rule, and the toolbar's inline-format helpers move into modules RichText shares internally. Apps see no change.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @josephfarina
+
+---
+
 # 0.7.16
 
 #### New Features

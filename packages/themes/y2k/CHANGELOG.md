@@ -1,5 +1,19 @@
 # @xds/theme-y2k
 
+# 0.7.17
+
+#### Fixes
+
+- Skeleton placeholders show on the light page: `--color-skeleton` takes a darker neutral stop, so the placeholder reads at its pulse peak against the page and every surface.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @josephfarina
+
+---
+
 # 0.7.16
 
 #### Documentation

@@ -1,5 +1,144 @@
 # @xds/core
 
+# 0.7.17
+
+#### Experimental APIs
+
+- Adds two English catalog messages for the Lab media player's visible time readouts (elapsed and total, and remaining time), so a locale can translate them.
+
+#### New Features
+
+- AlertDialog: under a finger the alert appears and leaves the way an iOS alert does. It scales down into place from 1.2 while it and the dimming fade in, on the theme's entrance timing. When it closes it fades out with the dimming, on the theme's exit timing, and a close or a reopen midway turns back from where it is. While it appears a touch does nothing, and keys and assistive technology still act. While it leaves nothing reaches it, but a toast its action raised stays live and its words are read. With reduced motion it only cross-fades. On a phone (a compact window under a coarse pointer) the width with no `width` prop goes from 400 px to 320 px in every theme; a `width` you pass still wins. With a mouse nothing changes.
+- Under a finger, a full swipe on an `Item` or `ListItem` swipe-action row works like a UIKit list row's, the same on every touch device. Past the open width the entries ride the row and the outermost action stretches out to the edge. Dragged on past the confirm point, judged on the finger as UIKit does, the row runs ahead and the outermost action covers its place. Letting go there fires it at any speed; backing out undoes that and closes the row. On a side with two or more actions, a full swipe confirms only from the open row. A disabled outermost action never confirms.
+- A trackpad's two-finger swipe moves an `Item` or `ListItem` swipe-action row with the fingers from its first event past 8 px and, when they lift, settles it on the nearest stop at their speed, without stopping first. Within one swipe an open row only closes, and a long fast swipe fires the outermost action where a full swipe may. A mouse wheel's notches never swipe a row.
+- Under a finger, swipe actions on `Item` and `ListItem` move like a UIKit list row, the same on every touch device. The row stays under the finger, one for one, until the release, and settles on UIKit's own spring from where it is and as fast as it was moving, so a release no longer stops dead and restarts. The settle plays on the compositor, so a busy page cannot hold it back. A flick opens the row or closes it, by its direction. Under Reduce Motion nothing a release starts travels or springs: the row cross-fades to where it lands, as `design:reduced-motion` asks. A finger that lands on a moving row catches it instead of being ignored until the row stops.
+- Pagination: page links. Pass `getPageHref` and the page number, previous, next, first and last controls render as real links to each page's URL, so a page opens in a new tab, its address can be copied, and it works before scripts load. `getPageHref(page, pageSize)` returns the URL in the shape your app uses: a query parameter, a path segment, an offset or a cursor. `as` sets the link component, as on Button, and `LinkProvider` applies too. `onChange` still runs when a link is activated: use it for state or analytics, and do not navigate in it, because the link navigates. The dots, the page box and the page-size selector are not links and work as before. A control that stops being a link while it holds focus, at the first or last page or while the pagination is disabled, keeps that focus. A Pagination without `getPageHref` is unchanged.
+- Swipe actions on `Item` and `ListItem` come from one prop, `swipe`, whose value `createSwipe` makes, from `@astryxdesign/core/Swipe` or the package root: `swipe={createSwipe({leading, trailing, swipeBehavior})}`. Each action has an `id`, and its `onActivate` receives `{id, itemKey}`: the action's `id` and the `ListItem`'s `itemKey`. So one definition at module scope serves every row; one whose handlers need component state goes in `useMemo`. The swipe's type carries the ids, so an id it does not have fails to compile. A new value with the same ids keeps an open row open, and one with other ids closes it. The swipe's code comes with `createSwipe`, so a row given `swipe` is swipeable at its first paint, and an app that never imports it ships none of it. The `swipeActions` and `swipeBehavior` props and the `ItemSwipeAction` and `ItemSwipeActions` types are deprecated (DEP-0017) and are removed in the next minor release. `ItemSwipeActionVariant` and `ItemSwipeBehavior` stay, and the new API uses them. Until then the deprecated ones keep working, with the swipe behavior this release gives every row, and when `swipe` is set too, `swipe` wins. `astryx upgrade` rewrites static uses and gives each action an `id`.
+  Before:
+
+  ```tsx
+  <ListItem
+    label="Inbox"
+    swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}}
+    swipeBehavior="commit"
+  />
+  ```
+
+  After:
+
+  ```tsx
+  import {createSwipe} from '@astryxdesign/core/Swipe';
+
+  const inboxSwipe = createSwipe({
+    trailing: [
+      {
+        id: 'archive',
+        label: 'Archive',
+        onActivate: ({itemKey}) => archive(itemKey),
+      },
+    ],
+    swipeBehavior: 'commit',
+  });
+
+  <ListItem label="Inbox" itemKey={message.id} swipe={inboxSwipe} />;
+  ```
+
+- A table row that `useTableSelection` selects carries the `table-row` target's `selected` theme state, so a theme can style selected rows (`components: {'table-row': {selected: {…}}}`). The selection wash stays as it was; a theme recolors it by setting `--color-accent-muted` in that state.
+- A theme's component overrides can hold `@light` and `@dark` blocks: properties, pseudo-class overrides and pseudo-elements that apply only where the element's color mode is that mode, as `Theme` resolves it from its own `mode`, the system preference, or a `MediaTheme` surface. Inside media surfaces the nearest surface decides, for up to five surfaces of alternating modes nested one in another, so a light `MediaTheme` inside a dark one (a toast over a dark surface) takes only the light block. Where no enclosing mode matches, the block writes nothing, so every other rule applies there as it would without it, and it can be any value, not only a color. Themes without these blocks compile to the same CSS.
+
+#### Fixes
+
+- `Badge` is as wide as its label. A badge alone in a `Grid` cell or a `VStack` no longer stretches into a bar across the cell or the stack; in a crowded `HStack` it still shrinks and ends its label with an ellipsis.
+- A required `CheckboxInput` is no longer announced as invalid before anyone touches it. Chromium reported an unchecked required checkbox as invalid from its first render, so a screen reader said "invalid" on every required checkbox of a fresh form. The invalid state now follows `status`, as on `Switch`, and native validation still blocks a form submitted with the box unchecked.
+- `CodeBlock`'s and `Timestamp`'s copy buttons no longer update after they unmount: a clipboard write that finishes once the control is gone sets no state, starts no timer and announces nothing.
+- Copy works inside a frame that does not allow the async Clipboard API, such as a sandboxed artifact viewer or an embed. There `useClipboard`, and so the copy buttons of `CodeBlock`, `Timestamp` and Markdown heading links, copy with the browser's copy command inside the reader's click or key press, also in an open modal dialog or a hover card, without moving focus. Before, those buttons copied nothing there (`CodeBlock` and `Timestamp` showed a failed copy), and the browser logged a permissions-policy violation for each press. Where the async Clipboard API is allowed, nothing changes.
+- CodeBlock's run-time highlight stylesheet now sits in the `astryx-base` cascade layer, like the rest of Core's CSS. A theme's syntax colours and an app's own `--color-syntax-*` or `::highlight()` rules now win over CodeBlock's defaults in any load order, also for a CodeBlock in a portal under a root Theme.
+- `CodeBlock` scrolls a long line, or code past `maxHeight`, before script runs and in a page that runs none, such as a file made with `astryx experimental render`. Until now the code was cut off at the edge of the block until script measured it, and in a static page it stayed cut off. The code viewport still becomes a Tab stop only while its code overflows.
+- `defineTheme` names a token map that holds itself ("tokens refers to itself: the value of self holds an object it sits in …") instead of recursing until the call stack overflows, when the theme extends one with adaptations. Themes whose tokens hold no such loop build as before.
+- `defineTheme({extends})` refuses a base written as a plain theme object (a name and tokens, not built by `defineTheme()`) with the named "`extends` must be a theme from defineTheme()" error. Before, it merged the object's raw values, so a light/dark pair was written as `#fff,#000`. A base from `defineTheme()` or a built theme module merges as before.
+- The active option of a select, multi-select and typeahead list (the one the keyboard or pointer is on, named by `aria-activedescendant`) carries a `highlighted` theme state on its row target, as Item and CommandPaletteItem rows do: `selector-option-row`, `multi-selector-option`, and the typeahead's option row, which gets its own target, `typeahead-option` (with `size` and `selected`). A theme can style the highlighted option without a structural selector.
+- The radio's circle (RadioList, the menu radio, and every host of the shared radio indicator), its dot and its pressed layer are drawn at a 50% radius instead of the `--radius-full` pill token, so a theme that squares its pills keeps round radios. A theme that wants square radios overrides the radio component.
+- `Theme`'s runtime style injection hint no longer names a package or an import made up from the theme's name (`@astryxdesign/theme-canvas-editor/built`, `canvas-editorTheme`). It gives the build step, `astryx theme build` on the file that defines the theme with `--detail full`, whose printed import lines bring in the built .js and .css; a theme from an Astryx theme package ships both built.
+- A theme value left `undefined` in a part's style block, a color-mode block (`@light`, `@dark`), a pseudo-class block, an `onDark`/`onLight` surface or an adaptation rule's parts is now not set, and so is a component, style key or color-mode block left `undefined`, or one whose every value is, as a page token left `undefined` already was: the stylesheet writes nothing for it. In a style key or a color-mode block, the value the theme inherits for that property stays. A restated pseudo-class block still replaces the inherited one whole, even when every value in it is `undefined`: it stays, empty, and its component counts as themed. Before, the stylesheet held the text `undefined` (`padding: undefined;`), which the browser drops, and the inherited value was lost too; in an adaptation rule, `defineTheme` refused the theme. A `null` value keeps its meaning: it replaces an inherited value and is written as it is, and an adaptation rule still refuses it.
+- `defineTheme` treats a local token left `undefined` (in the theme or in an adaptation rule's `localTokens`) as not set, as a token, or a value in a part, surface or adaptation rule, left `undefined` already is: the theme builds and the stylesheet writes nothing for it. Before, it was refused as no CSS string, so a conditional spread or an unset environment value failed the theme. An adaptation rule that writes a local token name no theme in the lineage declares still fails with its name. `localTokens: undefined` at the root is refused by name ("localTokens is undefined: omit the field or pass an object"), as `extends: undefined` is: a root `localTokens` or `extends` left undefined is almost always a failed import.
+- Toast: before the surface is measured (a server render, a static page), the Toast's text side comes from the theme's own resolved inverted surface color, by the same rule the measurement uses, instead of assuming the surface is dark in light mode. This applies when the inverted surface is an opaque hex, `rgb()`/`rgba()`, `black` or `white` value and the on-dark and on-light colors are hex, `rgb()`/`rgba()`, `black` or `white` values; any other value (such as a translucent surface, `oklch()`, `hsl()` or another named color) still starts from the color mode until the measurement runs. A theme whose inverted surface is a light hex or `rgb()` color in light mode no longer renders a Toast with white text on a white bar until the page runs its script.
+- A `DropdownMenu` whose layer opens after its trigger becomes a valid anchor now takes focus as it opens, and fires `onClick` once. A menu in a native `<dialog>` that the page displays closed opens one commit after the press. The menu read that open as refused, so focus stayed on the trigger and `onClick` never fired.
+- A DropdownMenu sub-menu whose `label` is not a string, such as emphasized text or a translated message component, is now named correctly: a drilled-in view is named by the label alone, not by the whole row with its description; a view nested in it names its Back row "Back to" that label; and in a bottom-sheet data menu the sheet takes that label's text as its name while its level shows. Sub-menus with string labels do not change.
+- A layer's exit copy, which a touch close plays on, keeps the padding, border and colors of the element it copies. Before, the browser's popover style padded, bordered and painted it, so a surface with no padding of its own drew its content inset during the close.
+- Malformed component icon slot values no longer throw while formatting diagnostics. Invalid fields keep the component fallback without dropping valid sibling fields, and production skips diagnostic formatting.
+- MultiSelector's caller-rendered trigger exposes its disabled state and blocks caller activation handlers, including when read-only or disabled by InputGroup, while remaining focusable.
+- An `Item` with its own `onClick` or `href` no longer rings the whole row when a control in its `startContent` or `endContent` takes focus, and a `Token`'s remove button no longer rings the whole token: each of those tab stops shows one focus ring. Rows that delegate to a nested control, and reorderable rows with a handle, keep their ring as before.
+- Tab moves through a `Popover` or a `DropdownMenu` that opens inside a native `<dialog>` that the page displays closed. Tab and Shift+Tab wrap at the layer's edges, and a `DropdownMenu`'s header and footer are Tab stops again. The focus trap counted every control in a closed dialog as hidden, so it found no Tab stops and held focus in place.
+  A closed dialog that the page displays has a box, so its controls are Tab stops. A closed dialog with `display: none` has no box, and its controls stay out of the Tab cycle.
+- An open swipe-action row on `Item` and `ListItem` closes on a touch tap on its own content, as a UIKit list row does, and that tap no longer activates the row or paints its press. It also closes when the list or the page scrolls, including a scroll that starts on the row itself, unless focus is inside its open panel (the browser may be scrolling a focused entry into view), and it counts as open from the release that opens it, before its spring comes to rest.
+- Swipe actions on `Item` and `ListItem` run on the gesture system. A row claims a sideways touch at 8 px, before a browser commits to scrolling it. From the claim the row follows the finger one for one, so the part under the finger stays under it. A pen now swipes the row as a finger does. A second finger that lands before the claim leaves the touch to the browser's pinch; once the row has claimed its finger, a second finger no longer cancels the swipe. The click a browser synthesizes after a swipe is cancelled at its source instead of being swallowed by a 400 ms timer.
+- A released input hold no longer changes its layer. A closing BottomSheet's hold reads focus a moment after focus leaves the sheet; if the hold was released in between, that late read could leave the sheet inert and hidden from assistive technology. No browser flow is known to hit this today.
+- `Popover`, `Tooltip`, `HoverCard` and the other anchored layers open again when their trigger sits in a native `<dialog>` that the page displays closed. Such a dialog never enters the top layer, so its trigger is a valid anchor. The layer waited for the dialog to open, and it never opened.
+  A layer still waits for a `Dialog` that displays its element before it calls `showModal()`. `Dialog`, `Drawer`, `Lightbox` and `MobileNav` open their dialog in the Effects of the commit that displays it. A trigger with a box in a closed dialog now waits for one more commit. React runs those Effects before it renders that commit, so a dialog that is still closed then stays closed, and the layer opens at once. For a press, that commit runs before the press's task ends, so the layer and its initial focus land within the press. A closed dialog with `display: none` gives its trigger no box, and the layer still waits for it with no time limit.
+
+  A second `show()` while a layer waits for the same trigger keeps that wait. It no longer restarts it.
+
+- Lightbox: an open caption that ends in a block image wider than the room beside "less" keeps its text lines when the window widens, instead of growing by a line every frame. "less" takes the line below the image. (#11740)
+- In block and inline layout, a Link whose label has no break opportunity, such as a bare URL from `useLinkify`, now wraps inside its line instead of running past it and making the page scroll sideways. The Link stops at its container and its label may shrink, so its text wraps. In a flex row, a Link whose label is wider than the row is now capped at the row's width and wraps. A Link in a line wide enough for its label looks the same. A content-sized grid or table column still grows to the label's longest word.
+- MobileNav with `side="auto"` opens from the opener's inline edge in right-to-left layouts. When the opener holds focus, that is used. When nothing is focused (such as the first open after a page load), the opener is found through its `aria-controls`, which AppShell's `MobileNavToggle` sets. A custom opener without `aria-controls` that never takes focus still opens from `end`.
+- Icons, `useIcon`, and component icon slots use the nearest Theme's object, so registering or nesting another theme with the same name does not replace their artwork. Icons outside a provider keep the registered root-theme fallback.
+- `usePopover` keeps its focus-return target when `show()` runs again after initial focus has moved inside the popover, so a close returns focus to the element that opened it instead of losing it.
+- A press no longer scales a trigger whose own layer is open: a Button that opens a menu or a Popover, and a ghost or secondary Selector, MultiSelector or ComplexSelector. Under a mouse or a finger, the open layer stays where an unpressed open puts it. A disclosure button without a popup keeps its press.
+- Selector and MultiSelector keep their selection surfaces closed when mounted disabled with `isDefaultOpen`, including when read-only or disabled by an InputGroup.
+- reset.css gives the page the `--font-family-body` font, so text in the page body outside the Theme wrapper, such as a tooltip or a hidden span a chart uses to measure labels, no longer falls back to the browser's serif font. A page where no stylesheet defines the token keeps its current font.
+- A horizontal `Slider` with labelled `marks` now keeps room for the labels: before, the labels hung below the slider's box and the content after it overlapped them; now that content starts below the labels. The labels take the supporting text's line height, so the room no longer depends on the surrounding text. Sliders without mark labels, and vertical sliders, keep their size.
+- In a Stepper's compact horizontal layout, a disabled Step now tells screen-reader users it is unavailable, with a hidden word after its label, as the expanded layout's disabled button already does. The new translated string is `@astryx.step.status.unavailable`; locales without it fall back to English.
+- With `useTableColumnsVirtualization`, a horizontal scroll that changes which columns are mounted now renders only the cells of the columns that enter. Before, every mounted cell of every mounted row ran its plugin transforms and rendered again. Each body cell is now its own memoized element, so cells whose inputs stay the same skip both. `useTableStickyColumns` now returns a new plugin object when its pinned keys change, so changing `startKeys` or `endKeys` at runtime pins and unpins body cells together with their header; before, body rows kept their old pinning until they rendered for another reason.
+- In a Table with sortable and resizable columns, a sortable column's resize line now sits on the column divider, like every other column's, in left-to-right and right-to-left layouts. Before, it sat one cell padding inside the column. A sortable header's right-click menu still opens at the pointer.
+- A theme that styles `link` keeps Core's hover tint on a link's color: the rules that hold each link `color` prop's color now hold, on hover, Core's tint of that color, so a link setting of any kind (a color for one mode, or any theme link color) no longer removes the hover tint in that mode. A theme's own hover color for a link color key still wins over the tint.
+- Tokenizer shows the caret in a focused, empty input when the field has no width
+- Tooltip paints the theme's inverted surface (`--color-background-inverted`), the surface Toast paints, instead of the primary text color, so a theme that sets its inverted surface styles tooltips and toasts alike. Its text stays the page surface color. To keep the previous look, a theme can set the `tooltip` target's `backgroundColor` to `var(--color-text-primary)`.
+- On a phone, TopNav's compact bar keeps a plain-text heading on one line and ends it in an ellipsis, so a long title no longer wraps and makes the bar taller.
+- Typeahead and Tokenizer: when a search matches more items than `maxMenuItems` shows, the result count announced to screen readers names every match, not only the rows shown.
+- The useHotkeys docs no longer recommend `shift+/` for a help overlay. The hook compares the final key against `event.key`, and Shift+/ produces `?` on US layouts, so a `shift+/` registration never fires there. The docs now use `?` and say to register a punctuation key that shift changes as the character it produces. No behavior changes.
+
+#### Performance
+
+- A pointer `ContextMenu` (the default presentation, and every Table cell menu) no longer carries the touch sheet's action list: `ContextMenu` now shares `DropdownMenu`'s sheet module, which loads the sheet only for the sheet presentation. A page with a Table that has cell actions, or with a `ContextMenu`, loads about 57 KB less JavaScript before first paint (about 20 KB gzip). A menu with `presentation="bottom-sheet"`, or `adaptive` on a compact touch screen, still loads its sheet after mount and opens it as before.
+- `OverflowList`s that mount or change in one render now measure together after it, before the frame paints. When other components write to the page in the same render, each list used to read its size after those writes and force its own layout; now all lists read their sizes first and the page lays out once for them. The first painted frame is the same. `useOverflow` results and `onOverflowChange` arrive one microtask after the render instead of inside it. A test that checks them right after a synchronous render awaits that microtask first, for example with `await act(async () => {})`. With fake timers that also fake `queueMicrotask`, as Jest's modern fake timers do by default, flush the faked microtasks too, for example with `jest.runAllTicks()` or `vi.runAllTicks()`.
+- A page whose components bring no tooltip code, such as one that renders only `Text` and `Heading`, loads about 9.6 KB less JavaScript before first paint (about 3.4 KB gzip). The truncation tooltip's tap handling no longer shares a file with the touch trigger code that its lazily loaded tooltip uses, so that code stays with the tooltip. Tapping a truncated text opens its tooltip as before.
+
+#### Documentation
+
+- The typography docs say what Core builds, in one rule: a heading with no `family` takes the body's whole font list; with its own `family`, only its own `fallbacks`; `fallbacks` with no `family` build nothing. `TypographyConfig`, its `heading` field, `defineTheme`'s `typography`, the `fonts-and-assets` doc page and the theme template say it; the `font-setup` page says a heading with no family uses the body's and points to `fonts-and-assets` for the rest.
+- Hook docs for `useChatDictation`, so `astryx hook useChatDictation` and `astryx search` return it, and a `useChatDictation — Voice input` example block: a start and stop control that stays off when the browser has no speech recognition.
+- Hook docs for `useChatPasteAsToken`, so `astryx hook useChatPasteAsToken` and `astryx search` return it, and a `useChatPasteAsToken — Long paste` example block: a composer that uses a threshold of 40 and a Pasted note label.
+- Hook docs for `useSpeechRecognition`, so `astryx hook useSpeechRecognition` and `astryx search` return it, and a `useSpeechRecognition — Transcript` example block: a headless control that shows whether the browser can listen and the interim transcript.
+- Hook docs for `useSyntaxTheme`, so `astryx hook useSyntaxTheme` and `astryx search` return it, and a `useSyntaxTheme — Keyword color` example block: the word const painted with the keyword color of the GitHub Light syntax theme.
+- Markdown's anatomy now says when its Image part shows alternative text: for an empty image URL, while an unsafe URL renders as source text. Its guidance adds two don'ts: plugins cannot cross a Server Component boundary, and Markdown does not sanitize renderer output. Prop docs now describe `density`, `isStreaming`, `onLinkClick`, and `components`; `inlinePlugins` keeps its own description instead of lending it to `plugins`; `contentWidth` names its 680 default; and the `contentAlign="start"` description now says inline start instead of left. The `onLinkClick` docs say that a custom `link` renderer does not receive the handler.
+- MetadataListItem's prop docs now list `xstyle`, `className`, `style`, `ref`, and `data-testid`, and say which element each one reaches: the label `dt` when the item is side by side, or the wrapper when it is stacked. The `data-testid` docs say that a side-by-side item puts `-label` and `-value` on its two cells.
+- MobileNavToggle's docs now say every case where it renders nothing: above the mobile breakpoint, without an AppShell mobile context (AppShell's, or an `AppShellMobileContext` you provide), and when AppShell has no mobile navigation (no side or top nav, `mobileNav={false}`, or a `mobileNav` node).
+- MoreMenu's prop docs now list `isMenuOpen` and say that without `size` the trigger takes the surrounding size (from a SizeProvider, ButtonGroup, or Toolbar), else `md`. The Chinese docs gain `isMenuOpen` and `onOpenChange` and the note on where host `data-*` attributes land.
+- The npm descriptions of `@astryxdesign/core` and `@astryxdesign/cli` name Astryx, so a search for "astryx" on npm lists them with the other Astryx packages.
+
+#### Other Changes
+
+- Internal: the UIKit values of a swipe-action row (the swipe threshold, the springs a confirmed row runs ahead on and a released row settles with, the touch claim distance the web needs) and the release rule that picks closed, open or fire (a fast release goes the way it moves, a slow one by where it is, and only a confirmed full swipe fires), checked against releases measured on UIKit. Not exported from the package entry point.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @ahmed-technyx
+- @cixzhang
+- @duytbp
+- @humbertovirtudes
+- @josephfarina
+- @korkt-kim
+- @mahmed74
+- @matthewfuaux
+- @mohamedhassank20
+- @nynexman4464
+- @popsiclelmlm
+- @vjeux
+
+---
+
 # 0.7.16
 
 #### Experimental APIs
