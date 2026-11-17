@@ -58,6 +58,13 @@ import {isGlobalCopy} from '../release/choose.mjs';
 import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {resolveProviders} from '../integrations/provider-resolution.mjs';
 import {
+  recordBaseCandidates,
+  resolveBase,
+  splitForBase,
+} from '../bases/resolve.mjs';
+import {requestedBase} from '../bases/state.mjs';
+import {coreBase} from '../bases/core.mjs';
+import {
   setProject as setDebugProject,
   setEventHandler as setDebugEventHandler,
   setIntegrationEventHandlers as setDebugIntegrationEventHandlers,
@@ -114,6 +121,7 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 /** Issues are plain records, kept as they are. */
 const ISSUES_CODEC = {
@@ -402,6 +410,12 @@ function inheritsIntegrationDebug(projectDir) {
 const PROVIDER_LEDGERS = new WeakMap();
 
 /**
+ * The base each project load resolved, and the integrations it left out.
+ * @type {WeakMap<Project, {resolution: import('../bases/resolve.mjs').BaseResolution, leftOut: Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>}>}
+ */
+const BASES = new WeakMap();
+
+/**
  * The provider ledger a Project resolved at load: one outcome for every
  * package directory configured, autolinked, or authored. Internal: upgrade
  * resolves on top of it, and tests account for every candidate with it.
@@ -603,6 +617,38 @@ export class Project {
         : []),
     ]);
     loadedIntegrations = resolution.integrations;
+    // The run reads one base. Only the integrations that are that base or
+    // build on it contribute; the rest are kept aside for the commands that
+    // list them.
+    // A package that failed to load is no base, but `--base` naming it says
+    // why: the ledger keeps its load error.
+    // Each is named both as the project reached it and by its own package
+    // name, which differ for an npm alias.
+    const failedToLoad = [...resolution.ledger.values()].flatMap(entry => {
+      if (entry.outcome !== 'load-failed' || entry.error == null) return [];
+      const error = entry.error;
+      const names = new Set([
+        entry.candidate.spec ?? entry.label,
+        readPackageJson(entry.key)?.name,
+      ]);
+      return [...names].flatMap(name =>
+        typeof name === 'string' ? [{name, error}] : [],
+      );
+    });
+    recordBaseCandidates(cwd, loadedIntegrations, failedToLoad);
+    const base = resolveBase({
+      cwd,
+      integrations: loadedIntegrations,
+      requested: requestedBase(),
+      failedToLoad,
+    });
+    /** @type {Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>} */
+    let leftOut = [];
+    if (base.ok) {
+      const split = splitForBase(loadedIntegrations, base.base);
+      loadedIntegrations = split.kept;
+      leftOut = split.leftOut;
+    }
     // A hosted run returns each package it resolved (cli-surface INV30).
     recordResolvedIntegrations(loadedIntegrations);
     // The picker (getCliInvocation) is synchronous, so the commands these
@@ -650,6 +696,7 @@ export class Project {
     });
     PROVIDER_LEDGERS.set(project, resolution.ledger);
     LAST_LOADED.set(path.resolve(cwd), {project, run: hostedRun()});
+    BASES.set(project, {resolution: base, leftOut});
     return project;
   }
 
@@ -692,6 +739,23 @@ export class Project {
    */
   get loadedIntegrations() {
     return this.#loadedIntegrations;
+  }
+
+  /**
+   * The base this project's run reads, or the reason it does not resolve.
+   * @returns {import('../bases/resolve.mjs').BaseResolution}
+   */
+  get base() {
+    return BASES.get(this)?.resolution ?? {ok: true, base: coreBase()};
+  }
+
+  /**
+   * Installed integrations that do not build on the run's base, with the
+   * bases each builds on. They contribute nothing to the run.
+   * @returns {Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>}
+   */
+  get integrationsLeftOut() {
+    return BASES.get(this)?.leftOut ?? [];
   }
 
   /** @returns {string} */
@@ -1274,7 +1338,10 @@ export class Project {
    */
   async codemods(fromVersion, toVersion) {
     return this.#memo(`codemods:${fromVersion}..${toVersion}`, async () => {
-      const core = await getTransformsBetween(fromVersion, toVersion);
+      // Core's codemods ship in the CLI for Core: none in a run on another base.
+      const core = currentNonCoreBase()
+        ? []
+        : await getTransformsBetween(fromVersion, toVersion);
 
       // Discover integration codemods per integration so a single broken
       // integration is skipped (issue collected) without losing the others.

@@ -58,6 +58,19 @@ export async function iconSetIcons({cwd, set}) {
  */
 export async function iconSearch(query, {cwd, set, limit}) {
   const {sets, withdrawn} = await loadIconSets(cwd);
+  return rankIconSets(sets, withdrawn, query, {set, limit});
+}
+
+/**
+ * Rank the icons of `sets` against a query: the one ranking behind both
+ * `icon()` and `rankIconIndex()`.
+ * @param {Parameters<typeof rankIcons>[0]} sets in tie order
+ * @param {Array<{name: string, package: string, reason: string}>} withdrawn
+ * @param {string} query
+ * @param {{set?: string, limit: number}} options
+ * @returns {import('../icon.type.mjs').IconSearchResponse}
+ */
+export function rankIconSets(sets, withdrawn, query, {set, limit}) {
   let searched = sets;
   if (set != null) {
     searched = setsNamed(sets, set);

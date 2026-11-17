@@ -32,7 +32,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds sheet.png, every component, or with --section that section's sheet-<section>.png in its place; the open states are taken with a section too), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file. Taking pictures changes nothing in the app, except that show first brings the app copy (src/themes/<theme>/) and an in-app preview up to date after a hand edit to <theme>.theme.ts",
+        "Also take PNG pictures of the previews (light and dark): preview.png, the sample page, and sheet-overlays.png, each control at rest, hovered, focused and pressed at its top, then every menu, tooltip, popover and list drawn open (from sheet-overlays.html, which it writes too; a file of yours by that name is left alone and the picture not taken) (show adds a picture of each family of components the theme sets a part of with --on, or of the buttons when it sets none: sheet-<family>.png, from the sheet-<family>.html it writes beside the full sheet; the families are actions, inputs, selection, navigation, feedback, data and containers. With --section, that section's picture is taken in their place, so --section <family> --png pictures any other family. sheet.html, every component, is written but not pictured; the open states are taken with a section too), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet-overlays.png) is never written over: no picture is taken, and the result names the file. Taking pictures changes nothing in the app, except that show first brings the app copy (src/themes/<theme>/) and an in-app preview up to date after a hand edit to <theme>.theme.ts",
     },
   ],
   examples: [
@@ -46,6 +46,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.compile'],
   notes: [
     {
       type: 'prose',

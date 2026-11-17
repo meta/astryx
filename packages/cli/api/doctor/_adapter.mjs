@@ -10,9 +10,11 @@ import {
   stateLockHolder,
 } from '../../foundation/release/global-state.mjs';
 import {
+  addVerbFor,
   alignCliAndCore,
   cliInstallAdvice,
   installFolder,
+  listedPackageInstall,
   projectAddCommand,
   globalBehind,
   globalUpgradeCommand,
@@ -51,7 +53,7 @@ import {
   rendersElement,
 } from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
-import {satisfiesRange} from '../../foundation/env/semver.mjs';
+import {isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
   persistedGather,
@@ -93,6 +95,7 @@ export {
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
+export {fontServiceFamilies} from '../../foundation/fonts/font-stylesheet.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
@@ -697,14 +700,17 @@ export function projectHasOwnCli(cwd) {
  * The command that adds the CLI at `version` with the project's package
  * manager, and the Core it matches: from a folder whose package.json declares
  * no Astryx package, in the Astryx project above at that project's Core; null
- * when there is none (see `cliInstallAdvice`).
+ * when there is none (see `cliInstallAdvice`). For a project that declares
+ * the CLI already, the command installs its dependencies (`declared`).
  * @param {string} cwd
  * @param {string} version
- * @returns {{command: string, core: string} | null}
+ * @returns {{command: string, core: string, declared: boolean} | null}
  */
 export function addCliCommandFor(cwd, version) {
   const advice = cliInstallAdvice({cwd, core: version});
-  return advice?.command ? {command: advice.command, core: advice.core} : null;
+  return advice?.command
+    ? {command: advice.command, core: advice.core, declared: advice.declared}
+    : null;
 }
 
 /**
@@ -716,6 +722,31 @@ export function addCliCommandFor(cwd, version) {
  */
 export function installCommandFor(cwd) {
   return projectAddCommand(cwd);
+}
+
+/**
+ * The command that installs the project's dependencies, when the project
+ * `cwd` belongs to lists `name`, so a `name` that is not installed comes from
+ * installing them; null otherwise (see `listedPackageInstall`).
+ * @param {string} cwd
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function dependencyInstallFor(cwd, name) {
+  return listedPackageInstall(cwd, name);
+}
+
+/**
+ * The command that installs the Core a theme's peer range accepts, with the
+ * project's package manager; one version is saved exactly in a project that
+ * pins its Core (see `addVerbFor`), and a range is quoted for the shell.
+ * @param {string} projectDir
+ * @param {string} range
+ * @returns {string}
+ */
+export function coreAddCommand(projectDir, range) {
+  const spec = `@astryxdesign/core@${range}`;
+  return `${addVerbFor(projectDir, range)} ${isValidSemver(range) ? spec : `'${spec}'`}`;
 }
 
 /**
@@ -924,4 +955,31 @@ export function builtIntegrationPackages(target, cwd) {
     }
     if (path.dirname(at) === at) return [];
   }
+}
+
+/**
+ * The install line for the font families a known package loads (an open
+ * font the editor's table names), in the project's package manager, and
+ * whether it loads every family given. A family no known package loads (a
+ * self-hosted face) gets none: its package name would be a guess.
+ * @param {string} projectDir
+ * @param {string[]} families
+ * @returns {Promise<{line: string | null, coversAll: boolean}>}
+ */
+export async function fontPackagesInstallLine(projectDir, families) {
+  const {fontsourceSuggestion} = await import('../theme-edit/_settings.mjs');
+  const {installLine} = await import('../theme-edit/_project.mjs');
+  const known = families.map(family => {
+    const s = fontsourceSuggestion(family);
+    return s?.known ? s.pkg : null;
+  });
+  const packages = [
+    ...new Set(
+      known.filter(/** @returns {pkg is string} */ pkg => Boolean(pkg)),
+    ),
+  ];
+  return {
+    line: packages.length ? installLine(projectDir, packages) : null,
+    coversAll: known.every(Boolean),
+  };
 }

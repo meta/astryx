@@ -16,6 +16,11 @@
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
 import {runParses} from './stray-option.mjs';
+import {
+  helpBase,
+  optionAvailable,
+  servedSubcommands,
+} from './base-gate.mjs';
 
 /**
  * The part of a Commander option this module reads.
@@ -33,12 +38,30 @@ import {runParses} from './stray-option.mjs';
  */
 
 /**
- * The commands below `cmd` that people and agents see, `help` aside.
+ * The commands below `cmd` that people and agents see, `help` aside: the
+ * run's base serves each one.
  * @param {CommandLike} cmd
  * @returns {CommandLike[]}
  */
 function visible(cmd) {
-  return (cmd.commands ?? []).filter(c => !c._hidden && c.name() !== 'help');
+  return servedSubcommands(cmd);
+}
+
+/**
+ * Whether `cmd` offers the long option `long` to people and agents: listed,
+ * and served by the run's base.
+ * @param {CommandLike} cmd
+ * @param {string} long
+ * @returns {boolean}
+ */
+function offers(cmd, long) {
+  const base = helpBase();
+  return (cmd.options ?? []).some(
+    o =>
+      o.long === long &&
+      !o.hidden &&
+      optionAvailable(/** @type {any} */ (cmd), /** @type {any} */ (o), base),
+  );
 }
 
 /**
@@ -203,9 +226,7 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   }
 
   const option = `--${word.toLowerCase()}`;
-  const taking = top.filter(c =>
-    (c.options ?? []).some(o => o.long === option && !o.hidden),
-  );
+  const taking = top.filter(c => offers(c, option));
   if (taking.length > 0) {
     const [object, ...after] = rest;
     const meant =
@@ -248,7 +269,7 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   const plural = rest.length === 0 && spellings(word).length > 1;
   /** @param {{words: string[], cmd: CommandLike}} c */
   const listing = c =>
-    plural && (c.cmd.options ?? []).some(o => o.long === '--list')
+    plural && offers(c.cmd, '--list')
       ? ['--list']
       : [];
   // A command that needs words the run did not give is named by its help

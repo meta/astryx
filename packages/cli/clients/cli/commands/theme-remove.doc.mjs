@@ -12,11 +12,12 @@ export const doc = {
   description:
     'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme removes the module file and prints the lines the app root must drop (with the provider an installed package names as taking the theme, the props passed to it, keeping the provider); a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
   fn: 'themeRemove',
-  args: [{name: 'slug', param: 'slug', required: true}],
+  args: [{name: 'slug', param: 'slug', required: true, names: 'theme'}],
   examples: [
     {label: 'Remove an added theme', cli: 'astryx theme remove ocean'},
   ],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {
       code: 0,

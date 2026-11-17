@@ -16,7 +16,24 @@
  *           the same values.
  */
 
-import {cssTree} from '../../../foundation/runtime/css-tree.mjs';
+import {
+  cssTree,
+  keptCssTreeAnswer,
+} from '../../../foundation/runtime/css-tree.mjs';
+
+/**
+ * A custom property's name as CSS reads it: two dashes, then name
+ * characters (letters, digits, `_`, `-`, and any letter beyond ASCII, as in
+ * `--café`). The one pattern every var() reader here and in the editor
+ * builds on.
+ */
+export const CUSTOM_PROPERTY = String.raw`--(?:[\w-]|[^\x00-\x7F])+`;
+
+/** A var() that names a custom property, and the comma of its fallback. */
+const VAR_REF = new RegExp(
+  String.raw`var\(\s*(${CUSTOM_PROPERTY})\s*(,)?`,
+  'gi',
+);
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isBlock = value =>
@@ -163,18 +180,55 @@ function tokenValueProblem(key, value, reads) {
     const number = halves.findIndex(h => typeof h === 'number');
     if (number !== -1)
       return `${key} gives the number ${halves[number]} as its ${number === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
+    const length = halves.findIndex(h => isLength(String(h)));
+    if (length !== -1)
+      return `${key} gives a [light, dark] pair of sizes (${halves[length]}), so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give it one value for both modes`;
+    // Each half is read as the text it is written in.
+    for (const [i, h] of halves.entries()) {
+      const why = unsetVarRead(key, String(h), reads);
+      if (why)
+        return `${key} gives a ${i === 0 ? 'light' : 'dark'} half that reads var(${why}), which no token sets, so the build writes ${shown}, and the browser drops the whole value, in both modes: read a token, or give a fallback (var(${why}, <value>))`;
+    }
     return null;
   }
   const bad = nonText(key, value);
   if (bad) return bad;
   if (boxed(value)) value = /** @type {any} */ (value).valueOf();
   if (typeof value !== 'string') return null;
-  for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/gi)) {
-    if (comma || name === key) continue;
-    if (reads && !reads(name))
-      return `${key} reads var(${name}), which no token sets, so it has no value and the browser drops what reads it: read a token, or give a fallback (var(${name}, <value>))`;
-  }
+  const name = unsetVarRead(key, value, reads);
+  return name
+    ? `${key} reads var(${name}), which no token sets, so it has no value and the browser drops what reads it: read a token, or give a fallback (var(${name}, <value>))`
+    : null;
+}
+
+/**
+ * The first custom property a value's var()s read with no fallback that no
+ * token sets, or null.
+ * @param {string} key the token the value is given to
+ * @param {string} value
+ * @param {(name: string) => boolean} [reads] whether a var() of a name reads
+ *   a value
+ * @returns {string | null}
+ */
+function unsetVarRead(key, value, reads) {
+  if (!reads) return null;
+  for (const [, name, comma] of value.matchAll(VAR_REF))
+    if (!comma && name !== key && !reads(name)) return name;
   return null;
+}
+
+/**
+ * Whether a value is a size (a length or a percentage), which a [light,
+ * dark] pair cannot hold: light-dark() takes colors only.
+ * @param {string} value
+ */
+function isLength(value) {
+  try {
+    const ast = cssTree().parse(value, {context: 'value'});
+    return !cssTree().lexer.matchType('length-percentage', ast).error;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -182,12 +236,14 @@ function tokenValueProblem(key, value, reads) {
  * not start with exactly two dashes (`-color-accent`, `---color-border`),
  * or an empty value.
  * @param {string} key @param {unknown} value
+ * @param {(name: string) => boolean} isProperty whether a name is a CSS
+ *   property's
  */
-function tokenNameProblem(key, value) {
+function tokenNameProblem(key, value, isProperty) {
   if (value === undefined) return null;
   // A CSS property set on the theme's root (Core sets color-scheme on a
   // surface) styles it; any other name is no declaration a browser reads.
-  if (!key.startsWith('--') && key in cssTree().lexer.properties) return null;
+  if (!key.startsWith('--') && isProperty(key)) return null;
   if (!key.startsWith('--'))
     return `${key} is no token name: the build writes it as a declaration on the theme's root, which no browser reads as a token; a token name starts with two dashes, such as --${key.replace(/^-+/, '')}`;
   if (key.startsWith('---'))
@@ -200,9 +256,7 @@ function tokenNameProblem(key, value) {
 /** @param {unknown} value @returns {string[]} the custom properties a value's var()s read */
 const varNames = value =>
   (Array.isArray(value) ? value : [value]).flatMap(part =>
-    typeof part === 'string'
-      ? [...part.matchAll(/var\(\s*(--[\w-]+)/gi)].map(m => m[1])
-      : [],
+    typeof part === 'string' ? [...part.matchAll(VAR_REF)].map(m => m[1]) : [],
   );
 
 /**
@@ -263,9 +317,38 @@ export function cycleProblem(name, values) {
  *   through them, but they are Core's, not the theme's, so none is named
  * @returns {WrittenValueProblem[]}
  */
-export function writtenValueProblems(
+export function writtenValueProblems(theme, options = {}) {
+  // A token name that is no custom property's is a CSS property's or no
+  // token's, and only css-tree tells them apart. The names the check asks
+  // about are found first, and css-tree's answer for them is kept between
+  // runs (keptCssTreeAnswer).
+  /** @type {Set<string>} */
+  const asked = new Set();
+  const first = valueProblems(theme, options, name => {
+    asked.add(name);
+    return false;
+  });
+  if (asked.size === 0) return first;
+  const properties = new Set(
+    keptCssTreeAnswer('css-property-names', [...asked].sort(), names =>
+      names.filter(name => name in cssTree().lexer.properties),
+    ),
+  );
+  return valueProblems(theme, options, name => properties.has(name));
+}
+
+/**
+ * {@link writtenValueProblems}, with whether a token name is a CSS
+ * property's from `isProperty`.
+ * @param {Record<string, any>} theme
+ * @param {NonNullable<Parameters<typeof writtenValueProblems>[1]>} options
+ * @param {(name: string) => boolean} isProperty
+ * @returns {WrittenValueProblem[]}
+ */
+function valueProblems(
   theme,
-  {reads, rootTokens, surfaceDefaults} = {},
+  {reads, rootTokens, surfaceDefaults},
+  isProperty,
 ) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
@@ -371,7 +454,7 @@ export function writtenValueProblems(
             continue;
           }
           const why =
-            tokenNameProblem(k, v) ??
+            tokenNameProblem(k, v, isProperty) ??
             tokenValueProblem(k, v, reads) ??
             cycleProblem(k, onElement);
           if (why) out.push({path: [...at, map, k], why});

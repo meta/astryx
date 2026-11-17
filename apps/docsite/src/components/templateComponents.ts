@@ -78,6 +78,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
   'gallery-hero': () =>
     import('../../../../packages/cli/assets/templates/pages/gallery-hero/page'),
   ide: () => import('../../../../packages/cli/assets/templates/pages/ide/page'),
+  'incident-console': () =>
+    import('../../../../packages/cli/assets/templates/pages/incident-console/page'),
   'kanban-board': () =>
     import('../../../../packages/cli/assets/templates/pages/kanban-board/page'),
   library: () =>
@@ -98,8 +100,6 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
   'product-gallery': () =>
     import('../../../../packages/cli/assets/templates/pages/product-gallery/page'),
-  'run-console': () =>
-    import('../../../../packages/cli/assets/templates/pages/run-console/page'),
   settings: () =>
     import('../../../../packages/cli/assets/templates/pages/settings/page'),
   'settings-dialog': () =>

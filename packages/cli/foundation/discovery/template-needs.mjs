@@ -25,6 +25,7 @@ import {
 } from './template-source-tree.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {
   decidePackageManagerIn,
@@ -110,7 +111,8 @@ export function parsedSpecifiers(source) {
   const specs = [];
   /** @param {any} literal */
   const add = literal => {
-    if (literal?.type === 'StringLiteral') specs.push(literal.value);
+    const spec = writtenString(literal);
+    if (spec != null) specs.push(spec);
   };
   walk(file.program, (/** @type {any} */ node) => {
     if (

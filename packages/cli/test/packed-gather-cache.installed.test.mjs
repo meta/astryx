@@ -31,6 +31,7 @@ import {
   writeKept,
   docsTreeEntries,
   themeFactsEntries,
+  BUILD_ID,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
@@ -242,7 +243,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
   );
 
   it.skipIf(!hasModuleHooks)(
-    "keeps the CLI's own docs tree, and is not used after an edit to one of its tree docs",
+    "keeps the CLI's own docs tree, which a reinstall or a copy in another folder gathers again",
     async () => {
       const tmp = keptTmp('docs-tree');
       const ask = ['docs', 'authoring/building-blocks/components'];
@@ -250,33 +251,60 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       expect(first.status, first.stderr).toBe(0);
       expect(docsTreeEntries(tmp).size).toBe(1);
       expectWarmHit(tmp, [ask]);
-      // As patch-package or a hand edit leaves it: same build id, other text.
-      const file = path.join(
-        packed,
-        'assets',
-        'docs',
-        'tree',
-        'components.doc.mjs',
-      );
-      const source = fs.readFileSync(file, 'utf8');
-      const edited = source.replace(
-        'Add components to an integration,',
-        'Add components to an integration package,',
-      );
-      expect(edited).not.toBe(source);
-      try {
+      const tree = path.join('assets', 'docs', 'tree', 'components.doc.mjs');
+      /** @param {string} cli */
+      const edit = cli => {
+        const file = path.join(cli, tree);
+        const source = fs.readFileSync(file, 'utf8');
+        const edited = source.replace(
+          'Add components to an integration,',
+          'Add components to an integration package,',
+        );
+        expect(edited).not.toBe(source);
         fs.writeFileSync(file, edited);
-        const [kept, fresh] = await Promise.all([
+        return () => fs.writeFileSync(file, source);
+      };
+      // A patched copy, installed beside the CLI as a package manager's patch
+      // installs one in another folder, while the CLI it came from stays as it
+      // was: it keeps its own entries.
+      const copy = path.join(path.dirname(packed), 'cli-copy');
+      fs.cpSync(packed, copy, {recursive: true});
+      try {
+        edit(copy);
+        const patched = run(ask, {tmp: freshTmp(), cli: copy});
+        expect(patched.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp, cli: copy})).toEqual(patched);
+      } finally {
+        fs.rmSync(copy, {recursive: true, force: true});
+      }
+      // As patch-package or a hand edit leaves the installed CLI: same build
+      // id, same folder, other text. The build id and the folder stand for
+      // the CLI's own files, so the edit is not seen (the record says
+      // in-place edits to an installed CLI aren't supported).
+      const restore = edit(packed);
+      const buildIdFile = path.join(packed, BUILD_ID);
+      const buildId = fs.readFileSync(buildIdFile, 'utf8');
+      try {
+        const fresh = run(ask, {tmp: freshTmp()});
+        expect(fresh.stdout).not.toBe(first.stdout);
+        expect(run(ask, {tmp})).toEqual(first);
+        // A reinstall gives another build id: the next run gathers again.
+        fs.writeFileSync(
+          buildIdFile,
+          JSON.stringify({id: 'reinstalled'}) + '\n',
+        );
+        const [kept, again] = await Promise.all([
           runAsync(ask, {tmp}),
           runAsync(ask, {tmp: freshTmp()}),
         ]);
-        expect(fresh.stdout).not.toBe(first.stdout);
-        expect(kept).toEqual(fresh);
+        expect(kept).toEqual(again);
+        expect(kept.stdout).toBe(fresh.stdout);
       } finally {
-        fs.writeFileSync(file, source);
+        restore();
+        fs.writeFileSync(buildIdFile, buildId);
       }
     },
-    120_000,
+    180_000,
   );
 
   it("is not used after an edit to the installed CLI's table-building code or cards", async () => {

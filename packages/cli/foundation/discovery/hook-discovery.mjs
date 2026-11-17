@@ -80,7 +80,7 @@ function hookNameFromFile(fileName) {
  * Returns Record<category, hookName[]> similar to discoverComponents.
  * Categories from HookDoc.category: focus, layout, animation, interaction, data, media, streaming
  * Hooks without a category go in 'Other'.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] the hooks to read; the others are
  *   left out, and their docs are not read
  * @param {Set<string>} [tops] the top folders of `src` outside `hooks` to
@@ -121,12 +121,13 @@ export function discoverHooks(coreDir, keep = () => true, tops) {
 /**
  * Each hook's doc, by hook name: the `*.doc.mjs` files in src/hooks/, then
  * the hook docs in the other folders of src/.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} keep the hooks to list
  * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {Map<string, string>} hook name → doc path
  */
 function hookDocs(coreDir, keep, tops) {
+  if (coreDir == null) return new Map();
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
   /** @type {Map<string, string>} */
@@ -212,11 +213,12 @@ function readHookKeywords(docPath) {
  * Searches hooks/ directory and component directories.
  * Matches both exact name and with 'use' prefix stripped.
  *
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name - Hook name (e.g. 'useMediaQuery', 'MediaQuery', 'mediaquery')
  * @returns {string|null} Path to the .doc.mjs file, or null
  */
 export function findHookDoc(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
 
@@ -306,7 +308,7 @@ function searchDirForHookDoc(dirPath, candidates) {
 
 /**
  * Get all discovered hook names as a flat array (for fuzzy matching).
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {(name: string) => boolean} [keep] as for {@link discoverHooks}
  * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {string[]}
