@@ -104,7 +104,14 @@ export function useTruncationTooltipInterest(
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
-      if (state.isRead || !(isEnabled || (isCutOnInterest?.() ?? false))) {
+      if (isCutOnInterest != null) {
+        // Measured on each interaction: text that fits mounts nothing, and
+        // text cut again (after a resize) arms the remounted tooltip anew.
+        if (!isCutOnInterest()) {
+          return;
+        }
+        state.isRead = false;
+      } else if (!isEnabled || state.isRead) {
         return;
       }
       state.interest = interest;

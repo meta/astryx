@@ -780,9 +780,36 @@ function overflows(element: Element): boolean {
   return box > 0 && element.scrollWidth > box;
 }
 
-/** Whether a label is cut: its box, or a box inside it, clips its text. */
+/** Whether an element is left out of what a reader sees. */
+function isHiddenCopy(element: Element): boolean {
+  return element.closest('[hidden], [aria-hidden="true"]') != null;
+}
+
+/**
+ * Whether a label is cut: its box, or a visible box inside it, clips its
+ * text. A hidden copy (ToggleButton's bold-width reservation) does not count.
+ */
 function isLabelCut(label: HTMLElement): boolean {
-  return overflows(label) || [...label.querySelectorAll('*')].some(overflows);
+  return (
+    overflows(label) ||
+    [...label.querySelectorAll('*')].some(
+      element => !isHiddenCopy(element) && overflows(element),
+    )
+  );
+}
+
+/**
+ * Whether a caller's Tooltip already describes the Button. Its tooltip
+ * replaces the cut-label one, so one tooltip shows at one spot.
+ */
+function hasCallerTooltip(button: HTMLElement): boolean {
+  const ids = button.getAttribute('aria-describedby')?.split(/\s+/) ?? [];
+  return ids.some(
+    id =>
+      id !== '' &&
+      button.ownerDocument.getElementById(id)?.getAttribute('role') ===
+        'tooltip',
+  );
 }
 
 /** The label a reader sees: hidden and `aria-hidden` copies are left out. */
@@ -983,8 +1010,13 @@ export function Button({
   const canShowCutLabel = !isIconOnly && tooltip == null;
   const measureLabel = (): boolean => {
     const labelEl = labelRef.current;
+    const buttonEl = buttonRef.current;
     const text = labelEl == null ? '' : visibleLabelText(labelEl);
-    const isCut = labelEl != null && text !== '' && isLabelCut(labelEl);
+    const isCut =
+      labelEl != null &&
+      text !== '' &&
+      !(buttonEl != null && hasCallerTooltip(buttonEl)) &&
+      isLabelCut(labelEl);
     setCutLabel(isCut ? text : null);
     return isCut;
   };
@@ -992,13 +1024,6 @@ export function Button({
     false,
     canShowCutLabel ? measureLabel : undefined,
   );
-  // After the tooltip mounts, each new hover or focus measures again, so a
-  // label that now fits shows nothing.
-  const remeasureLabel = () => {
-    if (canShowCutLabel && cutLabelInterest.isWanted) {
-      measureLabel();
-    }
-  };
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
@@ -1235,11 +1260,6 @@ export function Button({
         onPointerEnter={composeEventHandlers(
           props.onPointerEnter,
           cutLabelInterest.onPointerEnter,
-          event => {
-            if (event.pointerType !== 'touch') {
-              remeasureLabel();
-            }
-          },
         )}
         onPointerLeave={composeEventHandlers(
           props.onPointerLeave,
@@ -1249,11 +1269,7 @@ export function Button({
           props.onPointerDown,
           cutLabelInterest.onPointerDown,
         )}
-        onFocus={composeEventHandlers(
-          props.onFocus,
-          cutLabelInterest.onFocus,
-          remeasureLabel,
-        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabelInterest.onFocus)}
         onBlur={composeEventHandlers(props.onBlur, cutLabelInterest.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
@@ -1283,11 +1299,6 @@ export function Button({
         onPointerEnter={composeEventHandlers(
           props.onPointerEnter,
           cutLabelInterest.onPointerEnter,
-          event => {
-            if (event.pointerType !== 'touch') {
-              remeasureLabel();
-            }
-          },
         )}
         onPointerLeave={composeEventHandlers(
           props.onPointerLeave,
@@ -1297,11 +1308,7 @@ export function Button({
           props.onPointerDown,
           cutLabelInterest.onPointerDown,
         )}
-        onFocus={composeEventHandlers(
-          props.onFocus,
-          cutLabelInterest.onFocus,
-          remeasureLabel,
-        )}
+        onFocus={composeEventHandlers(props.onFocus, cutLabelInterest.onFocus)}
         onBlur={composeEventHandlers(props.onBlur, cutLabelInterest.onBlur)}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>

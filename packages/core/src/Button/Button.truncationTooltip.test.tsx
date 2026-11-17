@@ -14,13 +14,16 @@
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {Button} from './Button';
+import {Tooltip} from '../Tooltip/Tooltip';
+import {ToggleButton} from '../ToggleButton/ToggleButton';
 // Loaded up front, so the tooltip renders at once.
-import '../Tooltip/Tooltip';
 
 const LABEL = 'Save and continue to the next step';
 
 /** Makes every element report content wider than its box, as a cut label is. */
-function withOverflow(isOverflowing: boolean) {
+function withOverflow(
+  isOverflowing: boolean | ((element: HTMLElement) => boolean),
+) {
   const proto = window.HTMLElement.prototype;
   const original = {
     scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
@@ -28,7 +31,13 @@ function withOverflow(isOverflowing: boolean) {
   };
   Object.defineProperty(proto, 'scrollWidth', {
     configurable: true,
-    get: () => (isOverflowing ? 400 : 100),
+    get(this: HTMLElement) {
+      const isCut =
+        typeof isOverflowing === 'function'
+          ? isOverflowing(this)
+          : isOverflowing;
+      return isCut ? 400 : 100;
+    },
   });
   Object.defineProperty(proto, 'offsetWidth', {
     configurable: true,
@@ -183,6 +192,88 @@ describe('Button label truncation tooltip', () => {
     restore = withOverflow(true);
     render(<Button label="Settings" icon={<span>⚙</span>} isIconOnly />);
     expect(screen.getByRole('button', {name: 'Settings'})).toBeInTheDocument();
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+  });
+
+  it("lets a caller's Tooltip take precedence, so one tooltip shows", async () => {
+    restore = withOverflow(true);
+    render(
+      <Tooltip content="Saves your draft">
+        <Button label={LABEL} />
+      </Tooltip>,
+    );
+    const button = screen.getByRole('button');
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(button);
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        'Saves your draft',
+      );
+    });
+    expect(
+      screen
+        .queryAllByRole('tooltip', {hidden: true})
+        .filter(el => el.textContent === LABEL),
+    ).toHaveLength(0);
+  });
+
+  it('shows again when a label that came to fit is cut again', async () => {
+    let isCut = true;
+    restore = withOverflow(() => isCut);
+    render(<Button label={LABEL} />);
+    const button = screen.getByRole('button');
+    // A browser dispatches these in one task, before React renders again.
+    const hover = () => {
+      act(() => {
+        fireEvent.pointerOver(button, {pointerType: 'mouse'});
+        fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+        fireEvent.mouseOver(button);
+        fireEvent.mouseEnter(button);
+      });
+    };
+    const leave = () => {
+      fireEvent.pointerOut(button, {pointerType: 'mouse'});
+      fireEvent.pointerLeave(button, {pointerType: 'mouse'});
+      fireEvent.mouseOut(button);
+      fireEvent.mouseLeave(button);
+    };
+    hover();
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        LABEL,
+      );
+    });
+    leave();
+    isCut = false;
+    hover();
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    });
+    leave();
+    isCut = true;
+    hover();
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        LABEL,
+      );
+    });
+  });
+
+  it("ignores a ToggleButton's hidden bold-width copy when the label fits", async () => {
+    restore = withOverflow(
+      element => element.closest('[aria-hidden="true"]') != null,
+    );
+    render(
+      <ToggleButton
+        label="Bold"
+        isPressed={false}
+        onPressedChange={() => {}}
+      />,
+    );
+    const button = screen.getByRole('button');
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(button);
+    await new Promise(resolve => setTimeout(resolve, 300));
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
 });
