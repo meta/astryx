@@ -80,9 +80,7 @@ describe('the recorder', () => {
     expect(all('probes')).toContain(path.join(work, 'missing.lock'));
     expect(all('lists')).toContain(path.join(work, 'dir'));
     // A recursive copy's source is read as a whole tree, like a listing.
-    expect(
-      lines.filter(line => line.lists.includes(path.join(work, 'dir'))).length,
-    ).toBeGreaterThanOrEqual(1);
+    expect(all('lists')).toContain(path.join(work, 'tree'));
     expect(all('writes')).toContain(path.join(work, 'copy'));
     expect(all('writes')).toContain(path.join(work, 'out.txt'));
     expect(
