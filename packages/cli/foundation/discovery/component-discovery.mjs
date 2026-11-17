@@ -18,6 +18,11 @@ import {
 import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
+import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
+import {
+  checkedComponentList,
+  storedComponentList,
+} from './stored-component-list.mjs';
 import {
   HAS_COMPUTED,
   moduleExportSource,
@@ -26,6 +31,7 @@ import {
 } from './module-exports.mjs';
 import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -365,15 +371,22 @@ export function familyMember(docs, name) {
  *
  * Keys are sorted alphabetically (groups and ungrouped components interleaved).
  * Components within each group are also sorted alphabetically.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  if (coreDir == null) return {};
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
-  const found = oncePerListing(`components\0${coreDir}`, () =>
-    readComponentGroups(coreDir),
-  );
+  // The Core the CLI was published with, unchanged, has its list stored.
+  const found = oncePerListing(`components\0${coreDir}`, () => {
+    const stored = storedComponentList(coreDir)?.groups;
+    return stored
+      ? inGroupOrder(
+          Object.entries(stored).map(([key, values]) => ({key, values})),
+        )
+      : readComponentGroups(coreDir);
+  });
   return Object.fromEntries(
     Object.entries(found).map(([key, names]) => [key, [...names]]),
   );
@@ -530,14 +543,22 @@ function readComponentGroups(coreDir, keep = () => true, tops) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  return inGroupOrder(entries);
+}
 
+/**
+ * Groups as one record, keys in the fixed text order (`compareText`), so a
+ * live read and the list stored at publish print alike on every host.
+ * @param {Array<{key: string, values: string[]}>} entries
+ * @returns {Record<string, string[]>}
+ */
+function inGroupOrder(entries) {
+  entries.sort((a, b) => compareText(a.key, b.key));
   /** @type {Record<string, string[]>} */
   const ordered = {};
   for (const {key, values} of entries) {
     ordered[key] = values;
   }
-
   return ordered;
 }
 
@@ -581,11 +602,12 @@ function foldersHolding(srcDir, entries, names) {
  * Find the .doc.mjs file for a component.
  * For sub-components (e.g. StackItem), returns the parent's .doc.mjs
  * if the sub-component is documented there.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentReadme(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const exactDoc = `${name}.doc.mjs`;
   const xdsDoc = `XDS${name}.doc.mjs`;
@@ -644,11 +666,12 @@ export function findComponentReadme(coreDir, name) {
  * `useResizable.ts`), so `.ts` candidates are searched alongside `.tsx`. Without
  * this, deriving the import path for a `.ts`-authored function falls back to the
  * bare `@astryxdesign/core` root instead of its tree-shakeable subpath.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentSource(coreDir, name) {
+  if (coreDir == null) return null;
   const found = ownSourceFile(coreDir, name);
   if (found == null) return null;
   // A component's exact name in another case (`tokenizer` for Tokenizer) is
@@ -790,11 +813,17 @@ function caseSpelledComponentSource(srcDir, name) {
 /**
  * Compute the Levenshtein (edit) distance between two strings.
  * Used for fuzzy-matching component names. Dependency-free.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: every
+ *   name then imports from the package root
  * @param {string} componentName
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  if (coreDir == null) return '@astryxdesign/core';
+  const stored = checkedComponentList(coreDir)?.imports;
+  if (stored && Object.hasOwn(stored, componentName)) {
+    return stored[componentName];
+  }
   const srcDir = path.join(coreDir, 'src');
   const exportKeys = exportKeysOf(coreDir);
 
@@ -1013,7 +1042,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};
@@ -1071,8 +1100,8 @@ export function findExternalComponentDoc(docsDir, name) {
 // by package and route source/issues correctly.
 
 // A doc's `name` can name another export of its file, and a family doc's full
-// entries are components under their own names; every other doc reads as before.
-const COMPONENT_NAME_RE = /^[A-Z][\w$]*$/;
+// entries are components under their own names; every other doc reads as
+// before. Such a name has the shape COMPONENT_NAME_RE.
 
 /** @type {Map<string, {stamp: string, value: Record<string, any> | null}>} doc reads, reused while the doc file is unchanged */
 const docReads = new Map();

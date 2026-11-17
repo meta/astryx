@@ -10,8 +10,9 @@
  *   the modules it can load, import() targets included
  * @position Shared by analyze-pr.js for the PR size report, by the
  *   English-fallback import-cost test, which bundles several imports in one
- *   build, and by the component import-boundaries check, which builds each
- *   entry with the same esbuild options. Sizes are gzip at the default
+ *   build, and by the component import-boundaries check and the reference-page
+ *   measurer, which build with the same esbuild options and extract a ref's
+ *   source the same way. Sizes are gzip at the default
  *   compression level (spec:AST-080 FR8,
  *   architecture:component-style-authoring INV6).
  */
@@ -405,7 +406,53 @@ function measureComponentImport(entry, stylesheetText, ownDistDir, exportName) {
   };
 }
 
+// The packages an app brings itself, so a measured import leaves them out.
+const APP_EXTERNALS = [
+  'react',
+  'react/*',
+  'react-dom',
+  'react-dom/*',
+  '@stylexjs/stylex',
+];
+
+// The repository's `paths` at git `ref`, extracted under `target`. Untracked
+// generated files under `generatedFrom` come from the working tree, for each
+// one the ref lacks.
+function extractAtRef({repo, ref, target, paths, generatedFrom}) {
+  const {execFileSync} = require('node:child_process');
+  const archive = execFileSync(
+    'git',
+    ['archive', '--format=tar', ref, '--', ...paths],
+    {cwd: repo, maxBuffer: 1024 * 1024 * 1024},
+  );
+  fs.mkdirSync(target, {recursive: true});
+  execFileSync('tar', ['-x', '-C', target], {input: archive});
+  const generated = execFileSync(
+    'git',
+    [
+      'ls-files',
+      '--others',
+      '--ignored',
+      '--exclude-standard',
+      '-z',
+      '--',
+      generatedFrom,
+    ],
+    {cwd: repo, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
+  )
+    .split('\0')
+    .filter(Boolean);
+  for (const file of generated) {
+    const copy = path.join(target, file);
+    if (fs.existsSync(copy)) continue;
+    fs.mkdirSync(path.dirname(copy), {recursive: true});
+    fs.copyFileSync(path.join(repo, file), copy);
+  }
+}
+
 module.exports = {
+  APP_EXTERNALS,
+  extractAtRef,
   gzipBytes,
   sizeBuildOptions,
   reachableChunks,

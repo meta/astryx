@@ -46,6 +46,7 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
+  ICON_EXPORT_NAME_RE,
   discoverIconSetDirectory,
   hasLicenseNotice,
   licenseNoticeFix,
@@ -79,6 +80,7 @@ import {
   issueError,
   issueWarning,
 } from '../integrations/validate-contributions.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../integrations/issue').AstryxIntegrationIssue} Issue */
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -240,7 +242,7 @@ function checkContract(set, packageName, pkg, unchecked) {
   };
   /** @param {string} name @param {string} what */
   const checkName = (name, what) => {
-    if (!/^[A-Z][A-Za-z0-9]*Icon$/u.test(name)) {
+    if (!ICON_EXPORT_NAME_RE.test(name)) {
       issues.push(
         issueWarning(
           ICON_EXPORT_NAME,
@@ -1106,7 +1108,7 @@ function lookRewriteCommand(set, variant, origins) {
     if (from) counts.set(from, (counts.get(from) ?? 0) + 1);
   }
   const module = [...counts].sort(
-    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    (a, b) => b[1] - a[1] || compareText(a[0], b[0]),
   )[0]?.[0];
   return `astryx experimental icon add --variant ${shellArg(variant)} --from ${module ? shellArg(module) : '<module>'} --all --set ${shellArg(set.name)}`;
 }

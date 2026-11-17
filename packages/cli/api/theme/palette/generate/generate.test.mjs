@@ -11,7 +11,7 @@ import {
   PALETTE_TYPESCRIPT_FORMAT_VERSION,
   themePaletteGenerate,
 } from './generate.mjs';
-import {PALETTE_GENERATOR_VERSION} from './generator.mjs';
+import {PALETTE_GENERATOR_VERSION, generateTonalPalette} from './generator.mjs';
 
 const temporaryDirectories = [];
 
@@ -60,6 +60,40 @@ describe('themePaletteGenerate', () => {
       white: '#ffffff',
       stops: [20, 50, 80],
     });
+  });
+
+  it('a config that names no recipe runs v1, byte for byte what the bare API makes', () => {
+    const cwd = fixture();
+    const config = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'palette.config.json'), 'utf8'),
+    );
+    const result = themePaletteGenerate('palette.config.json', {}, {cwd});
+    expect(result.data.recipe).toBe('astryx-oklch-v1');
+    expect(JSON.stringify(result.data.candidate)).toBe(
+      JSON.stringify(generateTonalPalette(config)),
+    );
+  });
+
+  it('a config keeps the recipe it records', () => {
+    for (const recipe of ['astryx-oklch-v1', 'astryx-oklch-v2']) {
+      const cwd = fixture();
+      const file = path.join(cwd, 'palette.config.json');
+      fs.writeFileSync(
+        file,
+        JSON.stringify({recipe, ...JSON.parse(fs.readFileSync(file, 'utf8'))}),
+      );
+      const result = themePaletteGenerate(
+        'palette.config.json',
+        {out: 'palette.ts'},
+        {cwd},
+      );
+      expect(result.data.recipe).toBe(recipe);
+      expect(
+        JSON.parse(
+          fs.readFileSync(path.join(cwd, 'palette.receipt.json'), 'utf8'),
+        ).recipe,
+      ).toBe(recipe);
+    }
   });
 
   it('writes a candidate and detached reproducibility receipt together', () => {

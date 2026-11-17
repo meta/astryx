@@ -29,15 +29,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavMegaMenuFeaturedCard` with `title`, `description`, `image`, `imageAlt`, `linkLabel`, `linkHref`, and `children`; target `top-nav-mega-menu-featured-card`. |
-| Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                     |
-| End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                      |
-| Builder impact          | None.                                                                                                                                                             |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                    |
-| Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                |
-| Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                     |
+| Area                    | Contract                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `TopNavMegaMenuFeaturedCard` with `title`, `description`, `image`, `imageAlt`, `linkLabel`, `linkHref`, and `children`; target `top-nav-mega-menu-featured-card`.            |
+| Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                                |
+| End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                                 |
+| Builder impact          | Following the link inside a mega menu panel with the keyboard, a finger or a pen closes the panel and returns focus to the trigger.                                          |
+| Compatibility/readiness | Records shipped behavior, except the close when the link is followed inside a panel (FR3), a nonbreaking behavior change. One implementation gap (see Current-state impact). |
+| Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                           |
+| Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                                |
 
 This table is a review projection; the body below is authoritative.
 
@@ -49,10 +49,10 @@ that promotes one destination. Consumer usage lives in
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Released default preserved: `no` — FR3 closes the panel when the link is followed inside it with the keyboard, a finger or a pen. Decider: josephfarina, 2026-11-16: the close applies to keyboard, finger and pen picks; a mouse or trackpad pick keeps the shipped behavior.
+- Compatibility class: nonbreaking behavior change; no public API change
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none
+- Migration decision: none: a builder who needs the panel to stay open renders their own control in `children`
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -81,12 +81,12 @@ No component-local concept beyond the consumer props.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                        | Basis                    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | The root `div` carries `top-nav-mega-menu-featured-card`, the forwarded `ref`, and other DOM props, and shows: the image (full width, 140 px tall) when `image` is set, then the title, description, link, and `children`.       | Current source and tests |
-| FR2 | Without `imageAlt` the image is decorative: `alt=""`, `role="presentation"`, and `aria-hidden="true"`. With `imageAlt` it is a normal image with that alternative text.                                                          | Current source and tests |
-| FR3 | The link renders only when both `linkLabel` and `linkHref` are set, through the `LinkProvider` link component, as `linkLabel` followed by ` →`; the arrow mirrors once in right-to-left layouts (`design:bidirectionality` DR4). | Current source and tests |
-| FR4 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                                 | Current source           |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                            | Basis                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | The root `div` carries `top-nav-mega-menu-featured-card`, the forwarded `ref`, and other DOM props, and shows: the image (full width, 140 px tall) when `image` is set, then the title, description, link, and `children`.                                                                                                                                                                                           | Current source and tests |
+| FR2 | Without `imageAlt` the image is decorative: `alt=""`, `role="presentation"`, and `aria-hidden="true"`. With `imageAlt` it is a normal image with that alternative text.                                                                                                                                                                                                                                              | Current source and tests |
+| FR3 | The link renders only when both `linkLabel` and `linkHref` are set, through the `LinkProvider` link component, as `linkLabel` followed by ` →`; the arrow mirrors once in right-to-left layouts (`design:bidirectionality` DR4). Inside a TopNavMegaMenu panel, following the link with the keyboard, a finger or a pen closes the panel and returns focus to the trigger; a mouse or trackpad click leaves it open. | Current source and tests |
+| FR4 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                                                                                                                                                                                                                     | Current source           |
 
 ### Allowed variation
 

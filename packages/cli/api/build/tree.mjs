@@ -38,7 +38,7 @@ const main = defineSearcher({
     const signals = await kitSignals(request.query, request.options);
     if (!ctx.blocks) return kitAnswer(signals);
     const picked = pickBlocks(
-      request.query,
+      signals.idea,
       signals,
       ctx.blocks,
       ctx.keepBlocks,

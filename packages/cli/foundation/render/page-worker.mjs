@@ -18,31 +18,49 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served, withoutSegmenter}
- * @output one message: {ok: true, markup, css, files, texts, logs} or
+ * Overlays (a tooltip, a menu) render on the server as markers alone; with
+ * `openLayers`, the page is drawn again the same way (or the elements its
+ * `openLayerElements()` export gives, for a page that holds only their
+ * markup) and each overlay they show or open is added after the markup
+ * (layers.mjs). A part the page asks to be drawn open in its own place
+ * (through the global layers.mjs names) is drawn the same way and put where
+ * its marker is, with each overlay it opened after it.
+ *
+ * With `buildScript`, the page's modules and the modules they use are also
+ * bundled for the browser by esbuild (client-bundle.mjs) into one script,
+ * which draws the page over its markup in the browser.
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers, buildScript, esbuild}
+ * @output one message: {ok: true, markup, css, files, texts, logs, script} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Module, {createRequire, register} from 'node:module';
+import Module, {builtinModules, createRequire, register} from 'node:module';
 import {pathToFileURL} from 'node:url';
-import {format} from 'node:util';
+import {format, stripVTControlCharacters} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
-import {importSpecifiers} from './embedded-imports.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
+import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
+import {BundleError, bundleForBrowser} from './client-bundle.mjs';
+import {droppedImports} from './value-uses.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
+import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
-const {entry, root} = workerData;
+/** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
+const {entry, root, scope} = workerData;
+
+// Before React loads: a read of the overlays waits for React's queued tasks.
+countQueuedImmediates();
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -50,7 +68,8 @@ if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
-const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
+/** The folder whose modules the page carries (see render-page.mjs `carryScopeOf`). */
+const SCOPE_PREFIX = scope.endsWith(path.sep) ? scope : scope + path.sep;
 
 /** @type {PageLog[]} */
 const logs = [];
@@ -92,6 +111,56 @@ const texts = [];
 /** Every static JSX text, by the function it is in. */
 /** @type {Record<string, string[]>} */
 const fnTexts = {};
+/** Each media query the page's own code asks in JavaScript, for the screen-query warning. */
+/** @type {{call: string, file: string, line: number}[]} */
+const screenQueries = [];
+
+/** Core's media query hook, and the entries that export it. */
+const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign/core/hooks']), name: 'useMediaQuery'};
+
+/**
+ * The call a page makes to ask a media query in JavaScript, as the warning
+ * names it: Core's `useMediaQuery`, or `matchMedia` (bare or on an object such
+ * as `window`, optional calls included), with its query.
+ * @param {any} p a call expression
+ * @returns {string | null}
+ */
+function screenQuery(p) {
+  const callee = p.node.callee;
+  /** @param {any} spec the binding's path @param {boolean} namespace */
+  const fromCore = (spec, namespace) =>
+    (namespace ? spec?.isImportNamespaceSpecifier() : spec?.isImportSpecifier()) &&
+    MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value);
+  let name = null;
+  if (callee.type === 'Identifier') {
+    const binding = p.scope.getBinding(callee.name);
+    const spec = binding?.path;
+    if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
+    else if (fromCore(spec, false) && (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  } else if ((callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') && !callee.computed) {
+    if (callee.property.name === 'matchMedia') name = 'matchMedia';
+    // `core.useMediaQuery(…)` through `import * as core from '@astryxdesign/core'`.
+    else if (
+      callee.property.name === MEDIA_QUERY_HOOK.name &&
+      callee.object.type === 'Identifier' &&
+      fromCore(p.scope.getBinding(callee.object.name)?.path, true)
+    ) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  }
+  if (!name) return null;
+  const arg = p.node.arguments[0];
+  const query = !arg
+    ? ''
+    : arg.type === 'StringLiteral'
+      ? JSON.stringify(arg.value).replace(/^"|"$/g, "'")
+      : arg.type === 'TemplateLiteral' && arg.expressions.length === 0
+        ? `'${arg.quasis[0].value.cooked}'`
+        : (p.get('arguments.0')?.getSource?.() ?? '');
+  return `${name}(${query})`;
+}
 
 /** Components that show their content only on demand. */
 const HIDING =
@@ -144,10 +213,10 @@ const fnKey = p => {
 
 const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 
-/** A module of the project itself: inside its folder, not a package.
+/** A module of the page's own: inside the folder whose modules it carries, not a package.
  * @param {string} file */
 const isLocal = file =>
-  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
+  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -204,11 +273,15 @@ let InChart = null;
  * @type {'aside' | 'page' | 'alone'}
  */
 let mode = 'aside';
+/** The height each chart's box states, by the chart's place. @type {(number | null)[]} */
+let boxes = [];
+/** The place of the chart drawn by itself. */
+let alonePlace = 0;
 
 /**
  * Wrap a recharts chart, or a ResponsiveContainer, so the server render sets
- * it aside and the drawing pass draws it: a container at the size it starts
- * at, in a box that lets the drawing fit the page's width.
+ * it aside and the drawing pass draws it: a container at each size
+ * chartDrawings gives it, in the box a browser gives it.
  * @param {any} Chart
  * @param {boolean} container
  */
@@ -231,9 +304,16 @@ let mode = 'aside';
       pageCharts[place.current] = props;
       if (committed.current) renderedAfterCommit = true;
     }
-    const drawn = container
-      ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
-      : createElement(Chart, props);
+    let drawn = createElement(Chart, props);
+    if (container) {
+      const at = mode === 'alone' ? alonePlace : inside ? null : place.current;
+      const {sizes, style, follows} = chartDrawings(props, at === null ? null : boxes[at]);
+      drawn = createElement(
+        'div',
+        {className: 'recharts-responsive-container', style, [FOLLOWS_WIDTH]: follows ? '' : undefined},
+        ...sizes.map((size, k) => createElement(Chart, {...props, ...size, key: k})),
+      );
+    }
     if (mode === 'alone' || inside) return drawn;
     return createElement('astryx-chart', null, createElement(InChart.Provider, {value: true}, drawn));
   }
@@ -322,11 +402,17 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
-    if (!error) markLegends(host);
+    if (!error) {
+      foldLegends(host);
+      // Drawn by itself, a chart's place in the page is its own place.
+      separateIds(host, mode === 'alone' ? alonePlace : 0);
+      roundCoordinates(host);
+    }
     const out = error ? null : read(host);
     root.unmount();
     return out;
   };
+  boxes = await boxHeights(markup);
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
@@ -346,7 +432,10 @@ async function drawCharts(markup, Page) {
   }
   if (alone) {
     mode = 'alone';
-    drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
+    drawn = charts.map((chart, i) => {
+      alonePlace = i;
+      return drawIn(chart, host => [host.innerHTML])?.[0] ?? '';
+    });
   }
   let failed = 0;
   // A chart that drew no picture counts as failed, once.
@@ -360,6 +449,177 @@ async function drawCharts(markup, Page) {
     failed,
     alone,
   };
+}
+
+/**
+ * Parts the page asked to be drawn, in the order asked: open (`ifOpen`: drawn
+ * as nothing when nothing opens), or `mounted`, as the browser shows the part
+ * once it runs, nothing opened.
+ * @type {Array<{element: unknown, ifOpen: boolean, mounted: boolean}>}
+ */
+const layers = [];
+/** @type {any} */ (globalThis)[LAYER_GLOBAL] = (/** @type {unknown} */ element, /** @type {boolean | 'mounted'} */ how = false) =>
+  layerPlaceholder(layers.push({element, ifOpen: how === true, mounted: how === 'mounted'}) - 1);
+
+/**
+ * Run `fn` with a document in place, as a browser page has one, then put
+ * the globals back as they were (none, for a server render). The document
+ * carries the handler property a browser's document has for input events
+ * (`oninput`), which React reads to tell whether fields fire them.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withLoadDocument(fn) {
+  const g = /** @type {any} */ (globalThis);
+  const had = {window: Object.getOwnPropertyDescriptor(g, 'window'), document: Object.getOwnPropertyDescriptor(g, 'document')};
+  try {
+    const {parseHTML} = await import('linkedom');
+    const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+    if (!('oninput' in window.document)) /** @type {any} */ (window.document).oninput = null;
+    g.window = window;
+    g.document = window.document;
+    await fn();
+  } catch {
+    // No client to load (no react-dom): nothing is drawn with it either.
+  } finally {
+    if (had.window) Object.defineProperty(g, 'window', had.window);
+    else delete g.window;
+    if (had.document) Object.defineProperty(g, 'document', had.document);
+    else delete g.document;
+  }
+}
+
+/**
+ * Draw each part the page asked to be drawn open, in the layer document
+ * (layers.mjs), and put each where its marker is: the part as drawn, then
+ * each overlay it shows or a press opens (openLayerMarkup), in place after
+ * it. A part that fails to draw, or has none open, is its server render, or
+ * nothing when the page asked for it only open.
+ * @param {string} markup
+ * @param {any} server react-dom/server
+ * @returns {Promise<string>}
+ */
+async function drawLayers(markup, server) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    client = null;
+  }
+  const g = /** @type {any} */ (globalThis);
+  /** @type {string[]} */
+  const drawings = [];
+  for (const {element, ifOpen, mounted} of layers) {
+    /** @type {string | null} */
+    let out = null;
+    if (client) {
+      const host = g.document.createElement('div');
+      g.document.body.appendChild(host);
+      const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+      try {
+        flushSync(() => root.render(element));
+        if (mounted) {
+          await settled();
+          // A part that draws nothing in this window (a narrow screen's
+          // navigation, in a desktop's) is its server render.
+          out = host.innerHTML.replace(/<template><\/template>/g, '') || null;
+        } else {
+          // Its overlays shown open mount, and each popup a press opens opens.
+          await openLayerMarkup(host, flushSync);
+          const open = [...g.document.querySelectorAll('[data-astryx-layer-root]')].filter(
+            (/** @type {any} */ layer) => layer.__astryxPopoverOpen === true,
+          );
+          if (open.length) {
+            // The part as drawn, then each overlay open now, after it; never a
+            // closed one, nor the markers that place them.
+            const part = host.cloneNode(true);
+            for (const layer of part.querySelectorAll('[data-astryx-layer-root]')) layer.remove();
+            out = part.innerHTML.replace(/<template><\/template>/g, '') + open.map(layer => layer.outerHTML).join('');
+          }
+        }
+      } catch {
+        out = null;
+      }
+      try {
+        root.unmount();
+      } catch {
+        // A part that failed to draw unmounts as nothing.
+      }
+      host.remove();
+    }
+    if (out == null && ifOpen) out = '';
+    if (out == null)
+      try {
+        out = server.renderToStaticMarkup(element);
+      } catch {
+        out = '';
+      }
+    drawings.push(/** @type {string} */ (out));
+  }
+  return markup.replace(LAYER_PLACEHOLDER, (_, i) => drawings[Number(i)] ?? '');
+}
+
+/**
+ * The overlays the elements show open, and those their controls open, drawn
+ * in the layer document (layers.mjs), for after the page's markup in one
+ * element of their own; nothing when they cannot be drawn there. Each
+ * element draws on its own: one that throws leaves the others drawn.
+ * @param {unknown[]} elements
+ * @param {any} React
+ * @returns {Promise<string>}
+ */
+async function drawOpenLayers(elements, React) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    return '';
+  }
+  const g = /** @type {any} */ (globalThis);
+  class Alone extends React.Component {
+    state = {failed: false};
+    static getDerivedStateFromError() {
+      return {failed: true};
+    }
+    render() {
+      return this.state.failed ? null : this.props.children;
+    }
+  }
+  // Each part is drawn on its own, then taken down before the next: the
+  // listeners a drawn part puts on the document (a typeahead's or a menu's
+  // outside press) then hear only the presses on its own controls, never
+  // every other part's, as in a window that shows that part alone.
+  /** @type {string[]} */
+  const layers = [];
+  for (const element of elements) {
+    const host = g.document.createElement('div');
+    g.document.body.appendChild(host);
+    const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+    try {
+      flushSync(() => root.render(createElement(Alone, null, element)));
+      // (A part that opens nothing on a press and holds a layer, a context
+      // menu's area, is right-clicked, as one drawn in its own place is.)
+      layers.push(...(await openLayerMarkup(host, flushSync)));
+    } catch {
+      // A part that cannot be drawn there adds no overlays.
+    }
+    try {
+      root.unmount();
+    } catch {
+      // Unmounting a part that failed to draw changes nothing.
+    }
+    host.remove();
+  }
+  return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 
 /**
@@ -399,20 +659,58 @@ function aliasPlugin() {
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
+ *
+ * For the browser (`browser`), the same imports load the same way, but the
+ * page keeps its real charts and nothing is recorded: the server render
+ * recorded it already.
  * @param {string} filename
+ * @param {boolean} [browser]
  */
-function pagePlugin(filename) {
+function pagePlugin(filename, browser = false) {
   const dir = path.dirname(filename);
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
         const spec = /** @type {string} */ (p.node.source.value);
-        if (spec === 'recharts') setChartsAside(p, t);
+        if (spec === 'recharts' && !browser) setChartsAside(p, t);
         const raw = spec.split('?')[0];
         // A stylesheet, image or JSON file imported through a project alias
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
+        const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
+        const target = isAliased(raw) ? resolveAlias(raw) : raw;
+        if (query && (target.startsWith('.') || path.isAbsolute(target))) {
+          // `?raw` gives the file's text and `?inline` a stylesheet's text (not
+          // added to the page), as Vite does by itself. Any other query loads
+          // the file as it loads without one: an image, font or media file as
+          // its address (`?url`, `?inline`, `?w=400`), a module as itself.
+          const file = path.resolve(dir, target);
+          if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
+            if (!fs.existsSync(file)) {
+              const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
+              /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+              throw err;
+            }
+            if (!localFiles.includes(file)) localFiles.push(file);
+            // The text is the module's default export, as Vite gives it, to
+            // every way of importing it.
+            const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
+            const declarators = p.node.specifiers.map((/** @type {any} */ s) =>
+              t.variableDeclarator(
+                t.identifier(s.local.name),
+                s.type === 'ImportNamespaceSpecifier'
+                  ? t.objectExpression([t.objectProperty(t.identifier('default'), text)])
+                  : s.type === 'ImportDefaultSpecifier' || (s.imported.name ?? s.imported.value) === 'default'
+                    ? text
+                    : t.identifier('undefined'),
+              ),
+            );
+            if (declarators.length > 0) p.replaceWith(t.variableDeclaration('const', declarators));
+            else p.remove();
+            return;
+          }
+        }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -435,7 +733,7 @@ function pagePlugin(filename) {
         }
         if (/\.(scss|sass|less)$/i.test(bare)) {
           // Sass and Less need their compiler: say so rather than drop them.
-          skippedCss.push(bare);
+          if (!browser) skippedCss.push(bare);
           p.remove();
           return;
         }
@@ -473,7 +771,7 @@ function pagePlugin(filename) {
           } else {
             // A package stylesheet (a theme's, say): the caller resolves it
             // from this file and inlines the rules the page uses.
-            packageCss.push({spec: bare, from: filename});
+            if (!browser) packageCss.push({spec: bare, from: filename});
           }
           p.remove();
           return;
@@ -497,11 +795,18 @@ function pagePlugin(filename) {
           );
         }
       },
+      'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
+        if (browser) return;
+        const call = screenQuery(p);
+        if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
+      },
       JSXText(/** @type {any} */ p) {
+        if (browser) return;
         const v = cleanText(p.node);
         if (v.length >= 2) (fnTexts[fnKey(p)] ??= []).push(v);
       },
       JSXElement(/** @type {any} */ p) {
+        if (browser) return;
         const component = jsxName(p.node);
         if (!/^[A-Z]/.test(component)) return;
         // Only children that are all static text: the whole text must show.
@@ -580,10 +885,11 @@ function pagePlugin(filename) {
 }
 
 /**
- * The project's path aliases (`compilerOptions.paths` in tsconfig.json or
- * jsconfig.json), matched by TypeScript's rules (see ts-paths.mjs).
+ * The page's path aliases (`compilerOptions.paths` in the tsconfig.json or
+ * jsconfig.json that TypeScript reads for the page), matched by TypeScript's
+ * rules (see ts-paths.mjs).
  */
-const PATHS = readPathsIn(root) ?? [];
+const PATHS = pathsFor(path.resolve(entry));
 
 /** @param {string} spec whether a specifier goes through a project alias */
 const isAliased = spec => resolvePath(PATHS, spec) !== null;
@@ -713,6 +1019,32 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
   });
 }
 
+/** What the StyleX compiler reads as a theme or constants file, by name. */
+const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
+
+/**
+ * Outside a project, the file the page loads for each StyleX theme file a
+ * module imports from a package, for the StyleX compiler. The compiler finds
+ * a theme import from the folder of the file that imports it, which outside
+ * a project holds no copy of the packages the set serves, so it is given the
+ * file the page loads. Its own rules still name that file for the variables'
+ * names, so they match the package's stylesheet.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {Record<string, string[]> | null}
+ */
+function servedThemeFiles(source, filename) {
+  if (!served) return null;
+  /** @type {Record<string, string[]>} */
+  const files = {};
+  for (const spec of importSpecifiers(source, filename)) {
+    if (spec.startsWith('.') || path.isAbsolute(spec) || !STYLEX_THEME_FILE.test(spec)) continue;
+    const file = resolveServed(spec, filename, served);
+    if (file) files[spec] = [file];
+  }
+  return Object.keys(files).length > 0 ? files : null;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -723,76 +1055,100 @@ const jiti = createJiti(entry, {
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
-  transform(opts) {
-    // jiti names the file with forward slashes on Windows (`C:/...`), while
-    // `entry`, `root` and the node_modules test use the platform separator.
-    // Without this, no file reads as local there and none is transformed.
-    const filename = opts.filename ? path.normalize(opts.filename) : '';
-    let source = opts.source;
-    if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
-      localFiles.push(filename);
-    }
-    if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
-      if (!localFiles.includes(filename)) localFiles.push(filename);
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'module',
-        parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [
-          aliasPlugin(),
-          pagePlugin(filename),
-          ...(source.includes('stylex')
-            ? [
-                [
-                  stylexPlugin,
-                  {
-                    dev: false,
-                    runtimeInjection: false,
-                    treeshakeCompensation: true,
-                    unstable_moduleResolution: {type: 'commonJS', rootDir: root},
-                  },
-                ],
-              ]
-            : []),
-        ],
-      });
-      const rules = /** @type {any} */ (result?.metadata)?.stylex;
-      if (Array.isArray(rules)) stylexRules.push(...rules);
-      source = result?.code ?? source;
-    } else if (
-      PATHS.length > 0 &&
-      filename &&
-      !filename.includes(NODE_MODULES) &&
-      /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)
-    ) {
-      const ts = /\.(tsx?|mts|cts)$/.test(filename);
-      const result = transformSync(source, {
-        filename,
-        babelrc: false,
-        configFile: false,
-        sourceType: 'unambiguous',
-        // The options jiti compiles these files with: JSX only in .jsx and
-        // .tsx files (so `<string>value` stays a type assertion), and legacy
-        // decorators.
-        parserOpts: {
-          plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
-            ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
-          ),
-        },
-        generatorOpts: {retainLines: true},
-        compact: false,
-        plugins: [aliasPlugin()],
-      });
-      source = result?.code ?? source;
-    }
-    return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
-  },
+  transform: opts => transformModule(opts),
 });
+
+/**
+ * One of the page's own files, or a file outside them and outside
+ * `node_modules` that a path alias may reach, compiled as the server
+ * compiles it: the page's files with its plugins and StyleX, the other with
+ * its path aliases. The code stays an ES module with its JSX and types. For
+ * the browser (`browser`), the page's files keep their real charts and
+ * record nothing. Null for any other file.
+ * @param {string} source
+ * @param {string} filename
+ * @param {boolean} [browser]
+ * @returns {string | null}
+ */
+function compilePageModule(source, filename, browser = false) {
+  if (isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    if (!localFiles.includes(filename)) localFiles.push(filename);
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'module',
+      parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [
+        aliasPlugin(),
+        pagePlugin(filename, browser),
+        ...(source.includes('stylex')
+          ? [
+              [
+                stylexPlugin,
+                {
+                  dev: false,
+                  runtimeInjection: false,
+                  treeshakeCompensation: true,
+                  unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                  ...(themeFiles ? {aliases: themeFiles} : {}),
+                },
+              ],
+            ]
+          : []),
+      ],
+    });
+    const rules = /** @type {any} */ (result?.metadata)?.stylex;
+    if (Array.isArray(rules)) stylexRules.push(...rules);
+    return result?.code ?? source;
+  }
+  if (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
+    const ts = /\.(tsx?|mts|cts)$/.test(filename);
+    const result = transformSync(source, {
+      filename,
+      babelrc: false,
+      configFile: false,
+      sourceType: 'unambiguous',
+      // The options jiti compiles these files with: JSX only in .jsx and
+      // .tsx files (so `<string>value` stays a type assertion), and legacy
+      // decorators.
+      parserOpts: {
+        plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+          ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+        ),
+      },
+      generatorOpts: {retainLines: true},
+      compact: false,
+      plugins: [aliasPlugin()],
+    });
+    return result?.code ?? source;
+  }
+  return null;
+}
+
+/**
+ * One module as CommonJS, for the server render: {@link compilePageModule}
+ * for the page's files and the files its aliases reach, then jiti.
+ * @param {import('jiti').TransformOptions} opts
+ * @returns {{code: string}}
+ */
+function transformModule(opts) {
+  // jiti names the file with forward slashes on Windows (`C:/...`), while
+  // `entry`, `root` and the node_modules test use the platform separator.
+  // Without this, no file reads as local there and none is transformed.
+  const filename = opts.filename ? path.normalize(opts.filename) : '';
+  let source = opts.source;
+  if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
+    localFiles.push(filename);
+  }
+  const compiled = filename ? compilePageModule(source, filename) : null;
+  if (compiled !== null) source = compiled;
+  return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
+}
 
 /**
  * @param {string} code
@@ -803,12 +1159,75 @@ function fail(code, message, detail) {
   parentPort?.postMessage({ok: false, error: {code, message, detail}, logs});
 }
 
+/**
+ * A compile error's text without colour codes (Babel colours its code frame
+ * where a terminal or CI asks for colour), and the absolute path Babel puts
+ * before the message, when it names one.
+ * @param {any} err
+ * @returns {{text: string, named?: string}}
+ */
+function compileText(err) {
+  const text = stripVTControlCharacters(String(err?.message ?? err));
+  const lead = /^(.*?): /.exec(text)?.[1];
+  return lead && path.isAbsolute(lead) ? {text: text.slice(lead.length + 2), named: lead} : {text};
+}
+
+/**
+ * Where a compile error points: the file, as a path from the project, and the
+ * line its location or code frame marks (`> 3 |   gap,`), with the token the
+ * carets under that line mark.
+ * @param {any} err
+ * @returns {{file?: string, line?: number, column?: number, token?: string, source?: string}}
+ */
+function compileSite(err) {
+  const {text, named} = compileText(err);
+  const fromRoot = named ? path.relative(root, named) : '';
+  const file = named
+    ? (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(named) : fromRoot).split(path.sep).join('/')
+    : undefined;
+  const frame = /^>\s*(\d+)\s*\|(.*)\n\s*\|(\s*)(\^+)/m.exec(text);
+  const line = err?.loc?.line ?? (frame ? Number(frame[1]) : undefined);
+  const column = err?.loc ? err.loc.column + 1 : frame ? frame[3].length : undefined;
+  // An aliased import (`gap as space`) is read by its local name.
+  const token = frame
+    ? frame[2].slice(frame[3].length, frame[3].length + frame[4].length).split(/\s+as\s+/).pop()
+    : undefined;
+  return {
+    ...(file ? {file} : {}),
+    ...(line ? {line} : {}),
+    ...(column ? {column} : {}),
+    ...(token ? {token} : {}),
+    ...(named ? {source: named} : {}),
+  };
+}
+
+/**
+ * The module an import declaration names, read from the line of one of its
+ * names onward (an import can span lines).
+ * @param {string} file
+ * @param {number} line
+ * @returns {string | undefined}
+ */
+function importedFrom(file, line) {
+  let lines;
+  try {
+    lines = fs.readFileSync(file, 'utf8').split('\n').slice(line - 1, line + 40);
+  } catch {
+    return undefined;
+  }
+  for (const text of lines) {
+    const from = /\bfrom\s*(['"])([^'"]+)\1/.exec(text);
+    if (from) return from[2];
+  }
+  return undefined;
+}
+
 /** @param {unknown} e */
 function classify(e) {
   const err = /** @type {any} */ (e);
-  if (err?.renderCode) return fail(err.renderCode, String(err.message).replace(/^\/[^:\n]*: /, ''));
+  if (err?.renderCode) return fail(err.renderCode, compileText(err).text);
   // Babel prefixes errors raised while compiling with the file's path.
-  const message = String(err?.message ?? err).replace(/^\/[^:\n]*: /, '');
+  const message = compileText(err).text;
   if (/suspended while responding to synchronous input|A component suspended/.test(message)) {
     return fail(
       'ERR_RENDER_FAILED',
@@ -834,9 +1253,23 @@ function classify(e) {
     return fail('ERR_FILE_NOT_FOUND', `The page imports ${missing[1]}, which does not exist`, {module: missing[1]});
   }
   if (err?.code === 'BABEL_PARSE_ERROR' || err?.reasonCode || /SyntaxError|Unexpected token/.test(`${err?.name} ${message}`)) {
-    const loc = err?.loc ? `:${err.loc.line}:${err.loc.column + 1}` : '';
-    return fail('ERR_RENDER_COMPILE', `The page does not compile${loc ? ` (line ${err.loc.line})` : ''}: ${message.split('\n')[0]}`, {
-      ...(err?.loc ? {line: err.loc.line, column: err.loc.column + 1} : {}),
+    const site = compileSite(err);
+    const where = [site.file, site.line ? `line ${site.line}` : ''].filter(Boolean).join(', ');
+    let reason = message.split('\n')[0];
+    // StyleX reads at build time each value a style uses; an imported value
+    // only from a file it can read, which it says without naming the import.
+    if (reason.startsWith('Could not resolve the path to the imported file')) {
+      const spec = site.source && site.line ? importedFrom(site.source, site.line) : undefined;
+      const value = site.token ? `\`${site.token}\`` : 'an imported value';
+      reason =
+        spec && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)
+          ? `StyleX could not find ${spec}, which ${value} comes from, at build time. Check that the file exists, or that its package is installed where the page is.`
+          : `StyleX could not read ${value}${spec ? ` from ${spec}` : ''} at build time. A value a style uses must be written in the style, or come from a .stylex.ts or .stylex.js file that defines it with stylex.defineVars or stylex.defineConsts.`;
+    }
+    return fail('ERR_RENDER_COMPILE', `The page does not compile${where ? ` (${where})` : ''}: ${reason}`, {
+      ...(site.file ? {file: site.file} : {}),
+      ...(site.line ? {line: site.line} : {}),
+      ...(site.column ? {column: site.column} : {}),
     });
   }
   const browser = /\b(window|document|localStorage|sessionStorage|navigator|location|matchMedia|requestAnimationFrame|IntersectionObserver|ResizeObserver|HTMLElement|customElements) is not defined/.exec(message);
@@ -854,6 +1287,154 @@ function classify(e) {
 }
 
 /**
+ * One of the page's files for esbuild (client-bundle.mjs), compiled as the
+ * server compiled it; null for a file esbuild loads itself.
+ * @param {string} file
+ * @returns {{contents: string, loader: 'tsx' | 'ts' | 'jsx'} | null}
+ */
+function browserSource(file) {
+  const filename = path.normalize(file);
+  const compiled = compilePageModule(fs.readFileSync(filename, 'utf8'), filename, true);
+  if (compiled === null) return null;
+  const loader = /\.[cm]?tsx$/.test(filename) ? 'tsx' : /\.[cm]?ts$/.test(filename) ? 'ts' : 'jsx';
+  return {contents: compiled, loader};
+}
+
+/**
+ * The folder a package import resolves from in the browser bundle when it
+ * must be the copy the server loaded: React, React DOM and StyleX from the
+ * package set outside a project (one copy for every module), and a served
+ * package the importer has no copy of. Null when the importer's own copy
+ * serves.
+ * @param {string} name
+ * @param {string} importerDir
+ * @returns {string | null}
+ */
+function browserPackageDir(name, importerDir) {
+  if (!served) return null;
+  const pkg = packageOf(name);
+  if (pkg in SINGLE_COPY_ALIASES) return served.dir;
+  if (!findNodeModulesPackage(importerDir, pkg) && isServedPackage(pkg, served.integrations)) return served.dir;
+  return null;
+}
+
+/**
+ * Whether a package import resolves for the module that makes it: installed
+ * where the module is, served from the package set, or found by Node.
+ * @param {string} spec the import as written, without a query
+ * @param {string} file the importing module
+ */
+function packageResolves(spec, file) {
+  const pkg = packageOf(spec);
+  if (findNodeModulesPackage(path.dirname(file), pkg)) return true;
+  // A package the set serves counts only when the set holds it.
+  if (served && pkg in SINGLE_COPY_ALIASES) return true;
+  if (served && isServedPackage(pkg, served.integrations) && resolveServed(spec, file, served)) return true;
+  const require = createRequire(file);
+  for (const request of [spec, `${pkg}/package.json`]) {
+    try {
+      require.resolve(request);
+      return true;
+    } catch {
+      // Not found by this request: try the next one.
+    }
+  }
+  return false;
+}
+
+/**
+ * One of the page's modules as Babel parses it: TypeScript in a TypeScript
+ * file, JSX in a `.jsx` or `.tsx` file and in JavaScript.
+ * @param {string} source
+ * @param {string} file
+ */
+function parseModule(source, file) {
+  const typed = /\.[cm]?tsx?$/.test(file);
+  return requireFromCli('@babel/parser').parse(source, {
+    sourceType: 'module',
+    plugins: typed ? (/x$/.test(file) ? ['typescript', 'jsx'] : ['typescript']) : ['jsx'],
+  });
+}
+
+/**
+ * Every package the page's own modules import that does not resolve, found
+ * before the page loads, so one refusal names them all.
+ * @returns {string[]} package names, sorted
+ */
+function missingPackages() {
+  /** @type {Set<string>} */
+  const missing = new Set();
+  const seen = new Set([entry]);
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = /** @type {string} */ (queue.shift());
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    // TypeScript drops a static import that the module uses only as a type,
+    // or not at all; JavaScript loads every import.
+    /** @type {Set<string>} */
+    let dropped = new Set();
+    if (/\.[cm]?tsx?$/.test(file)) {
+      try {
+        dropped = droppedImports(parseModule(source, file));
+      } catch {
+        // A module that does not parse is reported where it is compiled.
+      }
+    }
+    for (const {specifier, typeOnly, declaration} of moduleImports(source, file) ?? []) {
+      if (typeOnly || (declaration && dropped.has(specifier))) continue;
+      const raw = specifier.split('?')[0];
+      const target = importedFile(raw, file);
+      if (target && path.isAbsolute(target)) {
+        if (isLocal(target) && !seen.has(target)) {
+          seen.add(target);
+          queue.push(target);
+        }
+        continue;
+      }
+      if (raw.startsWith('.') || path.isAbsolute(raw) || namesAlias(raw) || /^[@~#]\/|^#/.test(raw)) continue;
+      if (raw.startsWith('node:') || builtinModules.includes(raw.split('/')[0])) continue;
+      // A package's stylesheet the page imports is a missing-asset warning
+      // when absent, as the render reports it today, not a refusal.
+      if (/\.(css|scss|sass|less|styl)$/i.test(raw)) continue;
+      if (!packageResolves(raw, file)) missing.add(packageOf(raw));
+    }
+  }
+  return [...missing].sort();
+}
+
+/**
+ * The refusal for packages the page imports that are not installed.
+ * @param {string[]} packages sorted, at least one
+ */
+function failMissing(packages) {
+  const names =
+    packages.length === 1 ? packages[0] : `${packages.slice(0, -1).join(', ')} and ${packages[packages.length - 1]}`;
+  fail(
+    'ERR_RENDER_MISSING_DEPENDENCY',
+    `The page imports ${names}, which ${packages.length === 1 ? 'is' : 'are'} not installed`,
+    {package: packages[0], packages},
+  );
+}
+
+/**
+ * A file named for a message: a path from the page's folder for the page's
+ * own files, else the package that holds it.
+ * @param {string} file
+ */
+function describeFile(file) {
+  const at = file.lastIndexOf(NODE_MODULES);
+  if (at < 0) return path.relative(path.dirname(entry), file).split(path.sep).join('/');
+  const parts = file.slice(at + NODE_MODULES.length).split(path.sep);
+  return parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+/**
  * Tell the host what the page is doing, so an end without an answer can say
  * where it ended.
  * @param {string} name
@@ -865,10 +1446,23 @@ function reach(name) {
 try {
   /** @type {any} */
   let mod;
+  // React DOM's client reads what the document supports as it loads (input
+  // events among them). A component that loads it with the page (a toast's
+  // root) would load it with no document, and the drawing could never type
+  // into a field: a typeahead's search would reach no change handler. It is
+  // loaded first, with a document that fires input events as a browser's
+  // does; the page then renders on the server with no document.
+  await withLoadDocument(() => jiti.import('react-dom/client'));
   try {
     reach('importing the page');
+    const notInstalled = missingPackages();
+    if (notInstalled.length > 0) {
+      failMissing(notInstalled);
+      throw null;
+    }
     mod = await jiti.import(entry);
   } catch (e) {
+    if (e === null) throw null;
     classify(e);
     throw null;
   }
@@ -913,6 +1507,23 @@ try {
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
       logs.length = printed;
     }
+    if (workerData.openLayers) {
+      const printed = logs.length;
+      reach('drawing open overlays');
+      markup += await drawOpenLayers(
+        typeof mod.openLayerElements === 'function' ? mod.openLayerElements() : [React.createElement(Page)],
+        React,
+      );
+      logs.length = printed;
+    }
+    if (layers.length > 0) {
+      // What the parts print as they open was printed by the server render
+      // of the page, or is about the drawing itself.
+      const printed = logs.length;
+      reach('drawing open overlays in place');
+      markup = await drawLayers(markup, server);
+      logs.length = printed;
+    }
   } catch (e) {
     classify(e);
     throw null;
@@ -921,16 +1532,67 @@ try {
   for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
     if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
   }
+  // The page's script is built first: it compiles every module the page
+  // can load, a lazily imported one included, and their styles join the
+  // stylesheet below.
+  /** @type {{code: string, modules: number} | null} */
+  let script = null;
+  if (workerData.buildScript) {
+    reach("building the page's script");
+    try {
+      const loaded = await import(pathToFileURL(workerData.esbuild).href);
+      script = await bundleForBrowser({
+        esbuild: loaded.default ?? loaded,
+        entry,
+        source: browserSource,
+        // The files compilePageModule compiles: the page's own, and, when
+        // the project has path aliases, every module outside node_modules.
+        isPageFile: file => {
+          const filename = path.normalize(file);
+          return (
+            isLocal(filename) ||
+            (PATHS.length > 0 && !filename.includes(NODE_MODULES) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename))
+          );
+        },
+        resolveFile: (name, dir) => existingFile(path.resolve(dir, name), LOAD_EXTENSIONS),
+        packageDir: browserPackageDir,
+        builtin: name => name.startsWith('node:') || builtinModules.includes(packageOf(name)),
+        describe: describeFile,
+        oneCopy: served ? Object.keys(SINGLE_COPY_ALIASES) : [],
+      });
+    } catch (e) {
+      if (e instanceof BundleError && e.compile !== undefined) {
+        classify(e.compile);
+      } else if (e instanceof BundleError) {
+        fail('ERR_RENDER_SCRIPT', e.message, e.detail);
+      } else {
+        const message = e instanceof Error ? e.message : String(e);
+        fail('ERR_RENDER_SCRIPT', `The page's script cannot be built for the browser: ${message.split('\n')[0]}`);
+      }
+      throw null;
+    }
+  }
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
     reach('compiling styles');
-    css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+    // A module compiled for the server and again for the browser gives its
+    // rules twice; each rule is written once.
+    const seen = new Set();
+    const rules = stylexRules.filter(rule => {
+      const key = JSON.stringify(rule);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    css = stylexPlugin.processStylexRules(rules, {useLayers: false});
   }
   // Node loads some local modules itself (jiti hands it a plain ES module,
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
   // file carries each module the page reaches, as --reverse expects.
+  /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
+  const aliasImports = [];
   for (let i = 0; i < localFiles.length; i++) {
     const file = localFiles[i];
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -942,6 +1604,8 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
+      const raw = spec.split('?')[0];
+      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
@@ -962,9 +1626,13 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    aliasImports,
     texts,
     fnTexts,
+    screenQueries,
     logs,
+    script: script?.code ?? null,
+    scriptModules: script?.modules ?? 0,
   });
 } catch (e) {
   if (e !== null) classify(e);

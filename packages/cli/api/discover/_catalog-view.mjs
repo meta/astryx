@@ -28,6 +28,8 @@ import {KIND_FIELDS} from './_adapter.mjs';
  * @property {string} [summary]
  * @property {string[]} [keywords]
  * @property {string} [description]
+ * @property {string} [packageDescription] an item's package's description:
+ *   search reads its words with the item's own
  */
 
 /**
@@ -190,7 +192,13 @@ export function searchItems(installed, catalog, declared, officialDeclared) {
       const names = /** @type {Record<string, unknown>} */ (pkg)[field];
       if (!Array.isArray(names)) continue;
       for (const name of names) {
-        items.push({package: pkg.name, kind, name, installed: true});
+        items.push({
+          package: pkg.name,
+          kind,
+          name,
+          installed: true,
+          ...(pkg.description ? {packageDescription: pkg.description} : {}),
+        });
       }
     }
   }
@@ -221,6 +229,7 @@ export function searchItems(installed, catalog, declared, officialDeclared) {
         ...(c.title ? {title: c.title} : {}),
         ...(c.summary ? {summary: c.summary} : {}),
         ...(c.keywords ? {keywords: c.keywords} : {}),
+        ...(pkg.description ? {packageDescription: pkg.description} : {}),
       });
     }
   }

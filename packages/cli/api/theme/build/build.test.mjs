@@ -36,6 +36,7 @@ import {
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
+import {hasModuleHooks} from '../../../test-utils/module-hooks.mjs';
 
 // `themeBuild` captures core's generator once at module load. Wrap the two
 // CSS-emitting exports in vi.fn (call-through by default) so the receipt tests
@@ -55,7 +56,11 @@ vi.setConfig({testTimeout: 30000});
 
 let tmpDir;
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-'));
+  // The real path: macOS keeps the temp folder behind a link (/var is
+  // /private/var), and the files a theme imports are listed by real path.
+  tmpDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-build-api-')),
+  );
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
@@ -383,7 +388,15 @@ describe('themeBuild() — dropped declarations reach the receipt', () => {
     expect(css).toContain('--color-background-body: null;');
     expect(css).toContain('--spacing-4: 12;');
     expect(css).toContain('border-radius: 4px;');
-    expect(result?.data.warnings).toEqual([]);
+    // A null value keeps its meaning; the build names where it is.
+    expect(result?.data.warnings).toEqual([
+      expect.stringMatching(
+        /^tokens\.--color-background-body \(line 3\): --color-background-body holds null; the build writes it as it is \(--color-background-body: null\), and a browser keeps that as the token's value/,
+      ),
+      expect.stringMatching(
+        /^onDark\.tokens\.--color-background-body \(line 4\): /,
+      ),
+    ]);
   });
 
   it('keeps valid CSS that carries semicolons, and reports nothing', async () => {
@@ -811,8 +824,9 @@ describe('themeBuild() — icon registry detection', () => {
     const result = await themeBuild('live.mjs', {}, {cwd: tmpDir});
 
     const generated = fs.readFileSync(path.join(tmpDir, 'live.js'), 'utf8');
+    // The source's path, with the extension of the file it names.
     expect(iconImportLine(generated)).toBe(
-      "import { liveIcons } from './icons';",
+      "import { liveIcons } from './icons.mjs';",
     );
     expect(generated).toContain('icons: liveIcons,');
     expect(generated).toContain('export { liveIcons };');
@@ -862,7 +876,7 @@ describe('themeBuild() — icon registry detection', () => {
     // and emitted `./old-icons` — the live import must win.
     const generated = fs.readFileSync(path.join(tmpDir, 'both.js'), 'utf8');
     expect(iconImportLine(generated)).toBe(
-      "import { realIcons } from './icons';",
+      "import { realIcons } from './icons.mjs';",
     );
     expect(generated).not.toContain('old-icons');
     expect(result?.data.warnings).toEqual([]);
@@ -1008,7 +1022,8 @@ describe('themeBuild() — extends', () => {
   }
 
   /** A base theme with geometry, elevation and a component override. */
-  const BASE_SOURCE = `export const brandTheme = {
+  const BASE_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+  export const brandTheme = defineTheme({
     name: 'ext-base',
     tokens: {
       '--radius-element': '6px',
@@ -1018,7 +1033,7 @@ describe('themeBuild() — extends', () => {
     components: {
       switch: {base: {backgroundColor: 'var(--color-border-emphasized)'}},
     },
-  };\n`;
+  });\n`;
 
   /**
    * The child names its base with a plain relative specifier, exactly as a
@@ -1168,6 +1183,143 @@ describe('themeBuild() — extends', () => {
     const css = fs.readFileSync(path.join(extDir, 'ext-plain.css'), 'utf8');
     expect(css).toContain('--radius-element: 6px;');
     expect(css).toContain('.astryx-switch {');
+  });
+
+  describe('a base theme module that imports its own stylesheet', () => {
+    // Valid JavaScript, so a stylesheet that ran would leave this mark.
+    const STYLESHEET_RAN = '__astryxBaseThemeStylesheetRan';
+    afterEach(() => {
+      Reflect.deleteProperty(globalThis, STYLESHEET_RAN);
+    });
+
+    /**
+     * A package whose `./themes/<slug>` entry imports the theme's stylesheet
+     * from another folder and re-exports the theme object.
+     * @param {string} root the folder whose node_modules holds the package
+     * @param {string} [stylesheet] the stylesheet import the entry writes
+     */
+    function writeStyledBase(root, stylesheet = '../Theme/brand.css') {
+      const pkg = path.join(root, 'node_modules', '@acme', 'brand');
+      fs.mkdirSync(path.join(pkg, 'dist', 'themes'), {recursive: true});
+      fs.mkdirSync(path.join(pkg, 'dist', 'Theme'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@acme/brand',
+          type: 'module',
+          exports: {
+            './themes/brand': './dist/themes/brand.mjs',
+            './themes/brand.css': './dist/Theme/brand.css',
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand.css'),
+        `globalThis.${STYLESHEET_RAN} = true;\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand-theme.mjs'),
+        BASE_SOURCE,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'themes', 'brand.mjs'),
+        `import '${stylesheet}';\nexport {brandTheme} from '../Theme/brand-theme.mjs';\n`,
+      );
+    }
+
+    const STYLED_CHILD_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+    import {brandTheme} from '@acme/brand/themes/brand';
+    export const styledChildTheme = defineTheme({
+      name: 'styled-child',
+      extends: brandTheme,
+      tokens: {'--color-accent': '#ff0000'},
+    });\n`;
+
+    /** @param {string} dir */
+    function expectBaseInherited(dir) {
+      const css = fs.readFileSync(path.join(dir, 'styled-child.css'), 'utf8');
+      expect(css).toContain('--radius-element: 6px;');
+      expect(css).toContain('.astryx-switch {');
+      expect(css).toContain('--color-accent: #ff0000;');
+      expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+    }
+
+    it.skipIf(!hasModuleHooks)(
+      'builds and checks the child, without running the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await themeBuild('styled-child.mjs', {}, {cwd: extDir});
+        expectBaseInherited(extDir);
+
+        const check = await themeBuild(
+          'styled-child.mjs',
+          {check: true},
+          {cwd: extDir},
+        );
+        expect(check?.data.upToDate).toBe(true);
+      },
+    );
+
+    it.skipIf(!hasModuleHooks)(
+      "builds the child in a folder with no Core, on the CLI's Core",
+      async () => {
+        // No Core beside the theme: the build hands the theme the CLI's Core
+        // and loads it through the synchronous path.
+        const bare = fs.realpathSync(
+          fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-styled-base-')),
+        );
+        try {
+          fs.writeFileSync(
+            path.join(bare, 'package.json'),
+            '{"type": "module"}\n',
+          );
+          writeStyledBase(bare);
+          fs.writeFileSync(
+            path.join(bare, 'styled-child.mjs'),
+            STYLED_CHILD_SOURCE,
+          );
+
+          await themeBuild('styled-child.mjs', {}, {cwd: bare});
+          expectBaseInherited(bare);
+        } finally {
+          fs.rmSync(bare, {recursive: true, force: true});
+        }
+      },
+    );
+
+    it('still fails on a stylesheet that the base module imports and that is missing', async () => {
+      writeStyledBase(extDir, '../Theme/missing.css');
+      fs.writeFileSync(
+        path.join(extDir, 'styled-child.mjs'),
+        STYLED_CHILD_SOURCE,
+      );
+
+      await expect(
+        themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+      ).rejects.toThrow(/missing\.css/);
+    });
+
+    it.skipIf(hasModuleHooks)(
+      'fails on a Node without module hooks, naming the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await expect(
+          themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+        ).rejects.toThrow(
+          /brand\.css, and loading a theme that imports a stylesheet or asset needs Node 22\.15 or later, or 23\.5 or later \(this is Node [\d.]+\)\. Nothing was written\./,
+        );
+      },
+    );
   });
 
   it('fails loudly when the base import resolved to nothing', async () => {
@@ -1360,10 +1512,10 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(fs.existsSync(path.join(tmpDir, 'ocean.js'))).toBe(false);
   });
 
-  it('replaces a header-less output at its default path, as an output of a CLI before 0.6.7', async () => {
+  it('replaces a header-less output at its default path, as an output of a release that wrote no header', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'ocean.css'),
-      '/* Built by an older astryx theme build */\n[data-astryx-theme="ocean"] {}\n',
+      '@layer xds-theme {\n@scope ([data-xds-theme="ocean"]) to ([data-xds-theme]) {\n  :scope {}\n}\n}\n',
     );
     await expect(
       themeBuild('ocean.mjs', {}, {cwd: tmpDir}),
@@ -1386,7 +1538,7 @@ describe('themeBuild() — outputs it may replace', () => {
     }
     expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(error.message).toBe(
-      `${path.join('dist', 'o.css')} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another --out.`,
+      `${path.join('dist', 'o.css')} is a file this build did not write (it has no build header: your own file or another tool's), so the build does not replace it. Build to another place with --out, or move or rename ${path.join('dist', 'o.css')} and build again.`,
     );
     expect(error.suggestions).toEqual([
       {
@@ -1394,10 +1546,6 @@ describe('themeBuild() — outputs it may replace', () => {
           / theme build ocean\.mjs --out dist\/o-2\.css$/,
         ),
         reason: 'a path where no output of this build exists yet',
-      },
-      {
-        name: expect.stringMatching(/ theme build ocean\.mjs$/),
-        reason: 'write the outputs beside this source',
       },
     ]);
     expect(error.suggestions[0].name).not.toMatch(/\brm\b/);
@@ -1940,10 +2088,13 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
     }
     expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(error.message).not.toMatch(/[Dd]elete/);
-    const names = error.suggestions.map((/** @type {any} */ x) => x.name);
-    expect(names.join('\n')).toMatch(
-      / theme build other\.mjs --icons-specifier my-icons$/m,
-    );
+    // Any way forward keeps --icons-specifier and names a free --out path.
+    for (const name of error.suggestions.map(
+      (/** @type {any} */ x) => x.name,
+    )) {
+      expect(name).toContain('--icons-specifier my-icons');
+      expect(name).toContain('--out');
+    }
     expect(
       warn.mock.calls.filter(c => String(c[0]).includes('theme editor made')),
     ).toHaveLength(0);

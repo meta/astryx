@@ -28,7 +28,7 @@ const PHOTO_SVG =
 
 /** Opens a story's Lightbox and waits for its photos to load. */
 async function openViewer(page: Page, story: string, trigger: string) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
   );
   await openStory(page, storybook(), story);

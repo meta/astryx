@@ -572,6 +572,13 @@ export const samples = {
     mediaPart(React, mod, Pkg, React.createElement(C)),
   lab__MediaPlaybackRate: ({C, React, mod, Pkg}) =>
     mediaPart(React, mod, Pkg, React.createElement(C)),
+  core__Swipe: ({React, mod, Core}) =>
+    React.createElement(Core.Item, {
+      label: 'Inbox',
+      swipe: mod.createSwipe({
+        trailing: [{id: 'archive', label: 'Archive', onActivate() {}}],
+      }),
+    }),
 };
 
 /**

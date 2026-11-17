@@ -301,7 +301,7 @@ those contracts.
   still the `VelocityTracker` class), and no internal factory shares a public factory's name
   (`spec:AST-107` FR6). Core and Lab components use `spec:AST-107`'s public
   layer wherever it covers their job and reach these modules directly only for
-  these known public-API gaps: press feedback timing; the Reduce Motion
+  these known public-API gaps: press feedback timing, which components reach through `architecture:press-feedback`'s engine and profiles, not directly (its INV1 gap names the touch press tracker's remaining direct users); the Reduce Motion
   cross-fade constants; press tracking across a group of actions; the
   selection lock during a gesture; the presentation hold; the input hold;
   lift-from-trigger and the rectangle morph; custom recognizer relationships;
@@ -353,8 +353,8 @@ those contracts.
   `swipeBehavior` props only until they leave in 0.8.0 (`spec:AST-057`
   DEP-0017, CLN-0025): the released loader, the one `import()` of swipe code;
   the released row style; the role gate and the `commit` warning; the bridge
-  the loaded layer fills, the click guard, and the event forwarders into that
-  bridge; and the coexistence diagnostic. There is no
+  the loaded layer fills and the key forwarder into that bridge; and the
+  coexistence diagnostic. There is no
   install call, no public entry, and no public installed check; tests reset
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
@@ -449,6 +449,16 @@ those contracts.
   chat stream scroll hook reads scroll geometry on every scroll event, and
   about 49 Core source files that call `getBoundingClientRect` are not yet
   checked against this rule.)
+
+- **INV19 — Large behavior code lives in a shared engine.** A component's own
+  behavior module (gesture, motion, layout measurement, scroll, focus or
+  keyboard logic, not rendering or markup) that exceeds 300 lines of source
+  or 3 KB gzip extends or reuses a shared engine (INV13's touch modules, the
+  animator and `animatedLayout`, the layer runtime, the hover recognizer,
+  list windowing, `useOverflow`), or its component's record names why none
+  fits. A new shared engine follows `architecture:knowledge-contracts`
+  DEC-22. Tests, stories, docs, generated files and data tables are outside
+  this rule (DEC-4).
 
 ## Authoring guidance
 
@@ -577,6 +587,13 @@ contracts.
   `@astryxdesign/core/internal/shared-context`, so a Lab component's context
   reaches a swizzled copy's provider under one shared key (`spec:AST-110`
   FR3).
+- `packages/core/src/hooks/useClipboard.ts` `useClipboardCopy` — the body of
+  the public `useClipboard` plus the failed-write state a copy control shows:
+  `isFailed` for the copied state's reset time, an optional assertive failure
+  announcement, and `onError`. A write that settles after its caller unmounts
+  sets no state, starts no timer and announces nothing (INV5). Internal: never
+  in `hooks/index.ts` or the package entry; Lab imports it from
+  `@astryxdesign/core/internal/clipboard-copy`.
 
 ## Deciding specs
 
@@ -625,6 +642,21 @@ component and keeps the render-time writes INV17 forbids easy to reintroduce.
 Component, family, API, accessibility, layer, interaction, and style records
 remain authoritative for the other user-facing outcomes delegated above.
 
+### DEC-4 — Large behavior code lives in a shared engine
+
+**Decider:** `cixzhang`, `2026-11-13`
+
+> "Both rules" — Owner decision, 2026-11-13 (Cindy), on the size rules for
+> unused features and shared behavior code
+
+A large behavior file that only one component uses is code every page with
+that component pays for and every maintainer reads alone. Behavior over the
+threshold extends a shared engine, so a fix or a smaller implementation helps
+every component that uses it, or its record says why no engine fits (INV19).
+
+Rejected: leaving large private behavior files to review judgment alone,
+because they grow unnoticed until they duplicate a shared engine.
+
 ## Verification
 
 Lint and focused tests are one-way evidence. A lint failure means the construct
@@ -654,3 +686,4 @@ component suite is not blanket conformance with every invariant.
 | INV18                 | Review of every added read that forces layout: `getBoundingClientRect`, `getClientRects`, `offset*`, `client*`, `scroll*` (`scrollTop`, `scrollHeight`, and the rest), `inner*` and `outer*`, `visualViewport` geometry, and `getComputedStyle` (evidence gap: no automated finding yet)                                                                                                                                                                                                                                                                                                                                       | A layout read in a per-frame, scroll or resize path that no current clause requires there, a read interleaved with writes, a read without a comment that names its reason, more than one measurement pass per change beyond the before-and-after pair a current clause requires, or JavaScript measurement where CSS placement serves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV18 reorder         | Browser tests of a mouse drag in a reorderable List while a wheel scrolls its scroller: one checks the preview, the drop line and the drop, and one traces layout and counts the offset reads                                                                                                                                                                                                                                                                                                                                                                                                                                  | A wheel scroll mid-drag that leaves the drop line or the preview off the pointer, a drop away from the pointer, a layout the read forces, or more than one read in a scrolled frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV18 (after layout)  | `sharedResizeObserver.test.ts` cases for `observeResizeAfterLayout`, and the Chromium trace test that opens a Lightbox gallery on a clamped caption and counts its layouts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | A first read in the registration-time call, a first read before the browser's own first notification after layout, or a layout that the caption's first read forces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| INV19                 | A size check over Core component folders: each non-test behavior module over 300 lines or 3 KB gzip names its shared engine, or its record names why none fits                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | A private behavior module over the threshold with no shared engine and no recorded reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |

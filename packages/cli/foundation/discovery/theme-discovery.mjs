@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
 import {CLI_ROOT, realDir} from '../fs/paths.mjs';
@@ -34,8 +35,19 @@ import {
   storedKey,
   STORED_DOCS_FILE,
 } from '../doc-compiler/stored-docs.mjs';
+import {compareText} from '../text/compare-text.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
+
+/**
+ * The theme a project starts with when it has none: the package `init`
+ * installs and the build playbook tells such a project to add.
+ */
+export const STARTER_THEME = Object.freeze({
+  slug: 'neutral',
+  package: '@astryxdesign/theme-neutral',
+});
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
 
@@ -57,6 +69,8 @@ export const THEME_DOC_SUFFIX = '.doc.mjs';
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
+ * @property {{export: string, from: string, themeProp?: string, modeProp?: string}} [provider] the component the
+ *   owning integration's manifest names as the one that wires its themes
  */
 
 /**
@@ -156,8 +170,33 @@ class ThemeRuntimeExportError extends Error {}
  */
 function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
-  const j = jscodeshift.withParser(parser);
-  const root = j(fs.readFileSync(file, 'utf-8'));
+  const text = fs.readFileSync(file, 'utf-8');
+  // A module's specifiers follow from its text: one parse per text read
+  // (a command reads the same built theme module several times).
+  const key = `${parser}\0${withRequire}\0${createHash('sha256').update(text).digest('hex')}`;
+  const known = SPECIFIERS.get(key);
+  if (known) return [...known];
+  const found = parsedSpecifiers(text, jscodeshift.withParser(parser), {
+    withRequire,
+  });
+  if (SPECIFIERS.size >= 256) SPECIFIERS.clear();
+  SPECIFIERS.set(key, found);
+  return [...found];
+}
+
+/** The specifiers each module text read names, by parser, mode and text. @type {Map<string, string[]>} */
+const SPECIFIERS = new Map();
+
+/**
+ * The module specifiers a module's text names (imports, re-exports,
+ * import() calls, and with `withRequire` require() calls).
+ * @param {string} text
+ * @param {any} j jscodeshift with its parser
+ * @param {{withRequire: boolean}} options
+ * @returns {string[]}
+ */
+function parsedSpecifiers(text, j, {withRequire}) {
+  const root = j(text);
   /** @type {string[]} */
   const specifiers = [];
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
@@ -1328,7 +1367,7 @@ export function discoverUnmigratedThemeCopies(
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .sort((a, b) => compareText(a.slug, b.slug));
 }
 
 /** @param {string[]} files */
@@ -1434,7 +1473,7 @@ export function discoverThemeDirectory(
   }
   const directories = rootEntries
     .filter(entry => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   for (const directory of directories) {
     const slug = directory.name;
@@ -1723,6 +1762,8 @@ let bundledThemeCache = null;
 
 /** @returns {DiscoveredTheme[]} */
 export function discoverBundledThemes() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   bundledThemeCache ??= discoverThemeDirectory(
     THEMES_DIR,
     BUNDLED_THEME_PACKAGE,
@@ -1817,5 +1858,6 @@ export async function discoverIntegrationThemes(integration) {
     packageDir: integration.__packageDir,
     packageExports: integration.__packageExports,
     source: /** @type {const} */ ('package'),
+    ...(integration.themeProvider ? {provider: integration.themeProvider} : {}),
   }));
 }

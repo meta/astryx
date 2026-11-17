@@ -138,7 +138,7 @@ async function openViewer(
   page: Page,
   story: keyof typeof STORIES = 'plain',
 ): Promise<Viewer> {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), STORIES[story].id);
@@ -725,7 +725,7 @@ test(
 test("reopening at the dismissed photo's neighbour shows that photo", async ({
   page,
 }) => {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
   await openStory(page, storybook(), 'core-lightbox--gallery');
@@ -917,7 +917,7 @@ test('a caption stays in its band through a drag to close that springs back', as
 }) => {
   // A 3:1 panorama leaves free space between the fitted photo and the
   // caption's band. The band keeps its place through the drag.
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(3000, 1000),

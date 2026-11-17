@@ -57,6 +57,7 @@
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the returned source: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.
  * @property {number} data.demoContentReplaced Astryx docs-only demo content elements (such as a playing card's face in a motion example) replaced in the returned source with a `<Text>Card content</Text>` placeholder. Put your own content there. 0 when the template carried none.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the template's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**
@@ -69,6 +70,7 @@
  * @property {string} data.description
  * @property {string[]} data.components
  * @property {string} data.skeleton
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**
@@ -78,7 +80,7 @@
  * @property {string} package The npm package that owns the template.
  * @property {object} data
  * @property {string} data.template
- * @property {string} data.outputDir
+ * @property {string} data.outputDir The folder written: relative to the project, or absolute for a scratch copy in the system temp folder.
  * @property {string} data.fileName
  * @property {number} data.filesCopied
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the written file: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.
@@ -86,7 +88,9 @@
  * @property {string[]} data.notes Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Each note is one actionable line. Empty when the template needs nothing the project lacks.
  * @property {string[]} data.missingPackages External package names the template imports that are not in the project's dependencies. Empty when none are missing.
  * @property {string | null} data.installCommand A ready-to-run install command for the missing packages, using the project's package manager and the CLI workspace's version ranges. Null when no packages are missing, or when several lockfiles leave the package manager undetermined; missingPackages still names the packages.
+ * @property {string} [data.givenPath] The absolute path as given, present only when it named a place inside the project root. The write is the same as for its relative path: `outputDir` for a folder, or `outputDir` and `fileName` for a file.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the written file's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
+ * @property {boolean} data.isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out).
  */
 
 /**

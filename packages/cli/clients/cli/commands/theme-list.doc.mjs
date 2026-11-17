@@ -16,7 +16,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'List themes available to add',
   description:
-    'Lists bundled, package, and local themes with their owner, source, added state, and default state. ' +
+    "Lists bundled, package, and local themes with their source, added state, and default state, the owner the app imports each from (a bundled theme's own package), and whether that owner is installed. " +
     'Earlier descriptor-less copies are not listed as themes; the receipt names them with the upgrade command.',
   fn: 'themeListAvailable',
   options: [
