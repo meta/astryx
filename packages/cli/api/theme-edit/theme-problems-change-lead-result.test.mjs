@@ -213,14 +213,16 @@ describe('problems a change makes', () => {
             // The nearest darker accent that stands out from the page.
             fix: expect.stringMatching(/ set t accent '#[0-9a-f]{6}'$/),
           },
-          {
+          // (The pale yellow is the theme's own typed color: the problem
+          // also offers to keep it as designed.)
+          expect.objectContaining({
             problem: expect.stringMatching(
               /^the progress-bar-fill \(#ffe600\) is [\d.]+:1 on the progress-bar-track/,
             ),
             fix: expect.stringMatching(
               /set t background-color '#[0-9a-f]{6}' --on progress-bar-fill --when variant:accent --mode light$/,
             ),
-          },
+          }),
         ]),
       );
       expect(r.data.newProblems).toHaveLength(3);
