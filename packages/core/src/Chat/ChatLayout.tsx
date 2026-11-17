@@ -5,7 +5,8 @@
 /**
  * @file ChatLayout.tsx
  * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
- *   useChatKeyboard, the pooled resize observer
+ *   useChatKeyboard, the pooled resize observer, useGestureRecognizer,
+ *   useAttachment and the keyboard dismissal pans
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -36,6 +37,8 @@
  * - /packages/core/src/Chat/index.ts (exports)
  * - /apps/storybook/stories/ChatLayout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
+ * - /packages/core/src/Chat/transcriptDismiss.ts (the dismiss line)
+ * - /packages/core/src/Chat/composerBounce.ts (the dock's bounce)
  */
 
 import {type ReactNode, useCallback, useMemo, useRef, useState} from 'react';
@@ -50,6 +53,15 @@ import {useChatKeyboard} from './useChatKeyboard';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
 import {KeyboardSurfaceContext} from './keyboardSurface';
+import {
+  createComposerDismissPan,
+  createKeyboardDismissPan,
+  dismissKeyboardAtCrossing,
+  dismissKeyboardOnComposerDrag,
+  holdPageUnderComposer,
+} from './transcriptDismiss';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {useAttachment} from '../hooks/useAttachment';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -381,6 +393,7 @@ export function ChatLayout({
     [isSelfScrolling],
   );
   const dockRef = useMergedRefs(keyboard.dockRef, observeDock);
+  const {composerRef, bounceDock} = keyboard;
   const endRoom = keyboard.lift + (isSelfScrolling ? 0 : dockHeight);
 
   const defaultScrollButton = (
@@ -395,6 +408,34 @@ export function ChatLayout({
       }}
     />
   );
+
+  useGestureRecognizer(
+    rootRef,
+    () =>
+      createKeyboardDismissPan(
+        // Where the page draws the composer. A browser's own pan to the
+        // focused field moves it with the page.
+        () =>
+          composerRef.current?.getBoundingClientRect().top ??
+          Number.POSITIVE_INFINITY,
+      ),
+    pan =>
+      dismissKeyboardAtCrossing(pan, fingerSpeed => {
+        const composer = composerRef.current;
+        if (composer != null) {
+          // No deeper than the composer's bottom padding.
+          const depth =
+            Number.parseFloat(getComputedStyle(composer).paddingBottom) || 0;
+          bounceDock(fingerSpeed, depth);
+        }
+      }),
+  );
+  useGestureRecognizer(
+    composerRef,
+    () => createComposerDismissPan(() => composerRef.current),
+    dismissKeyboardOnComposerDrag,
+  );
+  useAttachment(composerRef, holdPageUnderComposer, null);
 
   // --- Layout context ---
   const layoutContext = useMemo(
@@ -459,7 +500,8 @@ export function ChatLayout({
           )}
         </div>
 
-        {/* Dock container — sticky/fixed, holds blur + scroll button + composer */}
+        {/* Dock container — sticky/fixed, holds blur + scroll button + composer.
+            Its bounce moves all three as one. */}
         <div
           ref={dockRef}
           {...stylex.props(
@@ -477,7 +519,9 @@ export function ChatLayout({
 
           {/* The composer's region. Under a finger in a top-level page,
               useChatKeyboard makes it a group with no name, where focus rests
-              after the keyboard's Done. Elsewhere it is a plain container. */}
+              after the keyboard's Done. Elsewhere it is a plain container. A
+              transcript drag that reaches its top, or a drag down that starts
+              on it, dismisses the software keyboard. */}
           <KeyboardSurfaceContext value={true}>
             <div
               ref={keyboard.composerRef}

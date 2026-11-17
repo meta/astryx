@@ -35,7 +35,10 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 // BottomSheet's keyboard hook. An import through it would put that hook's
 // on-demand code in every layered component.
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
-import {getKeyboardHeight} from '../keyboard/keyboardHeight';
+import {
+  getKeyboardHeight,
+  getKeyboardViewportHeight,
+} from '../keyboard/keyboardHeight';
 import {timing} from '../motion/uikit/timing';
 import {
   keyboardClearanceCap,
@@ -45,7 +48,6 @@ import {
 import {settledBox} from './settledBox';
 import {awaitBrowserClick} from '../utils/browserClickWait';
 import {subscribeInput} from '../utils/inputStream';
-import {layoutViewportHeight} from '../utils/layoutViewport';
 
 export {
   keyboardClearanceCap,
@@ -247,7 +249,7 @@ export function useLayerKeyboardClearance(
       }
       // In layout px, the box's and the keyboard's units: WebKit reports
       // `innerHeight` in the pinch-zoomed visual viewport's px.
-      const viewport = layoutViewportHeight(win);
+      const viewport = getKeyboardViewportHeight(win);
       const box = settledBox(layer);
       const height = keyboardClearanceCap(box, viewport, inset);
       if (height == null) {

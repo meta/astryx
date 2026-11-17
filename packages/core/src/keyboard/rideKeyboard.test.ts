@@ -4,8 +4,8 @@
  * @file rideKeyboard.test.ts
  * @input vitest, rideKeyboard, a stand-in animator
  * @output Tests that a ride plays its transition's curve from the
- *   transition's start and asks for an entrance. A jump or an ended slide
- *   lands at once.
+ *   transition's start, asks for an entrance and adds to a curve on screen
+ *   where asked. A jump or an ended slide lands at once.
  * @position Unit tests for keyboard/rideKeyboard.ts
  */
 
@@ -73,6 +73,29 @@ describe('rideKeyboard', () => {
     expect(options).toEqual({at: 1000});
     expect(curves.y.duration).toBeCloseTo(androidKeyboard.showMs / 1000, 9);
     expect(curves.y.at(curves.y.duration)).toBe(-300);
+  });
+
+  it('adds the ride to a curve the element plays where asked, as a bounce under the slide', () => {
+    const animator = standInAnimator();
+
+    rideKeyboard(
+      animator as unknown as Animator,
+      {y: 300},
+      transition({
+        curve: {
+          durationMs: androidKeyboard.showMs,
+          points: androidKeyboard.showCurve,
+        },
+      }),
+      {additive: true},
+    );
+
+    expect(animator.play).toHaveBeenCalledTimes(1);
+    const [, options] = animator.play.mock.calls[0] as unknown as [
+      unknown,
+      {at: number; additive: boolean},
+    ];
+    expect(options).toEqual({at: 1000, additive: true});
   });
 
   it("plays the transition's own curve, even a show published with the hide slide", () => {
