@@ -102,3 +102,32 @@ export const containerEdgeStyles = stylex.create({
     },
   },
 });
+
+/**
+ * The inline-end room of a header cell, as a private custom property. It
+ * equals the cell's inline-end padding, including the container edge value on
+ * the last column. Header content may grow into this room before its label
+ * truncates, so a label never truncates while the cell can still hold it.
+ *
+ * SYNC: Keep the last-column values equal to `containerEdgeStyles`.
+ */
+export const headerEndRoomStyles = stylex.create({
+  compact: {
+    '--_table-header-end-room': {
+      default: spacingVars['--spacing-2'],
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-2']}), ${spacingVars['--spacing-2']})`,
+    },
+  },
+  balanced: {
+    '--_table-header-end-room': {
+      default: spacingVars['--spacing-3'],
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-3']}), ${spacingVars['--spacing-2']})`,
+    },
+  },
+  spacious: {
+    '--_table-header-end-room': {
+      default: spacingVars['--spacing-4'],
+      ':last-child': `max(var(--container-padding-inline-end, ${spacingVars['--spacing-4']}), ${spacingVars['--spacing-2']})`,
+    },
+  },
+});

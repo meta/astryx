@@ -140,7 +140,12 @@ const sortStyles = stylex.create({
     },
     font: 'inherit',
     color: 'inherit',
-    width: '100%',
+    // At least the cell's content width, so the whole cell is the target. A
+    // longer label may grow into the header cell's end padding before it
+    // truncates.
+    width: 'max-content',
+    minWidth: '100%',
+    maxWidth: 'calc(100% + var(--_table-header-end-room, 0px))',
     height: '100%',
     textAlign: 'inherit',
     borderRadius: radiusVars['--radius-inner'],

@@ -444,7 +444,7 @@ function SortFilterTable() {
 }
 
 describe('header with a filter button in a narrow column', () => {
-  it('truncates the label so the filter button stays inside its cell', () => {
+  it('truncates the label only past the cell end padding, so the filter button stays inside its cell', () => {
     render(<SortFilterTable />);
     const filterButton = screen.getByRole('button', {name: /filter name/i});
     const sortButton = screen
@@ -454,9 +454,22 @@ describe('header with a filter button in a narrow column', () => {
     const labelRow = label.parentElement!;
 
     expect(labelRow.contains(filterButton)).toBe(true);
-    expect(cssDeclarationsOf(labelRow)).toContain('max-width: 100%');
+    // The row may grow into the cell's end padding, never past the cell.
+    expect(
+      cssDeclarationsOf(labelRow).some(
+        d =>
+          d.startsWith('max-width: calc(100% +') &&
+          d.includes('--_table-header-end-room'),
+      ),
+    ).toBe(true);
+    expect(
+      cssDeclarationsOf(filterButton.closest('th')!).some(d =>
+        d.startsWith('--_table-header-end-room:'),
+      ),
+    ).toBe(true);
     expect(cssDeclarationsOf(label)).toEqual(
       expect.arrayContaining([
+        '--_table-header-end-room: 0px',
         'min-width: 0',
         'overflow: hidden',
         'text-overflow: ellipsis',

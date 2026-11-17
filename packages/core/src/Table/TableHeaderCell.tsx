@@ -26,7 +26,11 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {overflowStyles, containerEdgeStyles} from './table.stylex';
+import {
+  overflowStyles,
+  containerEdgeStyles,
+  headerEndRoomStyles,
+} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {
   hasTableContextActions,
@@ -162,6 +166,7 @@ export function TableHeaderCell({
       headerDividerStyles.cell,
       overflowStyles.cell,
       containerEdgeStyles[ctx.density],
+      headerEndRoomStyles[ctx.density],
     );
     // Column dividers come from the shared builder (column axis only).
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
