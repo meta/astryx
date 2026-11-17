@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -34,6 +34,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {realRenders} from '../../test-utils/theme-render-stub.mjs';
+
+// (What these cases check is what a build or a picture run names, not the
+// rendered pages: the renders are stood in for.)
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** A valid 1x1 PNG. */
 const PNG = (() => {
@@ -149,7 +158,10 @@ describe('a build names the pictures it removed', () => {
 
 describe('a picture run that stops part way', () => {
   const savedPath = process.env.PATH;
+  // (The picture run takes the pages as they are rendered.)
+  beforeAll(() => realRenders(true));
   afterAll(() => {
+    realRenders(false);
     process.env.PATH = savedPath;
     fs.rmSync(path.join(cwd, 'node_modules/playwright'), {
       recursive: true,

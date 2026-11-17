@@ -7,7 +7,7 @@
  * following them ends the problems.
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
@@ -19,6 +19,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// (What these cases check comes from the theme, not the rendered pages: the
+// renders are stood in for.)
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 const T = 400_000;
 /** @type {string} */
