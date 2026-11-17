@@ -10164,6 +10164,16 @@ export async function contrastProblems(ctx, data, res) {
    * @returns {string | null}
    */
   const pairState = p => {
+    // (Asked for each side and each mode of every pair: made once a pair.)
+    if (statesOf.has(p)) return /** @type {string | null} */ (statesOf.get(p));
+    const found = pairStateOf(p);
+    statesOf.set(p, found);
+    return found;
+  };
+  /** @type {WeakMap<TextPair, string | null>} */
+  const statesOf = new WeakMap();
+  /** {@link pairState}, made. @param {TextPair} p @returns {string | null} */
+  const pairStateOf = p => {
     const t = p.bg.target;
     const tok = p.bg.tokens?.[0];
     if (!t || !tok) return null;
