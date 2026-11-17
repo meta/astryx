@@ -645,6 +645,62 @@ describe('Selector', () => {
     }
   });
 
+  it('keeps the selected-item overlay inside a panned visual viewport', async () => {
+    const restoreRects = mockSelectorRects();
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      'visualViewport',
+    );
+    const visualViewport = Object.assign(new EventTarget(), {
+      offsetTop: 100,
+      width: 0,
+      height: 200,
+      scale: 1,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: visualViewport,
+    });
+    const user = userEvent.setup();
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      const popover = screen
+        .getByRole('listbox', {hidden: true})
+        .closest('[popover]');
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: max(-90px, min(-110px,',
+        );
+      });
+
+      visualViewport.offsetTop = 120;
+      act(() => {
+        visualViewport.dispatchEvent(new Event('scroll'));
+      });
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: max(-70px, min(-110px,',
+        );
+      });
+    } finally {
+      restoreRects();
+      if (originalVisualViewport) {
+        Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+      } else {
+        Reflect.deleteProperty(window, 'visualViewport');
+      }
+    }
+  });
+
   it.each([
     ['below its anchor', 'marginBlockEnd'],
     ['already flipped above its anchor', 'marginBlockStart'],
