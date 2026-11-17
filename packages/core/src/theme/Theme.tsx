@@ -384,9 +384,6 @@ export function Theme({
   // marks its root.
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
-  // The root names the scheme it draws in when its mode forces one or the
-  // page draws in one; with neither, the reader's preference decides. A
-  // nested Theme reads none.
   const forcesScheme = mode === 'light' || mode === 'dark';
   const pageScheme = useRootScheme(!isNested && !forcesScheme);
   useRootThemeSync(

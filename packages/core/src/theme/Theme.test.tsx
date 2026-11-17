@@ -133,7 +133,7 @@ describe('Theme', () => {
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
   });
 
-  it('names the scheme the root provider draws in on <html> when its mode or the page decides it, and removes it on unmount', () => {
+  it('names the scheme the root provider draws in on <html> when its mode or the page decides it, and removes it on unmount', async () => {
     for (const mode of ['dark', 'light'] as const) {
       const {unmount} = render(
         <Theme theme={testTheme} mode={mode}>
@@ -176,7 +176,19 @@ describe('Theme', () => {
       },
     );
     try {
-      // A nested Theme that forces dark never changes what the root names.
+      // A nested Theme that forces dark never writes the root's scheme, not
+      // even for a moment before the root writes its own.
+      const written: (string | null)[] = [];
+      const watcher = new MutationObserver(records => {
+        for (const record of records) {
+          if (record.attributeName === 'data-astryx-scheme') {
+            written.push(
+              document.documentElement.getAttribute('data-astryx-scheme'),
+            );
+          }
+        }
+      });
+      watcher.observe(document.documentElement, {attributes: true});
       const page = render(
         <Theme theme={testTheme} mode="system">
           <Theme theme={testTheme} mode="dark">
@@ -184,9 +196,12 @@ describe('Theme', () => {
           </Theme>
         </Theme>,
       );
+      await Promise.resolve();
+      watcher.disconnect();
       expect(document.documentElement.getAttribute('data-astryx-scheme')).toBe(
         'light',
       );
+      expect(written).not.toContain('dark');
       page.unmount();
       rootScheme = 'light dark';
       render(

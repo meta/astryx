@@ -36,6 +36,7 @@ import {resolveThemeTokens} from './tokens';
 import {getRegisteredTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {watchMediaQuery} from '../utils/coarsePointer';
 import {createSharedContext} from '../utils/sharedContext';
 import {sharedState} from '../utils/sharedRealm';
 
@@ -354,15 +355,15 @@ function subscribeRootScheme(onStoreChange: () => void): () => void {
     document.addEventListener('load', onStylesheetLoad, true);
     // A root whose color-scheme follows the reader through a media query
     // changes with the reader's preference, with no DOM change.
-    const preference =
-      typeof window.matchMedia === 'function'
-        ? window.matchMedia('(prefers-color-scheme: dark)')
-        : null;
-    preference?.addEventListener?.('change', notifyRootSchemeChange);
+    const stopPreference = watchMediaQuery(
+      window,
+      '(prefers-color-scheme: dark)',
+      notifyRootSchemeChange,
+    );
     rootScheme.stop = () => {
       observer.disconnect();
       document.removeEventListener('load', onStylesheetLoad, true);
-      preference?.removeEventListener?.('change', notifyRootSchemeChange);
+      stopPreference();
     };
   }
   return () => {
