@@ -25,6 +25,7 @@ import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {TableRowPlacementContext} from './TableRowPlacementContext';
 
 /** Props for TableRow — thin `<tr>` wrapper */
 export interface TableRowProps extends BaseProps<HTMLTableRowElement> {
@@ -172,6 +173,7 @@ export function TableRow({
   ...props
 }: TableRowProps) {
   const ctx = use(TableContext);
+  const placement = use(TableRowPlacementContext);
 
   if (!ctx) {
     return (
@@ -228,12 +230,24 @@ export function TableRow({
     rowStyles.push(...xstyle);
   }
 
+  // A body row says which stripe it is and whether its table is striped, so
+  // a theme can style either stripe (`parity:odd`) and only striped tables
+  // (`striped`). The stripe Core paints itself is `parity:even`.
+  const isBodyRow = placement.isBodyRow && !isHeaderRow;
   return (
     <tr
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps('table-row'),
+        themeProps(
+          'table-row',
+          isBodyRow
+            ? {
+                parity: placement.parity,
+                striped: ctx.isStriped ? 'striped' : null,
+              }
+            : undefined,
+        ),
         stylex.props(tableRowMarker, ...rowStyles),
         incomingClassName,
         incomingStyle,
