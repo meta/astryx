@@ -26,7 +26,7 @@ function RouterLink({
       onClick={e => {
         e.preventDefault();
         onClick?.(e);
-        showToast({body: `Demo: RouterLink intercepted navigation to ${href}`});
+        showToast({body: `Demo: your router would navigate to ${href} here`});
       }}
       {...props}>
       {children}
