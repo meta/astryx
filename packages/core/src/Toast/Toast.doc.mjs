@@ -19,7 +19,14 @@ export const docs = {
   ],
 
   playground: {
-    defaults: {body: 'Changes saved'},
+    // The values useToast()'s show function sets, so the playground's toast
+    // starts as a shown info toast does.
+    defaults: {
+      body: 'Changes saved',
+      type: 'info',
+      isAutoHide: true,
+      autoHideDuration: 5000,
+    },
   },
 
   props: [
