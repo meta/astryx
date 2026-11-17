@@ -587,7 +587,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 cursor={{stroke: GRID_STROKE}}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -598,7 +598,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
@@ -634,7 +634,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 cursor={{stroke: GRID_STROKE}}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="prior"
                 name="Prior"
                 stroke={COLORS.prior}
@@ -644,7 +644,7 @@ function TrendChart({trend}: {trend: TrendSeries}) {
                 isAnimationActive={false}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="current"
                 name="Current"
                 stroke={trend.color}
