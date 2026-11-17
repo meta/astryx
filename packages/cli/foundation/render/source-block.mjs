@@ -164,7 +164,7 @@ function pageParts(html) {
 /**
  * Whether a script tag's attributes give it the source type. A MIME type is
  * matched without regard to letter case.
- * @param {Array<[string, string]>} attrs
+ * @param {ReadonlyArray<readonly [string, string, ...number[]]>} attrs
  */
 const isSourceType = attrs => {
   const type = attrs.find(([name]) => name === 'type')?.[1];

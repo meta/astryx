@@ -157,7 +157,7 @@ const escapeHtml = s =>
 function rootThemeAttrs(markup) {
   for (const t of scanHtml(markup)) {
     if (t.kind !== 'start') continue;
-    const attrs = new Map(t.attrs);
+    const attrs = new Map(t.attrs.map(([name, value]) => /** @type {[string, string]} */ ([name, value])));
     if (!attrs.has('data-astryx-theme')) continue;
     return ['data-astryx-theme', 'data-theme']
       .filter(a => attrs.has(a))
@@ -730,8 +730,11 @@ export function withoutAutofocus(markup) {
       // The attribute goes with the spaces before it; the reader names
       // where its text starts and ends, so every other attribute stays as
       // written.
+      // Not when a `/` follows: `<input title=x/>` would read as title="x/".
       let from = start;
-      while (from > token.start && /[\t\n\f\r ]/.test(markup[from - 1])) from--;
+      if (markup[end] !== '/') {
+        while (from > token.start && /[\t\n\f\r ]/.test(markup[from - 1])) from--;
+      }
       out += markup.slice(at, from);
       at = end;
     }

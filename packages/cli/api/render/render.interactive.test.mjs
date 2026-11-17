@@ -253,6 +253,11 @@ describe("a render, which carries the page's script", () => {
     expect(withoutAutofocus(`<input title="a>b" autofocus>`)).toBe(
       `<input title="a>b">`,
     );
+    // An unquoted value keeps a space before a `/` that follows the cut, so
+    // it never reads as part of the value.
+    expect(withoutAutofocus(`<input title=x autofocus/>`)).toBe(
+      `<input title=x />`,
+    );
     const painted = new JSDOM(markup).window.document.querySelector('input');
     expect(painted?.hasAttribute('autofocus')).toBe(false);
     const dom = new JSDOM(file, {
