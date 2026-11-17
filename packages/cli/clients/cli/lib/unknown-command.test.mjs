@@ -10,11 +10,20 @@ import {describe, it, expect} from 'vitest';
 import {Command} from 'commander';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {unknownCommandAnswer} from './unknown-command.mjs';
+import {
+  ADD_WORDS,
+  JOB_WORDS,
+  LIST_WORDS,
+  PROPS_WORDS,
+  READ_WORDS,
+  SOURCE_WORDS,
+} from './other-cli-words.mjs';
 
 /** A program shaped like the CLI's. */
 function program() {
   const root = new Command('astryx');
   root.option('--json', 'JSON');
+  root.option('--base <pkg>', 'base');
   root.command('init');
   root
     .command('component')
@@ -26,12 +35,30 @@ function program() {
     .command('template')
     .argument('[name]')
     .argument('[path]')
-    .option('--list', 'list');
+    .option('--list', 'list')
+    .option('--type <type>', 'type')
+    .option('--skeleton', 'skeleton');
+  root.command('build').argument('[query]');
+  root.command('hook').argument('[name]');
+  root.command('swizzle').argument('[component]').option('--list', 'list');
+  root
+    .command('upgrade')
+    .option('--from <version>', 'from')
+    .option('--list', 'list')
+    .option('--apply', 'apply');
+  root
+    .command('gap-report')
+    .argument('[component]')
+    .option('--reason <reason>', 'reason');
+  root.command('discover').argument('[query]');
   const theme = root.command('theme');
   theme.command('list');
+  theme.command('add').argument('[slug]');
+  theme.command('eject').argument('[slug]').argument('[path]');
   theme.command('targets').argument('[component]');
   const integration = root.command('integration');
   integration.command('verify');
+  integration.command('add').argument('[kind]').argument('[name]');
   const doctor = root.command('doctor');
   doctor.command('integration').command('validate').argument('[pkg]');
   const experimental = root.command('experimental');
@@ -43,6 +70,10 @@ function program() {
 const entries = async name =>
   ({
     Text: {command: 'component', name: 'Text'},
+    button: {command: 'component', name: 'Button'},
+    Card: {command: 'component', name: 'Card'},
+    Stepper: {command: 'component', name: 'Stepper'},
+    settings: {command: 'template', name: 'settings'},
     DialogFormDialog: {command: 'template', name: 'DialogFormDialog'},
     tokens: {command: 'docs', name: 'tokens'},
   })[name] ?? null;
@@ -128,6 +159,137 @@ describe('the command the words point at', () => {
   });
 });
 
+describe('words from another command line', () => {
+  it('reads a verb before its group', async () => {
+    expect(await names(['add', 'theme', 'matcha'])).toEqual([
+      'astryx theme add matcha',
+    ]);
+    expect(await names(['list', 'themes'])).toEqual(['astryx theme list']);
+  });
+
+  it('reads a plural kind of template as its list', async () => {
+    expect(await names(['list', 'pages'])).toEqual([
+      'astryx template --list --type page',
+    ]);
+  });
+
+  it('reads a word before a command as a request to run it, and moves a path option to its path', async () => {
+    expect(await names(['show', 'component', 'Button'])).toEqual([
+      'astryx component Button',
+    ]);
+    expect(
+      await names([
+        'add',
+        'template',
+        'settings',
+        '--out',
+        'src/app/settings/page.tsx',
+      ]),
+    ).toEqual(['astryx template settings src/app/settings/page.tsx']);
+  });
+
+  it('reads a copy verb and a component name as swizzle, and leaves other names to the tree', async () => {
+    expect(await names(['eject', 'button'])).toEqual(['astryx swizzle Button']);
+    expect(await names(['eject', 'neutral'])).toEqual([
+      'astryx theme eject neutral',
+    ]);
+  });
+
+  it('reads add and a name by what the name is', async () => {
+    expect(await names(['add', 'button'])).toEqual([
+      'astryx swizzle Button',
+      'astryx component Button',
+    ]);
+    expect(
+      await names(['add', 'settings', '--path', 'src/app/settings/page.tsx']),
+    ).toEqual(['astryx template settings src/app/settings/page.tsx']);
+  });
+
+  it("reads a props word and a component name as the component's props", async () => {
+    expect(await names(['props', 'Card'])).toEqual([
+      'astryx component Card --props',
+    ]);
+  });
+
+  it('reads a word for a job one command does, and names the inputs the run needs', async () => {
+    expect(await names(['migrate'])).toEqual([
+      'astryx upgrade --from <old-version>',
+    ]);
+    expect(
+      await names(['migrate', '--from', '0.6.0', '--to', 'latest']),
+    ).toEqual(['astryx upgrade --from 0.6.0']);
+    expect(await names(['migrate', '--list'])).toEqual([
+      'astryx upgrade --list',
+    ]);
+    expect(await names(['browse', 'integrations'])).toEqual([
+      'astryx discover',
+    ]);
+  });
+
+  it('keeps the program options written after the word', async () => {
+    expect(
+      await names([
+        'add',
+        'theme',
+        'matcha',
+        '--json',
+        '--base',
+        '@astryxdesign/core',
+      ]),
+    ).toEqual(['astryx theme add matcha --json --base @astryxdesign/core']);
+    expect(await names(['eject', 'button', '--json'])).toEqual([
+      'astryx swizzle Button --json',
+    ]);
+  });
+
+  it("leaves a command's plural to the plural rule", async () => {
+    expect(await names(['integrations', 'verify'])).toEqual([
+      'astryx integration verify',
+    ]);
+    expect(await names(['integrations'])).toEqual([
+      'astryx integration --help',
+    ]);
+    expect(await names(['integrations', 'list'])).toEqual([
+      'astryx integration --help',
+    ]);
+  });
+
+  it("reads a list word or a read word after a command's plural", async () => {
+    expect(await names(['templates', 'list'])).toEqual([
+      'astryx template --list',
+    ]);
+    expect(
+      await names(['templates', 'view', 'settings', '--skeleton']),
+    ).toEqual(['astryx template settings --skeleton']);
+  });
+});
+
+describe('the table of words from other command lines', () => {
+  it('holds no word that is a command, or the plural of one', async () => {
+    const {stdout} = await runCli(['--json', 'help']);
+    const commands = new Set(
+      JSON.parse(stdout).data.subcommands.map(
+        (/** @type {{name: string}} */ c) => c.name,
+      ),
+    );
+    const tables = [
+      LIST_WORDS,
+      READ_WORDS,
+      ADD_WORDS,
+      SOURCE_WORDS,
+      PROPS_WORDS,
+      JOB_WORDS,
+    ];
+    for (const {word, usedBy} of tables.flat()) {
+      expect(usedBy).not.toBe('');
+      expect(commands.has(word)).toBe(false);
+      expect(commands.has(word.replace(/s$/, ''))).toBe(false);
+      expect(commands.has(`${word}s`)).toBe(false);
+    }
+    for (const {run} of JOB_WORDS) expect(commands.has(run[0])).toBe(true);
+  });
+});
+
 describe('the CLI', () => {
   it('names the lookup that reads the next word, and that run works', async () => {
     const {status, stdout} = await runCli(['--json', 'info', 'Button']);
@@ -141,6 +303,41 @@ describe('the CLI', () => {
 
     const meant = await runCli(['--json', 'component', 'Button']);
     expect(meant.status).toBe(0);
+  });
+
+  it('names the command for words from another command line', async () => {
+    const added = JSON.parse(
+      (await runCli(['--json', 'add', 'theme', 'matcha'])).stdout,
+    );
+    expect(added.code).toBe('ERR_UNKNOWN_COMMAND');
+    expect(added.suggestions[0].name).toBe('astryx --json theme add matcha');
+
+    const ejected = JSON.parse(
+      (await runCli(['--json', 'eject', 'button'])).stdout,
+    );
+    expect(ejected.suggestions[0].name).toBe('astryx --json swizzle Button');
+  });
+
+  it('keeps the options the command it names takes, when the program does not take them', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'migrate',
+      '--from',
+      '0.6.0',
+      '--to',
+      'latest',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_UNKNOWN_COMMAND');
+    expect(envelope.suggestions[0].name).toMatch(
+      / --json upgrade --from 0\.6\.0$/,
+    );
+
+    const bare = JSON.parse((await runCli(['--json', 'migrate'])).stdout);
+    expect(bare.suggestions[0].name).toMatch(
+      / --json upgrade --from <old-version>$/,
+    );
   });
 
   it('reports an unknown command before an option the program does not take', async () => {
