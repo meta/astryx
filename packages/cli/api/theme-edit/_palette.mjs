@@ -678,7 +678,7 @@ export function modesOf(data) {
  * @param {{settings: Setting[]}} data
  */
 function dialFamilies(data) {
-  /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
+  /** @type {Array<{id: string, dial: string, seed: string, value: string, dark?: string, only?: 'light' | 'dark'}>} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
@@ -686,6 +686,41 @@ function dialFamilies(data) {
       .find(x => x?.source === 'dial' && x.thing === dial && !x.on && !x.mode);
     const seed = s && seedOf(s.value);
     if (s && seed) out.push({id: dial, dial, seed, value: s.value});
+  }
+  // A whole-theme --color-accent set as a token is the accent too: the
+  // accent's shades (links, selected rows, tints) grow from it as from the
+  // dial, and the token itself keeps the exact value it was given. A dark
+  // value of its own anchors the dark shades (planPalette).
+  if (!out.some(f => f.id === 'accent')) {
+    const raws = data.settings.filter(
+      x =>
+        x?.source === 'token' &&
+        x.thing === '--color-accent' &&
+        !x.on &&
+        !x.when &&
+        !x.state,
+    );
+    const last = (/** @type {(m: unknown) => boolean} */ ok) =>
+      [...raws].reverse().find(x => ok(x.mode));
+    const light = last(m => !m || m === 'light') ?? last(m => m === 'dark');
+    const dark = last(m => m === 'dark');
+    const seed = light && seedOf(light.value);
+    const darkSeed = dark && dark !== light ? seedOf(dark.value) : null;
+    // Set for one mode only, it moves that mode only.
+    const modes = new Set(raws.map(x => x.mode ?? 'both'));
+    const only =
+      modes.size === 1 && (modes.has('light') || modes.has('dark'))
+        ? /** @type {'light' | 'dark'} */ ([...modes][0])
+        : null;
+    if (light && seed)
+      out.unshift({
+        id: 'accent',
+        dial: 'accent',
+        seed,
+        value: light.value,
+        ...(darkSeed && !sameColor(darkSeed, seed) ? {dark: darkSeed} : {}),
+        ...(only ? {only} : {}),
+      });
   }
   return out;
 }
@@ -1521,17 +1556,25 @@ function planPalette(cwd, slug, data, base) {
   // The exact color anchors dark mode too when it reads there, as the
   // official themes anchor a brand color in both modes.
   if (modes.includes('dark') && Object.keys(fills).length) {
-    const t = tools(
-      generate(config, file),
-      data,
-      base,
-      ownSourceTokenValues(cwd, slug),
-    );
+    const generated = generate(config, file);
+    const t = tools(generated, data, base, ownSourceTokenValues(cwd, slug));
     /** @type {string[]} */
     const add = [];
+    /** The color a family's dark shades hold: its own dark value, else its seed. @param {string} id */
+    const darkColor = id => {
+      const f = fams.find(x => x.id === id);
+      return /** @type {string} */ (f?.dark ?? f?.seed);
+    };
     for (const [id, fill] of Object.entries(fills)) {
-      const seed = /** @type {string} */ (fams.find(f => f.id === id)?.seed);
-      const check = darkExact(t, id, seed);
+      const own = fams.find(f => f.id === id)?.dark;
+      // A dark value of its own sits at the dark shade nearest its lightness.
+      if (own)
+        fill.stop =
+          nearestByLightness(
+            /** @type {any} */ (generated).palette?.[id]?.dark,
+            own,
+          ) ?? fill.stop;
+      const check = darkExact(t, id, darkColor(id));
       Object.assign(fill, {why: check.why, ratio: check.ratio});
       if (check.ok) add.push(id);
     }
@@ -1543,7 +1586,7 @@ function planPalette(cwd, slug, data, base) {
         const anchor = {
           mode: 'dark',
           stop: fills[id].stop,
-          color: f.seed,
+          color: darkColor(id),
           policy: 'exact',
         };
         const others = (f.anchors ?? []).filter(
@@ -2126,6 +2169,24 @@ function generate(config, file = 'palette.config.json') {
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
   }
+}
+
+/**
+ * The stop of a ramp whose color is nearest a color in lightness.
+ * @param {Record<string, string> | undefined} ramp
+ * @param {string} color
+ * @returns {number | null}
+ */
+function nearestByLightness(ramp, color) {
+  if (!ramp) return null;
+  const L = hexToOklch(color).L;
+  let best = null;
+  let gap = Infinity;
+  for (const [stop, c] of Object.entries(ramp)) {
+    const d = Math.abs(hexToOklch(c).L - L);
+    if (d < gap) [best, gap] = [Number(stop), d];
+  }
+  return best;
 }
 
 /**
@@ -3038,6 +3099,28 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           `${u.token} reads at only ${u.ratio}:1 in ${u.mode} (needs ${u.needs}:1)`,
       ),
     };
+  }
+
+  // An accent set as a token for one mode moves that mode only: every value
+  // the palette gives keeps the base theme's in the other.
+  const only = fams.find(f => f.id === 'accent')?.only;
+  if (only) {
+    const other = only === 'light' ? 'dark' : 'light';
+    // Nothing the palette draws shows in that mode, so nothing is checked
+    // there.
+    for (let i = checks.length - 1; i >= 0; i--)
+      if (checks[i].mode === other) checks.splice(i, 1);
+    for (const [k, v] of Object.entries(tokens)) {
+      const kept = base?.[other]?.[k];
+      if (kept == null) {
+        delete tokens[k];
+        continue;
+      }
+      tokens[k] = {
+        ...v,
+        [other]: {stop: 0, color: String(kept), family: 'literal'},
+      };
+    }
   }
 
   return {
