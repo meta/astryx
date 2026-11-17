@@ -4,8 +4,8 @@
  * @file Chat.missingProps.test.tsx
  * @input ChatToolCalls, ChatDictationButton rendered without a required prop
  * @output In development, the error names the component, the prop and the
- *   fix. In production, the components behave as they did before, and their
- *   bundles carry no check or message.
+ *   fix. In production, the component throws as it did before, and the
+ *   bundle carries no check or message.
  * @position Tests; required-prop errors
  */
 
@@ -24,13 +24,16 @@ afterEach(() => {
 type Loose = ComponentType<Record<string, unknown> & {children?: ReactNode}>;
 
 const CASES: {
+  id: string;
   name: string;
   module: string;
   load: () => Promise<Loose>;
   element: (C: Loose) => ReactElement;
   message: string;
+  productionMessage: string;
 }[] = [
   {
+    id: 'ChatToolCalls',
     name: 'ChatToolCalls',
     module: 'Chat/ChatToolCalls',
     load: async () =>
@@ -38,8 +41,10 @@ const CASES: {
     element: C => <C>search</C>,
     message:
       "ChatToolCalls: `calls` must be an array of tool calls, for example calls={[{name: 'search', status: 'complete'}]}.",
+    productionMessage: "Cannot read properties of undefined (reading 'length')",
   },
   {
+    id: 'ChatDictationButton',
     name: 'ChatDictationButton',
     module: 'Chat/ChatDictationButton',
     load: async () =>
@@ -48,6 +53,8 @@ const CASES: {
     element: C => <C />,
     message:
       'ChatDictationButton: `dictation` is required: the value of useSpeechRecognition(), for example dictation={dictation}.',
+    productionMessage:
+      "Cannot read properties of undefined (reading 'isSupported')",
   },
 ];
 
@@ -62,26 +69,30 @@ function thrownBy(element: ReactElement): string | null {
   }
 }
 
-describe.each(CASES)('$name without its required prop', c => {
+/** The part of the message the component passes to devPropError. */
+function phraseOf(message: string): string {
+  const afterProp = message.slice(
+    message.indexOf('`', message.indexOf('`') + 1) + 1,
+  );
+  return afterProp.trim();
+}
+
+describe.each(CASES)('$id without its required prop', c => {
   it('names the prop and the fix', async () => {
     expect(thrownBy(c.element(await c.load()))).toBe(c.message);
   });
 
-  it('keeps the production behavior', async () => {
+  it('throws in production as it did before', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.resetModules();
-    const message = thrownBy(c.element(await c.load()));
-    expect(message).not.toBeNull();
-    expect(message).not.toBe(c.message);
+    expect(thrownBy(c.element(await c.load()))).toBe(c.productionMessage);
   });
 
   it('keeps the message in a development bundle only', () => {
-    const phrase = c.message.slice(c.message.indexOf('`'));
-    expect(bundleCoreExport(c.module, c.name, 'development')).toContain(
-      phrase.slice(phrase.indexOf(' ') + 1),
-    );
+    const phrase = phraseOf(c.message);
+    expect(bundleCoreExport(c.module, c.name, 'development')).toContain(phrase);
     expect(bundleCoreExport(c.module, c.name, 'production')).not.toContain(
-      phrase.slice(phrase.indexOf(' ') + 1),
+      phrase,
     );
   });
 });
