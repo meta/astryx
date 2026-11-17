@@ -187,6 +187,12 @@ export interface UseMenuHoverReturn<T extends HTMLElement = HTMLElement> {
    */
   close: () => void;
   setTriggerEl: (el: HTMLElement | null) => void;
+  /**
+   * A hover that began before this hook existed, `elapsedMs` ago: the open
+   * waits only what is left of the show delay. A trigger that loads its
+   * surface on first intent replays a held hover with it.
+   */
+  resumeHover: (elapsedMs: number) => void;
 }
 
 export function useMenuHover<T extends HTMLElement = HTMLElement>(
@@ -399,35 +405,40 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     ],
   );
 
-  const handleMouseEnter = useCallback(() => {
-    if (!hasHover) {
-      return;
-    }
-    if (
-      closedAtRef.current > 0 &&
-      Date.now() - closedAtRef.current < REOPEN_SUPPRESS_MS
-    ) {
-      return;
-    }
-    // Re-entering an open menu's trigger must not un-pin it or re-arm the
-    // guard, which would make the next deliberate click another "confirm" and
-    // leave the menu undismissable.
-    if (isOpen) {
+  const beginHover = useCallback(
+    (elapsedMs: number) => {
+      if (!hasHover) {
+        return;
+      }
+      if (
+        closedAtRef.current > 0 &&
+        Date.now() - closedAtRef.current < REOPEN_SUPPRESS_MS
+      ) {
+        return;
+      }
+      // Re-entering an open menu's trigger must not un-pin it or re-arm the
+      // guard, which would make the next deliberate click another "confirm" and
+      // leave the menu undismissable.
+      if (isOpen) {
+        clearTimeouts();
+        return;
+      }
+      hoverModeRef.current = true;
       clearTimeouts();
-      return;
-    }
-    hoverModeRef.current = true;
-    clearTimeouts();
-    const openByHover = () => {
-      hoverOpenedAtRef.current = Date.now();
-      show({skipAutoFocus: true});
-    };
-    if (showDelay > 0) {
-      showTimerRef.current = setTimeout(openByHover, showDelay);
-    } else {
-      openByHover();
-    }
-  }, [hasHover, isOpen, clearTimeouts, show, showDelay]);
+      const openByHover = () => {
+        hoverOpenedAtRef.current = Date.now();
+        show({skipAutoFocus: true});
+      };
+      const remainingDelay = showDelay - elapsedMs;
+      if (remainingDelay > 0) {
+        showTimerRef.current = setTimeout(openByHover, remainingDelay);
+      } else {
+        openByHover();
+      }
+    },
+    [hasHover, isOpen, clearTimeouts, show, showDelay],
+  );
+  const handleMouseEnter = useCallback(() => beginHover(0), [beginHover]);
 
   const handleMouseLeave = useCallback(
     (event?: React.MouseEvent) => {
@@ -523,6 +534,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       confirmHoverOpen,
       close: hideAndRestoreFocus,
       setTriggerEl: noopRef,
+      resumeHover: noop,
     };
   }
 
@@ -544,5 +556,6 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     confirmHoverOpen,
     close: hideAndRestoreFocus,
     setTriggerEl: setTriggerRef,
+    resumeHover: beginHover,
   };
 }

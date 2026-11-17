@@ -10,7 +10,7 @@ import type {ReactElement, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {DropdownMenuDivider} from './DropdownMenuDivider';
-import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
+import {SubMenuRow, subMenuSurfaceLoader} from './DropdownMenuSubMenuRow';
 import {
   spacingVars,
   typographyVars,
@@ -72,19 +72,22 @@ function renderLeafItem(
  * A data item that declares nested `items` becomes a submenu (data-mode
  * parity with the compound DropdownMenuSubMenu API), at the top level and
  * inside a section alike; otherwise it's a leaf. renderDropdownItems owns the
- * recursion and hands the rendered children to DropdownMenuSubMenu, so
- * DropdownMenuSubMenu never imports this module back (no import cycle).
+ * recursion and hands the rendered children to the sub-menu, so the
+ * sub-menu never imports this module back (no import cycle). The row renders
+ * at once; its surface loads on the row's first intent, so a menu without
+ * nested items loads none of it.
  */
 function renderItem(item: DropdownMenuItemData, index: number): ReactElement {
   if (item.items && item.items.length > 0) {
     return (
-      <DropdownMenuSubMenu
+      <SubMenuRow
         key={getItemKey(item, index)}
         icon={item.icon}
         label={item.label}
-        isDisabled={item.isDisabled}>
+        isDisabled={item.isDisabled}
+        loadSurface={subMenuSurfaceLoader}>
         {renderDropdownItems(item.items)}
-      </DropdownMenuSubMenu>
+      </SubMenuRow>
     );
   }
   return renderLeafItem(item, index);
