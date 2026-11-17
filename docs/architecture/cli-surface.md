@@ -43,6 +43,7 @@ verified_by:
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
     api/build/build.test.mjs,
+    clients/cli/lib/unknown-command.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -81,7 +82,13 @@ rather than left to the command author.
    the run with `ERR_VERSIONS_UNAVAILABLE` before any write.
 3. **Dispatch.** `clients/cli/index.mjs` parses with Commander, sets JSON mode
    in `preAction` before any command body runs, and rejects a command that
-   cannot support `--json` before any side effect.
+   cannot support `--json` before any side effect. A word that names no
+   command fails with suggestions that are runs that parse: besides the
+   command tree, the answer reads other command lines' word orders (`add
+theme matcha` is `theme add matcha`) and the table of their words in
+   `clients/cli/lib/other-cli-words.mjs`, where each word names a tool that
+   uses it and no word is a command or a command's plural. The answer only
+   suggests: it runs nothing and never names an experimental command.
 4. **Work.** The command parses its arguments and calls a function in `api/`.
    The command is a thin wrapper: parse, call, render. The API function is the
    unit that is scriptable and typed, and it is the source of truth for the
