@@ -4,7 +4,8 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip,
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip
+ *   (only while a disabled message can show),
  *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxInput.test.tsx
@@ -23,12 +24,14 @@ import {
   useCallback,
   useOptimistic,
   useRef,
+  useState,
   useTransition,
   type ChangeEvent,
   type FocusEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -60,6 +63,7 @@ import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {indicatorPressPaintStyles} from '../privateAttributes/press.stylex';
@@ -384,13 +388,10 @@ export function CheckboxInput({
   // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
   // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
-    placement: 'above',
-    // The container row is not naturally focusable; focusin bubbles up from the
-    // native checkbox, so always attach focus listeners.
-    focusTrigger: 'always',
-    isEnabled: showsDisabledMessage,
-  });
+  // The disabled-message tooltip mounts only while it can show, so a checkbox
+  // with no message runs none of the tooltip's work. It reports its
+  // description id for the input's aria-describedby.
+  const [disabledMessageID, setDisabledMessageID] = useState('');
 
   // The checkbox visual is an indicator: a theme can restyle it through the
   // canonical `checkbox-indicator` target or replace the component outright.
@@ -414,13 +415,10 @@ export function CheckboxInput({
   // stops.
   const watchRowHitArea = useTouchHitArea(hasHitArea);
   // The disabled-message tooltip listens for hover and focus on the whole
-  // row, a larger trigger. It anchors on the checkbox itself (below), so it
-  // shows next to the control. Its handlers check isEnabled, so the row
-  // always attaches them.
-  const rowRef = useMergedRefs(
-    disabledMessageTooltip.interactionRef,
-    watchRowHitArea,
-  );
+  // row, a larger trigger, and anchors on the checkbox itself, so it shows
+  // next to the control.
+  const rowElementRef = useRef<HTMLDivElement>(null);
+  const rowRef = useMergedRefs(rowElementRef, watchRowHitArea);
   // Where a press on the row itself began. A browser can move a tap's click
   // onto the row's edge, so the band is judged from the press.
   const pressPointRef = useRef<{x: number; y: number} | null>(null);
@@ -487,8 +485,8 @@ export function CheckboxInput({
   if (status?.message) {
     describedByParts.push(statusMessageID);
   }
-  if (showsDisabledMessage) {
-    describedByParts.push(disabledMessageTooltip.describedBy);
+  if (showsDisabledMessage && disabledMessageID) {
+    describedByParts.push(disabledMessageID);
   }
   const ariaDescribedBy =
     describedByParts.length > 0 ? describedByParts.join(' ') : undefined;
@@ -552,12 +550,7 @@ export function CheckboxInput({
             // pointer events. It runs no caller handler except `onFocus` and
             // `onBlur`.
             {...withholdCallerHandlers(rest, isDisabled)}
-            ref={useMergedRefs(
-              ref,
-              indeterminateRef,
-              disabledMessageTooltip.positionRef,
-              inputRef,
-            )}
+            ref={useMergedRefs(ref, indeterminateRef, inputRef)}
             id={id}
             type="checkbox"
             // Withhold the name while disabled: the input stays focusable (not
@@ -656,10 +649,60 @@ export function CheckboxInput({
           variant="detached"
         />
       )}
-      {showsDisabledMessage &&
-        disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {isDisabled && disabledMessage ? (
+        <DisabledMessageTooltip
+          message={disabledMessage}
+          rowRef={rowElementRef}
+          inputRef={inputRef}
+          onDescriptionID={setDisabledMessageID}
+        />
+      ) : null}
     </div>
   );
+}
+
+interface DisabledMessageTooltipProps {
+  readonly message: string;
+  readonly rowRef: RefObject<HTMLElement | null>;
+  readonly inputRef: RefObject<HTMLElement | null>;
+  readonly onDescriptionID: (id: string) => void;
+}
+
+/**
+ * A disabled checkbox's message as a tooltip: hover or focus anywhere on the
+ * row opens it above the checkbox.
+ */
+function DisabledMessageTooltip({
+  message,
+  rowRef,
+  inputRef,
+  onDescriptionID,
+}: DisabledMessageTooltipProps): ReactNode {
+  const tooltip = useTooltip({
+    placement: 'above',
+    // The container row is not naturally focusable; focusin bubbles up from the
+    // native checkbox, so always attach focus listeners.
+    focusTrigger: 'always',
+  });
+  const {interactionRef, positionRef, describedBy} = tooltip;
+  // Attaches the tooltip to the row and the checkbox, which the parent
+  // renders.
+  useIsomorphicLayoutEffect(() => {
+    interactionRef(rowRef.current);
+    positionRef(inputRef.current);
+    return () => {
+      interactionRef(null);
+      positionRef(null);
+    };
+  }, [interactionRef, positionRef, rowRef, inputRef]);
+  // Syncs the parent's aria-describedby with the tooltip's description id.
+  useIsomorphicLayoutEffect(() => {
+    onDescriptionID(describedBy);
+    return () => {
+      onDescriptionID('');
+    };
+  }, [describedBy, onDescriptionID]);
+  return tooltip.renderTooltip(message);
 }
 
 CheckboxInput.displayName = 'CheckboxInput';
