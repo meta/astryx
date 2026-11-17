@@ -7452,6 +7452,11 @@ async function changeOnce(
         // the browser measured as keeping it whole.
         ...cutShort.map(c => cutShortProblem(ctx, slug, c)),
       ],
+      // Problems the theme had that this change moved but left failing,
+      // each with what it was and its fix; left out when none.
+      .../** @type {any} */ ((r).leftProblems?.length
+        ? {leftProblems: problemLines(/** @type {any} */ (r).leftProblems)}
+        : {}),
       // (What it brought is told apart from the misses it found: those
       // repeat after every change otherwise.)
       ...(await missedSummary(ctx, slug, data, r.res, {
