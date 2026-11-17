@@ -3,10 +3,10 @@
 /**
  * @file docs command — Print Astryx reference docs
  *
- * In text, a topic prints whole, unless the whole topic is more than one docs
- * read may return (DOC_OUTPUT_BUDGET_BYTES): then it lists its sections, so a
- * reader opens one by its key. `--index` lists the sections of any topic, and
- * `--full` prints any topic whole. `--depth`
+ * In text, a topic prints whole, unless its whole text is over
+ * WHOLE_READ_MAX_BYTES: then it lists its sections, so a reader opens one by
+ * its key. `--index` lists the sections of any topic, and `--full` prints any
+ * topic whole. `--depth`
  * reads a docs-tree namespace as many levels down as asked, each doc below it
  * at --detail (brief by default: one line each). `--json` keeps the docs()
  * contract: a topic returns its whole doc, and `--index` its sections.
@@ -20,7 +20,7 @@
  *   astryx docs                          List available topics
  *   astryx docs --list                   The same list, asked for by flag
  *   astryx docs <topic>                  Print the topic (its sections when
- *                                        the whole is over one read's budget)
+ *                                        its whole text is over 16 KB)
  *   astryx docs <topic> --index          List the topic's sections
  *   astryx docs <topic> <section>        Print one section
  *   astryx docs <topic> --full           Print the whole topic
@@ -49,12 +49,16 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {docs as docsApi} from '../../../api/docs/docs.mjs';
-import {
-  DOC_OUTPUT_BUDGET_BYTES,
-  docPayloadBytes,
-} from '../../../foundation/response/docs-read-budget.mjs';
 import {doc as docsCommand} from './docs.doc.mjs';
 import {doc as docsFn} from '../../../api/docs/docs.doc.mjs';
+
+/**
+ * The longest whole topic a bare text read prints, in bytes of the text it
+ * prints. Up to this size, reading the whole topic costs no more than a reader
+ * who wants the answer reads through the section list and the sections it
+ * opens; a longer topic lists its sections.
+ */
+export const WHOLE_READ_MAX_BYTES = 16 * 1024;
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
@@ -726,11 +730,9 @@ export function registerDocs(program) {
         program.getOptionValueSource('detail') === 'default' ? 'brief' : detail;
       // A text read prints a topic whole, as JSON and docs() do: agents act
       // on the first read, and most never open a section from an index. Only
-      // a topic whose whole doc is over DOC_OUTPUT_BUDGET_BYTES (the budget
-      // doctor holds each section index and each section to) lists its
-      // sections instead.
-      // --index always lists them, --full always prints the whole topic, and
-      // the dense variant is written to be read whole.
+      // a topic whose whole text is over WHOLE_READ_MAX_BYTES lists its
+      // sections instead. --index always lists them, --full always prints
+      // the whole topic, and the dense variant is written to be read whole.
       const mayList =
         !json &&
         !options.full &&
@@ -752,7 +754,8 @@ export function registerDocs(program) {
           !options.index &&
           result.type === 'docs.detail' &&
           result.data.sections.length > 1 &&
-          docPayloadBytes(result) > DOC_OUTPUT_BUDGET_BYTES
+          Buffer.byteLength(formatReferenceFull(result.data, detail), 'utf8') >
+            WHOLE_READ_MAX_BYTES
         ) {
           result = await docsApi(topic, sectionName, {lang, zh, index: true});
         }

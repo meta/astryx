@@ -5,13 +5,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {Command} from 'commander';
-import {formatBlock, registerDocs} from './docs.mjs';
+import {formatBlock, registerDocs, WHOLE_READ_MAX_BYTES} from './docs.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {displayWidth} from '../formatters/index.mjs';
-import {
-  DOC_OUTPUT_BUDGET_BYTES,
-  docPayloadBytes,
-} from '../../../foundation/response/docs-read-budget.mjs';
 
 let tmpDir;
 
@@ -156,14 +152,13 @@ describe('progressive reads', () => {
     );
   }, SLOW);
 
-  it('lists the sections of a topic too long for one read; --full prints it whole', async () => {
-    const route = 'authoring/field-reference';
-    const json = JSON.parse((await runCli(['docs', route, '--json'])).stdout);
-    expect(docPayloadBytes(json)).toBeGreaterThan(DOC_OUTPUT_BUDGET_BYTES);
+  it('lists the sections of a topic whose whole text is over the limit; --full prints it whole', async () => {
+    const route = 'author-a-theme';
+    const full = await runCli(['docs', route, '--full']);
+    expect(Buffer.byteLength(full.stdout)).toBeGreaterThan(WHOLE_READ_MAX_BYTES);
     const bare = await runCli(['docs', route]);
     expect(bare.status).toBe(0);
     expect(bare.stdout).toBe((await runCli(['docs', route, '--index'])).stdout);
-    const full = await runCli(['docs', route, '--full']);
     expect(full.stdout.length).toBeGreaterThan(bare.stdout.length);
     expect(full.stdout).not.toContain('Read everything:');
   }, SLOW);

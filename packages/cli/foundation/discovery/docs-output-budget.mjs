@@ -11,12 +11,19 @@
  */
 
 import {sectionKey} from './docs-section-key.mjs';
-import {
-  DOC_OUTPUT_BUDGET_BYTES,
-  docPayloadBytes,
-} from '../response/docs-read-budget.mjs';
 
-export {DOC_OUTPUT_BUDGET_BYTES, docPayloadBytes};
+/** The most one index or one section read may return, in bytes. */
+export const DOC_OUTPUT_BUDGET_BYTES = 32 * 1024;
+
+/**
+ * A payload's size as `--json` prints it: the envelope data, two-space
+ * indented, in UTF-8 bytes.
+ * @param {unknown} payload
+ * @returns {number}
+ */
+export function docPayloadBytes(payload) {
+  return Buffer.byteLength(JSON.stringify(payload, null, 2), 'utf8');
+}
 
 /**
  * @param {Omit<import('../../api/docs/docs.type.mjs').DocsIndex, 'links' | 'sections'> & {sections: import('../../api/docs/docs.type.mjs').DocsIndexEntry[], links?: import('../../api/docs/docs.type.mjs').DocsLinks}} index
@@ -33,10 +40,7 @@ export function docsIndexBytes(index) {
  * @param {number} [budget]
  * @returns {{key: string, title: string, bytes: number}[]}
  */
-export function oversizedDocSections(
-  sections,
-  budget = DOC_OUTPUT_BUDGET_BYTES,
-) {
+export function oversizedDocSections(sections, budget = DOC_OUTPUT_BUDGET_BYTES) {
   return sections
     .map(section => ({
       key: sectionKey(section),

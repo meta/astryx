@@ -52,8 +52,9 @@ This record owns the moves a read offers and how they appear in text and JSON.
   summary, and give the command that opens one: a namespace its children, a
   topic's index its sections, and the topic list its topics and namespaces. In text,
   a bare read of a topic prints the whole doc, because a reader acts on the first
-  read it gets; only a topic whose whole doc is over 32 KB (the size doctor
-  allows one section index or one section) lists its sections instead.
+  read it gets; only a topic whose whole text is over 16 KB lists its sections
+  instead, because up to that size the whole read costs no more than a reader
+  who wants the answer reads through the section list.
   `--index` lists the sections of any topic, `--full` prints any topic whole, and
   the dense variant is written to be read whole, so `--dense` prints it whole.
   The JSON contract is unchanged: `docs(topic)` and `--json` return the whole doc,
