@@ -4672,6 +4672,67 @@ export function borderFrames(ctx, data, value) {
 }
 
 /**
+ * The disabled state of a look painted over a part's fill (a gradient or
+ * an image set at rest on a button and its family): each part it writes
+ * that has a disabled state shows the theme's disabled treatment there, the
+ * image taken off so the disabled fill shows, as Core draws a disabled
+ * part. A part with a disabled image of its own keeps it.
+ * @param {Ctx} ctx @param {ThemeData} data @param {Setting} s
+ * @returns {Setting[]}
+ */
+export function disabledCopies(ctx, data, s) {
+  const prop = kebab(String(s.thing));
+  if (
+    !s.on ||
+    s.state ||
+    s.source !== 'property' ||
+    !/^background(-image)?$/.test(prop) ||
+    !/\b(?:(?:repeating-)?(?:linear|radial|conic)-gradient|url|image-set)\(/i.test(
+      String(s.value),
+    )
+  )
+    return [];
+  /** @type {Setting[]} */
+  const out = [];
+  for (const t of writtenPartsOf(ctx, data, s)) {
+    // (A part that has a disabled look: a state its target declares, or
+    // one the census saw it drawn in, a native control's :disabled.)
+    const at = /** @type {any} */ (ctx).C?.MAP?.[t]?.at ?? {};
+    const disabledSeen = Object.values(at).some(byCond =>
+      Object.keys(/** @type {Record<string, string>} */ (byCond)).some(c =>
+        /disabled/.test(c),
+      ),
+    );
+    if (
+      !(ctx.project.target.get(t)?.states ?? []).includes('disabled') &&
+      !disabledSeen
+    )
+      continue;
+    const copy = {
+      thing: 'background-image',
+      value: 'none',
+      source: /** @type {const} */ ('property'),
+      on: t,
+      ...(s.when ? {when: s.when} : {}),
+      ...(s.mode ? {mode: s.mode} : {}),
+      state: 'disabled',
+      only: true,
+    };
+    if (
+      data.settings.some(
+        x =>
+          x.state === 'disabled' &&
+          /^background(-image)?$/.test(kebab(String(x.thing))) &&
+          partsOf(ctx, x).includes(t),
+      )
+    )
+      continue;
+    out.push(copy);
+  }
+  return out;
+}
+
+/**
  * Whether a whole-theme border width frames a borderless part by default:
  * the surfaces that hold content (a dialog, a menu, a banner, a panel), not
  * a button, whose frame the buttons dial gives, nor a small box that only
@@ -7529,6 +7590,7 @@ export function compileTheme(ctx, data, base) {
     x,
     ...momentCopies(ctx, data, x),
     ...frameCopies(ctx, data, x),
+    ...disabledCopies(ctx, data, x),
   ]);
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
