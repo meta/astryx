@@ -70,7 +70,8 @@ This table is a review projection; the body below is authoritative.
 Toast shows brief, non-modal notifications. This record covers the toast card
 (`Toast`), the viewport that stacks, hosts, and announces toasts
 (`ToastViewport`, which has no consumer doc of its own), and the behavior the
-`useToast` show function drives. Consumer usage lives in `Toast.doc.mjs`.
+`useToast` show function drives. Consumer usage lives in `Toast.doc.mjs` (the
+card) and `useToast.doc.mjs` (the show function).
 
 ## Compatibility and migration
 

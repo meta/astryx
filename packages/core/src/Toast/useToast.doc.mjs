@@ -13,7 +13,7 @@ export const docs = {
     {
       name: 'showToast',
       type: '(options: ToastOptions) => () => void',
-      description: 'Show a toast notification. Returns a dismiss function. Options include body (ReactNode), type ("info" | "error"), isAutoHide, autoHideDuration, endContent, uniqueID, and collisionBehavior.',
+      description: 'Show a toast notification. Returns a dismiss function. Options: body (ReactNode, required); type ("info" | "error", default "info"); isAutoHide (default true for info, false for error); autoHideDuration (ms, default 5000); endContent; renderContent; uniqueID, which deduplicates toasts; collisionBehavior ("overwrite" | "ignore", default "overwrite"), what a show with an existing uniqueID does; and onHide, called with "auto" or "manual" when the toast is removed.',
     },
   ],
   usage: {
@@ -35,7 +35,7 @@ export const docs = {
 export const docsDense = {
   description: 'Show toast notifications from anywhere in component tree. Returns function accepting toast options + showing notification. Works automatically w/ LayerProvider / self-mounts fallback viewport.',
   returnDescriptions: {
-    showToast: 'show toast notification. Returns dismiss function. Options: body (ReactNode), type ("info" | "error"), isAutoHide, autoHideDuration, endContent, uniqueID, collisionBehavior.',
+    showToast: 'show toast notification. Returns dismiss function. Options: body (ReactNode, required), type ("info" | "error", default "info"), isAutoHide (default true for info, false for error), autoHideDuration (default 5000 ms), endContent, renderContent, uniqueID (dedup), collisionBehavior ("overwrite" default | "ignore"), onHide (reason "auto" | "manual").',
   },
   usage: {
     description: 'Show toast notifications from anywhere in component tree. Returns function accepting toast options + showing notification. Works automatically w/ LayerProvider / self-mounts fallback viewport.',
