@@ -53,6 +53,7 @@ import {
   themeFiles,
   APP_COPY_BUILT,
   appCopyNames,
+  groupsOf,
 } from './_settings.mjs';
 import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -60,7 +61,6 @@ import {importPathOf, installLine} from './_project.mjs';
 import {
   COLOR_PROP_PARTS,
   DIRECT,
-  FAMILIES,
   P,
   SHOWCASE_GROUPS,
   wordTable,
@@ -178,7 +178,7 @@ export function touchedFamilies(project, data) {
   // A group (`--on inputs`) sets each of its parts.
   const parts = new Set(
     (data.settings ?? []).flatMap(s =>
-      s.on ? (FAMILIES[s.on] ?? [s.on]) : [],
+      s.on ? (groupsOf({project})[s.on] ?? [s.on]) : [],
     ),
   );
   /** @type {Set<string>} */

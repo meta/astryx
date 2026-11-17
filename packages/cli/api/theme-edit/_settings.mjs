@@ -32,7 +32,7 @@ import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {coreVarValues} from './_parts.mjs';
+import {coreVarValues, familyRoles} from './_parts.mjs';
 import {
   hexToOklch,
   oklabCoordinates,
@@ -4350,6 +4350,54 @@ export function describe(s) {
   return `${s.thing} = ${value}${where}${s.mode && s.on ? ` [${s.mode} only]` : ''}`;
 }
 
+/** @type {WeakMap<object, Record<string, string[]>>} */
+const groupTables = new WeakMap();
+
+/**
+ * Every group `--on` takes, by name: the editor's own groups (inputs,
+ * menus, …) and the family roles the census shows (button-like, overlays,
+ * option-rows, selected-items, accent-fills, inset-fields), each read from
+ * the parts' structure.
+ * Without a census (no context), the editor's own groups alone.
+ * @param {{project?: any, C?: any} | null | undefined} ctx
+ * @returns {Record<string, string[]>}
+ */
+export function groupsOf(ctx) {
+  const key = ctx?.C ?? ctx?.project;
+  const known = key ? groupTables.get(key) : undefined;
+  if (known) return known;
+  /** @type {Record<string, string[]>} */
+  const table = Object.create(null);
+  for (const [name, members] of Object.entries(FAMILIES)) table[name] = members;
+  if (ctx?.C?.MAP && ctx.project?.target) {
+    const roles = familyRoles(ctx.C, ctx.project, FAMILIES.inputs ?? []);
+    for (const name of GROUP_ROLES)
+      if (roles[name]?.length && !ctx.project.target.has(name))
+        table[name] = roles[name];
+  }
+  if (key) groupTables.set(key, table);
+  return table;
+}
+
+/** The family roles `--on` takes as groups. */
+export const GROUP_ROLES = /** @type {const} */ ([
+  'button-like',
+  'overlays',
+  'option-rows',
+  'selected-items',
+  'accent-fills',
+  'inset-fields',
+]);
+
+/**
+ * A part name or a group's members.
+ * @param {{project: any, C?: any}} ctx
+ * @param {string} name
+ */
+export function membersOf(ctx, name) {
+  return groupsOf(ctx)[name] ?? [name];
+}
+
 /**
  * The parts a setting styles: the group when `--on` names one, the whole
  * group of an always-alike member unless `--only`, else the one part.
@@ -4370,7 +4418,7 @@ export function partsOf(ctx, s) {
       : /^background(-color)?$/.test(s.thing)
         ? [...new Set(members.flatMap(t => fillParts(ctx, t)))]
         : members;
-  if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
+  if (groupsOf(ctx)[s.on]) return spread(groupsOf(ctx)[s.on].filter(has));
   const fam = familyOf(s.on);
   // (Set on one member under a condition of its own, "--on selector
   // --when variant:secondary": only the members that have that value
@@ -4387,7 +4435,7 @@ export function partsOf(ctx, s) {
   };
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
     return spread(
-      FAMILIES[fam]
+      (groupsOf(ctx)[fam] ?? [])
         .filter(has)
         .filter(m => drawnAlike(ctx, s, m))
         .filter(takesWhen),
@@ -5529,7 +5577,9 @@ export function compileTheme(ctx, data, base) {
         x.source === 'property' &&
         // The part's own, or a group's it is in.
         (x.on === s.on ||
-          (FAMILIES[/** @type {string} */ (x.on)] ?? []).includes(target)) &&
+          (groupsOf(ctx)[/** @type {string} */ (x.on)] ?? []).includes(
+            target,
+          )) &&
         x.when == null &&
         x.state == null &&
         (/^padding-/.test(kebab(x.thing)) ||
@@ -6798,7 +6848,22 @@ export function compileTheme(ctx, data, base) {
     // A setting for the mode a one-mode theme does not show still applies
     // where Core draws that mode (a toast, a lightbox), as the theme's other
     // halves of its colors do.
-    const parts = partsOf(ctx, s);
+    // (A family role's look never overwrites a member the theme set the
+    // same thing on itself, before or after.)
+    const parts = GROUP_ROLES.includes(/** @type {any} */ (s.on))
+      ? partsOf(ctx, s).filter(
+          t =>
+            !data.settings.some(
+              x =>
+                x !== s &&
+                x.on === t &&
+                kebab(x.thing) === kebab(s.thing) &&
+                (x.when ?? '') === (s.when ?? '') &&
+                (x.state ?? '') === (s.state ?? '') &&
+                (x.mode ?? '') === (s.mode ?? ''),
+            ),
+        )
+      : partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
         // Past 1000px a radius is fully round: the pill tokens apply.
@@ -8058,14 +8123,14 @@ export function maskedSettings(data, ctx = null) {
   // A part setting that a later setting on a group holding that part
   // covers: the later one is written after it, so it wins.
   data.settings.forEach((s, i) => {
-    if (s.source !== 'dial' || !s.on || FAMILIES[s.on]) return;
+    if (s.source !== 'dial' || !s.on || groupsOf(ctx)[s.on]) return;
     const later = data.settings
       .slice(i + 1)
       .find(
         x =>
           x.thing === s.thing &&
           x.on &&
-          (FAMILIES[x.on] ?? []).includes(/** @type {string} */ (s.on)) &&
+          (groupsOf(ctx)[x.on] ?? []).includes(/** @type {string} */ (s.on)) &&
           (x.when ?? '') === (s.when ?? '') &&
           (x.state ?? '') === (s.state ?? ''),
       );
