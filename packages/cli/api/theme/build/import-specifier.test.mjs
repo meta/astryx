@@ -6,12 +6,12 @@
  *   this platform.
  * @output The specifier in the install snippet, relative to a file in src/:
  *   `./…` for an output under src/, `../…` for one beside it, `/`-joined.
- * @position Unit coverage for importSpecifier in build.mjs.
+ * @position Unit coverage for importSpecifier (./import-specifier.mjs).
  */
 
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {importSpecifier} from './build.mjs';
+import {importSpecifier} from './import-specifier.mjs';
 
 describe('importSpecifier', () => {
   it('joins a platform path with `/`, whatever the separator', () => {
