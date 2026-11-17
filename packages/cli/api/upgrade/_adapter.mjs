@@ -53,6 +53,7 @@ import {
 } from '../../foundation/fs/paths.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
+import {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 import {resolveProviders} from '../../foundation/integrations/provider-resolution.mjs';
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
@@ -792,7 +793,8 @@ export async function runCoreCodemods(
  * @param {string} cwd
  * @param {string[]} [extraIntegrationSpecs] explicit `--integration` specs
  * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger, iconSets: boolean}>}
- *   `iconSets`: the project sets `experimental.iconSet`
+ *   `iconSets`: icon features are on (an installed icon-set package or
+ *   `experimental.iconSet`)
  */
 export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   // The CLI debug preflight may already have imported this config before core
@@ -876,7 +878,7 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
     postCodemodHooks,
     integrations,
     ledger,
-    iconSets: Boolean(project.config.experimental?.iconSet),
+    iconSets: iconFeatureGate(project).on,
   };
 }
 
@@ -885,9 +887,9 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
  * nudge must not fail the upgrade) and is suppressed for --json/programmatic
  * callers (the silent logger).
  * @param {Array<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} integrations
- * @param {{iconSets?: boolean}} [options] `iconSets`: the project sets
- *   `experimental.iconSet`. Without it a package's experimental icon-set root
- *   is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
+ * @param {{iconSets?: boolean}} [options] `iconSets`: icon features are on
+ *   in the project (the icon feature gate). Without them a package's
+ *   experimental icon-set root is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
  *   own issues.
  * @returns {Promise<void>}
  */

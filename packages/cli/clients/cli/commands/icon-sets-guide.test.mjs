@@ -144,9 +144,10 @@ describe('icon-set guide', () => {
     ).toEqual(types);
   });
 
-  // A set's own definitions join the namespace only in a project that opts
-  // in, as FR4 says; Astryx's are always there.
-  it("lists a set's own icon definitions only with experimental.iconSet", async () => {
+  // A set's own definitions join the namespace once its package is
+  // installed, with or without `experimental.iconSet`, as FR4 says;
+  // Astryx's are always there.
+  it("lists a set's own icon definitions once its package is installed, with or without experimental.iconSet", async () => {
     const definition = `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Launch something.', words: ['launch', 'liftoff']};
 `;
@@ -179,8 +180,7 @@ export default {type: 'icon-definition', name: 'rocketLaunch', description: 'Lau
     const withOptIn = await routes(optedIn);
     const without = await routes(notOptedIn);
     expect(withOptIn).toContain('rocket-launch');
-    expect(without).not.toContain('rocket-launch');
-    expect(without).toContain('close');
-    expect(withOptIn.filter(name => name !== 'rocket-launch')).toEqual(without);
+    expect(withOptIn).toContain('close');
+    expect(without).toEqual(withOptIn);
   });
 });

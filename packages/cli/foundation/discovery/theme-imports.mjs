@@ -20,8 +20,7 @@ import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-import {listedPackageInstall} from '../release/notices.mjs';
-import {installCommandFor} from './template-needs.mjs';
+import {addMatchingCore, listedPackageInstall} from '../release/notices.mjs';
 
 export class ThemeImportError extends Error {
   /**
@@ -184,8 +183,7 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
     }
     // The app imports a theme from its package, bundled themes included, so
     // the package is installed in the app before the theme is added.
-    const {installCommand} = installCommandFor([importPackage], cwd);
-    const install = installCommand ?? `npm install ${importPackage}`;
+    const install = addMatchingCore(cwd, importPackage);
     throw new ThemeImportError(
       `Theme package "${importPackage}" is not installed. The app imports ${theme.slug} from it, so install it, then add the theme: \`${install}\`, then \`${add}\`.`,
       {
