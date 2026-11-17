@@ -146,9 +146,33 @@ const BUTTON_LOOK_PROPS = new Set([
 const ACTION_PROPS = new Set(['onClick', 'clickAction']);
 
 /**
+ * ARIA roles that name a landmark or a part of a document. An element with
+ * one of them still holds content and takes no press; a widget role, such as
+ * `button` or `menuitem`, can.
+ */
+const STRUCTURE_ROLES = new Set([
+  'article',
+  'banner',
+  'complementary',
+  'contentinfo',
+  'document',
+  'form',
+  'group',
+  'list',
+  'listitem',
+  'main',
+  'navigation',
+  'none',
+  'note',
+  'presentation',
+  'region',
+  'search',
+]);
+
+/**
  * Props that make a layout element act on a press, or that hand it to code
- * the tree does not show: an event handler, a link, a ref, a role or focus,
- * a data attribute that a script may look for, or props spread in.
+ * the tree does not show: an event handler, a link, a ref, a widget role or
+ * focus, a data attribute that a script may look for, or props spread in.
  * @param {any} attribute a JSXAttribute or JSXSpreadAttribute node
  * @param {string} tag the element's tag; `form` ignores its own events
  */
@@ -158,16 +182,8 @@ function actsOnPress(attribute, tag) {
   if (name == null) return true;
   if (/^on[A-Z]/.test(name)) return !(tag === 'form' && FORM_EVENTS.has(name));
   if (name.startsWith('data-')) return name !== 'data-testid';
-  return [
-    'as',
-    'contentEditable',
-    'draggable',
-    'href',
-    'popover',
-    'ref',
-    'role',
-    'tabIndex',
-  ].includes(name);
+  if (name === 'role') return !STRUCTURE_ROLES.has(staticText(attribute.value) ?? '');
+  return ['as', 'contentEditable', 'draggable', 'href', 'popover', 'ref', 'tabIndex'].includes(name);
 }
 
 /** @param {any} attribute */

@@ -377,7 +377,7 @@ validate` and `integration check` list it as an `unknown_manifest_key` note
   goes nowhere (`#`, an empty link, or a `javascript:` link), and that nothing
   around it can act on. Nothing acts on a button when each element
   around it is a Core layout component, a React wrapper, a provider, or HTML
-  that holds no control and has no handler, link, role or spread props, and
+  that holds no control and has no handler, link, widget role or spread props, and
   when each place the app renders the component that holds it is the same, or
   nothing renders that component and its module exports it (a page or an entry
   point). The check does not report a button that it cannot judge: one with

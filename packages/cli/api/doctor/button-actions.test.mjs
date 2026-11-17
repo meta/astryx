@@ -92,7 +92,7 @@ describe('the button-actions check', () => {
         status: 'warn',
         message:
           '4 buttons do nothing when pressed: src/App.tsx:5 "Try it", src/App.tsx:7 "Start" (href="#"), src/App.tsx:8 "Undo" (empty onClick), src/App.tsx:9 IconButton.',
-        fix: 'Give each one its action: `onClick` (or `clickAction` for async work), `href` to the page it opens, or `type="submit"` inside a form. Remove a button that has no action yet: an empty handler or a `#` link still does nothing.',
+        fix: 'Give each one an action: `onClick` (or `clickAction` for async work), a real `href`, or `type="submit"` inside a form. If it has no action yet, disable it with `isDisabled` or remove it: an empty handler or a `#` link still does nothing.',
       });
     },
     SLOW,

@@ -154,6 +154,8 @@ describe('a button that acts, or whose press the scan cannot judge', () => {
     ['a type the scan cannot read', '<Button label="Send" type={kind} />'],
     ['spread props', '<Button label="Go" {...props} />'],
     ['isDisabled', '<Button label="Go" isDisabled />'],
+    ['isDisabled={true}', '<Button label="Go" isDisabled={true} />'],
+    ['the HTML disabled prop', '<Button label="Go" disabled />'],
     ['a disabled state the scan cannot read', '<Button label="Go" isDisabled={busy} />'],
     ['isLoading', '<Button label="Go" isLoading />'],
     ['a tooltip', '<IconButton label="Info" icon="info" tooltip="About this" />'],
@@ -176,7 +178,8 @@ describe('what is around the button', () => {
     ['a label', '<label><Button label="Pick" /></label>'],
     ['a summary', '<details><summary><Button label="More" /></summary></details>'],
     ['an element with a click handler', '<div onClick={open}><Button label="Open" /></div>'],
-    ['an element with a role', '<div role="button"><Button label="Open" /></div>'],
+    ['an element with a widget role', '<div role="button"><Button label="Open" /></div>'],
+    ['an element with a role the scan cannot read', '<div role={kind}><Button label="Open" /></div>'],
     ['an element with spread props', '<div {...rest}><Button label="Open" /></div>'],
     ['a Card that acts', '<Card onClick={select}><Button label="View" /></Card>'],
     ['a package link', "<Link href=\"/x\"><Button label=\"Go\" /></Link>", "import Link from 'next/link';"],
@@ -207,6 +210,8 @@ describe('what is around the button', () => {
     ['a fragment', '<><Button label="Go" /></>'],
     ['plain HTML', '<div className="row"><section><Button label="Go" /></section></div>'],
     ['a provider', '<ToastProvider><Button label="Go" /></ToastProvider>'],
+    ['a landmark role on a layout component', '<Card role="main"><Button label="Go" /></Card>'],
+    ['a landmark role on HTML', '<nav role="navigation"><div role="group"><Button label="Go" /></div></nav>'],
   ])('%s: reported', (_, body) => {
     const source = page(body).replace(
       "import {VStack} from '@astryxdesign/core/Layout';",
