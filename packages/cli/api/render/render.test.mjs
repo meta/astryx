@@ -2865,7 +2865,7 @@ console.log(JSON.stringify({inside, outside}));
       path.join(away, 'many-deps-chart.tsx'),
       "import {Line} from 'not-real-charts-xyz';\nimport fs from 'node:fs';\nexport const Chart = ({icon}: {icon: unknown}) => <Line icon={icon} fs={fs} />;\n",
     );
-    const run = runBin(away, ['experimental', 'render', 'many-deps.tsx']);
+    const run = runBin(away, ['experimental', 'export', 'many-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
     // No package.json holds this folder, so an install would make it a
     // project: the message names the packages for the project that uses the
@@ -2885,7 +2885,7 @@ console.log(JSON.stringify({inside, outside}));
       path.join(away, 'used-deps-shapes.ts'),
       "import {Model} from 'not-real-model-xyz';\nexport type Shape = Model;\nexport const twice = (Model: number) => Model * 2;\nexport const size = 1;\n",
     );
-    const run = runBin(away, ['experimental', 'render', 'used-deps.tsx']);
+    const run = runBin(away, ['experimental', 'export', 'used-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
     expect(run.json.error).toBe(
       'The page imports not-real-brand-xyz and not-real-mark-xyz, which are not installed. Install them in the project that uses this page.',
@@ -2897,7 +2897,7 @@ console.log(JSON.stringify({inside, outside}));
       path.join(away, 'js-deps.jsx'),
       "import {unused} from 'not-real-unused-js-xyz';\nimport {Line} from 'not-real-line-js-xyz';\nexport default () => <Line />;\n",
     );
-    const run = runBin(away, ['experimental', 'render', 'js-deps.jsx']);
+    const run = runBin(away, ['experimental', 'export', 'js-deps.jsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
     expect(run.json.error).toBe(
       'The page imports not-real-line-js-xyz and not-real-unused-js-xyz, which are not installed. Install them in the project that uses this page.',
@@ -2909,7 +2909,7 @@ console.log(JSON.stringify({inside, outside}));
       path.join(away, 're-export-deps.tsx'),
       "import {Shape} from 'not-real-shapes-xyz';\nexport {make} from 'not-real-shapes-xyz';\nexport const shape: Shape | null = null;\nexport default () => <p>x</p>;\n",
     );
-    const run = runBin(away, ['experimental', 'render', 're-export-deps.tsx']);
+    const run = runBin(away, ['experimental', 'export', 're-export-deps.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
     expect(run.json.error).toBe('The page imports not-real-shapes-xyz, which is not installed. Install it in the project that uses this page.');
   }, 60_000);
@@ -2919,7 +2919,7 @@ console.log(JSON.stringify({inside, outside}));
       path.join(away, 'unheld.tsx'),
       "import {Line} from 'not-real-charts-xyz';\nimport {x} from '@astryxdesign/not-a-real-package-xyz';\nexport default () => <Line x={x} />;\n",
     );
-    const run = runBin(away, ['experimental', 'render', 'unheld.tsx']);
+    const run = runBin(away, ['experimental', 'export', 'unheld.tsx']);
     expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
     expect(run.json.error).toBe(
       'The page imports @astryxdesign/not-a-real-package-xyz and not-real-charts-xyz, which are not installed. Install them in the project that uses this page.',
