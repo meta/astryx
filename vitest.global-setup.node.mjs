@@ -58,9 +58,9 @@ export default async function setup(project) {
   // This run holds a lease for its whole length, so a later run's setup does
   // not rebuild Core under it. The returned teardown ends it, and so does the
   // process's exit: a run stopped with Ctrl-C calls no teardown.
+  const root = fileURLToPath(new URL('.', import.meta.url));
   const endRun = registerTestRun();
   process.once('exit', endRun);
-  const root = fileURLToPath(new URL('.', import.meta.url));
   try {
     // A stale Core is rebuilt only here, before the workers. A suite that
     // rebuilt it mid-run would delete dist under suites still reading it. The
