@@ -69,6 +69,61 @@ describe('main validation legs', () => {
   });
 });
 
+describe('main validation checkouts', () => {
+  /** Every checkout step in a job, with the steps right after it. */
+  const checkoutsOf = job =>
+    job.steps
+      .map((step, index) => ({step, index}))
+      .filter(({step}) => step.uses?.startsWith('actions/checkout@'));
+
+  it('bounds every checkout at five minutes, tries it once more, and stops with a named reason when both fail', () => {
+    const jobs = Object.entries(workflow.jobs).filter(([, job]) =>
+      job.steps?.some(step => step.uses?.startsWith('actions/checkout@')),
+    );
+    // Every job that checks out code: none is left unbounded.
+    expect(jobs.map(([id]) => id).sort()).toEqual([
+      'main-commit',
+      'sync-exports',
+      'test-node',
+      'test-ui',
+      'typecheck',
+    ]);
+    for (const [id, job] of jobs) {
+      const checkouts = checkoutsOf(job);
+      // One first try and one second try, each bounded.
+      expect(
+        checkouts.map(({step}) => step.id),
+        id,
+      ).toEqual(['checkout', 'checkout-again']);
+      const [first, again] = checkouts;
+      for (const {step} of checkouts) {
+        expect(step['timeout-minutes'], id).toBe(5);
+        expect(step['continue-on-error'], id).toBe(true);
+      }
+      // The second try checks out the same thing, only after the first failed.
+      expect(again.step.with, id).toEqual(first.step.with);
+      expect(again.index, id).toBe(first.index + 1);
+      expect(String(again.step.if), id).toContain(
+        "steps.checkout.outcome != 'success'",
+      );
+      // When both fail, the job stops at once with the reason.
+      const stop = job.steps[again.index + 1];
+      expect(stop.name, id).toBe('Stop when the checkout failed twice');
+      expect(String(stop.if), id).toContain(
+        "steps.checkout.outcome != 'success' && steps.checkout-again.outcome != 'success'",
+      );
+      expect(stop.run, id).toContain('checkout failed twice');
+      expect(stop.run.trim().split('\n').at(-1), id).toBe('exit 1');
+      // A condition the original step had applies to all three.
+      if (first.step.if)
+        for (const each of [again.step, stop])
+          expect(String(each.if), id).toContain(
+            String(first.step.if).replace(/^\$\{\{\s*|\s*\}\}$/g, ''),
+          );
+    }
+  });
+});
+
 describe('main validation dispatch', () => {
   const inputs = workflow.on.workflow_dispatch.inputs;
 

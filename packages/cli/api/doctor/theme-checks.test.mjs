@@ -1066,11 +1066,34 @@ describe('app-theme doctor checks', () => {
     const owners = check(await checkAppThemes(dir), 'theme-owners');
     expect(owners.status).toBe('fail');
     // The listed theme's install stays a command of its own, before the
-    // steps that add the other theme.
+    // steps that add the other theme: with the project's package manager, at
+    // the Core release its exact Core peer needs, then the theme again.
     const steps = owners.fix.split('; ');
     expect(steps[0]).toBe('pnpm install');
-    expect(steps.slice(1).join('; ')).toContain('@astryxdesign/theme-stone');
-    expect(steps.at(-1)).toMatch(/ theme add stone\b/);
+    expect(steps[1]).toBe(
+      `pnpm add -E @astryxdesign/theme-stone@${CLI_VERSION}`,
+    );
+    expect(steps[2]).toMatch(/ theme add stone$/);
+    expect(steps).toHaveLength(3);
+  });
+
+  it('check 1 names the package to add a theme from when a bundled theme shares its slug', async () => {
+    // The app adds stone from @acme/themes, which it no longer lists or
+    // installs. The CLI carries a stone theme of its own.
+    const {dir, packageDir} = await fixture([{slug: 'stone'}]);
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    delete pkg.dependencies['@acme/themes'];
+    write(path.join(dir, 'package.json'), JSON.stringify(pkg));
+    write(path.join(dir, 'package-lock.json'), '{}\n');
+    fs.rmSync(packageDir, {recursive: true});
+
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    expect(owners.fix).toMatch(
+      /^npm install @acme\/themes; .* theme add stone --package @acme\/themes$/,
+    );
   });
 
   it('check 2 fails when the generated module is hand-edited', async () => {
