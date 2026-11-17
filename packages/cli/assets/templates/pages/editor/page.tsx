@@ -108,9 +108,10 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
     key: 'name',
     header: 'Transaction',
     // An icon and a name share this cell, so the default 60px floor leaves a
-    // letter or two per line on a phone. This floor keeps the name readable,
-    // and the Table scrolls sideways when the columns no longer fit.
-    width: proportional(1, {minWidth: 180}),
+    // letter or two per line on a phone. Each column's share matches its
+    // floor, so the floors add up to the table's minimum (480px), and the
+    // Table scrolls sideways only below that.
+    width: proportional(3, {minWidth: 180}),
     renderCell: (item: Transaction) => (
       <HStack gap={3} vAlign="center">
         <Icon icon={CATEGORY_ICONS[item.category] || SparklesIcon} />
@@ -128,6 +129,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'date',
     header: 'Date',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="body" color="secondary">
         {item.date}
@@ -137,6 +139,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'amount',
     header: 'Amount',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="label" weight="semibold" color={undefined} hasTabularNumbers>
         {item.amount}
@@ -146,6 +149,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'actions',
     header: '',
+    width: proportional(1, {minWidth: 60}),
     renderCell: () => (
       <Button
         label="More"
