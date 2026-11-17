@@ -465,7 +465,7 @@ function InvoiceCard() {
               <StackItem size="fill">
                 <Text type="body">New customer code: NEW15</Text>
               </StackItem>
-              <Text type="body">– {fmt(DISCOUNT)}</Text>
+              <Text type="body">–&nbsp;{fmt(DISCOUNT)}</Text>
             </HStack>
           </MetadataListItem>
           <MetadataListItem label="Shipping">

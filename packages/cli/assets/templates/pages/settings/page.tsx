@@ -76,7 +76,8 @@ export default function SettingsTemplate() {
       contentWidth={1440}
       header={
         <LayoutHeader hasDivider>
-          <HStack vAlign="center">
+          {/* On a narrow screen the search moves under the title instead of squeezing it. */}
+          <HStack vAlign="center" wrap="wrap" gap={2}>
             <StackItem size="fill">
               <Heading level={1}>Settings</Heading>
             </StackItem>
