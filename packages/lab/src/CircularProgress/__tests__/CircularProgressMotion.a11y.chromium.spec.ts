@@ -426,28 +426,57 @@ test('a value change lays out and paints nothing per frame', async ({page}) => {
   );
   // Tracing starts before the change, so however long it takes to start, it
   // takes none of the change's time. The judged second starts two frames
-  // after the change's animations are ready, 200 ms in.
+  // after the change's animations are ready, 200 ms in. The page times the
+  // change and the window on its own clock, in one evaluation: on a loaded
+  // runner each round trip to the test process can take hundreds of
+  // milliseconds, and a chain of them can outlast the change.
   let from = 0;
   let to = 0;
   let moving = false;
   const trace = await traceRendering(page, async () => {
-    await setArgs(page, {value: 80});
-    await page.waitForTimeout(200);
-    from = await page.evaluate(async () => {
-      await Promise.all(document.getAnimations().map(async a => a.ready));
-      await new Promise(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      );
-      return performance.timeOrigin + performance.now();
-    });
-    await page.waitForTimeout(1000);
-    [to, moving] = await page.evaluate(
-      () =>
-        [
-          performance.timeOrigin + performance.now(),
-          document.getAnimations().some(a => a.playState === 'running'),
-        ] as const,
-    );
+    ({from, to, moving} = await page.evaluate(
+      async ({storyId, updatedArgs}) => {
+        const before = new Set(document.getAnimations());
+        const started = new Promise<Animation[]>((resolve, reject) => {
+          const poll = () => {
+            const fresh = document
+              .getAnimations()
+              .filter(animation => !before.has(animation));
+            if (fresh.length >= 4) {
+              resolve(fresh);
+              return;
+            }
+            requestAnimationFrame(poll);
+          };
+          requestAnimationFrame(poll);
+          setTimeout(() => reject(new Error('no animation started')), 3000);
+        });
+        (
+          window as unknown as {
+            __STORYBOOK_ADDONS_CHANNEL__: {
+              emit: (event: string, payload: unknown) => void;
+            };
+          }
+        ).__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', {
+          storyId,
+          updatedArgs,
+        });
+        const change = await started;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await Promise.all(change.map(async a => a.ready));
+        await new Promise(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
+        const start = performance.timeOrigin + performance.now();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return {
+          from: start,
+          to: performance.timeOrigin + performance.now(),
+          moving: change.some(a => a.playState === 'running'),
+        };
+      },
+      {storyId: STORY, updatedArgs: {value: 80}},
+    ));
   });
   const counts = countBetween(trace, from, to);
   // A full second of the change: nothing lays out or paints. A
