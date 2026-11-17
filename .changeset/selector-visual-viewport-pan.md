@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Keep Selector overlays above the keyboard line when a software keyboard pans the visual viewport.
+[fix] Keep an open Selector list inside the visible area, above the keyboard, when a software keyboard pans the page.
 
 @bezabyte
