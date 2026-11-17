@@ -468,9 +468,9 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>(
  * live region. iOS VoiceOver ignores `aria-activedescendant`, so on iOS the
  * announcement is how it hears each keyboard move. Elsewhere screen readers
  * follow `aria-activedescendant`, and an announcement would say each move
- * twice. This is the one place that decides where it applies. Remove the
- * gate, and the announcement, once iOS VoiceOver follows
- * `aria-activedescendant`.
+ * twice. It decides for Selector; MultiSelector's announcer hook keeps the
+ * same gate (see its SYNC note). Remove the gate, and the announcement, once
+ * iOS VoiceOver follows `aria-activedescendant`.
  */
 export function announcesActiveOption(): boolean {
   return isIosWebKit();

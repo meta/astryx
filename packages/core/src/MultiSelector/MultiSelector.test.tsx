@@ -5764,4 +5764,45 @@ describe('MultiSelector active option announcement', () => {
       expect(politeRegion()?.textContent).toContain('Apple, 2 of 3'),
     );
   });
+
+  it('says nothing when the pointer moves the highlight', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={['Apple', 'Banana', 'Orange']}
+        value={['Banana']}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /^Fruit/}));
+    fireEvent.mouseMove(
+      screen.getByRole('option', {hidden: true, name: /Orange/}),
+    );
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(politeRegion()?.textContent ?? '').not.toContain('Orange');
+  });
+
+  it('says nothing where screen readers follow aria-activedescendant', async () => {
+    vi.stubGlobal('CSS', {...globalThis.CSS, supports: () => false});
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={['Apple', 'Banana', 'Orange']}
+        value={['Banana']}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /^Fruit/}));
+    fireEvent.keyDown(screen.getByRole('combobox', {hidden: true}), {
+      key: 'ArrowDown',
+    });
+    await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+    expect(politeRegion()?.textContent ?? '').not.toContain('Banana, selected');
+  });
 });

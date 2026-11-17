@@ -146,7 +146,7 @@ export function useMultiCombobox(
 /**
  * `useMultiCombobox` for Core's own MultiSelector: `onKeyboardHighlight` runs
  * after each move of the highlight by a key, with the new index, so the
- * caller can announce the active option (announcesActiveOption). Internal:
+ * caller can announce the active option. Internal:
  * not exported from the MultiSelector entry point.
  */
 export function useMultiComboboxWithKeyHighlight(
