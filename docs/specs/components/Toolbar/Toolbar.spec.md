@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/Toolbar/__tests__/Toolbar.a11y.test.tsx,
     packages/core/src/Toolbar/__tests__/Toolbar.a11y.chromium.spec.ts,
     packages/core/src/Toolbar/__tests__/ToolbarTextSize.interaction.browser.spec.ts,
+    packages/core/src/Toolbar/__tests__/ToolbarTwoLaneWrap.a11y.chromium.spec.ts,
     packages/core/src/Section/Section.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
@@ -45,7 +46,7 @@ system_specs: [spec:AST-020]
 | Behavior                | A Section-wrapped `role="toolbar"` row with start, optional center, and end lanes. The row is one tab stop; arrow keys, Home, and End move focus among its controls along its orientation.                                          |
 | End-user impact         | Keyboard users Tab into the toolbar once and move between its controls with arrows, without losing text-caret keys inside an input or arrow keys inside an open menu; screen-reader users hear a named toolbar and its orientation. |
 | Builder impact          | None.                                                                                                                                                                                                                               |
-| Compatibility/readiness | Three-lane layout change: the row wraps when its lanes do not fit (FR2); no public API change. Five current-state items (see Current-state impact).                                                                                 |
+| Compatibility/readiness | Lane layout change: a two-lane or three-lane row wraps when its lanes do not fit (FR2); no public API change. Five current-state items (see Current-state impact).                                                                  |
 | Review checks           | Reject more than one tab stop, arrows that steal caret keys from a text input mid-line, caller props that replace `role`, `aria-label`, or `aria-orientation`, or moving outer chrome into Toolbar.                                 |
 | Governing rules         | `family:layout-regions`; `spec:AST-020` (toolbar pattern binding); `architecture:container-padding`.                                                                                                                                |
 
@@ -59,10 +60,10 @@ keyboard model, and size cascade. Consumer usage lives in `Toolbar.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `no` for the three-lane layout: when the lanes
+- Released default preserved: `no` for the two-lane and three-lane layouts: when the lanes
   do not fit one row, the row wraps (FR2), and in a narrow container a center
   TabList keeps all of its tabs instead of scrolling them in place
-- Compatibility class: layout change to the three-lane row under FR2; DOM,
+- Compatibility class: layout change to the two-lane and three-lane rows under FR2; DOM,
   targets, and public API remain unchanged, and while the lanes fit one row
   the layout is unchanged
 - Controlled/uncontrolled behavior: not applicable
@@ -198,15 +199,16 @@ become additional Toolbar-owned anatomy or targets.
 
 ## Verification map
 
-| Contract            | Verification                                                                                                                  | Representative states                               | Mutation or failure expectation                                                                                                               | Audit section                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| FR1                 | `Toolbar.test.tsx` role, name, pass-through, and Section suites                                                               | Empty and populated Toolbar                         | Removing the role/name, Toolbar target, Section composition, or delegated Section target fails current evidence.                              | `audit:Toolbar/anatomy`       |
-| FR2                 | `Toolbar.test.tsx` slot and child-count suites                                                                                | Start-only, end-only, two-lane, and three-lane      | Changing current slot presence or two-/three-lane structure fails focused assertions.                                                         | `audit:Toolbar/layout`        |
-| FR2 wrap            | `ToolbarTextSize.interaction.browser.spec.ts` at a 402 px viewport at 165% and 194% default font size, and at 1024 px at 100% | Three Slot; default text size                       | Lane text that overlaps another lane or leaves the screen, a page that scrolls sideways, or a center that moves off the middle at 100% fails. | `audit:Toolbar/layout`        |
-| FR3                 | `Toolbar.test.tsx` variant and block-inset tests                                                                              | Default and passed variant                          | A variant that no longer reaches Section fails.                                                                                               | `audit:Toolbar/theming`       |
-| FR4, FR5, AR1–AR2   | `Toolbar.test.tsx` keyboard and composition suites; `Toolbar.a11y.test.tsx`; `Toolbar.a11y.chromium.spec.ts`                  | Horizontal, vertical, text input, MoreMenu, popover | Extra tab stops, stolen caret keys, or ignored caller cancellation fails.                                                                     | `audit:Toolbar/accessibility` |
-| Target inventory    | `packages/core/src/theme/themingTargets.test.ts`                                                                              | Toolbar and delegated Section targets               | Runtime and documented target metadata drift fails target validation.                                                                         | `audit:Toolbar/theming`       |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                 | Canonical anatomy and current local target          | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                       | `audit:Toolbar/theming`       |
+| Contract             | Verification                                                                                                                  | Representative states                               | Mutation or failure expectation                                                                                                                                   | Audit section                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| FR1                  | `Toolbar.test.tsx` role, name, pass-through, and Section suites                                                               | Empty and populated Toolbar                         | Removing the role/name, Toolbar target, Section composition, or delegated Section target fails current evidence.                                                  | `audit:Toolbar/anatomy`       |
+| FR2                  | `Toolbar.test.tsx` slot and child-count suites                                                                                | Start-only, end-only, two-lane, and three-lane      | Changing current slot presence or two-/three-lane structure fails focused assertions.                                                                             | `audit:Toolbar/layout`        |
+| FR2 wrap             | `ToolbarTextSize.interaction.browser.spec.ts` at a 402 px viewport at 165% and 194% default font size, and at 1024 px at 100% | Three Slot; default text size                       | Lane text that overlaps another lane or leaves the screen, a page that scrolls sideways, or a center that moves off the middle at 100% fails.                     | `audit:Toolbar/layout`        |
+| FR2 wrap (two lanes) | `ToolbarTwoLaneWrap.a11y.chromium.spec.ts` at 390 px and 1024 px                                                              | Two lanes on a narrow screen                        | A title that wraps, a cut lane control, an end lane that stays beside a start lane it does not fit, a page that scrolls sideways, or a wide row that wraps fails. | `audit:Toolbar/layout`        |
+| FR3                  | `Toolbar.test.tsx` variant and block-inset tests                                                                              | Default and passed variant                          | A variant that no longer reaches Section fails.                                                                                                                   | `audit:Toolbar/theming`       |
+| FR4, FR5, AR1–AR2    | `Toolbar.test.tsx` keyboard and composition suites; `Toolbar.a11y.test.tsx`; `Toolbar.a11y.chromium.spec.ts`                  | Horizontal, vertical, text input, MoreMenu, popover | Extra tab stops, stolen caret keys, or ignored caller cancellation fails.                                                                                         | `audit:Toolbar/accessibility` |
+| Target inventory     | `packages/core/src/theme/themingTargets.test.ts`                                                                              | Toolbar and delegated Section targets               | Runtime and documented target metadata drift fails target validation.                                                                                             | `audit:Toolbar/theming`       |
+| Theming anatomy map  | `scripts/check-knowledge.mjs`                                                                                                 | Canonical anatomy and current local target          | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                                           | `audit:Toolbar/theming`       |
 
 Read from source, with no focused test yet:
 
