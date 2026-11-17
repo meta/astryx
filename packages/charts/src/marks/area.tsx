@@ -6,8 +6,8 @@
  *
  * Missing / non-finite values (including gaps in a stacked baseline) become
  * holes via d3's `.defined()` rather than collapsing to zero. Each gradient
- * fill takes a `useId()` id, unique on the page, so no two areas share (and
- * steal) each other's fill, within one chart or across charts.
+ * fill takes its id from `useId()`. The id is unique on the page, so an area
+ * never paints another area's gradient.
  */
 
 import {
