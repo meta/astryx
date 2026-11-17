@@ -82,8 +82,11 @@ for (const story of ['core-indicator--sizes', 'core-indicator--all-states']) {
       await openStory(page, storybook(), story);
       const found = await marks(page);
       expect(found.length).toBeGreaterThan(0);
+      // (Within one layout unit: WebKit lays a share out to 1/64px.)
       for (const m of found) {
-        expect([m.width, m.height]).toEqual(SHIPPED[m.kind][m.size]);
+        const [w, h] = SHIPPED[m.kind][m.size];
+        expect(m.width).toBeCloseTo(w, 1);
+        expect(m.height).toBeCloseTo(h, 1);
       }
     });
 
@@ -96,7 +99,7 @@ for (const story of ['core-indicator--sizes', 'core-indicator--all-states']) {
       const found = await marks(page);
       expect(found.length).toBeGreaterThan(0);
       for (const m of found) {
-        expect(m.box).toBe(13);
+        expect(m.box).toBeCloseTo(13, 1);
         expect(m.inside).toBe(true);
         expect(Math.abs(m.dx)).toBeLessThanOrEqual(0.5);
         expect(Math.abs(m.dy)).toBeLessThanOrEqual(0.5);

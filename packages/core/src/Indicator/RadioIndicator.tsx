@@ -113,24 +113,37 @@ const circleSizeStyles = stylex.create({
 // (`radio-indicator` width and height) gets a dot that stays centered inside
 // it. A percentage reads the circle's content box, so the border is added back
 // first: at the shipped 20px and 24px circles the dot stays exactly 8px and
-// 10px, whatever `--border-width` a theme sets. The share is rounded to whole
-// pixels: Chromium draws a dot of a fractional size (a 13px circle, or a
-// border set directly rather than through the token) as a rounded square
-// despite its 50% radius. A browser without `round()` keeps the exact share.
-const dotShare = (share: string) =>
-  stylex.firstThatWorks(
-    `round(calc((100% + 2 * ${borderVars['--border-width']}) * ${share}), 1px)`,
-    `calc((100% + 2 * ${borderVars['--border-width']}) * ${share})`,
-  );
+// 10px, whatever `--border-width` a theme sets. Where the browser has
+// `round()`, the share is rounded to whole pixels: Chromium draws a dot of a
+// fractional size (a 13px circle, or a border set directly rather than through
+// the token) as a rounded square despite its 50% radius. The rounded value
+// sits behind `@supports`, so a browser without `round()` keeps the exact
+// share instead of dropping the declaration (a value holding `var()` is only
+// checked once the variable is substituted).
+const share = (s: string) =>
+  `calc((100% + 2 * ${borderVars['--border-width']}) * ${s})`;
+const ROUND = '@supports (width: round(1px, 1px))';
 
 const dotSizeStyles = stylex.create({
   sm: {
-    width: dotShare('8 / 20'),
-    height: dotShare('8 / 20'),
+    width: {
+      default: share('8 / 20'),
+      [ROUND]: `round(${share('8 / 20')}, 1px)`,
+    },
+    height: {
+      default: share('8 / 20'),
+      [ROUND]: `round(${share('8 / 20')}, 1px)`,
+    },
   },
   md: {
-    width: dotShare('10 / 24'),
-    height: dotShare('10 / 24'),
+    width: {
+      default: share('10 / 24'),
+      [ROUND]: `round(${share('10 / 24')}, 1px)`,
+    },
+    height: {
+      default: share('10 / 24'),
+      [ROUND]: `round(${share('10 / 24')}, 1px)`,
+    },
   },
 });
 
