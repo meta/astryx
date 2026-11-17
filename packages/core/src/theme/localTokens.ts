@@ -87,10 +87,17 @@ function collectCustomPropertyReferences(
   }
 }
 
+/**
+ * Throws when a token map holds a value that never ends (an object inside
+ * itself) or tokens that read each other. `context` names where the map
+ * comes from; `contextOf`, when given, names where one token's value comes
+ * from instead (a merged map holds the root's values beside a rule's).
+ */
 export function assertNoTokenCycles(
   tokenValues: Record<string, string>,
   context?: string,
   relevantNames?: ReadonlySet<string>,
+  contextOf?: (name: string) => string,
 ): void {
   const dependencies = new Map<string, string[]>();
   for (const [name, value] of Object.entries(tokenValues)) {
@@ -101,8 +108,9 @@ export function assertNoTokenCycles(
       if (!(error instanceof SelfReferenceError)) {
         throw error;
       }
+      const where = contextOf?.(name) ?? context;
       throw new Error(
-        `${context ? `${context}: ` : ''}tokens refers to itself: the value of ${name} holds an object it sits in, so it never ends and is no token value.`,
+        `${where ? `${where}: ` : ''}tokens refers to itself: the value of ${name} holds an object it sits in, so it never ends and is no token value.`,
         {cause: error},
       );
     }

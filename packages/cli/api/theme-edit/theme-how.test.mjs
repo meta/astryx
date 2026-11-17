@@ -182,16 +182,19 @@ const QUESTIONS = [
   [
     'make the page background white',
     {
-      top: /^set q --color-background-body '#ffffff'$/,
-      adds: /--color-background-body=#ffffff/,
+      // (A light page color on a theme that draws both modes is the light
+      // mode's; the dark page keeps its own.)
+      top: /^set q --color-background-body '#ffffff' --mode light$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background-color '#e5e7eb' --on card$/,
-      adds: /card\.base\.backgroundColor=#e5e7eb/,
+      // (A plain fill reaches the neutral cards; colored ones keep theirs.)
+      top: /^set q background-color '#e5e7eb' --on card --when variant:default --mode light$/,
+      adds: /card\b.*@light.*#e5e7eb|card\b.*#e5e7eb.*light/,
     },
   ],
   [
@@ -268,8 +271,8 @@ const QUESTIONS = [
   [
     'progress bar fill should be green',
     {
-      top: /--on progress-bar-fill$/,
-      adds: /progress-bar-fill\.base\.backgroundColor=#16a34a/,
+      top: /--on progress-bar-fill --when variant:accent/,
+      adds: /progress-bar-fill\.variant:accent\.backgroundColor=#16a34a/,
     },
   ],
   [
@@ -655,8 +658,10 @@ const QUESTIONS = [
     {
       parts: ['table-row'],
       // Core paints the selected wash inline from this token.
-      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
-      adds: /table-row\.selected\.--color-accent-muted=#/,
+      // (A light wash the dark mode's light text would not read on: the
+      // light mode's.)
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected --mode light$/,
+      adds: /table-row\.selected.*--color-accent-muted/,
     },
   ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
@@ -1192,7 +1197,7 @@ const QUESTIONS_2 = [
   [
     'in dark mode, cards should be #1c1c1e',
     {
-      top: /^set q background-color '#1c1c1e' --on card --mode dark$/,
+      top: /^set q background-color '#1c1c1e' --on card --when variant:default --mode dark$/,
       adds: /card\.variant:default\.@dark\.backgroundColor=/,
     },
   ],
@@ -1603,15 +1608,15 @@ const QUESTIONS_3 = [
   [
     'colors: bg=#fff text=#000 accent=#ff0080',
     {
-      top: /^set q --color-background-body '#fff' && set q --color-text-primary '#000' && set q accent '#ff0080'$/,
-      adds: /--color-background-body=#fff/,
+      top: /^set q --color-background-body '#fff' --mode light && set q --color-text-primary '#000' --mode light && set q accent '#ff0080'$/,
+      adds: /--color-background-body/,
     },
   ],
   [
     'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
     {
-      top: /^set q --color-background-body '#fafafa' && set q --color-text-primary '#171717' && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
-      adds: /--color-border=#e5e5e5/,
+      top: /^set q --color-background-body '#fafafa' --mode light && set q --color-text-primary '#171717' --mode light && set q --color-border '#e5e5e5' --mode light && set q accent '#0070f3'$/,
+      adds: /--color-border.*#e5e5e5/,
     },
   ],
   [
@@ -1738,7 +1743,12 @@ const QUESTIONS_3 = [
   ],
   [
     'make inputs taller (44px)',
-    {top: /^set q min-height 44px --on inputs$/, adds: /minHeight=44px/},
+    // (The control heights the inputs read, so they can shrink and a text
+    // area keeps its rows.)
+    {
+      top: /^set q --size-element-md 44px --on inputs && set q --size-element-sm 40px --on inputs$/,
+      adds: /--size-element-md=44px/,
+    },
   ],
   [
     'stakeholders think the grays are too warm',
@@ -1776,7 +1786,7 @@ const QUESTIONS_3 = [
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
     {
-      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background-color '#f3f4f6' --on table-header-cell$/,
+      top: /^set q --color-background-muted '#f9fafb' --on table-row --mode light && set q background-color '#f3f4f6' --on table-header-cell --mode light$/,
     },
   ],
   [
@@ -1785,7 +1795,13 @@ const QUESTIONS_3 = [
       top: /^set q background-color '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
     },
   ],
-  ['button color #fff', {top: /^set q color '#fff' --on button$/}],
+  // (A ghost button, drawn on the page, keeps its own text.)
+  [
+    'button color #fff',
+    {
+      top: /^set q color '#fff' --on button --when variant:primary(?!.*variant:ghost)/,
+    },
+  ],
   [
     'accent #ff0000 */ body{display:none} /*',
     {top: /^set q accent '#ff0000'$/},
@@ -1984,7 +2000,9 @@ const QUESTIONS_F = [
   ['Source Sans 3 font', {top: /^set q font 'Source Sans 3'$/}],
   [
     'boutons sans-serif font',
-    {top: /^set q font-family system-ui --on button$/},
+    {
+      top: /^set q font-family 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' --on button$/,
+    },
   ],
   [
     'IBM Carbon: square corners, IBM Plex Sans, accent #0f62fe',
@@ -2001,7 +2019,7 @@ const QUESTIONS_F = [
   ],
   [
     'page should be off-white',
-    {top: /^set q --color-background-body '#fafafa'$/},
+    {top: /^set q --color-background-body '#fafafa' --mode light$/},
   ],
   ['headings are way too big', {top: /^set q type compact$/}],
   [
@@ -2313,7 +2331,8 @@ const QUESTIONS_G = [
     // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
     {
-      top: /^set q --color-border '#e5e7eb' --on divider && set q --color-border-emphasized '#e5e7eb' --on divider$/,
+      // (A light line, the light mode's: on the dark page a glaring edge.)
+      top: /^set q --color-border '#e5e7eb' --on divider --mode light && set q --color-border-emphasized '#e5e7eb' --on divider --mode light$/,
     },
   ],
   // a CSS property named in the question is set as named
@@ -2327,7 +2346,7 @@ const QUESTIONS_G = [
   [
     'card background color-mix(in srgb, #2563eb 10%, white)',
     {
-      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card$/,
+      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card --mode light$/,
     },
   ],
   [
@@ -2394,7 +2413,7 @@ const QUESTIONS_G = [
   // gray stops and named grays
   [
     'page background gray-50',
-    {top: /^set q --color-background-body '#f[0-9a-f]{5}'$/},
+    {top: /^set q --color-background-body '#f[0-9a-f]{5}' --mode light$/},
   ],
   [
     'text zinc-900',
@@ -2419,7 +2438,7 @@ const QUESTIONS_G = [
     'Times New Roman for headings, lol',
     {top: /^set q font 'Times New Roman' --on heading$/},
   ],
-  // Code blocks are Core's code-block part (hunt68).
+  // Code blocks are Core's code-block part.
   [
     'code blocks should use Menlo',
     {top: /^set q font-family Menlo --on code-block$/},
@@ -2700,7 +2719,7 @@ const QUESTIONS_H = [
   ['halve the spacing', {top: /^set q spacing less$/}],
   [
     'cut the border radius in half on inputs',
-    // Half the radius inputs have now (hunt61), not a dial step.
+    // Half the radius inputs have now, not a dial step.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on inputs$/},
   ],
   [
@@ -2766,8 +2785,11 @@ const QUESTIONS_H = [
     {top: null, text: /button has no loading state/},
   ],
   [
+    // (Unchecked is the box at rest: the checked look kept.)
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checkbox-indicator has no unchecked state/},
+    {
+      top: /^set q border-width 2px --on checkbox-indicator --only && set q border-width 1px --on checkbox-indicator --state checked --only/,
+    },
   ],
   [
     'heading color red',
@@ -2905,7 +2927,10 @@ const QUESTIONS_I = [
   ],
   [
     'card border 2px #e5e7eb',
-    {top: /^set q border '2px solid #e5e7eb' --on card$/},
+    // (A light line keeps the dark mode's own border color.)
+    {
+      top: /^set q border '2px solid light-dark\(#e5e7eb, var\(--color-border\)\)' --on card$/,
+    },
   ],
   ['card border width 2px', {top: /^set q border-width 2px --on card$/}],
   ['card outline width 2px', {top: /^set q outline-width 2px --on card$/}],
@@ -2962,7 +2987,8 @@ const QUESTIONS_I = [
   [
     'cards get a 1px border instead of a shadow',
     {
-      top: /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none && set q border-width 1px --on card$/,
+      // (The shadow taken away is the cards', never every shadow.)
+      top: /^set q border-width 1px --on card && set q box-shadow none --on card$/,
     },
   ],
   ['turn off all animations', {top: /^set q --duration-[a-z-]+ 0ms/}],
@@ -3227,7 +3253,7 @@ const QUESTIONS_J = [
   ],
   [
     'buttons twice as round as inputs',
-    // Twice the inputs' radius, on buttons only (hunt68).
+    // Twice the inputs' radius, on buttons only.
     {top: /^set q border-radius \d*\.?\d+(px|rem) --on button$/},
   ],
   [
@@ -3300,7 +3326,9 @@ describe('how answers final-5 questions', () => {
 const QUESTIONS_K = [
   [
     'in dark mode only, cards #111111',
-    {top: /^set q background-color '#111111' --on card --mode dark$/},
+    {
+      top: /^set q background-color '#111111' --on card --when variant:default --mode dark$/,
+    },
   ],
   ['only dark mode please', {top: /^set q mode dark-only$/}],
   [
@@ -3430,9 +3458,16 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       'I look at it all day, please make the cards rounder',
     ]) {
       const {data} = await themeEditHow(q, {cwd, theme: 'q'});
-      expect(JSON.stringify(data.results), q).not.toMatch(
-        /--mode light|light mode only/,
-      );
+      // (The readable-text line beside a fill is measured per mode.)
+      expect(
+        JSON.stringify(
+          data.results.filter(
+            (/** @type {any} */ r) =>
+              !/^readable text on that fill/.test(r.text),
+          ),
+        ),
+        q,
+      ).not.toMatch(/--mode light|light mode only/);
     }
     const {data} = await themeEditHow(
       'in daytime mode use a cream background',
@@ -3603,7 +3638,7 @@ describe('how answers final-8 questions', () => {
 });
 
 /**
- * Chaos-10 R10-C and O11: an amount with a comparative is a change from
+ * Chaos-10 -C and O11: an amount with a comparative is a change from
  * the value now, and "all corners like the buttons" copies their radius.
  * @type {Array<[string, RegExp | null, RegExp?]>}
  */
@@ -3821,11 +3856,11 @@ const QUESTIONS_R = [
   ['darkmode accent teal', /^set q --color-accent '#0d9488' --mode dark$/],
   [
     'html.dark .card { background: #111 }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   [
     '@media (prefers-color-scheme: dark) { .card { background: #111 } }',
-    /^set q background-color '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --when variant:default --mode dark$/,
   ],
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
@@ -4219,7 +4254,10 @@ describe('how writes only for a clause that reads as an ask', () => {
  */
 const QUESTIONS_Y = [
   // A description of the look wanted writes.
-  ['the page is white', /^set q --color-background-body '#ffffff'$/],
+  [
+    'the page is white',
+    /^set q --color-background-body '#ffffff' --mode light$/,
+  ],
   ['show me the card shadow', null],
   ['give me the border width on inputs', null],
   ['give buttons 8px corners', /^set q border-radius 8px --on button$/],

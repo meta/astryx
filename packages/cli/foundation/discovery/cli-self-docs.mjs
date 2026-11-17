@@ -27,6 +27,7 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {publishedSummary} from './command-pointers.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 
 /** The doc kinds that declare a namespace. */
@@ -97,7 +98,14 @@ export async function loadCliSelfDocs(
       if (typeof doc.name !== 'string' || doc.name === '') {
         throw new Error('exports no doc with a name');
       }
-      loaded.push({source, doc});
+      // The docs and search read a command's summary with its pointers.
+      loaded.push({
+        source,
+        doc:
+          doc.type === 'command' && doc.pointers?.length
+            ? {...doc, summary: publishedSummary(doc)}
+            : doc,
+      });
     } catch (error) {
       failed.push({
         source,

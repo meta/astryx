@@ -12,6 +12,7 @@ import {
   proportional,
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
+import {useToast} from '@astryxdesign/core/Toast';
 
 interface User extends Record<string, unknown> {
   id: string;
@@ -35,6 +36,7 @@ const columns: TableColumn<User>[] = [
 ];
 
 export default function TableBulkActionsTable() {
+  const showToast = useToast();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   const {selectionConfig, selectionState} = useTableSelectionState<User>({
@@ -51,7 +53,15 @@ export default function TableBulkActionsTable() {
         selection={selectionState}
         startContent={
           <>
-            <Button label="Export" variant="ghost" onClick={() => {}} />
+            <Button
+              label="Export"
+              variant="ghost"
+              onClick={() =>
+                showToast({
+                  body: 'Demo: the selected rows would be exported here',
+                })
+              }
+            />
             <Button
               label="Delete"
               variant="ghost"

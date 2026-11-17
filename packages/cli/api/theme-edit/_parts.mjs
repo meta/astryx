@@ -16,8 +16,11 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
@@ -36,8 +39,40 @@ import {
 } from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
-/** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 23;
+/**
+ * A fingerprint of a module and every file it imports by a relative path,
+ * read once: what a cache built by that code is keyed by, so any change to
+ * the code builds it again, with no number to bump by hand (the installed
+ * Core is the cache folder's own key).
+ * @param {string} url the module's own `import.meta.url`
+ */
+export function codeFingerprint(url) {
+  const hash = createHash('sha256');
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} file */
+  const walk = file => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    /** @type {string} */
+    let src;
+    try {
+      src = fs.readFileSync(file, 'utf8');
+    } catch {
+      return;
+    }
+    hash.update(`${path.basename(file)}\0${src}\0`);
+    for (const m of src.matchAll(
+      /(?:\bfrom|\bimport\s*\(?)\s*['"](\.{1,2}\/[^'"]+)['"]/g,
+    ))
+      walk(path.resolve(path.dirname(file), m[1]));
+  };
+  walk(fileURLToPath(url));
+  return hash.digest('hex').slice(0, 16);
+}
+
+/** What the cached part data is built by ({@link codeFingerprint}). */
+const CENSUS_KEY = codeFingerprint(import.meta.url);
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -58,7 +93,11 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Record<string, string[]>} [holdsVariants] - for a part rendered inside it, the variants it is drawn in there (a toast's close button: ghost)
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string} [underInput] - drawn under an invisible native input
+ *   laid over it (a checkbox's box), which takes its pointer and focus: the
+ *   part that holds that input (empty when none is themed)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
  * @property {Record<string, string[]>} [held] - the tokens the parts inside it draw with there, at rest, and the properties they set with each
  * @property {string[]} [line] - the properties a line inside it with no target of its own draws (a divider's line), recorded as the part's: a setting on the part's own element does not reach them
@@ -69,11 +108,14 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide, within?: string[]}} TextPair
  *   `over`: the region the part sits in (a header), whose background shows
  *   through a see-through background of the part's own, else the page
- * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
+ * @typedef {{censusKey: string, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
+
+/** The days a sample date and range of days stand on. */
+const SAMPLE_DAYS = {start: '2026-01-12', end: '2026-01-16'};
 
 /**
  * A sample value for a required prop the doc declares, from its type: the
@@ -100,6 +142,10 @@ function sampleOf(name, type) {
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  // A date, and a range of days (a calendar's in range): fixed days, so
+  // the part data reads the same whatever day it is drawn on.
+  if (t === 'ISODateString') return SAMPLE_DAYS.start;
+  if (t === 'DateRange') return {...SAMPLE_DAYS};
   // A value the type lets be null (a file input's chosen file): none
   // chosen, when nothing plainer stands for it.
   if (/(^|\|)\s*null\s*(\||$)/.test(type)) return null;
@@ -158,12 +204,16 @@ export function demoProps(project, name) {
   )
     return null;
   const props = given ?? {};
-  // A search source its defaults leave out (a command palette's) is the
-  // page's sample one: without it the part lists nothing.
+  // A required prop its defaults leave out (a status dot's variant, a
+  // command palette's search source) takes its sample, as for a doc with no
+  // defaults: without it the part draws nothing (no color, no list).
   if (given)
-    for (const [p, d] of Object.entries(info.props ?? {}))
-      if (!(p in props) && /^SearchSource\b/.test(d.type))
-        props[p] = SAMPLE_SOURCE;
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (p in props || /^on[A-Z]/.test(p) || p === 'children') continue;
+      if (!d.required && !/^SearchSource\b/.test(d.type)) continue;
+      const v = d.slots?.[0] ?? sampleOf(name, d.type);
+      if (v !== undefined) props[p] = v;
+    }
   if (!given)
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
@@ -303,7 +353,17 @@ export function catalogVariants(project, name, cap, opts = {}) {
       info.props?.[k] &&
       !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
   ))
-    for (const v of values[p] ?? [])
+    for (const v of values[p] ?? []) {
+      // A value kind the look names (a calendar's `range` mode, whose value
+      // is a DateRange): a sample of that kind, so what Core draws for it
+      // (the days in the range) is read too.
+      const kind = String(info.props?.value?.type ?? '')
+        .split('|')
+        .map(x => x.trim())
+        .find(x =>
+          new RegExp(`${v[0]?.toUpperCase() ?? ''}${v.slice(1)}$`).test(x),
+        );
+      const sample = kind ? sampleOf(name, kind) : undefined;
       variants.push({
         label: v,
         // A status like `{type: 'error', message?: string}` takes the
@@ -311,8 +371,10 @@ export function catalogVariants(project, name, cap, opts = {}) {
         props: {
           ...base,
           [p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v,
+          ...(sample != null && /^[a-z]/.test(v) ? {value: sample} : {}),
         },
       });
+    }
   // The states the doc names that a prop sets: checked (a boolean value)
   // and disabled. The label says the state shown.
   const states = new Set(info.targets.flatMap(t => t.states ?? []));
@@ -437,10 +499,55 @@ const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 export const renderDir = project =>
   path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
 
+/** The file in a render folder that names the process that made it. */
+const RENDER_OWNER = '.astryx-render-owner.json';
+/** The renders of this process running now, which share its render folder. */
+let rendersInFlight = 0;
+
+/**
+ * The process space this process runs in: its host and, on Linux, its pid
+ * namespace, so a process id read from a render folder's owner file is
+ * known to be this machine's own (a container that shares the project
+ * folder has another).
+ */
+const processSpace = () => {
+  let namespace = '';
+  try {
+    namespace = fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    // No pid namespaces here.
+  }
+  return `${os.hostname()}\0${namespace}`;
+};
+
+/**
+ * Whether the process that made a render folder is known to be gone: its
+ * owner file names this process space, and no process has its id.
+ * @param {string} dir
+ * @param {number} pid
+ */
+function renderOwnerGone(dir, pid) {
+  /** @type {any} */
+  let owner;
+  try {
+    owner = JSON.parse(fs.readFileSync(path.join(dir, RENDER_OWNER), 'utf8'));
+  } catch {
+    return false;
+  }
+  if (owner?.space !== processSpace() || owner?.pid !== pid) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return /** @type {any} */ (error)?.code === 'ESRCH';
+  }
+}
+
 /**
  * Remove render folders a stopped command left (killed, out of memory):
- * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
- * Links are never followed.
+ * `.astryx-render-<pid>-<random>` folders whose maker is known to be gone
+ * (its owner file names this process space, and no process has its id),
+ * else only those more than ten minutes old. Links are never followed.
  * @param {string} themes
  */
 function sweepRenders(themes) {
@@ -454,17 +561,23 @@ function sweepRenders(themes) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
     const p = path.join(themes, n);
-    // A process id from another process space may look gone or alive here,
-    // so age decides: a render takes at most three minutes, and a folder
-    // older than ten is a leftover.
-    /** @type {number} */
-    let age;
+    // A folder whose maker is known gone is a leftover at once. A process id
+    // from another process space may look gone or alive here, so there age
+    // decides: a render takes at most three minutes, and a folder older than
+    // ten is a leftover.
+    /** @type {import('node:fs').Stats} */
+    let stat;
     try {
-      age = Date.now() - fs.lstatSync(p).mtimeMs;
+      stat = fs.lstatSync(p);
     } catch {
       continue;
     }
-    if (age < 10 * 60_000) continue;
+    if (!stat.isDirectory()) continue;
+    if (
+      !renderOwnerGone(p, Number(m[1])) &&
+      Date.now() - stat.mtimeMs < 10 * 60_000
+    )
+      continue;
     try {
       if (fs.lstatSync(p).isDirectory())
         fs.rmSync(p, {recursive: true, force: true});
@@ -511,22 +624,36 @@ export async function renderGenerated(
   // still goes.
   const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
-  // Demo images point at the docs site's own folder (`/template-assets/…`),
-  // which a page opened from disk cannot reach: the inline placeholder
-  // takes their place, as when a template is scaffolded.
-  const {stripTemplateAssetRefs} =
-    await import('../../foundation/discovery/template-adapter.mjs');
-  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
-  for (const x of extra) {
-    fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
-    fs.copyFileSync(x.from, path.join(dir, x.name));
-  }
+  rendersInFlight++;
   try {
+    // Who made it, so a later render can tell it is left over once this
+    // process is gone (killed outright, which no handler sees).
+    fs.writeFileSync(
+      path.join(dir, RENDER_OWNER),
+      `${JSON.stringify({pid: process.pid, space: processSpace()})}\n`,
+    );
+    // Demo images point at the docs site's own folder
+    // (`/template-assets/…`), which a page opened from disk cannot reach:
+    // the inline placeholder takes their place, as when a template is
+    // scaffolded.
+    const {stripTemplateAssetRefs} =
+      await import('../../foundation/discovery/template-adapter.mjs');
+    fs.writeFileSync(entry, stripTemplateAssetRefs(source));
+    for (const x of extra) {
+      fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
+      fs.copyFileSync(x.from, path.join(dir, x.name));
+    }
     // The editor's pages render every component, and a busy machine slows
     // them down: they get three times the page limit.
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      // The editor shows the markup itself and writes no file, so it needs
+      // no script.
+      markupOnly: true,
+      // A theme's image too large for a page is named by the editor (show's
+      // notes); the page goes on without it.
+      leaveLargeStyleAssets: true,
       ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
@@ -578,6 +705,10 @@ export async function renderGenerated(
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
+    // The owner file goes with this process's last render: then the folder
+    // holds nothing of a render still running.
+    if (--rendersInFlight === 0)
+      fs.rmSync(path.join(dir, RENDER_OWNER), {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
     untrack();
@@ -629,7 +760,7 @@ export async function partData(project) {
     // A file that parses but has the wrong shape (a hand edit, a cut-off
     // write) is built again, as a file that does not parse is.
     if (
-      cached.version === PART_DATA_VERSION &&
+      cached.censusKey === CENSUS_KEY &&
       cached.coreKey === project.coreKey &&
       isRecord(cached.map) &&
       Object.values(cached.map).every(isRecord) &&
@@ -845,7 +976,7 @@ async function buildPartData(project) {
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
-    version: PART_DATA_VERSION,
+    censusKey: CENSUS_KEY,
     coreKey: project.coreKey,
     ...result,
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
@@ -1147,9 +1278,9 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, holdsVariants?: Record<string, Set<string>>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>, underInput?: string}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string, kids?: string[], input?: boolean, owns?: boolean}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1160,7 +1291,19 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
    */
   const addPair = (target, fg, bg, sample) => {
     const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
-    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+    // (The parts the text sits inside where the census drew it, between
+    // it and its ground and beyond: a side nav's item inside the side nav.)
+    const within = new Set(pairs.get(k)?.within ?? []);
+    for (const anc of stack)
+      for (const at of anc.all ?? (anc.target ? [anc.target] : []))
+        if (at !== target) within.add(at);
+    pairs.set(k, {
+      text: target,
+      fg,
+      bg,
+      sample: sample.slice(0, 30),
+      within: [...within],
+    });
   };
   /** The parts whose paint is a line inside them. @type {Set<string>} */
   const lined = new Set();
@@ -1176,7 +1319,16 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       continue;
     }
     if (close) {
-      if (stack.length > 1) stack.pop();
+      if (stack.length > 1) {
+        const done = /** @type {typeof stack[number]} */ (stack.pop());
+        // (A native input laid over its siblings, invisible, takes the
+        // pointer and the focus for them: a checkbox's box draws under
+        // it, so its own :hover or :focus never applies. The part that
+        // holds the input is where those states land.)
+        if (done.input)
+          for (const k of done.kids ?? [])
+            map[k].underInput ??= done.target ?? stack.at(-1)?.target ?? '';
+      }
       continue;
     }
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
@@ -1234,6 +1386,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       !d.cond &&
       /^(background(-color)?|border(-[a-z-]+)?-color)$/.test(d.prop) &&
       expand(d.value, env, tokens).size > 0;
+    // (Every part the parent element carries: a menu's separator is a
+    // divider too.)
     const lineOf =
       !ownsTarget &&
       empty &&
@@ -1246,11 +1400,15 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         ? parent.target
         : null;
     if (lineOf) lined.add(lineOf);
+    const lineParts = lineOf ? (parent.all ?? [lineOf]) : [];
     // An element can carry several targets (a shell's side nav region is a
-    // layout panel too): its declarations are each one's own.
-    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
+    // layout panel too): its declarations are each one's own. What an
+    // element without one draws is each of its parent's.
+    for (const t of ownsTarget
+      ? named.map(c => c.slice(7))
+      : (parent.all ?? [target])) {
       if (!t) continue;
-      const asOwn = ownsTarget || t === lineOf;
+      const asOwn = ownsTarget || lineParts.includes(t);
       const T = (map[t] ??= {
         own: {},
         at: {},
@@ -1290,7 +1448,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         // A line's paint and its thickness (a size read from the border
         // width) are the part's; its layout is not.
         const lineProp =
-          t === lineOf &&
+          lineParts.includes(t) &&
           (paints(d) ||
             /^border(-[a-z-]+)?-(width|style)$/.test(d.prop) ||
             (/^(height|width|block-size|inline-size)$/.test(d.prop) &&
@@ -1375,6 +1533,12 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         for (const at of anc.all ?? (anc.target ? [anc.target] : []))
           if (at !== t) {
             map[at].contains.add(t);
+            // (The variant each holds there: a toast's close button is a
+            // ghost button.)
+            if (dataAttrs.variant)
+              ((map[at].holdsVariants ??= {})[t] ??= new Set()).add(
+                dataAttrs.variant,
+              );
             // What the parts inside it draw with there, at rest (a table
             // row's cells' border color; a toast's ghost button declares
             // none).
@@ -1404,6 +1568,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           ...context,
         ].join(',')
       : parent.cond;
+    if (
+      tag.toLowerCase() === 'input' &&
+      own.some(
+        d =>
+          (d.prop === 'opacity' && /^0(?:\.0+)?$/.test(d.value.trim())) ||
+          (d.prop === 'position' && d.value.trim() === 'absolute'),
+      )
+    )
+      parent.input = true;
+    else if (ownsTarget)
+      // (Into each element it sits in, up to the nearest themed one: the
+      // box inside a wrapper with no box of its own, beside the input.)
+      for (let i = stack.length - 1; i >= 1; i--) {
+        (stack[i].kids ??= []).push(...named.map(c => c.slice(7)));
+        if (stack[i].owns) break;
+      }
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({
         env,
@@ -1412,6 +1592,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         fg,
         bg,
         cond: condHere,
+        owns: ownsTarget,
       });
   }
   // A part that holds other parts (a layout, an outline, a slider's
@@ -1456,7 +1637,15 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      ...(v.holdsVariants
+        ? {
+            holdsVariants: Object.fromEntries(
+              Object.entries(v.holdsVariants).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
       tags: [...v.tags],
+      ...(v.underInput != null ? {underInput: v.underInput} : {}),
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),
       ...(v.mediaSides?.size ? {mediaSides: [...v.mediaSides].sort()} : {}),

@@ -37,7 +37,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'experimental.iconSet (and experimental.iconVariant) is written, or already names the sets and the look',
+      when: 'experimental.iconSet (and experimental.iconVariant) is written, or already names the sets and the look, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

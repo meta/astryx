@@ -6,7 +6,8 @@
  *
  * @input An operation run inside `recordReads(seen, fn)`.
  * @output `seen` gets every file whose content the operation read through fs
- *   or imported as a doc module (`recordContentRead`), and every folder it
+ *   (synchronously or with promises.readFile) or imported as a doc module
+ *   (`recordContentRead`), and every folder it
  *   listed or probed, each with its state when first read; an exact run
  *   records each probed path by what the call returned instead.
  *   `unchangedSince(seen)` says whether all are still in that state.
@@ -126,10 +127,11 @@ const RECORDED = [
   'realpathSync',
   'accessSync',
   'openSync',
+  'readFile',
 ];
 
 /** The reads that see a file's content, so the file itself is checked. */
-const CONTENT_READS = new Set(['readFileSync', 'openSync']);
+const CONTENT_READS = new Set(['readFileSync', 'openSync', 'readFile']);
 
 /**
  * What an existence check of a present path records: only that it is there,
@@ -247,7 +249,9 @@ function installRecorder() {
   if (recording) return;
   recording = true;
   for (const name of RECORDED) {
-    const original = fs[name];
+    // Older Node releases read native ES modules through the promise API.
+    const api = name === 'readFile' ? fs.promises : fs;
+    const original = api[name];
     if (typeof original !== 'function') continue;
     const kind = readKind(name);
     /**
@@ -283,9 +287,9 @@ function installRecorder() {
       return answer;
     };
     Object.assign(wrapped, original);
-    fs[name] = wrapped;
+    api[name] = wrapped;
   }
-  // ESM imports of node:fs see the wrapped functions too.
+  // ESM imports of node:fs and node:fs/promises see the wrapped functions too.
   syncBuiltinESMExports();
 }
 

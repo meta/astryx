@@ -108,6 +108,6 @@ export async function render(file, options = {}) {
   const target = output ?? input.replace(/\.[^.]+$/, '.html');
   return {
     type: 'render.page',
-    data: await renderToFile({cwd, input, output: target, title}),
+    data: await renderToFile({cwd, input, output: target, title, absolute: Boolean(options.out) && path.isAbsolute(/** @type {string} */ (options.out))}),
   };
 }

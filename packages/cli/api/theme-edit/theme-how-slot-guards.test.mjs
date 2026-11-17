@@ -123,7 +123,7 @@ describe('guards', () => {
   );
 });
 
-describe('chaos42', () => {
+describe('cases', () => {
   it(
     'roles, keeps, grounds and shapes stay where they are said',
     async test => {
