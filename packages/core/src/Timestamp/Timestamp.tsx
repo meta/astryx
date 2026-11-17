@@ -48,6 +48,7 @@ import type {
 } from './tooltipEntries';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -282,6 +283,22 @@ function isRelativeFormat(
 // =============================================================================
 
 /**
+ * Whether `focused` is the time, or a control whose accessible name the time
+ * helps form: a control that contains it, or the control of a label that
+ * contains it.
+ */
+function focusIsNamedBy(time: HTMLElement, focused: Element | null): boolean {
+  if (focused == null || focused === time.ownerDocument.body) {
+    return false;
+  }
+  if (focused === time || focused.contains(time)) {
+    return true;
+  }
+  const label = time.closest('label');
+  return label != null && label.control === focused;
+}
+
+/**
  * Displays a formatted timestamp as human-readable text.
  *
  * Renders a semantic `<time>` element with an ISO 8601 `datetime` attribute,
@@ -419,6 +436,31 @@ export function Timestamp({
           date: fullAbsoluteSpokenText,
         });
 
+  // A live tick must not change the name a focused control speaks: the name
+  // holds while focus is on the time, or on a control whose name it helps
+  // form, and follows the visible text again when focus leaves.
+  const holdsNameOnFocus = isLive && isRelativeFormat(effectiveFormat);
+  const latestLabelRef = useCommittedRef(ariaLabelText);
+  const [heldLabel, setHeldLabel] = useState<string | null>(null);
+  useEffect(() => {
+    const time = timeRef.current;
+    if (!holdsNameOnFocus || time == null) {
+      return;
+    }
+    const doc = time.ownerDocument;
+    const syncHold = () => {
+      const named = focusIsNamedBy(time, doc.activeElement);
+      setHeldLabel(held => (named ? (held ?? latestLabelRef.current) : null));
+    };
+    doc.addEventListener('focusin', syncHold);
+    doc.addEventListener('focusout', syncHold);
+    return () => {
+      doc.removeEventListener('focusin', syncHold);
+      doc.removeEventListener('focusout', syncHold);
+    };
+  }, [holdsNameOnFocus, latestLabelRef]);
+  const spokenLabel = (holdsNameOnFocus ? heldLabel : null) ?? ariaLabelText;
+
   // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
     if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
@@ -499,9 +541,9 @@ export function Timestamp({
       // falls back to reading the visible <time> content.
       // A caller's own name wins.
       {...(isRelativeFormat(effectiveFormat) &&
-      ariaLabelText !== '' &&
+      spokenLabel !== '' &&
       rest['aria-label'] == null
-        ? {'aria-label': ariaLabelText}
+        ? {'aria-label': spokenLabel}
         : {})}
       // A bare <time> cannot take focus. Add the tab stop only while a card
       // is attached, so keyboard users can open it. A caller's tabIndex wins.

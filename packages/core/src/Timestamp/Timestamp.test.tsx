@@ -90,6 +90,36 @@ describe('Timestamp', () => {
   describe('label in name', () => {
     const TWO_HOURS_AGO = '2026-03-25T10:00:00Z';
 
+    it("holds a focused control's name through a live tick, then follows the text on blur", () => {
+      const now = Date.now() / 1000;
+      render(
+        <>
+          <button type="button">
+            Pushed <Timestamp value={now - 5} format="relative" isLive />
+          </button>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const pushed = screen.getByRole('button', {name: /^Pushed/});
+      act(() => {
+        pushed.focus();
+      });
+      const nameAtFocus = /^Pushed now, /;
+      expect(pushed).toHaveAccessibleName(nameAtFocus);
+
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      // The visible words tick, but the focused control's name does not.
+      expect(pushed).toHaveTextContent('35 seconds ago');
+      expect(pushed).toHaveAccessibleName(nameAtFocus);
+
+      act(() => {
+        screen.getByRole('button', {name: 'Elsewhere'}).focus();
+      });
+      expect(pushed).toHaveAccessibleName(/^Pushed 35 seconds ago, /);
+    });
+
     it('names a standalone relative timestamp by its visible text, then the full date', () => {
       render(
         <Timestamp
