@@ -8,8 +8,10 @@
  *   resize, scroll and touch), and the layout viewport's height
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
- *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
- *   refuseFocusReveal and watchRevealPan
+ *   getKeyboardHeight, getKeyboardPan, isTextEntryControl,
+ *   findTextEntryControl, refuseFocusReveal, watchRevealPan and
+ *   subscribeViewportRest. It also keeps whether a window's browser leaves a
+ *   fixed dock covered (isDockLeftCovered)
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -71,13 +73,37 @@ export function isKeyboardMeasurable(win: Window): boolean {
  * `isKeyboardMeasurable` is false.
  */
 export function measureKeyboardHeight(win: Window): number {
+  return measureReport(win).height;
+}
+
+interface KeyboardMeasure {
+  height: number;
+  pan: number | null;
+  cover: number | null;
+}
+
+// One read of the visual viewport: the keyboard's height, the viewport's pan
+// and how far the keyboard covers the initial containing block. The last two
+// are null under a pinch zoom, whose pan is the reader's. Safari on iOS can
+// shrink the layout viewport to the visual viewport while it pans, but the
+// initial containing block keeps its height. layoutViewportHeight reads the
+// root's client height in the same batch, so that read adds no layout.
+function measureReport(win: Window): KeyboardMeasure {
   const viewport = win.visualViewport;
   if (viewport == null || !isKeyboardMeasurable(win)) {
-    return 0;
+    return {height: 0, pan: null, cover: null};
   }
-  const height =
-    layoutViewportHeight(win) - viewport.height * (viewport.scale ?? 1);
-  return height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0;
+  const scale = viewport.scale ?? 1;
+  const visualHeight = viewport.height;
+  const height = layoutViewportHeight(win) - visualHeight * scale;
+  const isUnzoomed = scale === 1;
+  return {
+    height: height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0,
+    pan: isUnzoomed ? viewport.offsetTop : null,
+    cover: isUnzoomed
+      ? Math.max(0, win.document.documentElement.clientHeight - visualHeight)
+      : null,
+  };
 }
 
 /** A report from the keyboard module, in the order the window raised them. */
@@ -101,6 +127,10 @@ export type KeyboardHeightEvent =
 
 interface KeyboardStore {
   height: number;
+  /** The visual viewport's pan at the last report (getKeyboardPan). */
+  pan: number | null;
+  /** The keyboard's cover of the initial containing block at that report. */
+  cover: number | null;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -118,6 +148,8 @@ function storeOf(win: Window): KeyboardStore {
   if (store == null) {
     store = {
       height: 0,
+      pan: null,
+      cover: null,
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -150,21 +182,28 @@ function isHideStep(win: Window, shown: number, height: number): boolean {
 
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
-  store.height = measureKeyboardHeight(win);
+  const first = measureReport(win);
+  store.height = first.height;
+  store.pan = first.pan;
+  store.cover = first.cover;
   // Set while a step of a hide waits. The store keeps the height it reported,
   // so every reader lays out once, when the keyboard comes to rest.
   let stepTimer: ReturnType<typeof setTimeout> | null = null;
   let stepHeight = 0;
   let stepLimit = 0;
-  const deliver = (height: number, timeStamp: number) => {
+  const deliver = (measure: KeyboardMeasure, timeStamp: number) => {
+    const {height} = measure;
     store.height = height;
+    store.pan = measure.pan;
+    store.cover = measure.cover;
     const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
   };
   const onViewport = (event: Event) => {
-    const height = measureKeyboardHeight(win);
+    const measure = measureReport(win);
+    const {height} = measure;
     if (isHideStep(win, store.height, height)) {
       // A pan reports the same step again, and leaves the wait as it is.
       if (
@@ -184,7 +223,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       stepTimer = setTimeout(
         () => {
           stepTimer = null;
-          deliver(measureKeyboardHeight(win), win.performance.now());
+          deliver(measureReport(win), win.performance.now());
         },
         Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
       );
@@ -194,7 +233,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       clearTimeout(stepTimer);
       stepTimer = null;
     }
-    deliver(height, event.timeStamp);
+    deliver(measure, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -297,6 +336,23 @@ export function subscribeKeyboardHeight(
 export function getKeyboardHeight(win: Window): number {
   const store = stores.get(win);
   return store?.detach != null ? store.height : measureKeyboardHeight(win);
+}
+
+// The visual viewport's pan down the layout viewport, CSS px, or null under a
+// pinch zoom, whose pan is the reader's.
+function measurePan(win: Window): number | null {
+  const viewport = win.visualViewport;
+  return viewport != null && viewport.scale === 1 ? viewport.offsetTop : null;
+}
+
+/**
+ * How far `win`'s visual viewport is panned down the layout viewport, CSS px,
+ * or null under a pinch zoom. While the module listens, it is the pan read
+ * with the last report's height, so a reader adds no read of its own.
+ */
+export function getKeyboardPan(win: Window): number | null {
+  const store = stores.get(win);
+  return store?.detach != null ? store.pan : measurePan(win);
 }
 
 /**
@@ -460,12 +516,67 @@ export function __focusTakeoverCallersForTest(doc: Document): number {
   return focusTakeovers.get(doc)?.callers.size ?? 0;
 }
 
+// One shared listener per window hears the visual viewport's scroll end, for
+// every caller. The first caller adds it, and the last removes it.
+const viewportRests = new WeakMap<
+  Window,
+  {stop: () => void; listeners: Set<() => void>}
+>();
+
+/**
+ * Calls `listener` when a scroll of `win`'s visual viewport comes to rest,
+ * such as the end of a pan's fling. A pan that moves no document scroller
+ * raises no document scroll end. Returns the unsubscribe function.
+ */
+export function subscribeViewportRest(
+  win: Window,
+  listener: () => void,
+): () => void {
+  let shared = viewportRests.get(win);
+  if (shared == null) {
+    const viewport = win.visualViewport;
+    if (viewport == null) {
+      return () => {};
+    }
+    const listeners = new Set<() => void>();
+    const onRest = () => {
+      for (const each of [...listeners]) {
+        each();
+      }
+    };
+    viewport.addEventListener('scrollend', onRest);
+    shared = {
+      stop: () => viewport.removeEventListener('scrollend', onRest),
+      listeners,
+    };
+    viewportRests.set(win, shared);
+  }
+  shared.listeners.add(listener);
+  return () => {
+    const current = viewportRests.get(win);
+    if (current == null || !current.listeners.delete(listener)) {
+      return;
+    }
+    if (current.listeners.size === 0) {
+      current.stop();
+      viewportRests.delete(win);
+    }
+  };
+}
+
 /** The caller's rules for watchRevealPan. */
 export interface WatchRevealPanOptions {
   /** Whether the focused field is the caller's to keep in view. */
   owns: (focused: HTMLElement) => boolean;
   /** Called on every touch start, which ends the watch for the report. */
   onTouch?: () => void;
+  /**
+   * The field sits in a fixed dock of a page that scrolls the document. Each
+   * keyboard show then decides once whether the browser pans the visual
+   * viewport to the dock (isDockLeftCovered). Off by default.
+   * @default false
+   */
+  dock?: boolean;
 }
 
 /** A watch for the browser's own reveal pan (see watchRevealPan). */
@@ -480,6 +591,12 @@ export interface RevealPanWatch {
    * the layout viewport's top, or else a probe fixed where the viewport sat.
    */
   putBack: (anchor?: Element | null) => void;
+  /**
+   * With `dock`, feeds a keyboard report to the dock's watch. True while the
+   * browser keeps the reveal, so the caller puts no pan back. Without `dock`,
+   * always false.
+   */
+  dockReport: (height: number) => boolean;
   /** Ends the watch; the shared touch subscription goes with the last watch. */
   stop: () => void;
 }
@@ -521,6 +638,268 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   };
 }
 
+// How long a dock's keyboard show waits for the browser's own pan to the
+// dock, from the show's opening report. Only a pan restarts the wait: the
+// height reports of the keyboard's slide do not. The cap ends a wait that pans
+// keep restarting. Safari on iOS pans up to about 400 ms after the keyboard's
+// report.
+const DOCK_REVEAL_SETTLE_MS = 700;
+const DOCK_REVEAL_CAP_MS = 3000;
+
+// The windows whose browser left a fixed dock covered at a keyboard show with
+// no touch or wheel in the wait.
+const docksLeftCovered = new WeakSet<Window>();
+// The windows whose current show lifts the dock by the part of the cover the
+// visual viewport's pan leaves, and teaches nothing. That is a show for a
+// field outside the dock. It is also a show with a touch or a wheel once the
+// browser's own reveal is over.
+const deficitShows = new WeakSet<Window>();
+const dockRevealListeners = new Set<() => void>();
+let dockRevealVersion = 0;
+
+function notifyDockReveal(): void {
+  dockRevealVersion += 1;
+  for (const listener of [...dockRevealListeners]) {
+    listener();
+  }
+}
+
+function learnDockLeftCovered(win: Window): void {
+  if (!docksLeftCovered.has(win)) {
+    docksLeftCovered.add(win);
+    notifyDockReveal();
+  }
+}
+
+/**
+ * Whether `win`'s browser was found to leave a fixed dock covered at a
+ * keyboard show. A pan to the dock decides only its own show and teaches
+ * nothing. A browser can pan at one show and not at the next. Once learned, it
+ * holds for the page.
+ */
+export function isDockLeftCovered(win: Window): boolean {
+  return docksLeftCovered.has(win);
+}
+
+/**
+ * Whether the fixed dock in `win` rises at this keyboard show by the part of
+ * the cover the visual viewport's pan leaves (getKeyboardPan).
+ */
+export function followsDockDeficit(win: Window): boolean {
+  return deficitShows.has(win);
+}
+
+/** Calls `listener` when isDockLeftCovered or followsDockDeficit changes. */
+export function subscribeDockReveal(listener: () => void): () => void {
+  dockRevealListeners.add(listener);
+  return () => {
+    dockRevealListeners.delete(listener);
+  };
+}
+
+/** A number that changes whenever a window's dock reveal changes. */
+export function getDockRevealVersion(): number {
+  return dockRevealVersion;
+}
+
+/**
+ * Test-only: forgets what `win`'s browser was found to do with a fixed dock.
+ * Not part of the runtime API.
+ *
+ * @internal
+ */
+export function __resetDockRevealForTest(win: Window): void {
+  const known = docksLeftCovered.delete(win);
+  if (deficitShows.delete(win) || known) {
+    notifyDockReveal();
+  }
+}
+
+// The dock's watch: one decision per keyboard show for the dock's field. A
+// pan to the dock decides that show alone: no lift. A dock still covered when
+// the wait ends rises. With no touch or wheel in the wait, the page learns that
+// its browser leaves the dock covered. In the show that learned it, a later pan
+// to the dock before any input is put back, as at every later show. After a
+// touch or a wheel, once the browser's reveal is over, the
+// dock follows the part of the cover that the pan leaves. So a reader's scroll
+// that moves the pan keeps the dock on the keyboard.
+function watchDock(
+  win: Window,
+  owns: (focused: HTMLElement) => boolean,
+  putBackTo: (top: number) => void,
+): {
+  report: (height: number) => boolean;
+  input: () => void;
+  stop: () => void;
+} {
+  let show: 'none' | 'other' | 'watching' | 'revealed' | 'covered' | 'deficit' =
+    'none';
+  // Set once the show finds the layout viewport's height following the pan,
+  // as in Safari on iOS. The dock then holds for the rest of the show: a lift
+  // there makes the browser reveal the focused field again.
+  let layoutFollowsPan = false;
+  let lastPan = getKeyboardPan(win);
+  let coveredPan = 0;
+  let isClassifying = false;
+  // Only the next show's opening report clears it.
+  let inputSinceShow = false;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  let capTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearTimers = () => {
+    if (settleTimer != null) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
+    if (capTimer != null) {
+      clearTimeout(capTimer);
+      capTimer = null;
+    }
+  };
+  const ownsFocus = () => {
+    const focused = win.document.activeElement;
+    return focused instanceof HTMLElement && owns(focused);
+  };
+  // With no lift, the dock rests at or above the visual viewport's bottom.
+  const isRevealed = (pan: number | null, height: number): pan is number =>
+    pan != null && pan >= height - 1;
+  // A pan the browser made before any input of the show.
+  const isRevealPan = (pan: number | null, height: number): pan is number =>
+    !inputSinceShow && isRevealed(pan, height);
+  const followDeficit = () => {
+    clearTimers();
+    show = 'deficit';
+    if (!layoutFollowsPan && !deficitShows.has(win)) {
+      deficitShows.add(win);
+      notifyDockReveal();
+    }
+  };
+  // The layout viewport shrinks as the pan grows: the height and the pan add
+  // up to the cover of the initial containing block.
+  const seesLayoutFollowPan = (height: number, pan: number | null) => {
+    const cover = stores.get(win)?.cover ?? null;
+    return (
+      pan != null &&
+      pan > 0.5 &&
+      cover != null &&
+      height < cover - 1 &&
+      Math.abs(height + pan - cover) <= 1.5
+    );
+  };
+  // The wait's end decides the show. Only a clean wait that ends on its own
+  // teaches the page. Under a pinch zoom the pan is the reader's, so that show
+  // teaches nothing either.
+  const settle = (atCap: boolean) => {
+    clearTimers();
+    const pan = getKeyboardPan(win);
+    const revealed = isRevealed(pan, getKeyboardHeight(win));
+    if (inputSinceShow || atCap || pan == null) {
+      followDeficit();
+    } else if (revealed) {
+      show = 'revealed';
+    } else {
+      show = 'covered';
+      coveredPan = getKeyboardPan(win) ?? 0;
+      isClassifying = true;
+      learnDockLeftCovered(win);
+    }
+  };
+  const restartSettle = () => {
+    if (settleTimer != null) {
+      clearTimeout(settleTimer);
+    }
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      if (show === 'watching') {
+        settle(false);
+      }
+    }, DOCK_REVEAL_SETTLE_MS);
+  };
+  const markInput = () => {
+    inputSinceShow = true;
+    if (show === 'revealed') {
+      followDeficit();
+    }
+  };
+  const stopWheels = subscribeInput(win, 'wheel', markInput);
+  const report = (height: number): boolean => {
+    const pan = getKeyboardPan(win);
+    const panned =
+      pan == null || lastPan == null
+        ? pan !== lastPan
+        : Math.abs(pan - lastPan) > 0.5;
+    lastPan = pan;
+    if (height <= 0) {
+      clearTimers();
+      show = 'none';
+      isClassifying = false;
+      layoutFollowsPan = false;
+      if (deficitShows.delete(win)) {
+        notifyDockReveal();
+      }
+      return !docksLeftCovered.has(win);
+    }
+    if (!layoutFollowsPan && seesLayoutFollowPan(height, pan)) {
+      layoutFollowsPan = true;
+      if (deficitShows.delete(win)) {
+        notifyDockReveal();
+      }
+    }
+    if (show === 'none') {
+      inputSinceShow = false;
+      if (docksLeftCovered.has(win)) {
+        show = 'covered';
+        return false;
+      }
+      // A field outside the dock: the browser reveals that field, and the
+      // dock follows what is left of the cover.
+      if (!ownsFocus()) {
+        followDeficit();
+        show = 'other';
+        return true;
+      }
+      if (isRevealed(pan, height)) {
+        show = 'revealed';
+        return true;
+      }
+      show = 'watching';
+      capTimer = setTimeout(() => {
+        capTimer = null;
+        if (show === 'watching') {
+          settle(true);
+        }
+      }, DOCK_REVEAL_CAP_MS);
+      restartSettle();
+      return true;
+    }
+    if (show === 'watching') {
+      if (isRevealPan(pan, height)) {
+        clearTimers();
+        show = 'revealed';
+      } else if (panned) {
+        restartSettle();
+      }
+      return true;
+    }
+    // The module's own put-back measures from the opening report, before the
+    // lift moved the layout. So this show puts a pan to the dock back itself.
+    if (show === 'covered' && isClassifying) {
+      if (isRevealPan(pan, height) && pan > coveredPan + 0.5) {
+        putBackTo(coveredPan);
+      }
+      return true;
+    }
+    return show !== 'covered';
+  };
+  return {
+    report,
+    input: markInput,
+    stop: () => {
+      clearTimers();
+      stopWheels();
+    },
+  };
+}
+
 /**
  * Some browsers reveal a focused field themselves, after the keyboard's
  * report, by panning the visual viewport to it while the keyboard still
@@ -542,14 +921,41 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
  */
 export function watchRevealPan(
   win: Window,
-  {owns, onTouch}: WatchRevealPanOptions,
+  {owns, onTouch, dock = false}: WatchRevealPanOptions,
 ): RevealPanWatch {
   const doc = win.document;
   let atReport: {x: number; y: number; top: number; scale: number} | null =
     null;
+  // Pans the visual viewport back to `top`, without scrolling the document. It
+  // scrolls `anchor` into view, or a probe fixed at `top` in the layout
+  // viewport, which the pan does not move.
+  const putBackTo = (top: number, anchor?: Element | null) => {
+    const options: ScrollIntoViewOptions = {
+      block: 'start',
+      inline: 'nearest',
+      behavior: 'instant',
+    };
+    if (anchor != null) {
+      anchor.scrollIntoView(options);
+      return;
+    }
+    const probe = doc.createElement('div');
+    probe.style.position = 'fixed';
+    probe.style.left = '0';
+    probe.style.top = `${top}px`;
+    probe.style.width = '1px';
+    probe.style.height = '1px';
+    probe.style.visibility = 'hidden';
+    probe.style.pointerEvents = 'none';
+    (doc.body ?? doc.documentElement).append(probe);
+    probe.scrollIntoView(options);
+    probe.remove();
+  };
+  const dockWatch = dock ? watchDock(win, owns, top => putBackTo(top)) : null;
   let touchedSinceReport = false;
   const stopTouchStarts = watchTouchStarts(doc, () => {
     touchedSinceReport = true;
+    dockWatch?.input();
     onTouch?.();
   });
   return {
@@ -583,31 +989,15 @@ export function watchRevealPan(
         owns(focused)
       );
     },
-    putBack: anchor => {
-      const options: ScrollIntoViewOptions = {
-        block: 'start',
-        inline: 'nearest',
-        behavior: 'instant',
-      };
-      if (anchor != null) {
-        anchor.scrollIntoView(options);
-        return;
-      }
-      // A fixed element sits in the layout viewport, which the pan does not
-      // move: scrolling its top into view pans the visual viewport back.
-      const probe = doc.createElement('div');
-      probe.style.position = 'fixed';
-      probe.style.left = '0';
-      probe.style.top = `${atReport?.top ?? 0}px`;
-      probe.style.width = '1px';
-      probe.style.height = '1px';
-      probe.style.visibility = 'hidden';
-      probe.style.pointerEvents = 'none';
-      (doc.body ?? doc.documentElement).append(probe);
-      probe.scrollIntoView(options);
-      probe.remove();
-    },
-    stop: stopTouchStarts,
+    putBack: anchor => putBackTo(atReport?.top ?? 0, anchor),
+    dockReport: height => dockWatch?.report(height) ?? false,
+    stop:
+      dockWatch == null
+        ? stopTouchStarts
+        : () => {
+            stopTouchStarts();
+            dockWatch.stop();
+          },
   };
 }
 

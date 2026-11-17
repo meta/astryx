@@ -422,6 +422,17 @@ export function deliverTap(
   control.dispatchEvent(click);
 }
 
+/** The caller's rules for watchPans. */
+export interface WatchPansOptions {
+  /**
+   * The field sits in a fixed dock of a page that scrolls the document
+   * (watchRevealPan's `dock`). While the browser keeps the dock's reveal, no
+   * pan is put back. Off by default.
+   * @default false
+   */
+  dock?: boolean;
+}
+
 /**
  * Puts back a pan the browser makes on its own after a keyboard report. This
  * happens, for example, after a focus no claim saw: a script's `focus()` while
@@ -432,11 +443,16 @@ export function deliverTap(
 export function watchPans(
   win: Window,
   owns: (focused: Element) => boolean,
+  {dock = false}: WatchPansOptions = {},
 ): {report(height: number): void; stop(): void} {
-  const watch = watchRevealPan(win, {owns});
+  const watch = watchRevealPan(win, {owns, dock});
   let lastHeight = getKeyboardHeight(win);
   return {
     report(height: number): void {
+      if (watch.dockReport(height)) {
+        lastHeight = height;
+        return;
+      }
       if (height !== lastHeight) {
         lastHeight = height;
         watch.report();

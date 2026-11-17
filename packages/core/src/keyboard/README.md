@@ -71,7 +71,26 @@ that times motion with it. Everything here is internal to
   under a coarse primary pointer; under a fine one it registers no touch
   listener. `watchPans(win, owns)` (`keyboardTarget.ts`) runs that loop on
   each height the module reports: the keyboard targets and ChatLayout's
-  composer watch with it.
+  composer watch with it. With `dock` (off by default), the watch also
+  decides each keyboard show for a fixed dock in a page that scrolls the
+  document, while focus is in the dock. During the browser's own reveal, up to
+  a 0.7 s wait from the show's opening report, the dock does not move: a pan
+  to it decides only that show, and no pan is put back. Only a pan restarts the
+  wait, up to 3 s; the height reports of the keyboard's slide do not. A dock
+  still covered when a clean wait ends teaches the page that its browser leaves
+  it covered (`isDockLeftCovered(win)`), and every later show works as on main.
+  In the show that learned it, a later pan to the dock before any input is put
+  back, as at every later show, and the page keeps what it learned. A show
+  under a pinch zoom, whose pan is the reader's, learns nothing.
+  Otherwise, and after any touch or wheel once the reveal is over, the dock
+  follows the part of the cover the pan leaves (`followsDockDeficit(win)`). A
+  show for a field outside the dock follows it from the start. Where the layout
+  viewport's height follows the pan, as in Safari on iOS, the dock holds for the
+  rest of the show: the height and the pan then add up to the keyboard's cover
+  of the initial containing block, which each report carries.
+  `getKeyboardPan(win)` gives the pan read with each report, and
+  `subscribeViewportRest(win, listener)` hears the visual viewport's scroll end
+  through one shared listener per window.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).
