@@ -105,6 +105,7 @@ import {
   parseColor,
   oklabDistance,
   ratio,
+  ratioWords,
   splitTop,
 } from './_color.mjs';
 import {
@@ -9901,8 +9902,8 @@ export async function contrastProblems(ctx, data, res) {
     );
     return found.length === 1 ? found[0] : null;
   };
-  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string, within?: {light: Record<string, string>, dark: Record<string, string>}) => string | null} */
-  const ofBase = (p, side, m, within = res) => {
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string, within?: {light: Record<string, string>, dark: Record<string, string>}, viaGround?: boolean) => string | null} */
+  const ofBase = (p, side, m, within = res, viaGround = true) => {
     // The ground's own variant for the ground side (text on a header
     // variant), else the pair's variant.
     const pw = /** @type {any} */ (p);
@@ -9948,7 +9949,7 @@ export async function contrastProblems(ctx, data, res) {
       // Text that sets no color of its own takes its text token as the
       // part it sits on points it, in that part's variant (butter's colored
       // cards write their own text colors, in both modes).
-      (side === 'fg' && p.bg.target && p.bg.target !== target
+      (viaGround && side === 'fg' && p.bg.target && p.bg.target !== target
         ? (p.fg.tokens
             .map(tok =>
               baseComponent(
@@ -10119,8 +10120,10 @@ export async function contrastProblems(ctx, data, res) {
       );
     if (mine) return mine;
     // The base theme's own color on the text's part (butter's nav item)
-    // wins over a token set on the part around it.
-    if (ofBase(p, 'fg', m) != null) return null;
+    // wins over a token set on the part around it. (A color the base sets
+    // through the part around it, a colored card's text, is that token
+    // there: a setting of it on that part wins, below.)
+    if (ofBase(p, 'fg', m, res, false) != null) return null;
     // (On the part around it, a setting for that part's variant the text
     // sits on counts.)
     const viaGround = latest(
@@ -11096,7 +11099,9 @@ export async function contrastProblems(ctx, data, res) {
                     }),
                 ).size
               : 1;
-            if (x.textPart && ofBase(pair, 'fg', x.mode) != null)
+            // (A color the base sets through the part around the text, a
+            // colored card's, is fixed by that token there, below.)
+            if (x.textPart && ofBase(pair, 'fg', x.mode, res, false) != null)
               return sidesOver > 1
                 ? null
                 : `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${stateOn(x.textPart)}${modeFlag(x.mode)}`;
@@ -11388,7 +11393,7 @@ function borderContrastProblems(ctx, data, res, base) {
           );
           add(
             `border|${x.thing}|${mode}`,
-            `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
+            `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${ratioWords(now)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
             color
               ? `${P} set ${data.name} ${x.thing} '${color}'${modeFlag(mode)}`
               : null,
@@ -11461,7 +11466,7 @@ function borderContrastProblems(ctx, data, res, base) {
           const color = fixOn(ground || page, page, border);
           add(
             `border|${x.thing}|${t}|${mode}`,
-            `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
+            `the border on ${t} (${border}) is ${ratioWords(now)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
             color
               ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${x.only && x.on === t ? ' --only' : ''}${modeFlag(mode)}`
               : null,
@@ -11692,7 +11697,7 @@ function trackContrastProblems(ctx, data, res, base) {
             );
         out.push({
           key: `track|${track}|${fill}|${mode}`,
-          text: `the ${fill} (${hex(fi.rgb)}) is ${now.toFixed(2)}:1 on the ${track} (${hex(ground)})${inside ? '' : ' and no better on the page'} in ${mode}; a value drawn on a track needs 3:1 to be read`,
+          text: `the ${fill} (${hex(fi.rgb)}) is ${ratioWords(now)}:1 on the ${track} (${hex(ground)})${inside ? '' : ' and no better on the page'} in ${mode}; a value drawn on a track needs 3:1 to be read`,
           fix: `${P} set ${data.name} background-color '${color}' --on ${trackMoved ? track : fill}${(trackMoved ? trackWhen : fillWhen) ? ` --when ${trackMoved ? trackWhen : fillWhen}` : ''}${modeFlag(mode)}`,
         });
       }
@@ -11839,13 +11844,13 @@ function floatingEdgeProblems(ctx, data, res, base) {
         floats
           ? {
               key: `floating|${t}|${mode}`,
-              text: `the ${t} (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
+              text: `the ${t} (${hex(fill)}) is ${ratioWords(r)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow: a panel floating over the page has no edge to be seen by`,
               fix: `${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
             }
           : {
               key: `filled-on-page|${t}|${mode}`,
               note: true,
-              text: `the ${t}'s fill (${hex(fill)}) is ${r.toFixed(2)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow, so it barely shows where it sits on the page; to give it an edge: ${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
+              text: `the ${t}'s fill (${hex(fill)}) is ${ratioWords(r)}:1 on the page (${hex(page)}) in ${mode}, with no border or shadow, so it barely shows where it sits on the page; to give it an edge: ${P} set ${data.name} border '1px solid var(--color-border)' --on ${t}`,
               fix: null,
             },
       );
@@ -12017,7 +12022,7 @@ function leakedButtonProblems(ctx, data, res) {
         if (out.has(key)) continue;
         out.set(key, {
           key,
-          text: `your button color (${describe(x)}) also paints the close button in ${where}: it is ${ratio(color, f.rgb).toFixed(2)}:1 on the ${m}'s fill (${f.value}) in ${f.mode}, and an icon needs 3:1; no setting keeps the ${m}'s buttons apart${best ? '' : `, and no one button color reads on every ${m} and on the page`}`,
+          text: `your button color (${describe(x)}) also paints the close button in ${where}: it is ${ratioWords(ratio(color, f.rgb))}:1 on the ${m}'s fill (${f.value}) in ${f.mode}, and an icon needs 3:1; no setting keeps the ${m}'s buttons apart${best ? '' : `, and no one button color reads on every ${m} and on the page`}`,
           fix: best
             ? `${P} set ${data.name} color '${best}' --on ${x.on}${x.only ? ' --only' : ''}${x.when ? ` --when ${x.when}` : ''}${x.mode || modes.length > 1 ? ` --mode ${scheme}` : ''}`
             : null,
@@ -12101,7 +12106,7 @@ function placeholderProblems(ctx, data, res, base) {
       '--color-background-body',
       '--color-background-surface',
     ].every(k => String(res[m][k]) === String(base[m]?.[k]));
-    const what = `the loading placeholder (${parts.slice(0, 3).join(', ')}, ${TOKEN} ${v}) is ${r.toFixed(2)}:1 on the page${surface ? ' or a surface' : ''} in ${m} at its brightest`;
+    const what = `the loading placeholder (${parts.slice(0, 3).join(', ')}, ${TOKEN} ${v}) is ${ratioWords(r)}:1 on the page${surface ? ' or a surface' : ''} in ${m} at its brightest`;
     if (same) {
       out.push({
         key: `placeholder|${m}`,
@@ -12251,7 +12256,7 @@ function buttonStyleProblems(ctx, data, res) {
     const fg = compositeOver(fg0, alphaOf(textValue), worst.g);
     out.push({
       key: `button-style|${style.value}|${m}`,
-      text: `text in button (variant primary, buttons ${style.value}) is ${worst.r.toFixed(2)}:1 in ${m} (${textValue} on ${fillValue === 'transparent' ? 'the page and surface' : fillValue}); text needs 4.5:1`,
+      text: `text in button (variant primary, buttons ${style.value}) is ${ratioWords(worst.r)}:1 in ${m} (${textValue} on ${fillValue === 'transparent' ? 'the page and surface' : fillValue}); text needs 4.5:1`,
       fix: `${P} set ${data.name} color '${nearestReading(fg, grounds, 4.5)}' --on button --when variant:primary${modeFlag(m)}`,
     });
   }
@@ -12450,7 +12455,7 @@ function scopedTextProblems(ctx, data, res) {
             : null;
         out.set(key, {
           key,
-          text: `text in ${t} (${label}) is ${r.toFixed(2)}:1 in ${m} (${textValue} on ${t}'s ${fillSet ? groundValue : fillRead ? fillRead.token : 'page'} there); text needs 4.5:1`,
+          text: `text in ${t} (${label}) is ${ratioWords(r)}:1 in ${m} (${textValue} on ${t}'s ${fillSet ? groundValue : fillRead ? fillRead.token : 'page'} there); text needs 4.5:1`,
           // (Text of the parts inside it that read a text token of their
           // own, a typeahead option's label, takes the chosen color there
           // too, by that token set on it in that state.)
