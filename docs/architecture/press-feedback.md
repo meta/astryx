@@ -151,9 +151,7 @@ touch. The recipe styles paint from that attribute.
 
 - `spec:AST-094` FR5, FR11, DEC-21: the release, the press profiles, and the
   fine-pointer profile.
-- Owner decision (`cixzhang`, 2026-11-16): Core's press code is one engine
-  with three recipes, with no new module and no public API change.
-- Owner decision (`cixzhang`, 2026-11-16), the paint rule (INV7, INV9): the
+- Decider: `cixzhang`, 2026-11-16 11:40 PT, the paint rule (INV7, INV9): the
   surface a press lands on that invokes the action paints, and nothing else;
   a press on a control inside a row or card paints only that control, and a
   press on the row or card paints only the row or card, for every pointer.
