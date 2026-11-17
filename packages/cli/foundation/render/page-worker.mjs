@@ -49,7 +49,8 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers, moduleImports} from './embedded-imports.mjs';
-import {BundleError, bundleForBrowser} from './client-bundle.mjs';
+import {sha256} from './source-block.mjs';
+import {BundleError, CARRIED_MODULE, bundleForBrowser} from './client-bundle.mjs';
 import {droppedImports} from './value-uses.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 import {LAYER_GLOBAL, LAYER_PLACEHOLDER, countQueuedImmediates, layerDocument, layerPlaceholder, openLayerMarkup, settled} from './layers.mjs';
@@ -656,6 +657,27 @@ function aliasPlugin() {
 }
 
 /**
+ * The name a browser module calls `carried` by, imported once at its top.
+ * @param {any} p an import declaration's path
+ * @param {any} t Babel's types
+ */
+function carriedName(p, t) {
+  const program = p.scope.getProgramParent();
+  const name = '__astryxCarried';
+  if (!program.hasBinding(name)) {
+    program.path.unshiftContainer(
+      'body',
+      t.importDeclaration(
+        [t.importSpecifier(t.identifier(name), t.identifier('carried'))],
+        t.stringLiteral(CARRIED_MODULE),
+      ),
+    );
+    program.crawl();
+  }
+  return t.identifier(name);
+}
+
+/**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
@@ -788,9 +810,20 @@ function pagePlugin(filename, browser = false) {
             p.remove();
             return;
           }
+          // In the browser the image comes from the embedded source, which
+          // carries it; the render inlines one the source leaves out.
+          const base64 = browser ? /^(data:[^,]*;base64),/.exec(uri) : null;
           p.replaceWith(
             t.variableDeclaration('const', [
-              t.variableDeclarator(t.identifier(local.local.name), t.stringLiteral(uri)),
+              t.variableDeclarator(
+                t.identifier(local.local.name),
+                base64
+                  ? t.callExpression(carriedName(p, t), [
+                      t.stringLiteral(sha256(fs.readFileSync(file))),
+                      t.stringLiteral(base64[1]),
+                    ])
+                  : t.stringLiteral(uri),
+              ),
             ]),
           );
         }
