@@ -473,12 +473,9 @@ const variantStyles = stylex.create({
   },
 });
 
-// A mark sitting inside the filled area is drawn *on* the bar, so it takes the
-// on-color that pairs with the fill's own variant color — the same pairing
-// Badge uses for solid semantic backgrounds.
-//
-// Every fill but `accent` is a text role, which a theme sets to read on its
-// surface, so a mark on it takes the surface color.
+// A mark on the accent fill takes `--color-on-accent`. Every other fill is a
+// text role, which a theme sets to read on its surface, so a mark on it takes
+// the surface color.
 const markOnFillStyles = stylex.create({
   accent: {
     backgroundColor: colorVars['--color-on-accent'],

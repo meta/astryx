@@ -745,7 +745,8 @@ export const butterTheme = defineTheme({
       },
       'variant:error': {
         backgroundColor: lightDark(red.light[50], red.dark[85]),
-      }, // The secondary text color reads under 3:1 on the dark track, so a
+      },
+      // The secondary text color reads under 3:1 on the dark track, so a
       // neutral or disabled fill steps one stop lighter there.
       'variant:neutral': {
         backgroundColor: lightDark(
