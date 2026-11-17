@@ -595,7 +595,7 @@ since no project signal reliably separates prebuilt from source builds.
 ### DEC-11 — A theme follows the page's color scheme
 
 **Reference:** `spec:AST-066/DEC-11`
-**Decider:** maintainers (HQ, under Joey's delegation), `2026-11-17`
+**Decider:** `josephfarina` (HQ, under his delegation), `2026-11-17`
 
 Theme bundles pin the scheme only where the page or the Theme provider forces a
 mode on `html`, and complete bundles repeat those two pins when identical or
