@@ -449,13 +449,16 @@ describe('init() — what changed in each agent-doc file', () => {
       templatePath: null,
       nextSteps: false,
     });
-    // docsChanges and agentDocsStatus are the new fields; docsChanges lines up with docsWritten.
+    // New fields are only added: docsChanges, which lines up with
+    // docsWritten, agentDocsStatus, and the skill places (to, skills, user).
     expect(Object.keys(receipt.data).sort()).toEqual(
       [
         'mode', 'features', 'docsWritten', 'agentDocsStatus', 'docsChanges', 'docsError', 'theme',
         'themeTemplate', 'themeTemplatePath', 'template', 'templatePath', 'nextSteps',
+        'to', 'skills', 'user',
       ].sort(),
     );
+    expect(receipt.data).toMatchObject({to: ['agents-md'], skills: [], user: null});
     expect(receipt.data.docsChanges.map(c => c.path)).toEqual(receipt.data.docsWritten);
   });
 });

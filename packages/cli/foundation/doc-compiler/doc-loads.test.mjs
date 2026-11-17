@@ -378,6 +378,10 @@ const RUNNERS = {
     runs: 'astryx.config, through the config parser',
     sites: ['loadModuleWithParser(..., parseConfig)'],
   },
+  'foundation/agent-docs/skill-place-files.mjs': {
+    runs: 'astryx.config, through the config parser, to read the skill places it saves (only the config, not its integrations)',
+    sites: ['loadModuleWithParser(..., parseConfig)'],
+  },
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],

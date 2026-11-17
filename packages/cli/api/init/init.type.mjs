@@ -9,7 +9,8 @@
 /**
  * What init did to one agent-doc file. `created`: the file did not exist.
  * `updated`: its text changed. `unchanged`: it already held this text.
- * `removed`: its Astryx block was removed, because another file holds it.
+ * `removed`: its Astryx block was removed, because another file holds it, or
+ * because `--to` moved the project's skill to another place.
  * @typedef {object} InitDocsChange
  * @property {string} path The file, relative to the project root (the folder init writes agent docs in), `--agent-docs-path` files included. Never absolute.
  * @property {'created' | 'updated' | 'unchanged' | 'removed'} change
@@ -22,7 +23,7 @@
  * @property {'default' | 'features'} mode `default` (no flags) or `features` (--features/--all).
  * @property {string[]} features Features that were run, in order.
  * @property {string[]} docsWritten Agent-doc files written, relative to the directory init ran in (empty if agents weren't run or install failed). Without --agent-docs-path they sit at the project root: the nearest folder at or above it whose package.json declares an Astryx package, else the nearest with any package.json, within its repository and never the home folder; with none, the directory init ran in.
- * @property {'missing' | 'stale' | 'current' | null} agentDocsStatus The agent docs init writes, before this run: `missing` (no Astryx block), `stale` (a block from another release or with other text, or with `--agent-docs-path` a named file without the block), or `current` (every block already matches); null when agent docs were not installed or the write failed.
+ * @property {'missing' | 'stale' | 'current' | null} agentDocsStatus The agent docs init writes, before this run: `missing` (no Astryx block), `stale` (a block from another release or with other text, or with `--agent-docs-path` a named file without the block), or `current` (every block already matches); null when agent docs were not installed or the write failed. In a project whose saved places hold no `agents-md`, it describes the project skill files instead: `missing` (none there), `current` (each already this release's), else `stale`.
  * @property {InitDocsChange[]} docsChanges What init did to each file in `docsWritten`, in the same order; each path is relative to the project root.
  * @property {{kind: 'path-safety' | 'install-failed', message?: string} | null} docsError Soft agent-docs failure, if any. `path-safety` also implies a non-zero exit. `install-failed` carries a message when init wrote no agent docs (the home folder, or a settings folder in it outside a project) or skipped a file that resolves outside the project; docsWritten then lists what was written.
  * @property {boolean} theme Whether the theme feature ran.
@@ -31,6 +32,9 @@
  * @property {'workflow' | 'created' | 'skipped' | null} template Template outcome (`workflow` is the CLI default; `created`/`skipped` are programmatic).
  * @property {string | null} templatePath Relative output path when `template === 'created'`.
  * @property {boolean} nextSteps Whether the getting-started "Next steps" were emitted (default mode inside a project; false outside one, and false when `agentDocsStatus` is `current`, where init prints the build and search commands instead).
+ * @property {string[]} to The places init wrote the Astryx skill to, as they are saved: `agents-md` (the agent docs above), `skills`, `user`, or a folder. Without `--to`, the project's saved places, else `agents-md`. Empty when agent docs were not installed.
+ * @property {InitSkillFile[]} skills One row per skill file of the `skills` and folder places: written, or, when `--to` moved the project off a place, removed. Empty for `agents-md` alone.
+ * @property {InitUserData | null} user What the `user` place did, as `init --user` reports it; null when `to` has no `user`.
  */
 
 /**
@@ -66,6 +70,17 @@
  */
 
 /**
+ * What init did to one skill file. `created`, `updated`, `unchanged`: as for
+ * an agent-doc file. `removed`: a place `--to` moved off held it. `kept`:
+ * left as it is (see `reason`).
+ * @typedef {object} InitSkillFile
+ * @property {string} path The file: relative to the project root for a project place, absolute for a folder outside the project.
+ * @property {string} place The place it belongs to, as saved: `skills` or a folder.
+ * @property {'created' | 'updated' | 'unchanged' | 'removed' | 'kept'} action
+ * @property {'edited' | 'not-astryx' | 'pair-kept'} [reason] Only on `kept`: `edited`, a person changed it since Astryx wrote it; `not-astryx`, Astryx did not write it; `pair-kept`, the other copy of the `skills` place is a person's own, so neither copy is written and every agent reads one text.
+ */
+
+/**
  * @typedef {object} InitUserData
  * @property {InitUserFile[]} files One row per path acted on: `~/.agents/skills/astryx/SKILL.md` first, then each link to its folder: `~/.claude/skills/astryx` always, and another agent's skills folder when that agent's folder exists (`linked`, or `unchanged` when the link is already there). Removal removes the file and the links Astryx made.
  * @property {string} command The command the text tells agents to run: `astryx`, or the host's command when a host started the run.
@@ -85,6 +100,7 @@
  * @property {boolean} [all] Install all features.
  * @property {boolean} [removeAgents] Remove the managed agent-docs block, at the project root and in the folder init runs in, instead of installing; with `user`, remove the computer-level agent text.
  * @property {boolean} [user] Write the computer-level agent text (`~/.agents/skills/astryx/SKILL.md`, linked into `~/.claude/skills` and the skill folders of other installed tools, with a copy for Continue) instead of setting up the folder.
+ * @property {string | string[]} [to] Where the Astryx skill goes: `agents-md`, `skills`, `user`, or a folder written as a path; a comma list or several. Saved in the project's config (project places) or the settings file (folders outside the project).
  * @property {string} [agent] Agent preset: claude, cursor, codex, hermes, muse, all. Refused with `user`.
  * @property {string | string[]} [agentDocsPath] Explicit agent-docs file path(s).
  * @property {string} [templateName] Scaffold a named page template (programmatic only; the CLI never sets it).

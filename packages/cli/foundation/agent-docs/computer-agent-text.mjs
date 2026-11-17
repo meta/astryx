@@ -39,7 +39,6 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {createHash} from 'node:crypto';
 import {cliDoor} from '../env/cli-command.mjs';
 import {astryxCommandsOnSearchPath} from '../env/search-path.mjs';
 import {samePath} from '../fs/path-compare.mjs';
@@ -47,6 +46,13 @@ import {CLI_ROOT} from '../fs/paths.mjs';
 import {CLI_PACKAGE} from '../env/package-manager.mjs';
 import {isGlobalCopy} from '../release/choose.mjs';
 import {globalUpgradeCommand} from '../release/notices.mjs';
+import {
+  keptReason,
+  managedFileState,
+  removeManagedFile,
+  withHash,
+  writeNoFollow,
+} from './managed-skill-file.mjs';
 import {
   MARKER_START,
   MARKER_END,
@@ -315,93 +321,12 @@ export function renderComputerAgentText({
   );
 }
 
-/** The line, right after the start marker, that records the file's hash. */
-const HASH_LINE = /^<!-- astryx-managed sha256:([0-9a-f]{64}) -->\n/mu;
-
 /**
- * The sha256 of a file's text without its hash line.
- * @param {string} text
- * @returns {string}
+ * What is at one path of the computer-level text: a managed file state
+ * (see managed-skill-file.mjs), or, for a link only, `linked` (a link to the
+ * skill folder) or `dangling` (one whose folder is missing; see linkStateOf).
+ * @typedef {import('./managed-skill-file.mjs').ManagedFileState | 'linked' | 'dangling'} ComputerAgentTextState
  */
-function hashOf(text) {
-  return createHash('sha256').update(text).digest('hex');
-}
-
-/**
- * Insert the hash line after the start marker.
- * @param {string} text a rendering without a hash line
- * @returns {string}
- */
-function withHash(text) {
-  const at = text.indexOf(MARKER_START);
-  if (at === -1) return text;
-  const lineEnd = text.indexOf('\n', at);
-  const cut = lineEnd === -1 ? text.length : lineEnd + 1;
-  return `${text.slice(0, cut)}<!-- astryx-managed sha256:${hashOf(text)} -->\n${text.slice(cut)}`;
-}
-
-/**
- * Whether a file with the markers is unedited: it carries a hash line, and
- * the hash matches the rest of its text.
- * @param {string} content
- * @returns {boolean}
- */
-function isUnedited(content) {
-  const match = HASH_LINE.exec(content);
-  if (!match) return false;
-  return hashOf(content.replace(HASH_LINE, '')) === match[1];
-}
-
-/**
- * What is at one path of the computer-level text.
- * - `absent`: nothing there.
- * - `current`: an Astryx file with exactly this release's rendering.
- * - `differs`: an unedited Astryx file (its recorded hash matches) with
- *   another rendering, such as another release's.
- * - `edited`: an Astryx file (it has the markers) whose text no longer
- *   matches its recorded hash, or that records none: a person changed it.
- *   Never changed.
- * - `foreign`: a file without the Astryx markers, a symlink, or something
- *   other than a regular file. Never changed.
- * - `linked`, `dangling` (a link only): a link to the skill folder, or one
- *   whose folder is missing (see linkStateOf).
- * @typedef {'absent' | 'current' | 'differs' | 'edited' | 'foreign' | 'linked' | 'dangling'} ComputerAgentTextState
- */
-
-/**
- * @param {string} content
- * @returns {boolean}
- */
-function hasMarkers(content) {
-  const start = content.indexOf(MARKER_START);
-  return start !== -1 && content.indexOf(MARKER_END, start) !== -1;
-}
-
-/**
- * The state of one path, read without following a symlinked file.
- * @param {string} file
- * @param {string} expected
- * @returns {ComputerAgentTextState}
- */
-function stateOf(file, expected) {
-  /** @type {fs.Stats} */
-  let stat;
-  try {
-    stat = fs.lstatSync(file);
-  } catch {
-    return 'absent';
-  }
-  if (!stat.isFile()) return 'foreign';
-  let content;
-  try {
-    content = fs.readFileSync(file, 'utf8');
-  } catch {
-    return 'foreign';
-  }
-  if (!hasMarkers(content)) return 'foreign';
-  if (content === expected) return 'current';
-  return isUnedited(content) ? 'differs' : 'edited';
-}
 
 /**
  * The state of one link target.
@@ -460,7 +385,7 @@ function copyStateOf(at, expected) {
   }
   if (names.length === 0) return 'absent';
   if (names.length !== 1 || names[0] !== 'SKILL.md') return 'foreign';
-  const state = stateOf(path.join(at, 'SKILL.md'), expected);
+  const state = managedFileState(path.join(at, 'SKILL.md'), expected);
   return state === 'current' && expected === '' ? 'differs' : state;
 }
 
@@ -525,7 +450,7 @@ export function inspectComputerAgentText({
   return [
     {
       path: computerSkillFile(home),
-      state: stateOf(computerSkillFile(home), expected),
+      state: managedFileState(computerSkillFile(home), expected),
     },
     ...computerSkillLinks(home)
       .filter(place => place.wanted || made.has(place.path))
@@ -538,46 +463,6 @@ export function inspectComputerAgentText({
         return {path: place.path, state, link: /** @type {const} */ (true)};
       }),
   ];
-}
-
-/**
- * Write `content` to `file` without following a symlink planted at it.
- * @param {string} file
- * @param {string} content
- */
-function writeNoFollow(file, content) {
-  const flags =
-    fs.constants.O_WRONLY |
-    fs.constants.O_CREAT |
-    fs.constants.O_TRUNC |
-    (fs.constants.O_NOFOLLOW ?? 0);
-  const fd = fs.openSync(file, flags, 0o644);
-  try {
-    fs.writeFileSync(fd, content);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
-/**
- * Why a path was kept: a person edited it, or Astryx did not create it.
- * @param {ComputerAgentTextState} state
- * @returns {'edited' | 'not-astryx'}
- */
-const keptReason = state => (state === 'edited' ? 'edited' : 'not-astryx');
-
-/**
- * Remove an unedited Astryx file, or a folder holding only one, and its
- * emptied folder.
- * @param {string} file
- */
-function removeFile(file) {
-  fs.unlinkSync(file);
-  try {
-    fs.rmdirSync(path.dirname(file));
-  } catch {
-    // The folder holds something else; leave it.
-  }
 }
 
 /**
@@ -642,7 +527,7 @@ export function writeComputerAgentText({home = os.homedir(), command} = {}) {
   const folder = path.dirname(file);
   /** @type {import('../../api/init/init.type.mjs').InitUserFile[]} */
   const rows = [];
-  const state = stateOf(file, judged);
+  const state = managedFileState(file, judged);
   const expected =
     state === 'current'
       ? judged
@@ -678,7 +563,7 @@ export function writeComputerAgentText({home = os.homedir(), command} = {}) {
       rows.push({path: at, action: 'kept', reason: 'not-astryx'});
       continue;
     }
-    if (linkState === 'differs') removeFile(path.join(at, 'SKILL.md'));
+    if (linkState === 'differs') removeManagedFile(path.join(at, 'SKILL.md'));
     // The skill folder exists now, so a link still dangling here is one
     // whose target the system resolves from a linked folder above it: an
     // Astryx link, remade so that it resolves.
@@ -724,16 +609,16 @@ export function removeComputerAgentText({
   // Managed copies are told apart by their markers and hash, like the file.
   for (const place of computerSkillLinks(home)) {
     if (copyStateOf(place.path, '') !== 'differs') continue;
-    removeFile(path.join(place.path, 'SKILL.md'));
+    removeManagedFile(path.join(place.path, 'SKILL.md'));
     rows.push({path: place.path, action: 'removed'});
   }
-  const state = stateOf(file, '');
+  const state = managedFileState(file, '');
   if (state === 'absent') {
     rows.unshift({path: file, action: 'absent'});
   } else if (state === 'foreign' || state === 'edited') {
     rows.unshift({path: file, action: 'kept', reason: keptReason(state)});
   } else {
-    removeFile(file);
+    removeManagedFile(file);
     rows.unshift({path: file, action: 'removed'});
   }
   return rows;

@@ -477,9 +477,14 @@ works on is `spec:AST-040` FR9's.
     `astryx/state.json`, which holds what the update check found and when
     each notice last printed (FR6, FR8, FR10);
   - the computer-level agent text (FR8), its links, and its copy, written by
-    `astryx init --user` and by the global copy keeping that text installed,
-    in the background, as FR8 states; no other command writes them, and no
-    package install script does.
+    `astryx init --user` (also spelled `--to user`) and by the global copy
+    keeping that text installed, in the background, as FR8 states; no other
+    command writes them, and no package install script does;
+  - a folder a person names with `astryx init --to <folder>`, for
+    `<folder>/astryx-project/SKILL.md` (the project skill) when the folder is
+    in the project, else `<folder>/astryx/SKILL.md` (the computer-level
+    text). The project skills folders `--to skills` writes sit in the folder
+    where `init` writes agent docs.
 
   No run writes a project's agent docs into the home folder or a settings folder
   in it (`architecture:cli-surface` INV31); the computer-level agent text above
@@ -524,7 +529,12 @@ works on is `spec:AST-040` FR9's.
     folder (FR9). `astryx init --user --remove-agents` removes the file, every
     link the CLI made, and every managed copy, and records that the
     computer-level text is not wanted. The global copy honors that choice, and
-    writes nothing, until `astryx init --user` runs again.
+    writes none of these files, until `astryx init --user` runs again. A
+    folder a person saved with `astryx init --to <folder>` is a choice of its
+    own: the global copy refreshes `<folder>/astryx/SKILL.md` on the same
+    schedule while the file is there, an edited file kept, and never writes
+    it again once it is deleted; `astryx init --to <folder>` writes it
+    again.
   - The settings file is `astryx/settings.json` in the per-user configuration
     directory (FR7): `computerAgentText.install`, `true` or `false`, and
     `computerAgentText.links`, the links the CLI made, so removal removes
