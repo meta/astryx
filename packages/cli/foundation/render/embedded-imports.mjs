@@ -115,11 +115,11 @@ export function importSpecifiers(source, file) {
 /**
  * Each string specifier one module imports, with its line and whether it
  * brings in types only (`import type`, `export type`, or named bindings that
- * are each an inline `type`), which a bundler drops. Null when the module
- * does not parse.
+ * are each an inline `type`), which a bundler drops, and whether it is a
+ * static import declaration. Null when the module does not parse.
  * @param {string} source
  * @param {string} file for the parser's TypeScript/JSX choice
- * @returns {Array<{specifier: string, line?: number, typeOnly: boolean}> | null}
+ * @returns {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}
  */
 export function moduleImports(source, file) {
   return scanModule(source, file).records;
@@ -175,11 +175,11 @@ function typesOnly(node) {
 /**
  * One module's imports, and the relative asset paths its strings name
  * (`<img src="./logo.png">`, `url(./bg.png)` in a style). `records` holds
- * each import with its line and whether it is types only; null when the
- * module does not parse.
+ * each import with its line, whether it is types only and whether it is a
+ * static import declaration; null when the module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean}> | null}}
+ * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}> | null}}
  */
 function scanModule(source, file) {
   /** @type {string[]} */
@@ -203,11 +203,16 @@ function scanModule(source, file) {
   } catch {
     return {imports: [], assets: [], records: null};
   }
-  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean}>} */
+  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean, declaration: boolean}>} */
   const records = [];
   /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
   const add = (specifier, node, typeOnly = false) =>
-    records.push({specifier, line: node.loc?.start?.line, typeOnly});
+    records.push({
+      specifier,
+      line: node.loc?.start?.line,
+      typeOnly,
+      declaration: node.type === 'ImportDeclaration',
+    });
   const written = writtenString;
   /** @param {any} node */
   const visit = node => {

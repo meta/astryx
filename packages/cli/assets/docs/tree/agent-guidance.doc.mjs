@@ -92,7 +92,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "An app's `{@command init}` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
+          text: "An app's `{@command init}` writes your lines near the end of its managed agent block, each labeled with your package name; only the CLI's line on how to remove the block comes after them. The CLI owns the heading, the labels, that last line, and the markers.",
         },
         {
           type: 'code',
@@ -104,6 +104,7 @@ export default {
           lang: 'text',
           code: `INTEGRATIONS:
 - \`@acme/astryx-widgets\`: Use AcmeCarousel for rotating content.
+To remove this block, run \`astryx init --remove-agents\`, …
 <!-- ASTRYX:END -->`,
         },
         {

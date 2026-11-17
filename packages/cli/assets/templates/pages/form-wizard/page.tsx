@@ -441,7 +441,7 @@ export default function FormWizardPage() {
         // this region, so a card here would be a border inside a border — and
         // its own padding would push every field off the content line the
         // title and stepper sit on.
-        <LayoutContent>
+        <LayoutContent role="main">
           {step === 0 && (
             <VStack gap={5}>
               <VStack gap={1}>

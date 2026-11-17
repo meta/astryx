@@ -301,7 +301,7 @@ export default function AIChatTemplate() {
       contentWidth={720}
       padding={6}
       content={
-        <LayoutContent>
+        <LayoutContent role="main">
           <VStack gap={8} vAlign="center" style={pageStyle}>
             {/* Greeting */}
             <VStack gap={1}>

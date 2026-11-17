@@ -76,7 +76,146 @@ document.addEventListener('keydown', event => {
 });
 }`;
 
-/** The namespace of the page's own files in the build. */
+/**
+ * Storage for a page in a viewer that blocks it. A frame without
+ * allow-same-origin has an opaque origin, where touching `localStorage` or
+ * `sessionStorage` throws. Then the page gets an in-memory storage for each
+ * one that acts as the browser's does: its methods, and its items read,
+ * written, listed and deleted as properties (`localStorage.theme`,
+ * `Object.keys(localStorage)`). What it saves lasts until the page closes.
+ * A file opened from disk or on a real origin keeps its real storage. This
+ * runs as the script's first module, before any of the page's own modules.
+ */
+export const VIEWER_STORAGE = `for (const name of ['localStorage', 'sessionStorage']) {
+  let usable = true;
+  try {
+    window[name].getItem('');
+  } catch {
+    usable = false;
+  }
+  if (usable) continue;
+  const items = new Map();
+  const methods = {
+    get length() {
+      return items.size;
+    },
+    key: index => [...items.keys()][index] ?? null,
+    getItem: key => (items.has(String(key)) ? items.get(String(key)) : null),
+    setItem: (key, value) => {
+      items.set(String(key), String(value));
+    },
+    removeItem: key => {
+      items.delete(String(key));
+    },
+    clear: () => {
+      items.clear();
+    },
+  };
+  const storage = new Proxy(methods, {
+    get: (target, key, receiver) =>
+      key in target || typeof key !== 'string' ? Reflect.get(target, key, receiver) : items.get(key),
+    set: (target, key, value) => {
+      if (typeof key === 'string' && !(key in target)) items.set(key, String(value));
+      return true;
+    },
+    has: (target, key) => (typeof key === 'string' && items.has(key)) || key in target,
+    deleteProperty: (target, key) => {
+      if (typeof key === 'string' && !(key in target)) items.delete(key);
+      return true;
+    },
+    ownKeys: () => [...items.keys()],
+    getOwnPropertyDescriptor: (target, key) =>
+      typeof key === 'string' && items.has(key)
+        ? {value: items.get(key), writable: true, enumerable: true, configurable: true}
+        : undefined,
+  });
+  try {
+    Object.defineProperty(window, name, {configurable: true, enumerable: true, get: () => storage});
+  } catch {
+    // A window that refuses the property keeps the storage it has.
+  }
+}`;
+
+/**
+ * Copying for a page in a viewer that blocks the Clipboard API. It falls
+ * back to the copy command where Core's clipboard hook does: when the frame's
+ * permissions policy refuses clipboard-write, when `writeText` refuses the
+ * write (NotAllowedError), and also when the frame leaves `navigator.clipboard`
+ * out or `writeText` throws at once. The copy command runs only in a click or
+ * a key press, as in the hook. A write that resolves copied the text; a
+ * failed fallback rejects with the browser's own refusal, or NotAllowedError,
+ * so the page's own error path runs. `readText` rejects with NotAllowedError,
+ * as a browser does. The hook's helpers are private to Core and run only in
+ * pages that use the hook; this runs in the file's script before any of the
+ * page's modules, for every page.
+ */
+export const VIEWER_CLIPBOARD = `{
+const refused = message => new DOMException(message, 'NotAllowedError');
+const copy = text =>
+  new Promise((resolve, reject) => {
+    if (navigator.userActivation?.isActive === false) {
+      reject(refused('The copy command runs only in a click or a key press.'));
+      return;
+    }
+    let written = false;
+    const write = event => {
+      if (event.clipboardData == null) return;
+      event.clipboardData.setData('text/plain', String(text));
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      written = true;
+    };
+    window.addEventListener('copy', write, true);
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    } finally {
+      window.removeEventListener('copy', write, true);
+    }
+    if (copied && written) resolve();
+    else reject(refused('The browser did not copy the text.'));
+  });
+const policy = document.permissionsPolicy ?? document.featurePolicy;
+const writeAllowed = () =>
+  typeof policy?.allowsFeature === 'function' ? policy.allowsFeature('clipboard-write') : true;
+const clipboard = navigator.clipboard;
+if (clipboard == null) {
+  const fallback = {
+    writeText: copy,
+    readText: () => Promise.reject(refused('This frame does not let a page read the clipboard.')),
+  };
+  try {
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, enumerable: true, get: () => fallback});
+  } catch {
+    // A navigator that refuses the property keeps what it has.
+  }
+} else if (typeof clipboard.writeText === 'function') {
+  const writeText = clipboard.writeText;
+  try {
+    clipboard.writeText = function (text) {
+      if (!writeAllowed()) return copy(text);
+      let asked;
+      try {
+        asked = writeText.call(this, text);
+      } catch {
+        return copy(text);
+      }
+      return Promise.resolve(asked).catch(error =>
+        error instanceof DOMException && error.name === 'NotAllowedError'
+          ? copy(text).catch(() => Promise.reject(error))
+          : Promise.reject(error),
+      );
+    };
+  } catch {
+    // A clipboard that refuses the property keeps its own writeText.
+  }
+}
+}`;
+
+/** The namespace of the module that fills in what a viewer's frame blocks: storage and the clipboard. */
+const VIEWER = 'astryx-viewer';
 const PAGE = 'astryx-page';
 
 /** The namespace of the module that mounts the page. */
@@ -204,10 +343,11 @@ export async function bundleForBrowser({
   describe,
   oneCopy = [],
 }) {
-  // A page whose script throws, in render or in an effect (a frame that
-  // blocks storage, say), keeps its first paint: React would empty the root.
+  // A page whose script throws, in render or in an effect (a cookie write in
+  // a frame that blocks cookies, say), keeps its first paint: React would
+  // empty the root.
   const mount =
-    `import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
+    `import 'astryx:viewer';import {Component, createElement} from 'react';import {createRoot} from 'react-dom/client';import Page from ${JSON.stringify(entry)};` +
     `${IN_A_VIEWER}` +
     `const root = document.getElementById(${JSON.stringify(ROOT_ID)});const painted = root.innerHTML;` +
     `class FirstPaint extends Component {constructor(props) {super(props);this.state = {failed: false};}` +
@@ -264,6 +404,8 @@ export async function bundleForBrowser({
     setup(/** @type {any} */ setupBuild) {
       build = setupBuild;
       build.onResolve({filter: /^astryx:mount$/}, () => ({path: 'mount', namespace: MOUNT}));
+      build.onResolve({filter: /^astryx:viewer$/, namespace: MOUNT}, () => ({path: 'viewer', namespace: VIEWER}));
+      build.onLoad({filter: /.*/, namespace: VIEWER}, () => ({contents: `${VIEWER_STORAGE}\n${VIEWER_CLIPBOARD}`, loader: 'js'}));
       build.onLoad({filter: /.*/, namespace: MOUNT}, () => ({
         contents: mount,
         loader: 'js',

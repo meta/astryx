@@ -26,7 +26,7 @@ Commands:
   theme                             <text>
   integration                       <text>
   hook [options] [name]             <text>
-  discover [options] [query]        <text>
+  discover [options] [query...]     <text>
   search [options] <query...>       <text>
   build [options] [query]           <text>
   doctor [options]                  <text>

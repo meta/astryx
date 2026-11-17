@@ -20,6 +20,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -500,7 +501,8 @@ export default function FileExplorerPage() {
         />
       }
       content={
-        <LayoutContent padding={0} isScrollable={false}>
+        <LayoutContent role="main" padding={0} isScrollable={false}>
+          <VisuallyHidden as="h1">Files</VisuallyHidden>
           <HStack height="100%" isScrollable>
             {columns.map((col, colIndex) => {
               const showDivider =
