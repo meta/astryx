@@ -71,7 +71,8 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {LIKE, P} from './_tables.mjs';
+import {LIKE, P, knowBuiltInThemes} from './_tables.mjs';
+import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
@@ -147,6 +148,10 @@ export async function themeEditHow(subject, options = {}) {
     ...(words ? {words} : {}),
   });
 }
+
+// The built-in themes come from the installed packages: found here, in the
+// adapter, and handed to the editor's tables.
+knowBuiltInThemes(discoverBundledThemes().map(t => t.slug));
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
