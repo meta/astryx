@@ -664,18 +664,44 @@ export function modesOf(data) {
   );
 }
 
+/** The fill token each color dial's family is drawn as. */
+const DIAL_FILL_TOKEN = /** @type {Record<string, string>} */ ({
+  accent: '--color-accent',
+  neutral: '--color-neutral',
+  success: '--color-success',
+  warning: '--color-warning',
+  danger: '--color-error',
+  info: '--color-info',
+});
+
 /**
- * The color dial settings of a theme, in dial order.
- * @param {{settings: Setting[]}} data
+ * The light-mode color of a token value the theme's own source writes: a
+ * plain color, or the first half of a light-dark() pair.
+ * @param {string | undefined} value
  */
-function dialFamilies(data) {
+function lightHalf(value) {
+  const v = String(value ?? '').trim();
+  const pair = /^light-dark\(\s*([^,]+?)\s*,/.exec(v);
+  return pair ? pair[1] : v;
+}
+
+/**
+ * The color dial settings of a theme, in dial order. A family whose fill
+ * token the theme's own source sets exactly takes that color, the one in
+ * effect, as its seed: the shades its text, icons and tints read come from
+ * the color the fill shows, never from a dial value the source overrides.
+ * @param {{settings: Setting[]}} data
+ * @param {Record<string, string>} [own] the tokens the theme's own source sets
+ */
+function dialFamilies(data, own = {}) {
   /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
   const out = [];
   for (const dial of PALETTE_DIALS) {
     const s = [...data.settings]
       .reverse()
       .find(x => x?.source === 'dial' && x.thing === dial && !x.on && !x.mode);
-    const seed = s && seedOf(s.value);
+    const inEffect = seedOf(lightHalf(own[DIAL_FILL_TOKEN[dial] ?? '']));
+    const seed = inEffect ?? (s && seedOf(s.value));
     if (s && seed) out.push({id: dial, dial, seed, value: s.value});
   }
   return out;
@@ -1175,7 +1201,7 @@ function darkExact(t, id, seed) {
 function planPalette(cwd, slug, data, base) {
   const file = paletteFiles(slug).config;
   const existing = readConfig(path.join(cwd, file));
-  const fams = dialFamilies(data);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!existing && !fams.length) return null;
   /** @type {string[]} */
   const notes = [];
@@ -2137,7 +2163,7 @@ export function familyRamp(cwd, slug, data, base, family) {
  * @returns {PaletteMapping | null}
  */
 export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
-  const fams = dialFamilies(data);
+  const fams = dialFamilies(data, ownSourceTokenValues(cwd, slug));
   if (!fams.length) return null;
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
