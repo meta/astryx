@@ -1938,6 +1938,8 @@ export async function checkAppThemes(cwd) {
   /** Families behind a local font import doctor could not follow. */
   const unreadFontWarnings = [];
   const missingFontWarnings = [];
+  const intentionalFontFallbacks = [];
+  const noFonts = new Set(state.noFonts ?? []);
   let generatedImports = null;
   try {
     generatedImports = moduleSpecifiers(currentModule);
@@ -1985,6 +1987,10 @@ export async function checkAppThemes(cwd) {
     }
     const named = namedThemeFonts(files);
     if (named.size === 0) continue;
+    if (noFonts.has(theme.slug)) {
+      intentionalFontFallbacks.push(`${theme.slug}: ${[...named].join(', ')}`);
+      continue;
+    }
     if (importedEvidence.get(theme) === null) {
       fontFailures.push({
         theme,
@@ -2066,6 +2072,10 @@ export async function checkAppThemes(cwd) {
       'Confirm the font service stylesheet loads each named family.',
     );
   }
+  const fontFallbackMessage =
+    intentionalFontFallbacks.length > 0
+      ? `Intentional system-font fallback for ${intentionalFontFallbacks.join('; ')}.`
+      : null;
   // A family with no loader in a stylesheet the app imports loads once
   // the package that loads it is installed and the theme's stylesheet is
   // written again, so the fix names that package when a known one loads
@@ -2116,7 +2126,10 @@ export async function checkAppThemes(cwd) {
               id: 'theme-fonts',
               label: 'Theme font loading',
               status: 'warn',
-              message: fontWarningMessages.join(' '),
+              message: [
+                ...fontWarningMessages,
+                ...(fontFallbackMessage ? [fontFallbackMessage] : []),
+              ].join(' '),
               fix: fontWarningFixes.join(' '),
             }
           : {
@@ -2124,6 +2137,7 @@ export async function checkAppThemes(cwd) {
               label: 'Theme font loading',
               status: 'pass',
               message:
+                fontFallbackMessage ??
                 'Every named non-system font is loaded by an @font-face rule or a font service URL that names it.',
             },
   );

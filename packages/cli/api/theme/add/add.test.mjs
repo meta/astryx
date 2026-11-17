@@ -30,16 +30,20 @@ function installTheme(
   const exportName = `${slug}Theme`;
   fs.mkdirSync(sourceDir, {recursive: true});
   fs.mkdirSync(path.join(packageDir, 'dist'), {recursive: true});
+  const exports = {
+    [`./themes/${slug}`]: `./dist/${slug}.js`,
+    [`./themes/${slug}.css`]: `./dist/${slug}.css`,
+    ...(options.fontCss != null
+      ? {[`./themes/${slug}.fonts.css`]: `./dist/${slug}.fonts.css`}
+      : {}),
+  };
   fs.writeFileSync(
     path.join(packageDir, 'package.json'),
     JSON.stringify({
       name: packageName,
       version: '1.0.0',
       type: 'module',
-      exports: {
-        [`./themes/${slug}`]: `./dist/${slug}.js`,
-        [`./themes/${slug}.css`]: `./dist/${slug}.css`,
-      },
+      exports,
     }),
   );
   fs.writeFileSync(
@@ -63,6 +67,12 @@ function installTheme(
       path.join(packageDir, `dist/${slug}.css`),
       `[data-astryx-theme="${slug}"] {}\n`,
     );
+    if (options.fontCss != null) {
+      fs.writeFileSync(
+        path.join(packageDir, `dist/${slug}.fonts.css`),
+        options.fontCss,
+      );
+    }
   }
   const pkg = JSON.parse(
     fs.readFileSync(path.join(tmpDir, 'package.json'), 'utf-8'),
@@ -195,6 +205,33 @@ describe('themeAdd', () => {
     expect(repeated.type).toBe('theme.app');
     expect(repeated.data.change.changed).toBe(false);
     expect(fs.readFileSync(moduleFile, 'utf-8')).not.toContain('hand edit');
+  });
+
+  it('records and preserves an intentional system-font fallback', async () => {
+    installTheme('neutral', '@acme/themes', {
+      fontCss:
+        '@import url("https://fonts.googleapis.com/css2?family=Figtree");\n',
+    });
+
+    const result = await themeAdd('neutral', {
+      cwd: tmpDir,
+      package: '@acme/themes',
+      noFonts: true,
+    });
+
+    expect(result.data.themes[0]).not.toHaveProperty('fontStylesheet');
+    const moduleFile = path.join(tmpDir, 'src/astryx-themes.ts');
+    const module = fs.readFileSync(moduleFile, 'utf-8');
+    expect(module).toContain('"noFonts":["neutral"]');
+    expect(module).not.toContain('neutral.fonts.css');
+
+    await themeAdd('neutral', {
+      cwd: tmpDir,
+      package: '@acme/themes',
+    });
+    expect(fs.readFileSync(moduleFile, 'utf-8')).not.toContain(
+      'neutral.fonts.css',
+    );
   });
 
   it.each([

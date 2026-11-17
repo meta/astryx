@@ -4,7 +4,8 @@
  * @file `astryx theme add` — add built theme output to the app.
  *
  * Plain `theme add` and the compatibility `--import` spelling both record the
- * built theme in the generated app module. Source copying belongs only to
+ * built theme in the generated app module. `--no-fonts` records an intentional
+ * system-font fallback beside the theme. Source copying belongs only to
  * `theme eject`.
  */
 
@@ -22,7 +23,7 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  * compatibility no-op.
  *
  * @param {string} slug
- * @param {{targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}} [options]
+ * @param {{targetPath?: string, overwrite?: boolean, import?: boolean, noFonts?: boolean, cwd?: string, package?: string}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}
  */
 export async function themeAdd(slug, options = {}) {

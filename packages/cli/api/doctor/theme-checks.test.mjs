@@ -32,7 +32,7 @@ function write(file, content) {
 
 /**
  * @param {Array<{slug: string, css?: string, fontFamily?: string, fontCss?: string}>} themeSpecs
- * @param {{peerRange?: string, importModule?: boolean, root?: string}} [options]
+ * @param {{peerRange?: string, importModule?: boolean, root?: string, noFonts?: boolean}} [options]
  *   `root`: the folder the fixture is made in (default: this package)
  */
 async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
@@ -115,6 +115,7 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
       cwd: dir,
       import: true,
       package: '@acme/themes',
+      noFonts: options.noFonts,
     });
   }
 
@@ -1724,6 +1725,30 @@ describe('app-theme doctor checks', () => {
     });
     expect(result.message).toContain('Ocean Sans');
     expect(checks.some(item => item.status === 'fail')).toBe(false);
+  });
+
+  it('check 9 reports an intentional system-font fallback as passing', async () => {
+    const {dir} = await fixture(
+      [
+        {
+          slug: 'neutral',
+          fontFamily: 'Figtree',
+          fontCss:
+            '@import url("https://fonts.googleapis.com/css2?family=Figtree");\n',
+        },
+      ],
+      {noFonts: true},
+    );
+
+    const checks = await checkAppThemes(dir);
+    expect(check(checks, 'theme-module')).toMatchObject({status: 'pass'});
+    expect(check(checks, 'theme-fonts')).toMatchObject({
+      status: 'pass',
+      message: expect.stringContaining('Intentional system-font fallback'),
+    });
+    expect(
+      fs.readFileSync(path.join(dir, 'src/astryx-themes.ts'), 'utf-8'),
+    ).not.toContain('fonts.css');
   });
 
   it('check 9 warns when a local theme has no font stylesheet', async () => {

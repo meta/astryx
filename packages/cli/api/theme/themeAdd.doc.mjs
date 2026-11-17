@@ -11,10 +11,10 @@ export const doc = {
   displayName: 'themeAdd()',
   summary: 'Add a built theme to the app.',
   description:
-    'Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.',
+    'Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. options.noFonts records an intentional system-font fallback and omits that theme’s font stylesheet import; later theme commands preserve the choice. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.',
   importPath: '@astryxdesign/cli/api',
   signature:
-    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}): Promise<ThemeAppResponse>',
+    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, noFonts?: boolean, cwd?: string, package?: string}): Promise<ThemeAppResponse>',
   keywords: ['theme', 'add', 'import', 'app', 'default', 'local'],
   params: [
     {
@@ -41,6 +41,13 @@ export const doc = {
       type: 'boolean',
       description:
         'Compatibility no-op; the built theme is added with or without this option.',
+      default: 'false',
+    },
+    {
+      name: 'options.noFonts',
+      type: 'boolean',
+      description:
+        'Record the theme’s system-font fallback and omit its font stylesheet import.',
       default: 'false',
     },
     {

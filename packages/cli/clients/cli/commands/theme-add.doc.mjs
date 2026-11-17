@@ -11,7 +11,7 @@ export const doc = {
   summary:
     "Add a built theme to the app. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`.",
   description:
-    "Records the theme in the generated app module and imports its built module and stylesheets. --import remains accepted as a compatibility no-op. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`. A bare command or --list delegates to themeListCopySources(), whose released JSON bytes stay unchanged while its text names the current add and eject commands; use --package when owners share a slug. Outside a project, a bare command or --list lists the available themes as in a new project; given a slug it writes nothing and fails, naming the app project it needs (ERR_THEME_INVALID), or with ERR_UNKNOWN_THEME when no theme has that slug. On the first add, when an installed package names the provider that wires its themes, it says the app may already get its theme from that provider (its import module, the package that declares it, and the props it takes the theme and mode through). When that one provider takes the theme, the wiring shown passes the added theme to it in place of a Theme wrap, and a later add that first lists themeModes shows how it passes the mode; with no such prop, or two providers, it says what replacing each costs and what a Theme inside it covers above the Theme wiring. The JSON carries it as data.appProvider.",
+    "Records the theme in the generated app module and imports its built module and stylesheets. --no-fonts records that the theme intentionally uses its system-font fallback and leaves the package font stylesheet out; later theme commands preserve that choice. --import remains accepted as a compatibility no-op. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`. A bare command or --list delegates to themeListCopySources(), whose released JSON bytes stay unchanged while its text names the current add and eject commands; use --package when owners share a slug. Outside a project, a bare command or --list lists the available themes as in a new project; given a slug it writes nothing and fails, naming the app project it needs (ERR_THEME_INVALID), or with ERR_UNKNOWN_THEME when no theme has that slug. On the first add, when an installed package names the provider that wires its themes, it says the app may already get its theme from that provider (its import module, the package that declares it, and the props it takes the theme and mode through). When that one provider takes the theme, the wiring shown passes the added theme to it in place of a Theme wrap, and a later add that first lists themeModes shows how it passes the mode; with no such prop, or two providers, it says what replacing each costs and what a Theme inside it covers above the Theme wiring. The JSON carries it as data.appProvider.",
   fn: 'themeAdd',
   args: [{name: 'slug', param: 'slug', required: false, names: 'theme'}],
   options: [
@@ -23,6 +23,12 @@ export const doc = {
         'Compatibility no-op; the built theme is added with or without this flag',
     },
     {
+      flag: '--no-fonts',
+      param: 'options.noFonts',
+      description:
+        'Use the theme’s system-font fallback and do not import its font stylesheet',
+    },
+    {
       flag: '--package <package>',
       param: 'options.package',
       description: 'Select the package that owns the theme',
@@ -32,6 +38,10 @@ export const doc = {
     {
       label: 'Add a built theme to the app',
       cli: 'astryx theme add ocean',
+    },
+    {
+      label: 'Use the system-font fallback',
+      cli: 'astryx theme add neutral --no-fonts',
     },
     {
       label: 'Select a package theme over a local theme',

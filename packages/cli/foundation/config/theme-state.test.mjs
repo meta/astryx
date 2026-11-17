@@ -83,6 +83,32 @@ describe('generated theme-module state', () => {
     });
   });
 
+  it('records an intentional system-font fallback without importing fonts', () => {
+    const source = renderThemeModule(
+      [
+        packageEntry(),
+        {
+          ...packageEntry('neutral'),
+          fontStylesheet: '@acme/themes/themes/neutral.fonts.css',
+        },
+      ],
+      'ocean',
+      true,
+      {noFonts: ['neutral']},
+    );
+
+    expect(source).toContain('"noFonts":["neutral"]');
+    expect(source).toContain('import "@acme/themes/themes/ocean.css"');
+    expect(source).not.toContain(
+      'import "@acme/themes/themes/neutral.fonts.css"',
+    );
+    expect(parseThemeModuleRecord(source)).toEqual({
+      themes: {ocean: '@acme/themes', neutral: '@acme/themes'},
+      defaultSlug: 'ocean',
+      noFonts: ['neutral'],
+    });
+  });
+
   it('uses src for a TypeScript project and the project root without src', () => {
     const typed = project();
     fs.mkdirSync(path.join(typed, 'src'));
