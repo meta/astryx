@@ -72,7 +72,8 @@ without taking activation away from the interactive content inside it.
 
 - Released default preserved: `no` for the touch press release: it fades on
   the theme's exit duration and easing, as FR5 and `spec:AST-094` FR5. A
-  mouse press keeps the card's desktop press styling.
+  mouse press keeps the card's desktop press timing; where any press paints
+  follows FR5 for every pointer (`architecture:press-feedback` INV7).
 - Compatibility class: nonbreaking behavior change; no public prop, default,
   DOM, or target changes
 - Controlled/uncontrolled behavior: not applicable

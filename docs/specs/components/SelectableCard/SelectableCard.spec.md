@@ -61,7 +61,8 @@ toggling, and the selection ring; the caller owns the selection state.
 
 - Released default preserved: `no` for the touch press release: it fades on
   the theme's exit duration and easing, as FR4 and `spec:AST-094` FR5. A
-  mouse press keeps the card's desktop press styling.
+  mouse press keeps the card's desktop press timing; where any press paints
+  follows FR4 for every pointer (`architecture:press-feedback` INV7).
   Otherwise `yes` until the next minor; then `no` for the caller `onClick`
   (FR2).
 - Compatibility class: no public prop, default or DOM changes; the touch
