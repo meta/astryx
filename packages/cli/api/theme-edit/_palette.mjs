@@ -44,6 +44,7 @@ import {
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
 import {
   CATEGORY_HUES,
+  deriveCodeColors,
   deriveLookColors,
   deriveStatusColors,
   isLookFamily,
@@ -316,6 +317,7 @@ export function tempFor(file) {
  * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {{badges: 'derived' | 'merged' | 'unreadable' | 'none', chart: 'derived' | 'merged' | 'unreadable' | 'none', merged: string[], unreadable: string[]}} [categories] - Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
+ * @property {string[]} [code] - The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {Array<{token: string, mode: Mode, pair: string, ratio: number}>} [kept] - The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{roles: Record<string, 'derived' | 'unreadable' | 'alike'>, why: string[]}} [statuses] - The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
@@ -747,9 +749,12 @@ export function derivedStatusWords(data) {
  * @param {string} token
  */
 export const isLookToken = token =>
-  /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+)$/.test(
+  /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+|syntax-(?:keyword|string|comment|number|function|type|variable|operator|constant|tag|attribute|property|punctuation|background)|overlay)$/.test(
     token,
   );
+
+/** A code color or the overlay scrim. @param {string} token */
+const isCodeToken = token => /^--color-(?:syntax-[a-z]+|overlay)$/.test(token);
 
 /**
  * A change's token lines with the look's own (category and chart colors)
@@ -767,8 +772,11 @@ export function lookCollapsed(lines, statusWords = []) {
   const rest = lines.filter(c => !status.test(tokenOf(c)));
   lines = rest;
   const look = lines.filter(c => isLookToken(tokenOf(c))).map(String);
-  const badges = look.filter(c => !tokenOf(c).startsWith('--color-data-'));
-  const chart = look.length - badges.length;
+  const code = look.filter(c => isCodeToken(tokenOf(c))).length;
+  const badges = look.filter(
+    c => !tokenOf(c).startsWith('--color-data-') && !isCodeToken(tokenOf(c)),
+  );
+  const chart = look.length - badges.length - code;
   return {
     lines: [
       ...lines.filter(c => !isLookToken(tokenOf(c))).map(String),
@@ -778,6 +786,9 @@ export function lookCollapsed(lines, statusWords = []) {
           ]
         : []),
       ...(chart ? [`chart colors: ${chart} values moved with the look`] : []),
+      ...(code
+        ? [`code colors and the overlay: ${code} values moved with the look`]
+        : []),
       ...(statusLines.length
         ? [
             `status colors (${statusWords.join(', ')}): ${statusLines.length} values moved with the look`,
@@ -3215,6 +3226,24 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     );
   const categories = mapCategories();
   const statuses = mapStatuses();
+  const code = mapCode();
+  /**
+   * The code colors and the overlay scrim, from the palette
+   * (deriveCodeColors); a token set by hand keeps its value.
+   * @returns {string[]} the roles that keep the base theme's
+   */
+  function mapCode() {
+    const derived = deriveCodeColors({
+      palette: /** @type {any} */ (candidate.palette),
+      stops,
+      modes,
+      grounds: m => lookColors(LOOK_GROUNDS, m),
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens))
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    return derived.unreadable;
+  }
   /**
    * The status roles the theme leaves unset, from the palette's families of
    * them (deriveStatusColors), written as its shades; a token set by hand
@@ -3310,6 +3339,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     lift,
     categories,
     statuses,
+    code,
     kept: keptAtBase,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
@@ -3511,10 +3541,13 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
       ? 'category colors (badges, tokens and card tints)'
       : '',
     c.chart === 'derived' ? 'chart colors' : '',
+    Object.keys(pal.tokens).some(k => k.startsWith('--color-syntax-'))
+      ? 'code colors'
+      : '',
   ].filter(Boolean);
   if (dial === 'accent' && derived.length)
     out.push(
-      `${derived.join(' and ')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on, and an exact --color-<role>-<hue> or --color-data-* setting wins`,
+      `${derived.join(', ').replace(/, ([^,]*)$/, ' and $1')} grow from Core's hues at your accent's strength and the palette's vibrancy, so they match the look; card tints stay tints that the page's text reads on, code reads at 4.5:1 on its background, and an exact --color-<role>-<hue>, --color-data-* or --color-syntax-* setting wins`,
     );
   /** The first pairs drawn alike, and how many more. @param {boolean} chart */
   const pairs = chart => {
@@ -3533,6 +3566,10 @@ export function categoryNotes(pal, dial, slug = '<theme>') {
   if (c.badges === 'unreadable' || c.chart === 'unreadable')
     out.push(
       `${[c.badges === 'unreadable' ? 'category colors (badges, tokens and card tints)' : '', c.chart === 'unreadable' ? 'chart colors' : ''].filter(Boolean).join(' and ')} keep the base theme's: grown from your look, ${c.unreadable.slice(0, 2).join('; ')}${c.unreadable.length > 2 ? `, and ${c.unreadable.length - 2} more` : ''}`,
+    );
+  if (pal.code?.length)
+    out.push(
+      `${pal.code.join(', ')} ${pal.code.length > 1 ? 'keep' : 'keeps'} the base theme's: no shade of ${pal.code.length > 1 ? 'their' : 'its'} color reads at 4.5:1 on the code background and the page`,
     );
   const held = pal.kept ?? [];
   if (held.length) {

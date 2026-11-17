@@ -478,7 +478,7 @@ beforeAll(async () => {
       // The category and chart colors that move with the look are counted
       // in one line each, not listed.
       if (
-        /^(?:category colors \(badges, tokens and card tints\)|chart colors|status colors \([a-z, ]+\)): \d+ values moved with the look$/.test(
+        /^(?:category colors \(badges, tokens and card tints\)|chart colors|code colors and the overlay|status colors \([a-z, ]+\)): \d+ values moved with the look$/.test(
           line,
         )
       )
