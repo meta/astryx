@@ -4,14 +4,15 @@
 /**
  * @file SelectorKeyboardInset.a11y.chromium.spec.ts
  * @input The Pre Selected story at a phone viewport, its trigger moved low. A
- *   stand-in `window.visualViewport` shrinks from the bottom as a software
- *   keyboard does.
+ *   stand-in `window.visualViewport` shrinks from the bottom and pans as a
+ *   software keyboard does.
  * @output Browser proof that the selected-item overlay slides above the
  *   software keyboard. The list ends clear of the keyboard with its rows in
  *   view, whether the keyboard was up before the list opened or rose after.
  *   When the keyboard's report ends, the open list keeps its top: a list the
  *   cap held grows downward in place. A list that slid above a late keyboard
- *   holds against a shorter one.
+ *   holds against a shorter one. A pan before or after the cap, and a keyboard
+ *   change after a pan, keep the list clear of the visible keyboard line.
  * @position Chromium contract for the Selector overlay beside the keyboard
  */
 
@@ -61,22 +62,31 @@ async function installKeyboard(page: Page) {
       configurable: true,
       get: () => viewport,
     });
-    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard =
-      cover => {
-        viewport.height = window.innerHeight - cover;
-        viewport.dispatchEvent(new Event('resize'));
-      };
+    (
+      window as unknown as {
+        __keyboard: (cover: number, offsetTop?: number) => void;
+      }
+    ).__keyboard = (cover, offsetTop = viewport.offsetTop) => {
+      viewport.offsetTop = offsetTop;
+      viewport.height = window.innerHeight - cover;
+      viewport.dispatchEvent(new Event('resize'));
+    };
   });
 }
 
-const raiseKeyboard = async (page: Page, cover = COVER) =>
+const raiseKeyboard = async (page: Page, cover = COVER, offsetTop?: number) =>
   page.evaluate(
-    value =>
-      (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-        value,
-      ),
-    cover,
+    ({cover: nextCover, offsetTop: nextOffsetTop}) =>
+      (
+        window as unknown as {
+          __keyboard: (cover: number, offsetTop?: number) => void;
+        }
+      ).__keyboard(nextCover, nextOffsetTop),
+    {cover, offsetTop},
   );
+
+const panVisualViewport = async (page: Page, offsetTop: number) =>
+  raiseKeyboard(page, COVER, offsetTop);
 
 /**
  * Sets the keyboard's cover (0 ends its report) and returns the open list's
@@ -84,9 +94,11 @@ const raiseKeyboard = async (page: Page, cover = COVER) =>
  */
 async function coverAndTrackTop(page: Page, cover = 0): Promise<number[]> {
   return page.getByRole('listbox').evaluate(async (list, value) => {
-    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-      value,
-    );
+    (
+      window as unknown as {
+        __keyboard: (cover: number, offsetTop?: number) => void;
+      }
+    ).__keyboard(value, value === 0 ? 0 : undefined);
     const tops: number[] = [];
     for (let frame = 0; frame < 30; frame++) {
       await new Promise(resolve => requestAnimationFrame(resolve));
@@ -172,7 +184,7 @@ interface ListFacts {
 }
 
 /** Where the open list is, and how many of its rows show above the keyboard. */
-async function listFacts(page: Page): Promise<ListFacts> {
+async function listFacts(page: Page, limit = LIMIT): Promise<ListFacts> {
   return page.getByRole('listbox').evaluate((list, limit) => {
     const box = list.getBoundingClientRect();
     const rows = [...list.querySelectorAll('[role="option"]')].map(row =>
@@ -190,7 +202,7 @@ async function listFacts(page: Page): Promise<ListFacts> {
           row.bottom <= Math.min(box.bottom, limit) + 0.5,
       ).length,
     };
-  }, LIMIT);
+  }, limit);
 }
 
 // The Pre Selected story's options.
@@ -204,6 +216,18 @@ function expectClearOfKeyboard(facts: ListFacts) {
   expect(facts.rowsWithBox, detail).toBe(OPTIONS);
   expect(facts.top, detail).toBeGreaterThanOrEqual(0);
   expect(facts.bottom, detail).toBeLessThanOrEqual(LIMIT + 0.5);
+  expect(facts.rowsAboveKeyboard, detail).toBe(facts.rows);
+}
+
+function expectClearOfPannedKeyboard(
+  facts: ListFacts,
+  cover: number,
+  offsetTop: number,
+) {
+  const limit =
+    VIEWPORT.height + offsetTop - cover - LAYER_KEYBOARD_CLEARANCE_PX;
+  const detail = JSON.stringify({...facts, limit});
+  expect(facts.bottom, detail).toBeLessThanOrEqual(limit + 0.5);
   expect(facts.rowsAboveKeyboard, detail).toBe(facts.rows);
 }
 
@@ -322,4 +346,80 @@ test('a list the cap holds above the keyboard grows downward in place when the r
     detail,
   ).toBeLessThanOrEqual(0.5);
   expect(after.bottom, detail).toBeGreaterThan(held.bottom + 40);
+});
+
+test('a cap followed by a visual-viewport pan keeps the list above the panned keyboard', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+
+  await panVisualViewport(page, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('a visual-viewport pan before the keyboard cap is applied keeps the list clear', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page, 0, 100);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await raiseKeyboard(page, COVER, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+});
+
+test('a keyboard height change after a visual-viewport pan keeps the list clear', async ({
+  page,
+}) => {
+  const trigger = await openStory(page, 190);
+  await raiseKeyboard(page, COVER, 100);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      COVER,
+      100,
+    );
+  }).toPass({timeout: 3_000});
+
+  const shorterCover = COVER - 100;
+  await raiseKeyboard(page, shorterCover, 100);
+  await expect(async () => {
+    expectClearOfPannedKeyboard(
+      await listFacts(
+        page,
+        VIEWPORT.height + 100 - shorterCover - LAYER_KEYBOARD_CLEARANCE_PX,
+      ),
+      shorterCover,
+      100,
+    );
+  }).toPass({timeout: 3_000});
 });

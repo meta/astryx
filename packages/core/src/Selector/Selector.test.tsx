@@ -634,7 +634,7 @@ describe('Selector', () => {
       // so it is 0 and the shift stands.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: min(-110px, max(-190px, calc(-110px - var(--_layer-keyboard-inset-block-end, -110px))))',
+          '--_selector-overlay-margin: max(calc(var(--_layer-keyboard-visual-viewport-offset-block-start, 0px) - 190px), min(-110px, max(-190px, calc(-110px - var(--_layer-keyboard-inset-block-end, -110px) + var(--_layer-keyboard-visual-viewport-offset-block-start, 0px)))))',
         );
       });
       expect(popover?.getAttribute('style')).toContain(
@@ -642,62 +642,6 @@ describe('Selector', () => {
       );
     } finally {
       restoreRects();
-    }
-  });
-
-  it('keeps the selected-item overlay inside a panned visual viewport', async () => {
-    const restoreRects = mockSelectorRects();
-    const originalVisualViewport = Object.getOwnPropertyDescriptor(
-      window,
-      'visualViewport',
-    );
-    const visualViewport = Object.assign(new EventTarget(), {
-      offsetTop: 100,
-      width: 0,
-      height: 200,
-      scale: 1,
-    });
-    Object.defineProperty(window, 'visualViewport', {
-      configurable: true,
-      value: visualViewport,
-    });
-    const user = userEvent.setup();
-    try {
-      render(
-        <Selector
-          label="Fruit"
-          options={OPTIONS}
-          value="Banana"
-          onChange={() => {}}
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox'));
-      const popover = screen
-        .getByRole('listbox', {hidden: true})
-        .closest('[popover]');
-      await waitFor(() => {
-        expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: max(-90px, min(-110px,',
-        );
-      });
-
-      visualViewport.offsetTop = 120;
-      act(() => {
-        visualViewport.dispatchEvent(new Event('scroll'));
-      });
-      await waitFor(() => {
-        expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: max(-70px, min(-110px,',
-        );
-      });
-    } finally {
-      restoreRects();
-      if (originalVisualViewport) {
-        Object.defineProperty(window, 'visualViewport', originalVisualViewport);
-      } else {
-        Reflect.deleteProperty(window, 'visualViewport');
-      }
     }
   });
 
@@ -741,7 +685,7 @@ describe('Selector', () => {
         // the gutter in the 200 px viewport.
         await waitFor(() => {
           expect(popover?.getAttribute('style')).toContain(
-            '--_selector-overlay-margin: min(-126px,',
+            '--_selector-overlay-margin: max(calc(var(--_layer-keyboard-visual-viewport-offset-block-start, 0px) - 190px), min(-126px,',
           );
         });
       } finally {
@@ -786,7 +730,7 @@ describe('Selector', () => {
       await waitFor(() => {
         // 68px geometric alignment plus the 1px optical correction.
         expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: min(-69px,',
+          '--_selector-overlay-margin: max(calc(var(--_layer-keyboard-visual-viewport-offset-block-start, 0px) - 192px), min(-69px,',
         );
       });
     } finally {
@@ -939,7 +883,7 @@ describe('Selector', () => {
           .closest('[popover]') as HTMLElement;
         await waitFor(() => {
           expect(popover.getAttribute('style')).toContain(
-            '--_selector-overlay-margin: min(-110px,',
+            '--_selector-overlay-margin: max(calc(var(--_layer-keyboard-visual-viewport-offset-block-start, 0px) - 190px), min(-110px,',
           );
         });
         expect(popover.style.getPropertyValue('--x-marginBlockStart')).toBe('');

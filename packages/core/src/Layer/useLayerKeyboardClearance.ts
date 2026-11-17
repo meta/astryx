@@ -9,7 +9,8 @@
  * @output Exports `useLayerKeyboardClearance` and its result type,
  *   `keyboardLiftStyle`, `keyboardClearanceCap`, `LAYER_ANCHORED_ATTRIBUTE`,
  *   `LAYER_KEYBOARD_CAP_PROPERTY`, `LAYER_KEYBOARD_OVERFLOW_PROPERTY`,
- *   `LAYER_KEYBOARD_INSET_PROPERTY` and `LAYER_KEYBOARD_CLEARANCE_PX`
+ *   `LAYER_KEYBOARD_INSET_PROPERTY`, `LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY`
+ *   and `LAYER_KEYBOARD_CLEARANCE_PX`
  * @position Layer runtime, through the layer's touch module: the software
  *   keyboard's part of the viewport caps
  *
@@ -35,7 +36,10 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 // BottomSheet's keyboard hook. An import through it would put that hook's
 // on-demand code in every layered component.
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
-import {getKeyboardHeight} from '../keyboard/keyboardHeight';
+import {
+  getKeyboardHeight,
+  subscribeKeyboardHeight,
+} from '../keyboard/keyboardHeight';
 import {timing} from '../motion/uikit/timing';
 import {
   keyboardClearanceCap,
@@ -78,6 +82,15 @@ export const LAYER_KEYBOARD_OVERFLOW_PROPERTY = '--_layer-keyboard-overflow';
  */
 export const LAYER_KEYBOARD_INSET_PROPERTY =
   '--_layer-keyboard-inset-block-end';
+
+/**
+ * The custom property each layer's style sets beside the inset. It holds the
+ * visual viewport's block-start offset while a software keyboard is up. A
+ * layer that owns its placement, such as Selector, uses it to keep its far
+ * edge inside the panned keyboard room.
+ */
+export const LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY =
+  '--_layer-keyboard-visual-viewport-offset-block-start';
 
 /**
  * Scrolls the nearest scroll container between `target` and `layer` the
@@ -132,6 +145,8 @@ export interface LayerKeyboardClearance {
    * largest value until the layer closes. Otherwise null.
    */
   readonly inset: number | null;
+  /** The visual viewport's block-start offset while the keyboard is up. */
+  readonly visualViewportOffsetTop: number;
   /**
    * Follows a layer element the runtime swaps in while the layer is open.
    * The runtime calls it from its layer ref callback.
@@ -155,10 +170,12 @@ export function useLayerKeyboardClearance(
   const [cap, setCap] = useState<number | null>(null);
   const [lift, setLift] = useState<number | null>(null);
   const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
+  const [visualViewportOffsetTop, setVisualViewportOffsetTop] = useState(0);
   // The cap the layer renders with, read by the measurement between commits.
   const capRef = useRef<number | null>(null);
   const liftRef = useRef<number | null>(null);
   const keyboardInsetRef = useRef<number | null>(null);
+  const visualViewportOffsetTopRef = useRef(0);
   // Set while the layer is open: follows the runtime when it replaces the
   // layer element without closing it.
   const resyncRef = useRef<(() => void) | null>(null);
@@ -208,40 +225,54 @@ export function useLayerKeyboardClearance(
     // Renders the layer with `next` and returns once that commit has laid it
     // out, so the measurement after it reads the new box. Runs outside
     // React's own work: keyboard reports, timers, frames and native events.
+    const readVisualViewportOffsetTop = () =>
+      Math.max(0, view.visualViewport?.offsetTop ?? 0);
     const commitCap = (
       next: number | null,
       nextInset = keyboardInsetRef.current,
       nextLift: number | null = null,
+      nextVisualViewportOffsetTop = visualViewportOffsetTopRef.current,
     ) => {
       if (
         isDisposed ||
         (capRef.current === next &&
           keyboardInsetRef.current === nextInset &&
-          liftRef.current === nextLift)
+          liftRef.current === nextLift &&
+          visualViewportOffsetTopRef.current === nextVisualViewportOffsetTop)
       ) {
         return;
       }
       capRef.current = next;
       keyboardInsetRef.current = nextInset;
       liftRef.current = nextLift;
+      visualViewportOffsetTopRef.current = nextVisualViewportOffsetTop;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the box is measured at its new size in the same task, before the frame paints
       flushSync(() => {
         setCap(next);
         setKeyboardInset(nextInset);
         setLift(nextLift);
+        setVisualViewportOffsetTop(nextVisualViewportOffsetTop);
       });
       sync();
     };
     // Measured at the layer's own size, as the fallback order places it:
     // returns whether the layer is capped.
-    const capFor = (inset: number): boolean => {
+    const capFor = (
+      inset: number,
+      nextVisualViewportOffsetTop: number,
+    ): boolean => {
       // The inset goes out in the commit that lifts the cap. So a layer that
       // places itself by the inset has moved before its box is read. While
       // the layer stays open, the inset only grows. A keyboard that goes down
       // then leaves a layer placed by it where it is.
       const reported = inset > 0 ? inset + LAYER_KEYBOARD_CLEARANCE_PX : 0;
       const held = Math.max(reported, keyboardInsetRef.current ?? 0);
-      commitCap(null, held > 0 ? held : null);
+      commitCap(
+        null,
+        held > 0 ? held : null,
+        null,
+        nextVisualViewportOffsetTop,
+      );
       if (inset <= 0) {
         return false;
       }
@@ -249,7 +280,12 @@ export function useLayerKeyboardClearance(
       // `innerHeight` in the pinch-zoomed visual viewport's px.
       const viewport = layoutViewportHeight(win);
       const box = settledBox(layer);
-      const height = keyboardClearanceCap(box, viewport, inset);
+      const height = keyboardClearanceCap(
+        box,
+        viewport,
+        inset,
+        nextVisualViewportOffsetTop,
+      );
       if (height == null) {
         return false;
       }
@@ -265,13 +301,23 @@ export function useLayerKeyboardClearance(
         placed.top > box.top + 1 &&
         Math.abs(placed.bottom - box.bottom) > 1
       ) {
-        commitCap(height, keyboardInsetRef.current, placed.top - box.top);
+        commitCap(
+          height,
+          keyboardInsetRef.current,
+          placed.top - box.top,
+          nextVisualViewportOffsetTop,
+        );
         // An engine that does not move the layer by the lift leaves it below
         // the trigger: cap it from where it starts there.
         const lifted = settledBox(layer);
         if (Math.abs(lifted.top - box.top) > 1) {
           commitCap(height);
-          const again = keyboardClearanceCap(placed, viewport, inset);
+          const again = keyboardClearanceCap(
+            placed,
+            viewport,
+            inset,
+            nextVisualViewportOffsetTop,
+          );
           if (again != null) {
             commitCap(again);
           }
@@ -280,7 +326,11 @@ export function useLayerKeyboardClearance(
       // The cap holds the block-start edge: below its trigger the top stays
       // and the bottom comes up. Placed above its trigger the layer holds its
       // bottom instead, which a shorter box cannot lift: leave it as it is.
-      const limit = viewport - inset - LAYER_KEYBOARD_CLEARANCE_PX;
+      const limit =
+        viewport +
+        nextVisualViewportOffsetTop -
+        inset -
+        LAYER_KEYBOARD_CLEARANCE_PX;
       if (settledBox(layer).bottom > limit + 1) {
         commitCap(null);
         return false;
@@ -288,13 +338,18 @@ export function useLayerKeyboardClearance(
       return true;
     };
 
-    const avoid = (inset: number) => {
+    const avoid = (
+      inset: number,
+      requestedVisualViewportOffsetTop = readVisualViewportOffsetTop(),
+    ) => {
       sync();
+      const nextVisualViewportOffsetTop =
+        inset > 0 ? requestedVisualViewportOffsetTop : 0;
       if (!layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
-        commitCap(null, null);
+        commitCap(null, null, null, 0);
         return;
       }
-      if (!capFor(inset)) {
+      if (!capFor(inset, nextVisualViewportOffsetTop)) {
         return;
       }
       // The composing component makes its surface a scroll container once it
@@ -417,6 +472,30 @@ export function useLayerKeyboardClearance(
       }
       avoid(transition.to);
     });
+    // The keyboard-height module reports visual-viewport pans even when the
+    // keyboard's inset is unchanged. The layout guide intentionally filters
+    // those reports from its keyboard transitions, so the layer runtime reads
+    // the pan here and remeasures the cap once for that report. It is the one
+    // shared keyboard listener; Selector and other layers do not listen to the
+    // visual viewport themselves.
+    let lastKeyboardReportHeight = getKeyboardHeight(view);
+    const unsubscribeKeyboardReports = subscribeKeyboardHeight(view, event => {
+      if (event.type !== 'viewport') {
+        return;
+      }
+      const nextVisualViewportOffsetTop = readVisualViewportOffsetTop();
+      const heightChanged =
+        Math.abs(event.height - lastKeyboardReportHeight) >= 1;
+      lastKeyboardReportHeight = event.height;
+      if (nextVisualViewportOffsetTop === visualViewportOffsetTopRef.current) {
+        return;
+      }
+      // A keyboard-height change is already handled by the guide above. A
+      // same-height report is the browser's pan, which needs a fresh cap.
+      if (!heightChanged && keyboardInsetRef.current != null) {
+        avoid(event.height, nextVisualViewportOffsetTop);
+      }
+    });
     // Opened while a keyboard is up: capped in the task that opens it. So no
     // frame callback reads the layer uncapped, and no frame paints it so. The
     // runtime has shown the layer before this commit. A read here places it,
@@ -459,6 +538,7 @@ export function useLayerKeyboardClearance(
         win.cancelAnimationFrame(swapped);
       }
       unsubscribe();
+      unsubscribeKeyboardReports();
       cancelPending();
       stopWaiting?.();
       layer.removeEventListener('pointerdown', handlePress, true);
@@ -478,6 +558,10 @@ export function useLayerKeyboardClearance(
         keyboardInsetRef.current = null;
         setKeyboardInset(null);
       }
+      if (visualViewportOffsetTopRef.current !== 0) {
+        visualViewportOffsetTopRef.current = 0;
+        setVisualViewportOffsetTop(0);
+      }
     };
   }, [isOpen, layerRef]);
 
@@ -488,6 +572,7 @@ export function useLayerKeyboardClearance(
     cap: isOpen ? cap : null,
     lift: isOpen ? lift : null,
     inset: isOpen ? keyboardInset : null,
+    visualViewportOffsetTop: isOpen ? visualViewportOffsetTop : 0,
     followLayerElement,
   };
 }

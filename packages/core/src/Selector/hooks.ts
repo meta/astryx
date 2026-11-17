@@ -25,7 +25,10 @@ import {
   readLayerEntranceSide,
   writeLayerEntranceSide,
 } from '../Layer/layerEntranceSide';
-import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
+import {
+  LAYER_KEYBOARD_INSET_PROPERTY,
+  LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY,
+} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import type {RefObject} from 'react';
@@ -233,27 +236,6 @@ export function useSelectedItemOverlayMargin({
 }: UseSelectedItemOffsetOptions): SelectedItemOverlayMargin {
   const [marginBlockStart, setMarginBlockStart] = useState<string>();
   const [isPositioned, setIsPositioned] = useState(false);
-  const [visualViewportRevision, setVisualViewportRevision] = useState(0);
-
-  // A mobile browser can pan the visual viewport while the keyboard is up.
-  // Re-read the overlay's anchor in that viewport so the list does not stay
-  // above the visible area until the keyboard closes.
-  useIsomorphicLayoutEffect(() => {
-    const viewport = isOpen ? window.visualViewport : null;
-    if (viewport == null) {
-      return;
-    }
-    const handleViewportChange = () => {
-      setVisualViewportRevision(revision => revision + 1);
-    };
-    viewport.addEventListener('resize', handleViewportChange);
-    viewport.addEventListener('scroll', handleViewportChange);
-    return () => {
-      viewport.removeEventListener('resize', handleViewportChange);
-      viewport.removeEventListener('scroll', handleViewportChange);
-    };
-  }, [isOpen]);
-
   // Syncs the overlay's margin with the open list's layout: its selected
   // item, its anchor and the viewport.
   useIsomorphicLayoutEffect(() => {
@@ -273,25 +255,14 @@ export function useSelectedItemOverlayMargin({
       // layout px. With no keyboard the inset falls back to the room itself.
       // The keyboard term is then 0, and the measured shift stands.
       const room = layoutViewportHeight(window) - listboxHeight - anchorBottom;
-      const keyboardMargin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
-      const viewportTop = Math.max(0, window.visualViewport?.offsetTop ?? 0);
-      margin =
-        viewportTop > 0
-          ? `max(${viewportTop - anchorBottom}px, ${keyboardMargin})`
-          : keyboardMargin;
+      const keyboardMargin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px) + var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px))))`;
+      margin = `max(calc(var(${LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY}, 0px) - ${anchorBottom}px), ${keyboardMargin})`;
     }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setMarginBlockStart(margin);
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
-  }, [
-    isOpen,
-    selectedItemIndex,
-    listboxId,
-    listboxRef,
-    anchorRef,
-    visualViewportRevision,
-  ]);
+  }, [isOpen, selectedItemIndex, listboxId, listboxRef, anchorRef]);
 
   // The list moves over its trigger in the commit that applies the margin.
   // The runtime skips its read at the show (`writesEntranceSide`), so the

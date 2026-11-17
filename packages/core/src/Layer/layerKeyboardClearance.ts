@@ -2,8 +2,8 @@
 
 /**
  * @file layerKeyboardClearance.ts
- * @input A layer's box, the layout viewport's height and the keyboard's
- *   cover
+ * @input A layer's box, the layout viewport's height, the keyboard's cover,
+ *   and the visual viewport's block-start pan
  * @output Exports `LAYER_KEYBOARD_CLEARANCE_PX`, `LAYER_ANCHORED_ATTRIBUTE` and
  *   `keyboardClearanceCap`
  * @position Layer runtime: the software keyboard cap's numbers, with no DOM
@@ -43,11 +43,16 @@ export function keyboardClearanceCap(
   box: {top: number; bottom: number},
   viewportHeight: number,
   inset: number,
+  visualViewportOffsetTop = 0,
 ): number | null {
   if (inset <= 0) {
     return null;
   }
-  const limit = viewportHeight - inset - LAYER_KEYBOARD_CLEARANCE_PX;
+  const limit =
+    viewportHeight +
+    visualViewportOffsetTop -
+    inset -
+    LAYER_KEYBOARD_CLEARANCE_PX;
   if (box.bottom <= limit) {
     return null;
   }

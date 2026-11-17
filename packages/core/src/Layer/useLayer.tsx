@@ -93,15 +93,24 @@ const styles = stylex.create({
   // itself slide above the keyboard. The inset keeps its largest value until
   // the layer closes, so that layer stays put as the keyboard goes. Every
   // layer sets it, `initial` until a keyboard is up, so a nested layer does
-  // not inherit it. All three are private runtime state, never set by an app
+  // not inherit it. The visual viewport's block-start offset sits beside it
+  // for layers that own their placement. All four are private runtime state,
+  // never set by an app
   // or a theme.
   // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY,
-  // LAYER_KEYBOARD_OVERFLOW_PROPERTY and LAYER_KEYBOARD_INSET_PROPERTY
-  // (useLayerKeyboardClearance.ts).
-  keyboardCap: (cap: string, overflow: 'auto' | 'visible', inset: string) => ({
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY, LAYER_KEYBOARD_INSET_PROPERTY and
+  // LAYER_KEYBOARD_VISUAL_VIEWPORT_OFFSET_PROPERTY (useLayerKeyboardClearance.ts).
+  keyboardCap: (
+    cap: string,
+    overflow: 'auto' | 'visible',
+    inset: string,
+    visualViewportOffsetTop: string,
+  ) => ({
     '--_layer-keyboard-max-block-size': cap,
     '--_layer-keyboard-overflow': overflow,
     '--_layer-keyboard-inset-block-end': inset,
+    '--_layer-keyboard-visual-viewport-offset-block-start':
+      visualViewportOffsetTop,
   }),
   // A layer that keeps its anchor clear scrolls only once its content
   // overflows the box it was given. A layer that fits has no scroll range, so
@@ -2282,6 +2291,7 @@ function useLayerImplementation(
     cap: keyboardCap,
     lift: keyboardLift,
     inset: keyboardInset,
+    visualViewportOffsetTop: keyboardVisualViewportOffsetTop,
     followLayerElement,
   } = useLayerKeyboardClearance(isOpen && mode === 'context', popoverRef);
 
@@ -2528,6 +2538,7 @@ function useLayerImplementation(
           keyboardCap == null ? '100vh' : `${keyboardCap}px`,
           keyboardCap == null ? 'visible' : 'auto',
           keyboardInset == null ? 'initial' : `${keyboardInset}px`,
+          `${keyboardVisualViewportOffsetTop}px`,
         ),
         keepsAnchorClear && styles.scrollsOnOverflow,
         viewportStyles,
@@ -2590,6 +2601,7 @@ function useLayerImplementation(
       keepsAnchorClear,
       keyboardCap,
       keyboardInset,
+      keyboardVisualViewportOffsetTop,
       keyboardLift,
       lightDismiss,
       mountStore,
@@ -2622,7 +2634,7 @@ function useLayerImplementation(
         overlayPaddingReset.reset,
         // A fixed layer is never capped; it still sets its own limit so it is
         // not clamped by a capped layer it sits in.
-        styles.keyboardCap('100vh', 'visible', 'initial'),
+        styles.keyboardCap('100vh', 'visible', 'initial', '0px'),
         styles.fixed,
         xstyle,
       );
