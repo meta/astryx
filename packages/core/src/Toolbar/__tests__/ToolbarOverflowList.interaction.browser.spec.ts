@@ -111,8 +111,11 @@ async function rowAt(page: Page, frame: string, width: number): Promise<Row> {
     // Edge compensation lets a lane reach into the toolbar's padding by
     // design, so the frame's edge is the limit.
     const frameRect = document
-      .querySelector<HTMLElement>(`[data-testid="${testId}"]`)!
-      .getBoundingClientRect();
+      .querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+      ?.getBoundingClientRect();
+    if (frameRect == null) {
+      throw new Error(`No frame ${testId}`);
+    }
     const last = list.lastElementChild?.getBoundingClientRect();
     const measure = list.previousElementSibling as HTMLElement | null;
     const measured = measure?.children.length ?? 0;
@@ -676,6 +679,91 @@ test.describe('a single row’s minimum width', () => {
       expect(step.afterLeft).toBeGreaterThanOrEqual(step.listRight);
       expect(step.afterRight).toBeLessThanOrEqual(step.frameRight);
     }
+  });
+
+  test('a list in a block parent fills the line, as before', async ({page}) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--followed-by-sibling&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="block-parent"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    await page.waitForTimeout(300);
+    const sizes = await page.evaluate(() => {
+      const parent = document.querySelector<HTMLElement>(
+        '[data-testid="block-parent"]',
+      );
+      const list = parent?.querySelector<HTMLElement>('.astryx-overflow-list');
+      if (parent == null || list == null) {
+        throw new Error('missing story parts');
+      }
+      return {
+        parent: parent.getBoundingClientRect().width,
+        list: list.getBoundingClientRect().width,
+      };
+    });
+    expect(sizes.list).toBeCloseTo(sizes.parent, 1);
+  });
+
+  test('a list whose parent switches between a flex row and a block follows it', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-overflowlist--followed-by-sibling&viewMode=story`,
+    );
+    await page
+      .locator('[data-testid="sibling-frame"] .astryx-overflow-list button')
+      .first()
+      .waitFor();
+    // A breakpoint: the row is a block at 700 px and a flex row at 900 px.
+    const read = async (width: number, display: string) => {
+      await page.evaluate(
+        ([w, d]) => {
+          const frame = document.querySelector<HTMLElement>(
+            '[data-testid="sibling-frame"]',
+          );
+          const row = frame?.querySelector<HTMLElement>(
+            '.astryx-overflow-list',
+          )?.parentElement;
+          if (frame == null || row == null) {
+            throw new Error('missing story parts');
+          }
+          frame.style.width = `${w}px`;
+          row.style.display = d;
+        },
+        [String(width), display] as const,
+      );
+      await page.waitForTimeout(300);
+      return page.evaluate(() => {
+        const list = document.querySelector<HTMLElement>(
+          '[data-testid="sibling-frame"] .astryx-overflow-list',
+        );
+        const row = list?.parentElement;
+        if (list == null || row == null) {
+          throw new Error('missing story parts');
+        }
+        return {
+          list: list.getBoundingClientRect().width,
+          row: row.getBoundingClientRect().width,
+          labels: [...list.children].map(child =>
+            (child as HTMLElement).innerText.trim(),
+          ),
+        };
+      });
+    };
+    const flex = await read(900, 'flex');
+    const block = await read(700, 'block');
+    const flexAgain = await read(900, 'flex');
+    test.info().annotations.push({
+      type: 'display-flip',
+      description: JSON.stringify({flex, block, flexAgain}),
+    });
+    expect(flex.list).toBeLessThan(flex.row - 50);
+    expect(block.list).toBeCloseTo(block.row, 1);
+    expect(block.labels).toHaveLength(6);
+    expect(flexAgain.list).toBeCloseTo(flex.list, 1);
+    expect(flexAgain.labels).toHaveLength(6);
   });
 
   test('a list capped with calc() holds one fold across frames', async ({

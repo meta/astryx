@@ -100,13 +100,31 @@ export interface OverflowInlineBounds {
   rendered: number;
   /** The list's own inline padding and border. */
   chrome: number;
+  /**
+   * Whether the list's parent lays it out in a flex row, where its width
+   * would otherwise follow its shown (folded) content.
+   */
+  inFlexRow: boolean;
 }
 
 const NO_INLINE_BOUNDS: OverflowInlineBounds = {
   collapsed: 0,
   rendered: 0,
   chrome: 0,
+  inFlexRow: false,
 };
+
+/** Whether `parent` lays its children out in a flex row. */
+function isFlexRow(parent: Element | null): boolean {
+  if (parent == null) {
+    return false;
+  }
+  const style = getComputedStyle(parent);
+  return (
+    (style.display === 'flex' || style.display === 'inline-flex') &&
+    style.flexDirection.startsWith('row')
+  );
+}
 
 /** An element's sub-pixel border-box width; its rounded width without layout. */
 function exactWidth(element: HTMLElement): number {
@@ -121,6 +139,7 @@ function inlineBoundsOf(
   minVisibleItems: number,
   collapseFrom: 'start' | 'end',
   chrome: number,
+  inFlexRow: boolean,
 ): OverflowInlineBounds {
   const span = (set: ReadonlyArray<number>) =>
     set.reduce((sum, width) => sum + width, 0) +
@@ -140,6 +159,7 @@ function inlineBoundsOf(
     collapsed: Math.ceil(collapsed),
     rendered: span(widths),
     chrome,
+    inFlexRow,
   };
 }
 
@@ -472,6 +492,7 @@ export function useOverflowInternal(
   const observedElRef = useRef<HTMLElement | null>(null);
   const observedMeasureElRef = useRef<HTMLElement | null>(null);
   const unobserveContainerRef = useRef<(() => void) | null>(null);
+  const unobserveParentRef = useRef<(() => void) | null>(null);
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
 
   const apply = useCallback(
@@ -519,6 +540,9 @@ export function useOverflowInternal(
       } else {
         availableWidth = container.offsetWidth;
         recordBorderBox(measuredSizes, container);
+        if (tracksInlineBounds && container.parentElement != null) {
+          recordBorderBox(measuredSizes, container.parentElement);
+        }
       }
       recordBorderBox(measuredSizes, measure);
 
@@ -571,12 +595,14 @@ export function useOverflowInternal(
           minVisibleItems,
           collapseFrom,
           chrome,
+          !observeParent && isFlexRow(container.parentElement),
         );
         const applied = appliedBoundsRef.current;
         if (
           applied.collapsed !== bounds.collapsed ||
           applied.rendered !== bounds.rendered ||
-          applied.chrome !== bounds.chrome
+          applied.chrome !== bounds.chrome ||
+          applied.inFlexRow !== bounds.inFlexRow
         ) {
           appliedBoundsRef.current = bounds;
           setInlineBounds(bounds);
@@ -690,6 +716,8 @@ export function useOverflowInternal(
       unobserveContainerRef.current?.();
       unobserveContainerRef.current = null;
       observedElRef.current = null;
+      unobserveParentRef.current?.();
+      unobserveParentRef.current = null;
 
       if (el) {
         const target =
@@ -700,9 +728,19 @@ export function useOverflowInternal(
           measuredSizes,
         );
         observedElRef.current = target;
+        // A parent that resizes can change how it lays the list out (a flex
+        // row at one width, a block at another), and the list's published
+        // width depends on that, so the list measures again.
+        if (!observeParent && tracksInlineBounds && el.parentElement != null) {
+          unobserveParentRef.current = observeForOverflow(
+            el.parentElement,
+            measureLatest,
+            measuredSizes,
+          );
+        }
       }
     },
-    [measureLatest, measuredSizes, observeParent],
+    [measureLatest, measuredSizes, observeParent, tracksInlineBounds],
   );
 
   const measureRef = useCallback(

@@ -70,12 +70,14 @@ const styles = stylex.create({
   },
 });
 
-// A single-row list's own inline sizes. Its width is its unfolded items, at
-// most its parent's width: a flex row shrinks it toward its minimum, it folds
-// to the width it gets, and it grows back when room returns. Its minimum is
-// its fully folded width, so its indicator stays whole; the minimum is never
-// wider than the unfolded items. A caller's width, max-width, or flex basis
-// replaces these.
+// A single-row list's own inline sizes. Its minimum is its fully folded
+// width, so its indicator stays whole; the minimum is never wider than the
+// unfolded items. In a flex row, where its width would follow its folded
+// content, its width is its unfolded items at most the row's width: the row
+// shrinks it toward its minimum, it folds to the width it gets, and it grows
+// back when room returns. Elsewhere its width stays automatic (the full line
+// in a block parent). A caller's width, max-width, or flex basis replaces
+// these.
 const inlineSizes = stylex.create({
   floor: (minWidth: number) => ({minWidth: `${minWidth}px`}),
   preferred: (width: number) => ({width: `${width}px`, maxWidth: '100%'}),
@@ -426,7 +428,7 @@ export function OverflowList({
                   inlineBounds.chrome,
               ),
             !isMultiRow &&
-              !observeParent &&
+              inlineBounds.inFlexRow &&
               inlineBounds.rendered > 0 &&
               inlineSizes.preferred(
                 inlineBounds.rendered + inlineBounds.chrome,

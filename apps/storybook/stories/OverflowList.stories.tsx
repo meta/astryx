@@ -589,7 +589,7 @@ export const RowWidensAfterFold: Story = {
   },
 };
 
-/** A list followed by a button in a flex row: a folded list keeps the width the row gives it, up to its unfolded width, and the button sits after that width. */
+/** A list followed by a button in a flex row: a folded list keeps the width the row gives it, up to its unfolded width, and the button sits after that width. Below it, a list in a block parent fills the line, as before. */
 export const FollowedBySibling: Story = {
   render: () => {
     const items = ['Save', 'Edit', 'Duplicate', 'Share', 'Archive', 'Delete'];
@@ -618,6 +618,12 @@ export const FollowedBySibling: Story = {
             ))}
           </OverflowList>
           <Button label="After" size="sm" variant="secondary" />
+        </div>
+        <div data-testid="block-parent" style={{marginTop: 8}}>
+          <OverflowList gap={2}>
+            <Button label="Save" size="sm" />
+            <Button label="Edit" size="sm" />
+          </OverflowList>
         </div>
       </div>
     );
