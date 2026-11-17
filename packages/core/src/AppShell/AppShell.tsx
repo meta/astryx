@@ -29,7 +29,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -80,6 +79,7 @@ import {
   focusOutlineProps,
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
@@ -94,11 +94,6 @@ import type {AppShellVariantMap} from './index';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {attachScrollKeyboardDelegation} from '../hooks/scrollKeyboardDelegation';
 import {observeMainOverflow} from './observeMainOverflow';
-import {
-  unreadShellProps,
-  unreadWidthStyle,
-  unreadWideOnlyProps,
-} from '../privateAttributes/appShellUnread.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -134,12 +129,6 @@ const ActivityWrapper = HasActivity
  * this never turns into a race decided by browser timer-firing order.
  */
 const ACTIVITY_HIDE_BUFFER_MS = 50;
-
-// The server render and the hydration render read `false`; every later render
-// reads `true`. Nothing changes after that, so nothing is watched.
-const subscribeToNothing = () => () => {};
-const readOnClient = () => true;
-const readOnServer = () => false;
 
 // =============================================================================
 // Types
@@ -420,7 +409,7 @@ const styles = stylex.create({
   mainElevatedCorner: {
     borderStartStartRadius: {
       default: null,
-      ':focus-visible': `var(--_app-shell-page-corner, ${radiusVars['--radius-page']})`,
+      ':focus-visible': radiusVars['--radius-page'],
     },
   },
   // While main scrolls its overflowing content it is a keyboard stop, and
@@ -437,7 +426,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     backgroundColor: colorVars['--color-background-surface'],
-    borderStartStartRadius: `var(--_app-shell-page-corner, ${radiusVars['--radius-page']})`,
+    borderStartStartRadius: radiusVars['--radius-page'],
     pointerEvents: 'none',
   },
   contentWrapper: {
@@ -542,6 +531,66 @@ const styles = stylex.create({
     overflow: 'auto',
   },
 });
+
+// Styles for a shell that has not read the window yet. StyleX compiles media
+// queries ahead of time, so there is one rule per standard width point
+// (`DEFAULT_WIDTH_BREAKPOINTS`). Below the point, the inline side nav does
+// not paint and the elevated backdrop loses its corner, as in the phone
+// layout.
+const unreadSideNavStyles = stylex.create({
+  sm: {display: {default: null, '@media (width < 640px)': 'none'}},
+  md: {display: {default: null, '@media (width < 768px)': 'none'}},
+  lg: {display: {default: null, '@media (width < 1024px)': 'none'}},
+  xl: {display: {default: null, '@media (width < 1280px)': 'none'}},
+  '2xl': {display: {default: null, '@media (width < 1536px)': 'none'}},
+});
+const unreadCornerStyles = stylex.create({
+  sm: {
+    borderStartStartRadius: {
+      default: radiusVars['--radius-page'],
+      '@media (width < 640px)': 0,
+    },
+  },
+  md: {
+    borderStartStartRadius: {
+      default: radiusVars['--radius-page'],
+      '@media (width < 768px)': 0,
+    },
+  },
+  lg: {
+    borderStartStartRadius: {
+      default: radiusVars['--radius-page'],
+      '@media (width < 1024px)': 0,
+    },
+  },
+  xl: {
+    borderStartStartRadius: {
+      default: radiusVars['--radius-page'],
+      '@media (width < 1280px)': 0,
+    },
+  },
+  '2xl': {
+    borderStartStartRadius: {
+      default: radiusVars['--radius-page'],
+      '@media (width < 1536px)': 0,
+    },
+  },
+});
+const UNREAD_STYLES: Readonly<
+  Record<
+    WidthBreakpointName,
+    {sideNav: stylex.StyleXStyles; corner: stylex.StyleXStyles}
+  >
+> = {
+  sm: {sideNav: unreadSideNavStyles.sm, corner: unreadCornerStyles.sm},
+  md: {sideNav: unreadSideNavStyles.md, corner: unreadCornerStyles.md},
+  lg: {sideNav: unreadSideNavStyles.lg, corner: unreadCornerStyles.lg},
+  xl: {sideNav: unreadSideNavStyles.xl, corner: unreadCornerStyles.xl},
+  '2xl': {
+    sideNav: unreadSideNavStyles['2xl'],
+    corner: unreadCornerStyles['2xl'],
+  },
+};
 
 // =============================================================================
 // Component
@@ -648,11 +697,7 @@ export function AppShell({
   const isMobileOnServer =
     breakpointWidth != null && mobileNavConfig?.defaultIsMobile === true;
   const isBelowBreakpointNow = useMediaQuery(breakpointQuery, isMobileOnServer);
-  const hasReadWindow = useSyncExternalStore(
-    subscribeToNothing,
-    readOnClient,
-    readOnServer,
-  );
+  const hasReadWindow = !useIsHydrating();
   // The client's first answer can differ from the server's. That correction
   // is an urgent update, and it changes the mobile context above the page.
   // React answers an urgent update above content it has not hydrated by
@@ -876,11 +921,15 @@ export function AppShell({
   const showSideNavInline = hasSideNav && !isBelowBreakpoint;
   // Until the shell reads the window, a phone can be showing the server's wide
   // layout. CSS then hides the inline side nav and flattens the elevated
-  // corner below the breakpoint, so the first paint matches the phone layout.
-  const unreadWidth =
-    layoutWidth === 'unread' && showSideNavInline ? breakpointWidth : null;
-  const sideNavWideOnlyProps =
-    unreadWidth == null ? undefined : unreadWideOnlyProps(unreadWidth);
+  // corner below the breakpoint. A theme that moves the point has no compiled
+  // rule, so its shell keeps the server's layout until it reads the window.
+  const unreadStyles =
+    layoutWidth === 'unread' &&
+    showSideNavInline &&
+    sideNavBreakpoint !== 'none' &&
+    breakpointWidth === DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
+      ? UNREAD_STYLES[sideNavBreakpoint]
+      : undefined;
 
   // Mobile nav rendering modes:
   // 1. ReactNode shorthand — user provided <MobileNav> directly
@@ -1144,11 +1193,11 @@ export function AppShell({
       hasDivider={navHasDividers}
       isScrollable={isFill}
       {...themeProps('app-shell-sidenav', {variant})}
-      {...(isAuto ? undefined : sideNavWideOnlyProps)}
       xstyle={[
         navAreaStyle,
         isAuto && stickyBgStyle,
         isAuto && styles.panelAutoFill,
+        unreadStyles?.sideNav,
       ]}>
       <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
     </LayoutPanel>
@@ -1156,9 +1205,7 @@ export function AppShell({
 
   const sideNavContent =
     sideNavPanel != null && isAuto ? (
-      <div {...sideNavWideOnlyProps} {...stylex.props(styles.sideNavSticky)}>
-        {sideNavPanel}
-      </div>
+      <div {...stylex.props(styles.sideNavSticky)}>{sideNavPanel}</div>
     ) : (
       sideNavPanel
     );
@@ -1291,7 +1338,10 @@ export function AppShell({
           : styles.contentWrapper,
       )}>
       {shouldElevateWithCorner && (
-        <div ref={backdropRef} {...stylex.props(styles.elevatedBackdrop)} />
+        <div
+          ref={backdropRef}
+          {...stylex.props(styles.elevatedBackdrop, unreadStyles?.corner)}
+        />
       )}
       {mainInner}
     </div>
@@ -1352,7 +1402,6 @@ export function AppShell({
         {...rest}
         ref={useMergedRefs(ref, shellRef)}
         data-testid={dataTestId}
-        {...(unreadWidth == null ? undefined : unreadShellProps(unreadWidth))}
         {...mergeProps(
           themeProps('app-shell', {variant}),
           stylex.props(
@@ -1431,7 +1480,6 @@ export function AppShell({
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>
-        {unreadWidth != null && unreadWidthStyle(unreadWidth)}
       </div>
     </AppShellMobileContext>
   );

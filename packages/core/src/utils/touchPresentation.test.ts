@@ -23,7 +23,10 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {reducedMotionKeys} from '../motion/reducedMotion.stylex';
-import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {
+  DEFAULT_COMPACT_DEFINITION,
+  DEFAULT_WIDTH_BREAKPOINTS,
+} from '../theme/themeAdaptations';
 import {Theme, defineTheme} from '../theme';
 import {
   COMPACT_QUERY,
@@ -274,7 +277,17 @@ describe('touch presentation', () => {
       reducedMotionKeys.fade,
       reducedMotionKeys.instant,
     ]);
-    const references = new Set<string>([...pointerKeys, touchKeys.compact]);
+    // The standard width points (AppShell's breakpoints) are width-only
+    // queries, not the compact size, so each is a reference spelling of its
+    // own.
+    const widthPointKeys = Object.values(DEFAULT_WIDTH_BREAKPOINTS).map(
+      width => `@media (width < ${width}px)`,
+    );
+    const references = new Set<string>([
+      ...pointerKeys,
+      touchKeys.compact,
+      ...widthPointKeys,
+    ]);
     const lowered = [...references].map(reference => reference.toLowerCase());
     const root = path.resolve(__dirname, '..');
     const drifted: string[] = [];
