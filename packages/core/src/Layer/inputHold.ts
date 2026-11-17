@@ -1057,8 +1057,9 @@ function createPressHold(doc: Document): PressHold | null {
     if (type === 'pointerdown') {
       const isHeldType = HELD_POINTERS.has(pointerType);
       // Another finger of an outside press, such as a pinch's second one,
-      // joins it.
-      const joinsOutside = isHeldType && outside != null;
+      // joins it while one of the press's fingers is still down.
+      const joinsOutside =
+        isHeldType && outside != null && outside.pointers.size > 0;
       const isPresented =
         isHeldType && !joinsOutside && holdsPressAt(event.target);
       const scope =
@@ -1141,6 +1142,9 @@ function createPressHold(doc: Document): PressHold | null {
           outside?.touches.delete(identifier);
         }
       }
+      // An outside press whose target left the page with its layer ends here:
+      // its touchend reached no listener on the window.
+      endOutsideIfDone();
       if (outside != null) {
         for (const touch of changed) {
           touches.add(touch.identifier);

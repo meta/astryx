@@ -175,6 +175,22 @@ function ControlledMenu({
   );
 }
 
+/** A menu whose app shows a scrim only while the menu is open. */
+function MenuWithScrim() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      {isOpen ? <div data-testid="scrim" /> : null}
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        isMenuOpen={isOpen}
+        onOpenChange={setIsOpen}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+      </DropdownMenu>
+    </>
+  );
+}
+
 describe('DropdownMenu: a touch outside the open menu (spec:AST-094 FR32)', () => {
   beforeEach(() => {
     __resetMenuPressForTest();
@@ -472,5 +488,43 @@ describe('DropdownMenu: a touch outside the open menu (spec:AST-094 FR32)', () =
     await waitFor(() => {
       expect(outer).toHaveAttribute('aria-expanded', 'false');
     });
+  });
+
+  it("a finger's tap on an app's scrim that leaves with the menu ends at its lift: the next tap on the page acts", async () => {
+    const heard: string[] = [];
+    render(
+      <>
+        <PressControl label="Beneath" heard={type => heard.push(type)} />
+        <MenuWithScrim />
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+    const scrim = screen.getByTestId('scrim');
+    tapAt(scrim, 'touch');
+    await waitFor(() => {
+      expect(scrim.isConnected).toBe(false);
+    });
+    // The browser still sends the touchend to the scrim, which has left the
+    // page, so no listener on the window hears it.
+    fireTouch(scrim, 'touchend', 9);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(2000);
+    const beneath = screen.getByRole('button', {name: 'Beneath'});
+    tapAt(beneath, 'touch', {id: 11});
+    const touchEnd = fireTouch(beneath, 'touchend', 11);
+    expect(touchEnd.defaultPrevented).toBe(false);
+    browserClickAfter(touchEnd, beneath);
+    expect(heard).toEqual([
+      'pointerdown',
+      'touchstart',
+      'pointerup',
+      'touchend',
+      'click',
+    ]);
   });
 });
