@@ -578,8 +578,17 @@ function npmRegistries(run) {
  * @param {{scoped: string | null, registry: string | null} | null} b
  */
 function registriesChanged(a, b) {
-  if (!a || !b || (!a.scoped && !a.registry) || (!b.scoped && !b.registry)) return false;
+  if (!readsRegistry(a) || !readsRegistry(b)) return false;
   return a.scoped !== b.scoped || a.registry !== b.registry;
+}
+
+/**
+ * Whether a reading of npm's registries names one.
+ * @param {{scoped: string | null, registry: string | null} | null} r
+ * @returns {r is {scoped: string | null, registry: string | null}}
+ */
+function readsRegistry(r) {
+  return Boolean(r && (r.scoped || r.registry));
 }
 
 /**
@@ -1103,7 +1112,7 @@ export function ensureRelease(version, options = {}) {
     const minutes = Math.max(1, Math.round((Date.now() - failed.at) / 60_000));
     return {
       version,
-      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes or at once when npm's registry changes`,
+      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes${readsRegistry(failed.registries) ? " or at once when npm's registry changes" : ''}`,
     };
   }
   try {
@@ -1124,7 +1133,14 @@ export function ensureRelease(version, options = {}) {
       !('signal' in result && result.signal) &&
       result.reason !== 'another run is still installing it'
     ) {
-      recordFailedInstall(version, cacheDir, result.reason, ('registries' in result ? result.registries : null) ?? registries);
+      // Every recorded failure carries a reading of npm's registries, so a
+      // change to them retries it whatever the failure was.
+      recordFailedInstall(
+        version,
+        cacheDir,
+        result.reason,
+        ('registries' in result ? result.registries : null) ?? registries ?? npmRegistries(run),
+      );
     }
     return result;
   } catch (error) {

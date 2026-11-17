@@ -258,6 +258,54 @@ describe('ensureRelease', () => {
     }
   });
 
+  it('a failure without a registry error (the install time limit) still records the settings, and a registry change retries it', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'https://slow.example/';
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: `@astryxdesign:registry=undefined\nregistry=${registry}\n`, stderr: ''};
+      installs.push(args);
+      if (registry === 'https://slow.example/') {
+        return /** @type {any} */ ({status: null, signal: null, stdout: '', stderr: '', error: Object.assign(new Error('timed out'), {code: 'ETIMEDOUT'})});
+      }
+      return fakeNpm().run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toMatch(/did not finish within/);
+    const record = JSON.parse(fs.readFileSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'), 'utf8'));
+    expect(record.registries).toEqual({scoped: null, registry: 'https://slow.example/'});
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in again && again.reason).toMatch(/or at once when npm's registry changes$/);
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+  });
+
+  it('a record without registry settings (an older CLI wrote it) waits out its time and says nothing about registry changes', () => {
+    const cacheDir = tempDir('cache');
+    fs.mkdirSync(releasesDir(cacheDir), {recursive: true});
+    fs.writeFileSync(
+      path.join(releasesDir(cacheDir), '.failed-0.6.8.json'),
+      `${JSON.stringify({at: Date.now(), reason: 'the registry could not be reached', failures: 1})}\n`,
+    );
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: '@astryxdesign:registry=undefined\nregistry=https://registry.npmjs.org/\n', stderr: ''};
+      installs.push(args);
+      return fakeNpm().run(args, opts);
+    };
+    const result = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(0);
+    expect('reason' in result && result.reason).toBe(
+      'the registry could not be reached; last tried 1 minute ago, tried again after 2 minutes',
+    );
+  });
+
   it("refuses a release this computer's Node cannot run", () => {
     const cacheDir = tempDir('cache');
     const result = ensureRelease('0.9.0', {
