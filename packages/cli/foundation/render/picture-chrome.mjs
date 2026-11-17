@@ -1,13 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file One whole-page picture of a page through a Chrome or Chromium,
- * driven over the DevTools protocol on a pipe, run as its own process by the
- * editor's browser runner.
- * @input argv: the browser, the page (.html), the picture (.png), the color
- *   mode
- * @output the whole page, every pixel of its height, at the path given; on
- *   failure, the browser's reason on stderr and exit code 1
+ * @file Whole-page pictures of a batch of pages through one Chrome or
+ * Chromium, driven over the DevTools protocol on a pipe, run as its own
+ * process by the editor's browser runner.
+ * @input argv: the browser, and the batch (JSON: each job's page .html,
+ *   picture .png and color mode)
+ * @output each whole page, every pixel of its height, at its path, and on
+ *   stdout, each line led by its job's place and a tab: the fonts it drew
+ *   its text in (font-probe.mjs), the text it draws cut short
+ *   (cut-short.mjs), and PICTURE_TAKEN once it is whole; on failure, the
+ *   browser's reason on stderr and exit code 1
  * @position run by `screenshot` in api/theme-edit/_preview.mjs through
  *   `runBrowser`, which gives it a temp folder of its own (the browser's
  *   profile goes there), its time bound and its stop
@@ -18,8 +21,22 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {CUT_SHORT_PREFIX, cutShortText} from './cut-short.mjs';
+import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
+import {
+  PICTURE_PAGES_AT_ONCE,
+  PICTURE_TAKEN,
+  PICTURE_WINDOW,
+  SETTLE_ANIMATIONS,
+  eachAtOnce,
+} from './picture-window.mjs';
+import {FONT_PROBE_PREFIX, probeFonts} from './font-probe.mjs';
 
-const [chrome, html, png, mode] = process.argv.slice(2);
+const [chrome, batch] = process.argv.slice(2);
+/** @type {Array<{html: string, png: string, mode: string}>} */
+const jobs = JSON.parse(batch);
+/** A line for one job of the batch. @param {number} i @param {string} line */
+const say = (i, line) => process.stdout.write(`${i}\t${line}\n`);
 
 const browser = spawn(
   chrome,
@@ -29,6 +46,8 @@ const browser = spawn(
     '--no-sandbox',
     '--hide-scrollbars',
     '--remote-debugging-pipe',
+    // The browser's own network off: a picture asks the network for nothing.
+    ...QUIET_BROWSER_ARGS,
     `--user-data-dir=${path.join(os.tmpdir(), 'profile')}`,
     'about:blank',
   ],
@@ -132,16 +151,26 @@ function event(method, sessionId) {
   ]);
 }
 
-try {
+/**
+ * One page of the batch in a tab of its own: drawn, pictured whole, and
+ * measured.
+ * @param {{html: string, png: string, mode: string}} job
+ * @param {number} i
+ */
+async function picture({html, png, mode}, i) {
   const {targetId} = await send('Target.createTarget', {url: 'about:blank'});
   const {sessionId} = await send('Target.attachToTarget', {
     targetId,
     flatten: true,
   });
   await send('Page.enable', {}, sessionId);
+  // The page loads its own files only: a remote stylesheet, font or image
+  // fails at once instead of holding the load on a network.
+  await send('Network.enable', {}, sessionId);
+  await send('Network.setBlockedURLs', {urls: NETWORK_URL_PATTERNS}, sessionId);
   await send(
     'Emulation.setDeviceMetricsOverride',
-    {width: 1280, height: 900, deviceScaleFactor: 1, mobile: false},
+    {...PICTURE_WINDOW, deviceScaleFactor: 1, mobile: false},
     sessionId,
   );
   await send(
@@ -159,6 +188,10 @@ try {
   const loaded = event('Page.loadEventFired', sessionId);
   await send('Page.navigate', {url: pathToFileURL(html).href}, sessionId);
   await loaded;
+  // An overlay drawn open plays its opening animation (a fade-in) as the
+  // page loads: it is run to its end, and a looping one held at a frame a
+  // person sees (SETTLE_ANIMATIONS), before the picture.
+  await send('Runtime.evaluate', {expression: SETTLE_ANIMATIONS}, sessionId);
   const metrics = await send('Page.getLayoutMetrics', {}, sessionId);
   const size = metrics.cssContentSize ?? metrics.contentSize;
   const {data} = await send(
@@ -169,7 +202,7 @@ try {
       clip: {
         x: 0,
         y: 0,
-        width: 1280,
+        width: PICTURE_WINDOW.width,
         height: Math.max(1, Math.ceil(size.height)),
         scale: 1,
       },
@@ -177,6 +210,28 @@ try {
     sessionId,
   );
   fs.writeFileSync(png, Buffer.from(data, 'base64'));
+  // The fonts the picture drew its text in, for the editor's note.
+  const fonts = await probeFonts((method, params) =>
+    send(method, params, sessionId),
+  ).catch(() => null);
+  if (fonts) say(i, `${FONT_PROBE_PREFIX}${JSON.stringify(fonts)}`);
+  // The text the picture draws cut short, measured on the page as the
+  // picture shows it. A measurement that does not run says nothing, and
+  // the picture stands.
+  const measured = await send(
+    'Runtime.evaluate',
+    {expression: `(${cutShortText})()`, returnByValue: true},
+    sessionId,
+  ).catch(() => null);
+  if (Array.isArray(measured?.result?.value) && !measured.exceptionDetails)
+    say(i, `${CUT_SHORT_PREFIX}${JSON.stringify(measured.result.value)}`);
+  await send('Target.closeTarget', {targetId}).catch(() => {});
+  say(i, PICTURE_TAKEN);
+}
+
+try {
+  // One browser for every page of the batch, a few tabs at a time.
+  await eachAtOnce(jobs, PICTURE_PAGES_AT_ONCE, picture);
   await send('Browser.close').catch(() => {});
 } catch (e) {
   process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);

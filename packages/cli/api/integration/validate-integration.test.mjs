@@ -108,7 +108,7 @@ describe('validate-integration API', () => {
     ]);
   });
 
-  it('reports an unknown manifest key as a warning, and still loads the rest', async () => {
+  it('reports an unknown manifest key as a note, not an issue, and still loads the rest', async () => {
     // The manifest used to be parsed with a strict schema, so a single unknown
     // key failed the parse — and an integration whose manifest fails to parse
     // contributes NOTHING, taking its components, templates and codemods down
@@ -121,12 +121,33 @@ describe('validate-integration API', () => {
     const result = await validateLocalIntegration(pkgDir);
     expect(byCode(result.issues, 'invalid_manifest')).toHaveLength(0);
 
-    const unknown = byCode(result.issues, 'unknown_manifest_key');
+    expect(byCode(result.issues, 'unknown_manifest_key')).toHaveLength(0);
+    const unknown = byCode(result.notes ?? [], 'unknown_manifest_key');
     expect(unknown).toHaveLength(1);
-    expect(unknown[0].severity).toBe('warning');
+    expect(unknown[0].next).toBeUndefined();
     expect(unknown[0].message).toContain('"bogus"');
     // The declared root is still seen — it is missing on disk, which is the
     // proof the rest of the manifest was read rather than discarded.
+    expect(byCode(result.issues, 'missing_root')).toHaveLength(1);
+  });
+
+  it('drops a themeProvider part it cannot use with a warning, and still loads the rest', async () => {
+    // themeProvider is a hint: a bad prop name or a mode prop alone never
+    // stops the package's other contributions loading.
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { components: './c', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'the theme', modeProp: 'themeMode'} };\n`,
+    });
+    const result = await validateLocalIntegration(pkgDir);
+    expect(byCode(result.issues, 'invalid_manifest')).toHaveLength(0);
+    const ignored = byCode(result.issues, 'ignored_manifest_field');
+    expect(ignored.map(i => i.severity)).toEqual(['warning', 'warning']);
+    expect(ignored[0].message).toContain(
+      '"themeProvider.themeProp" because it names no prop',
+    );
+    expect(ignored[1].message).toContain(
+      '"themeProvider.modeProp" because it needs themeProp beside it',
+    );
     expect(byCode(result.issues, 'missing_root')).toHaveLength(1);
   });
 
@@ -466,6 +487,42 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     );
   });
 
+  it('scans every file of a package with many generated files', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {manifest: 'export default {};\n'});
+    const generated = path.join(pkgDir, 'src', 'generated');
+    fs.mkdirSync(generated, {recursive: true});
+    for (let index = 0; index < 6_000; index++) {
+      fs.writeFileSync(
+        path.join(generated, `Icon${index}.js`),
+        'export default 1;\n',
+      );
+    }
+    // Sorted after every generated file, so a scan that stops early misses it.
+    fs.mkdirSync(path.join(pkgDir, 'src', 'zz'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'src', 'zz', 'orphan.doc.mjs'),
+      `export default ${JSON.stringify({
+        type: 'generic',
+        name: 'orphan',
+        title: 'Orphan',
+        description: 'Outside every root.',
+        sections: [
+          {title: 'Overview', content: [{type: 'prose', text: 'Orphan.'}]},
+        ],
+      })};\n`,
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    const unreachable = byCode(result.issues, 'unreachable_contribution');
+    expect(unreachable).toHaveLength(1);
+    expect(unreachable[0].message).toContain('src/zz/orphan.doc.mjs');
+    expect(result.issues.filter(issue => issue.severity === 'warning')).toEqual(
+      unreachable,
+    );
+  });
+
   it('never executes unreachable metadata while diagnosing it', async () => {
     const pkgDir = path.join(tmpDir, 'pkg');
     const marker = path.join(tmpDir, 'executed');
@@ -525,6 +582,22 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     );
     const result = await validateInstalledIntegration('@acme/nope', consumer);
     expect(byCode(result.issues, 'package_not_found')).toHaveLength(1);
+  });
+
+  it('in the folder of the package itself, points to integration check', async () => {
+    const own = path.join(tmpDir, 'own');
+    writePackage(own, {
+      name: '@acme/widgets',
+      manifest: 'export default {};\n',
+    });
+
+    const result = await validateInstalledIntegration('@acme/widgets', own);
+
+    const [issue] = byCode(result.issues, 'package_not_found');
+    expect(issue.message).toContain(
+      '"@acme/widgets" is the package in this folder, not one it installs',
+    );
+    expect(issue.message).toMatch(/run `[^`]*integration check`/);
   });
 
   it('reports malformed installed package.json distinctly from not found', async () => {

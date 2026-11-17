@@ -8,8 +8,9 @@
  * images become data: URIs; and the page's source rides along so
  * `--reverse` can give it back exactly.
  *
- * The file needs no network and runs no script, so it works inside a
- * sandboxed frame with a strict content security policy. Its colors follow
+ * The file needs no network, and it carries the page's script, which draws
+ * the live page over the markup, so it works inside a sandboxed frame that
+ * allows scripts under a strict content security policy. Its colors follow
  * `color-scheme` (and a `data-theme` of `light` or `dark` on the root), since
  * Astryx tokens use light-dark().
  *
@@ -32,6 +33,8 @@ import {
 } from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
+import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
+import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
 import {removeOnStop} from '../fs/stop-cleanup.mjs';
@@ -50,7 +53,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -65,6 +68,8 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
+ * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
+ * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
  */
 
 /** An error carrying a render error code. */
@@ -670,7 +675,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean, buildScript?: boolean, esbuild?: string}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -691,6 +696,51 @@ async function runPage(input, timeoutMs, warnings) {
 }
 
 /**
+ * The markup with each link out of the file opening in a new tab, as the
+ * file's script opens it once it runs (client-bundle.mjs): a viewer's frame
+ * cannot follow a link out. A link that names its own target keeps it.
+ * @param {string} markup the page's server markup
+ * @returns {string}
+ */
+export function linksOpenNewTabs(markup) {
+  return markup.replace(/<a\b([^>]*)>/g, (tag, /** @type {string} */ attrs) => {
+    const href = /\shref="([^"]*)"/.exec(attrs)?.[1];
+    if (href === undefined || /\starget="/.test(attrs) || !LINK_OUT.test(href.trim())) return tag;
+    const rel = /\srel="([^"]*)"/.exec(attrs);
+    const rels = new Set([...(rel ? rel[1].split(/\s+/).filter(Boolean) : []), 'noopener', 'noreferrer']);
+    return `<a${rel ? attrs.replace(rel[0], '') : attrs} target="_blank" rel="${[...rels].join(' ')}">`;
+  });
+}
+
+/**
+ * The page's script with each string the markup's rewrite replaced (an
+ * image's `src`, `poster` or `srcset`, as the page wrote it) written as the
+ * same carried data, so the page the script draws shows what the first paint
+ * showed. Only a quoted string that is exactly that value changes, never a
+ * longer string that holds it.
+ * @param {string} script
+ * @param {Map<string, string>} rewrites
+ * @returns {string}
+ */
+export function withCarriedPaths(script, rewrites) {
+  let out = script;
+  for (const [was, now] of rewrites) {
+    if (/["'`\\\n<]/.test(now) || /["'`\\\n]/.test(was)) continue;
+    for (const quote of ['"', "'", '`']) {
+      const literal = `${quote}${was}${quote}`;
+      // Text the page shows (`children: "./photo.png"`) stays as written.
+      out = out
+        .split(literal)
+        .map((part, i, parts) =>
+          i === parts.length - 1 ? part : /\bchildren:\s*$/.test(part) ? `${part}${literal}` : `${part}${quote}${now}${quote}`,
+        )
+        .join('');
+    }
+  }
+  return out;
+}
+
+/**
  * The warning for a page rendered without Intl.Segmenter.
  * @returns {RenderWarning}
  */
@@ -702,20 +752,90 @@ export function segmenterWarning() {
 }
 
 /**
+ * A CSS `url()` as CSS reads it: a quoted reference may hold parentheses
+ * and the other quote (`url("./a(1).png")`); an unquoted one holds neither.
+ * Read its reference with {@link cssUrlRef}.
+ */
+export const CSS_URL =
+  /url\(\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)'|(?<bare>[^'"()\s]+))\s*\)/;
+
+/**
+ * The reference a {@link CSS_URL} match names.
+ * @param {RegExpMatchArray} m
+ * @returns {string}
+ */
+export function cssUrlRef(m) {
+  return m.groups?.dq ?? m.groups?.sq ?? m.groups?.bare ?? '';
+}
+
+/**
+ * What a local file reference of a page or stylesheet names: nothing to
+ * inline (inline data, a fragment, a non-asset path), a remote file, a file
+ * that is not there, one that is not a regular file (a pipe, a device or a
+ * folder: never read), or the file to inline. One reader for the renderer
+ * and for callers that say what a page will not show.
+ * @param {string} ref as written in src, poster or url()
+ * @param {{dir: string, root: string}} at the folder it is relative to,
+ *   and the project root (for `/` paths, `public/` first)
+ * A reference is URL text: it names the file its percent-escapes decode to
+ * (`a%20b.png` is "a b.png"), as a browser and the app's bundler read it.
+ * A file that cannot be read (no permission) is `unreadable`.
+ * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
+ */
+export function assetRef(ref, at) {
+  const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
+  if (!clean) return null;
+  if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
+    return null;
+  if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean};
+  /** @type {string} */
+  let named;
+  try {
+    named = decodeURIComponent(clean);
+  } catch {
+    // A % that starts no escape is the character itself.
+    named = clean;
+  }
+  if (!isAssetPath(named)) return null;
+  const candidates = named.startsWith('/')
+    ? [path.join(at.root, 'public', named), path.join(at.root, named)]
+    : [path.resolve(at.dir, named)];
+  const found = candidates.find(c => fs.existsSync(c));
+  if (!found) return {kind: 'missing', ref: clean};
+  /** @type {fs.Stats | undefined} */
+  let st;
+  try {
+    st = fs.statSync(found);
+  } catch {
+    return {kind: 'missing', ref: clean};
+  }
+  if (!st.isFile()) return {kind: 'not-file', ref: clean, file: found};
+  try {
+    fs.accessSync(found, fs.constants.R_OK);
+  } catch {
+    return {kind: 'unreadable', ref: clean, file: found};
+  }
+  return {kind: 'file', ref: clean, file: found};
+}
+
+/**
  * Inline local images (src, srcset, poster and CSS url()) as data: URIs. A
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>}} ctx
+ * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>}} ctx
+ *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
+ *   as it is and named, as a missing one is, rather than refused;
+ *   `rewrites`: each attribute value the markup's rewrite replaced, as the
+ *   page wrote it, with what it became
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
   const resolveRef = ref => {
-    const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
-    if (!clean) return null;
-    if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
-      return null;
-    if (/^(https?:)?\/\//i.test(clean)) {
+    const named = assetRef(ref, ctx);
+    if (!named) return null;
+    const clean = named.ref;
+    if (named.kind === 'remote') {
       const key = `remote:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
@@ -726,18 +846,37 @@ function inlineAssets(text, kind, ctx) {
       }
       return null;
     }
-    if (!isAssetPath(clean)) return null;
-    const candidates = clean.startsWith('/')
-      ? [path.join(ctx.root, 'public', clean), path.join(ctx.root, clean)]
-      : [path.resolve(ctx.dir, clean)];
-    const found = candidates.find(c => fs.existsSync(c));
-    if (!found) {
+    if (named.kind !== 'file') {
       const key = `missing:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
         ctx.warnings.push({
           code: 'missing-asset',
-          message: `${clean} was not found next to the page, so it is left as is and will not show.`,
+          message:
+            named.kind === 'missing'
+              ? `${clean} was not found next to the page, so it is left as is and will not show.`
+              : named.kind === 'unreadable'
+                ? `${clean} cannot be read (no permission), so it is left as is and will not show.`
+                : `${clean} is not a regular file (a pipe, a device or a folder), so it is not read and will not show.`,
+        });
+      }
+      return null;
+    }
+    const found = named.file;
+    // A stylesheet's file too large to carry, where the caller names such
+    // files itself (the theme editor's own pages): left as it is, as a
+    // missing one is.
+    if (
+      kind === 'css' &&
+      ctx.leaveLargeStyleAssets &&
+      (fs.statSync(found, {throwIfNoEntry: false})?.size ?? 0) > MAX_ASSET_BYTES
+    ) {
+      const key = `large:${clean}`;
+      if (!ctx.counted.has(key)) {
+        ctx.counted.add(key);
+        ctx.warnings.push({
+          code: 'missing-asset',
+          message: `${clean} is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file, so it is left as is and will not show.`,
         });
       }
       return null;
@@ -749,17 +888,22 @@ function inlineAssets(text, kind, ctx) {
   };
   /** @param {string} value */
   const urls = value =>
-    value.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (whole, q, ref) => {
-      const uri = resolveRef(ref);
+    value.replace(new RegExp(CSS_URL.source, 'g'), (whole, ...rest) => {
+      const uri = resolveRef(
+        cssUrlRef(/** @type {any} */ ({groups: rest.at(-1)})),
+      );
       return uri ? `url("${uri}")` : whole;
     });
   if (kind === 'css') return urls(text);
   return text
-    .replace(/\s(src|poster)="([^"]*)"/g, (whole, attr, ref) => {
+    // React writes `srcSet` as it is spelled in JSX; HTML reads attribute
+    // names in any case.
+    .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
       const uri = resolveRef(ref);
+      if (uri) ctx.rewrites?.set(decodeAttr(ref), uri);
       return uri ? ` ${attr}="${uri}"` : whole;
     })
-    .replace(/\ssrcset="([^"]*)"/g, (whole, set) => {
+    .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
       const parts = decodeAttr(set)
         .split(',')
         .map(part => {
@@ -767,7 +911,9 @@ function inlineAssets(text, kind, ctx) {
           const uri = ref ? resolveRef(ref) : null;
           return [uri ?? ref, ...rest].join(' ');
         });
-      return ` srcset="${parts.join(', ').replace(/"/g, '&quot;')}"`;
+      const rewritten = parts.join(', ');
+      if (rewritten !== decodeAttr(set)) ctx.rewrites?.set(decodeAttr(set), rewritten);
+      return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
     })
     .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
       // The attribute holds escaped text: rewrite the CSS it means, then
@@ -809,15 +955,26 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
- *   project.
- *   With `output`, the file describes itself: notes at its top and end name
+ *   project; `openLayers`: the overlays the page shows or opens are drawn
+ *   and added after its markup (layers.mjs), for reading what they paint;
+ *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is
+ *   left out and named in the warnings, not refused (for a caller that
+ *   names such files itself). With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
- *   the page rendered with, and the markup as rendered.
+ *   the page rendered with, and the markup as rendered. The file also
+ *   carries the page's script (client-bundle.mjs): it draws the page over
+ *   its markup in the browser, so the page's controls work. The markup sits
+ *   in one element the script draws into, and the stylesheet keeps the rules
+ *   any of the page's modules can use, not only the markup's. esbuild, a
+ *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
+ *   resolves from); a page whose script cannot be built fails the render.
+ *   `markupOnly` renders the markup and its styles without the script, for a
+ *   caller that shows the markup itself (the theme editor); it writes no file.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -829,8 +986,19 @@ export async function renderPage(entry, options = {}) {
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
+  /** @type {string | undefined} */
+  let esbuild;
+  if (!options.markupOnly) {
+    esbuild = findEsbuild(options.esbuildFrom) ?? undefined;
+    if (!esbuild) {
+      throw new RenderError(
+        'ERR_RENDER_MISSING_DEPENDENCY',
+        `The render builds the page's script, but ${ESBUILD_MISSING}; nothing was written.`,
+      );
+    }
+  }
   const message = await runPage(
-    {entry, root, scope, served},
+    {entry, root, scope, served, openLayers: options.openLayers === true, buildScript: esbuild !== undefined, esbuild},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );
@@ -842,7 +1010,7 @@ export async function renderPage(entry, options = {}) {
     );
   }
   /** @type {string} */
-  let markup = message.markup;
+  let markup = linksOpenNewTabs(message.markup);
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
@@ -906,6 +1074,8 @@ export async function renderPage(entry, options = {}) {
     warnings,
     counted: new Set(),
     localAssets: /** @type {Set<string>} */ (new Set()),
+    leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
+    rewrites: /** @type {Map<string, string>} */ (new Map()),
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
@@ -939,6 +1109,17 @@ export async function renderPage(entry, options = {}) {
     throw e;
   }
   const used = classesIn(markup);
+  /** The page's script; none in a markup-only render. @type {string | null} */
+  const script = typeof message.script === 'string' ? message.script : null;
+  // The script draws the page again with the paths the page wrote, so each
+  // image the first paint shows from its carried data keeps showing.
+  const drawn = script === null ? null : withCarriedPaths(script, ctx.rewrites);
+  // The script draws what the markup does not show yet (a menu as it opens,
+  // the next tab), so the rules every class name it holds needs stay too.
+  const kept = script ? new Set([...used, ...(script.match(/[A-Za-z_][\w-]*/g) ?? [])]) : used;
+  // A page that draws elements in a state (hovered, focused, pressed) marks
+  // them; its stylesheet then applies those states' rules to them too.
+  const states = markup.includes(' data-astryx-state="');
   const layerOrder = sheetText.map(layerOrderOf).find(Boolean) ?? '';
   let css = layerOrder;
   try {
@@ -957,7 +1138,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, used), 'css', {
+        return inlineAssets(cutCss(own, kept, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1018,8 +1199,28 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
+  // A media query the page asks in JavaScript gets its server answer in the
+  // markup. The file paints that answer first and asks again when its script
+  // runs; a viewer that blocks scripts keeps the server answer, and so does
+  // a markup-only render.
+  const screenQueries = [
+    ...new Set(
+      /** @type {{call: string}[]} */ (message.screenQueries ?? []).map(
+        q => q.call,
+      ),
+    ),
+  ];
+  if (screenQueries.length > 0) {
+    warnings.push({
+      code: 'screen-query',
+      message: script
+        ? `The page asks ${screenQueries.join(', ')} in JavaScript: this file paints the server answer first and asks again when its script runs, and a viewer that blocks scripts keeps the server answer. To fit every screen from the first paint, fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`
+        : `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
+    });
+  }
   // A chart the render did not draw is an empty box: a ResponsiveContainer
-  // holds only its sizing box, and a chart of fixed size an empty wrapper.
+  // holds only its sizing box, and a chart of fixed size an empty wrapper. The
+  // file's script draws it when it runs.
   const blankCharts =
     (
       markup.match(
@@ -1032,7 +1233,9 @@ export async function renderPage(entry, options = {}) {
   if (blankCharts > 0) {
     warnings.push({
       code: 'chart-size',
-      message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+      message: script
+        ? `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so the file paints ${blankCharts === 1 ? 'it' : 'them'} empty and its script draws ${blankCharts === 1 ? 'it' : 'them'} when it runs; a viewer that blocks scripts keeps ${blankCharts === 1 ? 'it' : 'them'} empty. The render draws a chart into the markup only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`
+        : `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
     });
   }
   if (message.chartsAlone) {
@@ -1047,7 +1250,9 @@ export async function renderPage(entry, options = {}) {
     const why = causes[message.chartsAlone] ?? causes.error;
     warnings.push({
       code: 'chart-size',
-      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
+      message: script
+        ? `${why}, so each chart was drawn by itself for the first paint, as the first render gave it: until the file's script draws the page again, a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`
+        : `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
     });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
@@ -1205,7 +1410,11 @@ export async function renderPage(entry, options = {}) {
       ? decodeAttr(heading)
       : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
-  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  const style = `<style>${SCHEME_CSS}${script ? `#${ROOT_ID}{display:contents}` : ''}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  // With a script, the markup sits in the one element the script draws into,
+  // which takes no box of its own.
+  const body = script ? `<div id="${ROOT_ID}">${markup}</div>` : markup;
+  const scriptTag = drawn ? `<script>${drawn}</script>\n` : '';
   let html;
   if (options.output) {
     // The charset and generator metas come first: a browser reads the
@@ -1269,10 +1478,10 @@ export async function renderPage(entry, options = {}) {
       packages,
       ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
       markup: {
-        sha256: sha256(asParsed(markup)),
+        sha256: sha256(asParsed(body)),
         style: sha256(asParsed(style)),
         text: Buffer.from(
-          JSON.stringify({title, runs: textRuns(markup)}),
+          JSON.stringify({title, runs: textRuns(body)}),
         ).toString('base64'),
       },
     };
@@ -1280,15 +1489,15 @@ export async function renderPage(entry, options = {}) {
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n${scriptTag}</body></html>\n`;
   } else {
     html =
       `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
-      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
-      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${body}` +
+      `${sourceBlock(path.basename(entry), embedded)}${scriptTag}</body></html>\n`;
   }
   return {
     html,
@@ -1305,5 +1514,6 @@ export async function renderPage(entry, options = {}) {
     ]).size,
     warnings,
     fromSet: message.fromSet ?? [],
+    ...(drawn ? {scriptBytes: Buffer.byteLength(drawn), scriptModules: message.scriptModules ?? 0} : {}),
   };
 }

@@ -301,7 +301,7 @@ those contracts.
   still the `VelocityTracker` class), and no internal factory shares a public factory's name
   (`spec:AST-107` FR6). Core and Lab components use `spec:AST-107`'s public
   layer wherever it covers their job and reach these modules directly only for
-  these known public-API gaps: press feedback timing; the Reduce Motion
+  these known public-API gaps: press feedback timing, which components reach through `architecture:press-feedback`'s engine and profiles, not directly (its INV1 gap names the touch press tracker's remaining direct users); the Reduce Motion
   cross-fade constants; press tracking across a group of actions; the
   selection lock during a gesture; the presentation hold; the input hold;
   lift-from-trigger and the rectangle morph; custom recognizer relationships;
@@ -587,6 +587,13 @@ contracts.
   `@astryxdesign/core/internal/shared-context`, so a Lab component's context
   reaches a swizzled copy's provider under one shared key (`spec:AST-110`
   FR3).
+- `packages/core/src/hooks/useClipboard.ts` `useClipboardCopy` — the body of
+  the public `useClipboard` plus the failed-write state a copy control shows:
+  `isFailed` for the copied state's reset time, an optional assertive failure
+  announcement, and `onError`. A write that settles after its caller unmounts
+  sets no state, starts no timer and announces nothing (INV5). Internal: never
+  in `hooks/index.ts` or the package entry; Lab imports it from
+  `@astryxdesign/core/internal/clipboard-copy`.
 
 ## Deciding specs
 
