@@ -379,6 +379,7 @@ export interface PowerSearchProps extends Omit<
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
+   * - 'tooltip': no message box; the status shows in a tooltip on the status icon
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
