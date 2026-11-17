@@ -59,6 +59,9 @@ import {
   positionalCornerToken,
   radiusAt,
   partState,
+  baseBlocksFor,
+  partsOf,
+  MOMENT_STATES,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -73,10 +76,11 @@ import {
   stateSynonym,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
-import {NUMBER_WORDS, commaNumbers, modeNear} from './_normal.mjs';
+import {NUMBER_WORDS, commaNumbers, modeNear, pluralOf} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
+import {render as renderStep} from './_how-commands.mjs';
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 /** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
@@ -625,7 +629,7 @@ function colorsFound(c) {
       c.slice((m.index ?? 0) + m[0].length);
   }
   const re =
-    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|darker|dark|deep|rich|subtle|soft)\s+)?([a-z]+)\b/g;
+    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(lighter|light|pale|pastel|darker|dark|deeper|deep|rich|subtle|soft)\s+)?([a-z]+)\b/g;
   for (const m of c
     .replace(GRAY_STOP, s => ' '.repeat(s.length))
     .matchAll(re)) {
@@ -650,6 +654,7 @@ function colorsFound(c) {
         lighter: 'light',
         darker: 'dark',
         deep: 'dark',
+        deeper: 'dark',
         rich: 'dark',
       })[m[1] ?? ''] ?? m[1];
     const word = m[2];
@@ -665,10 +670,19 @@ function colorsFound(c) {
       base &&
       (shade === 'light' ||
         shade === 'pale' ||
+        shade === 'pastel' ||
         (shade === 'dark' && Math.max(...base.slice(0, 3)) > 150))
     ) {
       const to = shade === 'dark' ? 0 : 255;
-      const k = shade === 'dark' ? 0.4 : shade === 'light' ? 0.75 : 0.88;
+      // (A pastel is a hue well toward white, keeping some of its color.)
+      const k =
+        shade === 'dark'
+          ? 0.4
+          : shade === 'pastel'
+            ? 0.6
+            : shade === 'light'
+              ? 0.75
+              : 0.88;
       found.push([
         m.index ?? 0,
         hex(base.slice(0, 3).map(v => Math.round(v + (to - v) * k))),
@@ -1197,7 +1211,20 @@ function sharedAsk(q, partWords) {
                 const m2 = new RegExp(
                   `^\\s*([a-z]+)\\s+(?:${re2.source})`,
                 ).exec(right);
-                return m2 && stateWord(m2[1]) != null ? m2 : null;
+                // (A word that describes the part, "the draft badge", "the
+                // hovered card", goes with it, as on the left; a word that
+                // is an ask of its own, a color, an aspect or a verb, never.)
+                const w = m2 ? m2[1].toLowerCase() : '';
+                const describes =
+                  m2 != null &&
+                  (stateWord(w) != null ||
+                    (!colorsIn(w).length &&
+                      !aspectsOf(w).length &&
+                      !partWords.some(([p]) => p.test(` ${w} `)) &&
+                      !/^(?:make|set|give|turn|change|add|remove|keep|use|put|round|square|no|not|without|except|than)$/.test(
+                        w,
+                      )));
+                return describes ? m2 : null;
               })();
             if (!r) continue;
             const lead = left.slice(0, l.index);
@@ -1601,12 +1628,53 @@ function shadowWay(text) {
 }
 
 /**
- * The near color a "never use pure <color>" ask moves a color to: a
- * near-black for a dark color, a near-white for a light one.
- * @param {number[]} avoid the RGB to stay off
+ * A clause's colors without one said as what something is now, which is
+ * the color the ask moves away from, never the one it asks for: "too
+ * bright blue" (the way, "too bright", stays an ask).
+ * @param {string} text
  */
-function nearOff(avoid) {
-  return avoid.reduce((x, y) => x + y, 0) < 384 ? '#1f2937' : '#f9fafb';
+function withoutColorNow(text) {
+  return String(text).replace(
+    /\btoo\s+(?:[a-z]+\s+)?(?=[a-z#])((?:[a-z]+|#[0-9a-f]{3,8})\b)/gi,
+    (m, w) => (colorsIn(w).length ? m.replace(w, ' ') : m),
+  );
+}
+
+/**
+ * A question without a report of how something looks now ("is still
+ * gray", "it's blue now"): what it is now is no value to write, so the rest
+ * reads as the ask it is (the part, and what to look at).
+ * @param {string} text
+ */
+function withoutLooksNow(text) {
+  return (
+    String(text)
+      .replace(
+        /\b(?:(?:is|are|it'?s|looks?|stays?)\s+)?(?:still|currently|right now)\s+((?:[a-z]+|#[0-9a-f]{3,8})\b)/gi,
+        (m, w) => (colorsIn(w).length ? ' ' : m),
+      )
+      .replace(
+        /\b(?:is|are|it'?s)\s+((?:[a-z]+|#[0-9a-f]{3,8}))\s+now\b/gi,
+        (m, w) => (colorsIn(w).length ? ' ' : m),
+      )
+      // (Spaces only: a line break between asks stays a break.)
+      .replace(/[ \t]{2,}/g, ' ')
+  );
+}
+
+/**
+ * The near color a "never use pure <color>" ask moves a color to: a
+ * near-black for a dark color, a near-white for a light one, tinted with
+ * the theme's own neutral in that mode (a purple theme's off-white is a
+ * pale lavender), so it reads as the theme's and is visibly off the color.
+ * @param {number[]} avoid the RGB to stay off
+ * @param {number[] | null} [tint] the theme's neutral there, as RGB
+ */
+function nearOff(avoid, tint) {
+  const dark = avoid.reduce((x, y) => x + y, 0) < 384;
+  if (!tint) return dark ? '#1f2937' : '#f9fafb';
+  const share = dark ? 0.25 : 0.1;
+  return hex(avoid.map((x, i) => Math.round(x + (tint[i] - x) * share)));
 }
 
 /**
@@ -1683,7 +1751,9 @@ function keepsAsExcept(question) {
     // up to the ask's own verb, is a keep too.
     .replace(
       new RegExp(
-        String.raw`^\s*(?:please\s+)?(?:keep|leave)\s+(?:the\s+|my\s+)?([a-z0-9][a-z0-9 -]*?)\s*(?:,\s*)?(?:and\s+|then\s+)?(?=(?:please\s+)?(?:make|set|give|turn|change|round|add|remove)\b)`,
+        // (The ask's verb is a whole word: the "round" inside "background"
+        // is no verb, so the keep never ends mid-word.)
+        String.raw`^\s*(?:please\s+)?(?:keep|leave)\s+(?:the\s+|my\s+)?([a-z0-9][a-z0-9 -]*?)\s*(?:,\s*)?(?:and\s+|then\s+)?(?=(?:please\s+)?\b(?:make|set|give|turn|change|round|add|remove)\b)`,
         'i',
       ),
       (_m, x) => {
@@ -1737,6 +1807,20 @@ function stateWord(t) {
 }
 
 /**
+ * Whether states said together are the part in all of them at once: a
+ * list with a condition in it (checked, selected, disabled); never moment
+ * states alone (hovered and pressed are each one).
+ * @param {string[]} words
+ */
+function atOnce(words) {
+  const states = words.map(stateWord);
+  return (
+    states.every(st => st != null) &&
+    states.some(st => !MOMENT_STATES.includes(String(st)))
+  );
+}
+
+/**
  * A clause's words with its mode phrases taken out ("in light mode", "dark
  * theme", "in light"), so "darker … in light mode" reads as darker.
  * @param {string} t
@@ -1776,6 +1860,55 @@ const BY_SCREEN = /** @type {const} */ ('by-screen');
  * @type {WeakMap<object, string>}
  */
 const compared = new WeakMap();
+
+/**
+ * How visible an ask makes a line or a tint: `stronger` (more of it) or
+ * fainter, by the factor said when one is (`half as visible` 0.5 of its
+ * strength). Words of transparency count the other way: more transparent
+ * or see-through is fainter, and `half as transparent` is twice as strong.
+ * Null when the ask says nothing of visibility. The one reader the border
+ * answers share.
+ * @param {string} text
+ * @returns {{stronger: boolean, by: number | null} | null}
+ */
+export function visibilityAsk(text) {
+  const t = text.toLowerCase();
+  const SEE = '(?:transparent|translucent|see-through|see through)';
+  const SHOW = '(?:visible|noticeable|prominent|obvious|pronounced|strong)';
+  const by = exactFactor(t);
+  if (new RegExp(`\\b${SEE}\\b`).test(t)) {
+    // "less transparent", "half as transparent": stronger; "more
+    // transparent", "twice as transparent": fainter.
+    const less = new RegExp(
+      `\\bless ${SEE}\\b|\\bhalf as ${SEE}\\b|\\bnot as ${SEE}\\b`,
+    ).test(t);
+    const factor =
+      by != null && by > 0
+        ? less
+          ? by < 1
+            ? 1 / by
+            : by
+          : by > 1
+            ? 1 / by
+            : by
+        : null;
+    return {stronger: less, by: factor};
+  }
+  if (/\bmore opaque\b|\bopaquer\b/.test(t)) return {stronger: true, by};
+  if (/\bless opaque\b/.test(t)) return {stronger: false, by};
+  if (
+    new RegExp(
+      `\\b${SHOW}\\b|\\binvisible\\b|\\bfaint(?:er)?\\b|\\bsubtler\\b|\\bweaker\\b`,
+    ).test(t)
+  ) {
+    const fainter =
+      new RegExp(
+        `\\b(?:less|half as|barely|hardly|not as|a lot less|much less) ${SHOW}\\b|\\binvisible\\b|\\bfaint(?:er)?\\b|\\bsubtler\\b|\\bweaker\\b`,
+      ).test(t) && !new RegExp(`\\b(?:twice|\\d+ times) as ${SHOW}\\b`).test(t);
+    return {stronger: !fainter, by};
+  }
+  return null;
+}
 
 /**
  * An exact relative amount the words give ("half", "double", "twice",
@@ -2010,7 +2143,7 @@ export function partLexicon(ctx) {
       ...Object.keys(HUES).filter(w => w.length >= 5 && !PALETTE_NAMES.has(w)),
       ...[...project.target.keys()]
         .filter(key => !key.includes('-'))
-        .flatMap(key => [key, `${key}s`]),
+        .flatMap(key => [key, pluralOf(key)]),
     ]),
   ];
   // Every group the editor knows, by its own name ("checks", "inputs"),
@@ -2210,7 +2343,11 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(hover(ed|ing)?|mouse ?over)\b/, 'hover'],
   [/\b(focus(ed|ing)?|on focus)\b/, 'focus'],
   [/\b(disabled|inactive)\b/, 'disabled'],
-  [/\b(checked|ticked|when on|turned on|toggled on|is on)\b/, 'checked'],
+  // (A switch's "on color", "on state": its checked look.)
+  [
+    /\b(checked|ticked|when on|turned on|toggled on|is on|on[- ](?:colou?r|state|look))\b/,
+    'checked',
+  ],
   [
     /\b(selected|active (tab|nav|item|link|page))\b|\bactive\b(?=.*\b(nav|tab|item)\b)/,
     'selected',
@@ -2247,6 +2384,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     /\b(unchecked|not checked|unticked|when off|turned off|toggled off|switched off|is off)\b/,
     'unchecked',
   ],
+  [/\b(unselected|not selected|non-selected)\b/, 'unselected'],
 ]);
 
 /**
@@ -2365,7 +2503,11 @@ function aspectsOf(text) {
     add('case');
   if (/\bitalics?\b/.test(c)) add('italic');
   if (
-    /\b(bold(er)?|unbold\w*|weight|heav(y|ier)|semibold)\b/.test(c) ||
+    // ("heavy shadows", "a heavy border": how strong a shadow or line
+    // is, never a font weight.)
+    /\b(bold(er)?|unbold\w*|weight|heav(y|ier)(?!\s+(?:drop\s+|box\s+)?(?:shadows?|borders?|lines?|outlines?))|semibold)\b/.test(
+      c,
+    ) ||
     // "body 16px regular": a weight word after a size.
     /\b\d+(\.\d+)?(px|rem|em|pt) (regular|normal|medium)\b|\b(body|text|headings?) (regular|normal)$/.test(
       c,
@@ -2627,10 +2769,9 @@ function namedLists(q, partWords, isVariant) {
       // ("the checked and disabled checkbox": two states said of one
       // part, both at once, never each.)
       (items.length === 2 &&
-        items.every(w => stateWord(w) != null) &&
+        atOnce(items) &&
         /\sand\s/i.test(String(list)) &&
-        !/,|\bor\b/i.test(String(list)) &&
-        !/s$/i.test(String(noun)))
+        !/,|\bor\b/i.test(String(list)))
     )
       continue;
     // The asks said of the list: up to a full stop or semicolon, an
@@ -2706,11 +2847,10 @@ function namedLists(q, partWords, isVariant) {
             // part, both at once, never each.)
             const bothAtOnce =
               items.length === 2 &&
-              items.every(w => stateWord(w) != null) &&
+              atOnce(items) &&
               !/,|\bor\b/i.test(String(list)) &&
               !ones &&
-              nounPart != null &&
-              !/s$/i.test(next);
+              nounPart != null;
             if (bothAtOnce) return m;
             if (items.every(modifies))
               // (The noun said after the list stays after its last item.)
@@ -2806,9 +2946,7 @@ function clausesOf(q, partWords) {
   const bothStates = tokenLists.replace(
     /\b([a-z]+)\s+and\s+([a-z]+)\s+([a-z][a-z-]*)\b/gi,
     (m, a, b, noun) =>
-      stateWord(String(a).toLowerCase()) != null &&
-      stateWord(String(b).toLowerCase()) != null &&
-      !/s$/i.test(String(noun)) &&
+      atOnce([String(a).toLowerCase(), String(b).toLowerCase()]) &&
       partWords.some(([re]) => re.test(` ${String(noun).toLowerCase()} `))
         ? `${a} & ${b} ${noun}`
         : m,
@@ -2818,14 +2956,22 @@ function clausesOf(q, partWords) {
   /** @type {Array<{text: string, joint: string}>} */
   const pieces = [];
   {
+    // (A generic family after a color, "on black, monospace", starts an
+    // ask of its own: a font stack starts with a family's name, never a
+    // color.)
     const split = (
       /\bswap\b/.test(bothStates)
         ? bothStates.replace(/\band\b/g, '&')
         : sharedAsk(bothStates, partWords)
-    ).split(
-      // A font stack ("Georgia, serif") is one value, not two asks.
-      /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b))/,
-    );
+    )
+      .replace(
+        /([a-z#0-9]+)(\s*),(?=\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy)\b)/gi,
+        (m, prev, sp) => (colorsIn(String(prev)).length ? `${prev}${sp};` : m),
+      )
+      .split(
+        // A font stack ("Georgia, serif") is one value, not two asks.
+        /(;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b(?!\s+(?:an?\s+)?\d{1,3}(?:\.\d+)?\s?%\s+(?:alpha|opacity|transparency)\b)|\bwhile\b|(?=\bexcept\b))/,
+      );
     let joint = '';
     for (let k = 0; k < split.length; k++) {
       const piece = split[k] ?? '';
@@ -2862,7 +3008,26 @@ function clausesOf(q, partWords) {
       );
     const cornerWords = /\b(round|corner|radius|shape|circular)/.test(text);
     for (const [re, part] of partWords) {
-      const m = re.exec(rest);
+      // (A part word is a word of its own, never one half of a hyphenated
+      // compound, "field-service", "card-like": a match with a letter
+      // joined to it by a hyphen names no part. A part's own name written
+      // with a hyphen, "date-picker", is one match and counts whole.)
+      const all = new RegExp(
+        re.source,
+        re.flags.includes('g') ? re.flags : `${re.flags}g`,
+      );
+      /** @type {RegExpExecArray | null} */
+      let m = null;
+      for (const x of rest.matchAll(all)) {
+        const at = /** @type {number} */ (x.index);
+        if (
+          /[a-z]-$/i.test(rest.slice(0, at)) ||
+          /^-[a-z]/i.test(rest.slice(at + x[0].length))
+        )
+          continue;
+        m = x;
+        break;
+      }
       if (!m) continue;
       const p = {...part};
       if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
@@ -2874,7 +3039,7 @@ function clausesOf(q, partWords) {
       if (p.on === 'banner' && status)
         p.when = `status:${status === 'danger' ? 'error' : status}`;
       parts.push(p);
-      rest = rest.replace(re, ' ');
+      rest = `${rest.slice(0, m.index)} ${rest.slice(/** @type {number} */ (m.index) + m[0].length)}`;
     }
     // "the sidebar the page color", "the header the card color", "cards
     // the color of the page": a part named as its color after another part
@@ -3112,6 +3277,12 @@ function clausesOf(q, partWords) {
     // "transparent" inside color-mix() asks for no see-through fill.
     const aspects0 = aspectsOf(
       (groundSaid ? text.replace(groundSaid, ' ') : text)
+        // ("the text on the gradient": where the text sits, never what
+        // changes.)
+        .replace(
+          /\b(text|labels?|writing|words)\s+on\s+(?:the\s+|a\s+|an\s+)?[a-z-]+\b/g,
+          '$1',
+        )
         .replace(
           refSaid ? new RegExp(`\\b${refSaid}\\b(?=\\S*\\s+colou?r)`) : /$^/,
           ' ',
@@ -3358,7 +3529,7 @@ function clausesOf(q, partWords) {
       named: namedProperty(text),
       neg,
       dir,
-      colors: colorsIn(text),
+      colors: colorsIn(withoutColorNow(text)),
       bad: badHex(text),
       // A typed clamp() or calc() is a length, kept whole.
       lengths: [
@@ -3391,13 +3562,26 @@ export function namedProperty(text) {
   for (const m of flat.matchAll(
     /\b((?:border|outline)(?: (?:top|right|bottom|left))? (?:colou?r|width|style)|(?:min|max) (?:height|width)|line height|letter spacing|font (?:size|weight)|radius|[a-z]+(?:-[a-z]+)+|[a-z]+)(\s*:)?\s*/g,
   )) {
-    const prop =
+    const prop0 =
       PROPERTY_WORDS[m[1]] ??
       (/^(border|outline)( (top|right|bottom|left))? (colou?r|width|style)$/.test(
         m[1],
       )
         ? m[1].replace(/colour/, 'color').replace(/ /g, '-')
         : m[1]);
+    // ("bottom border 1px #49454f": the side said before it is the side's.)
+    const sideBefore = /\b(top|right|bottom|left)\s+$/.exec(
+      flat.slice(0, m.index ?? 0),
+    )?.[1];
+    const prop =
+      sideBefore && /^(border|outline)$/.test(prop0)
+        ? `${prop0}-${sideBefore}`
+        : prop0;
+    // ("1px border rgba(0 0 0 / 0.2)": a width said before it is its own.)
+    const lenBefore =
+      /(?:^|\s)(\d*\.?\d+(?:px|rem|em))\s+(?:(?:top|right|bottom|left)\s+)?$/.exec(
+        flat.slice(0, m.index ?? 0),
+      )?.[1];
     // A property word right after another one ("border width") is part of
     // it, never a property of its own.
     if (
@@ -3467,7 +3651,16 @@ export function namedProperty(text) {
       // A value that drops typed words is not the one asked for: "border
       // 0 0 2px" is not "border 0".
       if (n < tokens.length && /^[-.\d#]/.test(tokens[n] ?? '')) break;
-      return completeShorthand(prop, value);
+      const done = completeShorthand(prop, value);
+      if (
+        lenBefore &&
+        /^(border|outline)(-(top|right|bottom|left))?-color$/.test(done.prop)
+      )
+        return {
+          prop: done.prop.replace(/-color$/, ''),
+          value: `${lenBefore} solid ${done.value}`,
+        };
+      return done;
     }
   }
   return null;
@@ -3735,6 +3928,17 @@ function oneModeLine(C, TARGET, part, width, color, mode, state) {
  * @returns {{parts: string[], aspects: string[], drafts: Draft[]}}
  */
 export function draftAnswer(ctx, env, question) {
+  // The theme's own neutral, as its seed is set: what a near color off a
+  // pure one is tinted with, so it reads as the theme's (none: a plain
+  // near-black or near-white).
+  const themeNeutral = parseColor(
+    String(
+      (env.data?.settings ?? []).find(
+        (/** @type {any} */ x) =>
+          x.source === 'dial' && x.thing === 'neutral' && !x.on && !x.mode,
+      )?.value ?? '',
+    ),
+  );
   // (The words as asked, for the readers that hold the whole question.)
   const asked0 = String(question).toLowerCase();
   // "darkmode", "dark-mode": one spelling of a mode before any clause is
@@ -3780,6 +3984,17 @@ export function draftAnswer(ctx, env, question) {
   // color the answer writes is held to (after the answers are made), never
   // the color asked for nor a clause of its own, so it is read out of the
   // words here.
+  // "navy, not bright blue": a color said against the one it replaces is
+  // the first color alone, never a prohibition of its own.
+  question = question.replace(
+    /(\S+)\s*,?\s*(?:and\s+|but\s+)?not\s+((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))(?=\s*(?:[,;.!?]|$))/gi,
+    (m, first, second) =>
+      colorsIn(first).length &&
+      colorsIn(String(second).split(/\s+/).pop() ?? '').length
+        ? first
+        : m,
+  );
+  question = withoutLooksNow(question);
   const colorBound = colorBoundOf(question);
   if (colorBound)
     question = question
@@ -3892,6 +4107,107 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:that\s+|which\s+)?(?:works|looks good|holds up|also works|is usable|works well)\s+in\s+(?:both\s+)?(?:dark|light)(?:\s+(?:and|&)\s+(?:dark|light))?\s+modes?\b/gi,
       ' ',
     )
+    // ("green text on a black page": the text's color and the page's, each
+    // its own, as "a black page with green text" says it. "green text on
+    // black", with the ground's noun left out at the end of its clause, is
+    // the same: the color under text is the page's.)
+    .replace(
+      /\b((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+(text|writing|type)\s+on\s+(?:(?:a|an|the)\s+((?:[a-z]+\s+)?(?:[a-z]+|#[0-9a-f]{3,8}))\s+(page|background|surface)\b|((?:[a-z]+|#[0-9a-f]{3,8}))(?=\s*(?:[,;.!?]|$)))/gi,
+      (m, ink, _t, under, ground, bare) =>
+        colorsIn(String(ink).toLowerCase()).length &&
+        colorsIn(String(under ?? bare).toLowerCase()).length
+          ? `${under ?? bare} ${ground ?? 'page'} background, ${ink} text`
+          : m,
+    )
+    // ("a frosted glass look", "glass cards", "translucent with a blur":
+    // the glass rung of the surfaces dial.)
+    .replace(
+      /\b(?:frosted(?:\s+glass)?|glassy|glass(?:morphism)?)(?:\s+(?:look|effect|style|surfaces?|cards?|panels?))?\b|\btranslucent\s+with\s+(?:a\s+)?blur\b/gi,
+      'make the surfaces glass',
+    )
+    .replace(
+      /\b(?:make\s+)?(?:the\s+)?(?:cards?|panels?|surfaces?)\s+make the surfaces glass\b/gi,
+      'make the surfaces glass',
+    )
+    // ("tight dense spacing": the rung said wins over the way.)
+    .replace(
+      /\b(tight|compact|roomy|spacious)\s+(?:and\s+)?(?:dense|denser|airy|airier|loose|looser)\b|\b(?:dense|denser|airy|airier|loose|looser)\s+(?:and\s+)?(tight|compact|roomy|spacious)\b/gi,
+      (_m, a, b) => a ?? b,
+    )
+    // ("gridlines": a table's cell borders.)
+    .replace(
+      /\b(?:show\s+)?grid\s?lines?(?:\s+(?:between|on|in)\s+(?:the\s+)?table\s+cells)?\b/gi,
+      '1px border on table cells',
+    )
+    // ("big buttons" said alone: bigger; "the large buttons 4px taller"
+    // names their size.)
+    .replace(
+      /(^|[,;:]\s*|\band\s+)(?:make\s+(?:the\s+)?)?(big|large|huge)\s+(buttons?|inputs?|controls?)\s*(?=$|[,;.]|\band\b)/gi,
+      '$1bigger $3',
+    )
+    // ("luxury fashion brand: black and ivory": a lead naming what the
+    // theme is for, never the brand color itself.)
+    .replace(/\b(?:brand|company|startup|business)\s*:/gi, 'theme:')
+    // ("headings semibold, not bold": the rung said, and the one it is
+    // set against; never a second ask.)
+    .replace(
+      /\b(thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b([^,;.]*?)[,;]?\s*(?:but\s+)?not\s+(?:too\s+)?(?:thin|light|regular|normal|medium|semibold|semi-bold|bold|heavy|black|extra-?bold)\b/gi,
+      '$1$2',
+    )
+    // ("lots of data on screen", "information-dense": the theme denser.)
+    .replace(
+      /\b(?:lots|a lot|plenty) of (?:data|information|info|content|rows|things) (?:on|per) (?:the )?(?:screen|page)\b|\binformation[- ]dense\b|\bdata[- ]dense\b|\bfit more (?:on|per) (?:the )?(?:screen|page)\b/gi,
+      'more compact',
+    )
+    // ("red only for alerts", "red reserved for errors": the danger color,
+    // every error, alert and destructive look; never every banner.)
+    .replace(
+      /\b((?:[a-z]+\s+)?[a-z]+|#[0-9a-f]{3,8})\s+(?:only|just|reserved)\s+for\s+(?:the\s+)?(?:alerts?|errors?|danger|destructive(?:\s+actions?)?|warnings? and errors?)\b/gi,
+      (m, color) =>
+        colorsIn(String(color).toLowerCase()).length
+          ? `danger color ${color}`
+          : m,
+    )
+    // ("bigger, bolder headings": ways listed before one part are all its.)
+    .replace(
+      /\b(bigger|larger|smaller|bolder|lighter|darker|rounder|wider|taller|softer|brighter)\s*,\s*(?:and\s+)?(bigger|larger|smaller|bolder|lighter|darker|rounder|wider|taller|softer|brighter)\s+(?=[a-z])/gi,
+      '$1 $2 ',
+    )
+    // ("dark purple theme", "moody dark purple": dark said of a whole look
+    // with a hue is the dark mode and that hue as the accent; "dark purple
+    // buttons" stays a shade.)
+    .replace(
+      /\b(dark|light)\s+([a-z]+)(?=\s+(?:theme|look|vibe|aesthetic|palette)\b|\s*(?:[,;:]|$))/gi,
+      (m, mode, hue, at, whole) =>
+        Object.hasOwn(HUES, String(hue).toLowerCase()) &&
+        // (A whole look: no part named anywhere in the ask.)
+        !partLexicon(ctx).parts.some(([re]) =>
+          re.test(` ${String(whole).toLowerCase()} `),
+        ) &&
+        !/\b(?:text|backgrounds?|borders?|fills?|colou?r of)\b/i.test(
+          String(whole),
+        )
+          ? `${mode} theme with ${hue} accent`
+          : m,
+    )
+    // ("deeper blue": a dark shade of the hue.)
+    .replace(/\b(?:deeper|richer)\s+(?=([a-z]+)\b)/gi, (m, hue) =>
+      Object.hasOwn(HUES, String(hue).toLowerCase()) ? 'dark ' : m,
+    )
+    // ("easy to read at night", "for reading at night": a dark mode by
+    // default, and larger text for "easy to read".)
+    .replace(
+      /\b(?:at|for|during the)\s+night(?:time)?\b/gi,
+      ', dark by default',
+    )
+    .replace(/\b(?:easy|easier|comfortable)\s+to\s+read\b/gi, 'larger text')
+    // ("use the system font": the font named, never a part called so.)
+    .replace(
+      /\b(?:use|using|with|switch to|go with)\s+(?:the|a)\s+(system|serif|sans-serif|sans|monospace|mono|rounded|display)\s+(font|typeface|type)\b/gi,
+      '$1 $2',
+    )
+    // ("dark mode first", "dark first": the mode the app opens in.)
+    .replace(/\b(dark|light)(?:\s+mode)?\s+first\b/gi, '$1 mode by default')
     // ("almost square", "nearly square": a rung short of square, the
     // small corners.)
     .replace(
@@ -3936,9 +4252,90 @@ export function draftAnswer(ctx, env, question) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
+  // "--brand-primary: #4f46e5; --brand-bg: #f9fafb": a custom property of
+  // the app's own (no token of the editor's) is read by its last word, the
+  // role it names, never by every word of its name.
+  question = question.replace(
+    /--([a-z][a-z0-9]*(?:-[a-z0-9]+)*?)-(primary|accent|brand|bg|background|surface|page|text|fg|foreground|radius|border|muted|secondary)(?![\w-])\s*:?\s*/gi,
+    (m, pre, role) => {
+      if (Object.hasOwn(TOKENS, `--${pre}-${role}`.toLowerCase())) return m;
+      const said = /** @type {Record<string, string>} */ ({
+        primary: 'accent ',
+        accent: 'accent ',
+        brand: 'accent ',
+        bg: 'page background ',
+        background: 'page background ',
+        page: 'page background ',
+        surface: 'card background ',
+        text: 'text ',
+        fg: 'text ',
+        foreground: 'text ',
+        radius: 'corners ',
+        border: 'border color ',
+        muted: 'secondary text ',
+        secondary: 'secondary text ',
+      })[String(role).toLowerCase()];
+      return said ?? m;
+    },
+  );
   /** A part's rest color read, with the project's tokens. @param {Array<{token: string, when: string[]}>} reads @param {string} [when] */
   const restRead = (reads, when) => restColorRead(reads, when, TOKENS);
   const lex = partLexicon(ctx);
+  // "make the blue a bit darker": a color named as the theme's own, with a
+  // way, is the theme color whose hue it is (the accent when the accent is
+  // blue), never a part.
+  {
+    /** @param {string} tok @returns {string} */
+    const roleNow = tok => {
+      let v = String(
+        env.own?.light?.[tok] ?? env.base.light?.[tok] ?? TOKENS[tok] ?? '',
+      );
+      for (let i = 0; i < 4; i++) {
+        const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(v.trim())?.[1];
+        if (!ref) break;
+        v = String(
+          env.own?.light?.[ref] ?? env.base.light?.[ref] ?? TOKENS[ref] ?? '',
+        );
+      }
+      return v;
+    };
+    const ROLES = /** @type {Array<[string, string]>} */ ([
+      ['--color-accent', 'accent color'],
+      ['--color-error', 'danger color'],
+      ['--color-success', 'success color'],
+      ['--color-warning', 'warning color'],
+      ['--color-info', 'info color'],
+    ]);
+    question = question.replace(
+      /\bthe\s+([a-z]+)\b(?=\s+(?:color\s+)?(?:a\s+(?:bit|little|touch)\s+|slightly\s+|much\s+|way\s+)?(?:darker|lighter|brighter|deeper|softer|warmer|cooler|calmer|duller|bolder|more\s+[a-z]+|less\s+[a-z]+)\b)/gi,
+      (m, name) => {
+        const word = String(name).toLowerCase();
+        if (lex.parts.some(([re]) => re.test(` ${word} `))) return m;
+        const said = colorsIn(word)[0];
+        const h = said ? hueOf(said) : null;
+        if (h == null) return m;
+        const near = ROLES.map(([tok, label]) => {
+          const hr = hueOf(roleNow(tok));
+          const d =
+            hr == null
+              ? 999
+              : Math.min(Math.abs(hr - h), 360 - Math.abs(hr - h));
+          return {label, d};
+        }).sort((a, b) => a.d - b.d)[0];
+        return near && near.d <= 30 ? `the ${near.label}` : m;
+      },
+    );
+  }
+  // "17px like iOS": a value said with where it comes from; a name after
+  // "like" that is no part of the editor's is the source, never words to
+  // read.
+  question = question.replace(
+    /(\d(?:px|rem|em|pt)?)\s+(?:just\s+)?like\s+(?:on\s+|in\s+)?([a-z][a-z0-9.]*)\b/gi,
+    (m, v, name) =>
+      lex.parts.some(([re]) => re.test(` ${String(name).toLowerCase()} `))
+        ? m
+        : v,
+  );
 
   // "focus-ring", "table_row": a word of the editor's vocabulary written
   // with hyphens or underscores reads as the same words with spaces, for
@@ -4446,6 +4843,61 @@ export function draftAnswer(ctx, env, question) {
           : `${level} font size calc(${Number(f.toFixed(3))} * var(${tok}))`;
       },
     )
+    // "the hovered item of menus blue and the disabled one gray": "the
+    // disabled one" is the element named, in its place, never the place.
+    .replace(
+      /\b([a-z]+)\s+((?:of|in|inside|within)\s+(?:the\s+)?[a-z]+)\b([^,;.\n]*?)\band the (active|selected|current|disabled|hovered|focused|checked|open) ones?\b/gi,
+      (m, noun, place, mid, st) => {
+        const w = String(noun).toLowerCase().replace(/s$/, '');
+        // (A part's own word, or the last word of a part's name: a menu's
+        // item.)
+        const isPart =
+          lex.parts.some(([re]) => re.test(` ${w} `)) ||
+          [...ctx.project.target.keys()].some(k => k.endsWith(`-${w}`));
+        return isPart
+          ? `${noun} ${place}${mid}and the ${st} ${noun} ${place}`
+          : m;
+      },
+    )
+    // "the selected tab text white and the others gray", "primary buttons
+    // blue and the others gray": the others are the same parts but that
+    // state or variant, read as an except, its own ask.
+    .replace(
+      /^(.*?)\band\s+(?:all\s+)?the\s+(?:others?|rest)\b([^,;.\n]*)/gim,
+      (m, before, after) => {
+        const pairs = [
+          ...String(before).matchAll(
+            /(?=\b([a-z]+)\s+([a-z]+?)(s?)((?:\s+(?:text|background|border|fill|icons?|labels?))?)\b)/gi,
+          ),
+        ].reverse();
+        for (const [, qual, noun, , aspect] of pairs) {
+          const q = String(qual).toLowerCase();
+          const part = lex.parts.find(([re]) =>
+            re.test(` ${String(noun).toLowerCase()} `),
+          )?.[1];
+          if (!part || part.missing) continue;
+          const base = FAMILIES[part.on] ? FAMILIES[part.on][0] : part.on;
+          // (A variant: the part's other values on that axis, each named,
+          // as a list of variants is. A state: the part not in it.)
+          const axis = Object.values(ctx.C.variantValues(base) ?? {}).find(
+            vals => /** @type {string[]} */ (vals).map(String).includes(q),
+          );
+          if (axis) {
+            const rest = /** @type {string[]} */ (axis)
+              .map(String)
+              .filter(v => v !== q && !/^(?:default|md)$/.test(v));
+            if (!rest.length) continue;
+            return [
+              String(before).replace(/[\s,]+$/, ''),
+              ...rest.map(v => `the ${v} ${noun}s${aspect}${after}`),
+            ].join('; ');
+          }
+          if (stateWord(q) == null) continue;
+          return `${String(before).replace(/[\s,]+$/, '')}; the un${q} ${noun}s${aspect}${after}`;
+        }
+        return m;
+      },
+    )
     // "the nav links bolder and the active one blue": "the active one" is
     // the same parts in that state.
     .replace(
@@ -4942,7 +5394,16 @@ export function draftAnswer(ctx, env, question) {
       // "muted ones", "the muted card", "the muted background": the muted
       // variant or token it names, not a color ask.
       /(?<![-\w])(?:more )?(?:muted|pastel|duller|subdued|desaturated)(?![-\w])(?! (?:ones?|cards?|buttons?|badges?|variant|backgrounds?|surfaces?|bg|text)\b)/gi,
-      'less saturated',
+      // ("pastel pink": a shade of the hue named, read by the color reader.)
+      (m, at, whole) =>
+        /^pastel$/i.test(m) &&
+        colorsIn(
+          (
+            /^\s+([a-z]+)/i.exec(String(whole).slice(at + m.length))?.[1] ?? ''
+          ).toLowerCase(),
+        ).length
+          ? m
+          : 'less saturated',
     )
     // "less sharp", "less thick", "less round": the opposite word.
     .replace(/\bless (?:sharp|square|angular|boxy)\b/gi, 'rounder')
@@ -5222,10 +5683,12 @@ export function draftAnswer(ctx, env, question) {
       /\b(\d+(?:\.\d+)?)pt\b/gi,
       (_, n) => `${Math.round((Number(n) * 4) / 3)}px`,
     )
-    // "a 1px border instead of a shadow": no shadow, and the border.
+    // "a 1px border instead of a shadow": the border, and no shadow (on
+    // the part the ask names: "inputs filled gray instead of outlined"
+    // takes the inputs' outline away, never every border).
     .replace(
       /^(.*?)\binstead of (?:a |an |the )?([a-z]+(?: [a-z]+)?)\b/gim,
-      (m, a, b) => (a.trim() ? `no ${b} ; ${a}` : m),
+      (m, a, b) => (a.trim() ? `${a.trim()} ; no ${b}` : m),
     )
     // "why are my headings not bold": the complaint asks for bold.
     .replace(/\bwhy (?:is|are|isn'?t|aren'?t)\b(.*?)\bnot\s+/gi, 'make$1 ')
@@ -5671,6 +6134,29 @@ export function draftAnswer(ctx, env, question) {
   );
   const media = MEDIA_RE.test(q);
   if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
+  // Two colors of the whole theme joined by "and" before one way ("the
+  // accent and danger darker", "--color-accent and --color-danger
+  // darker"): each takes that way, as two parts joined by "and" do.
+  {
+    const COLOR = `(?:--[a-z][a-z0-9-]*|${PALETTE_DIALS.join('|')})`;
+    q = q.replace(
+      new RegExp(
+        `\\b(?:the\\s+)?(${COLOR})((?:\\s*,\\s*(?:the\\s+)?${COLOR})*)\\s*,?\\s+and\\s+(?:the\\s+)?(${COLOR})\\s+(?!and\\b)([^,;.]+)`,
+        'g',
+      ),
+      (all, first, more, last, ask) =>
+        [
+          first,
+          ...String(more)
+            .split(',')
+            .map(x => x.replace(/^\s*(?:the\s+)?/, '').trim())
+            .filter(Boolean),
+          last,
+        ]
+          .map(x => `${x} ${ask.trim()}`)
+          .join(' and '),
+    );
+  }
   const clauses0 = clausesOf(q, lex.parts);
   // "cream background, terracotta accent, serif headings": a list whose
   // items each ask their own thing is each of them, never the first one's
@@ -5869,7 +6355,12 @@ export function draftAnswer(ctx, env, question) {
     // A look taken away from the part before ("rounded buttons, no
     // shadow"; never "serif headings, no shadows": a text part's look is
     // its type).
-    if (c.neg && own.length && !before.parts.every(p => textOnlyPart(p.on)))
+    if (
+      c.neg &&
+      own.length &&
+      !own.includes('text') &&
+      !before.parts.every(p => textOnlyPart(p.on))
+    )
       return 'inherit';
     // A CSS property named with its value ("card padding-block 20px,
     // padding-inline 16px"): a declaration list, the part's.
@@ -5889,13 +6380,32 @@ export function draftAnswer(ctx, env, question) {
     if (own.length && own.every(a => a === 'text') && pageBefore)
       return 'theme';
     if (j.sep === 'with' || j.list === 'colon') return 'inherit';
-    // Only a way, a value or a color: the same part.
-    if (!own.length) return 'inherit';
+    // (The part's text in its with-list: "badges with a subtle background
+    // and dark text".)
+    if (j.list === 'with' && own.length && own.every(a => a === 'text'))
+      return 'inherit';
+    // Only a way, a value or a color, said with "and" or as a bare
+    // fragment ("rounder and darker", ", red"): the same part. A comma
+    // item with words of its own ("magenta #ff00e6 for highlights") is not
+    // the part before's.
+    if (!own.length)
+      return j.sep === 'and' || c.text.trim().split(/\s+/).length <= 2
+        ? 'inherit'
+        : 'theme';
     // (The theme's spacing said as a dial, never a part's padding or gap.)
     if (
       own.some(a => THEME_ASPECTS.includes(a)) ||
       (own.includes('spacing') &&
         !/\b(?:padding|gaps?|margins?|inset)\b|\bpadding-/.test(c.text))
+    )
+      return 'theme';
+    // A list item said subject first, "text #111827", "border #e5e7eb",
+    // in a comma list of tokens: its own item, the theme's.
+    if (
+      j.sep === 'comma' &&
+      /^(?:text|muted text|secondary text|borders?|background|links?|accent)\s+(?:#|rgb|hsl|oklch|var\()/.test(
+        c.text.trim(),
+      )
     )
       return 'theme';
     // A text color: the part's, when it holds text.
@@ -5948,8 +6458,14 @@ export function draftAnswer(ctx, env, question) {
   // (Only for a look said as a look, "a theme in navy", or a color said
   // alone; never a statement, "I set the accent to red by mistake", nor a
   // color another dial names, "a more muted success green".)
+  // (Or a look said as a list, "clean and trustworthy like a bank: blue
+  // and gray, lots of data": several pieces and no part named.)
+  const lookList =
+    !clauses.some(c => c.parts.length > 0) &&
+    q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3;
   const lookSaid =
-    /\b(?:theme|look|feel|vibe|style|palette|brand|branding)\b/.test(q);
+    /\b(?:theme|look|feel|vibe|style|palette|brand|branding)\b/.test(q) ||
+    lookList;
   const namesAPart = clauses.some(c => c.parts.length > 0);
   for (let i = clauses.length - 1; i >= 0 && !paintsAPart && !namesAPart; i--) {
     const c = clauses[i];
@@ -6080,7 +6596,10 @@ export function draftAnswer(ctx, env, question) {
   for (const [ci, c] of [...clauses.entries()].reverse())
     if (
       c.lengths.some(l => /^\d*\.?\d+(?:px|rem|em)$/.test(l)) &&
-      /\b(?:text|labels?|font|type|letters)\b/.test(c.text) &&
+      // (Uppercase or italic is the text's look whatever the words: "table
+      // headers uppercase 11px".)
+      (/\b(?:text|labels?|font|type|letters)\b/.test(c.text) ||
+        c.aspects.some(a => a === 'case' || a === 'italic')) &&
       c.aspects.some(a =>
         ['case', 'weight', 'italic', 'tracking', 'family'].includes(a),
       ) &&
@@ -6105,6 +6624,46 @@ export function draftAnswer(ctx, env, question) {
       });
       c.lengths = [];
     }
+  // ("badges uppercase bold": two looks of a part's text said together are
+  // each an ask of their own, run in turn.)
+  const TEXT_LOOKS = ['case', 'weight', 'italic', 'tracking', 'fontsize'];
+  for (const [ci, c] of [...clauses.entries()].reverse()) {
+    // ("large bold headings", "bigger, bolder headings": a heading's size
+    // word beside its weight is its text size.)
+    if (
+      c.parts.length &&
+      c.parts.every(p =>
+        /(?:^|-)(?:heading|title)s?$/.test(String(p.on).split('|')[0]),
+      ) &&
+      c.aspects.some(
+        a => a === 'size' || (TEXT_LOOKS.includes(a) && a !== 'fontsize'),
+      ) &&
+      !c.aspects.includes('fontsize') &&
+      /\b(?:large|larger|big|bigger|huge|giant|small|smaller|tiny)\b(?![\s-]*caps\b)/.test(
+        c.text,
+      )
+    )
+      c.aspects = [...c.aspects.filter(a => a !== 'size'), 'fontsize'];
+    const looks = c.aspects.filter(a => TEXT_LOOKS.includes(a));
+    if (
+      !c.parts.length ||
+      looks.length < 2 ||
+      looks.length !== c.aspects.length ||
+      c.except ||
+      c.neg
+    )
+      continue;
+    c.aspects = [looks[0]];
+    clauses.splice(
+      ci + 1,
+      0,
+      ...looks.slice(1).map(a => ({
+        ...c,
+        parts: c.parts.map(x => ({...x})),
+        aspects: [a],
+      })),
+    );
+  }
   // ("make it calmer", "the error toast calmer": its color, the fill it
   // shows.)
   for (const c of clauses)
@@ -6162,6 +6721,7 @@ export function draftAnswer(ctx, env, question) {
       !a.except &&
       b.state &&
       b.state !== a.state &&
+      [a.state, b.state].some(st => !MOMENT_STATES.includes(String(st))) &&
       !b.alsoState &&
       (!b.parts.length ||
         b.parts.every(x => a.parts.some(y => y.on === x.on))) &&
@@ -6282,6 +6842,8 @@ export function draftAnswer(ctx, env, question) {
   const symDone = new Set();
   /** Places the question names that the editor cannot keep apart. @type {Array<{c: any, text: string}>} */
   const placeNotes = [];
+  /** The other reading of two states said together, as a line. @type {Draft[]} */
+  const otherReadings = [];
   /** Clauses whose every step was kept to their container. @type {Set<any>} */
   const keptInPlace = new Set();
   // "checkboxes green": the color a checked box fills with (the checks
@@ -7047,6 +7609,30 @@ export function draftAnswer(ctx, env, question) {
           if (/-label$/.test(k) && stems.has(k.split('-')[0]))
             found.push({k, score: 60 - k.split('-').length});
       }
+      // A group part holds the parts it is the group of (a toggle button
+      // group's buttons are its toggle buttons): the part named by the
+      // group's name without its last word, by that part's last word.
+      for (const h of members)
+        if (/-group$/.test(h)) {
+          const stem = h.replace(/-group$/, '');
+          if (
+            keys.includes(stem) &&
+            words(stem.split('-').at(-1) ?? '').test(nameText)
+          )
+            found.push({k: stem, score: 45});
+        }
+      // A thing the place does not draw itself whose name only one part of
+      // the catalog ends with ("the date picker's days": the calendar's
+      // day, the one day there is), said as that part.
+      if (!found.length && by === 'possessive') {
+        const last = String(said).trim().split(/\s+/).at(-1) ?? '';
+        const ending = keys.filter(
+          k =>
+            k.split('-').length > 1 &&
+            words(k.split('-').at(-1) ?? '').test(last),
+        );
+        if (ending.length === 1) found.push({k: ending[0], score: 5});
+      }
       // A group of parts the place holds, named ("the buttons' icons").
       const group = Object.keys(FAMILIES).find(
         g =>
@@ -7175,9 +7761,17 @@ export function draftAnswer(ctx, env, question) {
                 : (ctx.project.target.get(k)?.states ?? [])
                     .filter(
                       (/** @type {string} */ st) =>
-                        !/^(hover|active|focus|focus-visible|focus-within|disabled|selected|checked|open|expanded|pressed|current)$/.test(
+                        !/^(hover|active|focus|focus-visible|focus-within|disabled)$/.test(
                           st,
-                        ) && words(st).test(elementText),
+                        ) &&
+                        words(st).test(elementText) &&
+                        // (A state many parts take, selected or checked,
+                        // only with the part's own word said: "the
+                        // selected day" is a calendar's day.)
+                        (!/^(selected|checked|open|expanded|pressed|current)$/.test(
+                          st,
+                        ) ||
+                          words(String(k.split('-').at(-1))).test(elementText)),
                     )
                     .map((/** @type {string} */ st) => ({k, st})),
             )
@@ -8104,6 +8698,24 @@ export function draftAnswer(ctx, env, question) {
       ?.find(t => /title/.test(t) && t !== ts0(owner.on));
     if (title && C.MAP[title]) c.parts = [{on: title}];
   }
+  // "selected tab text white, unselected tabs gray": a clause naming the
+  // same part in another state, with only its color, says the same thing
+  // of it as the clause before.
+  for (let i = 1; i < clauses.length; i++) {
+    const [b, c] = [clauses[i - 1], clauses[i]];
+    if (
+      c.except ||
+      b.except ||
+      !c.parts.length ||
+      (ownAspects.get(c) ?? c.aspects).length ||
+      !c.colors.length ||
+      !b.aspects.length ||
+      (b.state ?? '') === (c.state ?? '') ||
+      !c.parts.every(p => b.parts.some(x => x.on === p.on))
+    )
+      continue;
+    c.aspects = [...b.aspects];
+  }
   fillAspect();
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
@@ -8234,12 +8846,18 @@ export function draftAnswer(ctx, env, question) {
     // "on focus, inputs get a 2px outline": a clause that only names a state
     // gives it to the clause after it.
     // (Never an except's state: "except when focused, and rounder".)
+    // (Only from a clause that names nothing but the state: "primary hover
+    // #4338ca" asks for a value of its own, and gives the next clause
+    // nothing.)
     if (
       !c.state &&
       prev?.state &&
       !prev.except &&
       !prev.parts.length &&
       !prev.aspects.length &&
+      !prev.colors.length &&
+      !prev.lengths.length &&
+      !prev.dir &&
       c.parts.length
     )
       c.state = prev.state;
@@ -8258,6 +8876,8 @@ export function draftAnswer(ctx, env, question) {
       !c.state &&
       // (An except's mode is what it keeps: "except primary in dark mode".)
       !c.except &&
+      // (The mode the app opens in is the theme's, scoping nothing.)
+      !/\bby default\b|\bopens? in\b|\bstarts? in\b/.test(c.text) &&
       !prev.mode &&
       (prev.parts.length || prev.aspects.length)
     ) {
@@ -8393,7 +9013,10 @@ export function draftAnswer(ctx, env, question) {
       !modal ||
       /\b(?:(?:in\s+)?(?:both|all)\s+modes|every\s+mode|everywhere|light\s+and\s+dark|dark\s+and\s+light)\b/i.test(
         `${c.text} ${question}`,
-      )
+      ) ||
+      // (Said with a one-mode theme, "dark only … page #x", the theme
+      // has one mode: its page needs none.)
+      /\b(?:dark|light)[- ](?:mode[- ])?only\b/.test(q)
     )
       return null;
     const rgb = parseColor(String(color));
@@ -8404,6 +9027,55 @@ export function draftAnswer(ctx, env, question) {
       : ratio(rgb, [255, 255, 255]) >= 12
         ? 'dark'
         : null;
+  };
+  /**
+   * A color at another color's lightness: the amount toward white or black
+   * whose luminance is that color's (a color word's tone for a mode's page
+   * or surface).
+   * @param {string} color
+   * @param {string} like
+   */
+  const toneLike = (color, like) => {
+    const target = parseColor(like);
+    if (!target || !parseColor(color)) return null;
+    const want = ratio(target, [0, 0, 0]);
+    let lo = -1;
+    let hi = 1;
+    for (let k = 0; k < 24; k++) {
+      const mid = (lo + hi) / 2;
+      const v = parseColor(shift(color, mid) ?? '');
+      if (!v) return null;
+      if (ratio(v, [0, 0, 0]) < want) lo = mid;
+      else hi = mid;
+    }
+    return shift(color, (lo + hi) / 2);
+  };
+  /**
+   * A page color said as a word ("make it gray") that is neither clearly
+   * light nor clearly dark, on a theme that draws both modes: each mode's
+   * page takes the word's color at that page's own lightness, so neither
+   * mode gets a mid-tone page under its text. Null when the color was
+   * typed, a mode or both modes were said, or the theme draws one mode.
+   * @param {Clause} c
+   * @param {string} color
+   * @returns {{light: string, dark: string} | null}
+   */
+  const pageTones = (c, color) => {
+    if (!modal || c.mode || pageModeOf(c, color)) return null;
+    if (
+      /\b(?:(?:in\s+)?(?:both|all)\s+modes|every\s+mode|everywhere|light\s+and\s+dark|dark\s+and\s+light)\b/i.test(
+        `${c.text} ${question}`,
+      ) ||
+      question.toLowerCase().includes(String(color).toLowerCase())
+    )
+      return null;
+    if (!parseColor(color)) return null;
+    /** @param {'light' | 'dark'} m */
+    const tone = m =>
+      toneLike(color, String(current('--color-background-body', m) ?? ''));
+    const light = tone('light');
+    const dark = tone('dark');
+    return light && dark ? {light, dark} : null;
   };
   /** How a page color's mode reads. @param {Clause} c @param {'light' | 'dark' | null} m */
   const pageModeSaid = (c, m) => {
@@ -8792,8 +9464,12 @@ export function draftAnswer(ctx, env, question) {
       // on inputs", "large padding on buttons", it is the amount.)
       const besidePart = (/** @type {string} */ w) =>
         !new RegExp(
-          String.raw`\b(?:${w})\s+(?:shadows?|padding|radius|corners?|borders?|gaps?|spacing|text|fonts?|type|outlines?|rings?|margins?)\b`,
-        ).test(c.text);
+          String.raw`\b(?:${w})\s+(?:shadows?|padding|radius|corners?|borders?|gaps?|spacing|text|fonts?|type|outlines?|rings?|margins?|weight|bold|letters?|headings?)\b`,
+        ).test(c.text) &&
+        // ("buttons medium weight": a weight, never a size.)
+        !new RegExp(String.raw`\b(?:${w})\s*(?:-\s*)?(?:weight|bold)\b`).test(
+          c.text,
+        );
       const size =
         /\b(small|sm)\b/.test(c.text) && besidePart('small|sm')
           ? ['sm', 'small']
@@ -9119,7 +9795,8 @@ export function draftAnswer(ctx, env, question) {
       // that mode (its width and style are the part's own).
       const color =
         new RegExp(COLOR_IN_VALUE.source, 'i').exec(value)?.[0] ??
-        colorsIn(value)[0];
+        colorsIn(value)[0] ??
+        /var\(--color-[a-z0-9-]+\)/.exec(value)?.[0];
       // (A state's look keeps the border the part draws at rest: a focused
       // input's line is its resting one, recolored.)
       const shows =
@@ -9156,6 +9833,15 @@ export function draftAnswer(ctx, env, question) {
             mode: undefined,
             value: ring.value,
             ...(ring.when ? {when: ring.when} : {}),
+          });
+        // (No ring where the part draws its own shadow: the border itself,
+        // its color see-through in the other mode, so that mode keeps the
+        // look with an edge of the same width it cannot see.)
+        if (!st.state)
+          return held({
+            ...st,
+            mode: undefined,
+            value: `${w} solid light-dark(${c.mode === 'light' ? `${color}, transparent` : `transparent, ${color}`})`,
           });
         shadowWhy = `${one(st.on)} draws no border now, so a border in ${c.mode} mode would take its width in the other mode too, and it draws a shadow of its own, so a ring in its box-shadow would take that away`;
       }
@@ -9953,7 +10639,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {Clause} c @param {string} chosen
    * @returns {string}
    */
-  const themeShade = (c, chosen) => {
+  const themeShade = (c, chosen, mirror = false) => {
     for (const m of c.text.matchAll(/\b([a-z]+)\b/g)) {
       const word = m[1];
       if (!Object.hasOwn(HUES, word) || HUES[word] !== chosen) continue;
@@ -9984,13 +10670,32 @@ export function draftAnswer(ctx, env, question) {
       const light = nearestShade(ramp.light, chosen);
       const dark = nearestShade(ramp.dark, chosen);
       if (light == null || dark == null) return chosen;
-      const [l, d] = [ramp.light[light], ramp.dark[dark]];
+      // (A gray on a surface: the light mode's step and its mirror in the
+      // dark mode, so the surface stays as far from its page, and its text
+      // as readable, in both.)
+      const mirrored =
+        mirror && family === 'neutral'
+          ? ramp.dark[String(100 - Number(light))]
+          : undefined;
+      const [l, d] = [ramp.light[light], mirrored ?? ramp.dark[dark]];
       return String(l).toLowerCase() === String(d).toLowerCase()
         ? l
         : `light-dark(${l}, ${d})`;
     }
     return chosen;
   };
+  /**
+   * Whether every part a clause names is a surface: its resting fill a
+   * background token, or no fill of its own (a header cell, an input).
+   * @param {Clause} c
+   */
+  const onSurfaces = c =>
+    c.parts.length > 0 &&
+    c.parts.every(p => {
+      const reads = C.partReads(one(p.on), 'background') ?? [];
+      const tok = restRead(reads, '');
+      return !reads.length || (!!tok && /^--color-background-/.test(tok));
+    });
   /** A color for the clause, for a fill, a text or a border color. @param {Clause} c @param {'fill' | 'text' | 'border'} use */
   const colorFor = (c, use) => {
     // (A border's color is read as a fill's, but takes its own palette
@@ -10053,7 +10758,8 @@ export function draftAnswer(ctx, env, question) {
           c.text,
         );
       const said = fillWord ? colorsIn(fillWord[0]) : [];
-      if (said.length) return themeShade(c, said[0]);
+      if (said.length)
+        return themeShade(c, said[0], use === 'fill' && onSurfaces(c));
       // (Else never the color said before "text".)
       const textWord =
         /(?:(?:light|dark|pale|deep)\s+)?(?:#[0-9a-f]{3,8}|[a-z]+)\s+(?:text|labels?|writing|words|letters)\b/i.exec(
@@ -10061,14 +10767,15 @@ export function draftAnswer(ctx, env, question) {
         );
       const ink = textWord ? colorsIn(textWord[0])[0] : undefined;
       const other = c.colors.find(x => x !== ink);
-      if (ink && other) return themeShade(c, other);
+      if (ink && other)
+        return themeShade(c, other, use === 'fill' && onSurfaces(c));
     }
     if (
       kind === 'fill' &&
       c.colors.length &&
       !THEME_COLOR_WORDS.some(([re]) => re.test(c.text))
     )
-      return themeShade(c, c.colors[0]);
+      return themeShade(c, c.colors[0], use === 'fill' && onSurfaces(c));
     for (const [re, fill, text] of THEME_COLOR_WORDS)
       if (re.test(ownText)) return kind === 'fill' ? fill : text;
     // "the color of the text", "the same color as the danger": a theme
@@ -10169,40 +10876,87 @@ export function draftAnswer(ctx, env, question) {
     if (steps.length) tops.push({clause: c, steps});
   };
 
+  // "the pink page background is a bit much, make the page a warm cream":
+  // a clause that says how a part looks now (its color before it, a
+  // complaint after) is the reason for the ask after it on the same part,
+  // never a value: it writes nothing of its own.
+  for (let i = 0; i < clauses.length - 1; i++) {
+    const c = clauses[i];
+    const verb =
+      /\b(?:is|are|looks?|feels?|seems?)\s+(?:a\s+bit\s+|a\s+little\s+|way\s+|kind\s+of\s+|far\s+|just\s+)?(?:too\s+\w+|much|too\s+much|overwhelming|loud|harsh|garish)\b/.exec(
+        c.text,
+      );
+    if (!verb || c.except || !c.parts.length || !c.colors.length) continue;
+    // (Its color said before the complaint: what the part is now.)
+    if (!colorsIn(c.text.slice(0, verb.index)).length) continue;
+    const later = clauses
+      .slice(i + 1)
+      .find(
+        o =>
+          !o.except &&
+          (o.colors.length || o.dir) &&
+          (!o.parts.length ||
+            o.parts.some(p => c.parts.some(x => x.on === p.on))),
+      );
+    if (!later) continue;
+    if (!later.parts.length) later.parts = c.parts.map(p => ({...p}));
+    c.parts = [];
+    c.colors = [];
+    c.dir = null;
+    c.text = '';
+  }
   // "switches: track #e5e7eb when off": a part whose only selection
   // state is checked draws its unchecked look at rest, so the clause is
   // its resting look with the checked one kept, never every state.
   for (let i = clauses.length - 1; i >= 0; i--) {
     const c = clauses[i];
+    // (The same for "unselected": the resting look, selected kept.)
+    const on = /** @type {Record<string, string>} */ ({
+      unchecked: 'checked',
+      unselected: 'selected',
+    })[c.state ?? ''];
     if (
-      c.state !== 'unchecked' ||
+      !on ||
       c.except ||
       !c.parts.length ||
       !c.parts.every(
         p =>
-          statesOf(p.on).includes('checked') &&
-          !statesOf(p.on).includes('unchecked'),
+          statesOf(p.on).includes(on) &&
+          !statesOf(p.on).includes(String(c.state)),
       )
     )
       continue;
     c.state = null;
+    // (When the ask says the kept state's own look too, "selected tab text
+    // white, unselected tabs gray", that clause writes it: nothing more to
+    // keep.)
+    const said = clauses.some(
+      o =>
+        o !== c &&
+        !o.except &&
+        o.state === on &&
+        o.parts.some(p => c.parts.some(x => x.on === p.on)),
+    );
     // (Its state words are read: the resting look, checked kept.)
+    // (The whole state phrase goes, the "when it is" before it included,
+    // so the words the answer repeats never end on a bare "when".)
     c.text = c.text
       .replace(
-        /\b(?:unchecked|not checked|unticked|when off|turned off|toggled off|switched off|is off)\b/g,
+        /(?:\bwhen\s+(?:(?:it|they)\s+(?:is|are)\s+|it'?s\s+|they'?re\s+)?|\b(?:is|are)\s+)?\b(?:unchecked|not checked|unticked|off|turned off|toggled off|switched off|unselected|not selected|non-selected)\b/g,
         ' ',
       )
       .replace(/\s+/g, ' ')
       .trim();
+    if (said) continue;
     clauses.splice(i + 1, 0, {
       ...c,
-      text: `except checked ${c.parts.map(p => p.on).join(' and ')}`,
+      text: `except ${on} ${c.parts.map(p => p.on).join(' and ')}`,
       aspects: [],
       colors: [],
       lengths: [],
       dir: null,
       decl: {},
-      state: 'checked',
+      state: on,
       except: true,
     });
   }
@@ -11601,7 +12355,7 @@ export function draftAnswer(ctx, env, question) {
               now => {
                 const n = parseColor(now);
                 return n && n.every((x, i) => Math.abs(x - avoid[i]) <= 2)
-                  ? nearOff(avoid)
+                  ? nearOff(avoid, themeNeutral)
                   : null;
               },
               c,
@@ -13555,6 +14309,43 @@ export function draftAnswer(ctx, env, question) {
     for (const p of targets.slice(0, 3)) {
       for (const a of c.aspects.slice(0, 3)) {
         let d = answerFor(c, p, a);
+        // The other reading of two states said together, as a second line:
+        // each one alone for a condition list read at once ("the checked
+        // and disabled checkboxes"), both at once for moment states read
+        // as each ("hovered and pressed buttons").
+        if (d?.options[0]?.length && p) {
+          /** @param {Partial<Clause>} over */
+          const reread = over => {
+            const r = answerFor({...c, ...over}, p, a);
+            const o = r?.options[0] ?? [];
+            return o.length && env.check(o).ok ? o : null;
+          };
+          const prev = clauses[clauses.indexOf(c) - 1];
+          /** @param {string} what @param {Step[]} steps */
+          const other = (what, steps) =>
+            otherReadings.push({
+              text: `or ${what}: ${steps.map(st => renderStep(st, env.slug)).join(' && ')}`,
+              options: [],
+            });
+          if (c.alsoState) {
+            const one1 = reread({alsoState: null});
+            const one2 = reread({state: c.alsoState, alsoState: null});
+            if (one1 && one2) other('each state alone', [...one2, ...one1]);
+          } else if (
+            c.state &&
+            prev?.state &&
+            prev.state !== c.state &&
+            !prev.alsoState &&
+            MOMENT_STATES.includes(String(c.state)) &&
+            MOMENT_STATES.includes(String(prev.state)) &&
+            JSON.stringify(prev.parts) === JSON.stringify(c.parts) &&
+            JSON.stringify(prev.colors) === JSON.stringify(c.colors) &&
+            JSON.stringify(prev.aspects) === JSON.stringify(c.aspects)
+          ) {
+            const both = reread({state: prev.state, alsoState: c.state});
+            if (both) other(`${prev.state} and ${c.state} at once`, both);
+          }
+        }
         // A part kept to its container ("buttons inside cards", "headings
         // in cards"): only a token the part reads, set on the container
         // (which the parts inside it read, and the container's own element
@@ -14520,12 +15311,21 @@ export function draftAnswer(ctx, env, question) {
             : ['background-color', 'background'];
       // (The variant's or status's own read in that state first: an error
       // input keeps its red when focused.)
+      // (A state the part data records by its attribute, "checked=checked",
+      // is that state too, as the pseudo-class ":checked" is.)
       const stateRead = (/** @type {string | null} */ need) =>
         C.partReads(one(p.on), group).find(
           r =>
             r.when.some(
               w =>
-                w.includes(`:${p.state}`) &&
+                (w.includes(`:${p.state}`) ||
+                  w
+                    .split(/[ ,]/)
+                    .some(
+                      x =>
+                        x === `${p.state}=${p.state}` ||
+                        x === `${p.state}=true`,
+                    )) &&
                 !/::before/.test(w) &&
                 (!need || w.split(/[ ,]/).includes(need)),
             ) &&
@@ -14708,6 +15508,25 @@ export function draftAnswer(ctx, env, question) {
     const on = p?.on;
     const {noState, ...f} = p ? flagsFor(c, p) : {};
     if (noState && on) {
+      // (The state is another part's, named by its own word in the ask,
+      // "the date picker's selected day": the calendar day's, a part of the
+      // plain component the place draws. Said, with its line, never
+      // written: it reaches every one.)
+      const other = [...ctx.project.target.keys()].filter(
+        k =>
+          k !== one(on) &&
+          (ctx.project.target.get(k)?.states ?? []).includes(noState) &&
+          new RegExp(`\\b${String(k.split('-').at(-1))}s?\\b`).test(c.text),
+      );
+      if (other.length === 1) {
+        const k = other[0];
+        const comp = ctx.project.target.get(k)?.component ?? k;
+        return {
+          text: `${on} has no ${noState} state: the ${noState} ${k.split('-').at(-1)} is ${k}'s, a part of the plain ${comp}, so a change there reaches every ${comp.toLowerCase()}; nothing is written. To change every ${comp.toLowerCase()}'s ${noState} ${k.split('-').at(-1)} instead, set it --on ${k} --state ${noState}`,
+          options: [],
+          lookup: `${HOW} ${k}`,
+        };
+      }
       return {
         text: `${on} has no ${noState} state that set can name (its states: ${statesOf(on).join(', ') || 'none'}), so a change would reach every ${on}`,
         options: [],
@@ -14727,14 +15546,29 @@ export function draftAnswer(ctx, env, question) {
           ? ['box-shadow']
           : ['border', 'border-color', 'border-width', 'border-style'];
       const rec = C.MAP[one(on)];
+      // (Only a part its component draws inside the overlay, never one
+      // that stands alone, a divider, nor one that draws a line of its
+      // own.)
+      const comp = ctx.project.target.get(one(on))?.component;
+      const standalone =
+        !comp ||
+        ctx.project.components[String(comp)]?.targets?.[0]?.className ===
+          `astryx-${one(on)}`;
       const holder =
-        rec && !props.some(x => rec.own?.[x] || rec.at?.[x])
+        rec &&
+        !standalone &&
+        !(rec.line ?? []).length &&
+        !props.some(x => rec.own?.[x] || rec.at?.[x])
           ? Object.keys(C.MAP)
               .filter(
                 k =>
                   k !== one(on) &&
                   (C.MAP[k].contains ?? []).includes(one(on)) &&
-                  props.some(x => C.MAP[k].own?.[x]) &&
+                  // (Its edge: the overlay's own shadow; for a border, the
+                  // surface it paints, whose edge the list sits inside.)
+                  (a === 'shadow'
+                    ? props.some(x => C.MAP[k].own?.[x])
+                    : Boolean(C.MAP[k].own?.['background-color'])) &&
                   ctx.project.components[
                     String(ctx.project.target.get(k)?.component ?? '')
                   ]?.category === 'Overlay',
@@ -14747,7 +15581,7 @@ export function draftAnswer(ctx, env, question) {
           : undefined;
       if (holder)
         return {
-          text: `${on} draws no ${a} of its own: the ${holder} it opens in draws it, and a change on ${holder} reaches every ${holder}; nothing is written. To change every ${holder}'s ${a}, set it --on ${holder}`,
+          text: `${on} draws no ${a} of its own: the ${holder} it opens in ${a === 'shadow' ? 'draws it' : 'is the surface whose edge it is'}, and a change on ${holder} reaches every ${holder}; nothing is written. To change every ${holder}'s ${a}, set it --on ${holder}`,
           options: [],
           lookup: `${HOW} ${holder}`,
         };
@@ -15356,6 +16190,20 @@ export function draftAnswer(ctx, env, question) {
             [
               set('--color-background-body', color, pm),
               set('--color-text-primary', ink, pm),
+            ],
+          ],
+          sequence: true,
+        };
+      // (A color word in neither mode's lightness, with no text said with
+      // it: each mode's page takes it at its own.)
+      const tones = pageTones(c, String(color));
+      if (tones)
+        return {
+          text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`,
+          options: [
+            [
+              set('--color-background-body', tones.light, {mode: 'light'}),
+              set('--color-background-body', tones.dark, {mode: 'dark'}),
             ],
           ],
           sequence: true,
@@ -16884,28 +17732,25 @@ export function draftAnswer(ctx, env, question) {
               sequence: steps.length > 1,
             };
           }
-          // Darker, lighter, subtler or more contrast asks for the color.
+          // Darker, lighter, subtler, more contrast or how visible (or
+          // transparent) asks for the color.
+          const seen = visibilityAsk(c.text);
           if (
-            /\b(darker|lighter|subtle\w*|contrast|stronger|fainter|softer|visible|invisible|too (dark|light|faint|strong|harsh|heavy))\b/.test(
+            seen ||
+            /\b(darker|lighter|subtle\w*|contrast|stronger|fainter|softer|too (dark|light|faint|strong|harsh|heavy))\b/.test(
               c.text,
             )
           ) {
             // "too light" asks for stronger borders, "too dark" for fainter.
             // Visibility is the border's strength: "less visible", "half as
-            // visible", "barely visible" are fainter, by the share named.
-            const lessVisible =
-              /\b(?:less|half as|barely|hardly|not as|a lot less|much less)\s+visible\b|\binvisible\b/.test(
-                c.text,
-              );
-            const more =
-              (/\b(darker|stronger|more contrast|visible|too (light|faint|subtle))\b/.test(
-                c.text,
-              ) &&
-                !lessVisible) ||
-              false;
-            const visibleBy = /\bvisible\b/.test(c.text)
-              ? exactFactor(c.text)
-              : null;
+            // visible", "more transparent" are fainter, "half as
+            // transparent" stronger, by the share named (visibilityAsk).
+            const more = seen
+              ? seen.stronger
+              : /\b(darker|stronger|more contrast|too (light|faint|subtle))\b/.test(
+                  c.text,
+                );
+            const visibleBy = seen?.by ?? null;
             // A named mode with darker or lighter moves the border that way
             // as it paints on that mode's page ("lighter in dark mode" is
             // more of a light ink); otherwise darker is more contrast.
@@ -16988,6 +17833,59 @@ export function draftAnswer(ctx, env, question) {
             return null;
           const color = colorFor(c, 'border');
           const w = c.lengths[0];
+          // A ring said with no focus ("cards: 1px ring #e5e7eb", as a
+          // ring is written in CSS utilities) is a ring at rest: a
+          // box-shadow of that width and color; the focus ring only when
+          // focus is said.
+          const focusSaid =
+            Boolean(f.state && /focus/.test(f.state)) ||
+            /\bfocus(?:ed|ing|-visible|-within)?\b/.test(c.text);
+          if (on && !focusSaid && !c.neg && color) {
+            // The ring goes in front of the shadow the part shows now (the
+            // theme's own, else the shadow token Core draws it with), so
+            // its own shadow stays, as an input's ring sits beside its
+            // bevel.
+            const ring = `0 0 0 ${w ?? '1px'} ${color}`;
+            const rests = C.partReads(one(on), 'shadow') ?? [];
+            const coreShadow = (
+              rests.find(
+                r =>
+                  r.props.includes('box-shadow') &&
+                  r.when.includes(f.when ?? '') &&
+                  /^--shadow-/.test(r.token),
+              ) ??
+              rests.find(
+                r =>
+                  r.props.includes('box-shadow') &&
+                  r.when.includes('') &&
+                  /^--shadow-/.test(r.token),
+              )
+            )?.token;
+            // (What Core draws there at rest, as the census read it: the
+            // render asked for, else its first render with no state; a
+            // card's ring and elevation layers stay in it.)
+            const drawn = Object.entries(
+              C.MAP[one(on)]?.at?.['box-shadow'] ?? {},
+            ).filter(([k]) => !/:/.test(k));
+            const coreDrawn = ((f.when
+              ? drawn.find(([k]) =>
+                  k.split(',').includes(String(f.when).replace(':', '=')),
+                )
+              : undefined) ?? drawn[0])?.[1];
+            const shows =
+              (f.state || c.mode || f.when
+                ? null
+                : partValue(on, 'box-shadow')) ??
+              coreDrawn ??
+              (coreShadow ? `var(${coreShadow})` : null);
+            const keep = shows && !/^\s*none\s*$/i.test(shows) ? shows : null;
+            return {
+              text: `a ring at rest${where}: box-shadow ${ring}${keep ? `, in front of the shadow it shows now (${keep})` : ''}, shown always (for the ring shown while focused, say "focus ring")`,
+              options: [
+                [set('box-shadow', keep ? `${ring}, ${keep}` : ring, f)],
+              ],
+            };
+          }
           const fl = {...f, state: f.state ?? 'focus-visible'};
           /** @type {Step[]} */
           const steps = [
@@ -17169,9 +18067,7 @@ export function draftAnswer(ctx, env, question) {
         // at a lower alpha, on the part (the looks that draw no border
         // stay without one); a part that draws none has none to fade.
         if (
-          /\b(?:less (?:visible|noticeable|prominent|obvious)|half as (?:visible|noticeable|strong)|fainter|subtler|more (?:transparent|see-through)|weaker)\b/.test(
-            c.text,
-          ) &&
+          visibilityAsk(c.text)?.stronger === false &&
           !/\b(?:thin|thick|width|wide|px)\w*/.test(c.text)
         ) {
           const read = restRead(C.partReads(one(on), 'border'), f.when);
@@ -17404,7 +18300,9 @@ export function draftAnswer(ctx, env, question) {
             };
           }
         }
-        if (!hasBorder && color && !style && !side) {
+        // ("dialogs with a 1px border #23252a": a width said asks for the
+        // part's own edge, never only its inner lines' color.)
+        if (!hasBorder && color && !style && !side && !c.lengths.length) {
           const lineRead = (/** @type {{props: string[]}} */ r) =>
             r.props.some(x =>
               /^border(-(top|bottom|left|right))?(-color)?$/.test(x),
@@ -17566,8 +18464,20 @@ export function draftAnswer(ctx, env, question) {
                 })(),
               }
             : {
-                text: `${on} draws no border now: a border in ${c.mode} mode only would take its width in the other mode too, and ${on} draws a shadow of its own, so a ring in its box-shadow would take that away`,
-                options: [],
+                // (No ring where the part draws its own shadow: the border
+                // itself, its color see-through in the other mode, where it
+                // keeps an edge of that width it does not show.)
+                text: `a border${where}, in ${c.mode} mode only: ${on} draws a shadow of its own, so no ring inside its edge; the border's color is see-through in the ${c.mode === 'light' ? 'dark' : 'light'} mode, which keeps an unseen ${width ?? '1px'} edge`,
+                options: [
+                  [
+                    set(
+                      prop,
+                      `${width ?? '1px'} solid light-dark(${c.mode === 'light' ? `${lineColor}, transparent` : `transparent, ${lineColor}`})`,
+                      f,
+                    ),
+                  ],
+                ],
+                ...(c.mode ? {modeInValue: true} : {}),
               };
         }
         return {
@@ -17897,6 +18807,69 @@ export function draftAnswer(ctx, env, question) {
               text: `${gap ? 'the gap' : 'padding'}${where}: ${stepped} (now ${nowPad}; a step: give an amount, such as double or 24px, for an exact one)`,
               options: [[set(gap ? 'gap' : 'padding', stepped, f)]],
             };
+        }
+        // A part whose rows are as tall as the parts inside it pad them (a
+        // table row, its cells): tighter is those parts' block padding one
+        // spacing step down, which shows; the spacing dial's step scales
+        // everything inside and barely moves a row.
+        const rowPad =
+          value === 'less' && on && !FAMILIES[on] && !f.state && !f.when
+            ? (() => {
+                const own = ctx.project.target.get(one(on))?.component;
+                const inner = [one(on), ...(C.MAP[one(on)]?.contains ?? [])]
+                  .filter(
+                    k =>
+                      ctx.project.target.get(k)?.component === own &&
+                      C.MAP[k]?.at?.['padding-block'],
+                  )
+                  .map(k => {
+                    const v = Object.values(
+                      C.MAP[k]?.at?.['padding-block'] ?? {},
+                    )[0];
+                    return {
+                      k,
+                      tok: /var\((--spacing-[\w-]+)\)/.exec(String(v))?.[1],
+                    };
+                  })
+                  .filter(x => x.tok);
+                if (!inner.length || inner.some(x => x.tok !== inner[0].tok))
+                  return null;
+                const px = (/** @type {string} */ t) =>
+                  lengthPx(String(resolvedValue(t) || current(t) || ''));
+                const now = px(/** @type {string} */ (inner[0].tok));
+                if (now == null) return null;
+                const down = Object.keys(TOKENS)
+                  .filter(t => /^--spacing-[\d-]+$/.test(t))
+                  .map(t => ({t, v: px(t)}))
+                  .filter(x => x.v != null && x.v < now && x.v > 0)
+                  .sort((a, b) => Number(b.v) - Number(a.v))[0];
+                return down
+                  ? {
+                      parts: inner.map(x => x.k),
+                      from: inner[0].tok,
+                      to: down.t,
+                      by: 2 * (now - Number(down.v)),
+                    }
+                  : null;
+              })()
+            : null;
+        // (The spacing dial's step on the part leads: it reaches every row.
+        // The block padding of the cells that set a row's height, one
+        // spacing step down, is the second line: it shows more, the body
+        // cells first, never the header alone.)
+        if (rowPad) {
+          const cells = [...rowPad.parts].sort(
+            (x, y) => Number(/header/.test(x)) - Number(/header/.test(y)),
+          );
+          return {
+            text: `${on} tighter: spacing ${value} on ${on} (one step of the room inside it); for more, the second line sets the block padding of ${cells.join(' and ')}, which set its height, one spacing step down (${rowPad.from} to ${rowPad.to}), ${rowPad.by}px less per row`,
+            options: [
+              [set('spacing', value, stepOk ? stepFlags : {on})],
+              cells.map(k =>
+                set('padding-block', `var(${rowPad.to})`, {on: k}),
+              ),
+            ],
+          };
         }
         return {
           text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it; one step${padFactor ? ', not an exact amount: give a value, such as 24px, for one' : ''})`,
@@ -18945,26 +19918,36 @@ export function draftAnswer(ctx, env, question) {
                 };
           }
         }
-        if (tall)
-          return {
-            text: `the height${where}: min-height ${tall}${rowsSized && FAMILIES[on] ? ` (never one fixed height: ${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)` : ''}`,
-            options: [
-              [set('min-height', tall, f)],
-              ...(rowsSized && FAMILIES[on] ? [] : [[set('height', tall, f)]]),
-            ],
-          };
-        if (on === 'progress-bar-fill' || on === 'progress-bar-track')
+        // A progress bar's height is its track's, a height said in px or a
+        // way ("4px tall", "thinner"): the fill runs the track's height, so
+        // a height on the fill draws a strip over the unchanged track. Only
+        // the fill named as the fill ("the progress fill 4px") is the fill.
+        if (
+          (on === 'progress-bar-track' ||
+            (on === 'progress-bar-fill' &&
+              !/\b(fill|filled|indicator)\b/.test(c.text))) &&
+          !f.state
+        )
           return {
             text: 'the progress bar thickness: the height of its track',
             options: [
               [
                 set(
                   'height',
-                  c.lengths[0] ??
+                  tall ??
+                    c.lengths[0] ??
                     (c.dir === 'less' || /\bthin/.test(c.text) ? '2px' : '8px'),
                   {on: 'progress-bar-track'},
                 ),
               ],
+            ],
+          };
+        if (tall)
+          return {
+            text: `the height${where}: min-height ${tall}${rowsSized && FAMILIES[on] ? ` (never one fixed height: ${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)` : ''}`,
+            options: [
+              [set('min-height', tall, f)],
+              ...(rowsSized && FAMILIES[on] ? [] : [[set('height', tall, f)]]),
             ],
           };
         if (
@@ -19302,7 +20285,7 @@ export function draftAnswer(ctx, env, question) {
             const n = parseColor(now);
             if (!avoid || !n || n.some((x, i) => Math.abs(x - avoid[i]) > 2))
               return null;
-            return nearOff(avoid);
+            return nearOff(avoid, themeNeutral);
           };
           const own = restRead(C.partReads(one(on), 'text'), f.when);
           const steps =
@@ -19337,7 +20320,7 @@ export function draftAnswer(ctx, env, question) {
                   n.some((x, i) => Math.abs(x - avoid[i]) > 2)
                 )
                   return null;
-                return nearOff(avoid);
+                return nearOff(avoid, themeNeutral);
               },
               c,
             );
@@ -19457,7 +20440,7 @@ export function draftAnswer(ctx, env, question) {
           };
         if (on === 'link' && color) {
           // (A link color one mode's page would make unreadable, a dark
-          // blue on the dark page under 2:1, is set for the other mode
+          // blue on the dark page under 2.5:1, is set for the other mode
           // only, as the text color is; said.)
           const rgb = parseColor(color);
           const readable = /** @type {Array<'light' | 'dark'>} */ ([
@@ -19465,7 +20448,7 @@ export function draftAnswer(ctx, env, question) {
             'dark',
           ]).filter(m => {
             const page = parseColor(current('--color-background-body', m));
-            return !rgb || !page || ratio(rgb, page) >= 2;
+            return !rgb || !page || ratio(rgb, page) >= 2.5;
           });
           const oneMode =
             !c.mode &&
@@ -19635,8 +20618,15 @@ export function draftAnswer(ctx, env, question) {
           };
         }
         // A part that takes its color from a prop (a heading): the text
-        // token, on that part only.
-        if (!env.check([set('color', color, f)]).ok)
+        // token, on that part only. (A color it already has is said so,
+        // never read as a prop.)
+        const colorCheck = env.check([set('color', color, f)]);
+        if (!colorCheck.ok && /^it changes nothing/.test(colorCheck.why ?? ''))
+          return {
+            text: `the text color${where} is ${color} already, so nothing changes`,
+            options: [],
+          };
+        if (!colorCheck.ok)
           return {
             text: `the text color${where}: --color-text-primary on ${on} only (${on} takes its color from a prop, so a color property never shows)`,
             options: [
@@ -19674,11 +20664,39 @@ export function draftAnswer(ctx, env, question) {
         // A state Core paints with an inline style from a token (a selected
         // table row's wash): that token, on the part in that state.
         const inlinePart = on ? one(on) : null;
+        // (In two states at once where one is the inline one, a selected
+        // row hovered: that token, in the other state; the wash is the
+        // token's value there, so only the rows in the inline state show
+        // it.)
+        const pieces = String(f.state ?? '').split('+');
+        const inlineState =
+          inlinePart && pieces.length === 2
+            ? pieces.find(
+                p => C.MAP[inlinePart]?.inline?.[p]?.['background-color'],
+              )
+            : undefined;
         const inlineToken =
           inlinePart && f.state
-            ? C.MAP[inlinePart]?.inline?.[f.state]?.['background-color']
+            ? (C.MAP[inlinePart]?.inline?.[inlineState ?? f.state]?.[
+                'background-color'
+              ] ?? null)
             : null;
         const inlineColor = inlineToken ? colorFor(c, 'fill') : null;
+        if (inlinePart && inlineToken && inlineColor && inlineState) {
+          const other = pieces.find(p => p !== inlineState);
+          return {
+            text: `the background${where}: ${inlineToken}, which Core paints ${inlinePart} with when ${inlineState}, set for ${other}, so a ${inlineState} ${inlinePart} shows it when ${other}`,
+            options: [
+              [
+                set(inlineToken, inlineColor, {
+                  on: inlinePart,
+                  state: other,
+                  ...modeOf(c),
+                }),
+              ],
+            ],
+          };
+        }
         if (inlinePart && inlineToken && inlineColor)
           return {
             text: `the background${where}: ${inlineToken}, which Core paints ${inlinePart} with when ${f.state}`,
@@ -19931,6 +20949,20 @@ export function draftAnswer(ctx, env, question) {
           const color = colorFor(c, 'fill');
           if (color) {
             const pageMode = pageModeOf(c, color);
+            const tones = pageTones(c, color);
+            if (tones)
+              return {
+                text: `the page background: --color-background-body, ${color}'s color at each mode's own page lightness (${tones.light} in light mode, ${tones.dark} in dark mode), so both pages keep their text readable`,
+                options: [
+                  [
+                    set('--color-background-body', tones.light, {
+                      mode: 'light',
+                    }),
+                    set('--color-background-body', tones.dark, {mode: 'dark'}),
+                  ],
+                ],
+                sequence: true,
+              };
             return {
               text: `the page background: --color-background-body${pageModeSaid(c, pageMode)}`,
               options: [
@@ -20965,6 +21997,23 @@ export function draftAnswer(ctx, env, question) {
         : {text: 'no setting is a second brand color', options: []};
     /** @type {Step | null} */
     let darkStep = null;
+    /**
+     * Whether a fill stands out on the dark page (3:1) with text that reads
+     * on it (4.5:1, white or black).
+     * @param {string} x
+     */
+    const standsInDark = x => {
+      const rgb = parseColor(x);
+      const page = parseColor(
+        String(current('--color-background-body', 'dark') ?? ''),
+      );
+      return Boolean(
+        rgb &&
+        page &&
+        ratio(rgb, page) >= 3 &&
+        Math.max(ratio(rgb, [255, 255, 255]), ratio(rgb, [0, 0, 0])) >= 4.5,
+      );
+    };
     // A theme whose modes show this color in different hues (butter's blue
     // light accent, yellow dark one), or that shows only its dark mode: the
     // editor's one seed would make every mode's shades from one hue. A step
@@ -21202,8 +22251,39 @@ export function draftAnswer(ctx, env, question) {
             tokenAlpha,
           )
         : color;
+    let nearDark = false;
+    // A deeper or darker role color asked for, too dark to stand out on
+    // the dark page: the editor's dark half falls back to its paler
+    // official shade, so the dark token is set in the same answer to the
+    // color nearest it that stands out there (3:1) with text that reads on
+    // it (4.5:1): dark mode goes the way the ask goes, not paler.
+    if (
+      modal &&
+      !darkStep &&
+      // ("deeper blue" reads as "dark blue" here.)
+      /\b(?:darker|darken|deeper|dark)\b(?!\s+(?:mode|theme|scheme)\b)/i.test(
+        c.text,
+      ) &&
+      color &&
+      dial !== 'neutral' &&
+      dial !== 'secondary' &&
+      parseColor(color) &&
+      alphaOf(color) >= 1
+    ) {
+      if (!standsInDark(color)) {
+        let near = null;
+        for (let k = 0.02; k <= 0.6 && !near; k += 0.02) {
+          const next = shift(color, k);
+          if (next && standsInDark(next)) near = next;
+        }
+        if (near) {
+          darkStep = set(token, near, {mode: 'dark'});
+          nearDark = true;
+        }
+      }
+    }
     return {
-      text: `${dial}: the editor makes its light and dark shades from ${color}${darkStep ? `, and the dark ${token} steps from its own value the same way` : `; or, the second line, only ${token} itself${tokenAlpha < 1 ? `, kept at its own ${Math.round(tokenAlpha * 100)}% strength (a wash)` : ''}, leaving the other ${dial} shades as they are`}`,
+      text: `${dial}: the editor makes its light and dark shades from ${color}${darkStep ? `, and the dark ${token} ${nearDark ? 'is the color nearest it that stands out on the dark page, so dark mode follows it instead of turning paler' : 'steps from its own value the same way'}` : `; or, the second line, only ${token} itself${tokenAlpha < 1 ? `, kept at its own ${Math.round(tokenAlpha * 100)}% strength (a wash)` : ''}, leaving the other ${dial} shades as they are`}`,
       options: darkStep
         ? [[set(dial, color), darkStep]]
         : [[set(dial, color)], [set(token, exactToken)]],
@@ -21274,9 +22354,48 @@ export function draftAnswer(ctx, env, question) {
         ? m[1]
         : undefined;
     })();
+    // (Right before a part, "the zorp card rounder", or between a part's
+    // possessive and its element, "the button's foo icon": a word there
+    // that is no part's own word names nothing the part has.)
+    // (A word some part's own name holds, "the close button", names a
+    // piece of a part, which the place reader reads: never unknown.)
+    const inPartName = (/** @type {string} */ w) =>
+      [...TARGET.keys()].some(k => k.split('-').includes(singular(w)));
+    const beforePartWord = (() => {
+      const m = new RegExp(String.raw`\b${DET}([a-z]{3,})\s+([a-z]+)\b`).exec(
+        text,
+      );
+      return m &&
+        !inPartName(m[1]) &&
+        lex.parts.some(([re]) => re.test(` ${m[2]} `)) &&
+        !lex.parts.some(([re]) => {
+          const x = re.exec(` ${m[1]} ${m[2]} `);
+          return x != null && x[0].includes(m[1]);
+        })
+        ? m[1]
+        : undefined;
+    })();
+    const possessiveWord = (() => {
+      const m = /\b([a-z]+)(?:'s|s'|’s|s’)\s+([a-z]{3,})\s+([a-z]+)\b/.exec(
+        text,
+      );
+      return m &&
+        !inPartName(m[2]) &&
+        lex.parts.some(([re]) => re.test(` ${m[1]} `)) &&
+        (lex.parts.some(([re]) => re.test(` ${m[3]} `)) ||
+          new RegExp(String.raw`^${THING}$|^icons?$`).test(m[3])) &&
+        !lex.parts.some(([re]) => {
+          const x = re.exec(` ${m[2]} ${m[3]} `);
+          return x != null && x[0].includes(m[2]);
+        })
+        ? m[2]
+        : undefined;
+    })();
     const slots = between
-      ? [betweenWord, placedWord]
+      ? [betweenWord, placedWord, beforePartWord, possessiveWord]
       : [
+          beforePartWord,
+          possessiveWord,
           new RegExp(
             String.raw`\b(?:from|on)\s+${DET}([a-z]{3,})\b(?!\s+(?:mode|theme)\b)`,
           ).exec(text)?.[1],
@@ -21334,7 +22453,7 @@ export function draftAnswer(ctx, env, question) {
               ),
             ))) ||
         parseColor(w) ||
-        /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
+        /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|big|tiny|huge|little|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
           w,
         )
       )
@@ -21449,10 +22568,16 @@ export function draftAnswer(ctx, env, question) {
       // (A rung by name; a length said beside a step is an example. The
       // step goes the rung's way: "sharper … almost square", never
       // "rounder but square", which contradicts.)
-      const rung = (/** @type {Step} */ x) => /^[a-z]+$/.test(String(x.value));
+      // (A size said beside the way, "bigger, 17px", is how much: it wins
+      // as a rung does.)
+      const sized = (/** @type {Step} */ x) =>
+        /^\d*\.?\d+(?:px|rem|em)?$/.test(String(x.value));
+      const rung = (/** @type {Step} */ x) =>
+        /^[a-z]+$/.test(String(x.value)) || sized(x);
       const LOW = /^(?:square|small|tight|compact|light|thin|regular)$/;
       const HIGH = /^(?:large|round|pill|roomy|spacious|bold|heavy)$/;
       const sameWay = (/** @type {Step} */ r, /** @type {Step} */ a) =>
+        sized(a) ||
         (r.value === 'less' && LOW.test(String(a.value))) ||
         (r.value === 'more' && HIGH.test(String(a.value)));
       if (
@@ -21465,6 +22590,24 @@ export function draftAnswer(ctx, env, question) {
         (rel(st) ? sameWay(st, prior.step) : sameWay(prior.step, st)) &&
         (prior.clause.mode ?? '') === (clause.mode ?? '')
       ) {
+        // ("like 1 or 2 px": a size given as an example keeps the way.)
+        const sizedStep = rel(st) ? prior.step : st;
+        const sizedClause = rel(st) ? prior.clause : clause;
+        if (
+          sized(sizedStep) &&
+          /^\s*(?:like|say|e\.?g\.?|about|around|maybe|roughly)\b/.test(
+            sizedClause.text,
+          )
+        ) {
+          relDropped.push(sizedStep);
+          if (!rel(st)) {
+            steps.splice(k, 1, prior.step);
+            continue;
+          }
+          last.delete(key);
+          last.set(key, {step: st, clause});
+          continue;
+        }
         relDropped.push(rel(st) ? st : prior.step);
         if (rel(st)) {
           steps.splice(k, 1, prior.step);
@@ -22283,7 +23426,19 @@ export function draftAnswer(ctx, env, question) {
           (state ? state.test(cond) && !/:hover|:not\(/.test(cond) : !cond)
         );
       });
-      const value = keys.map(k => at[k])[0];
+      // The base theme's own rule for the part draws the property where it
+      // sets one (neutral's neutral badge fills with its gray), over what
+      // Core reads there.
+      const key = keys[0];
+      const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
+      const baseRule =
+        key && !key.split(' ')[1]
+          ? baseBlocksFor(
+              /** @type {any} */ (env.base).components?.[one(named)],
+              key.split(' ')[0],
+            ).find(({block}) => typeof block[camel] === 'string')
+          : null;
+      const value = baseRule ? baseRule.block[camel] : keys.map(k => at[k])[0];
       if (value == null) return null;
       const mode = inMode ?? readMode ?? 'light';
       const read = String(value)
@@ -22466,7 +23621,36 @@ export function draftAnswer(ctx, env, question) {
         const tok = /var\(\s*(--[a-z0-9-]+)\s*\)/.exec(v)?.[1];
         return tok ? `${partNow(tok, mode)}${named ? ` (${tok})` : ''}` : v;
       };
-      const rest = at['background-color'][base];
+      // (A fill the theme sets on the part there, for the mode asked, wins;
+      // else the base theme's own rule for the part draws its fill where it
+      // sets one: neutral's neutral badge fills with its gray.)
+      const set = [...env.data.settings]
+        .reverse()
+        .find(
+          x =>
+            x.source === 'property' &&
+            /^background(?:-color)?$/.test(x.thing) &&
+            !x.state &&
+            (!x.mode || x.mode === mode) &&
+            (!x.when || (vWord && x.when === `${vAxis}:${vWord}`)) &&
+            partsOf(ctx, x).includes(one(named)),
+        );
+      const setValue = set
+        ? (() => {
+            const pair = /^light-dark\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/.exec(
+              String(set.value).trim(),
+            );
+            return pair ? pair[mode === 'dark' ? 2 : 1] : String(set.value);
+          })()
+        : null;
+      const rest =
+        setValue ??
+        baseBlocksFor(
+          /** @type {any} */ (env.base).components?.[one(named)],
+          base,
+        ).find(({block}) => typeof block.backgroundColor === 'string')?.block
+          .backgroundColor ??
+        at['background-color'][base];
       const suffix = `${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`;
       // (At rest, the reading the value answer gives: the value now.)
       if (!sel) return `${shown(rest, false)}${suffix}`;
@@ -22953,7 +24137,13 @@ export function draftAnswer(ctx, env, question) {
             st.on &&
             st.mode === 'dark' &&
             kind === 'light' &&
-            !typed(v)
+            !typed(v) &&
+            // (A color word the ask says, never a color a direction made:
+            // "the card background darker" keeps each card's own dark
+            // tone, whatever text it draws.)
+            colorsIn(question).some(
+              x => String(x).toLowerCase() === v.toLowerCase(),
+            )
           ) {
             const ink = inkOf(st.on, st.when, 'dark');
             const rgb = parseColor(v);
@@ -22971,14 +24161,19 @@ export function draftAnswer(ctx, env, question) {
             if (kind !== 'light' || /light-dark\(/.test(String(st.value)))
               continue;
             // (A border shorthand keeps its width in both modes: only its
-            // color is the light mode's, the dark mode keeping the theme's
-            // border color.)
-            if (st.thing === 'border')
+            // color is the light mode's, the dark mode keeping the border
+            // color the part draws now, an input's emphasized one, else the
+            // theme's.)
+            if (st.thing === 'border') {
+              const own =
+                st.on && restRead(C.partReads(one(st.on), 'border') ?? [], '');
+              const keep =
+                own && /^--color-/.test(own) ? own : '--color-border';
               st.value = String(st.value).replace(
                 v,
-                `light-dark(${v}, var(--color-border))`,
+                `light-dark(${v}, var(${keep}))`,
               );
-            else st.mode = 'light';
+            } else st.mode = 'light';
             notes.add(
               `(a light ${st.on ? 'border' : 'border color'}, in light mode only: on the dark page it would be a glaring edge, so the dark mode keeps its own; for the dark mode too, set a dark color with --mode dark, or say "in both modes")`,
             );
@@ -23015,6 +24210,75 @@ export function draftAnswer(ctx, env, question) {
       for (const n of notes) if (!d.text.includes(n)) d.text += ` ${n}`;
     }
   }
+  // A plain fill on a part whose variants are colors or statuses besides
+  // its neutral ones ("white cards": default, muted, transparent beside
+  // blue, green …; "blue tags": neutral beside success, error …): the
+  // neutral variants take it; each colored or status variant keeps its
+  // own, named, with a line for each to change it too.
+  /** @type {Draft[]} */
+  const keptLines = [];
+  for (const d of result)
+    for (const o of /contradict/.test(d.text) ? [] : d.options) {
+      // (Parts the answer keeps a variant or state of apart, as asked.)
+      const apart = new Set(
+        o
+          .filter(x => /^background/.test(x.thing) && (x.when || x.state))
+          .map(x => String(x.on)),
+      );
+      for (let i = o.length - 1; i >= 0; i--) {
+        const st = o[i];
+        if (
+          !st.on ||
+          st.when ||
+          st.state ||
+          st.only ||
+          !/^background(?:-color)?$/.test(st.thing) ||
+          FAMILIES[st.on]
+        )
+          continue;
+        // (A plain color only: a token, a gradient, a see-through or a
+        // removed fill is what each variant does with it as asked.)
+        const v0 = String(st.value ?? '').trim();
+        if (!/^#[0-9a-f]{3,8}$/i.test(v0) || !parseColor(v0) || alphaOf(v0) < 1)
+          continue;
+        // (A color the ask says, typed or as a word: never one worked out
+        // from another, "the accent but lighter"; nor an answer that
+        // already keeps a variant or state apart, an except.)
+        const said = new Set(
+          clauses.flatMap(x => x.colors).map(x => String(x).toLowerCase()),
+        );
+        if (
+          !said.has(v0.toLowerCase()) &&
+          !question.toLowerCase().includes(v0.toLowerCase())
+        )
+          continue;
+        if (apart.has(String(st.on))) continue;
+        const variants = C.variantValues(one(st.on)).variant ?? [];
+        // (A part with a main variant, a button's primary, is read by the
+        // pass below: its variants are roles, not colors.)
+        if (variants.includes('primary')) continue;
+
+        const colored = variants.filter(
+          v =>
+            Object.hasOwn(HUES, v) ||
+            /^(?:success|warning|error|danger|info|destructive|critical|positive|negative|caution|attention)$/.test(
+              v,
+            ),
+        );
+        const plain = variants.filter(v => !colored.includes(v));
+        if (!colored.length || !plain.length) continue;
+        o.splice(i, 1, ...plain.map(v => ({...st, when: `variant:${v}`})));
+        const name = one(st.on);
+        if (!/keeps? (?:their|its) own color/.test(d.text))
+          d.text += ` (the ${colored.join(', ')} ${name} ${colored.length > 1 ? 'variants keep their' : 'variant keeps its'} own color; the next lines change ${colored.length > 1 ? 'them' : 'it'} too)`;
+        if (!keptLines.some(k => k.text.includes(`${name} variants`)))
+          keptLines.push({
+            text: `to change the ${colored.join(', ')} ${name} variants too: one line for each`,
+            options: colored.map(v => [{...st, when: `variant:${v}`}]),
+          });
+      }
+    }
+  result.push(...keptLines);
   // A fill given to every variant of a part ("navy buttons"): a variant
   // whose own text would barely show on it (a secondary button's dark
   // label on navy, under 3:1) keeps its fill; the others take it, each by
@@ -23034,21 +24298,21 @@ export function draftAnswer(ctx, env, question) {
           continue;
         const fill = parseColor(String(st.value ?? ''));
         if (!fill || alphaOf(String(st.value)) < 1) continue;
-        // (Its text given in the same answer: the ask's own look.)
-        if (
-          o.some(
-            x =>
-              x !== st &&
-              x.on === st.on &&
-              (x.thing === 'color' || /^--color-(?:text|on)-/.test(x.thing)),
-          )
-        )
-          continue;
         const variants = C.variantValues(one(st.on)).variant ?? [];
         // (Role variants only, a part with a main variant, a button's
         // primary: a tone family, a badge's statuses, each pairs its text
         // with its own fill and is recolored as a whole.)
         if (variants.length < 2 || !variants.includes('primary')) continue;
+        // (Its text given in the same answer: the ask's own look, so no
+        // variant loses its text.)
+        const ownInk = o.some(
+          x =>
+            x !== st &&
+            x.on === st.on &&
+            !x.when &&
+            !x.state &&
+            (x.thing === 'color' || /^--color-(?:text|on)-/.test(x.thing)),
+        );
         /** @type {Map<string, string>} */
         const ink = new Map();
         for (const r of C.partReads(one(st.on), 'text') ?? []) {
@@ -23059,10 +24323,88 @@ export function draftAnswer(ctx, env, question) {
           }
         }
         const mode = /** @type {'light' | 'dark'} */ (st.mode ?? 'light');
+        const lost = ownInk
+          ? []
+          : variants.filter(v => {
+              const t = ink.get(v);
+              const rgb = t ? parseColor(String(current(t, mode) ?? '')) : null;
+              return rgb != null && ratio(fill, rgb) < 3;
+            });
+        if (lost.length === variants.length) continue;
+        // (Once the color goes to some variants only, a variant drawn in a
+        // status color, the destructive button's red, keeps its meaning
+        // too, unless the color asked is that status color already.)
+        const fills = C.partReads(one(String(st.on)), 'background') ?? [];
+        const status = variants.filter(v => {
+          if (lost.includes(v)) return false;
+          const r = fills.find(
+            x =>
+              x.when.some(w => w.trim() === `variant=${v}`) &&
+              /^--color-(?:error|danger|warning|success)\b/.test(x.token),
+          );
+          if (!r) return false;
+          const now = parseColor(String(current(r.token, mode) ?? ''));
+          const near =
+            !!now && Math.hypot(...now.map((x, k) => x - (fill[k] ?? 0))) < 80;
+          return !near;
+        });
+        // (Only once the color goes to some variants anyway, or when the
+        // ask gives the whole look, its fill and its text ("gold buttons
+        // with black text"): a bare color every button's text reads on
+        // stays every button's.)
+        if (!lost.length && !(ownInk && status.length)) continue;
+        const kept = variants.filter(
+          v => !lost.includes(v) && !status.includes(v),
+        );
+        if (!kept.length) continue;
+        o.splice(i, 1, ...kept.map(v => ({...st, when: `variant:${v}`})));
+        if (
+          !/keep their own fill|keeps its own fill|status color/.test(d.text)
+        ) {
+          if (lost.length)
+            d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own fill' : 'keeps its own fill'}: ${lost.length > 1 ? 'their' : 'its'} text would barely show on ${st.value}; give ${lost.length > 1 ? 'them' : 'it'} a text color too to change ${lost.length > 1 ? 'them' : 'it'})`;
+          if (status.length)
+            d.text += ` (${status.join(', ')} ${status.length > 1 ? 'keep their' : 'keeps its'} status color; name ${status.length > 1 ? 'them' : 'it'} to change ${status.length > 1 ? 'them' : 'it'} too)`;
+        }
+      }
+    }
+  // A text color given to every variant of a part ("buttons with white
+  // text"), with no fill of its own in the answer: a variant whose own
+  // fill would hide it (a ghost button's page, a secondary button's light
+  // fill, under 3:1) keeps its text; said.
+  for (const d of result)
+    for (const o of d.options) {
+      for (let i = o.length - 1; i >= 0; i--) {
+        const st = o[i];
+        if (
+          !st.on ||
+          st.when ||
+          st.state ||
+          st.only ||
+          st.thing !== 'color' ||
+          FAMILIES[st.on]
+        )
+          continue;
+        const ink = parseColor(String(st.value ?? ''));
+        if (!ink || alphaOf(String(st.value)) < 1) continue;
+        if (
+          o.some(x => x !== st && x.on === st.on && /^background/.test(x.thing))
+        )
+          continue;
+        const variants = C.variantValues(one(st.on)).variant ?? [];
+        if (variants.length < 2 || !variants.includes('primary')) continue;
+        const fills = (C.partReads(one(st.on), 'background') ?? []).filter(
+          r => /^--color-/.test(r.token) && !/overlay|tint/.test(r.token),
+        );
+        const mode = /** @type {'light' | 'dark'} */ (st.mode ?? 'light');
         const lost = variants.filter(v => {
-          const t = ink.get(v);
-          const rgb = t ? parseColor(String(current(t, mode) ?? '')) : null;
-          return rgb != null && ratio(fill, rgb) < 3;
+          const r = fills.find(x =>
+            x.when.some(w => w.trim() === `variant=${v}`),
+          );
+          const f = parseColor(
+            String(current(r?.token ?? '--color-background-body', mode) ?? ''),
+          );
+          return !!f && ratio(ink, f) < 3;
         });
         if (!lost.length || lost.length === variants.length) continue;
         o.splice(
@@ -23072,8 +24414,8 @@ export function draftAnswer(ctx, env, question) {
             .filter(v => !lost.includes(v))
             .map(v => ({...st, when: `variant:${v}`})),
         );
-        if (!/keep their own fill|keeps its own fill/.test(d.text))
-          d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own fill' : 'keeps its own fill'}: ${lost.length > 1 ? 'their' : 'its'} text would barely show on ${st.value}; give ${lost.length > 1 ? 'them' : 'it'} a text color too to change ${lost.length > 1 ? 'them' : 'it'})`;
+        if (!/keep their own text|keeps its own text/.test(d.text))
+          d.text += ` (${lost.join(', ')} ${lost.length > 1 ? 'keep their own text' : 'keeps its own text'}: ${st.value} would barely show on ${lost.length > 1 ? 'their' : 'its'} fill; give ${lost.length > 1 ? 'them' : 'it'} a fill too to change ${lost.length > 1 ? 'them' : 'it'})`;
       }
     }
   // A fill given to a part that holds others ("a navy header"): a part
@@ -23122,6 +24464,8 @@ export function draftAnswer(ctx, env, question) {
       }
   for (const n of placeNotes)
     if (!keptInPlace.has(n.c)) result.push({text: n.text, options: []});
+  // (The other reading of states said together, said last.)
+  result.push(...otherReadings);
   // A panel's look written for every one (a card's) reaches the panels an
   // app places in a layout too (cards in a carousel, a grid or a stack, as
   // tiles): said once, with the place to ask for to keep them apart.
@@ -23211,6 +24555,75 @@ export function draftAnswer(ctx, env, question) {
           ),
       ),
     );
+  // "make the primary button #0064E0", "pumpkin orange buttons": a fill
+  // typed on a part is measured against the text each of its looks draws
+  // on it, as set measures it after; a look whose text would not read
+  // (under 4.5:1) in a mode takes a text color that does there, white or
+  // black, beside the fill. A text that reads keeps the fill line alone.
+  for (const [di, d] of [...result.entries()].reverse()) {
+    const o = d.options[0];
+    if (!o || o.length !== 1) continue;
+    const st = o[0];
+    const fill = parseColor(String(st.value ?? ''));
+    if (
+      !st.on ||
+      !/^background(?:-color)?$/.test(st.thing) ||
+      !fill ||
+      alphaOf(String(st.value)) < 1 ||
+      !C.MAP[one(st.on)] ||
+      textOnlyPart(one(st.on)) ||
+      FAMILIES[st.on]
+    )
+      continue;
+    const textReads = C.partReads(one(st.on), 'text') ?? [];
+    // (Each look the fill reaches: the one named, else each variant.)
+    const variants = st.when
+      ? [String(st.when)]
+      : (C.variantValues(one(st.on))?.variant ?? []).map(v => `variant:${v}`);
+    const looks = variants.length ? variants : [''];
+    const modes = /** @type {Array<'light' | 'dark'>} */ (
+      st.mode
+        ? [st.mode]
+        : modal
+          ? ['light', 'dark']
+          : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+    );
+    /** @type {Step[]} */
+    const fixes = [];
+    for (const look of looks) {
+      const tok = restRead(textReads, look);
+      if (!tok) continue;
+      for (const m of modes) {
+        const ink = parseColor(String(current(tok, m) ?? ''));
+        if (!ink || alphaOf(String(current(tok, m))) < 1) continue;
+        if (ratio(ink, fill) >= 4.5) continue;
+        const white = ratio([255, 255, 255], fill);
+        const black = ratio([0, 0, 0], fill);
+        fixes.push(
+          set('color', white >= black ? '#ffffff' : '#000000', {
+            on: st.on,
+            ...(look ? {when: look} : {}),
+            ...(st.state ? {state: st.state} : {}),
+            ...(modes.length > 1 || st.mode ? {mode: m} : {}),
+          }),
+        );
+      }
+    }
+    if (!fixes.length || !env.check([st, ...fixes]).ok) continue;
+    // (Its own line beside the fill's, so the fill reads as asked and the
+    // text as measured.)
+    const where = fixes
+      .map(x =>
+        `${x.when ? `${x.when.replace(':', ' ')} ` : ''}${x.mode ? `in ${x.mode} mode` : ''}`.trim(),
+      )
+      .join(', ');
+    d.text = `${d.text}; its text would not read on that fill (${where}): the next line keeps it readable`;
+    result.splice(di + 1, 0, {
+      text: `readable text on that fill: ${st.on}'s text measures under 4.5:1 on ${st.value} (${where}), so ${[...new Set(fixes.map(x => x.value))].join(' or ')} there`,
+      options: [fixes],
+      ...(fixes.length > 1 ? {sequence: true} : {}),
+    });
+  }
   // "make the info banner navy": one status's fill on one part, or that
   // status's color for the whole theme (its banners, badges and toasts
   // together), the dial; both are offered, the part's first.
@@ -23245,8 +24658,9 @@ export function draftAnswer(ctx, env, question) {
   // are named, never dropped without a word.
   if (
     !gateAll &&
-    /\b(?:theme|vibe|palette|aesthetic|branding)\b/.test(q) &&
-    result.some(d => d.options.some(o => o.length))
+    (/\b(?:theme|vibe|palette|aesthetic|branding|feel)\b/.test(q) ||
+      (!partsSeen.length &&
+        q.split(/[,;:]|\band\b/).filter(x => x.trim()).length >= 3))
   ) {
     const STOP =
       /^(?:theme|themes|look|looks|feel|vibe|style|palette|with|give|make|want|need|have|this|that|those|these|their|ours?|your|for|and|but|the|very|really|quite|some|more|less|less|like|into|from|only|both|mode|modes|site|sites|apps?|page|pages|product|website|please|also|plus|something|kind|sort|ish|using|uses|feeling|overall|while|keep|kept|just|still|then|than|colou?rs?|them|they|those|these|what|when|where|which|lighten|darken|soften|brighten|sharpen|tone|default|brand|color|deep|rich)$/;
