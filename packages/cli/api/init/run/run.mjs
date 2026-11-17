@@ -56,7 +56,7 @@ const THEME_PACKAGE = '@astryxdesign/theme-neutral';
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation, cwd = process.cwd()) {
-  const {installCommand, noCommandReason} = projectInstallCommand(
+  const {installCommand} = projectInstallCommand(
     [THEME_PACKAGE],
     cwd,
   );
@@ -69,7 +69,8 @@ export function getNextSteps(invocation, cwd = process.cwd()) {
     "       and import '@astryxdesign/core/astryx.css'",
     "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
-    `       ${installCommand ?? noCommandReason}`,
+    `       ${installCommand ?? `npm install ${THEME_PACKAGE}`}`,
+    ...(installCommand ? [] : ['       (the lockfiles here disagree; use the package manager this project uses)']),
     `       ${invocation} theme add neutral`,
     "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",

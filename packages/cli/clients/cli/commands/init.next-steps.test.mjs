@@ -81,3 +81,21 @@ describe('init Next steps theme guidance', () => {
     expect(text).not.toContain("from '@astryxdesign/theme-neutral");
   });
 });
+
+describe('init Next steps when the lockfiles disagree', () => {
+  it('prints npm install and says the lockfiles disagree', () => {
+    const text = getNextSteps(
+      'npx astryx',
+      project({'pnpm-lock.yaml': "lockfileVersion: '9.0'\n", 'yarn.lock': '# yarn\n'}),
+    ).join('\n');
+    expect(text).toContain('npm install @astryxdesign/theme-neutral\n');
+    expect(text).toContain('the lockfiles here disagree');
+  });
+
+  it('follows a declared packageManager over a stray lockfile', () => {
+    const dir = project({'package-lock.json': '{}'});
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app","packageManager":"pnpm@10.0.0"}');
+    const text = getNextSteps('pnpm exec astryx', dir).join('\n');
+    expect(text).toContain('pnpm add @astryxdesign/theme-neutral\n');
+  });
+});
