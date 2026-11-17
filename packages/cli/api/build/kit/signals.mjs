@@ -352,7 +352,7 @@ export async function kitSignals(query, options = {}) {
   // not commitments, so reporting their needs would be noise.
   const startTemplate = picked && catalog.find(t => t.name === picked.name);
   if (picked && startTemplate) {
-    const notes = templateSetupNotes(startTemplate, cwd);
+    const notes = await templateSetupNotes(startTemplate, cwd);
     if (notes.length > 0) picked.notes = notes;
   }
   /** @type {BuildStart | null} */

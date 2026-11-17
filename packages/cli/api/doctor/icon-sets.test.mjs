@@ -54,11 +54,13 @@ describe('icon-sets check', () => {
     );
   });
 
-  it('two installed icon-set packages and no experimental.iconSet pass, saying none is the main set', async () => {
+  it('two installed icon-set packages and no experimental.iconSet fail, with the use command', async () => {
     const check = await iconCheckOf({packages: [{}, {name: '@acme/lines'}]});
-    expect(check).toMatchObject({status: 'pass'});
-    expect(check?.message).toContain('2 icon sets installed.');
+    expect(check).toMatchObject({status: 'fail'});
     expect(check?.message).toContain('so none is your main set');
+    expect(check?.fix).toContain(
+      '`astryx experimental icon use glyphs --backup lines`',
+    );
   });
 
   it('the configured set installed passes', async () => {

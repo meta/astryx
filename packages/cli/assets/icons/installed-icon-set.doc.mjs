@@ -22,7 +22,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Icon sets are experimental. Your project installs an icon set, and the package named beside this section ships it. To find an icon by meaning and get its import line, run `{@command experimental icon <words>}`. `{@command experimental icon --list}` names every installed set. These commands can change in a patch release.',
+          text: 'Icon sets are experimental. Your project installs an icon set, and the package named beside this section ships it. Templates you copy draw their icons from it. To find an icon by meaning and get its import line, run `{@command experimental icon <words>}`. `{@command experimental icon --list}` names every installed set. These commands can change in a patch release.',
         },
       ],
     },

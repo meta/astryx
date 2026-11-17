@@ -29,9 +29,14 @@ import {componentKeywords} from '../search/search.mjs';
 import {coreContentDir, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {mapTemplateIcons} from '../../foundation/discovery/template-icons.mjs';
+import {loadTemplateIconSets} from '../template/_adapter.mjs';
 import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
 import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
 
 /**
@@ -55,6 +60,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
  * @property {boolean} [isReady] Whether its doc calls it ready; the kit lists only ready pages.
+ * @property {Record<string, string>} [icons] The icon definition each icon it imports draws, by its imported name, when its doc declares them.
  */
 
 /**
@@ -132,6 +138,7 @@ export async function loadTemplates(cwd) {
           hidden: t.hidden === true,
           isReady: t.isReady !== false,
           filePath: t.filePath,
+          ...(t.icons ? {icons: t.icons} : {}),
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
           command: `astryx template ${t.replaces ?? t.dirName} --type page`,
@@ -346,14 +353,30 @@ function isBlockPickerWeights(w) {
  * calls this through the adapter rather than reading the file itself, because
  * file access is environment access (architecture:cli-surface INV21).
  *
+ * The needs are read from the source `astryx template` writes: its icons
+ * follow the project's icon set where icon features are on, so
+ * a library the set replaces is not a missing dependency. One note then
+ * names the set and how to find its icons.
+ *
  * @param {PageTemplate} template
  * @param {string} cwd Project directory
- * @returns {string[]} Setup notes (empty when the template needs nothing).
+ * @returns {Promise<string[]>} Setup notes (empty when the template needs nothing).
  */
-export function templateSetupNotes(template, cwd) {
+export async function templateSetupNotes(template, cwd) {
   try {
     const source = fs.readFileSync(template.filePath, 'utf-8');
-    return analyzeTemplateNeeds(source, cwd).notes;
+    const {source: written, icons} = mapTemplateIcons(
+      source,
+      await loadTemplateIconSets(cwd),
+      template.icons,
+    );
+    const {notes} = analyzeTemplateNeeds(written, cwd);
+    return icons?.set
+      ? [
+          ...notes,
+          `Icons come from your icon set ${icons.set}. Find one by meaning: \`${formatCliCommand('experimental icon <words>')}\``,
+        ]
+      : notes;
   } catch {
     // Best-effort: a read failure does not break the recommendation.
     return [];

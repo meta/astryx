@@ -9,7 +9,6 @@
  */
 
 import {Project} from '../../foundation/config/project.mjs';
-import {NO_ICON_SETS} from '../../foundation/discovery/template-icons.mjs';
 
 /**
  * The installed icon sets and the project's choice. A project the CLI cannot
@@ -20,10 +19,11 @@ import {NO_ICON_SETS} from '../../foundation/discovery/template-icons.mjs';
 export async function loadTemplateIconSets(cwd) {
   try {
     const project = await Project.load(cwd);
+    // Icon sets are experimental (spec:AST-017 FR27): `iconSets()` answers
+    // none where the icon feature gate is off, so the template is unchanged.
+    // Where it is on, the only installed set needs no config; with several
+    // and none chosen, the choice is ambiguous and no icon moves.
     const {sets, choice} = await project.iconSets();
-    // Icon sets are experimental (spec:AST-017 FR27): a copied template
-    // follows one only when the project opts in with `experimental.iconSet`.
-    if (!choice.configured) return NO_ICON_SETS;
     return {sets, choice};
   } catch (error) {
     return {

@@ -157,22 +157,32 @@ describe('template icon mapping', () => {
     expect(`${copiedText.stdout}${copiedText.stderr}`).not.toContain('icons:');
   });
 
-  it('icon-set packages installed but no experimental.iconSet: no report, and the output it always had', async () => {
-    // Copied templates follow an icon set only once the project names it.
-    for (const [name, packages] of /** @type {const} */ ([
-      ['one', [{}]],
-      ['two', [{}, {name: '@acme/lines'}]],
-    ])) {
-      const cwd = writeIconSetProject(path.join(tmp, name), {
-        packages: [...packages],
-      });
-      const res = await runCli(['template', TEMPLATE, '--json'], cwd);
-      const data = JSON.parse(res.stdout).data;
-      expect(data).not.toHaveProperty('icons');
-      expect(data.source).toMatch(/\bXMarkIcon\b/);
-      const copied = await runCli(['template', TEMPLATE, 'out', '--json'], cwd);
-      expect(JSON.parse(copied.stdout).data).not.toHaveProperty('icons');
-    }
+  it('exactly one icon-set package and no experimental.iconSet: the copy uses that set', async () => {
+    const cwd = writeIconSetProject(path.join(tmp, 'one'));
+    const copied = JSON.parse(
+      (await runCli(['template', TEMPLATE, 'out', '--json'], cwd)).stdout,
+    ).data;
+    expect(copied.icons).toMatchObject({
+      status: 'selected',
+      set: '@acme/glyphs/glyphs',
+    });
+    expect(copied.missingPackages).not.toContain('@heroicons/react');
+    const written = fs.readFileSync(path.join(cwd, 'out', 'page.tsx'), 'utf8');
+    expect(written).toContain("import {XIcon} from '@acme/glyphs';");
+    expect(written).not.toMatch(/\bXMarkIcon\b/);
+  });
+
+  it('two icon-set packages and no experimental.iconSet: source unchanged, status ambiguous', async () => {
+    const cwd = writeIconSetProject(path.join(tmp, 'two'), {
+      packages: [{}, {name: '@acme/lines'}],
+    });
+    const res = await runCli(['template', TEMPLATE, '--json'], cwd);
+    const data = JSON.parse(res.stdout).data;
+    expect(data.icons).toMatchObject({status: 'ambiguous', mapped: []});
+    expect(data.icons.reason).toContain('so none is your main set');
+    expect(data.source).toMatch(/\bXMarkIcon\b/);
+    const text = await runCli(['template', TEMPLATE], cwd);
+    expect(text.stderr).toContain('icons: unchanged (ambiguous)');
   });
 
   it('a configured set that is installed but withdrawn says so, with why, and maps nothing', async () => {

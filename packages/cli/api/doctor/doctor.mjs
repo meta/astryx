@@ -114,6 +114,7 @@ import {
   computerIntegrationsOutside,
   findIconPlaceholders,
   iconFeatureGate,
+  iconSetKey,
   iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
@@ -1155,6 +1156,8 @@ export function checkIntegrationCoreRange(ctx) {
  * withdrawn (with why), or that two packages ship under one name; and when
  * more than one set is installed and the list leaves one out. Warns for each
  * other installed set that was withdrawn, with why.
+ * With no list and more than one set installed, which set a copied template
+ * uses is not decided, so it fails too.
  * Icon sets are experimental (spec:AST-017 FR27): only a project where the
  * icon feature gate is on gets the check, so every other report is unchanged.
  * @param {DoctorContext} ctx
@@ -1166,6 +1169,20 @@ export function checkIconSets(ctx) {
   const label = 'Icon sets';
   if (state == null) return null;
   const {sets, withdrawn, choice} = state;
+  if (!choice.configured && choice.status === 'ambiguous') {
+    const named = (/** @type {{package: string, name: string}} */ set) =>
+      sets.filter(each => each.name === set.name).length > 1
+        ? iconSetKey(set)
+        : set.name;
+    const [main, ...others] = sets;
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: `${choice.reason} Which set a copied template uses is not decided.`,
+      fix: `Pick the main set, with the others as backup: \`${iconUseCommand(named(main), others.map(named), choice.variant)}\`.`,
+    };
+  }
   const list = choice.configured
     ? [
         {

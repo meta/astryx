@@ -8,8 +8,6 @@
 - `astryx doctor`: runs the `icon-sets` check and reports an invalid installed set. It runs the `icon-placeholders` check when a main set is decided: the one `experimental.iconSet` names, or the only installed set. `doctor integration validate <package>` checks an installed package's sets.
 - `astryx docs icons`: one section, added in the name of the package that ships your set, says how to find its icons (`astryx experimental icon <words>`). `astryx search` does not return it, and search output does not change.
 
-Copied templates still follow a set only once `experimental.iconSet` names it.
-
 For integration authors: `astryx search` now leaves out the sections that a doc marked `stability: 'experimental'` adds to another topic with `extends`, as it already leaves out an experimental topic. `astryx docs` still shows those sections.
 
 @josephfarina

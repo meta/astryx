@@ -46,6 +46,7 @@ import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {iconFeatureGate} from '../../foundation/integrations/icon-features.mjs';
 export {
+  iconSetKey,
   iconUseCommand,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';

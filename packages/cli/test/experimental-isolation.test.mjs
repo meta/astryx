@@ -1248,10 +1248,9 @@ describe('with no icon-set package and no experimental.iconSet, discover reads n
 
 // An installed icon-set package turns the icon feature gate on
 // (spec:AST-084 FR0) with no `experimental.iconSet`: discover, doctor,
-// `doctor integration validate`, and `docs icons` read the set. Copied
-// templates follow a set only with `experimental.iconSet`, and search never
-// reads one. Main's CLI has no icon sets, so regenerating from main skips
-// these.
+// `doctor integration validate`, template copies, build, and `docs icons`
+// read the set. Search never reads one. Main's CLI has no icon sets, so
+// regenerating from main skips these.
 describe.skipIf(REGENERATING)(
   'with an icon-set package installed and no experimental.iconSet, icon features are on',
   () => {
@@ -1279,31 +1278,15 @@ describe.skipIf(REGENERATING)(
       return dir;
     }
 
-    it('a template prints and copies as it always has without experimental.iconSet', () => {
+    it('a copied template draws its icons from the only installed set', () => {
       const cwd = installed('template');
-      const page = fs.readFileSync(
-        path.join(
-          CLI_ROOT,
-          'assets',
-          'templates',
-          'pages',
-          'settings-dialog',
-          'page.tsx',
-        ),
-        'utf-8',
-      );
-      const shown = JSON.parse(
-        astryx(['template', 'settings-dialog', '--json'], cwd).stdout,
-      );
-      expect(shown.data).not.toHaveProperty('icons');
-      expect(shown.data.source).toBe(page);
       const copied = JSON.parse(
         astryx(['template', 'settings-dialog', 'out', '--json'], cwd).stdout,
       );
-      expect(copied.data).not.toHaveProperty('icons');
-      expect(fs.readFileSync(path.join(cwd, 'out', 'page.tsx'), 'utf-8')).toBe(
-        page,
-      );
+      expect(copied.data.icons).toMatchObject({
+        status: 'selected',
+        set: '@acme/glyphs/glyphs',
+      });
     });
 
     it('discover lists the set, and --type icon-set lists its package', () => {
