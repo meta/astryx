@@ -1350,7 +1350,8 @@ describe.skipIf(REGENERATING)(
     });
 
     // The goldens keep the released JSON of these three reads covered: the
-    // set and its package now show, and an unknown type answers as before.
+    // set and its package now show, and an unknown type keeps its error
+    // fields and also lists `icon-set` among the types.
     it('discover lists the set, and --type icon-set lists its package', async () => {
       const cwd = installed('discover');
       const listed = astryx(['discover', '--json'], cwd);
