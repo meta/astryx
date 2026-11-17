@@ -2473,7 +2473,8 @@ describe('render(): a page outside a project', () => {
     const tree = path.join(away, 'outside-folder');
     fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
     fs.mkdirSync(path.join(tree, 'lib'), {recursive: true});
-    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(path.join(tree, 'lib/helper.ts'), "export const south = 'South';\n");
+    fs.writeFileSync(path.join(tree, 'lib/rows.ts'), "import {south} from './helper';\nexport const rows = ['North', south];\n");
     fs.writeFileSync(
       path.join(tree, 'page/page.tsx'),
       "import {rows} from '../lib/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
@@ -2481,7 +2482,8 @@ describe('render(): a page outside a project', () => {
     const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
     expect(run.status).toBe(0);
     expect(run.json.data.files).toEqual(['page.tsx']);
-    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts']);
+    // The module it imports from there, and the one that module imports.
+    expect(run.json.data.notCarried).toEqual(['../lib/rows.ts', '../lib/helper.ts']);
     expect(run.json.data.warnings).toContainEqual({
       code: 'not-embedded',
       message:
@@ -2490,7 +2492,7 @@ describe('render(): a page outside a project', () => {
     const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
     expect(html).toContain('North South');
     const note = html.slice(0, html.indexOf('-->'));
-    expect(note).toContain('Not carried: ../lib/rows.ts (--reverse cannot give them back)');
+    expect(note).toContain('Not carried: ../lib/rows.ts, ../lib/helper.ts (--reverse cannot give them back)');
     expect(note).not.toContain('come back exactly');
     const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
     expect(back.status).toBe(0);
@@ -2499,7 +2501,27 @@ describe('render(): a page outside a project', () => {
     const whole = runBin(tree, ['experimental', 'render', 'page/page.tsx', '--out', 'whole.html']);
     expect(whole.status).toBe(0);
     expect(whole.json.data).not.toHaveProperty('notCarried');
-    expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts']);
+    expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts', 'lib/helper.ts']);
+  }, 60_000);
+
+  it('in a project, tells the reader to move a file from outside the project inside it', () => {
+    const tree = path.join(away, 'outside-project');
+    fs.mkdirSync(path.join(tree, 'app/src'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'app/package.json'), JSON.stringify({name: 'app', private: true}));
+    fs.writeFileSync(path.join(tree, 'shared/rows.ts'), "export const rows = ['North', 'South'];\n");
+    fs.writeFileSync(
+      path.join(tree, 'app/src/page.tsx'),
+      "import {rows} from '../../shared/rows';\nexport default function Page() {\n  return <p>{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'app/src'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['../../shared/rows.ts']);
+    expect(run.json.data.warnings).toContainEqual({
+      code: 'not-embedded',
+      message:
+        "../../shared/rows.ts is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.",
+    });
   }, 60_000);
 
   it('names a module the page imports through a path alias from outside the folder it carries from', () => {

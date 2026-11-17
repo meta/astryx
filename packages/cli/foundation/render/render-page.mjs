@@ -1457,6 +1457,9 @@ export async function renderPage(entry, options = {}) {
   for (const asset of notCarried) {
     leftOut.push(path.relative(base, asset).split(path.sep).join('/'));
   }
+  // In a project, a render carries from the project's folder wherever it
+  // runs, so only moving the file inside it carries it.
+  const inProject = projectOf(dir) !== null;
   for (const f of uncarried) {
     // A file the render carries (a JSON file, stylesheet or image from above
     // the page's folder widens the folder it carries from) is not left out.
@@ -1468,7 +1471,9 @@ export async function renderPage(entry, options = {}) {
     if (/\.(scss|sass|less)$/i.test(f)) continue;
     warnings.push({
       code: 'not-embedded',
-      message: `${rel} is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
+      message: inProject
+        ? `${rel} is not carried: it is outside the project's folder, which a render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Move it inside the project's folder.`
+        : `${rel} is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,
     });
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
