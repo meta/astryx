@@ -24,6 +24,7 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {AGENT_DOC_PATHS} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {
+  STARTER_THEME,
   inspectAgentDocs,
   projectInstallStep,
   resolveAgentPaths,
@@ -38,7 +39,6 @@ import {
   agentDocChange,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
-import {STARTER_THEME} from '../../../foundation/discovery/theme-discovery.mjs';
 import {listTemplates} from '../../template/template.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';

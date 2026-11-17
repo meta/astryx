@@ -38,6 +38,7 @@ import {templateDestination} from '../../foundation/discovery/template-destinati
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
 import {themeListAvailable} from '../theme/theme.mjs';
+import {appProviders} from '../theme/_app-provider.mjs';
 import {
   ThemeStateError,
   readThemeState,
@@ -427,21 +428,42 @@ function withComponents(entry, filePath) {
 }
 
 /**
- * @typedef {{state: 'wired', modulePath: string, hasModes: boolean}
- *   | {state: 'installed', slug: string}
- *   | {state: 'none', slug: string, package: string}} AppThemeWiring
+ * The provider the app passes its theme to instead of `<Theme>`, as
+ * `theme add` names it: the one an installed package declares, when it takes
+ * a theme object.
+ * @typedef {{export: string, from: string, themeProp: string, modeProp?: string}} ThemeProvider
  */
 
 /**
- * How the project at `cwd` wires its theme, read from its generated theme
- * module and its installed theme packages, never by running its code:
- * `wired` when `theme add` has written the module, `installed` when a theme
- * package is installed but not added, and otherwise the starter theme.
+ * @typedef {({state: 'wired', modulePath: string, hasModes: boolean}
+ *   | {state: 'installed', slug: string}
+ *   | {state: 'none', slug: string, package: string})
+ *   & {provider: ThemeProvider | null}} AppThemeWiring
+ */
+
+/**
+ * How the project at `cwd` wires its theme, read the way `theme add` reads
+ * it: `wired` when `theme add` has written the generated module, `installed`
+ * when a theme it can add is installed but not added, and otherwise the
+ * starter theme. `provider` is set when an installed package names the
+ * provider that takes the theme.
  * @param {string} cwd
  * @returns {Promise<AppThemeWiring>}
  */
 export async function appThemeWiring(cwd) {
+  /** @type {ThemeProvider | null} */
+  let provider = null;
   try {
+    const {taking} = await appProviders(cwd);
+    if (taking?.provider.themeProp)
+      provider = {
+        export: taking.provider.export,
+        from: taking.provider.from,
+        themeProp: taking.provider.themeProp,
+        ...(taking.provider.modeProp
+          ? {modeProp: taking.provider.modeProp}
+          : {}),
+      };
     const state = readThemeState(cwd);
     const source = state.module.expectedOriginal;
     if (state.configured && source) {
@@ -449,12 +471,13 @@ export async function appThemeWiring(cwd) {
         state: 'wired',
         modulePath: state.module.path,
         hasModes: /\bexport const themeModes\b/u.test(source.toString('utf-8')),
+        provider,
       };
     }
     const installed = (await themeListAvailable({cwd})).data.find(
       theme => theme.installed,
     );
-    if (installed) return {state: 'installed', slug: installed.slug};
+    if (installed) return {state: 'installed', slug: installed.slug, provider};
   } catch (error) {
     // Outside a project, or with theme state the theme commands refuse, the
     // playbook names the starter theme; those commands report the problem.
@@ -465,5 +488,6 @@ export async function appThemeWiring(cwd) {
     state: 'none',
     slug: STARTER_THEME.slug,
     package: STARTER_THEME.package,
+    provider,
   };
 }

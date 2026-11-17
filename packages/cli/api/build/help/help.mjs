@@ -14,10 +14,11 @@
  * has the frame, spacing, and section rhythm that a page composed from
  * components has to rediscover.
  *
- * The theme rule names the exact wiring for the project the call names: the
- * import and the value `<Theme>` takes, from its generated theme module, its
- * installed theme, or the starter theme. A rule that leaves the value open
- * gets guessed as a theme name, and `<Theme>` with a name crashes on hydrate.
+ * The theme rule names the exact wiring for the project the call names, as
+ * `theme add` prints it: the import and the value `<Theme>` takes, or the
+ * provider an installed package names to take it. When no theme is added yet,
+ * a last step adds one, as a command. A rule that leaves the value open gets
+ * guessed as a theme name, and `<Theme>` with a name crashes on hydrate.
  */
 
 import {appThemeWiring} from '../_adapter.mjs';
@@ -28,22 +29,48 @@ import {appThemeWiring} from '../_adapter.mjs';
  * @returns {string}
  */
 export function themeRule(wiring) {
+  const modes = wiring.state === 'wired' && wiring.hasModes;
+  const module =
+    wiring.state === 'wired'
+      ? `the generated ${wiring.modulePath}`
+      : 'the astryx-themes module the theme step writes';
+  const names = modes
+    ? 'themes, defaultThemeSlug, themeModes'
+    : 'themes, defaultThemeSlug';
   const notAName =
     'The theme prop takes that theme object, never a name such as "light".';
-  if (wiring.state === 'wired') {
-    const mode = wiring.hasModes
-      ? " mode={themeModes[defaultThemeSlug] ?? 'system'}"
-      : '';
-    const names = wiring.hasModes
-      ? 'themes, defaultThemeSlug, themeModes'
-      : 'themes, defaultThemeSlug';
-    return `Wrap the app in <Theme theme={themes[defaultThemeSlug]}${mode}> (import {Theme} from '@astryxdesign/core/theme', and {${names}} from the generated ${wiring.modulePath}) and import core reset.css + astryx.css. ${notAName}`;
+  const {provider} = wiring;
+  if (provider) {
+    const mode =
+      modes && provider.modeProp
+        ? ` ${provider.modeProp}={themeModes[defaultThemeSlug]}`
+        : '';
+    return `Pass the theme to the app's ${provider.export}, which wires it: <${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}${mode}> (import {${provider.export}} from '${provider.from}', and {${names}} from ${module}), and import core reset.css + astryx.css. ${notAName}`;
   }
-  const add =
-    wiring.state === 'installed'
-      ? `Run \`theme add ${wiring.slug}\` to add your installed theme`
-      : `Install ${wiring.package} and run \`theme add ${wiring.slug}\``;
-  return `${add}, then wrap the app in <Theme theme={themes[defaultThemeSlug]}> (import {Theme} from '@astryxdesign/core/theme', and {themes, defaultThemeSlug} from the astryx-themes module it writes, as its output shows) and import core reset.css + astryx.css. ${notAName}`;
+  const mode = modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : '';
+  return `Wrap the app in <Theme theme={themes[defaultThemeSlug]}${mode}> (import {Theme} from '@astryxdesign/core/theme', and {${names}} from ${module}) and import core reset.css + astryx.css. ${notAName}`;
+}
+
+/**
+ * The step that adds the app's theme, when the project has none added yet.
+ * @param {import('../_adapter.mjs').AppThemeWiring} wiring
+ * @returns {import('../build.type.mjs').BuildPlaybookStep | null}
+ */
+export function themeStep(wiring) {
+  if (wiring.state === 'wired') return null;
+  return {
+    title:
+      wiring.state === 'none'
+        ? `Install ${wiring.package}, then add it as the app's theme (once)`
+        : "Add your installed theme as the app's theme (once)",
+    commands: [
+      {
+        command: `theme add ${wiring.slug}`,
+        purpose:
+          'write the astryx-themes module the app root takes its theme from',
+      },
+    ],
+  };
 }
 
 /**
@@ -89,6 +116,7 @@ export async function buildHelp(options = {}) {
             },
           ],
         },
+        ...[themeStep(wiring)].filter(step => step != null),
       ],
       rules: [
         'Start every page from a page template. Never lay out a page from scratch.',

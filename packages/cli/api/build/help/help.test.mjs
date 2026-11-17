@@ -2,17 +2,21 @@
 
 /**
  * @file The playbook's theme rule names the exact wiring: the import and the
- * value `<Theme>` takes, for the project's generated module, its installed
- * theme, or the starter theme. An open value gets guessed as a theme name,
- * which crashes on hydrate.
+ * value `<Theme>` takes (or the provider an installed package names), for
+ * the project's generated module, its installed theme, or the starter theme.
+ * A project with no theme added gets a step whose command adds one. An open
+ * value gets guessed as a theme name, which crashes on hydrate.
  */
 
 import {describe, it, expect, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {buildHelp, themeRule} from './help.mjs';
+import {buildHelp, themeRule, themeStep} from './help.mjs';
 import {STARTER_THEME} from '../../../foundation/discovery/theme-discovery.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 
 const THEME_IMPORT = "import {Theme} from '@astryxdesign/core/theme'";
 const VALUE = '<Theme theme={themes[defaultThemeSlug]}';
@@ -26,17 +30,20 @@ afterEach(() => {
 
 describe('build playbook theme rule', () => {
   it('wires the generated module by its path, with the value to pass', () => {
-    const rule = themeRule({
-      state: 'wired',
+    const wiring = {
+      state: /** @type {const} */ ('wired'),
       modulePath: 'src/astryx-themes.ts',
       hasModes: false,
-    });
+      provider: null,
+    };
+    const rule = themeRule(wiring);
     expect(rule).toContain(`${VALUE}>`);
     expect(rule).toContain(THEME_IMPORT);
     expect(rule).toContain(
       '{themes, defaultThemeSlug} from the generated src/astryx-themes.ts',
     );
     expect(rule).toContain('never a name');
+    expect(themeStep(wiring)).toBeNull();
   });
 
   it("passes the module's mode when it records one", () => {
@@ -44,6 +51,7 @@ describe('build playbook theme rule', () => {
       state: 'wired',
       modulePath: 'src/astryx-themes.ts',
       hasModes: true,
+      provider: null,
     });
     expect(rule).toContain(
       `${VALUE} mode={themeModes[defaultThemeSlug] ?? 'system'}>`,
@@ -51,11 +59,42 @@ describe('build playbook theme rule', () => {
     expect(rule).toContain('{themes, defaultThemeSlug, themeModes}');
   });
 
-  it('adds an installed theme before wiring it', () => {
-    const rule = themeRule({state: 'installed', slug: 'stone'});
-    expect(rule).toMatch(/^Run `theme add stone` /);
+  it('passes the theme to the provider an installed package names, as theme add does', () => {
+    const rule = themeRule({
+      state: 'wired',
+      modulePath: 'src/astryx-themes.ts',
+      hasModes: true,
+      provider: {
+        export: 'BrandProvider',
+        from: '@acme/brand',
+        themeProp: 'theme',
+        modeProp: 'colorMode',
+      },
+    });
+    expect(rule).toContain(
+      '<BrandProvider theme={themes[defaultThemeSlug]} colorMode={themeModes[defaultThemeSlug]}>',
+    );
+    expect(rule).toContain("import {BrandProvider} from '@acme/brand'");
+    expect(rule).not.toContain('<Theme ');
+  });
+
+  it('adds an installed theme with a command step before wiring it', () => {
+    const wiring = {
+      state: /** @type {const} */ ('installed'),
+      slug: 'stone',
+      provider: null,
+    };
+    expect(themeStep(wiring)?.commands).toEqual([
+      {
+        command: 'theme add stone',
+        purpose:
+          'write the astryx-themes module the app root takes its theme from',
+      },
+    ]);
+    const rule = themeRule(wiring);
     expect(rule).toContain(`${VALUE}>`);
     expect(rule).toContain(THEME_IMPORT);
+    expect(rule).not.toMatch(/theme add/);
   });
 
   it('names the starter theme in a project with no theme', async () => {
@@ -66,20 +105,82 @@ describe('build playbook theme rule', () => {
       JSON.stringify({name: 'app', version: '1.0.0'}),
     );
     const {data} = await buildHelp({cwd: dir});
-    const rule = data.rules.find(r => r.includes('<Theme'));
-    expect(rule).toBe(
-      themeRule({
-        state: 'none',
-        slug: STARTER_THEME.slug,
-        package: STARTER_THEME.package,
+    const wiring = {
+      state: /** @type {const} */ ('none'),
+      slug: STARTER_THEME.slug,
+      package: STARTER_THEME.package,
+      provider: null,
+    };
+    expect(data.rules).toContain(themeRule(wiring));
+    expect(data.steps.at(-1)).toEqual(themeStep(wiring));
+    expect(data.steps.at(-1)?.title).toContain(STARTER_THEME.package);
+    expect(data.steps.at(-1)?.commands[0].command).toBe(
+      `theme add ${STARTER_THEME.slug}`,
+    );
+  });
+
+  it('names the provider an installed integration declares, read from the project', async () => {
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-build-help-'));
+    dirs.push(dir);
+    /** @param {string} rel @param {string} text */
+    const write = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), {recursive: true});
+      fs.writeFileSync(path.join(dir, rel), text);
+    };
+    write(
+      'package.json',
+      JSON.stringify({
+        name: 'provider-app',
+        private: true,
+        dependencies: {'@acme/ui': '1.0.0', '@astryxdesign/core': CLI_VERSION},
       }),
     );
-    expect(rule).toMatch(
-      new RegExp(
-        `^Install ${STARTER_THEME.package} and run \`theme add ${STARTER_THEME.slug}\`, `,
-      ),
+    write(
+      'node_modules/@astryxdesign/core/package.json',
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
     );
-    expect(rule).toContain(`${VALUE}>`);
-    expect(rule).toContain(THEME_IMPORT);
+    write(
+      'node_modules/@acme/ui/package.json',
+      JSON.stringify({
+        name: '@acme/ui',
+        version: '1.0.0',
+        type: 'module',
+        exports: {
+          './theme': './dist/theme.js',
+          './themes/brand': './dist/brand.js',
+          './themes/brand.css': './dist/brand.css',
+        },
+      }),
+    );
+    write(
+      'node_modules/@acme/ui/astryx.integration.mjs',
+      "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme'}};\n",
+    );
+    write(
+      'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
+      "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
+    );
+    write(
+      'node_modules/@acme/ui/themes/brand/brandTheme.ts',
+      "export const brandTheme = {name: 'brand', tokens: {}};\n",
+    );
+    write(
+      'node_modules/@acme/ui/dist/brand.js',
+      "export const brandTheme = {name: 'brand', tokens: {}};\n",
+    );
+    write('node_modules/@acme/ui/dist/brand.css', '');
+    write(
+      'node_modules/@acme/ui/dist/theme.js',
+      'export function AcmeThemeProvider({children}) { return children; }\n',
+    );
+
+    const {data} = await buildHelp({cwd: dir});
+    const rule = data.rules.find(r => r.includes('{themes, defaultThemeSlug}'));
+    expect(rule).toContain(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
+    );
+    expect(rule).toContain("import {AcmeThemeProvider} from '@acme/ui/theme'");
+    expect(rule).not.toContain('<Theme ');
+    expect(data.steps.at(-1)?.commands[0].command).toBe('theme add brand');
   });
 });
