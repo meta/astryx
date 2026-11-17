@@ -558,9 +558,11 @@ export function baseFontsCss(ctx, data) {
  * Null when the base ships none or the build names none of its families.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
- * With the weights it loads of each family (`weights`, by family; none
- * for a family whose weights it does not say, such as a variable face).
- * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>} | null}
+ * With the weights a font service request loads of each family (`weights`,
+ * by family; none for a family whose weights it does not say, such as a
+ * variable face), and the weight spans its `@font-face` rules load
+ * (`spans`, by family).
+ * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>, spans: Map<string, Array<[number, number]>>} | null}
  */
 export function baseFontsSheet(ctx, data) {
   if (!data.like) return null;
@@ -593,7 +595,9 @@ export function baseFontsSheet(ctx, data) {
       decodeURIComponent(m[1].replace(/\+/g, ' ')),
     ),
     // A `@font-face` rule names its family itself.
-    ...fontFaceRules(text).map(rule => rule.family),
+    ...fontFaceRules(text)
+      .map(rule => rule.family)
+      .filter(Boolean),
   ];
   /** @type {string | null} */
   let built = null;
@@ -631,38 +635,45 @@ export function baseFontsSheet(ctx, data) {
         [...new Set(list)].sort((a, b) => a - b),
       );
   }
-  // A `@font-face` rule names its weight; a range is a variable face.
-  for (const rule of fontFaceRules(text)) {
-    if (rule.weight == null || /\s/.test(rule.weight)) continue;
-    const weight = Number(rule.weight);
-    if (!Number.isInteger(weight)) continue;
-    weights.set(
-      rule.family,
-      [...new Set([...(weights.get(rule.family) ?? []), weight])].sort(
-        (a, b) => a - b,
-      ),
-    );
-  }
-  return {spec: sheet, families, remote, weights};
+  // The weight span each `@font-face` rule loads, by family.
+  /** @type {Map<string, Array<[number, number]>>} */
+  const spans = new Map();
+  for (const rule of fontFaceRules(text))
+    spans.set(rule.family, [...(spans.get(rule.family) ?? []), rule.span]);
+  return {spec: sheet, families, remote, weights, spans};
 }
 
 /**
- * The family and weight of each `@font-face` rule of a stylesheet's text.
+ * The family and weight span of each `@font-face` rule of a stylesheet's
+ * text: one weight (`400`) as `[400, 400]`, a range (`100 900`, a variable
+ * face, every weight in it) as its ends; a rule with no font-weight is
+ * weight 400. A rule with an unreadable weight is left out.
  * @param {string} text
- * @returns {Array<{family: string, weight: string | null}>}
+ * @returns {Array<{family: string, span: [number, number]}>}
  */
-function fontFaceRules(text) {
+export function fontFaceRules(text) {
   return [
     ...text
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .matchAll(/@font-face\s*\{([^}]*)\}/gi),
   ].flatMap(m => {
-    const family = /font-family\s*:\s*['"]?([^'";]+?)['"]?\s*(?:;|$)/i.exec(
-      m[1],
-    )?.[1];
-    if (!family) return [];
-    const weight = /font-weight\s*:\s*([^;]+?)\s*(?:;|$)/i.exec(m[1])?.[1];
-    return [{family: family.trim(), weight: weight ?? null}];
+    const family =
+      /font-family\s*:\s*['"]?([^'";}]+?)['"]?\s*(?:;|$)/i.exec(m[1])?.[1] ??
+      '';
+    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
+    const nums = value
+      .trim()
+      .replace(/\bnormal\b/gi, '400')
+      .replace(/\bbold\b/gi, '700')
+      .split(/\s+/)
+      .map(Number);
+    if (!nums.length || nums.some(n => !Number.isFinite(n))) return [];
+    return [
+      {
+        family: family.trim(),
+        span: /** @type {[number, number]} */ ([nums[0], nums[1] ?? nums[0]]),
+      },
+    ];
   });
 }
 
@@ -750,19 +761,7 @@ export function fontIndexWeights(ctx, pkg) {
   } catch {
     return null;
   }
-  /** @type {Array<[number, number]>} */
-  const spans = [];
-  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
-    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
-    const nums = value
-      .trim()
-      .replace(/\bnormal\b/gi, '400')
-      .replace(/\bbold\b/gi, '700')
-      .split(/\s+/)
-      .map(Number);
-    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
-    spans.push([nums[0], nums[1] ?? nums[0]]);
-  }
+  const spans = fontFaceRules(text).map(rule => rule.span);
   return spans.length ? spans : null;
 }
 

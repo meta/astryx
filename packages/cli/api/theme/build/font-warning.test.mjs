@@ -14,7 +14,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {collectUnloadedFonts, formatFontLoadingHelp} from './font-warning.mjs';
+import {
+  collectUnloadedFonts,
+  formatFontLoadingHelp,
+  withoutMetricFallbacks,
+} from './font-warning.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 describe('collectUnloadedFonts', () => {
@@ -26,24 +30,26 @@ describe('collectUnloadedFonts', () => {
     ).toEqual(['Fraunces']);
   });
 
-  it('does not name a metric fallback face beside its family', () => {
+  it('names a metric fallback face, which doctor still checks', () => {
     expect(
       collectUnloadedFonts({
         tokens: {
           '--font-family-body':
             'Figtree, "Figtree Fallback", -apple-system, Arial, sans-serif',
         },
-        typography: {
-          heading: {family: 'Figtree', fallbacks: '"Figtree Fallback", Arial'},
-        },
       }),
-    ).toEqual(['Figtree']);
-    // Without its family before it, the name is an ordinary family.
+    ).toEqual(['Figtree', 'Figtree Fallback']);
+  });
+
+  it('drops a metric fallback face beside its family for theme build', () => {
     expect(
-      collectUnloadedFonts({
-        tokens: {'--font-family-body': '"Inter Fallback", Arial, sans-serif'},
-      }),
-    ).toEqual(['Inter Fallback']);
+      withoutMetricFallbacks(['Figtree', 'Figtree Fallback', 'Fraunces']),
+    ).toEqual(['Figtree', 'Fraunces']);
+    // Without its family before it, the name is an ordinary family.
+    expect(withoutMetricFallbacks(['Inter Fallback', 'Figtree'])).toEqual([
+      'Inter Fallback',
+      'Figtree',
+    ]);
   });
 
   it('returns nothing for the default system stacks', () => {

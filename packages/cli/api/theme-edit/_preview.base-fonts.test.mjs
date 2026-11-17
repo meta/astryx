@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
-import {baseFontsSheet} from './_preview.mjs';
+import {baseFontsSheet, fontFaceRules} from './_preview.mjs';
 
 /** A project whose base theme package ships `fonts.css`. @param {string} css */
 function projectWithBaseFonts(css) {
@@ -59,10 +59,32 @@ describe('baseFontsSheet', () => {
       ].join('\n'),
     );
     expect(sheet?.families).toEqual(['Figtree', 'Figtree Fallback', 'Mono']);
-    // A weight range is a variable face: every weight in it.
-    expect(sheet?.weights.has('Figtree')).toBe(false);
-    expect(sheet?.weights.get('Mono')).toEqual([500]);
+    // A weight range is a variable face: its span keeps both ends.
+    expect(sheet?.spans.get('Figtree')).toEqual([[400, 700]]);
+    expect(sheet?.spans.get('Figtree Fallback')).toEqual([[400, 400]]);
+    expect(sheet?.spans.get('Mono')).toEqual([[500, 500]]);
+    expect(sheet?.weights.size).toBe(0);
     // The rules name their files: no stylesheet a static page cannot load.
     expect(sheet?.remote).toEqual([]);
+  });
+});
+
+describe('fontFaceRules', () => {
+  it('reads each rule’s family and weight span, without comments', () => {
+    expect(
+      fontFaceRules(
+        [
+          '/* @font-face { font-family: Hidden; } */',
+          "@font-face { font-family: 'A'; font-weight: 100 900; }",
+          '@font-face { font-family: B; font-weight: bold; }',
+          '@font-face { font-family: C; }',
+          '@font-face { font-family: D; font-weight: var(--w); }',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {family: 'A', span: [100, 900]},
+      {family: 'B', span: [700, 700]},
+      {family: 'C', span: [400, 400]},
+    ]);
   });
 });

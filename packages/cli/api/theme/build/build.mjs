@@ -109,6 +109,7 @@ import {
   collectUnloadedFonts,
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
+  withoutMetricFallbacks,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
@@ -6064,7 +6065,8 @@ async function themeBuildInternal(
 
   // A family the caller knows the app loads (a font stylesheet it writes
   // for the theme) is not named as unloaded.
-  const unloadedFonts = [
+  // A metric fallback face beside its family has nothing to load.
+  const unloadedFonts = withoutMetricFallbacks([
     ...new Set([
       ...collectUnloadedFonts(resolvedTheme),
       ...adaptationRuleValues(resolvedTheme).flatMap(
@@ -6072,7 +6074,7 @@ async function themeBuildInternal(
           collectUnloadedFonts(value, resolvedTheme),
       ),
     ]),
-  ].filter(family => !handOff.loadedFonts?.(family));
+  ]).filter(family => !handOff.loadedFonts?.(family));
 
   if (handOff.prepareFamily) {
     return {

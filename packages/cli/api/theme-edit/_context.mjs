@@ -1154,6 +1154,23 @@ export function baseWeightNotes(ctx, data) {
         : '',
     );
   }
+  // A family the base sheet loads with `@font-face` rules: the weights
+  // inside their spans load; another shows as the nearest span end.
+  for (const [family, spans] of base?.spans ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const used = builtFontWeights(ctx, data.name, family) ?? [];
+    const missing = used.filter(
+      w => !spans.some(([from, to]) => w >= from && w <= to),
+    );
+    if (missing.length)
+      notes.push(
+        `${family} is loaded by ${/** @type {{spec: string}} */ (base).spec} at ${spans.map(([from, to]) => (from === to ? `${from}` : `${from}–${to}`)).join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, spans.flat())}`).join(', ')}`,
+      );
+  }
   for (const {pkg, family, installed} of packages) {
     if (!installed || (built && !built.has(family.toLowerCase()))) continue;
     const faces = fontPackageWeights(ctx, pkg);
