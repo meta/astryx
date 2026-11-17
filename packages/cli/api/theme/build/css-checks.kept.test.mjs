@@ -8,7 +8,8 @@
  * @output What theme build's css-tree checks give is read back, with no
  *   css-tree loaded, while the keys and css-tree's files are unchanged; the
  *   problems equal a fresh check's; a theme with nothing to ask css-tree
- *   keeps nothing; a check that throws keeps nothing
+ *   keeps nothing; a check that throws keeps nothing; a theme's [light,
+ *   dark] pairs are judged from a kept answer, with no css-tree loaded
  */
 
 import {
@@ -398,5 +399,36 @@ describe("theme build's check of which token names are CSS properties'", () => {
     expect(result.asked).toBe(0);
     expect(result.problems).toEqual(result.fresh);
     expect(keptNames()).toHaveLength(0);
+  });
+});
+
+describe("theme build's check of a theme's [light, dark] pairs", () => {
+  /** The kept answers for [light, dark] halves in the store. */
+  const keptHalves = () =>
+    fs
+      .readdirSync(STORE)
+      .filter(name => name.endsWith('.json'))
+      .filter(name =>
+        String(
+          JSON.parse(fs.readFileSync(path.join(STORE, name), 'utf8')).key,
+        ).includes('light-dark-non-colors'),
+      );
+
+  it('is read back without css-tree, the same as a fresh check', () => {
+    const theme = {
+      tokens: {
+        '--color-accent': ['#fff', '#000'],
+        '--color-border': ['red', '4px'],
+        '--color-text': ['color-mix(in oklab, red, blue)', 'blue'],
+      },
+    };
+    const first = checkValues(theme);
+    expect(first.asked).toBeGreaterThan(0);
+    expect(first.problems).toEqual(first.fresh);
+    expect(first.problems.map(p => p.path.at(-1))).toEqual(['--color-border']);
+    expect(keptHalves()).toHaveLength(1);
+    const again = checkValues(theme);
+    expect(again.asked).toBe(0);
+    expect(again.problems).toEqual(first.problems);
   });
 });

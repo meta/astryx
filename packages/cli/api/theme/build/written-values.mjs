@@ -184,8 +184,10 @@ export function entriesNotRead(field, value) {
  * @param {unknown} value
  * @param {(name: string) => boolean} [reads] whether a var() of a name reads
  *   a value
+ * @param {(half: string) => boolean} [isNonColor] whether a [light, dark]
+ *   half is no color (left out, none is judged so)
  */
-function tokenValueProblem(key, value, reads) {
+function tokenValueProblem(key, value, reads, isNonColor = () => false) {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
     const shown = `light-dark(${value.map(String).join(', ')})`;
@@ -209,7 +211,7 @@ function tokenValueProblem(key, value, reads) {
     const number = halves.findIndex(h => typeof h === 'number');
     if (number !== -1)
       return `${key} gives the number ${halves[number]} as its ${number === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
-    const other = halves.findIndex(h => isOtherThanColor(String(h)));
+    const other = halves.findIndex(h => isNonColor(String(h)));
     if (other !== -1)
       return `${key} gives a ${other === 0 ? 'light' : 'dark'} half that is no color (${halves[other]}), so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
     // Each half is read as the text it is written in.
@@ -251,11 +253,11 @@ function unsetVarRead(key, value, reads) {
  * pair cannot hold: light-dark() takes colors only. Only a value with no
  * function in it is judged (a size, a duration, a number, a word that is
  * no color name): a function may be a color syntax newer than the CSS data
- * this CLI ships.
+ * this CLI ships. Answered by css-tree, so it is asked through
+ * keptCssTreeAnswer (see writtenValueProblems).
  * @param {string} value
  */
 function isOtherThanColor(value) {
-  if (value.includes('(')) return false;
   try {
     const ast = cssTree().parse(value, {context: 'value'});
     return Boolean(cssTree().lexer.matchType('color', ast).error);
@@ -355,33 +357,64 @@ export function writtenValueProblems(theme, options = {}) {
   // token's, and only css-tree tells them apart. The names the check asks
   // about are found first, and css-tree's answer for them is kept between
   // runs (keptCssTreeAnswer).
+  // The same holds for the [light, dark] halves only css-tree can tell
+  // from a color: the first run collects both, and one kept answer each
+  // serves the second.
   /** @type {Set<string>} */
   const asked = new Set();
-  const first = valueProblems(theme, options, name => {
-    asked.add(name);
-    return false;
+  /** @type {Set<string>} */
+  const halves = new Set();
+  const first = valueProblems(theme, options, {
+    isProperty: name => {
+      asked.add(name);
+      return false;
+    },
+    isNonColor: half => {
+      // A half with a function in it may be a color syntax newer than the
+      // CSS data: never judged, so never asked.
+      if (!half.includes('(')) halves.add(half);
+      return false;
+    },
   });
-  if (asked.size === 0) return first;
+  if (asked.size === 0 && halves.size === 0) return first;
   const properties = new Set(
-    keptCssTreeAnswer('css-property-names', [...asked].sort(), names =>
-      names.filter(name => name in cssTree().lexer.properties),
-    ),
+    asked.size === 0
+      ? []
+      : keptCssTreeAnswer('css-property-names', [...asked].sort(), names =>
+          names.filter(name => name in cssTree().lexer.properties),
+        ),
   );
-  return valueProblems(theme, options, name => properties.has(name));
+  const nonColors = new Set(
+    halves.size === 0
+      ? []
+      : keptCssTreeAnswer('light-dark-non-colors', [...halves].sort(), vals =>
+          vals.filter(isOtherThanColor),
+        ),
+  );
+  return valueProblems(theme, options, {
+    isProperty: name => properties.has(name),
+    // A half the first run did not reach (its token's name was judged
+    // first) is asked directly.
+    isNonColor: half =>
+      halves.has(half)
+        ? nonColors.has(half)
+        : !half.includes('(') && isOtherThanColor(half),
+  });
 }
 
 /**
- * {@link writtenValueProblems}, with whether a token name is a CSS
- * property's from `isProperty`.
+ * {@link writtenValueProblems}, with the answers only css-tree gives:
+ * whether a token name is a CSS property's, and whether a [light, dark]
+ * half is no color.
  * @param {Record<string, any>} theme
  * @param {NonNullable<Parameters<typeof writtenValueProblems>[1]>} options
- * @param {(name: string) => boolean} isProperty
+ * @param {{isProperty: (name: string) => boolean, isNonColor: (half: string) => boolean}} css
  * @returns {WrittenValueProblem[]}
  */
 function valueProblems(
   theme,
   {reads, rootTokens, surfaceDefaults},
-  isProperty,
+  {isProperty, isNonColor},
 ) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
@@ -498,7 +531,7 @@ function valueProblems(
           }
           const why =
             tokenNameProblem(k, v, isProperty) ??
-            tokenValueProblem(k, v, reads) ??
+            tokenValueProblem(k, v, reads, isNonColor) ??
             cycleProblem(k, onElement);
           if (why) out.push({path: [...at, map, k], why});
         }
