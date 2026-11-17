@@ -579,9 +579,11 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   hooks, templates, and codemods name `@astryxdesign/core`; the docs the CLI
   ships name `@astryxdesign/cli`; an integration's artifacts name the
   integration's package, with nothing written for it by the integration's
-  author. Two lists of plain names, `hook --list` and `swizzle --list`, hold
-  only Core's artifacts and name `package` once, in the envelope; `build`'s
-  `frame` and `foundation` are fixed lists of Core component names. Text
+  author. Two lists of plain names, `hook --list` and `swizzle --list`, name
+  `package` once, in the envelope: the run's active base, which is
+  `@astryxdesign/core` in a run on Core (`spec:AST-114` FR1). `build`'s
+  `frame` and `foundation` are fixed lists of Core component names in a run
+  on Core, and empty in a run on another base. Text
   output names the same package. Verbatim source output (`--source`,
   `--showcase`, and a template's source) keeps stdout to the source alone, so
   it pipes byte for byte, and names the package on stderr. A `--json` result

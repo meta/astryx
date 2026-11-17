@@ -11,7 +11,8 @@
  *   `files`), or cannot be asked.
  * @position foundation/integrations; read by the template-asset and logo
  *   checks (validate-contributions.mjs) and the shipped-import check
- *   (shipped-imports.mjs). Inside `withListingCache` (one validation) npm is
+ *   (shipped-imports.mjs); `integration verify` packs through
+ *   `runNpmPackJson` too. Inside `withListingCache` (one validation) npm is
  *   asked once per package folder, however many checks ask, and its list is
  *   kept between runs while nothing it depends on has changed.
  */
@@ -237,30 +238,52 @@ function readNpmrcFiles(folder, npm) {
 }
 
 /**
+ * Run `npm pack --json` with `args` in `cwd`. npm writes one JSON entry per packed file, so a
+ * package of tens of thousands of files prints megabytes: its stdout and
+ * stderr go to files, not to an in-memory pipe, so no buffer limit stops it.
+ * @param {{command: string, prefix: string[]}} npm how to start npm (npmCommand)
+ * @param {string} cwd
+ * @param {string[]} args the arguments after `pack --json`
+ * @param {{timeout: number}} options
+ * @returns {{error?: Error, status: number | null, stdout: string, stderr: string}}
+ */
+export function runNpmPackJson(npm, cwd, args, {timeout}) {
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-npm-pack-'));
+  const stdoutFile = path.join(outputDir, 'stdout.json');
+  const stderrFile = path.join(outputDir, 'stderr.txt');
+  const stdoutFd = fs.openSync(stdoutFile, 'w');
+  const stderrFd = fs.openSync(stderrFile, 'w');
+  try {
+    const result = spawnSync(
+      npm.command,
+      [...npm.prefix, 'pack', '--json', ...args],
+      {cwd, shell: false, timeout, stdio: ['ignore', stdoutFd, stderrFd]},
+    );
+    return {
+      error: result.error,
+      status: result.status,
+      stdout: fs.readFileSync(stdoutFile, 'utf-8'),
+      stderr: fs.readFileSync(stderrFile, 'utf-8'),
+    };
+  } finally {
+    fs.closeSync(stdoutFd);
+    fs.closeSync(stderrFd);
+    fs.rmSync(outputDir, {recursive: true, force: true});
+  }
+}
+
+/**
  * What npm answers for the package in `base` (npmPackedPaths).
  * @param {string} base
  * @param {{command: string, prefix: string[]}} npm
  * @returns {{paths: Set<string>} | {error: string}}
  */
 function askNpm(base, npm) {
-  const result = spawnSync(
-    npm.command,
-    [
-      ...npm.prefix,
-      'pack',
-      '--dry-run',
-      '--json',
-      '--ignore-scripts',
-      '--silent',
-    ],
-    {
-      cwd: base,
-      encoding: 'utf-8',
-      shell: false,
-      timeout: 60_000,
-      // One line per packed file: room for a very large package.
-      maxBuffer: 256 * 1024 * 1024,
-    },
+  const result = runNpmPackJson(
+    npm,
+    base,
+    ['--dry-run', '--ignore-scripts', '--silent'],
+    {timeout: 60_000},
   );
   if (result.error) return {error: `npm did not run (${result.error.message})`};
   if (result.status !== 0) {

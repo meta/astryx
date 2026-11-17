@@ -49,13 +49,15 @@ import {
 } from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 import {intlDefaults} from '../../foundation/env/intl-defaults.mjs';
-import {setRequestedBase} from '../../foundation/bases/resolve.mjs';
+import {requestedBase, setRequestedBase} from '../../foundation/bases/state.mjs';
+import {CORE_BASE_NAME} from '../../foundation/bases/core.mjs';
 import {
   addBaseHelpText,
   baseHelpSettings,
   checkRun,
   commandAvailable,
   helpBase,
+  runResolution,
 } from './lib/base-gate.mjs';
 import {commandPath} from './lib/command-path.mjs';
 import {scanRootArgs} from './lib/root-args.mjs';
@@ -304,8 +306,7 @@ export async function refuseHelpWithoutBase(argv = process.argv.slice(2), progra
   const help =
     argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help';
   if (!help) return;
-  const {runBase} = await import('../../foundation/bases/resolve.mjs');
-  const resolution = runBase();
+  const resolution = await runResolution();
   if (resolution.ok) return;
   if (argv.includes('--json')) setJsonMode(true);
   cliError(resolution.message, {code: resolution.code});
@@ -503,12 +504,8 @@ function printsRootHelp(argv) {
  * @returns {Promise<boolean>}
  */
 async function readsCore() {
-  const {runBase, requestedBase} = await import(
-    '../../foundation/bases/resolve.mjs'
-  );
-  const {CORE_BASE_NAME} = await import('../../foundation/bases/core.mjs');
   // A base is an integration, so where none can load, and no --base names
-  // another, the run reads Core with no project load.
+  // another, the run reads Core with no project load and no resolver.
   const named = requestedBase();
   if (
     !mayHaveIntegrations(process.cwd()) &&
@@ -516,6 +513,7 @@ async function readsCore() {
   ) {
     return true;
   }
+  const {runBase} = await import('../../foundation/bases/resolve.mjs');
   await loadProjectOnce();
   const run = runBase();
   return run.ok && run.base.core;
