@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Field labels use the semibold weight. The common system fonts have no medium face, so a medium label drew in the regular face, the same weight as its description. A semibold label draws in a bolder face with every font stack.
+[fix] Field labels use the semibold weight. Arial, Helvetica, Liberation Sans, and Segoe UI have no medium face, so a medium label drew in their regular face, at the same weight as its description. The label now draws in their bold face. With fonts that have a medium face, such as the Apple and Android system fonts and the first-party theme fonts, labels become one step heavier. CheckboxInput and Switch labels use the same label style and change too.
 
 @josephfarina

@@ -49,7 +49,7 @@ function declarationsOf(el: Element): string[] {
 
 describe('FieldLabel', () => {
   it('sets the label in the semibold weight', () => {
-    // A 500 weight falls back to the regular face in common system fonts.
+    // A 500 weight resolves to the regular face in fonts with no 500 face.
     render(<FieldLabel label="Email" inputID="email-input" />);
     const label = screen.getByText('Email').closest('label');
     expect(label).not.toBeNull();
