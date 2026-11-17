@@ -122,6 +122,12 @@ describe('discover reads every word of an unquoted query', () => {
         type: 'discover.item',
         data: {package: '@acme/charts', name: 'BarChart'},
       });
+      // More than one word after it is no item path: it is not read as one.
+      const more = await runCli(
+        ['discover', '@acme/charts', 'bar', 'chart', '--json'],
+        {cwd: project},
+      );
+      expect(more.stdout).not.toContain('@acme/charts/bar/chart');
     },
     TIMEOUT,
   );

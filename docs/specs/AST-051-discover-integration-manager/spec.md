@@ -97,9 +97,10 @@ discover sources follow it except where this record says otherwise.
   the list of matches, even when one name matches exactly or only one item
   matches, so the response type depends on the form of the query and never on
   what the project has. Every word typed after `discover` is part of the
-  query; after a scoped package name, the next word is its item (FR3). The query
-  MUST match word by word, with the word scorer `astryx search` uses: an item matches by the words of its name, title, summary,
-  and keywords, and its package's description adds only words the item's own
+  query; a scoped package name followed by one word names that item (FR3).
+  The query MUST match word by word, with the word scorer `astryx search`
+  uses: an item matches by the words of its name, title, summary, and
+  keywords, and its package's description adds only words the item's own
   text lacks. When an item matches every word, only such items are listed.
   Matches are ranked by how many words they match, then by how strongly
   (a word of the name above a word of the summary), with installed items

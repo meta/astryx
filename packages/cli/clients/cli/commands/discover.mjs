@@ -324,12 +324,14 @@ export function registerDiscover(program) {
        */
       async (words, options) => {
         // The query is variadic, as search's is: `astryx discover bar chart`
-        // is one query, "bar chart". After a scoped package name the next
-        // word is its item: `astryx discover @acme/charts BarChart` opens
+        // is one query, "bar chart". A scoped package name and one word after
+        // it name an item: `astryx discover @acme/charts BarChart` opens
         // `@acme/charts/BarChart`.
         const query = Array.isArray(words)
           ? words.length > 0
-            ? words.join(words[0].startsWith('@') ? '/' : ' ')
+            ? words.join(
+                words.length === 2 && words[0].startsWith('@') ? '/' : ' ',
+              )
             : undefined
           : words;
         rejectEmptyArgument('query', query, 'astryx discover');
