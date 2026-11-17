@@ -236,12 +236,10 @@
   }
 
   /*
-   * The button inside a file input is a button and a form control too, but
-   * as a pseudo-element it escapes the element selectors above and keeps the
-   * browser's font stack, text color, border and fill. It gets the same box
-   * model, font inheritance and button reset here. Its own padding and
-   * margin stay, to keep it apart from the file name. It is its own rule, so
-   * a browser that does not know `::file-selector-button` drops only this.
+   * A file input's button is a pseudo-element, so the element selectors above
+   * miss it. It keeps its padding and margin to stay apart from the file name.
+   * A browser that does not know `::file-selector-button` drops the whole rule,
+   * so the rule stands alone.
    */
   :where(*)::file-selector-button {
     box-sizing: border-box;
