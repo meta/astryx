@@ -103,7 +103,7 @@ export function registerExperimentalRender(group, program) {
           output: d.output,
           files: d.files.join(', '),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
-          ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
+          ...(d.aliased?.imports.length ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'
             ? {
                 components: (d.components ?? []).join(', ') || 'none',
@@ -126,10 +126,18 @@ export function registerExperimentalRender(group, program) {
               ),
             ]
           : []),
-        ...(d.aliased
+        ...(d.aliased?.sameAsProject ?? []).map(a =>
+          text(`The page imports ${a.import} through this project's alias, which reaches ${a.file}: the same file the page carries, so the page uses it and it was not written again.`),
+        ),
+        ...(d.aliased?.differs ?? []).map(a =>
+          text(
+            `${a.import} reaches ${a.project} in this project, which ${a.exists ? 'differs from the copy the page carries' : 'is not there'}. The page's copy came back as ${a.file}; it needs the alias entry below to use it.`,
+          ),
+        ),
+        ...(d.aliased?.imports.length && d.aliased.paths
           ? [
               text(
-                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, set the "paths" of ${d.aliased.config} (create it if it is not there) to: ${Object.entries(d.aliased.paths)
+                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias that does not reach ${d.aliased.imports.length === 1 ? 'it' : 'them'} in this project, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, set the "paths" of ${d.aliased.config} (create it if it is not there) to: ${Object.entries(d.aliased.paths)
                   .map(([key, targets]) => `${JSON.stringify(key)}: ${JSON.stringify(targets)}`)
                   .join(', ')}.`,
               ),

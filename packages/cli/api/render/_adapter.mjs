@@ -863,39 +863,64 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const home = folder ?? newFolderOf(requested);
       const within = (/** @type {string} */ file) => isInside(file, home);
       const target = path.join(anchor, path.basename(requested));
-      // The alias imports no alias here names: their files come back in the
-      // page's own layout, and the page needs the alias to build, in the config
-      // TypeScript reads for it.
-      const unaliased = [...reached]
-        .flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})))
-        .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
-      const aliased = unaliased.length === 0 ? null : aliasedResult(unaliased, requested, cwd);
       /** @type {{file: string, bytes: Buffer}[]} */
       const writes = [];
       const placed = new Set();
       /** @type {string[]} */
       const outside = [];
-      /** @type {string[]} */
-      const aliasedOutside = [];
+      // The alias imports no alias here names: their files come back in the
+      // page's own layout, and the page needs the alias to build, in the config
+      // TypeScript reads for it.
+      const unaliased = [...reached].flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})));
+      /** @type {{import: string, file: string}[]} */
+      const sameAsProject = [];
+      /** @type {{import: string, project: string, exists: boolean, file: string}[]} */
+      const differs = [];
       source.files.forEach((f, i) => {
         const reach = /** @type {import('../../foundation/render/embedded-imports.mjs').Reach} */ (reached.get(f.path));
-        const relative = i === 0 ? [target] : reach.relative ? [placeFrom(f.path)] : [];
-        for (const [file, aliased] of [...relative.map(x => /** @type {[string, boolean]} */ ([x, false])), ...[...reach.aliased].map(x => /** @type {[string, boolean]} */ ([x, true]))]) {
-          if (placed.has(file)) continue;
+        const bytes = Buffer.from(f.base64, 'base64');
+        const own = i === 0 ? target : placeFrom(f.path);
+        /** @param {string} file */
+        const place = file => {
+          if (placed.has(file)) return;
           placed.add(file);
-          // Every copy but the page at its target, the page's own copy that an
-          // alias places included, lands in the one new folder.
-          if (file !== target && !within(file)) (aliased ? aliasedOutside : outside).push(file);
-          writes.push({file, bytes: Buffer.from(f.base64, 'base64')});
+          if (file !== target && !within(file)) outside.push(file);
+          writes.push({file, bytes});
+        };
+        if (i === 0 || reach.relative) place(own);
+        for (const file of reach.aliased) {
+          const names = [...(reach.via?.get(file) ?? [])];
+          // Where this project's alias points inside the new folder, the copy
+          // goes there. Outside it, a received file never adds or replaces a
+          // file: the page uses the project's file when it is the same, and
+          // otherwise its own copy comes back in its layout, with the alias
+          // entry that reaches it.
+          if (file === target || within(file)) {
+            place(file);
+            continue;
+          }
+          const exists = fs.existsSync(file) && fs.statSync(file).isFile();
+          if (exists && fs.readFileSync(file).equals(bytes)) {
+            for (const name of names) sameAsProject.push({import: name, file: shown(cwd, file)});
+            continue;
+          }
+          place(own);
+          for (const name of names) {
+            unaliased.push({spec: name, file: own});
+            differs.push({import: name, project: shown(cwd, file), exists, file: shown(cwd, own)});
+          }
         }
       });
-      if (aliasedOutside.length > 0) {
-        throw new AstryxError(
-          `${shown(cwd, input)} imports ${aliasedOutside.map(file => shown(cwd, file)).join(', ')} through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.`,
-          [],
-          ERROR_CODES.ERR_PATH_TRAVERSAL,
-        );
-      }
+      unaliased.sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
+      const byImport = (/** @type {{import: string}} */ a, /** @type {{import: string}} */ b) => (a.import < b.import ? -1 : a.import > b.import ? 1 : 0);
+      const aliased =
+        unaliased.length === 0 && sameAsProject.length === 0
+          ? null
+          : {
+              ...(unaliased.length === 0 ? {imports: []} : aliasedResult(unaliased, requested, cwd)),
+              ...(sameAsProject.length > 0 ? {sameAsProject: sameAsProject.sort(byImport)} : {}),
+              ...(differs.length > 0 ? {differs: differs.sort(byImport)} : {}),
+            };
       if (outside.length > 0) {
         const top = entryDir === '.' ? '' : `${entryDir}/`;
         let fresh = 'restored';

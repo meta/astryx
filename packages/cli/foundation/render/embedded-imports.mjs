@@ -269,6 +269,8 @@ export function receivingAliases(file) {
  *   page), so it goes where the page's layout puts it.
  * @property {Set<string>} aliased - Absolute paths a receiving-project alias
  *   import names for it, so it also goes there.
+ * @property {Map<string, Set<string>>} [via] - For each path in `aliased`,
+ *   the alias imports that name it there.
  * @property {Set<string>} unaliased - Alias imports that name it where no
  *   receiving-project alias does: the render recorded the file each named,
  *   so it goes where the page's layout puts it, and the page needs the alias.
@@ -281,7 +283,8 @@ export function receivingAliases(file) {
  * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
  *   the receiving project's path aliases (see receivingAliases), and the
  *   alias imports the render recorded (an untrusted record: only an entry
- *   that names a carried file counts)
+ *   that names a carried file counts; without a record, each such import
+ *   names the one carried file its path ends with)
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
@@ -322,6 +325,15 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
       }
     }
     return hits.length === 1 ? hits[0] : null;
+  };
+  /** @param {string} spec an import only an alias resolves */
+  const derivedTarget = spec => {
+    const segments = spec.split('/');
+    for (let drop = 1; drop < segments.length; drop++) {
+      const hit = bySuffix(segments.slice(drop).join('/'));
+      if (hit) return hit.path;
+    }
+    return undefined;
   };
   /** @param {string} p */
   const reach = p => {
@@ -468,19 +480,29 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
         if (chosen) {
           const {r, fresh} = reach(chosen.hit.path);
           r.aliased.add(chosen.abs);
+          r.via ??= new Map();
+          const names = r.via.get(chosen.abs) ?? new Set();
+          names.add(bare);
+          r.via.set(chosen.abs, names);
           if (fresh) queue.push(chosen.hit.path);
         }
         continue;
       }
       // No alias here names it, but the render recorded the carried file it
-      // named: that file comes back in the page's own layout.
-      const sent =
+      // named, or the file has no record and one carried file fits: that
+      // file comes back in the page's own layout.
+      const listed =
         aliasOnly(bare) &&
         recorded &&
         typeof recorded === 'object' &&
         Object.hasOwn(recorded, bare)
           ? /** @type {Record<string, unknown>} */ (recorded)[bare]
           : undefined;
+      // A file from a CLI that recorded no alias imports: the one carried
+      // file whose path ends with the import's longest tail after its first
+      // segment (`@/components/Header` -> `.../components/Header.tsx`).
+      const sent =
+        typeof listed === 'string' ? listed : aliasOnly(bare) && !recorded ? derivedTarget(bare) : undefined;
       if (typeof sent === 'string' && byPath.has(sent)) {
         const {r, fresh} = reach(sent);
         r.relative = true;

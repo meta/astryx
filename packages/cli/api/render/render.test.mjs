@@ -364,7 +364,7 @@ describe('render(): every write takes its place in one step', () => {
     60_000,
   );
 
-  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+  it('uses the project\'s own file where an alias leads outside the new folder to the same bytes', async () => {
     put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
     put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
     put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
@@ -372,16 +372,9 @@ describe('render(): every write takes its place in one step', () => {
     put('alias-loop/src/app/page.tsx', page);
     const cwd = path.join(dir, 'alias-loop');
     await render('src/app/page.tsx', {cwd});
-    /** @type {any} */
-    let refused;
-    try {
-      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
-    } catch (e) {
-      refused = e;
-    }
-    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
-    expect(refused.message).toContain('src/app/page.tsx');
-    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    const back = /** @type {any} */ (await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'}));
+    expect(back.data.files).toEqual(['restored/app/page.tsx', 'restored/lib/helper.ts']);
+    expect(back.data.aliased).toEqual({imports: [], sameAsProject: [{import: '@/app/page', file: 'src/app/page.tsx'}]});
     expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
   }, 60_000);
 
@@ -692,7 +685,9 @@ describe('render(): every write stays inside the current folder', () => {
     put('aliased-to/package.json', '{"name":"aliased-to","private":true}');
     fs.copyFileSync(path.join(dir, 'aliased-src/src/app/page.html'), path.join(dir, 'aliased-to/page.html'));
     const cwd = path.join(dir, 'aliased-to');
-    // Into the project's existing folders: refused, without a suggestion that cannot work.
+    // The alias leads into an existing folder that lacks the file: its copy
+    // goes in the page's layout, which from here is outside the folder the
+    // restore creates, so it is refused with a new folder to use.
     put('aliased-to/src/keep.txt', 'existing\n');
     /** @type {any} */
     let refused;
@@ -702,8 +697,8 @@ describe('render(): every write stays inside the current folder', () => {
       refused = e;
     }
     expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
-    expect(refused.message).toContain('path alias');
-    expect(refused.suggestions ?? []).toEqual([]);
+    expect(refused.suggestions?.[0]?.name).toBe('--out restored/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'src/components'))).toBe(false);
     fs.rmSync(path.join(cwd, 'src'), {recursive: true});
     // Into a new folder the alias points into: the page and its import come back.
     const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true, out: 'src/app/page.tsx'}));
@@ -728,6 +723,69 @@ describe('render(): every write stays inside the current folder', () => {
     expect(fs.readFileSync(path.join(dir, 'no-alias/page-restored/components/Header.tsx'))).toEqual(
       fs.readFileSync(path.join(dir, 'aliased-src/src/components/Header.tsx')),
     );
+  }, 60_000);
+
+  it('restores an aliased page in its own project again and again', async () => {
+    put('alias-home/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-home/package.json', '{"name":"alias-home","private":true}');
+    const header = 'export function Header() { return <p>Home header</p>; }\n';
+    put('alias-home/src/components/Header.tsx', header);
+    put('alias-home/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const cwd = path.join(dir, 'alias-home');
+    await render('src/app/page.tsx', {cwd, out: 'page.html'});
+    // The project's alias reaches the same file: the page uses it, and only the page is written.
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    expect(back.data).toMatchObject({exact: true, files: ['page-restored/app/page.tsx']});
+    expect(back.data.aliased).toEqual({imports: [], sameAsProject: [{import: '@/components/Header', file: 'src/components/Header.tsx'}]});
+    // Render it again, and give that back too.
+    await render('page-restored/app/page.tsx', {cwd, out: 'page.html'});
+    expect(fs.readFileSync(path.join(cwd, 'page.html'), 'utf8')).toContain('Home header');
+    const twice = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    // The new render carries the page from where it now sits, beside the project's file.
+    expect(twice.data.files).toEqual(['page-restored-2/page-restored/app/page.tsx']);
+    // The project's file changed since the render: the page's own copy comes
+    // back in its layout, the result names the project's file, and the
+    // `paths` lead the import to the copy first.
+    put('alias-home/src/components/Header.tsx', 'export function Header() { return <p>Changed header</p>; }\n');
+    const changed = /** @type {any} */ (await render('page.html', {cwd, reverse: true}));
+    const copy = 'page-restored-3/src/components/Header.tsx';
+    expect(changed.data.files).toEqual(['page-restored-3/page-restored/app/page.tsx', copy]);
+    expect(changed.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {'@/*': ['./src/*', './page-restored-3/src/*'], '@/components/Header': [`./${copy}`]},
+      imports: [{import: '@/components/Header', file: copy}],
+      differs: [{import: '@/components/Header', project: 'src/components/Header.tsx', exists: true, file: copy}],
+    });
+    expect(fs.readFileSync(path.join(cwd, copy), 'utf8')).toBe(header);
+    expect(fs.readFileSync(path.join(cwd, 'src/components/Header.tsx'), 'utf8')).toContain('Changed header');
+    put('alias-home/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: changed.data.aliased.paths}}));
+    await render('page-restored-3/page-restored/app/page.tsx', {cwd, out: 'again.html'});
+    expect(fs.readFileSync(path.join(cwd, 'again.html'), 'utf8')).toContain('Home header');
+  }, 60_000);
+
+  it('names the paths for an alias import from a file that records none', async () => {
+    put('alias-old/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-old/package.json', '{"name":"alias-old","private":true}');
+    put('alias-old/src/components/Header.tsx', 'export function Header() { return <p>Old header</p>; }\n');
+    put('alias-old/src/app/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    await render('alias-old/src/app/page.tsx', {cwd: dir});
+    // A CLI before the alias record wrote the same block without it.
+    const html = fs.readFileSync(path.join(dir, 'alias-old/src/app/page.html'), 'utf8');
+    const open = '<script type="application/x-astryx-source">';
+    const start = html.indexOf(open) + open.length;
+    const end = html.indexOf('</script>', start);
+    const block = JSON.parse(html.slice(start, end));
+    expect(block.aliases).toBeDefined();
+    delete block.aliases;
+    const json = JSON.stringify(block).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    put('alias-old-to/package.json', '{"name":"alias-old-to","private":true}');
+    put('alias-old-to/page.html', html.slice(0, start) + json + html.slice(end));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'alias-old-to'), reverse: true}));
+    expect(back.data).toMatchObject({
+      exact: true,
+      files: ['page-restored/app/page.tsx', 'page-restored/components/Header.tsx'],
+      aliased: {config: 'tsconfig.json', paths: {'@/*': ['./page-restored/*']}, imports: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}]},
+    });
   }, 60_000);
 
   it('names the whole paths a page needs: every target of an alias, and the entries a config inherits', async () => {
