@@ -35,4 +35,44 @@ describe('a family member read prints its props once', () => {
     );
     expect(full.stdout).toBe(run.stdout);
   });
+
+  // Each field of the JSON shows in exactly one place in the text.
+  it.each(['VStack', 'HStack'])(
+    'prints each JSON field of %s exactly once at --detail full',
+    async name => {
+      const json = await runCli(['component', name, '--json'], {cwd});
+      const text = await runCli(['component', name, '--detail', 'full'], {
+        cwd,
+      });
+      expect(text.status, text.stderr).toBe(0);
+      const {data} = JSON.parse(json.stdout);
+      const lines = text.stdout.split('\n');
+      /** @param {(line: string) => boolean} match */
+      const count = match => lines.filter(match).length;
+      /** @type {string[]} */
+      const missed = [];
+      /** @param {string} field @param {(line: string) => boolean} match */
+      const once = (field, match) => {
+        const n = count(match);
+        if (n !== 1) missed.push(`${field}: ${n}`);
+      };
+      once('name', l => l === `# ${data.name}`);
+      for (const p of data.props) {
+        once(`props.${p.name}`, l =>
+          l.startsWith(`- \`${p.name}\`: \`${p.type}\``),
+        );
+      }
+      for (const c of data.components) {
+        once(`components.${c.name}`, l => l === `### ${c.name}`);
+        once(`components.${c.name}.description`, l => l === c.description);
+      }
+      for (const a of data.usage?.anatomy ?? []) {
+        once(`usage.anatomy.${a.name}`, l => l.startsWith(`| ${a.name} |`));
+      }
+      for (const bp of data.usage?.bestPractices ?? []) {
+        once('usage.bestPractices', l => l === `- ${bp.description}`);
+      }
+      expect(missed).toEqual([]);
+    },
+  );
 });
