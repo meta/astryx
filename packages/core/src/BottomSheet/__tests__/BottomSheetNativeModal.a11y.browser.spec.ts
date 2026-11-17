@@ -9,7 +9,7 @@
  *   dialog: the flow's one page scroll lock (the shared hook, as Dialog)
  *   holding while two sheet dialogs are open through a handoff and under a
  *   Core Dialog opened from a step, never released between steps nor when
- *   that Dialog closes, and the page's offset restored after the exit; Tab landing inside the entering sheet's dialog
+ *   that Dialog closes, and the page never moving; Tab landing inside the entering sheet's dialog
  *   as soon as both dialogs are open and on Tab stops for as long as the
  *   retained dialog is open beneath it (its fade included), never the page
  *   once the handoff is done, by the browser's own containment, with the
@@ -17,29 +17,34 @@
  *   open; Escape and
  *   the backdrop dismissing by purpose with focus returned to the opener;
  *   and one steady scrim through a handoff. The handoff cases hold it phase
- *   by phase with the interaction harness (sheet panel transitions stretched
- *   and held, the page's timers frozen), so neither depends on how fast the
- *   machine runs.
+ *   by phase with the interaction harness. The page holds each phase's panel
+ *   transitions as they start, and its timers are frozen, so neither case
+ *   depends on how fast the machine runs.
  * @position Cross-browser proof; jsdom presents no dialog and contains no
  *   focus, so BottomSheetSwitcher.test.tsx can only assert the calls. WebKit
  *   here is desktop WebKit under Playwright, not iOS Safari.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
   thawTimers,
   waitForRest,
-  watchAnimations,
+  type HeldAnimation,
 } from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
@@ -85,35 +90,32 @@ async function mountScrollable(page: Page, story = 'hug-content') {
 }
 
 /**
- * The shared lock's pin on <body>, and the page's offset as the lock sees
- * it: while pinned, `scrollY` reads 0 and the saved offset is `top`; after
- * release, `scrollY` is the restored offset. `scrollEvents` counts window
- * scroll events since `resetScrollCounter`: a lock released and re-acquired
- * between steps restores the offset and pins again, which fires one.
+ * The shared lock's hold on the page (`overflow: hidden` on the root) and the
+ * page's offset, which the lock never changes. `scrollEvents` counts window
+ * scroll events since `resetScrollCounter`: any movement of the page while
+ * the flow is open fires one.
  */
 async function lockState(page: Page): Promise<{
-  position: string;
-  top: string;
+  overflow: string;
   scrollY: number;
   scrollEvents: number;
 }> {
   return page.evaluate(() => ({
-    position: document.body.style.position,
-    top: document.body.style.top,
+    overflow: document.documentElement.style.overflow,
     scrollY: window.scrollY,
     scrollEvents: (window as {__scrollEvents?: number}).__scrollEvents ?? 0,
   }));
 }
 
 /**
- * Zero the counter once the events already owed have arrived: the spacer
- * scroll in `mountScrollable` and the lock's own pin (300 → 0) each fire one
- * window `scroll` event, and WebKit delivers them late on a cold run.
+ * Zero the counter once the owed event arrives. The spacer scroll in
+ * `mountScrollable` fires one window `scroll` event, and WebKit delivers it
+ * late on a cold run.
  */
 async function resetScrollCounter(page: Page) {
   await page
     .waitForFunction(
-      () => ((window as {__scrollEvents?: number}).__scrollEvents ?? 0) >= 2,
+      () => ((window as {__scrollEvents?: number}).__scrollEvents ?? 0) >= 1,
       undefined,
       {timeout: 3000},
     )
@@ -166,67 +168,63 @@ async function openFlow(page: Page) {
   await page.waitForTimeout(500);
 }
 
-test('the flow holds one page scroll lock through a handoff and under a Core Dialog opened from a step, never released between steps, and restores the offset after the exit', async ({
+test('the flow holds one page scroll lock through a handoff and under a Core Dialog opened from a step, never released between steps, and never moves the page', async ({
   page,
   browserName,
 }) => {
   await mountScrollable(page, 'dialog-from-step');
   await openFlow(page);
   let state = await lockState(page);
-  expect(state.position).toBe('fixed');
-  expect(state.top).toBe('-300px');
+  expect(state.overflow).toBe('hidden');
+  expect(state.scrollY).toBe(300);
   await resetScrollCounter(page);
 
   await page.getByRole('button', {name: 'Continue', exact: true}).click();
   await expect(page.locator('dialog[open]')).toHaveCount(2);
   state = await lockState(page);
-  expect(state.position).toBe('fixed');
-  expect(state.top).toBe('-300px');
-  // Wheel and finger over the backdrop with both dialogs open: the pinned
+  expect(state.overflow).toBe('hidden');
+  // Wheel and finger over the backdrop with both dialogs open: the locked
   // page does not move.
   await wheelDown(page);
   await touchScrollDown(page, browserName);
   state = await lockState(page);
-  expect(state.position).toBe('fixed');
-  expect(state.top).toBe('-300px');
-  expect(state.scrollY).toBe(0);
+  expect(state.overflow).toBe('hidden');
+  expect(state.scrollY).toBe(300);
   await expect(page.locator('dialog[open]')).toHaveCount(1, {timeout: 3000});
-  // One lock for the flow: the handoff released nothing, so the page never
-  // scrolled back and forth between steps.
+  // One lock for the flow: the handoff released nothing, and the page never
+  // moved between steps.
   state = await lockState(page);
-  expect(state.position).toBe('fixed');
+  expect(state.overflow).toBe('hidden');
   expect(state.scrollEvents).toBe(0);
 
   // A Core Dialog opened from the step, as a builder would, takes the same
   // shared lock a second time; closing it must give back only its own hold,
-  // leaving the flow's pin in place with the saved offset untouched.
+  // leaving the flow's lock in place and the page where it was.
   await page.getByRole('button', {name: 'Reset', exact: true}).click();
   const resetDialog = page.getByRole('dialog', {name: 'Reset frequency?'});
   await expect(resetDialog).toBeVisible();
   await wheelDown(page);
   state = await lockState(page);
-  expect(state.position).toBe('fixed');
-  expect(state.top).toBe('-300px');
-  expect(state.scrollY).toBe(0);
+  expect(state.overflow).toBe('hidden');
+  expect(state.scrollY).toBe(300);
   await page.getByRole('button', {name: 'Keep', exact: true}).click();
   await expect(resetDialog).toBeHidden();
   await page.waitForTimeout(400);
   state = await lockState(page);
-  expect(state.position).toBe('fixed');
-  expect(state.top).toBe('-300px');
-  expect(state.scrollY).toBe(0);
+  expect(state.overflow).toBe('hidden');
+  expect(state.scrollY).toBe(300);
   expect(state.scrollEvents).toBe(0);
   await wheelDown(page);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(300);
   // The Dialog returned focus into the step, so Escape closes the flow.
   await expect(page.locator('dialog[open]')).toHaveCount(1);
 
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0, {timeout: 3000});
   state = await lockState(page);
-  expect(state.position).toBe('');
-  expect(state.top).toBe('');
+  expect(state.overflow).toBe('');
   expect(state.scrollY).toBe(300);
+  expect(state.scrollEvents).toBe(0);
   // The page scrolls again.
   await wheelDown(page);
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
@@ -283,8 +281,145 @@ async function handoffStep(
   }, retainedName);
 }
 
-/** How long a held phase's panel transitions are stretched to run, ms. */
-const HELD_RUN_MS = 1_000_000;
+test('the lock keeps the page where it is on a page whose body sets its own overflow', async ({
+  page,
+}) => {
+  await mountScrollable(page);
+  // A common reset: with `html, body { height: 100% }`, the body's own
+  // overflow propagates to the viewport, which a root `overflow` would stop.
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent =
+      'html, body { height: 100%; } body { overflow-x: hidden; }';
+    document.head.append(style);
+    window.scrollTo(0, 300);
+  });
+  const position = async () =>
+    page.evaluate(() => ({
+      scrollY: window.scrollY,
+      spacerTop: Math.round(
+        document.getElementById('spacer')?.getBoundingClientRect().top ?? NaN,
+      ),
+    }));
+  const before = await position();
+  expect(before.scrollY).toBe(300);
+
+  await openFlow(page);
+  expect(await position()).toEqual(before);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  // The lock's release gives the body its own inline overflow back.
+  await page.waitForFunction(() => document.body.style.overflow === '');
+  expect(await position()).toEqual(before);
+});
+
+/** Where the backdrop drag starts: over the dimmed page, above the sheet. */
+const DRAG_START = {x: 195, y: 120};
+
+/**
+ * A finger drag down the backdrop as trusted touch events, one move per frame;
+ * Chromium only (CDP). `Input.synthesizeScrollGesture` delivers the touch's
+ * start but none of its moves to the page, so it cannot show a cancelled move.
+ */
+async function touchDragDown(page: Page) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [DRAG_START],
+  });
+  for (let step = 1; step <= 12; step += 1) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{x: DRAG_START.x, y: DRAG_START.y + step * 20}],
+    });
+    await page.evaluate(async () => new Promise(requestAnimationFrame));
+  }
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  });
+  await session.detach();
+  // Two frames, so the page has handled the lift before the test reads it.
+  await page.evaluate(
+    async () =>
+      new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
+test('the lock holds a backdrop drag when the flow renders inside a scrolling container', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'touch input needs CDP');
+  await mountScrollable(page);
+  // The sheets render their dialogs in place, so moving the story root into a
+  // scroller puts the open flow inside it. A modal dialog's pans still go to
+  // the viewport, never to that scroller, so the lock cancels them here too.
+  // iOS Safari scrolls the page under a move that goes through.
+  // Chromium never does, so the cancelled moves are the evidence here.
+  await page.evaluate(() => {
+    const root = document.getElementById('storybook-root');
+    const container = document.createElement('div');
+    container.id = 'container';
+    container.style.cssText = 'height: 400px; overflow-y: auto;';
+    root?.before(container);
+    if (root != null) {
+      container.append(root);
+    }
+    const filler = document.createElement('div');
+    filler.style.height = '2000px';
+    container.append(filler);
+    container.scrollTop = 100;
+    // After every listener: whether each move past the hold's 5 px slop was
+    // cancelled.
+    const moves = {judged: 0, cancelled: 0, startX: 0, startY: 0};
+    (window as {__moves?: typeof moves}).__moves = moves;
+    window.addEventListener('touchstart', event => {
+      moves.startX = event.touches[0]?.clientX ?? 0;
+      moves.startY = event.touches[0]?.clientY ?? 0;
+    });
+    window.addEventListener('touchmove', event => {
+      const touch = event.touches[0];
+      if (touch == null) {
+        return;
+      }
+      const distance = Math.max(
+        Math.abs(touch.clientX - moves.startX),
+        Math.abs(touch.clientY - moves.startY),
+      );
+      if (distance >= 5) {
+        moves.judged += 1;
+        moves.cancelled += event.defaultPrevented ? 1 : 0;
+      }
+    });
+  });
+  // Moving the story root changes the page's height, so read the offset now.
+  const scrollY = await page.evaluate(() => window.scrollY);
+  await openFlow(page);
+  // The drag starts on the backdrop. There, the one open dialog is under the
+  // finger, not the sheet's content, and the dialog is painted.
+  const start = await page.evaluate(({x, y}) => {
+    const hit = document.elementFromPoint(x, y);
+    const box = hit?.getBoundingClientRect();
+    return {
+      openDialogs: document.querySelectorAll('dialog[open]').length,
+      hitIsOpenDialog: hit instanceof HTMLDialogElement && hit.open,
+      painted: box != null && box.width > 0 && box.height > 0,
+    };
+  }, DRAG_START);
+  expect(start).toEqual({openDialogs: 1, hitIsOpenDialog: true, painted: true});
+  await touchDragDown(page);
+
+  const moves = await page.evaluate(
+    () => (window as {__moves?: {judged: number; cancelled: number}}).__moves,
+  );
+  expect(moves?.judged ?? 0).toBeGreaterThan(0);
+  expect(moves?.cancelled).toBe(moves?.judged);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+});
 
 /** The sheet the flow's Continue presents over the opener's. */
 const ENTERING = 'Notification frequency';
@@ -292,19 +427,12 @@ const ENTERING = 'Notification frequency';
 /**
  * Prepares the switcher's handoff to be held phase by phase, so however busy
  * the machine, nothing moves it on until the test ends a phase. Once the open
- * sheet is at rest, panel transitions are stretched to `HELD_RUN_MS` and the
- * page's timers are frozen (the panels' backstop for a `transitionend` that
- * never comes among them). On a busy runner a 300ms transition can run out
- * before a hold sent from the test reaches it, a round trip later; a
- * stretched one is still near its start when held, and the tests read it by
- * progress, so its length doesn't change what they read. From here on, every
+ * sheet is at rest, the page's timers are frozen (the panels' backstop for a
+ * `transitionend` that never comes among them). From here on, every
  * `::backdrop` transition is listed in `window.__backdropRuns`.
  */
 async function prepareHandoffHold(page: Page) {
   await waitForRest(page.locator('dialog[open]'));
-  await page.addStyleTag({
-    content: `.astryx-bottom-sheet { transition-duration: ${HELD_RUN_MS}ms !important; }`,
-  });
   await page.evaluate(() => {
     const runs: string[] = [];
     (window as unknown as {__backdropRuns: string[]}).__backdropRuns = runs;
@@ -336,28 +464,27 @@ function sheetPanel(page: Page, label: string): Locator {
 }
 
 /**
- * Runs `action`, which starts the handoff's next phase, waits until a
- * `property` transition runs on each of `movers` (the sheet panels that move
- * in that phase), and holds every running animation. Both sheet dialogs are
- * open through every phase.
+ * Arms the page to hold the `property` transition of each of `movers`, the
+ * sheet panels that move in the handoff's next phase. Then it runs `action`,
+ * which starts that phase, and returns what the page held. The page holds the
+ * transitions as they start. A hold sent from the test after the action
+ * reaches the page a round trip later. On a busy runner, a transition can end
+ * before it. Both sheet dialogs are open through every phase.
  */
 async function holdPhase(
   page: Page,
   movers: Locator[],
   property: 'transform' | 'opacity',
   action: () => Promise<void>,
-) {
-  const watches = [];
-  for (const mover of movers) {
-    watches.push(await watchAnimations(mover));
-  }
+): Promise<HeldAnimation[]> {
+  const hold = await armHold(page, undefined, {
+    count: movers.length,
+    judges: movers.map(mover => ({target: mover, property})),
+  });
   await action();
-  for (const watch of watches) {
-    const started = await watch.started({timeout: 10_000});
-    expect(started.map(animation => animation.name)).toContain(property);
-  }
-  await holdAnimations(page);
+  const held = await hold.held();
   await expect(page.locator('dialog[open]')).toHaveCount(2);
+  return held;
 }
 
 /**
@@ -365,7 +492,7 @@ async function holdPhase(
  * one, which moves to line up with it.
  */
 async function holdSlide(page: Page) {
-  await holdPhase(
+  return holdPhase(
     page,
     [sheetPanel(page, ENTERING), sheetPanel(page, OPENER)],
     'transform',
@@ -378,7 +505,7 @@ async function holdSlide(page: Page) {
  * retained sheet's fade.
  */
 async function holdFade(page: Page) {
-  await holdPhase(page, [sheetPanel(page, OPENER)], 'opacity', async () =>
+  return holdPhase(page, [sheetPanel(page, OPENER)], 'opacity', async () =>
     releaseAnimations(page, {finish: true}),
   );
 }
@@ -528,21 +655,21 @@ test('one steady scrim through a handoff: no dip and no double dim', async ({
       }
       return Number((1 - combined).toFixed(3));
     });
-  // The held phase read from 0 to 100% of its run in 5% steps.
-  const readHeldPhase = async () => {
+  // The held phase is read from 0 to 100% of its run in 5% steps. The run
+  // spans the held transitions' earliest start to their latest end.
+  const readHeldPhase = async (held: HeldAnimation[]) => {
+    const run = Math.max(...held.map(a => a.offsetMs + a.curveEndMs));
     const dims: number[] = [];
     for (let step = 0; step <= 20; step += 1) {
-      await seekAnimations(page, (HELD_RUN_MS * step) / 20);
+      await seekAnimations(page, (run * step) / 20);
       dims.push(await combinedDim());
     }
     return dims;
   };
   const steady = await combinedDim();
   expect(steady).toBeGreaterThan(0.3);
-  await holdSlide(page);
-  const slide = await readHeldPhase();
-  await holdFade(page);
-  const fade = await readHeldPhase();
+  const slide = await readHeldPhase(await holdSlide(page));
+  const fade = await readHeldPhase(await holdFade(page));
   // The retained dialog closes and the entering one takes the scrim.
   await releaseAnimations(page, {finish: true});
   await expect(page.locator('dialog[open]')).toHaveCount(1);

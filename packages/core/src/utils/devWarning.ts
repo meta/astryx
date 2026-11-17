@@ -16,6 +16,10 @@
  * - /packages/core/src/hooks/useDevWarning.ts (the render-path counterpart)
  */
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 const isDev = process.env.NODE_ENV !== 'production';
 
 /** Format a message as `Component: message`. */
@@ -42,6 +46,25 @@ export function devWarn(
     return;
   }
   console.warn(formatDevMessage(component, message), ...args);
+}
+
+/** Warns once for each key. Internal. */
+export type DevWarnings = (
+  component: string,
+  message: string,
+  key?: string,
+) => void;
+
+/** Per-instance diagnostics for hooks and imperative callbacks. Internal. */
+export function createDevWarnings(): DevWarnings {
+  const warned = new Set<string>();
+  return (component: string, message: string, key: string = message): void => {
+    if (process.env.NODE_ENV === 'production' || warned.has(key)) {
+      return;
+    }
+    warned.add(key);
+    devWarn(component, message);
+  };
 }
 
 /**

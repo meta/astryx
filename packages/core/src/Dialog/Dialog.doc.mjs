@@ -69,7 +69,7 @@ export const docs = {
     ],
   },
   description:
-    'Modal dialog using the native <dialog> element. Modal and inline content starts with theme body text defaults. Ancestor surface/group membership ends as a whole, including group-owned state. Explicit props and unrelated contexts remain unchanged. Place intentional groups and complete required providers inside the dialog. With reduced motion the dialog never slides or scales in: on a touch screen it fades in, in 200 ms or less, and with a mouse it appears at once.',
+    'Modal dialog using the native <dialog> element. Modal and inline content starts with theme body text defaults. Ancestor surface/group membership ends as a whole, including group-owned state. Explicit props and unrelated contexts remain unchanged. Place intentional groups and complete required providers inside the dialog. With reduced motion the dialog never slides or scales in: on a touch screen it fades in, in 200 ms or less, and with a mouse it appears at once. On a phone or tablet (a coarse primary pointer), a tap or a drag that lands while the dialog is still entering reaches nothing, and the dialog finishes entering; keys and assistive technology stay live, and a mouse or a trackpad still clicks: at once when it was the last pointer used, otherwise once it moves.',
   props: [
     {
       name: 'isOpen',
@@ -171,7 +171,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead. The one exception is an AlertDialog that confirms a destructive action: it asks one question, and Escape closes only the alert.',
       },
       {
         guidance: false,
@@ -242,7 +242,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead. The one exception is an AlertDialog that confirms a destructive action: it asks one question, and Escape closes only the alert.',
       },
       {
         guidance: false,
@@ -315,7 +315,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Nest dialogs inside other dialogs; restructure the flow into steps within a single dialog instead.',
+          'Nest dialogs inside other dialogs; use steps in one dialog. Exception: an AlertDialog confirming a destructive action (one question; Escape closes only the alert).',
       },
       {
         guidance: false,

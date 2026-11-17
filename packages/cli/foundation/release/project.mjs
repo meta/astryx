@@ -14,8 +14,9 @@
  * answers always pairs with the Core its reads load. A folder inside another
  * project therefore belongs to that project, as it does for reads.
  *
- * Plain files only: no imports beyond Node built-ins and the path helpers, so
- * the bin can read these facts before it loads anything else.
+ * Plain files only: no imports beyond Node built-ins, the path helpers and
+ * the built-in package names, so the bin can read these facts before it loads
+ * anything else.
  *
  * @input  a folder
  * @output {@link ReleaseFacts}
@@ -27,11 +28,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
+import {CLI_PACKAGE_NAME, CORE_PACKAGE_NAME} from '../identity/package-names.mjs';
 
-/** The CLI package. */
-export const CLI_PACKAGE_NAME = '@astryxdesign/cli';
-/** The Core package. */
-export const CORE_PACKAGE_NAME = '@astryxdesign/core';
+export {CLI_PACKAGE_NAME, CORE_PACKAGE_NAME};
 
 /**
  * An installed package and its version.
@@ -157,7 +156,14 @@ export function findProjectCli(startDir) {
 }
 
 /** Version-control metadata that marks a repository's root. */
-const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
+export const REPOSITORY_MARKERS = ['.git', '.hg', '.sl'];
+
+/** The dependency fields whose packages an install gets. */
+const INSTALLED_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+];
 
 /**
  * The Astryx ranges a package.json declares, from any dependency field.
@@ -168,12 +174,7 @@ function declaredRanges(pkg) {
   /** @type {{core: string | null, cli: string | null}} */
   const out = {core: null, cli: null};
   if (!pkg || typeof pkg !== 'object') return out;
-  for (const field of [
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'peerDependencies',
-  ]) {
+  for (const field of [...INSTALLED_FIELDS, 'peerDependencies']) {
     const deps = pkg[field];
     if (!deps || typeof deps !== 'object') continue;
     if (out.core === null && typeof deps[CORE_PACKAGE_NAME] === 'string') {
@@ -184,6 +185,20 @@ function declaredRanges(pkg) {
     }
   }
   return out;
+}
+
+/**
+ * Does the package.json in `dir` list `name` among the packages its install
+ * gets? A peer dependency does not count: some package managers never install
+ * peers.
+ * @param {string} dir
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function installsPackage(dir, name) {
+  const pkg = readJson(path.join(dir, 'package.json'));
+  if (!pkg || typeof pkg !== 'object') return false;
+  return INSTALLED_FIELDS.some(field => typeof pkg[field]?.[name] === 'string');
 }
 
 /**

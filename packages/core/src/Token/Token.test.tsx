@@ -111,6 +111,29 @@ describe('Token', () => {
     expect(handleRemove).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['static', {}],
+    ['clickable', {onClick: vi.fn()}],
+    ['link', {href: '/filters/open'}],
+  ])(
+    'keeps the remove button from shrinking when a %s token is cut by its width',
+    (_structure, props) => {
+      render(
+        <div style={{width: 60}}>
+          <Token
+            label="Location: Ho Chi Minh City"
+            onRemove={vi.fn()}
+            {...props}
+          />
+        </div>,
+      );
+      const removeButton = screen.getByRole('button', {
+        name: 'Remove Location: Ho Chi Minh City',
+      });
+      expect(getComputedStyle(removeButton).flexShrink).toBe('0');
+    },
+  );
+
   it('stops propagation when remove button is clicked', () => {
     const handleRemove = vi.fn();
     const handleClick = vi.fn();
@@ -812,5 +835,22 @@ describe('Token — owned handlers on the link+remove container', () => {
     expect(handleMouseUp).toHaveBeenCalledOnce();
     expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();
+  });
+});
+
+describe('popup state on a clickable token (FR10)', () => {
+  it('passes aria-haspopup and aria-expanded to the inner button', () => {
+    render(
+      <Token
+        label="Status"
+        onClick={() => {}}
+        aria-haspopup="dialog"
+        aria-expanded={false}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Status'});
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
   });
 });

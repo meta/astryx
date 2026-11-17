@@ -10,7 +10,7 @@
  *   (WCAG 2.4.7) on the disabled field focus styles
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

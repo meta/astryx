@@ -24,9 +24,13 @@ function write(files) {
   }
 }
 
-/** @param {string} target @param {string[]} [packages] */
-function check(target, packages = []) {
-  const [usage, purity] = checkBuilt(target, {cwd: dir, packages});
+/**
+ * @param {string} target
+ * @param {string[]} [packages]
+ * @param {{fileLimit?: number}} [options]
+ */
+function check(target, packages = [], options = {}) {
+  const [usage, purity] = checkBuilt(target, {cwd: dir, packages, ...options});
   return {usage, purity};
 }
 
@@ -290,20 +294,15 @@ describe('--built edge cases', () => {
   });
 
   it('warns, not fails, when the file limit ends the read before any Astryx', () => {
-    // One more file than the read takes, spread over 50 folders. Each folder
-    // is made once, and each file is a link to one empty file: a file is
-    // one directory entry, not a recursive mkdir and a write each.
-    const empty = path.join(dir, 'empty.txt');
-    fs.writeFileSync(empty, '');
-    for (let folder = 0; folder < 50; folder++) {
-      fs.mkdirSync(path.join(dir, 'a', String(folder)), {recursive: true});
+    // One more file than a read of 50 takes, spread over 5 folders. The
+    // default limit reads the same way, so a small one keeps the folder small.
+    for (let i = 0; i < 51; i++) {
+      write({[`a/${i % 5}/${i}.txt`]: ''});
     }
-    for (let i = 0; i < 20_000; i++) {
-      fs.linkSync(empty, path.join(dir, 'a', String(i % 50), `${i}.txt`));
-    }
-    const {usage} = check('.');
+    const {usage} = check('.', [], {fileLimit: 50});
     expect(usage.status).toBe('warn');
     expect(usage.message).toContain('went unread');
+    expect(usage.message).toContain('the first 50 files');
   });
 
   it('finds a root-relative asset from the build root for a page in a subfolder', () => {
@@ -458,6 +457,22 @@ describe('--built edge cases', () => {
       ].join('\n'),
     });
     expect(check('src').usage.status).not.toBe('pass');
+  });
+
+  it('counts a require() or import() call with a comment or a line break before its parenthesis, or an escape in its name', () => {
+    write({
+      'src/a.ts':
+        "export const a = import /* lazy */ ('@astryxdesign/core/Text');\n",
+      'src/b.ts':
+        "export const b = import\n  // lazy\n  ('@astryxdesign/core/Card');\n",
+      'src/c.ts':
+        "export const c = requir\\u0065('@astryxdesign/core/Badge');\n",
+      'src/d.ts': "export const d = require ('@astryxdesign/core/Grid');\n",
+      'src/e.ts': 'export const e = 1;\n',
+    });
+    const scan = scanBuilt(path.join(dir, 'src'), []);
+    expect(scan.imports).toBe(4);
+    expect(scan.importFiles).toBe(4);
   });
 
   it('does not count an import written only in a string or JSX text', () => {

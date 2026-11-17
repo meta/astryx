@@ -5,9 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
+import {createRepository} from './git-fixture.mjs';
 import {readDiff} from './review-diff.mjs';
 import {collectConcernMatches} from '../check-knowledge.mjs';
 import {loadKnowledgeIndex} from '../specs-for-file.mjs';
+import {routeReviewBaselines} from '../review-global-baselines.mjs';
 
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, '../..');
@@ -25,6 +27,21 @@ const routed = name =>
   );
 
 describe('readDiff', () => {
+  it('reads a hunk line that starts with --- or +++ as content, and counts changed lines', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -1,2 +1,2 @@',
+      '---- a rule',
+      '+++ a heading',
+      ' context',
+    ].join('\n');
+    const {addedByFile, changedCountByFile} = readDiff(diff);
+    expect(addedByFile).toEqual({'docs/a.md': ['++ a heading']});
+    expect(changedCountByFile).toEqual({'docs/a.md': 2});
+  });
+
   it('keeps every added line of each path in addedByFile', () => {
     const diff = [
       'diff --git a/docs/a.md b/docs/a.md',
@@ -38,6 +55,68 @@ describe('readDiff', () => {
     const {addedLines, addedByFile} = readDiff(diff);
     expect(addedLines).toEqual([]);
     expect(addedByFile).toEqual({'docs/a.md': ['added']});
+  });
+
+  it('keeps every added line of any file with its new line number', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -3,0 +4,2 @@',
+      '+one',
+      '+++ two',
+      '@@ -9 +11 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    expect(readDiff(diff).everyAddedLine).toEqual([
+      {file: 'docs/a.md', line: 4, text: 'one'},
+      {file: 'docs/a.md', line: 5, text: '++ two'},
+      {file: 'docs/a.md', line: 11, text: 'new'},
+    ]);
+  });
+
+  it('reads a path with a space, or a quoted non-ASCII path, from the +++ header', () => {
+    const diff = [
+      'diff --git a/My notes.md b/My notes.md',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/My notes.md\t',
+      '@@ -0,0 +1 @@',
+      '+first',
+      'diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"',
+      '--- "a/caf\\303\\251.md"',
+      '+++ "b/caf\\303\\251.md"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+second',
+    ].join('\n');
+    const {files, everyAddedLine, unreadable} = readDiff(diff);
+    expect(files).toEqual(['My notes.md', 'café.md']);
+    expect(everyAddedLine).toEqual([
+      {file: 'My notes.md', line: 1, text: 'first'},
+      {file: 'café.md', line: 1, text: 'second'},
+    ]);
+    expect(unreadable).toBe(false);
+  });
+
+  it('reads a deleted file by its old path, and flags a hunk with no readable path', () => {
+    expect(
+      readDiff(
+        [
+          'diff --git a/gone file.md b/gone file.md',
+          '--- a/gone file.md',
+          '+++ /dev/null',
+          '@@ -1 +0,0 @@',
+          '-removed',
+        ].join('\n'),
+      ).files,
+    ).toEqual(['gone file.md']);
+    const odd = readDiff(
+      ['diff --git a/x y b/x y', '@@ -0,0 +1 @@', '+lost'].join('\n'),
+    );
+    expect(odd.unreadable).toBe(true);
+    expect(odd.everyAddedLine).toEqual([]);
   });
 
   it('reads added shipped-source lines with their new line numbers', () => {
@@ -182,46 +261,58 @@ describe('review-global-baselines.mjs', () => {
   function repository(source) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-baselines-'));
     roots.push(root);
-    git(root, 'init', '-q', '-b', 'main');
-    write(
-      root,
-      'docs/architecture/react-component-runtime.md',
-      [
-        '---',
-        'authority: current',
-        'kind: architecture',
-        'id: architecture:react-component-runtime',
-        '---',
-        '',
-        '# React component runtime',
-        '',
-        '<!-- review-applicability:v1 -->',
-        '',
-        '```json',
-        JSON.stringify({
-          scope: 'global',
-          triggers: {styling: ['INV2']},
-          concerns: {
-            effects: {patterns: ['\\buseEffect\\b'], claims: ['INV1']},
-          },
-        }),
-        '```',
-        '',
-        '## Requirements',
-        '',
-        '- **INV1 — Effects clean up.** Detail.',
-        '- **INV2 — Styles stay static.** Detail.',
-        '',
-      ].join('\n'),
-    );
-    write(root, 'packages/core/src/A/A.tsx', 'export function A() {}\n');
-    git(root, 'add', '-A');
-    git(root, 'commit', '-q', '-m', 'base');
-    const base = git(root, 'rev-parse', 'HEAD');
-    git(root, 'update-ref', 'refs/remotes/origin/main', base);
+    const record = [
+      '---',
+      'authority: current',
+      'kind: architecture',
+      'id: architecture:react-component-runtime',
+      '---',
+      '',
+      '# React component runtime',
+      '',
+      '<!-- review-applicability:v1 -->',
+      '',
+      '```json',
+      JSON.stringify({
+        scope: 'global',
+        triggers: {styling: ['INV2']},
+        concerns: {
+          effects: {patterns: ['\\buseEffect\\b'], claims: ['INV1']},
+        },
+      }),
+      '```',
+      '',
+      '## Requirements',
+      '',
+      '- **INV1 — Effects clean up.** Detail.',
+      '- **INV2 — Styles stay static.** Detail.',
+      '',
+    ].join('\n');
+    const before = 'export function A() {}\n';
+    write(root, 'docs/architecture/react-component-runtime.md', record);
     write(root, 'packages/core/src/A/A.tsx', source);
-    git(root, 'commit', '-q', '-am', 'head');
-    return {root, base, head: git(root, 'rev-parse', 'HEAD')};
+    const {base, head} = createRepository(
+      root,
+      [
+        {
+          ref: 'refs/heads/main',
+          name: 'base',
+          message: 'base',
+          files: {
+            'docs/architecture/react-component-runtime.md': record,
+            'packages/core/src/A/A.tsx': before,
+          },
+        },
+        {
+          ref: 'refs/heads/main',
+          name: 'head',
+          message: 'head',
+          files: {'packages/core/src/A/A.tsx': source},
+        },
+      ],
+      {refs: {'refs/remotes/origin/main': 'base'}},
+    );
+    return {root, base, head};
   }
 
   function route({root, base, head}) {
@@ -244,12 +335,17 @@ describe('review-global-baselines.mjs', () => {
     );
   }
 
+  // The router runs in this process; the case below runs the command once.
   it("routes a concern the head's added lines match, beside the requested triggers", () => {
-    const result = route(
-      repository(
-        'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
-      ),
+    const {root, base, head} = repository(
+      'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
     );
+    const result = routeReviewBaselines({
+      root,
+      authorityCommit: base,
+      reviewHead: head,
+      requestedTriggers: ['styling'],
+    });
     expect(result.matches.map(match => match.claimId)).toEqual(['INV2']);
     expect(result.concernMatches).toEqual([
       expect.objectContaining({

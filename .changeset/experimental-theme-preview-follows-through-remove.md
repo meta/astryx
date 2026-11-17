@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor` and `preview`: `preview remove --path` given a file is refused with the preview's folder (it reported an unknown error). Pictures are taken under a part name and moved into place, so a `--png` run stopped while the browser runs leaves nothing the next run reads as a file of yours. The `see` line names `preview add --theme <name>` when the project has several editor themes; gives no URL for a preview moved where Next does not serve it, saying why; says preview.html could not be written when a folder is in the way; says what blocked `--png` when a picture of yours did; names files by paths that work from a subfolder; and says when the in-app preview was changed by hand, as `previewStale` now does with what to move out. The show help says pictures change nothing in the app, except that show first brings the app copy up to date after a hand edit. A dial value labeled with another setting (`accent 'neutral: #64748b'`) is refused with that setting's line. The input cleanup reads corner brackets as quotes, keeps escaped quotes and brackets inside strings, reads a light and a dark color typed as a pair (offering `light-dark()` or two `--mode` lines, or one color for a dial), splits a JSON object of several settings into one line each, reads a JSON-escaped font stack, maps `--mode night` and `day` to dark and light, and reads `vibrancy 0.5` and `"50"` as 50; a saved value with paste debris or `!important` is offered cleaned.
+
+@josephfarina

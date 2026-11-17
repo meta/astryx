@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, within, fireEvent} from '@testing-library/react';
 import {MobileNav} from './MobileNav';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 
@@ -247,6 +247,67 @@ describe('MobileNav', () => {
     );
   });
 
+  it('puts the drawer content in a navigation landmark named like the dialog', () => {
+    const {rerender} = render(
+      <MobileNav isOpen={true} onOpenChange={() => {}} header="My Nav">
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'My Nav'});
+    const navigation = within(dialog).getByRole('navigation', {
+      name: 'My Nav',
+    });
+    expect(navigation).toContainElement(
+      screen.getByRole('link', {name: 'Home'}),
+    );
+    expect(within(dialog).getAllByRole('navigation')).toHaveLength(1);
+
+    rerender(
+      <MobileNav isOpen={true} onOpenChange={() => {}}>
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    expect(
+      within(screen.getByRole('dialog')).getByRole('navigation', {
+        name: 'Navigation',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("names the landmark by the caller's aria-labelledby, as the dialog is", () => {
+    render(
+      <>
+        <h2 id="drawer-title">Workspace</h2>
+        <MobileNav
+          isOpen={true}
+          onOpenChange={() => {}}
+          aria-labelledby="drawer-title">
+          <a href="/home">Home</a>
+        </MobileNav>
+      </>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'Workspace'});
+    expect(
+      within(dialog).getByRole('navigation', {name: 'Workspace'}),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to the dialog's own name when the caller's aria-labelledby resolves to nothing", () => {
+    render(
+      <MobileNav
+        isOpen={true}
+        onOpenChange={() => {}}
+        header="My Nav"
+        aria-labelledby="missing-id">
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'My Nav'});
+    expect(
+      within(dialog).getByRole('navigation', {name: 'My Nav'}),
+    ).toBeInTheDocument();
+  });
+
   it('opens dialog via showModal when isOpen becomes true', () => {
     const {rerender} = render(
       <MobileNav
@@ -292,5 +353,27 @@ describe('MobileNav', () => {
     // The requested width is the width, not a cap on a full-viewport one.
     expect(drawer.style.getPropertyValue('--x-width')).toBe('300px');
     expect(declaredValue(drawer, 'width')).toBe('var(--x-width)');
+  });
+});
+
+describe('MobileNav panel text color', () => {
+  it("draws the panel's own text in the surface's text color", () => {
+    // The browser gives a dialog `color: CanvasText`, which follows the
+    // color scheme and not the theme. Text in the panel that sets no color
+    // of its own (a selected nav row) inherits the panel's color, so the
+    // panel sets the surface's. The real-browser proof is
+    // MobileNav.textColor.a11y.chromium.spec.ts.
+    render(
+      <MobileNav isOpen onOpenChange={() => {}} data-testid="mobile-nav">
+        <span>Content</span>
+      </MobileNav>,
+    );
+    const drawer = screen
+      .getByTestId('mobile-nav')
+      .querySelector<HTMLElement>('[tabindex="-1"]');
+    if (drawer == null) {
+      throw new Error('no drawer panel');
+    }
+    expect(declaredValue(drawer, 'color')).toMatch(/color-text-primary/);
   });
 });

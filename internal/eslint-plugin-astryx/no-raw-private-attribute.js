@@ -14,6 +14,20 @@
  * so the attribute can be renamed or reshaped in one place and never leaks
  * into the public surface by accident.
  *
+ * In Core, the owner can instead be a plain-TS module,
+ * `packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
+ * engine can import. It may export its name and the selector text built on
+ * it, and only its `.stylex.ts` sibling and the theme engine
+ * (`packages/core/src/theme/`) may import it. When it exists, its
+ * `.stylex.ts` sibling is not an owner. The sibling may write the attribute's
+ * selectors only as literals that reach its own `stylex.create` calls,
+ * directly or through module constants read only there, because StyleX
+ * resolves a selector only where it is written. Any other use in the sibling
+ * is reported. A binding the sibling imports from its owner may be read, but
+ * not exported, re-exported, used as a setter-prop key outside
+ * `stylex.create`, or passed to `setAttribute`, `toggleAttribute` or
+ * `removeAttribute`.
+ *
  * Reported, outside the owner modules:
  *   - a string literal that contains `data-astryx-<name>`, in any position
  *     (an object key, a `setAttribute` argument, a selector inside
@@ -25,8 +39,8 @@
  * A name the rule cannot read (`data-astryx-${part}`, `dataAttr(name)`) is
  * reported as `data-astryx-*`: it cannot be shown to be public.
  *
- * Inside an owner module, only its own attribute may be written, and the
- * module may not export the raw name or a selector as a string: not as an
+ * Inside an owner module, only its own attribute may be written, and a
+ * `.stylex.ts` owner may not export the raw name or a selector as a string: not as an
  * exported or default-exported value, not inside an exported object, array or
  * function's return value, and not through a module constant that one of
  * those uses, including a string built from that constant in a template or
@@ -42,8 +56,9 @@
  * Known limitations: a name assembled from the namespace with `+`
  * (`'data-' + NAMESPACE + '-press'`), a template that reaches the namespace
  * through anything but `dataAttrNamespace` or `NAMESPACE` (a member access,
- * an aliased import, `classPrefix`), and a name read through `element.dataset`
- * are not seen; no shipped source does any of these today, and public-API
+ * an aliased import, `classPrefix`), a name read through `element.dataset`,
+ * and a sibling's imported name copied to another variable before it sets the
+ * attribute are not seen; no shipped source does any of these today, and public-API
  * review covers them.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
@@ -53,6 +68,7 @@
  * `no-raw-private-attribute.baseline.mjs` writes it.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import {baselineAllowance} from './rule-baseline.mjs';
 
@@ -104,10 +120,42 @@ const NAMESPACE_IDENTIFIERS = new Set(['dataAttrNamespace', 'NAMESPACE']);
 /** Stands in for an interpolated value whose text is unknown. */
 const UNKNOWN = '\u0000';
 
-const OWNER_MODULE =
+const STYLEX_OWNER_MODULE =
   /(?:^|\/)packages\/[^/]+\/src\/privateAttributes\/([^/]+)\.stylex\.ts$/;
+const PLAIN_OWNER_MODULE =
+  /(?:^|\/)packages\/core\/src\/privateAttributes\/([^/.]+)\.ts$/;
 const PACKAGE_SOURCE = /(?:^|\/)packages\/([^/]+)\/src\//;
 const NAMING_MODULE = /(?:^|\/)packages\/core\/src\/naming\.ts$/;
+const PLAIN_OWNER_TARGET =
+  /^(.*\/packages\/core\/src\/privateAttributes)\/([^/.]+)(?:\.(?:ts|js))?$/;
+const THEME_ENGINE = /(?:^|\/)packages\/core\/src\/theme\//;
+const ATTRIBUTE_WRITERS = new Set([
+  'setAttribute',
+  'toggleAttribute',
+  'removeAttribute',
+]);
+
+/** Is `node` an argument of a `stylex.create` call, at any depth? */
+function insideStylexCreate(node) {
+  let current = node;
+  while (current.parent != null) {
+    const parent = current.parent;
+    if (
+      parent.type === 'CallExpression' &&
+      parent.arguments.includes(current) &&
+      parent.callee.type === 'MemberExpression' &&
+      !parent.callee.computed &&
+      parent.callee.object.type === 'Identifier' &&
+      parent.callee.object.name === 'stylex' &&
+      parent.callee.property.type === 'Identifier' &&
+      parent.callee.property.name === 'create'
+    ) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
+}
 
 /**
  * Every `data-astryx-*` attribute a piece of text names, as the attribute
@@ -310,6 +358,14 @@ const rule = {
       exportedName:
         'An owner module exports styles, setter props and readers, never its attribute name ' +
         'or a selector on it as a string ({{attribute}}).',
+      siblingSelector:
+        '`{{attribute}}` belongs to {{owner}}. Its `.stylex.ts` sibling writes the attribute ' +
+        'only as a selector literal for its own `stylex.create` calls; it never sets the ' +
+        'attribute or exports the selector.',
+      plainOwnerImport:
+        "'{{source}}' is a plain-TS owner module. Only its `.stylex.ts` sibling and the theme " +
+        'engine in packages/core/src/theme import it; other files spread the styles, setter ' +
+        'props and readers the owner modules export.',
     },
   },
   create(context) {
@@ -319,16 +375,58 @@ const rule = {
     if (NAMING_MODULE.test(filename)) {
       return {};
     }
+    const packageSource = PACKAGE_SOURCE.exec(filename);
+    const packageName = packageSource?.[1] ?? null;
+    const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
+    const ownerDirectoryOnDisk =
+      packageSource == null
+        ? null
+        : `${filename.slice(0, packageSource.index + packageSource[0].length)}privateAttributes`;
+    const hasPlainOwner = stem =>
+      packageName === 'core' &&
+      ownerDirectoryOnDisk != null &&
+      fs.existsSync(`${ownerDirectoryOnDisk}/${stem}.ts`);
     // Owner modules are named in camelCase (`focusOwner.stylex.ts` owns
     // `data-astryx-focus-owner`); compare in the attribute's kebab case.
-    const ownerStem = OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const plainOwnerStem = PLAIN_OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const stylexOwnerStem = STYLEX_OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const ownerStem =
+      plainOwnerStem ??
+      (stylexOwnerStem != null && !hasPlainOwner(stylexOwnerStem)
+        ? stylexOwnerStem
+        : null);
     const ownedName = ownerStem == null ? null : kebabCase(ownerStem);
-    const packageName = PACKAGE_SOURCE.exec(filename)?.[1] ?? null;
-    const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
-    const ownerOf = name =>
-      name == null
-        ? ownerDirectory
-        : `${ownerDirectory}/${camelCase(name)}.stylex.ts`;
+    const mayExportName = plainOwnerStem != null;
+    // The `.stylex.ts` sibling of a plain-TS owner: the attribute it may
+    // still write as a `stylex.create` selector.
+    const siblingName =
+      stylexOwnerStem != null && ownerStem == null
+        ? kebabCase(stylexOwnerStem)
+        : null;
+    const siblingValues = [];
+    // In the sibling: import and re-export declarations from its own owner.
+    const siblingOwnerImports = [];
+    const isOwnSiblingOwner = specifier =>
+      siblingName != null &&
+      typeof specifier === 'string' &&
+      specifier.startsWith('.') &&
+      path
+        .resolve(
+          path.dirname(context.filename ?? context.getFilename()),
+          specifier,
+        )
+        .split(path.sep)
+        .join('/')
+        .replace(/\.(?:ts|js)$/, '') === filename.replace(/\.stylex\.ts$/, '');
+    const ownerOf = name => {
+      if (name == null) {
+        return ownerDirectory;
+      }
+      const stem = camelCase(name);
+      return hasPlainOwner(stem)
+        ? `${ownerDirectory}/${stem}.ts`
+        : `${ownerDirectory}/${stem}.stylex.ts`;
+    };
     const sourceCode = context.sourceCode ?? context.getSourceCode();
     // Each listed attribute allows as many sites as it is listed; the next
     // one is reported.
@@ -342,6 +440,10 @@ const rule = {
         return;
       }
       const attribute = attributeLabel(name);
+      if (siblingName != null && name === siblingName) {
+        siblingValues.push(node);
+        return;
+      }
       if (ownedName != null) {
         if (name === ownedName) {
           return;
@@ -366,11 +468,11 @@ const rule = {
       });
     }
 
-    // In an owner module: strings (and `dataAttr()` calls) that spell its
-    // own attribute, checked at the end for a path to an export.
+    // In a `.stylex.ts` owner module: strings (and `dataAttr()` calls) that
+    // spell its own attribute, checked at the end for a path to an export.
     const ownerValues = [];
     function noteOwnerValue(node, names) {
-      if (ownedName != null && names.includes(ownedName)) {
+      if (!mayExportName && ownedName != null && names.includes(ownedName)) {
         ownerValues.push(node);
       }
     }
@@ -415,10 +517,12 @@ const rule = {
      */
     function checkImport(source) {
       const specifier = source?.value;
-      if (
-        typeof specifier !== 'string' ||
-        !/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)
-      ) {
+      if (typeof specifier !== 'string') {
+        return;
+      }
+      // A neighbour in the same folder reaches a plain-TS owner as `./press`.
+      if (!/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)) {
+        checkPlainOwnerImport(source, specifier);
         return;
       }
       let foreign = !specifier.startsWith('.');
@@ -439,7 +543,117 @@ const rule = {
           messageId: 'foreignPackage',
           data: {source: specifier},
         });
+        return;
       }
+      checkPlainOwnerImport(source, specifier);
+    }
+
+    /**
+     * Only a plain-TS owner's `.stylex.ts` sibling and the theme engine may
+     * import it, because it exports the raw name.
+     */
+    function checkPlainOwnerImport(source, specifier) {
+      if (!specifier.startsWith('.')) {
+        return;
+      }
+      const target = path
+        .resolve(
+          path.dirname(context.filename ?? context.getFilename()),
+          specifier,
+        )
+        .split(path.sep)
+        .join('/');
+      const match = PLAIN_OWNER_TARGET.exec(target);
+      if (match == null) {
+        return;
+      }
+      const [, directory, stem] = match;
+      if (
+        !fs.existsSync(`${directory}/${stem}.ts`) ||
+        filename === `${directory}/${stem}.stylex.ts` ||
+        `${directory}/${stem}.ts` === filename ||
+        THEME_ENGINE.test(filename)
+      ) {
+        return;
+      }
+      context.report({
+        node: source,
+        messageId: 'plainOwnerImport',
+        data: {source: specifier},
+      });
+    }
+
+    /**
+     * Does the value of `node` reach only `stylex.create` arguments, directly
+     * or through module constants that are read only there?
+     */
+    function reachesOnlyStylexCreate(node, seen) {
+      if (insideStylexCreate(node)) {
+        return true;
+      }
+      const destination = valueDestination(node);
+      if (
+        destination == null ||
+        destination.exported ||
+        destination.binding.type !== 'VariableDeclarator'
+      ) {
+        return false;
+      }
+      const {binding} = destination;
+      if (seen.has(binding)) {
+        return true;
+      }
+      seen.add(binding);
+      const name = binding.id.name;
+      if (exportedLocals.has(name)) {
+        return false;
+      }
+      return sourceCode
+        .getDeclaredVariables(binding)
+        .filter(variable => variable.name === name)
+        .every(variable =>
+          variable.references.every(
+            reference =>
+              reference.identifier === binding.id ||
+              !reference.isRead() ||
+              reachesOnlyStylexCreate(reference.identifier, seen),
+          ),
+        );
+    }
+
+    function reportSiblingUse(node) {
+      context.report({
+        node,
+        messageId: 'siblingSelector',
+        data: {
+          attribute: attributeLabel(siblingName),
+          owner: ownerOf(siblingName),
+        },
+      });
+    }
+
+    /**
+     * Does a read of a binding imported from the sibling's owner set the
+     * attribute: a setter-prop key outside `stylex.create`, or a
+     * `setAttribute`, `toggleAttribute` or `removeAttribute` argument?
+     */
+    function setsAttribute(identifier) {
+      const parent = identifier.parent;
+      if (
+        parent?.type === 'Property' &&
+        parent.computed &&
+        parent.key === identifier
+      ) {
+        return !insideStylexCreate(parent);
+      }
+      return (
+        parent?.type === 'CallExpression' &&
+        parent.arguments[0] === identifier &&
+        parent.callee.type === 'MemberExpression' &&
+        !parent.callee.computed &&
+        parent.callee.property.type === 'Identifier' &&
+        ATTRIBUTE_WRITERS.has(parent.callee.property.name)
+      );
     }
 
     function checkText(node, text) {
@@ -453,12 +667,21 @@ const rule = {
     return {
       ImportDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source.value)) {
+          siblingOwnerImports.push(node);
+        }
       },
       ExportNamedDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source?.value)) {
+          reportSiblingUse(node);
+        }
       },
       ExportAllDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source.value)) {
+          reportSiblingUse(node);
+        }
       },
       ImportExpression(node) {
         if (node.source.type === 'Literal') {
@@ -504,6 +727,34 @@ const rule = {
         }
       },
       'Program:exit'() {
+        for (const declaration of siblingOwnerImports) {
+          for (const variable of sourceCode.getDeclaredVariables(declaration)) {
+            for (const reference of variable.references) {
+              if (
+                reference.isRead() &&
+                (setsAttribute(reference.identifier) ||
+                  reachesExport(reference.identifier, new Set()))
+              ) {
+                reportSiblingUse(reference.identifier);
+              }
+            }
+          }
+        }
+        for (const node of siblingValues) {
+          if (
+            !reachesOnlyStylexCreate(node, new Set()) &&
+            !isAllowed(attributeLabel(siblingName))
+          ) {
+            context.report({
+              node,
+              messageId: 'siblingSelector',
+              data: {
+                attribute: attributeLabel(siblingName),
+                owner: ownerOf(siblingName),
+              },
+            });
+          }
+        }
         for (const node of ownerValues) {
           if (reachesExport(node, new Set())) {
             context.report({

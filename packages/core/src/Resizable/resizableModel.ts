@@ -11,7 +11,7 @@
  *   clamp, snap and persist alike; no React, and no DOM work on import
  */
 
-import {devWarn} from '../utils/devWarning';
+import type {DevWarnings} from '../utils/devWarning';
 
 export type ResizableDirection = 'horizontal' | 'vertical';
 
@@ -303,7 +303,7 @@ export function resolveBound(
   fallback: number,
   label: string,
   accepted: string,
-  didWarnRef: {current: boolean},
+  warn: DevWarnings | null,
   source = 'useResizable',
 ): number {
   if (raw === undefined) {
@@ -315,14 +315,12 @@ export function resolveBound(
     return Infinity;
   }
   if (parsed == null) {
-    if (!didWarnRef.current) {
-      didWarnRef.current = true;
-      devWarn(
-        source,
-        `${label}: ${describeSize(raw)} is not a size. ${accepted} ` +
-          `Falling back to ${fallback}.`,
-      );
-    }
+    warn?.(
+      source,
+      `${label}: ${describeSize(raw)} is not a size. ${accepted} ` +
+        `Falling back to ${fallback}.`,
+      label,
+    );
     return fallback;
   }
   return toPixels(parsed, basis) ?? fallback;

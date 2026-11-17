@@ -2,13 +2,14 @@
 
 /**
  * @file InputGroup.test.tsx
- * @input Uses vitest, @testing-library/react, InputGroup, TextInput, NumberInput, DateInput components
+ * @input Uses vitest, @testing-library/react, InputGroup, TextInput, NumberInput, DateInput, Typeahead, Tokenizer, Selector, MultiSelector components
  * @output Unit tests for InputGroup
  * @position Testing; validates InputGroup component implementation
  *
  * SYNC: When InputGroup component changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {InputGroup} from './InputGroup';
@@ -22,6 +23,8 @@ import {Selector} from '../Selector';
 import {MultiSelector} from '../MultiSelector';
 import {TimeInput} from '../TimeInput';
 import {Button} from '../Button';
+import {SizeProvider} from '../SizeContext/SizeContext';
+import {Tokenizer} from '../Tokenizer/Tokenizer';
 
 const fruits: SearchableItem[] = [
   {id: '1', label: 'Apple'},
@@ -262,6 +265,39 @@ describe('InputGroup', () => {
     );
   });
 
+  it('labels grouped Tokenizer from the group and inner input labels', () => {
+    const {container} = render(
+      <InputGroup label="Recipients" description="Who receives the digest">
+        <InputGroupText>To</InputGroupText>
+        <Tokenizer
+          label="People"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={[]}
+          onChange={() => {}}
+        />
+      </InputGroup>,
+    );
+
+    const group = screen.getByRole('group', {name: 'Recipients'});
+    const groupLabelID = group.getAttribute('aria-labelledby');
+    const input = screen.getByRole('combobox', {name: 'Recipients People'});
+    const labelledByIDs =
+      input.getAttribute('aria-labelledby')?.split(' ') ?? [];
+
+    expect(labelledByIDs).toHaveLength(2);
+    expect(labelledByIDs[0]).toBe(groupLabelID);
+    expect(document.getElementById(labelledByIDs[1])).toHaveTextContent(
+      'People',
+    );
+    expect(input).not.toHaveAttribute('aria-label');
+    expect(input).toHaveAttribute(
+      'aria-describedby',
+      group.getAttribute('aria-describedby'),
+    );
+    expect(container.querySelectorAll('.astryx-field')).toHaveLength(1);
+  });
+
   it('keeps grouped DateInput calendar button and popover semantics', () => {
     render(
       <InputGroup label="Deadline">
@@ -319,6 +355,14 @@ describe('InputGroup', () => {
             disabledMessage="Unavailable"
           />
         </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Tokenizer
+            label="People"
+            value={[]}
+            searchSource={fruitSource}
+            onChange={onChange}
+          />
+        </InputGroup>
       </>,
     );
 
@@ -333,6 +377,7 @@ describe('InputGroup', () => {
       'Group Date',
       'Group Time',
       'Group Fruit',
+      'Group People',
     ]) {
       expect(screen.getByLabelText(name)).toHaveAttribute(
         'aria-disabled',
@@ -473,30 +518,146 @@ describe('InputGroup', () => {
     expect(screen.getByText('Price is required')).toBeInTheDocument();
   });
 
-  it('renders with hidden label', () => {
+  it('keeps a hidden label as the group name (FR1, AR1)', () => {
     render(
       <InputGroup label="Price" isLabelHidden>
         <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
       </InputGroup>,
     );
 
-    expect(screen.getByText('Price')).toBeInTheDocument();
-    expect(screen.getByRole('group')).toBeInTheDocument();
+    const group = screen.getByRole('group', {name: 'Price'});
+    expect(group.getAttribute('aria-labelledby')).toBe(
+      screen.getByText('Price').id,
+    );
+    expect(screen.getByRole('textbox', {name: 'Price Amount'})).toBe(
+      screen.getByRole('textbox'),
+    );
   });
 
-  it('renders with different sizes', () => {
+  it('shows the optional or required marker and the label tooltip on the group label (FR1)', () => {
     const {rerender} = render(
-      <InputGroup label="Price" size="sm">
+      <InputGroup label="Price" isOptional labelTooltip="Before tax">
         <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
       </InputGroup>,
     );
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    const label = () =>
+      document.getElementById(
+        screen.getByRole('group').getAttribute('aria-labelledby') ?? '',
+      );
+    expect(label()).toHaveTextContent('Optional');
+    // The info button follows the label element, outside it.
+    const tooltipTrigger = label()?.nextElementSibling;
+    expect(tooltipTrigger?.tagName).toBe('BUTTON');
+    expect(
+      document.getElementById(
+        tooltipTrigger?.getAttribute('aria-describedby') ?? '',
+      ),
+    ).toHaveTextContent('Before tax');
+
+    rerender(
+      <InputGroup label="Price" isRequired>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(label()).toHaveTextContent('Required');
+    expect(label()).not.toHaveTextContent('Optional');
+    expect(label()?.querySelector('.astryx-icon')).toBeNull();
+  });
+
+  it('describes the group by its description, then its status message (ORD2)', () => {
+    render(
+      <InputGroup
+        label="Price"
+        description="Enter the amount in USD"
+        status={{type: 'warning', message: 'Price looks high'}}>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    const ids =
+      screen.getByRole('group').getAttribute('aria-describedby')?.split(' ') ??
+      [];
+    expect(ids).toHaveLength(2);
+    expect(document.getElementById(ids[0])).toHaveTextContent(
+      'Enter the amount in USD',
+    );
+    expect(document.getElementById(ids[1])).toHaveTextContent(
+      'Price looks high',
+    );
+  });
+
+  it('reflects size and status on the input-group row and forwards its ref (FR5)', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(
+      <InputGroup
+        ref={ref}
+        label="Price"
+        size="lg"
+        status={{type: 'error', message: 'Price is required'}}>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    const group = screen.getByRole('group', {name: 'Price'});
+    expect(ref.current).toBe(group);
+    expect(group).toHaveClass('astryx-input-group');
+    expect(group).toHaveAttribute('data-size', 'lg');
+    expect(group).toHaveAttribute('data-status', 'error');
+  });
+
+  it('takes its size from its prop, then an outer provider, then md, and passes it to its inputs (FR3, ORD1)', () => {
+    const textInput = () =>
+      screen.getByRole('textbox').closest('.astryx-text-input');
+    const {rerender} = render(
+      <InputGroup label="Price">
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'md');
+    expect(textInput()).toHaveAttribute('data-size', 'md');
+
+    rerender(
+      <SizeProvider value="sm">
+        <InputGroup label="Price">
+          <TextInput
+            label="Amount"
+            isLabelHidden
+            value=""
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </SizeProvider>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'sm');
+    expect(textInput()).toHaveAttribute('data-size', 'sm');
+
+    rerender(
+      <SizeProvider value="sm">
+        <InputGroup label="Price" size="lg">
+          <TextInput
+            label="Amount"
+            isLabelHidden
+            value=""
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </SizeProvider>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
+    expect(textInput()).toHaveAttribute('data-size', 'lg');
 
     rerender(
       <InputGroup label="Price" size="lg">
-        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+        <TextInput
+          label="Amount"
+          isLabelHidden
+          size="sm"
+          value=""
+          onChange={() => {}}
+        />
       </InputGroup>,
     );
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
+    expect(textInput()).toHaveAttribute('data-size', 'sm');
   });
 });

@@ -425,13 +425,27 @@ export function matchedVersionOf(facts) {
 }
 
 /**
+ * The one version a declared dependency pins, such as `0.7.16`, `=0.7.16` or
+ * `v0.7.16`; null for a range or nothing.
+ * @param {string | null | undefined} spec
+ * @returns {string | null}
+ */
+export function pinnedVersion(spec) {
+  const trimmed = String(spec ?? '')
+    .trim()
+    .replace(/^=/, '')
+    .replace(/^v/, '');
+  return isReleaseVersion(trimmed) ? trimmed : null;
+}
+
+/**
  * @param {string} name
  * @param {string} spec
  * @returns {{version: string | null, range: {name: string, spec: string} | null}}
  */
 function exactOrRange(name, spec) {
-  const trimmed = spec.trim().replace(/^=/, '').replace(/^v/, '');
-  if (isReleaseVersion(trimmed)) return {version: trimmed, range: null};
+  const version = pinnedVersion(spec);
+  if (version) return {version, range: null};
   return {version: null, range: {name, spec}};
 }
 

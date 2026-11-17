@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {defineTheme} from './defineTheme';
-import {generateAdaptationCSS} from './generateThemeRules';
+import {generateAdaptationCSS, generateThemeRules} from './generateThemeRules';
 import {expandMotionScale} from './expandMotionScale';
 import {
   CHARACTER_EASE,
@@ -29,10 +29,13 @@ import {durationDefaults, easeDefaults} from './tokens.stylex';
 const TODAY_MS = [130, 175, 230, 310, 410, 550, 730, 975, 1300];
 const STANDARD = 'cubic-bezier(0.24, 1, 0.4, 1)';
 
+/** The duration tokens whose default is a literal, not a reference. */
+const BAND_DURATIONS = Object.entries(durationDefaults)
+  .filter(([, value]) => !value.startsWith('var('))
+  .map(([name]) => name);
+
 function durationsMs(tokens: Readonly<Record<string, string>>): number[] {
-  return Object.keys(durationDefaults).map(name =>
-    Number.parseFloat(tokens[name]),
-  );
+  return BAND_DURATIONS.map(name => Number.parseFloat(tokens[name]));
 }
 
 describe('the motion knobs (spec:AST-108 FR1)', () => {
@@ -243,6 +246,71 @@ describe('existing motion configuration (spec:AST-108 FR5)', () => {
   });
 });
 
+describe('--duration-exit (spec:AST-090 FR12)', () => {
+  it('defaults to --duration-fast', () => {
+    expect(durationDefaults['--duration-exit']).toBe('var(--duration-fast)');
+    expect(resolveThemeMotion({}).durations['--duration-exit']).toBe('175ms');
+  });
+
+  it('follows tempo through --duration-fast, and tempo writes no value for it', () => {
+    const tokens = expandThemeMotion({tempo: 1.2});
+    expect(tokens).not.toHaveProperty('--duration-exit');
+    expect(tokens).not.toHaveProperty('--_astryx-pre-tempo-duration-exit');
+    expect(Object.values(tokens).some(value => value.includes('NaN'))).toBe(
+      false,
+    );
+    expect(
+      resolveThemeMotion({motion: {tempo: 1.2}}).durations['--duration-exit'],
+    ).toBe(`${Math.round(175 * 1.2)}ms`);
+  });
+
+  it.each([
+    ['a tempo', {name: 'ExitTempo', motion: {tempo: 1.2}}],
+    [
+      'a duration scale',
+      {name: 'ExitScale', motion: {fast: 100, medium: 250, ratio: 0.75}},
+    ],
+    [
+      'an explicit --duration-fast',
+      {name: 'ExitFast', tokens: {'--duration-fast': '120ms'}},
+    ],
+  ] as const)(
+    'is declared again in a theme scope that sets --duration-fast through %s, so a nested theme follows its own value',
+    (_label, config) => {
+      const css = generateThemeRules(defineTheme(config)).join('\n');
+      expect(css).toContain('--duration-exit: var(--duration-fast);');
+    },
+  );
+
+  it('is not declared again where the theme sets it, or sets no --duration-fast', () => {
+    const own = generateThemeRules(
+      defineTheme({
+        name: 'ExitOwn',
+        motion: {tempo: 1.2},
+        tokens: {'--duration-exit': '90ms'},
+      }),
+    ).join('\n');
+    expect(own).not.toContain('--duration-exit: var(--duration-fast);');
+    const plain = generateThemeRules(defineTheme({name: 'ExitPlain'})).join(
+      '\n',
+    );
+    expect(plain).not.toContain('--duration-exit');
+  });
+
+  it('takes a theme override', () => {
+    expect(
+      resolveThemeMotion({tokens: {'--duration-exit': '90ms'}}).durations[
+        '--duration-exit'
+      ],
+    ).toBe('90ms');
+    const theme = defineTheme({
+      name: 'ExitOverride',
+      tokens: {'--duration-exit': '90ms'},
+    });
+    expect(theme.tokens['--duration-exit']).toBe('90ms');
+  });
+});
+
 describe('resolveThemeMotion (spec:AST-108 FR6)', () => {
   it('returns the knobs, durations and easings with explicit tokens applied', () => {
     const motion = resolveThemeMotion({
@@ -327,6 +395,52 @@ describe('a layer\u2019s own durations reach the busy loops under an enclosing t
       }),
     ).component;
     expect(css).toContain('--_astryx-pre-tempo-duration-medium: 300ms');
+  });
+
+  it('a theme whose durations come from a duration scale alone writes a tempo of 1, so its springs keep its pace inside a theme with one', () => {
+    const scaled = defineTheme({
+      name: 'ScaledPace',
+      motion: {fast: 100, medium: 250, ratio: 0.75},
+    });
+    expect(scaled.tokens['--_astryx-motion-tempo']).toBe('1');
+    // A child keeps its base's tempo beside a scale of its own.
+    const child = defineTheme({
+      name: 'ScaledPaceChild',
+      extends: defineTheme({name: 'PacedBase', motion: {tempo: 1.5}}),
+      motion: {fast: 100, medium: 250, ratio: 0.75},
+    });
+    expect(child.tokens['--_astryx-motion-tempo']).toBe('1.5');
+    // A knob that writes no duration, and one explicit duration, leave the
+    // enclosing tempo in place.
+    for (const theme of [
+      defineTheme({name: 'CrispPace', motion: {character: 'crisp'}}),
+      defineTheme({name: 'ExplicitPace', tokens: {'--duration-slow': '800ms'}}),
+    ]) {
+      expect(theme.tokens['--_astryx-motion-tempo']).toBeUndefined();
+    }
+  });
+
+  it('an adaptation rule whose durations come from a duration scale writes the tempo they play at', () => {
+    const ruleCss = (name: string, tempo?: number) =>
+      generateAdaptationCSS(
+        defineTheme({
+          name,
+          ...(tempo == null ? {} : {motion: {tempo}}),
+          adaptations: {
+            rules: [
+              {
+                when: {pointer: 'coarse'},
+                value: {motion: {fast: 100, medium: 250, ratio: 0.75}},
+              },
+            ],
+          },
+        }),
+      ).component;
+    expect(ruleCss('AdaptiveScale')).toContain('--_astryx-motion-tempo: 1;');
+    // Over a theme with a tempo, the rule keeps the theme's tempo.
+    expect(ruleCss('AdaptiveScaleTempo', 1.5)).toContain(
+      '--_astryx-motion-tempo: 1.5;',
+    );
   });
 });
 
@@ -470,8 +584,8 @@ describe('busy loops read the duration before tempo (spec:AST-108 FR4)', () => {
   it('Spinner and Skeleton read the pre-tempo duration first', () => {
     const read = (file: string) =>
       fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    expect(read('Spinner/Spinner.tsx')).toContain(
-      "`var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`",
+    expect(read('Spinner/spinnerRotor.ts')).toContain(
+      "var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})",
     );
     expect(read('Skeleton/Skeleton.tsx')).toContain(
       "`var(--_astryx-pre-tempo-duration-medium-max, ${durationVars['--duration-medium-max']})`",

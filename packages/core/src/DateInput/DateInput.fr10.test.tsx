@@ -253,9 +253,10 @@ describe('DateInput FR10 handler composition', () => {
         }
       />,
     );
-    fireEvent.keyDown(screen.getByRole('combobox', {name: 'Due'}), {
-      key: 'Enter',
-    });
+    const input = screen.getByRole('combobox', {name: 'Due'});
+    // Typed text makes Enter a key the field consumes (it commits the text).
+    fireEvent.change(input, {target: {value: '2026-02-03'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
     expect(seen).toEqual([{key: 'Enter', defaultPrevented: true}]);
   });
 

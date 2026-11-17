@@ -52,7 +52,7 @@ function ControlledInput({
   );
 }
 
-function InheritedRequiredInput() {
+function UnderRequiredDefaultInput() {
   return (
     <FormLayout defaultOptionality="required">
       <ControlledInput initial={false} label="Marketing consent" />
@@ -244,7 +244,7 @@ export const CHECKBOX_STATE_RENDERS: Record<
   'input-required': () => (
     <ControlledInput initial={false} label="Accept terms" isRequired />
   ),
-  'input-inherited-required-valid': () => <InheritedRequiredInput />,
+  'input-under-required-default': () => <UnderRequiredDefaultInput />,
   'input-invalid': () => (
     <ControlledInput
       initial={false}

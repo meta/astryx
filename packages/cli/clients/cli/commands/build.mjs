@@ -21,6 +21,7 @@ import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
   emit,
+  formatDeprecation,
   section,
   text,
   list,
@@ -28,6 +29,7 @@ import {
   records,
 } from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {build as buildApi} from '../../../api/build/build.mjs';
@@ -65,6 +67,24 @@ function printPlaybook(playbook) {
   );
 }
 
+/** The domains search finds that a build kit has no group for. */
+const SEARCH_ONLY_TYPES = ['doc', 'theme'];
+
+/**
+ * In text mode, say once on stderr that a kit has no docs or themes and name
+ * the search that finds them, as other command notes do (`search`,
+ * `integration pack --check`). Stdout, the JSON envelope and the exit status
+ * stay as they are.
+ * @param {string | undefined} type
+ * @param {boolean} json
+ */
+function pointToSearch(type, json) {
+  if (json || !type || !SEARCH_ONLY_TYPES.includes(type)) return;
+  console.error(
+    `Note: a build kit has no ${type}s. Find them with \`${formatCliCommand(`search <query> --type ${type}`)}\`.`,
+  );
+}
+
 /**
  * @param {import('commander').Command} program
  */
@@ -88,6 +108,7 @@ export function registerBuild(program) {
         // one. Counting it as a result keeps "what did this run answer with"
         // true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
+        pointToSearch(options.type, json);
         if (json) {
           jsonOut(result);
           return playbook;
@@ -100,8 +121,7 @@ export function registerBuild(program) {
       // Parse --limit to a number; the API validates it (positive integer) and
       // throws ERR_INVALID_ARGUMENT, so we pass NaN through rather than
       // pre-rejecting with a generic code here (parity with `search`).
-      const limit =
-        options.limit != null ? Number(options.limit) : 60;
+      const limit = options.limit != null ? Number(options.limit) : 60;
 
       /** @type {import('../../../api/build/build.type.mjs').BuildKitResponse} */
       let result;
@@ -150,6 +170,7 @@ export function registerBuild(program) {
         jsonOut(result);
         return answered;
       }
+      pointToSearch(options.type, json);
 
       if (!hasResults && !start) {
         emit(
@@ -165,6 +186,16 @@ export function registerBuild(program) {
       // blocks and components share one command line in their heading; the
       // JSON and --verbose carry everything.
       const verbose = Boolean(options.verbose);
+      /**
+       * A template record names an unready template `<name> (not ready)`.
+       * @template {{name: string, isReady?: boolean}} T
+       * @param {T} item
+       * @returns {T}
+       */
+      const tagged = item =>
+        item.isReady === false
+          ? {...item, name: markNotReady(item.name, false)}
+          : item;
       /** @type {import('../formatters/index.mjs').RecordOptions} */
       const full = {
         fields: [
@@ -172,18 +203,23 @@ export function registerBuild(program) {
           'package',
           'domain',
           'displayName',
+          'deprecated',
           'score',
           'reason',
           'import',
           'description',
           'command',
         ],
-        format: {command: formatCliCommand},
+        format: {command: formatCliCommand, deprecated: formatDeprecation},
       };
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
-        format: {command: formatCliCommand, description: firstSentence},
+        format: {
+          command: formatCliCommand,
+          description: firstSentence,
+          deprecated: formatDeprecation,
+        },
       });
       // Blocks and components are extras: the text names the top few, and
       // says how many more the JSON and --verbose carry.
@@ -218,10 +254,17 @@ export function registerBuild(program) {
             }`,
           ),
           record(
-            start,
+            tagged(start),
             verbose
               ? {
-                  fields: ['name', 'package', 'displayName', 'description', 'command'],
+                  fields: [
+                    'name',
+                    'package',
+                    'displayName',
+                    'description',
+                    'fit',
+                    'command',
+                  ],
                   format: {command: formatCliCommand},
                 }
               : brief(['name', 'package', 'description', 'command']),
@@ -235,8 +278,10 @@ export function registerBuild(program) {
               `If the layout is wrong, scaffold one of these instead. All page templates: ${formatCliCommand('template --list --type page')}`,
             ),
             records(
-              start.alternatives,
-              verbose ? full : brief(['name', 'package', 'description', 'command']),
+              start.alternatives.map(tagged),
+              verbose
+                ? full
+                : brief(['name', 'package', 'description', 'command']),
             ),
           );
         }
@@ -251,10 +296,10 @@ export function registerBuild(program) {
                 'Page templates keyword search matched, best first.',
               )
             : text(
-                `Keyword search matched these page templates: ${pages.map(p => `${p.name} (${p.package})`).join(', ')}.`,
+                `Keyword search matched these page templates: ${pages.map(p => `${markNotReady(p.name, p.isReady)} (${p.package})`).join(', ')}.`,
               ),
         );
-        if (verbose) out.push(records(pages, full));
+        if (verbose) out.push(records(pages.map(tagged), full));
       }
       if (blocks.length) {
         out.push(
@@ -263,26 +308,36 @@ export function registerBuild(program) {
             `Ready-made sections for parts the template lacks${more(blocks)}. Print one: ${formatCliCommand('template <name>')}`,
           ),
           records(
-            shown(blocks),
+            shown(blocks.map(tagged)),
             verbose ? full : brief(['name', 'package', 'description']),
           ),
         );
       }
-      out.push(
-        section(
-          'COMPONENTS',
-          `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
-        ),
+      const componentLines = [
         ...(domain.length
           ? [
               records(
                 shown(domain),
-                verbose ? full : brief(['name', 'package', 'description']),
+                verbose
+                  ? full
+                  : brief(['name', 'package', 'deprecated', 'description']),
               ),
             ]
           : []),
-        record({frame, foundation}),
-      );
+        ...(frame.length + foundation.length
+          ? [record({frame, foundation})]
+          : []),
+      ];
+      // A section with no lines under it is left out.
+      if (componentLines.length > 0) {
+        out.push(
+          section(
+            'COMPONENTS',
+            `For what the template and blocks do not cover${more(domain)}. Read one: ${formatCliCommand('component <name>')}`,
+          ),
+          ...componentLines,
+        );
+      }
 
       // Last, so it is the line the reader leaves with — and only when the kit
       // was thin enough that "the package has nothing" is the wrong conclusion.

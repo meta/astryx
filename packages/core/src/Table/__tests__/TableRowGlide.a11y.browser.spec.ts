@@ -13,7 +13,7 @@
  *   adoption and glidingDivider.ts
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -40,31 +40,66 @@ async function mount(page: Page, story: string, args = '', timeout = 5000) {
 }
 
 /**
- * Toggles a row and holds every animation `ms` into its run, so the frame
- * can be read.
+ * Toggles a row and holds every animation `ms` into its run, so a test can read
+ * the frame. Returns how many row glides it held, and throws when a row
+ * animation starts another way. A glide starts on the timeline's time in the
+ * click's own task. On a loaded runner, its first frame can come after the
+ * glide ends. So the helper holds each animation the click starts before any
+ * frame runs.
  */
 async function toggleAndHold(page: Page, index: number, ms: number) {
   return page.evaluate(
     async ({index, ms}) => {
-      (
-        document.querySelectorAll('[data-expansion-toggle]')[index] as
-          HTMLElement | undefined
-      )?.click();
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      // The glide's own motion on rows (script animations), not a CSS
-      // transition a row's hover or press state runs.
-      const rows = document
-        .getAnimations()
-        .filter(
-          animation =>
-            !(animation instanceof CSSTransition) &&
-            !(animation instanceof CSSAnimation) &&
-            (animation.effect as KeyframeEffect | null)?.target?.nodeName ===
-              'TR',
-        );
-      for (const animation of document.getAnimations()) {
+      const hold = (animation: Animation) => {
         animation.pause();
         animation.currentTime = ms;
+      };
+      const before = new Set(document.getAnimations());
+      const held: Animation[] = [];
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (
+        this: Element,
+        ...args: Parameters<Element['animate']>
+      ) {
+        const animation = animate.apply(this, args);
+        held.push(animation);
+        // After the code that starts it has set its start time.
+        queueMicrotask(() => hold(animation));
+        return animation;
+      };
+      try {
+        (
+          document.querySelectorAll('[data-expansion-toggle]')[index] as
+            HTMLElement | undefined
+        )?.click();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      } finally {
+        Element.prototype.animate = animate;
+      }
+      const live = document.getAnimations();
+      const isRowMotion = (animation: Animation) =>
+        !(animation instanceof CSSTransition) &&
+        !(animation instanceof CSSAnimation) &&
+        (animation.effect as KeyframeEffect | null)?.target?.nodeName === 'TR';
+      // A row animation the click started that the patch did not hold escapes
+      // the hold.
+      const stray = live.filter(
+        animation =>
+          isRowMotion(animation) &&
+          !before.has(animation) &&
+          !held.includes(animation),
+      );
+      if (stray.length > 0) {
+        throw new Error(
+          `${stray.length} row animations started outside Element.prototype.animate`,
+        );
+      }
+      const rows = held.filter(
+        animation => live.includes(animation) && isRowMotion(animation),
+      );
+      // A CSS transition starts on the first frame, so the loop below holds it.
+      for (const animation of document.getAnimations()) {
+        hold(animation);
       }
       return rows.length;
     },
@@ -103,6 +138,29 @@ async function darkestNear(page: Page, x: number, y: number): Promise<Rgb> {
       }
     }
     return darkest;
+  }, shot.toString('base64'));
+}
+
+/** The pixel at `x`, `y`. */
+async function colorAt(page: Page, x: number, y: number): Promise<Rgb> {
+  const shot = await page.screenshot({
+    clip: {x, y, width: 1, height: 1},
+    scale: 'css',
+  });
+  return page.evaluate(async b64 => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${b64}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d');
+    if (context == null) {
+      return [255, 255, 255];
+    }
+    context.drawImage(image, 0, 0);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return [r, g, b];
   }, shot.toString('base64'));
 }
 
@@ -169,6 +227,65 @@ test('mid-glide each divider moves with its row, pinned cells included', async (
     });
     await page.waitForTimeout(100);
   }
+});
+
+test("mid-open the panel's divider rides its cell's bottom", async ({page}) => {
+  await mount(page, 'gliding-rows');
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
+  // The panel's one cell, where it shows now: the line under it moves with
+  // its bottom. A line left where the cell was measured mid-slide is cut off.
+  const cell = await page.evaluate(() => {
+    const box = document
+      .querySelector('tr[data-expansion-panel] > td')
+      ?.getBoundingClientRect();
+    return box == null
+      ? null
+      : {x: Math.round((box.left + box.right) / 2), y: Math.round(box.bottom)};
+  });
+  expect(cell, 'the panel cell').not.toBeNull();
+  expect((await darkestNear(page, cell?.x ?? 0, cell?.y ?? 0))[0]).toBeLessThan(
+    248,
+  );
+});
+
+test("mid-open a muted panel's wash slides in with its cell, and the divider rides the cell's bottom", async ({
+  page,
+}) => {
+  await mount(page, 'gliding-rows', '&args=muted:!true');
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
+  const panel = await page.evaluate(() => {
+    const row = document.querySelector('tr[data-expansion-panel]');
+    const cell = row?.firstElementChild ?? null;
+    const animates = (element: Element | null | undefined) =>
+      (element?.getAnimations() ?? []).flatMap(animation =>
+        Object.keys(
+          (animation.effect as KeyframeEffect | null)?.getKeyframes()[0] ?? {},
+        ),
+      );
+    const box = cell?.getBoundingClientRect();
+    return {
+      row: animates(row),
+      cell: animates(cell),
+      at:
+        box == null
+          ? null
+          : {
+              x: Math.round((box.left + box.right) / 2),
+              y: Math.round(box.bottom),
+            },
+    };
+  });
+  // The row paints nothing, so its clip stays still and the cell slides. A
+  // clip that moves with the edge can trail the rows below it on iOS.
+  expect(panel.row).not.toContain('clipPath');
+  expect(panel.cell).toContain('translate');
+  expect(panel.at, 'the panel cell').not.toBeNull();
+  const x = panel.at?.x ?? 0;
+  const y = panel.at?.y ?? 0;
+  // The wash shows where the cell is now, and the line under it is darker.
+  const wash = await colorAt(page, x, y - 8);
+  expect(wash[0], 'the wash').toBeLessThan(250);
+  expect((await darkestNear(page, x, y))[0]).toBeLessThan(wash[0] - 8);
 });
 
 test("a theme's divider and an app's override move with their rows, pinned cells included", async ({
@@ -293,16 +410,39 @@ test('the chevron turns on the glide; column lines and Reduce Motion change at o
   page,
 }) => {
   await mount(page, 'gliding-rows');
-  await page.locator('[data-expansion-toggle]').first().click();
+  // Hold the glide before a slow runner can let it finish between calls.
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
+  // The values the rows glide on, as read where the area is.
   const timing = await page
     .locator('[data-expansion-toggle] > *')
     .first()
-    .evaluate(glyph =>
-      (glyph as HTMLElement).style.getPropertyValue(
+    .evaluate(glyph => {
+      const row = document.querySelectorAll('tr[data-expansion-key]')[1];
+      const glide = row
+        ?.getAnimations()
+        .find(animation =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .some(frame => frame.translate != null),
+        );
+      const style = (glyph as HTMLElement).style;
+      // The theme's curve as an inline style serializes it (`.24` as `0.24`).
+      const theme = document.createElement('i').style;
+      theme.setProperty(
         'transition-timing-function',
-      ),
-    );
-  expect(timing.startsWith('linear(')).toBe(true);
+        getComputedStyle(glyph).getPropertyValue('--ease-move'),
+      );
+      return {
+        easing: style.getPropertyValue('transition-timing-function'),
+        duration: style.getPropertyValue('transition-duration'),
+        theme: theme.getPropertyValue('transition-timing-function'),
+        glideMs: Number(glide?.effect?.getComputedTiming().duration),
+      };
+    });
+  expect(timing.glideMs).toBeGreaterThan(0);
+  expect(parseFloat(timing.duration)).toBeCloseTo(timing.glideMs, 3);
+  expect(timing.theme).toMatch(/^cubic-bezier\(/);
+  expect(timing.easing).toBe(timing.theme);
 
   for (const dividers of ['columns', 'grid']) {
     await mount(page, 'gliding-rows', `&args=dividers:${dividers}`);
@@ -325,7 +465,8 @@ test('under Reduce Motion a finger sees the rows fade in place, not move', async
   });
   const page = await context.newPage();
   await mount(page, 'gliding-rows');
-  await toggleAndHold(page, 0, 0);
+  // The rows animate, so the check below has animations to read.
+  expect(await toggleAndHold(page, 0, 0)).toBeGreaterThan(0);
   // The size-change module's Reduce Motion under a coarse pointer: a short
   // fade at the new place (design:reduced-motion DR2), never a translate.
   const moves = await page.evaluate(

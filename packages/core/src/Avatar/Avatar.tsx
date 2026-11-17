@@ -194,8 +194,10 @@ const styles = stylex.create({
     // `.astryx-avatar-fallback` class target (font size through its size
     // variant, `.astryx-avatar-fallback.<size>`), so the defaults here are
     // plain values with no internal-var seam. See Avatar.doc.mjs theming.
+    // Primary text: secondary text on the neutral tint falls below 4.5:1 in
+    // dark mode.
     backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-secondary'],
+    color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
@@ -209,7 +211,7 @@ const styles = stylex.create({
   // only CanvasText is sure to read on it.
   loneFallback: {
     color: {
-      default: colorVars['--color-text-secondary'],
+      default: colorVars['--color-text-primary'],
       '@media (forced-colors: active)': 'currentColor',
     },
   },
@@ -243,6 +245,19 @@ const styles = stylex.create({
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
+  // Generated content draws the initials. They are part of the picture, not
+  // text of the control. On a link or button, visible text that the name does
+  // not contain fails Label in Name. Newer engines get empty alternative text.
+  // Older engines draw the plain string; the aria-label still names the
+  // control.
+  initials: (quoted: string) => ({
+    '::before': {
+      content: {
+        default: quoted,
+        '@supports (content: "a" / "")': `${quoted} / ""`,
+      },
+    },
+  }),
   size: (size: number) => ({
     width: size,
     height: size,
@@ -427,6 +442,11 @@ const INITIAL_CHARACTER = new RegExp(
 function initialCharacter(word: string): string {
   const index = word.search(INITIAL_CHARACTER);
   return index === -1 ? '' : firstCharacter(word.slice(index));
+}
+
+/** The text as a CSS string literal, with quotes and backslashes escaped. */
+function cssString(text: string): string {
+  return `"${text.replace(/[\\"]/g, char => `\\${char}`).replace(/\n/g, '\\a ')}"`;
 }
 
 /**
@@ -806,10 +826,10 @@ export function Avatar({
                 styles.fallback,
                 avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
+                dynamicStyles.initials(cssString(initials)),
               ),
-            )}>
-            {initials}
-          </div>
+            )}
+          />
         )}
         {showIcon && (
           <div
@@ -824,7 +844,9 @@ export function Avatar({
           </div>
         )}
       </div>
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,

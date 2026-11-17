@@ -26,7 +26,12 @@
  * @position packages/core/src/theme/generateThemeRules.ts
  */
 
-import type {ComponentStyleMap, DefinedTheme} from './defineTheme';
+import type {
+  ComponentStyleMap,
+  DefinedTheme,
+  StyleBlock,
+  StyleOverrides,
+} from './defineTheme';
 import {
   normalizeThemeAdaptations,
   resolveThemeAdaptationRules,
@@ -42,6 +47,10 @@ import {
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
+import {readerTextSizeEntries} from './dynamicType';
+import {splitTopLevelWhitespace} from './tokenReferences';
+import {withoutUnsetComponents} from './mergeComponents';
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
  * Theme @scope selectors.
@@ -127,6 +136,37 @@ function appendPseudoToSelectorList(selector: string, pseudo: string): string {
   const guarded = guardHoverPseudo(pseudo);
 
   return parts.map(part => `${part}${guarded}`).join(', ');
+}
+
+/**
+ * The touch press model (utils/interactionOverlay.stylex.ts, pressFeedback.ts).
+ * A mouse keeps `:active`. Under a coarse primary pointer, the press
+ * controller marks a press it believes. A finger then paints no press on the
+ * touch or through a scroll.
+ */
+const COARSE_POINTER_QUERY = '(pointer: coarse)';
+const ACTIVE_PSEUDO = /:active(?![-\w])/g;
+
+/**
+ * The rules for one themed pseudo-class override. A themed `:active` follows
+ * the press model: the `:active` rule applies only off a coarse pointer, and
+ * under one the press attribute takes `:active`'s place.
+ */
+function pseudoRules(
+  baseSelector: string,
+  pseudo: string,
+  declarations: string,
+): string[] {
+  if (!new RegExp(ACTIVE_PSEUDO.source).test(pseudo)) {
+    return [
+      `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
+    ];
+  }
+  const pressed = pseudo.replace(ACTIVE_PSEUDO, PRESS_BELIEVED_SELECTOR);
+  return [
+    `  @media not all and ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }\n  }`,
+    `  @media ${COARSE_POINTER_QUERY} {\n  ${appendPseudoToSelectorList(baseSelector, pressed)} {\n${declarations}\n  }\n  }`,
+  ];
 }
 
 /** Insert the disabled guard into a `:hover` pseudo, keeping any pseudo-element last. */
@@ -242,9 +282,13 @@ function parsePadding(props: [string, string][]): ParsedPadding {
 
   for (const [rawProp, value] of props) {
     const prop = PHYSICAL_BLOCK_PADDING_PROPS[rawProp] ?? rawProp;
+    // An empty shorthand sets nothing. It keeps the longhands before it.
     switch (prop) {
       case 'padding': {
-        const parts = value.trim().split(/\s+/);
+        const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         if (parts.length === 1) {
           result.blockStart = parts[0];
           result.blockEnd = parts[0];
@@ -261,13 +305,19 @@ function parsePadding(props: [string, string][]): ParsedPadding {
         break;
       }
       case 'paddingBlock': {
-        const parts = value.trim().split(/\s+/);
+        const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         result.blockStart = parts[0];
         result.blockEnd = parts[1] ?? parts[0];
         break;
       }
       case 'paddingInline': {
-        const parts = value.trim().split(/\s+/);
+        const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         if (parts.length === 1) {
           result.inline = parts[0];
         } else {
@@ -444,13 +494,17 @@ function acceptDeclaration(
  * declarations it means to emit.
  */
 function joinDeclarations(
-  entries: [string, string][],
+  entries: [string, unknown][],
   location: string,
   sink: DiagnosticSink,
   mapProp: (prop: string) => string = p => p,
 ): string {
   const lines: string[] = [];
   for (const [rawProp, rawValue] of entries) {
+    // An undefined value sets nothing, as a page token's does.
+    if (rawValue === undefined) {
+      continue;
+    }
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
     const value = stringifyTokenValue(rawValue);
@@ -463,17 +517,18 @@ function joinDeclarations(
 }
 
 /**
- * Public status roles whose canonical default references an existing semantic
- * source token. StyleX owns the document defaults. A theme that authors a
- * source repeats its omitted role at the theme root so nested Theme regions
- * bind the alias locally without changing authored-token metadata.
+ * Public tokens whose canonical default references another public token: the
+ * status roles and `--duration-exit`. StyleX owns the document defaults. A
+ * theme that authors a source repeats its omitted token at the theme root so
+ * nested Theme regions bind the alias locally without changing authored-token
+ * metadata.
  *
  * Conditional scopes repeat an omitted alias only when the source changes on
  * that scope. Explicit adaptation role writes are replayed after generated
  * aliases (and on media descendants) so authored role precedence survives
  * overlapping conditions without disabling the alias in non-matching states.
  */
-const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
+const SCOPED_REFERENCE_DEFAULTS: ReadonlyArray<
   readonly [role: string, source: string]
 > = [
   ['--color-text-info', '--color-text-blue'],
@@ -493,16 +548,17 @@ const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
   ['--color-border-success', '--color-text-success'],
   ['--color-border-warning', '--color-text-warning'],
   ['--color-border-error', '--color-text-error'],
+  ['--duration-exit', '--duration-fast'],
 ];
 
-const SCOPED_STATUS_ROLE_SOURCES = new Map(SCOPED_STATUS_ROLE_DEFAULTS);
+const SCOPED_REFERENCE_SOURCES = new Map(SCOPED_REFERENCE_DEFAULTS);
 
 /** Colours INV17's derivation measures; a scope that sets one re-derives. */
 const STATUS_MEASURED =
   /^--color-(?:info|success|warning|error|on-|background-surface|background-card)/;
 
 const STATUS_ROLE_ORDER = new Map(
-  SCOPED_STATUS_ROLE_DEFAULTS.map(([role], index) => [role, index]),
+  SCOPED_REFERENCE_DEFAULTS.map(([role], index) => [role, index]),
 );
 
 type TokenValues = Record<string, unknown>;
@@ -527,6 +583,9 @@ function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);
@@ -740,7 +799,7 @@ export function generatedScopedStatusRoleDefaults(
     ),
   }));
 
-  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+  for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
     const alias = `var(${source})`;
     if (
       authoredRoot[role] !== undefined ||
@@ -775,7 +834,7 @@ function authoredStatusRoleEntries(
   tokens: Record<string, string>,
 ): [string, string][] {
   const canonicalTokens = createTokenCascade(tokens).values;
-  return SCOPED_STATUS_ROLE_DEFAULTS.flatMap(([role]) => {
+  return SCOPED_REFERENCE_DEFAULTS.flatMap(([role]) => {
     const value = canonicalTokens[role];
     return value === undefined ? [] : [[role, stringifyTokenValue(value)]];
   });
@@ -789,7 +848,7 @@ function tokenValueIsAliasOf(value: unknown, source: string): boolean {
 }
 
 function mediaRoleRestorationValue(role: string, value: string): string {
-  const source = SCOPED_STATUS_ROLE_SOURCES.get(role);
+  const source = SCOPED_REFERENCE_SOURCES.get(role);
   return source !== undefined && tokenValueIsAliasOf(value, source)
     ? value
     : 'inherit';
@@ -843,7 +902,7 @@ function generatedAdaptationStatusRoleDefaults(
     // alias, and roles that follow them (icon and border) alias them here.
     const ruleRoles = new Map(aliases[index]);
     const ruleSources = {...authoredRule, ...Object.fromEntries(ruleRoles)};
-    for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+    for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
       const alias = `var(${source})`;
       const rootRole = rootValues[role];
       if (
@@ -921,7 +980,7 @@ function generatedMediaStatusRoleDefaults(
     return stringifyTokenValue(candidate.values[role]);
   };
 
-  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+  for (const [role, source] of SCOPED_REFERENCE_DEFAULTS) {
     const alias = `var(${source})`;
     const rootRole = rootValues[role];
     if (
@@ -981,7 +1040,13 @@ function tokenBlock(
   tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    joinDeclarations(tokenEntries, `${location}tokens`, sink),
+    // Font sizes follow the reader's text size where the root Theme sets the
+    // scales. Elsewhere each scale is 1.
+    joinDeclarations(
+      readerTextSizeEntries(tokenEntries),
+      `${location}tokens`,
+      sink,
+    ),
     joinDeclarations(
       Object.entries(source.localTokens ?? {}),
       `${location}localTokens`,
@@ -1162,25 +1227,28 @@ export function generateThemeRules(
   }
 
   // 2. Component overrides: stable .astryx-* target classes combined with
-  // reflected data-* selectors for visual props and runtime states.
-  if (theme.components) {
-    generateComponentRules(theme.components, parts, {sink});
+  // reflected data-* selectors for visual props and runtime states. A rule
+  // source passed in directly can still hold undefined. Read it as every
+  // layer does: an undefined value is not set.
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {sink});
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
   generateProseRules(val, parts);
 
   // 4. Prop-level color overrides (for text/heading/link specificity)
-  generateColorOverrides(theme.components || {}, parts);
+  generateColorOverrides(components || {}, parts);
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(theme.components || {}, parts);
+  generateSizeOverrides(components || {}, parts);
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
   //    when a custom visual type declares its own default weight.
-  generateHeadingWeightOverrides(theme.components || {}, parts);
+  generateHeadingWeightOverrides(components || {}, parts);
 
   // (on-media rules are generated separately — see generateOnMediaCSS)
 
@@ -1298,10 +1366,7 @@ interface ComponentRuleOptions {
  * expansion and container padding mapping for every theme layer.
  */
 function generateComponentRules(
-  components: Record<
-    string,
-    Record<string, Record<string, string | Record<string, string>>>
-  >,
+  components: Record<string, Record<string, StyleOverrides>>,
   parts: string[],
   {
     resetInheritedPaddingSpecificity = false,
@@ -1312,135 +1377,253 @@ function generateComponentRules(
 ): void {
   for (const [component, rules] of Object.entries(components)) {
     for (const [key, styles] of Object.entries(rules)) {
-      const entries = Object.entries(styles);
-      if (entries.length === 0) {
-        continue;
-      }
-
-      const suffix = parseStyleKey(key);
-      const baseSelector = componentSelector(component, suffix, surface);
-      const location = componentLocation(locationPrefix, component, key);
-
-      // Separate regular properties from pseudo-class overrides
-      const props: [string, string][] = [];
-      const pseudos: [string, Record<string, string>][] = [];
-
-      for (const [prop, value] of entries) {
-        if (prop.startsWith(':') && typeof value === 'object') {
-          pseudos.push([prop, value]);
-        } else if (
-          acceptDeclaration(
-            toKebabCase(prop),
-            `${value as string}`,
-            location,
-            sink,
-          )
-        ) {
-          props.push([prop, value as string]);
-        }
-      }
-
-      // Derived var expansion: for each CSS property, check if the
-      // component has derived var entries and emit additional declarations.
-      // Entries are processed in order (priority).
-      // - `vars`: emit internal CSS custom property declarations
-      // - `expand: 'container'`: expand padding to container layout tokens
-      // - `replaces: true`: emit only the var, dropping the source property
-      let finalProps = props;
-      const derivedProps: [string, string][] = [];
-      let containerExpanded = false;
-      const replacedProps = new Set<string>();
-
-      for (const [prop, value] of props) {
-        const derived = getDerivedVars(component, prop);
-        // Padding longhands (paddingBlock, paddingInline, etc.) also
-        // match the 'padding' derived entry for container expansion.
-        const paddingDerived =
-          PADDING_PROPS.has(prop) && prop !== 'padding'
-            ? getDerivedVars(component, 'padding')
-            : [];
-        for (const entry of [...derived, ...paddingDerived]) {
-          if (entry.expand === 'container' && PADDING_PROPS.has(prop)) {
-            containerExpanded = true;
+      /**
+       * Emit a style block on a selector: its declarations, then its
+       * pseudo-class overrides, each rule passed through `wrap`; then, for a
+       * style key, its color-mode blocks.
+       */
+      const emit = (
+        block: StyleOverrides,
+        selector: string,
+        location: string,
+        wrap: (rule: string) => string,
+        withModes: boolean,
+      ): void => {
+        const props: [string, string][] = [];
+        const nested: [string, StyleBlock][] = [];
+        for (const [prop, value] of Object.entries(block)) {
+          const isObject = value !== null && typeof value === 'object';
+          // A pseudo-class override or a color-mode block nests. Anything
+          // else is a declaration as written, so the boundary check reports
+          // one that cannot be a declaration, such as a misspelled block key.
+          if (
+            isObject &&
+            (prop.startsWith(':') ||
+              (withModes && (prop === '@light' || prop === '@dark')))
+          ) {
+            nested.push([prop, value]);
+            continue;
           }
-          if (entry.replaces) {
-            replacedProps.add(prop);
-          }
-          if (entry.vars) {
-            for (const varName of entry.vars) {
-              derivedProps.push([varName, value]);
-            }
+          const text =
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value)
+              : `${value}`;
+          if (acceptDeclaration(toKebabCase(prop), text, location, sink)) {
+            props.push([prop, text]);
           }
         }
-        // A physical block longhand reaches the container expansion only. It
-        // names one edge, so it must not feed a `vars` entry above, which
-        // carries the padding for the whole box.
-        if (
-          prop in PHYSICAL_BLOCK_PADDING_PROPS &&
-          getDerivedVars(component, 'padding').some(
-            e => e.expand === 'container',
-          )
-        ) {
-          containerExpanded = true;
-        }
-      }
-
-      // Container padding expansion: replace padding props with
-      // component-scoped container tokens for layout integration.
-      if (containerExpanded) {
-        const paddingProps = props.filter(([p]) =>
-          CONTAINER_PADDING_PROPS.has(p),
-        );
-        const nonPaddingProps = props.filter(
-          ([p]) => !CONTAINER_PADDING_PROPS.has(p),
-        );
-        const parsed = parsePadding(paddingProps);
-        const containerTokens = expandContainerPadding(
+        const finalProps = expandComponentDeclarations(
           component,
-          parsed,
+          props,
           resetInheritedPaddingSpecificity,
         );
-        finalProps = [...nonPaddingProps, ...containerTokens];
-      }
-
-      // Drop properties whose derived entry set `replaces` — their value is
-      // carried by the emitted var and must not land on the class element.
-      if (replacedProps.size > 0) {
-        finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
-      }
-
-      if (derivedProps.length > 0) {
-        finalProps = [...finalProps, ...derivedProps];
-      }
-
-      // Emit base rule
-      if (finalProps.length > 0) {
-        const declarations = joinDeclarations(
-          finalProps,
-          location,
-          sink,
-          toKebabCase,
-        );
-        parts.push(`  ${baseSelector} {\n${declarations}\n  }`);
-      }
-
-      // Emit pseudo-class rules
-      for (const [pseudo, pseudoStyles] of pseudos) {
-        const pseudoEntries = Object.entries(pseudoStyles);
-        if (pseudoEntries.length > 0) {
+        if (finalProps.length > 0) {
           const declarations = joinDeclarations(
-            pseudoEntries,
-            `${location}[${JSON.stringify(pseudo)}]`,
+            finalProps,
+            location,
             sink,
             toKebabCase,
           );
-          parts.push(
-            `  ${appendPseudoToSelectorList(baseSelector, pseudo)} {\n${declarations}\n  }`,
+          parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
+        }
+        for (const [pseudo, pseudoStyles] of nested) {
+          const pseudoEntries = Object.entries(pseudoStyles);
+          if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
+            const declarations = joinDeclarations(
+              pseudoEntries,
+              `${location}[${JSON.stringify(pseudo)}]`,
+              sink,
+              toKebabCase,
+            );
+            for (const rule of pseudoRules(selector, pseudo, declarations)) {
+              parts.push(wrap(rule));
+            }
+          }
+        }
+        if (!withModes) {
+          return;
+        }
+        // Color-mode blocks follow the rules they refine at the same weight,
+        // so in their mode they win over the style key's own values, and in
+        // the other mode they write nothing. Dark comes before light, as the
+        // onDark and onLight surface overrides do.
+        for (const name of ['dark', 'light'] as const) {
+          const modeStyles = nested.find(([key]) => key === `@${name}`)?.[1];
+          if (!modeStyles) {
+            continue;
+          }
+          const modeEmit = (at: string, modeWrap: (rule: string) => string) =>
+            emit(
+              modeStyles,
+              at,
+              `${location}[${JSON.stringify(`@${name}`)}]`,
+              modeWrap,
+              false,
+            );
+          if (surface) {
+            // A media surface fixes the mode: only its own block applies.
+            if (surface === name) {
+              modeEmit(selector, wrap);
+            }
+            continue;
+          }
+          // The theme root decides outside media surfaces. Inside them, the
+          // nearest surface decides, by ancestor conditions at the root's
+          // weight (no scope proximity).
+          const inside = (ancestor: string) =>
+            `:is(${selector}):where(${ancestor} *)`;
+          const outsideSurfaces = `:where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
+          modeEmit(
+            `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
+            wrap,
           );
+          modeEmit(
+            `${inside(
+              `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
+            )}${outsideSurfaces}`,
+            rule =>
+              wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
+          );
+          modeEmit(
+            `:is(${selector}):where(${nearestSurfaceIs(name).join(', ')})`,
+            wrap,
+          );
+        }
+      };
+      emit(
+        styles,
+        componentSelector(component, parseStyleKey(key), surface),
+        componentLocation(locationPrefix, component, key),
+        rule => rule,
+        true,
+      );
+    }
+  }
+}
+
+/** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
+const THEME_MODE_ATTR = 'data-theme';
+
+/**
+ * How many media surfaces of alternating modes, one inside another, a
+ * color-mode block tells apart. CSS has no selector for an element's nearest
+ * ancestor with an attribute: `@scope (A) to (B)` finds it, but a scoped rule
+ * beats an unscoped or farther-scoped one of equal specificity by scope
+ * proximity, so on a surface the block would override the theme root's
+ * equal-weight rules (an explicit Heading weight) that win over it at the
+ * root. The nearest surface is read from ancestor chains instead, one
+ * condition per depth. Core nests a surface in a surface (a toast or a
+ * lightbox over a MediaTheme) well within this; deeper, the block writes
+ * nothing.
+ */
+const NEAREST_SURFACE_DEPTH = 5;
+
+/**
+ * Ancestor conditions (for `:where()`) that hold where the element's
+ * nearest media surface in the theme is of `mode`. The surfaces around an
+ * element, outermost first, form R runs of one mode; the nearest surface is
+ * the last run's. Condition k is a chain of k surfaces alternating in mode
+ * and ending in `mode` around the element, with no such chain one longer
+ * ending in the other mode. When the last run is `mode`, the longest chain
+ * ending in `mode` is R long and the longest ending in the other mode R - 1,
+ * so condition R - 1 or R holds; when it is not, no condition holds. With
+ * conditions 1 to NEAREST_SURFACE_DEPTH - 1, that reads R up to
+ * NEAREST_SURFACE_DEPTH.
+ */
+function nearestSurfaceIs(mode: MediaSurface): string[] {
+  const other: MediaSurface = mode === 'dark' ? 'light' : 'dark';
+  const chain = (length: number, last: MediaSurface) =>
+    Array.from({length}, (_, i) =>
+      mediaSelector(
+        (length - 1 - i) % 2 === 0 ? last : last === mode ? other : mode,
+      ),
+    ).join(' ');
+  return Array.from(
+    {length: NEAREST_SURFACE_DEPTH - 1},
+    (_, i) =>
+      `:scope ${chain(i + 1, mode)} *:not(:scope ${chain(i + 2, other)} *)`,
+  );
+}
+
+/**
+ * A component block's declarations with Core's derived variables added,
+ * padding written to the container layout tokens, and the declarations a
+ * derived entry replaces dropped.
+ */
+function expandComponentDeclarations(
+  component: string,
+  props: [string, string][],
+  resetInheritedPaddingSpecificity: boolean,
+): [string, string][] {
+  // Derived var expansion: for each CSS property, check if the
+  // component has derived var entries and emit additional declarations.
+  // Entries are processed in order (priority).
+  // - `vars`: emit internal CSS custom property declarations
+  // - `expand: 'container'`: expand padding to container layout tokens
+  // - `replaces: true`: emit only the var, dropping the source property
+  let finalProps = props;
+  const derivedProps: [string, string][] = [];
+  let containerExpanded = false;
+  const replacedProps = new Set<string>();
+
+  for (const [prop, value] of props) {
+    const derived = getDerivedVars(component, prop);
+    // Padding longhands (paddingBlock, paddingInline, etc.) also
+    // match the 'padding' derived entry for container expansion.
+    const paddingDerived =
+      PADDING_PROPS.has(prop) && prop !== 'padding'
+        ? getDerivedVars(component, 'padding')
+        : [];
+    for (const entry of [...derived, ...paddingDerived]) {
+      if (entry.expand === 'container' && PADDING_PROPS.has(prop)) {
+        containerExpanded = true;
+      }
+      if (entry.replaces) {
+        replacedProps.add(prop);
+      }
+      if (entry.vars) {
+        for (const varName of entry.vars) {
+          derivedProps.push([varName, value]);
         }
       }
     }
+    // A physical block longhand reaches the container expansion only. It
+    // names one edge, so it must not feed a `vars` entry above, which
+    // carries the padding for the whole box.
+    if (
+      prop in PHYSICAL_BLOCK_PADDING_PROPS &&
+      getDerivedVars(component, 'padding').some(e => e.expand === 'container')
+    ) {
+      containerExpanded = true;
+    }
   }
+
+  // Container padding expansion: replace padding props with
+  // component-scoped container tokens for layout integration.
+  if (containerExpanded) {
+    const paddingProps = props.filter(([p]) => CONTAINER_PADDING_PROPS.has(p));
+    const nonPaddingProps = props.filter(
+      ([p]) => !CONTAINER_PADDING_PROPS.has(p),
+    );
+    const parsed = parsePadding(paddingProps);
+    const containerTokens = expandContainerPadding(
+      component,
+      parsed,
+      resetInheritedPaddingSpecificity,
+    );
+    finalProps = [...nonPaddingProps, ...containerTokens];
+  }
+
+  // Drop properties whose derived entry set `replaces` — their value is
+  // carried by the emitted var and must not land on the class element.
+  if (replacedProps.size > 0) {
+    finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
+  }
+
+  if (derivedProps.length > 0) {
+    finalProps = [...finalProps, ...derivedProps];
+  }
+  return finalProps;
 }
 
 /**
@@ -1495,6 +1678,12 @@ function generateProseRules(
 }
 
 /**
+ * The Link color props whose color Core tints on hover.
+ * <!-- SYNC: packages/core/src/Link/Link.tsx (linkColorStyles) -->
+ */
+const LINK_HOVER_TINTED = new Set(['primary', 'secondary', 'accent']);
+
+/**
  * Generate prop-level color override rules for text/heading/link components.
  * These ensure color prop classes override theme token changes.
  */
@@ -1509,6 +1698,9 @@ function generateColorOverrides(
     disabled: 'var(--color-text-disabled)',
     placeholder: 'var(--color-text-secondary)',
     accent: 'var(--color-text-accent)',
+    // A label that follows its owner's color, such as a Link's, keeps doing
+    // so when a theme styles the target's base color.
+    inherit: 'inherit',
   };
 
   const touchesText = 'text' in components;
@@ -1528,9 +1720,20 @@ function generateColorOverrides(
         );
       }
       if (touchesLink) {
-        parts.push(
-          `  ${componentSelector('link', parseStyleKey(`color:${colorName}`), surface)} { color: ${colorValue}; }`,
+        const pin = componentSelector(
+          'link',
+          parseStyleKey(`color:${colorName}`),
+          surface,
         );
+        parts.push(`  ${pin} { color: ${colorValue}; }`);
+        // On hover Core mixes the hover tint into these colors, so the pin
+        // holds that tint of the prop's color there too, at no added weight:
+        // a theme's own hover color for the color key wins over it.
+        if (LINK_HOVER_TINTED.has(colorName)) {
+          parts.push(
+            `  @media (hover: hover) {\n    ${pin}:where(:hover)${HOVER_DISABLED_GUARD} { color: color-mix(in srgb, ${colorValue}, var(--color-tint-hover) 15%); }\n  }`,
+          );
+        }
       }
     }
   }
@@ -1691,8 +1894,10 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     if (tokenEntries.length > 0) {
+      // The surface re-declares font sizes the way a theme's root does, so they
+      // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        tokenEntries,
+        readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
         sink,
       );

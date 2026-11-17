@@ -50,9 +50,10 @@ describe('the clocks are the native ones', () => {
     expect(PRESS_ONSET_MS).toBe(150);
   });
 
-  it("uses the scroller's own slop, the release's own fade, and a flash for a quick tap", () => {
+  it("uses the scroller's own slop and a flash for a quick tap, and without a theme the exit token's fade", () => {
     expect(PRESS_SLOP_PX).toBe(10);
-    expect(PRESS_FADE_MS).toBe(200);
+    // `--duration-exit` is `var(--duration-fast)`, 175 ms by default.
+    expect(PRESS_FADE_MS).toBe(175);
     expect(PRESS_FLASH_MS).toBe(100);
   });
 
@@ -328,5 +329,50 @@ describe('on a touch-first device, a mouse button or the Space key presses at on
   it('takes over a surface whose last press is still fading', () => {
     const {paints} = run([buttonDown, {kind: 'up'}, buttonDown]);
     expect(paints).toEqual(['on', 'fading', 'on']);
+  });
+});
+
+describe('a control with no scroller above it does not wait', () => {
+  const now = (x = 100, y = 100): PressEvent => ({
+    kind: 'down',
+    x,
+    y,
+    delayed: false,
+  });
+
+  it('paints in the frame the finger lands, with no timer', () => {
+    const step = pressGestureStep(idlePressGesture(), now());
+    expect(step.paint).toBe('on');
+    expect(step.gesture.phase).toBe('pressed');
+    expect(step.timer).toBeNull();
+  });
+
+  it('is still cancelled by travel past the slop, with no fade', () => {
+    expect(run([now(), move(100, 100 + PRESS_SLOP_PX + 1)]).paints).toEqual([
+      'on',
+      'none',
+    ]);
+  });
+
+  it('is still cancelled by the scroll that takes the touch', () => {
+    expect(run([now(), {kind: 'cancel'}]).paints).toEqual(['on', 'none']);
+  });
+
+  it('fades at the lift', () => {
+    const {paints, gesture} = run([now(), {kind: 'up'}]);
+    expect(paints).toEqual(['on', 'fading']);
+    expect(gesture.phase).toBe('fading');
+  });
+
+  it('a delayed touch still waits, which is the default', () => {
+    expect(
+      pressGestureStep(idlePressGesture(), {
+        kind: 'down',
+        x: 100,
+        y: 100,
+        delayed: true,
+      }).paint,
+    ).toBe('none');
+    expect(pressGestureStep(idlePressGesture(), down()).paint).toBe('none');
   });
 });

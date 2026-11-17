@@ -83,7 +83,7 @@ function ImageGrid() {
   return (
     <Grid columns={3} gap={3}>
       {IMAGES.map(img => (
-        <AspectRatio key={img.src} ratio={1} style={imageClip}>
+        <AspectRatio key={img.alt} ratio={1} style={imageClip}>
           <img src={img.src} alt={img.alt} style={imageStyle} />
         </AspectRatio>
       ))}
@@ -119,7 +119,7 @@ export default function SideGalleryTemplate() {
               </VStack>
 
               <HStack gap={3} vAlign="center">
-                <Button label="Explore" variant="primary" />
+                <Button label="Explore" variant="primary" href="#" />
               </HStack>
 
               <VStack gap={4}>

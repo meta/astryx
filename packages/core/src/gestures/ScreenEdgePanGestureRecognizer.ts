@@ -76,12 +76,17 @@ interface EdgeLayout {
  */
 export interface ScreenEdgePanGestureRecognizerOptions extends Omit<
   PanGestureRecognizerOptions,
-  'direction' | 'allowedPointerTypes' | 'allowedScrollTypes'
+  'direction' | 'allowedPointerTypes' | 'allowedScrollTypes' | 'hysteresis'
 > {
   /** The edges a touch may start from. @default ['leading'] */
   edges?: ReadonlyArray<ScreenEdge>;
   /** Width of the band at each edge, px. */
   edgeRegion?: number;
+  /**
+   * The travel that begins the pan in its edge zone, px. It is one number for
+   * every press, since the zone sets the threshold itself. @default UIKit's 15
+   */
+  hysteresis?: number;
 }
 
 export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {

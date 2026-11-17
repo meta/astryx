@@ -1,0 +1,17 @@
+{
+  "name": "astryx",
+  "description": "The Astryx agent skill for Claude Code",
+  "owner": {
+    "name": "Astryx"
+  },
+  "plugins": [
+    {
+      "name": "astryx",
+      "displayName": "Astryx",
+      "source": "./plugins/astryx",
+      "description": "Tells coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
+      "category": "development",
+      "keywords": ["astryx", "design-system", "ui"]
+    }
+  ]
+}

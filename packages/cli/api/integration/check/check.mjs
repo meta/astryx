@@ -36,6 +36,8 @@ import {
   summarizeIssues,
   validateIntegration,
 } from '../validate-integration.mjs';
+import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
+import {asPackageCheck} from '../../../foundation/integrations/pack-state.mjs';
 
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckName} IntegrationCheckName */
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckReport} IntegrationCheckReport */
@@ -243,10 +245,18 @@ export async function integrationCheck(options = {}) {
   // One after another: each loads the package through the same discovery.
   /** @type {IntegrationCheckResponse[]} */
   const responses = [];
-  responses.push(await validateIntegration(undefined, {cwd}));
-  responses.push(await integrationComponentConflicts(undefined, {cwd}));
-  responses.push(await integrationTemplateConflicts(undefined, {cwd}));
-  responses.push(await integrationDocConflicts(undefined, {cwd}));
+  // The package's check of itself may make the per-user folder npm's list is
+  // kept in (pack-state.mjs); doctor's validate never makes it.
+  responses.push(
+    await asPackageCheck(() => validateIntegration(undefined, {cwd})),
+  );
+  // The three authoring checks only read, so they share one listing of each
+  // folder.
+  await withListingCache(async () => {
+    responses.push(await integrationComponentConflicts(undefined, {cwd}));
+    responses.push(await integrationTemplateConflicts(undefined, {cwd}));
+    responses.push(await integrationDocConflicts(undefined, {cwd}));
+  });
 
   const [validation] = responses;
   return {

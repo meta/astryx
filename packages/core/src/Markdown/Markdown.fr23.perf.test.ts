@@ -11,10 +11,11 @@
  * a time, and only asserts on what that process reports.
  *
  * A fresh process isolates engine state left by other plugin configurations,
- * but it still shares CPU and memory with other Vitest workers. CI and Deploy
- * exclude this file from the parallel UI suite, then run it alone after those
- * workers exit, as the spec's isolated-process-and-runner protocol requires.
- * Local measurements need the same isolation from other test and build work.
+ * but it still shares CPU and memory with other Vitest workers. So this file
+ * is the only one in the `perf` Vitest project. That project starts after
+ * every other project's files finish, as the spec's isolated-process-and-runner
+ * protocol requires. Local measurements need the same isolation from other
+ * test and build work.
  *
  * The timed region inside each process is the spec's protocol, unsmoothed:
  * ten untimed warmups, then one median of nine alternating paired rounds,
@@ -278,15 +279,21 @@ describe('Markdown FR23 helper overhead', () => {
   });
 
   it("times only the main thread, not V8's or a worker's background threads", async () => {
-    // A worker spins for 300 ms of CPU while this thread sleeps without any.
-    // The process clock counts the worker's time; the sampling clock must not.
+    // A worker spins until its own thread has used 300 ms of CPU, while this
+    // thread sleeps without any. The spin counts CPU time, not wall time, so
+    // a busy machine cannot shorten it. The process clock counts the worker's
+    // time; the sampling clock must not.
     const flag = new Int32Array(new SharedArrayBuffer(4));
     const processBefore = process.cpuUsage();
     const threadBefore = mainThreadCpuTime();
     const worker = new Worker(
       `const {workerData} = require('node:worker_threads');
-       const end = Date.now() + 300;
-       while (Date.now() < end) {}
+       const start = process.threadCpuUsage();
+       const used = () => {
+         const usage = process.threadCpuUsage(start);
+         return usage.user + usage.system;
+       };
+       while (used() < 300_000) {}
        Atomics.store(workerData, 0, 1);
        Atomics.notify(workerData, 0);`,
       {eval: true, workerData: flag},

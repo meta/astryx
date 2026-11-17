@@ -11,7 +11,8 @@ const meta: Meta<typeof Link> = {
   argTypes: {
     label: {
       control: 'text',
-      description: 'Accessible label (required)',
+      description:
+        'Accessible label for content that is not descriptive text, such as an icon. It replaces the content as the name.',
     },
     href: {
       control: 'text',
@@ -57,7 +58,6 @@ type Story = StoryObj<typeof Link>;
 
 export const Default: Story = {
   args: {
-    label: 'Documentation',
     href: '/docs',
     children: 'Documentation',
   },
@@ -65,7 +65,6 @@ export const Default: Story = {
 
 export const Secondary: Story = {
   args: {
-    label: 'Privacy Policy',
     href: '/privacy',
     color: 'secondary',
     children: 'Privacy Policy',
@@ -74,7 +73,6 @@ export const Secondary: Story = {
 
 export const Primary: Story = {
   args: {
-    label: 'Learn more',
     href: '/learn',
     color: 'primary',
     children: 'Learn more',
@@ -83,7 +81,6 @@ export const Primary: Story = {
 
 export const WithUnderline: Story = {
   args: {
-    label: 'Always underlined',
     href: '/underlined',
     hasUnderline: true,
     children: 'Always underlined',
@@ -92,7 +89,6 @@ export const WithUnderline: Story = {
 
 export const Disabled: Story = {
   args: {
-    label: 'Disabled link',
     href: '/disabled',
     isDisabled: true,
     children: 'Disabled link',
@@ -101,7 +97,6 @@ export const Disabled: Story = {
 
 export const ExternalLink: Story = {
   args: {
-    label: 'GitHub',
     href: 'https://github.com',
     isExternalLink: true,
     children: 'GitHub',
@@ -110,7 +105,6 @@ export const ExternalLink: Story = {
 
 export const WithTooltip: Story = {
   args: {
-    label: 'Settings',
     href: '/settings',
     tooltip: 'Configure your preferences',
     children: 'Settings',
@@ -119,7 +113,6 @@ export const WithTooltip: Story = {
 
 export const Standalone: Story = {
   args: {
-    label: 'Standalone Link',
     href: '/standalone',
     isStandalone: true,
     children: 'Standalone Link',
@@ -195,6 +188,63 @@ export const WrappedLines: Story = {
           </p>
         )),
       )}
+    </div>
+  ),
+};
+
+/**
+ * A label with no break opportunity, such as a bare URL, in a narrow column:
+ * an anchor Link, a button Link and an external Link each stay inside the
+ * column, and the label wraps.
+ */
+export const LongUnbrokenLabel: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    // A block column, as a chat or comment column is: a grid or flex item
+    // would grow to the URL's length before the Link could wrap.
+    <div style={{width: 200}}>
+      {(['anchor', 'button', 'external'] as const).map(form => (
+        <p key={form} data-long-label={form} style={{margin: '0 0 16px'}}>
+          <Link
+            href={form === 'button' ? undefined : 'https://example.com/a'}
+            onClick={form === 'button' ? () => {} : undefined}
+            isExternalLink={form === 'external'}>
+            https://www.example.com/groups/1234567890/permalink/98765432101234
+          </Link>
+        </p>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * A long Link inside `<Text maxLines={2}>` or `<Text maxLines={1}>` clamps
+ * with the ancestor text and keeps an inset focus ring, while a composed Link
+ * outside a clamp keeps its own box and focus ring.
+ */
+export const ClampedByAncestorText: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 24, width: 220}}>
+      <Text maxLines={2} data-testid="ancestor-clamp-text">
+        <Link href="/changelog">
+          Quarterly planning review with the product and research teams across
+          every region, plus the follow up retrospective notes and the rollout
+          summary
+        </Link>{' '}
+        and the closing remarks that follow the link in the same paragraph
+      </Text>
+      <Text maxLines={1} data-testid="ancestor-clamp-one-line">
+        <Link href="/roadmap">
+          Roadmap for the next two quarters with every milestone
+        </Link>{' '}
+        and the owners
+      </Text>
+      <p style={{margin: 0}} data-testid="composed-host">
+        <Link href="/team" data-testid="composed-link">
+          <strong>Team</strong> directory and roster listing for the whole org
+        </Link>
+      </p>
     </div>
   ),
 };

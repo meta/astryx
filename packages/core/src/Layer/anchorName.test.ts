@@ -135,6 +135,25 @@ describe('removeAnchorName', () => {
     expect(readAnchorNames(el)).toEqual(['--layer-1', '--layer-2']);
   });
 
+  it('writes the style only when the name is present, since a write invalidates style', () => {
+    const el = createMockElement();
+    let value = '--layer-1';
+    let writes = 0;
+    Object.defineProperty(el.style, 'anchorName', {
+      configurable: true,
+      get: () => value,
+      set: (next: string) => {
+        writes += 1;
+        value = next;
+      },
+    });
+    removeAnchorName(el, '--layer-2');
+    expect(writes).toBe(0);
+    removeAnchorName(el, '--layer-1');
+    expect(writes).toBe(1);
+    expect(value).toBe('');
+  });
+
   it('handles multiple add/remove cycles correctly', () => {
     const el = createMockElement();
     addAnchorName(el, '--menu-a');

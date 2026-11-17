@@ -66,7 +66,8 @@ export interface MetadataListProps extends Omit<
   columns?: MetadataListColumns;
   /**
    * Label display configuration.
-   * - position: 'start' places labels to the left, 'top' stacks labels above content
+   * - position: 'start' places each label at the inline start of its value,
+   *   'top' stacks labels above content
    * - width: Custom label width (number in px or CSS string)
    *
    * Defaults to `{ position: 'top' }` for multi-column layouts and
@@ -158,7 +159,7 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -260,7 +261,7 @@ export function MetadataList({
         ? styles.gridStackedSingle
         : styles.gridStackedMulti;
     }
-    // Labels on the left
+    // Labels at the inline start
     if (columns === 'single' || columns === 1) {
       return styles.gridSingle;
     }

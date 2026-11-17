@@ -15,9 +15,18 @@ const SRC = join(__dirname, '..');
 // Directories that render <Field> without being a Field-composed input.
 const NOT_FIELD_INPUTS = new Set(['Field', 'InputGroup', 'FormLayout']);
 
-// Field-composed inputs not yet converted to FR10. Every member is converted;
-// typed explicitly so the empty set still accepts string lookups.
-const PENDING_FR10: ReadonlySet<string> = new Set<string>();
+// Field-composed inputs not yet converted to FR10. Every member is converted.
+// PowerSearch is outside the family (a composition that consumes member
+// behavior) and composes Field only in its experimental sheet presentation,
+// whose trigger renders the Field box the tokenizer field has. Its stable
+// contract keeps `ref` on the root (FR10 item 1 sends it to the primary
+// control) and carries root `xstyle`, `className`, and `style` (documented,
+// in use), which both presentations apply to that field box — the
+// `container*` target under FR10 items 2–4. Moving `ref` or omitting the
+// root styling props is a stable API change for existing callers, so it waits
+// for its own decision rather than riding the experimental option
+// (`component:PowerSearch` Open questions).
+const PENDING_FR10: ReadonlySet<string> = new Set<string>(['PowerSearch']);
 
 function fieldComposedComponents(): string[] {
   return readdirSync(SRC)

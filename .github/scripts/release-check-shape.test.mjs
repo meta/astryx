@@ -237,6 +237,7 @@ describe('release re-check trigger', () => {
           'release-branch': 'main',
           'expected-head': TIP,
           recheck: 'true',
+          evidence: 'true',
         },
       },
       {
@@ -358,7 +359,8 @@ describe('release re-check trigger', () => {
       main.jobs['main-commit'],
       "github.event_name == 'workflow_dispatch' && inputs.recheck",
     );
-    expect(ci['run-name']).toBeUndefined();
+    // ci.yml names only main's nightly interaction run.
+    expect(ci['run-name']).not.toContain('recheck');
     // Main names only a run that validates an older commit (FR22); a
     // re-check names none, so it keeps the default name.
     expect(main['run-name']).not.toContain('recheck');

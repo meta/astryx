@@ -30,7 +30,7 @@ export const docs = {
           "type": "table",
           "headers": [
             "Token",
-            "Value"
+            "Core default"
           ],
           "rows": [
             [

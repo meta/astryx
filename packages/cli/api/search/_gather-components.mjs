@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {discoverExternalPackages} from '../../foundation/fs/paths.mjs';
+import {listDir} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverComponents,
   discoverValidIntegrationComponents,
@@ -56,10 +57,11 @@ function familyPlaces(docs) {
 /**
  * Build component candidates from core's own tree: name + keywords +
  * usage/description from the component's .doc.mjs.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Promise<Candidate[]>}
  */
 async function gatherCoreComponents(coreDir) {
+  if (coreDir == null) return [];
   const grouped = discoverComponents(coreDir);
   const names = Object.values(grouped).flat();
   /** @type {Candidate[]} */
@@ -73,6 +75,9 @@ async function gatherCoreComponents(coreDir) {
     let description = '';
     /** @type {string[]} */
     let guidance = [];
+    /** @type {import('@astryxdesign/cli/authoring').ComponentDeprecation | undefined} */
+    let deprecated;
+    let category = '';
     if (readme && readme.endsWith('.doc.mjs')) {
       const loaded = await loadModuleDoc(readme);
       // A member documented in its family's doc (VStack in Stack's doc) is
@@ -83,6 +88,8 @@ async function gatherCoreComponents(coreDir) {
         keywords = Array.isArray(doc.keywords) ? doc.keywords : [];
         description = doc.usage?.description || doc.description || '';
         guidance = guidanceFrom(doc);
+        deprecated = doc.deprecated;
+        category = typeof doc.category === 'string' ? doc.category : '';
       }
       for (const [n, place] of familyPlaces(loaded)) places.set(n, place);
     }
@@ -92,6 +99,8 @@ async function gatherCoreComponents(coreDir) {
       keywords,
       description,
       guidance,
+      ...(deprecated ? {_deprecated: deprecated} : {}),
+      _category: category,
       _package: CORE_PACKAGE,
       _import: resolveImportPath(coreDir, comp),
     });
@@ -99,7 +108,7 @@ async function gatherCoreComponents(coreDir) {
   // A family doc with no component of its own name (Chat) names members too.
   const srcDir = path.join(coreDir, 'src');
   const listed = new Set(names);
-  for (const dir of fs.existsSync(srcDir) ? fs.readdirSync(srcDir) : []) {
+  for (const dir of fs.existsSync(srcDir) ? listDir(srcDir) : []) {
     const doc = path.join(srcDir, dir, `${dir}.doc.mjs`);
     if (listed.has(dir) || !fs.existsSync(doc)) continue;
     for (const [n, place] of familyPlaces(await loadModuleDoc(doc)))
@@ -178,6 +187,8 @@ async function gatherIntegrationComponents(loadedIntegrations) {
         keywords: doc && Array.isArray(doc.keywords) ? doc.keywords : [],
         description: doc ? doc.usage?.description || doc.description || '' : '',
         guidance: guidanceFrom(doc),
+        ...(doc?.deprecated ? {_deprecated: doc.deprecated} : {}),
+        _category: typeof doc?.category === 'string' ? doc.category : '',
         ...places.get(rec.name),
         _package: rec.package ?? integration.name,
         // Exactly what `component` reports: a doc may state its own specifier
@@ -206,7 +217,7 @@ async function gatherIntegrationComponents(loadedIntegrations) {
 /**
  * Build component candidates: core's own tree plus every configured
  * integration's components.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} cwd
  * @returns {Promise<Candidate[]>}
  */
@@ -284,17 +295,20 @@ export async function gatherComponents(coreDir, cwd) {
 
 /**
  * Every component the project can use, Core's and its integrations', with the
- * keywords its own doc declares: the discovery and doc reads search's own
+ * keywords and category its own doc declares: the discovery and doc reads search's own
  * candidates use, without the import paths and prose a result carries. `build`
  * reads it to tell a part of a page from a page when its search was narrowed
  * away from components.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} cwd
- * @returns {Promise<{name: string, keywords: string[]}[]>}
+ * @returns {Promise<{name: string, keywords: string[], category: string}[]>}
  */
 export async function componentKeywords(coreDir, cwd) {
   /** @param {any} doc */
   const keywordsOf = doc => (Array.isArray(doc?.keywords) ? doc.keywords : []);
+  /** @param {any} doc */
+  const categoryOf = doc =>
+    typeof doc?.category === 'string' ? doc.category : '';
   const core = Object.values(discoverComponents(coreDir))
     .flat()
     .map(async name => {
@@ -303,7 +317,8 @@ export async function componentKeywords(coreDir, cwd) {
         readme && readme.endsWith('.doc.mjs')
           ? await loadModuleDoc(readme)
           : null;
-      return {name, keywords: keywordsOf(familyMember(loaded, name) ?? loaded)};
+      const doc = familyMember(loaded, name) ?? loaded;
+      return {name, keywords: keywordsOf(doc), category: categoryOf(doc)};
     });
   const loadedIntegrations = await loadIntegrationsSafely(cwd);
   const replacements = await loadComponentReplacements(
@@ -318,6 +333,7 @@ export async function componentKeywords(coreDir, cwd) {
         return {
           name: rec.name,
           keywords: keywordsOf(integrationMemberEntry(loaded, rec) ?? loaded),
+          category: categoryOf(integrationMemberEntry(loaded, rec) ?? loaded),
         };
       }),
     );

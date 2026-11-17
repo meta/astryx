@@ -12,8 +12,8 @@ export default function TextInputStatusVariant() {
   const [detached, setDetached] = useState('sarah@');
 
   return (
-    <div style={{width: 640}}>
-      <Stack direction="horizontal" gap={5}>
+    <div style={{width: 640, maxWidth: '100%'}}>
+      <Stack direction="horizontal" gap={5} wrap="wrap">
         <Stack direction="vertical" gap={2}>
           <Text type="label">attached (default)</Text>
           <TextInput

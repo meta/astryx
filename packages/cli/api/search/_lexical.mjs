@@ -59,6 +59,8 @@ import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
+import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
 
 /**
  * A search candidate gathered from one content domain. Extra underscore-
@@ -73,6 +75,8 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  *   author lists in `keywords`, without the code terms and table cells its
  *   other keywords add.
  * @property {string[]} [weakKeywords]
+ * @property {string[]} [weakKeywordBound] - Every name `weakKeywords` can
+ *   hold, for a page whose weak keywords cost a parse to read.
  * @property {string} [description]
  * @property {string[]} [prose]
  * @property {string[]} [guidance]
@@ -86,6 +90,7 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  * @property {string} [_command] - The command that reads exactly this doc part.
  * @property {string} [_parent] - The command that opens the level above a doc
  *   part: its topic's section list, or the docs-tree namespace it sits in.
+ * @property {string} [_category] - The category its own doc files it under.
  * @property {string} [_package] - The npm package that owns the candidate:
  *   Core's package for its components, hooks, and templates, the integration's
  *   for what it contributed, and for a doc part the package that wrote it.
@@ -96,9 +101,13 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  * @property {'page'|'block'} [_kind]
  * @property {string} [_resultName]
  * @property {string} [_commandName]
+ * @property {true} [_notReady] - A template whose doc sets `isReady: false`.
+ *   Its result's `isReady` is false; ranking never reads it.
  * @property {'file'|'doc'} [_hold] - How an integration component holds its
  *   name, for the owner rule.
  * @property {string} [_docPath] - An integration component's doc.
+ * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [_deprecated] -
+ *   A deprecated component's replacement, from its doc's `deprecated`.
  */
 
 /**
@@ -119,6 +128,58 @@ export function namesWhole(candidate, term) {
         lower === term.replace(/\s+/g, ''))
     );
   });
+}
+
+/**
+ * Whether a one-identifier query is read as its words when all it matches,
+ * read whole, is text that mentions it: when it is written as an entry's
+ * name is written (PascalCase: a component, a type, an icon), never as a
+ * prop's (camelCase). The scope of that reading, in one place.
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function readsMentionAsWords(query) {
+  return COMPONENT_NAME_RE.test(query.trim());
+}
+
+/**
+ * How a one-identifier query is read. It is read as its words when, read
+ * whole, it matches nothing: a prop or hook name (camelCase) a doc already
+ * mentions keeps the entries that mention it. An identifier written as an
+ * entry's name (see readsMentionAsWords) is read as its words also when all
+ * it matches is text that mentions it: `mentioned` holds those entries,
+ * which keep the hit, and the words find the entries they name. The whole
+ * identifier is scored against the catalog only for a query these rules can
+ * split; `mentioned` is empty unless the query is split for its mentions.
+ * @param {string} query
+ * @param {Candidate[]} all
+ * @returns {{split: boolean, mentioned: Set<Candidate>}}
+ */
+function identifierReading(query, all) {
+  const term = String(query).trim().toLowerCase();
+  const spelled = spellIdentifiers(String(query).trim());
+  const oneIdentifier =
+    !/\s/.test(term) &&
+    spelled !== term &&
+    !all.some(candidate => namesWhole(candidate, term));
+  const mentionsSplit = oneIdentifier && readsMentionAsWords(String(query));
+  /** @type {Set<Candidate>} */
+  const mentioned = new Set();
+  let wholeHit = false;
+  let otherHit = false;
+  if (oneIdentifier)
+    for (const candidate of all) {
+      const hit = scoreCandidate(term, candidate, {mentions: mentionsSplit});
+      if (!hit) continue;
+      wholeHit = true;
+      if (!mentionsSplit || !hit.inText) {
+        otherHit = true;
+        break;
+      }
+      mentioned.add(candidate);
+    }
+  const split = oneIdentifier && (!wholeHit || (mentionsSplit && !otherHit));
+  return {split, mentioned: split ? mentioned : new Set()};
 }
 
 /**
@@ -144,14 +205,11 @@ export function rankLexical(query, options, catalog) {
   // neither reading may add near siblings beside it.
   const spelled = spellIdentifiers(String(query).trim());
   const exact = all.some(candidate => namesWhole(candidate, term));
-  // One identifier is read as its words only when, read whole, it matches
-  // nothing: a prop or hook name a doc already mentions keeps the
-  // entries that mention it.
-  const split =
-    !exact &&
-    !/\s/.test(term) &&
-    spelled !== term &&
-    !all.some(candidate => scoreCandidate(term, candidate));
+  const {split, mentioned} = identifierReading(query, all);
+  // Read as its words, the identifier still answers the text that mentions
+  // it whole: that entry keeps the better of the two readings.
+  const wholeTokens = mentioned.size ? tokenizeQuery(term) : null;
+  const wholeWords = mentioned.size ? phraseWords(term) : null;
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact
@@ -218,7 +276,23 @@ export function rankLexical(query, options, catalog) {
   /** @type {{result: any, priority: 0 | 1 | 2, key: number, alias: 'partial' | 'keyword' | false, aliasWords: number, candidate: Candidate, span: [number, number] | null, word: [number, number] | null}[]} */
   const ranked = [];
   for (const candidate of all) {
-    const hit = scoreQuery(term, tokens, candidate, words);
+    // What scoreQuery scored each token as, for domainPriority below.
+    /** @type {Map<string, {fuzzy: boolean, hit: {score: number, reason: string} | null}>} */
+    const tokenHits = new Map();
+    const asWords = scoreQuery(term, tokens, candidate, words, {tokenHits});
+    const asWhole =
+      wholeTokens && mentioned.has(candidate)
+        ? scoreQuery(
+            term,
+            wholeTokens,
+            candidate,
+            /** @type {string[]} */ (wholeWords),
+          )
+        : null;
+    const hit =
+      asWhole && (!asWords || asWhole.score > asWords.score)
+        ? asWhole
+        : asWords;
     if (hit)
       ranked.push({
         result: toResult(
@@ -229,7 +303,14 @@ export function rankLexical(query, options, catalog) {
           hit.total,
           catalog.outside,
         ),
-        priority: domainPriority(term, tokens, candidate, hit, words),
+        priority: domainPriority(
+          term,
+          tokens,
+          candidate,
+          hit,
+          words,
+          tokenHits,
+        ),
         key: hit.score,
         alias: hit.alias ?? false,
         aliasWords: hit.aliasWords ?? 0,
@@ -291,7 +372,7 @@ export function rankLexical(query, options, catalog) {
   const byScore = ({result: a, key: ka}, {result: b, key: kb}) =>
     kb - ka ||
     (domainOrder[a.domain] ?? 9) - (domainOrder[b.domain] ?? 9) ||
-    a.name.localeCompare(b.name);
+    compareText(a.name, b.name);
   const others = ranked.filter(r => r.result.domain !== 'doc').sort(byScore);
   // Against other domains, a doc the reader asked for competes ahead of docs
   // they did not, so it is not held behind a broad page that outscores it.
@@ -315,6 +396,19 @@ export function rankLexical(query, options, catalog) {
       (other != null &&
         ((other.priority && !doc.priority) || byScore(other, doc) < 0));
     scored.push(otherFirst ? others[i++].result : docs[j++].result);
+  }
+  // Read as its words, an identifier text mentions keeps that text ahead of
+  // every entry its words only match: a mention of the whole identifier is
+  // the stronger hit. An entry the words name outright (its whole name is
+  // one of them, or a run of them joined, as `named` reads it) keeps its
+  // place among them. Each side keeps its order and its scores.
+  if (mentioned.size) {
+    const ahead = new Set(
+      ranked
+        .filter(r => mentioned.has(r.candidate) || r.span != null || r.word)
+        .map(r => r.result),
+    );
+    scored.sort((a, b) => Number(ahead.has(b)) - Number(ahead.has(a)));
   }
 
   // `results` is bounded by `limit` so a caller (and the recorded run that
@@ -347,7 +441,11 @@ export function rankLexical(query, options, catalog) {
   if (catalog.searchedComponents) {
     searchedComponentsOf.set(
       response,
-      components.map(c => ({name: c.name, keywords: c.keywords ?? []})),
+      components.map(c => ({
+        name: c.name,
+        keywords: c.keywords ?? [],
+        category: c._category ?? '',
+      })),
     );
   }
   return response;

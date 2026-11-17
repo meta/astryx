@@ -30,7 +30,8 @@ import {
   resolveBuiltPath,
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);
@@ -71,6 +72,7 @@ function hasJsx(text) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        attachComment: false,
       });
       break;
     } catch {
@@ -254,14 +256,24 @@ let lineCache = {text: null, starts: [0]};
  * @param {string} text
  */
 function withoutComments(text, ext = '', parsed = commentRanges(text, ext)) {
-  if (parsed) {
-    const out = text.split('');
-    for (const [start, end] of parsed) {
-      for (let j = start; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
-    }
-    return out.join('');
+  return parsed ? blankRanges(text, parsed) : scanOutComments(text);
+}
+
+/**
+ * Text with each range blanked, every character but a line break made a
+ * space, so every offset and line stays where it was.
+ * @param {string} text
+ * @param {Array<[number, number]>} ranges in order, none overlapping
+ */
+function blankRanges(text, ranges) {
+  let out = '';
+  let at = 0;
+  for (const [start, end] of ranges) {
+    out +=
+      text.slice(at, start) + text.slice(start, end).replace(/[^\n]/g, ' ');
+    at = end;
   }
-  return scanOutComments(text);
+  return out + text.slice(at);
 }
 
 /**
@@ -287,6 +299,8 @@ function parseSource(text, ext) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        // The checks read the file's list of comments, never a node's.
+        attachComment: false,
       });
     } catch {
       // try the next set of syntax plugins
@@ -312,14 +326,23 @@ function commentRanges(text, ext, ast = parseSource(text, ext)) {
 }
 
 /**
+ * Whether a source can hold a `require()` or `import()` call: the word
+ * `require`, `import` followed by a parenthesis or a comment, or a Unicode
+ * escape, which can spell `require`. A source with none of these has no such
+ * call, so its syntax tree is not walked for one.
+ */
+const MAY_CALL = /\brequire\b|\bimport\s*(?:\(|\/[*/]|<!--|-->)|\\u/;
+
+/**
  * The imports a parsed source file makes, read from its syntax tree so that
  * an import written in a string, a template literal or JSX text (a code
  * sample on a page) is not one: import and export-from declarations, and
  * `require()` and `import()` of a string.
  * @param {any} ast
+ * @param {string} source the file's text
  * @returns {{spec: string, names: string[], at: number}[]}
  */
-function astImports(ast) {
+function astImports(ast, source) {
   /** @type {{spec: string, names: string[], at: number}[]} */
   const found = [];
   for (const node of ast.program.body) {
@@ -354,7 +377,7 @@ function astImports(ast) {
     }
   }
   /** @type {any[]} */
-  const stack = [ast.program];
+  const stack = MAY_CALL.test(source) ? [ast.program] : [];
   while (stack.length > 0) {
     const node = stack.pop();
     if (!node || typeof node.type !== 'string') continue;
@@ -384,7 +407,8 @@ function astImports(ast) {
  * @param {string} text
  */
 function scanOutComments(text) {
-  const out = text.split('');
+  /** @type {Array<[number, number]>} */
+  const comments = [];
   /** @type {string | null} the quote of the string being read */
   let quote = null;
   for (let i = 0; i < text.length; i++) {
@@ -405,10 +429,10 @@ function scanOutComments(text) {
       next === '/'
         ? (text.indexOf('\n', i) + 1 || text.length + 1) - 1
         : (text.indexOf('*/', i + 2) + 1 || text.length - 1) + 1;
-    for (let j = i; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
+    comments.push([i, end]);
     i = end - 1;
   }
-  return out.join('');
+  return blankRanges(text, comments);
 }
 
 /**
@@ -560,10 +584,11 @@ function jsxFindings(text, rel, iconNames) {
  * @param {string} target an existing file or folder
  * @param {readonly string[]} packages package names whose components count as
  *   Astryx, beside every `@astryxdesign/*` package
+ * @param {{fileLimit?: number}} [options] how many files to read at most
  * @returns {BuiltScan}
  */
-export function scanBuilt(target, packages) {
-  const {files, truncated, missing = 0} = readBuiltPath(target);
+export function scanBuilt(target, packages, {fileLimit} = {}) {
+  const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -633,7 +658,9 @@ export function scanBuilt(target, packages) {
     const astryxNames = new Set();
     const iconNames = new Set();
     let fileImports = 0;
-    for (const {spec, names, at} of ast ? astImports(ast) : importsOf(text)) {
+    for (const {spec, names, at} of ast
+      ? astImports(ast, raw)
+      : importsOf(text)) {
       if (isAstryxSpecifier(spec, packages)) {
         fileImports++;
         imported.add(
@@ -690,7 +717,7 @@ export function scanBuilt(target, packages) {
     }
   }
   scan.packages = [...imported].sort();
-  scan.findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  scan.findings.sort((a, b) => compareText(a.file, b.file) || a.line - b.line);
   return scan;
 }
 
@@ -705,11 +732,15 @@ function plural(count, word) {
 /**
  * The two checks for a path.
  * @param {string} target as the caller gave it
- * @param {{cwd: string, packages: readonly string[]}} options `packages`: the
- *   integration packages whose components count as Astryx
+ * @param {{cwd: string, packages: readonly string[], fileLimit?: number}} options
+ *   `packages`: the integration packages whose components count as Astryx.
+ *   `fileLimit`: how many files to read at most (BUILT_FILE_LIMIT).
  * @returns {import('./doctor.type.mjs').DoctorCheck[]}
  */
-export function checkBuilt(target, {cwd, packages}) {
+export function checkBuilt(
+  target,
+  {cwd, packages, fileLimit = BUILT_FILE_LIMIT},
+) {
   const resolved = resolveBuiltPath(cwd, target);
   if (resolved == null) {
     return [
@@ -722,10 +753,10 @@ export function checkBuilt(target, {cwd, packages}) {
       },
     ];
   }
-  const scan = scanBuilt(resolved, packages);
+  const scan = scanBuilt(resolved, packages, {fileLimit});
   const used =
     scan.imports > 0 || scan.componentUses > 0 || scan.stylesheets.length > 0;
-  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${BUILT_FILE_LIMIT} files)` : ''}`;
+  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${fileLimit} files)` : ''}`;
   const evidence = [
     scan.imports > 0
       ? `${plural(scan.imports, 'import')} from ${scan.packages.join(', ')} in ${plural(scan.importFiles, 'file')}`
@@ -761,7 +792,7 @@ export function checkBuilt(target, {cwd, packages}) {
             id: 'built-astryx-usage',
             label: 'Built output uses Astryx',
             status: 'warn',
-            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${BUILT_FILE_LIMIT} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
+            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${fileLimit} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
             fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page itself, or on its build output.`,
           }
         : {
@@ -798,7 +829,7 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'info',
-      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${BUILT_FILE_LIMIT} files were read` : ''}.${unreadNote}`,
+      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${fileLimit} files were read` : ''}.${unreadNote}`,
       fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page's own source.`,
     };
   } else if (scan.findings.length === 0) {
@@ -829,7 +860,7 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'warn',
-      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${BUILT_FILE_LIMIT} files were read.` : ''}`,
+      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${fileLimit} files were read.` : ''}`,
       fix: `Replace each with the Astryx component, icon surface, prop or token it names; \`${formatCliCommand('docs is-my-code-good', cwd)}\` has the full rubric. Keep a raw element only where its native meaning is needed.`,
     };
   }

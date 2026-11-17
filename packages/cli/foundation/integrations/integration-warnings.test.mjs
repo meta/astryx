@@ -15,13 +15,14 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {warnOnIntegrationIssues} from './integration-warnings.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let errSpy;
 let errLines;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-warn-it-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-warn-it-'));
   errLines = [];
   errSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
     errLines.push(args.join(' '));

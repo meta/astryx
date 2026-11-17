@@ -17,6 +17,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {
   discoverComponents,
@@ -106,9 +107,18 @@ let cachedRegistry = /** @type {import('./xle-ast').Registry | null} */ (null);
  * @param {string} [options.cwd]
  * @returns {Promise<{components: Map<string, object>, aliases: Map<string, string>, componentNames: string[]}>}
  */
-export async function buildRegistry({cwd = process.cwd()} = {}) {
+export async function buildRegistry(options = {}) {
   if (cachedRegistry) return cachedRegistry;
+  // Every name's lookups walk the same source tree: read each directory once.
+  return withListingCache(() => readRegistry(options));
+}
 
+/**
+ * {@link buildRegistry}'s read, inside one listing operation.
+ * @param {{cwd?: string}} options
+ * @returns {ReturnType<typeof buildRegistry>}
+ */
+async function readRegistry({cwd = process.cwd()}) {
   const coreDir = findCoreDir(cwd);
   if (!coreDir) {
     throw new Error('Could not find @astryxdesign/core package — run from an XDS workspace');

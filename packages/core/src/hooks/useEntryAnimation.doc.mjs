@@ -33,7 +33,7 @@ export const docs = {
   relatedComponents: ['FieldStatus'],
   relatedHooks: [],
   importPath: '@astryxdesign/core/hooks',
-  category: 'animation',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
