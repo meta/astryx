@@ -24,7 +24,7 @@ export const doc = {
       flag: '--out <file>',
       param: 'options.out',
       description:
-        'Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)',
+        'Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/). A relative path stays inside the current folder; when rendering, an absolute path may name any folder, and the render still never replaces a file it did not write',
     },
     {
       flag: '--reverse',
@@ -66,7 +66,7 @@ export const doc = {
     {code: 0, when: 'the file was written (warnings included)'},
     {
       code: 1,
-      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, crashes Node, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, a file in a newer render format than this CLI reads, or HTML that is not an Astryx page',
+      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, crashes Node, or takes over 60 seconds; a relative --out, or with --reverse any file to write, outside the current folder; an absolute --out that is a symbolic link; with --reverse, an existing output without --overwrite, a damaged embedded source, a file in a newer render format than this CLI reads, or HTML that is not an Astryx page',
     },
   ],
   related: ['template', 'build'],
