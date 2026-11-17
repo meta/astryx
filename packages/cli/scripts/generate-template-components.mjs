@@ -18,6 +18,7 @@ import {
   TEMPLATE_COMPONENTS_FILE,
 } from '../foundation/discovery/template-adapter.mjs';
 import {storedKey} from '../foundation/doc-compiler/stored-docs.mjs';
+import {parsedSpecifiers} from '../foundation/discovery/template-needs.mjs';
 
 const TEMPLATES_DIR = path.join(CLI_ROOT, 'assets', 'templates');
 /** Page and block templates: the sources whose components are read. */
@@ -50,7 +51,9 @@ export function templateComponentsText() {
   for (const sub of SOURCE_DIRS) {
     for (const file of sourcesIn(path.join(TEMPLATES_DIR, sub))) {
       const source = fs.readFileSync(file, 'utf-8');
-      byKey[storedKey(source)] = parsedComponents(source);
+      const key = storedKey(source);
+      byKey[key] = parsedComponents(source);
+      byKey[`imports:${key}`] = parsedSpecifiers(source);
     }
   }
   const sorted = Object.fromEntries(

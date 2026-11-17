@@ -86,7 +86,55 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxInput', () => {
+  it("paints a primary mouse press at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(<CheckboxInput label="Accept" value={false} onChange={() => {}} />);
+    const target = screen.getByRole('checkbox');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('calls onChange with new checked state when clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -702,6 +750,44 @@ describe('CheckboxInput', () => {
       expect(checkbox).not.toBeChecked();
     });
   });
+  describe('required invalid state', () => {
+    it('exposes invalid only with an error status, while required still blocks submission', () => {
+      const {rerender} = render(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+          />
+        </form>,
+      );
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toHaveAttribute('aria-invalid', 'false');
+      expect(checkbox).toBeRequired();
+      expect(checkbox.closest('form')!.checkValidity()).toBe(false);
+      rerender(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={() => {}}
+            isRequired
+            status={{type: 'error', message: 'Accept the terms to go on'}}
+          />
+        </form>,
+      );
+      expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('leaves the invalid state unset on a box that is not required', () => {
+      render(
+        <CheckboxInput label="Newsletter" value={false} onChange={() => {}} />,
+      );
+      expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    });
+  });
+
   describe('form participation', () => {
     it('submits under htmlName when checked', () => {
       const {container} = render(

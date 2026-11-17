@@ -383,7 +383,7 @@ describe('colorsAt', () => {
     }),
   );
 
-  it('gives the exact hex color at each point, in order', () => {
+  it('gives the exact hex color and alpha at each point, in order', () => {
     expect(
       colorsAt(pic, [
         {x: 1, y: 0},
@@ -399,6 +399,32 @@ describe('colorsAt', () => {
     ]);
   });
 
+  it("reads every corner, the picture's last column and row included", () => {
+    const corners = [
+      {x: 0, y: 0},
+      {x: pic.width - 1, y: 0},
+      {x: 0, y: pic.height - 1},
+      {x: pic.width - 1, y: pic.height - 1},
+    ];
+    expect(colorsAt(pic, corners).map(p => p.color)).toEqual([
+      '#ff0000',
+      '#00ff00',
+      '#0000ff',
+      '#010203',
+    ]);
+  });
+
+  it('gives the alpha of a see-through pixel, to two decimals', () => {
+    const clear = decodePng(
+      makePng({width: 1, height: 1, colorType: 6, rows: [[10, 20, 30, 128]]}),
+    );
+    expect(colorsAt(clear, [{x: 0, y: 0}])).toEqual([
+      {at: '0,0', color: '#0a141e', alpha: 0.5},
+    ]);
+  });
+
+  // The `how` lookup refuses points outside the picture before it reads
+  // any (theme-edit.test.mjs); read directly, they have no color.
   it('gives null for a point outside the picture', () => {
     expect(
       colorsAt(pic, [

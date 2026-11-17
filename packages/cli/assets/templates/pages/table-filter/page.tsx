@@ -65,6 +65,7 @@ import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -792,25 +793,26 @@ const BULK_EDIT_ACTIONS: ReadonlyArray<{
   key: string;
   label: string;
   icon: React.ReactNode;
-  onClick: (selected: ServiceJob[]) => void;
+  /** The demo toast for the selected job IDs. */
+  demoBody: (jobIds: string) => string;
 }> = [
   {
     key: 'assign',
     label: 'Assign',
     icon: <Icon icon={UserPlus} size="sm" />,
-    onClick: s => alert(`Assign technician: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: a technician would be assigned to ${ids} here`,
   },
   {
     key: 'reschedule',
     label: 'Reschedule',
     icon: <Icon icon={Calendar} size="sm" />,
-    onClick: s => alert(`Reschedule: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be rescheduled here`,
   },
   {
     key: 'cancel',
     label: 'Cancel',
     icon: <Icon icon={CircleX} size="sm" />,
-    onClick: s => alert(`Cancel: ${s.map(j => j.id).join(', ')}`),
+    demoBody: ids => `Demo: ${ids} would be canceled here`,
   },
 ];
 
@@ -2193,6 +2195,7 @@ export default function TableFilterTemplate() {
   // client render rather than a default that corrects itself afterwards —
   // which is what lets the auto-open effect below trust it.
   const isCompactSurface = useMediaQuery(COMPACT_SURFACE_QUERY);
+  const showToast = useToast();
 
   // --- Filtering -------------------------------------------------------------
   const [filters, setFilters] = useState<PowerSearchFilter[]>(INITIAL_FILTERS);
@@ -3592,7 +3595,15 @@ export default function TableFilterTemplate() {
                 variant="ghost"
                 size="sm"
                 icon={action.icon}
-                onClick={() => action.onClick(selectedJobs)}
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: action.demoBody(
+                      selectedJobs.map(job => job.id).join(', '),
+                    ),
+                    uniqueID: `bulk-${action.key}`,
+                  })
+                }
               />
             ))}
           </HStack>
@@ -4185,12 +4196,26 @@ export default function TableFilterTemplate() {
                 label={NEXT_ACTION[activeJob.status]}
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: “${NEXT_ACTION[activeJob.status]}” would start for ${activeJob.id} here`,
+                    uniqueID: `next-${activeJob.id}`,
+                  })
+                }
               />
               <Button
                 label="Edit job"
                 variant="secondary"
                 size="sm"
                 width="100%"
+                onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
+                  showToast({
+                    body: `Demo: editing ${activeJob.id} would open here`,
+                    uniqueID: `edit-${activeJob.id}`,
+                  })
+                }
               />
             </HStack>
           </VStack>
@@ -4355,7 +4380,13 @@ export default function TableFilterTemplate() {
                     <Button
                       label="New job"
                       variant="primary"
-                      onClick={() => alert('New job')}
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: a new job form would open here',
+                          uniqueID: 'new-job',
+                        })
+                      }
                     />
                   </HStack>
 
@@ -4469,7 +4500,7 @@ export default function TableFilterTemplate() {
         content={
           /* Default padding (16px) is deliberate: Table bleeds to the edges
              and re-applies it to the first and last cells. */
-          <LayoutContent padding={4} label="Service jobs">
+          <LayoutContent role="main" padding={4} label="Service jobs">
             {results.length === 0 ? (
               <EmptyState
                 icon={<Icon icon={Search} size="lg" />}

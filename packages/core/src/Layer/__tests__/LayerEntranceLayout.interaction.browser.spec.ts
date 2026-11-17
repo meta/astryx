@@ -22,9 +22,9 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
-  countBetween,
   layoutSources,
   openStory,
+  RENDERING_EVENTS,
   traceRendering,
   waitForRest,
   withStorybook,
@@ -43,6 +43,10 @@ test.use({
 });
 
 const OPENS = 3;
+
+// The entrance's `animationstart` and `animationend` each leave a mark in the
+// trace, named with this prefix and `-start` or `-end`.
+const ENTRANCE_MARK = 'layer-entrance';
 
 interface EntranceWindow {
   __entrance: {start: number; end: number};
@@ -103,10 +107,10 @@ const routes: ReadonlyArray<EntranceRoute> = [
 ];
 
 // A callback on every frame, as on a page with frame work of its own, makes
-// each frame a main-thread one. The entrance's window runs from its
-// `animationstart` to its `animationend`, on any element in an anchored layer.
+// each frame a main-thread one. The entrance is the animation of any element
+// in an anchored layer.
 async function watchEntrances(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate(mark => {
     const w = window as unknown as EntranceWindow;
     w.__entrance = {start: 0, end: 0};
     w.__events = [];
@@ -171,6 +175,7 @@ async function watchEntrances(page: Page): Promise<void> {
       event => {
         if (inLayer(event.target) && w.__entrance.start === 0) {
           w.__entrance.start = performance.timeOrigin + event.timeStamp;
+          performance.mark(`${mark}-start`);
         }
       },
       true,
@@ -180,11 +185,12 @@ async function watchEntrances(page: Page): Promise<void> {
       event => {
         if (inLayer(event.target)) {
           w.__entrance.end = performance.timeOrigin + event.timeStamp;
+          performance.mark(`${mark}-end`);
         }
       },
       true,
     );
-  });
+  }, ENTRANCE_MARK);
 }
 
 async function closeAll(page: Page): Promise<void> {
@@ -193,6 +199,51 @@ async function closeAll(page: Page): Promise<void> {
     await page.keyboard.press('Escape');
   }
   await expect(open).toHaveCount(0);
+}
+
+// The entrance's whole frames in the trace: from the frame that fires
+// `animationstart` through the last frame before the one that fires
+// `animationend`. That last frame draws the final keyframe. The frame that
+// fires `animationend` removes the animation, and its cleanup can lay the
+// layer out. Frame bounds keep that work out, and no layout's time meets the
+// event's coarse timestamp at a bound. A frame starts where Chromium's
+// rendering update (`AnimationFrame::Render`) starts. That update dispatches
+// the animation events, then runs the frame callbacks, style and layout.
+function entranceFrames(trace: RenderingTrace): {
+  counts: Record<string, number>;
+  start: number;
+  end: number;
+} {
+  const main = trace.mainThread ?? [];
+  const marks = (name: string) =>
+    main.flatMap((event, index) => (event.name === name ? [index] : []));
+  const frameOf = (index: number) => {
+    let frame = index;
+    while (
+      frame >= 0 &&
+      !(main[frame].name === 'AnimationFrame::Render' && main[frame].ph === 'b')
+    ) {
+      frame--;
+    }
+    return frame;
+  };
+  const startMark = marks(`${ENTRANCE_MARK}-start`)[0];
+  const endMark = marks(`${ENTRANCE_MARK}-end`).at(-1);
+  if (startMark == null || endMark == null) {
+    throw new Error('The trace has no mark for an entrance event');
+  }
+  const from = frameOf(startMark);
+  const to = frameOf(endMark);
+  if (from < 0 || to <= from) {
+    throw new Error('The trace has no frame for an entrance event');
+  }
+  const counts: Record<string, number> = {};
+  for (const event of main.slice(from, to)) {
+    if ((RENDERING_EVENTS as ReadonlyArray<string>).includes(event.name)) {
+      counts[event.name] = (counts[event.name] ?? 0) + 1;
+    }
+  }
+  return {counts, start: main[from].t, end: main[to].t};
 }
 
 interface TracedEntrance {
@@ -227,14 +278,14 @@ async function traceEntrance(
     {keepEvents: true},
   );
   const {
-    __entrance: {start, end},
+    __entrance: {start},
     __events: events,
   } = await page.evaluate(() => {
     const w = window as unknown as EntranceWindow;
     return {__entrance: w.__entrance, __events: w.__events};
   });
   expect(start).toBeGreaterThan(0);
-  return {counts: countBetween(trace, start, end), start, end, trace, events};
+  return {...entranceFrames(trace), trace, events};
 }
 
 // Each counted layout of an entrance, with the task that ran it and the

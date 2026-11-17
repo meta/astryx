@@ -80,6 +80,9 @@ export function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);

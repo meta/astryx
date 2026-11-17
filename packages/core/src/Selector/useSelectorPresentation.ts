@@ -16,6 +16,7 @@ import {
   type FocusEvent,
   type RefObject,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
   usePopoverInternal,
   type InternalPopoverOptions,
@@ -28,6 +29,9 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
+import {useOutsidePress} from '../Layer/outsidePress';
+import {containsAlongFlatTree} from '../utils/flatTree';
+import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
   usePresentationHold,
@@ -66,6 +70,9 @@ interface SelectorPresentationController {
   show: () => boolean;
 }
 
+/** The browser light-dismisses the list; the press watch only reports. */
+function closesNothing(): void {}
+
 export function useSelectorPresentation({
   presentation,
   onHide,
@@ -90,53 +97,96 @@ export function useSelectorPresentation({
   const {isHeld: isSheetPresented, release: releaseSheet} = usePresentationHold(
     {isOpen: isSheetOpen, presentation: true},
   );
-  const onHideRef = useRef(onHide);
-  const onShowRef = useRef(onShow);
+  // The layer's popover ref callback can show the popover in the same commit.
+  const onHideRef = useCommittedRef(onHide);
+  const onShowRef = useCommittedRef(onShow);
   const didShowPopoverRef = useRef(false);
-  // The open list's container, read when the popover hides to tell focus that
-  // is still inside the list from focus that moved to another element.
-  const popoverContentRef = useRef<HTMLDivElement | null>(null);
+  // The popover's own ref to the open list's container. The hide reads it to
+  // tell focus that is still inside the list from focus that moved elsewhere.
+  // The hook writes it below, once the popover exists.
+  const popoverContentRef = useRef<RefObject<HTMLDivElement | null> | null>(
+    null,
+  );
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
-  onHideRef.current = onHide;
-  onShowRef.current = onShow;
+  // A press inside the list, such as a pick, can focus a container around it,
+  // such as a dialog's content box. The person did not choose that focus.
+  const isLastPressInListRef = useRef(false);
+  const pressWatch = useOutsidePress();
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
     const trigger = triggerRef.current;
-    // A light dismiss caused by pressing another focusable element has already
-    // moved focus there; taking it back would leave the next key on this
-    // closed Selector (spec:Popover AR4 returns focus only when it would
-    // otherwise be lost). Escape, a choice in the list, or a press on nothing
-    // focusable still returns focus to the trigger.
+    const isPressInList = isLastPressInListRef.current;
+    pressWatch.stop();
+    // A light dismiss by a press on another control has already moved focus
+    // there. Taking it back would send the next key to this closed Selector.
+    // Escape, a press inside the list, or a press on nothing focusable returns
+    // focus to the trigger. So does a press on a container around the list
+    // that is no Tab stop, such as one with `tabIndex={-1}`.
     const active = document.activeElement;
+    const list = popoverContentRef.current?.current ?? null;
+    // The press inside the list explains focus only while that focus still
+    // holds the list. A later key can move focus to another field.
+    const isFocusFromPressInList =
+      isPressInList &&
+      active != null &&
+      list != null &&
+      containsAlongFlatTree(active, list);
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
+      !isFocusFromPressInList &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      !popoverContentRef.current?.contains(active);
+      list?.contains(active) !== true &&
+      (active.tabIndex >= 0 || !active.contains(list));
     if (focusLandedElsewhere) {
       return;
     }
     prepareFocusReturn();
     trigger?.focus();
-  }, [isFocusReturnAlways, prepareFocusReturn, triggerRef]);
+  }, [
+    isFocusReturnAlways,
+    onHideRef,
+    prepareFocusReturn,
+    pressWatch,
+    triggerRef,
+  ]);
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
+    isLastPressInListRef.current = false;
+    const trigger = triggerRef.current;
+    if (trigger != null) {
+      const root = trigger.getRootNode();
+      pressWatch.start(
+        trigger,
+        path => {
+          const list = popoverContentRef.current?.current;
+          return list != null && path.includes(list);
+        },
+        closesNothing,
+        {
+          root: isShadowRoot(root) ? root : null,
+          onPress: isInside => {
+            isLastPressInListRef.current = isInside;
+          },
+        },
+      );
+    }
     onShowRef.current();
-  }, [resetFocusReturn]);
+  }, [onShowRef, pressWatch, resetFocusReturn, triggerRef]);
   const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });
-  popoverContentRef.current = popover.contentRef.current;
+  useCommittedRefInto(popoverContentRef, popover.contentRef);
   const {hide: hidePopover, show: showPopover} = popover;
 
   const show = useCallback((): boolean => {
@@ -154,6 +204,7 @@ export function useSelectorPresentation({
     return didShowPopoverRef.current;
   }, [
     activePresentationHold,
+    onShowRef,
     releaseSheet,
     resetFocusReturn,
     resolvedPresentation,
@@ -169,7 +220,7 @@ export function useSelectorPresentation({
     } else {
       hidePopover();
     }
-  }, [hidePopover, prepareFocusReturn]);
+  }, [hidePopover, onHideRef, prepareFocusReturn]);
 
   const handleTriggerFocus = useCallback(
     (_event: FocusEvent<HTMLElement>) => {

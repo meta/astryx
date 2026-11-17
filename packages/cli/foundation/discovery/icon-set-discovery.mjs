@@ -34,11 +34,15 @@ import {
   isIgnoredThemeEntry,
   readStaticDescriptorValue,
 } from './theme-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetData} IconSetData */
 /** @typedef {import('../../authoring/doctypes/icon-set/type').IconSetIcon} IconSetIcon */
 
 const SET_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+
+/** The name every icon export has (the icon export contract): `<Name>Icon`. */
+export const ICON_EXPORT_NAME_RE = /^[A-Z][A-Za-z0-9]*Icon$/u;
 
 /** A license or notice file a set ships beside its data (FR15). */
 export const NOTICE_FILE_RE = /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/iu;
@@ -125,6 +129,10 @@ export function hasLicenseNotice(dir) {
  * @property {DiscoveredIconSet[]} [order] the sets a template icon is looked
  *   up in, in order: the main set, then each backup that resolves. Present
  *   only when the main set is selected
+ * @property {string} [variant] the look every icon draws, as
+ *   `experimental.iconVariant` names it: each set in the list draws its
+ *   variant of that name, or its default look when it declares none. Present
+ *   only when `experimental.iconSet` and `experimental.iconVariant` are set
  * @property {string} reason one sentence saying why
  */
 
@@ -145,7 +153,7 @@ export function discoverIconSetDirectory(root, owner) {
   } catch {
     return {sets, errors};
   }
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries.sort((a, b) => compareText(a.name, b.name))) {
     if (isIgnoredThemeEntry(entry.name) || !entry.isDirectory()) continue;
     // Only a lower-kebab directory is a set (FR1).
     if (!SET_NAME_RE.test(entry.name)) continue;
@@ -474,19 +482,87 @@ export const ICON_USE_ORDER_COMMAND =
   'astryx experimental icon use <main> --backup <set>';
 
 /**
+ * The `experimental icon use` command for a main set, its backups in order,
+ * and the project's look. `use` writes the whole choice, so a printed
+ * command that left out a backup or the look would remove it.
+ * @param {string} main
+ * @param {readonly string[]} backups
+ * @param {string | null} [variant]
+ * @returns {string}
+ */
+export function iconUseCommand(main, backups, variant) {
+  return `astryx experimental icon use ${main}${backups.map(each => ` --backup ${each}`).join('')}${variant ? ` --variant ${variant}` : ''}`;
+}
+
+/**
+ * The look a set's icons draw when the project picks a variant: that
+ * variant when the set declares it, else the set's default look, null for a
+ * set with one look.
+ * @param {DiscoveredIconSet} set
+ * @param {string} variant
+ * @returns {string | null}
+ */
+export function iconSetLook(set, variant) {
+  return (set.data.variants ?? []).includes(variant)
+    ? variant
+    : (set.data.default?.variant ?? null);
+}
+
+/**
+ * The export that draws an icon in a look: the icon's variant of that name
+ * when it has one, else its own export, which draws the set's default look.
+ * Template mapping and `experimental icon <words>` both use it.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{module: string, export: string}}
+ */
+export function iconLookExport(icon, set, variant) {
+  const module = icon.module ?? set.data.module;
+  if (variant && variant !== set.data.default?.variant) {
+    const entry = (icon.variants ?? []).find(each => each.variant === variant);
+    if (entry) {
+      return {module: entry.module ?? module, export: entry.export};
+    }
+  }
+  return {module, export: icon.export};
+}
+
+/**
+ * What an icon draws when it does not have the look asked for: that look,
+ * and the set's default look it draws instead (null for a set with one
+ * look). Undefined when the icon has the look, or when none is asked for.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string | undefined} variant the look asked for
+ * @returns {{asked: string, used: string | null} | undefined}
+ */
+export function missingIconLook(icon, set, variant) {
+  if (!variant) return undefined;
+  const fallback = set.data.default?.variant ?? null;
+  if (variant === fallback) return undefined;
+  if ((icon.variants ?? []).some(each => each.variant === variant)) {
+    return undefined;
+  }
+  return {asked: variant, used: fallback};
+}
+
+/**
  * Installed sets the project's list leaves out: the problem, and the fix that
- * adds them as backups after the list's own. Doctor and `experimental icon
- * use` print the same words. Every set is named the same way: by its name
- * when no other installed set has that name, else as `<package>/<set>`.
+ * adds them as backups after the list's own, keeping the project's look.
+ * Doctor and `experimental icon use` print the same words. Every set is
+ * named the same way: by its name when no other installed set has that
+ * name, else as `<package>/<set>`.
  * @param {Array<{package: string, name: string}>} installed every installed set
  * @param {{package: string, name: string}} main the list's main set
  * @param {Array<{package: string, name: string}>} backups the list's
  *   backups, in order
  * @param {Array<{package: string, name: string}>} unlisted the installed
  *   sets the list leaves out
+ * @param {string | null} [variant] the project's look
  * @returns {{problem: string, command: string, fix: string}}
  */
-export function unlistedIconSets(installed, main, backups, unlisted) {
+export function unlistedIconSets(installed, main, backups, unlisted, variant) {
   /** @param {{package: string, name: string}} set */
   const named = set =>
     installed.filter(each => each.name === set.name).length > 1
@@ -494,7 +570,11 @@ export function unlistedIconSets(installed, main, backups, unlisted) {
       : set.name;
   const left = unlisted.map(named);
   const them = left.length === 1 ? 'it' : 'them';
-  const command = `astryx experimental icon use ${named(main)}${[...backups.map(named), ...left].map(each => ` --backup ${each}`).join('')}`;
+  const command = iconUseCommand(
+    named(main),
+    [...backups.map(named), ...left],
+    variant,
+  );
   return {
     problem: `${installed.length} icon sets are installed and ${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} not in your list`,
     command,
@@ -511,9 +591,15 @@ export function unlistedIconSets(installed, main, backups, unlisted) {
  * @param {DiscoveredIconSet[]} sets installed sets, in integration load order
  * @param {string | readonly string[] | undefined} configured the `experimental.iconSet` config value
  * @param {WithdrawnIconSet[]} [withdrawn] installed sets that were withdrawn
+ * @param {string} [variant] the `experimental.iconVariant` config value
  * @returns {IconSetChoice}
  */
-export function chooseProjectIconSet(sets, configured, withdrawn = []) {
+export function chooseProjectIconSet(
+  sets,
+  configured,
+  withdrawn = [],
+  variant = undefined,
+) {
   const [main, ...rest] = iconSetList(configured);
   if (main) {
     const resolved = resolveSelector(sets, main, withdrawn);
@@ -528,6 +614,7 @@ export function chooseProjectIconSet(sets, configured, withdrawn = []) {
       ...(resolved.set ? {set: resolved.set} : {}),
       configured: main,
       ...(backups.length > 0 ? {backups} : {}),
+      ...(variant ? {variant} : {}),
       reason: resolved.reason,
     };
     if (resolved.set) {

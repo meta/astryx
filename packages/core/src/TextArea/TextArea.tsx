@@ -72,6 +72,7 @@ import {
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -353,6 +354,15 @@ export interface TextAreaProps
    */
   maxLength?: number;
   /**
+   * The native `maxlength` attribute of the textarea. The browser stops typing
+   * past this many UTF-16 code units. An emoji can take two or more code
+   * units. This limit is separate from `maxLength`, which counts
+   * user-perceived characters. Set either one, or both. TextArea adds no
+   * truncation or validation of its own. A longer `value` stays as the caller
+   * sets it.
+   */
+  htmlMaxLength?: number;
+  /**
    * Whether to automatically focus the textarea on mount.
    * @default false
    */
@@ -420,6 +430,7 @@ export function TextArea({
   hasAutoCorrect,
   onPaste,
   maxLength,
+  htmlMaxLength,
   hasAutoFocus = false,
   size: sizeProp,
   htmlName,
@@ -458,6 +469,7 @@ export function TextArea({
   const statusMessageID = useId();
   const counterID = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useMobileKeyboard(textareaRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Tracks the counter "zone" last announced (under / near / over) so we only
   // announce on a zone change, not on every keystroke.
@@ -655,6 +667,7 @@ export function TextArea({
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          maxLength={htmlMaxLength}
           {...textEntryTraitAttributes({
             enterKeyHint,
             inputMode,

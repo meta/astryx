@@ -200,8 +200,16 @@ describe(
       ];
     });
 
-    const gate = (command, ...args) =>
-      spawnSync(
+    /** @param {string} command @param {...(string | Record<string, string>)} args */
+    const gate = (command, ...args) => {
+      const env =
+        typeof args.at(-1) === 'object'
+          ? {
+              ...process.env,
+              .../** @type {Record<string, string>} */ (args.pop()),
+            }
+          : process.env;
+      return spawnSync(
         process.execPath,
         [
           SCRIPT,
@@ -217,8 +225,9 @@ describe(
           '--no-scout',
           ...args,
         ],
-        {encoding: 'utf8'},
+        {encoding: 'utf8', env},
       );
+    };
     const verdict = () =>
       JSON.parse(fs.readFileSync(path.join(output, 'verdict.json'), 'utf8'));
 
@@ -233,6 +242,53 @@ describe(
       expect(result.stderr).not.toMatch(/ReferenceError/);
       expect(result.status).toBe(0);
       expect(verdict().status).toBe('skipped');
+    });
+
+    it('names the themes it cannot read, runs no pnpm build, and leaves every theme dist as it was', () => {
+      // The plan reads every theme's built source. A pnpm that records being
+      // called sits first on the gate's PATH.
+      const themesDir = path.join(repoRoot, 'packages/themes');
+      const coreThemeEntry = path.join(
+        repoRoot,
+        'packages/core/dist/theme/index.js',
+      );
+      const builtSources = () =>
+        fs
+          .readdirSync(themesDir, {withFileTypes: true})
+          .filter(entry => entry.isDirectory())
+          .map(entry => entry.name)
+          .sort()
+          .map(name => [
+            name,
+            fs.existsSync(path.join(themesDir, name, 'dist/source.mjs')),
+          ]);
+      const bin = path.join(root, 'bin');
+      const calls = path.join(root, 'pnpm-calls.log');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(
+        path.join(bin, 'pnpm'),
+        `#!/bin/sh\necho "$@" >> ${JSON.stringify(calls)}\nexit 1\n`,
+        {mode: 0o755},
+      );
+      const before = builtSources();
+      const coreBuilt = fs.existsSync(coreThemeEntry);
+
+      const result = gate('check', '--components', folders.join(','), {
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '').toBe(
+        '',
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(builtSources()).toEqual(before);
+      // The verdict names the themes it could not read: each one without its
+      // built source, or all of them when Core's theme entry is missing.
+      expect(verdict().context.themesNotBuilt).toEqual(
+        before
+          .filter(([, built]) => !built || !coreBuilt)
+          .map(([name]) => name),
+      );
     });
 
     it('writes the same skipped verdict for an over-budget plan of touched components alone', () => {

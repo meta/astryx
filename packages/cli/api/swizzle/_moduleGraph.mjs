@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import {isBuiltin} from 'node:module';
 import {packageOf} from '../../foundation/render/served-packages.mjs';
 import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {
   inspectPackageExport,
   sourceExportTarget,

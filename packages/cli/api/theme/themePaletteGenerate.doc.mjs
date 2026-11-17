@@ -9,7 +9,7 @@ export const doc = {
   displayName: 'themePaletteGenerate()',
   summary: 'Generate an author-reviewable palette candidate from JSON input.',
   description:
-    'Runs the versioned astryx-oklch-v1 recipe against an explicit generation request. ' +
+    'Runs the recipe the request names: astryx-oklch-v1 when it names none, so a request or config made before v2 keeps its colors, or astryx-oklch-v2, whose pale stops follow the vibrancy and each seed\'s own chroma. New palettes name v2: the theme editor records it in each config it makes, and a new config should too. A config keeps the recipe it records; to pin one, record "recipe": "astryx-oklch-v1" (or v2) in the palette config, against an explicit generation request. ' +
     'It always emits standalone `black` and `white` values that generated TypeScript can import ' +
     'directly into semantic theme tokens; those names are reserved from tonal family IDs. It also ' +
     'defaults family ramps to 21 stops from 0 through 100, repeating exact black and white ' +
@@ -68,7 +68,7 @@ export const doc = {
     {code: 'ERR_FILE_NOT_FOUND', when: 'the config file does not exist'},
     {
       code: 'ERR_PALETTE_GENERATION',
-      when: 'the config is not valid JSON; the request, seed, stop layout, mode or anchor is invalid; out does not end in .ts or .json; or preview does not end in .html',
+      when: 'the config is not valid JSON; the request, seed, stop layout, mode, anchor or dark chroma taper is invalid; out does not end in .ts or .json; or preview does not end in .html',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

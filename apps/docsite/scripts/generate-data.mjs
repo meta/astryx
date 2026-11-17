@@ -2480,6 +2480,13 @@ ${itemPathLines}
 // demos read as one set; any other example blocks follow in name order.
 const DOC_EXAMPLE_ORDER = new Map();
 
+// Setup examples (`kind: 'setup'`), per documented component or sub-component.
+// They do not run on their own: an app setup file, a server route, or a
+// snippet that uses variables defined elsewhere. The page shows them as code
+// only, and never gives one a live preview, not even through a block of the
+// same name.
+const DOC_SETUP_EXAMPLES = new Map();
+
 function recordDocExampleOrder(doc) {
   const entries = [
     doc,
@@ -2492,7 +2499,24 @@ function recordDocExampleOrder(doc) {
       .map(example => example?.label)
       .filter(label => typeof label === 'string');
     if (labels.length > 0) DOC_EXAMPLE_ORDER.set(name, labels);
+    const setup = entry.examples
+      .filter(
+        example =>
+          example?.kind === 'setup' && typeof example.code === 'string',
+      )
+      .map(example => ({
+        label: typeof example.label === 'string' ? example.label : 'Setup',
+        code: example.code,
+      }));
+    if (setup.length > 0) DOC_SETUP_EXAMPLES.set(name, setup);
   }
+}
+
+/** Whether a block is named after one of its component's setup examples. */
+function isSetupExampleBlock(component, blockName) {
+  return (DOC_SETUP_EXAMPLES.get(component) ?? []).some(
+    example => example.label === blockName,
+  );
 }
 
 /** Sorts one component's examples by its doc's example order (stable). */
@@ -2535,7 +2559,15 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
       ? `integration-${block.dirName}`
       : block.dirName;
 
-    if (!block.isShowcase && block.exampleFor) {
+    if (
+      !block.isShowcase &&
+      block.exampleFor &&
+      isSetupExampleBlock(block.exampleFor, block.name || block.dirName)
+    ) {
+      console.log(
+        `  skipping live preview for ${block.dirName} — its doc example is a setup example`,
+      );
+    } else if (!block.isShowcase && block.exampleFor) {
       const destFile = writeBlockPreview(block, EXAMPLES_OUT, base);
       if (destFile) {
         entries.push({
@@ -2551,6 +2583,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
     }
 
     for (const target of block.alsoExampleFor ?? []) {
+      if (isSetupExampleBlock(target, block.name || block.dirName)) continue;
       const basename = `${base}__${target}`;
       const destFile = writeBlockPreview(block, EXAMPLES_OUT, basename);
       if (destFile) {
@@ -2600,6 +2633,14 @@ export interface ExampleEntry {
 export const exampleRegistry: Record<string, ExampleEntry[]> = {
 ${componentLines}
 };
+
+/** A doc example with \`kind: 'setup'\`: shown as code only, never live. */
+export interface SetupExampleEntry {
+  label: string;
+  code: string;
+}
+
+export const setupExampleRegistry: Record<string, SetupExampleEntry[]> = ${JSON.stringify(Object.fromEntries(DOC_SETUP_EXAMPLES), null, 2)};
 `;
 
   writeRegistry('exampleRegistry.ts', registryContent);

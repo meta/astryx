@@ -164,6 +164,21 @@ describe('Stepper', () => {
     expect(list).toHaveAttribute('data-orientation', 'vertical');
   });
 
+  it('keeps a vertical step body within its step, whatever the width of its content', () => {
+    render(
+      <Stepper activeStep={0} orientation="vertical">
+        <Step step={0} label="Step 1">
+          <div data-testid="content">Content</div>
+        </Step>
+      </Stepper>,
+    );
+    // The body is a flex item of the step row: without the reset, its
+    // min-content floor lets wide content push it past the step.
+    const body = screen.getByTestId('content').closest('li > div');
+    expect(body).not.toBeNull();
+    expect(getComputedStyle(body as Element).minWidth).toBe('0');
+  });
+
   it('calls onStepClick when a completed step is clicked', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
@@ -1650,6 +1665,44 @@ describe('Stepper', () => {
       expect(screen.getByRole('button', {name: 'Next step'})).toBeEnabled();
     });
 
+    it.each(['separated', 'on-track'] as const)(
+      'states a disabled step as unavailable in the compact %s layout',
+      indicatorPosition => {
+        // A compact step has no button to carry aria-disabled, so its list
+        // item says it in words, as the expanded button does.
+        atWidth(
+          320,
+          <Stepper
+            activeStep={0}
+            onStepClick={vi.fn()}
+            indicatorPosition={indicatorPosition}>
+            <Step step={0} label="Shipping" />
+            <Step step={1} label="Delivery" isDisabled />
+            <Step step={2} label="Payment" />
+          </Stepper>,
+        );
+        const [shipping, delivery, payment] = screen.getAllByRole('listitem');
+        expect(within(delivery).getByText('unavailable')).toBeInTheDocument();
+        expect(within(shipping).queryByText('unavailable')).toBeNull();
+        expect(within(payment).queryByText('unavailable')).toBeNull();
+      },
+    );
+
+    it('keeps a disabled step on its aria-disabled button when the layout is not compact', () => {
+      atWidth(
+        900,
+        <Stepper activeStep={0} onStepClick={vi.fn()}>
+          <Step step={0} label="Shipping" />
+          <Step step={1} label="Delivery" isDisabled />
+          <Step step={2} label="Payment" />
+        </Stepper>,
+      );
+      expect(
+        screen.getByRole('button', {name: /^Go to step 2: Delivery/}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByText('unavailable')).toBeNull();
+    });
+
     it('drops the controls but keeps the name on request', () => {
       // The shape of a wizard whose footer already has Back and Continue: the
       // steps stay clickable at full width, and the phone gets one pair of
@@ -2109,10 +2162,10 @@ describe('step-label and step-description theme targets', () => {
     expect(descriptions[2].dataset.status).toBe('error');
   });
 
-  it('reflects disabled on the label target and emits its theme selector', () => {
-    // The label owns disabled paint (`styles.labelDisabled`); the description
-    // does not. The selector follows that ownership instead of being copied to
-    // every text target for vocabulary symmetry.
+  it('reflects disabled on the indicator and label targets, not the step or description, and emits theme selectors', () => {
+    // The indicator and label own disabled paint (`styles.numberDisabled` /
+    // `styles.labelDisabled`), so each carries the selector. The step and the
+    // description paint nothing of their own when disabled.
     const {container} = render(
       <Stepper activeStep={0}>
         <Step
@@ -2123,24 +2176,30 @@ describe('step-label and step-description theme targets', () => {
         />
       </Stepper>,
     );
+    const step = container.querySelector('.astryx-step');
+    const indicator = container.querySelector('.astryx-step-indicator');
     const label = container.querySelector('.astryx-step-label');
     const description = container.querySelector('.astryx-step-description');
+    expect(step).not.toHaveAttribute('data-disabled');
+    expect(indicator).toHaveAttribute('data-disabled', 'disabled');
     expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(description).not.toHaveAttribute('data-disabled');
     expect(description).not.toHaveAttribute('data-disabled');
 
     // A DOM attribute alone would not prove the public defineTheme path accepts
     // and emits the state. Hold both halves of the contract.
     const theme = defineTheme({
-      name: 'step-label-disabled-state-test',
+      name: 'step-disabled-state-test',
       components: {
+        'step-indicator': {
+          'disabled:disabled': {filter: 'grayscale(1)'},
+        },
         'step-label': {
           'disabled:disabled': {opacity: '0.4'},
         },
       },
     });
     const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
     expect(css).toContain('opacity: 0.4');
   });

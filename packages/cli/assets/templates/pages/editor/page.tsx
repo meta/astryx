@@ -5,6 +5,7 @@
 import {useState, useCallback, type CSSProperties} from 'react';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {Card} from '@astryxdesign/core/Card';
 import {Center} from '@astryxdesign/core/Center';
 import {Dialog} from '@astryxdesign/core/Dialog';
@@ -20,7 +21,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {Table} from '@astryxdesign/core/Table';
+import {Table, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Section} from '@astryxdesign/core/Section';
 import {
@@ -106,6 +107,11 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'name',
     header: 'Transaction',
+    // An icon and a name share this cell, so the default 60px floor leaves a
+    // letter or two per line on a phone. Each column's share matches its
+    // floor, so the floors add up to the table's minimum (480px), and the
+    // Table scrolls sideways only below that.
+    width: proportional(3, {minWidth: 180}),
     renderCell: (item: Transaction) => (
       <HStack gap={3} vAlign="center">
         <Icon icon={CATEGORY_ICONS[item.category] || SparklesIcon} />
@@ -123,6 +129,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'date',
     header: 'Date',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="body" color="secondary">
         {item.date}
@@ -132,6 +139,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'amount',
     header: 'Amount',
+    width: proportional(2, {minWidth: 120}),
     renderCell: (item: Transaction) => (
       <Text type="label" weight="semibold" color={undefined} hasTabularNumbers>
         {item.amount}
@@ -141,6 +149,7 @@ const TRANSACTION_COLUMNS: TableColumn<Transaction>[] = [
   {
     key: 'actions',
     header: '',
+    width: proportional(1, {minWidth: 60}),
     renderCell: () => (
       <Button
         label="More"
@@ -538,27 +547,25 @@ function BlockPreview({
       const items = (props.items as Transaction[]) || [];
       return (
         <Card padding={6} style={cardStyle} onClick={onSelect}>
-          <VStack gap={4}>
-            <HStack gap={3} vAlign="start" hAlign="between">
-              <VStack gap={1}>
-                <Heading level={3}>
-                  {(props.heading as string) || 'Features'}
-                </Heading>
-                {(props.description as string) && (
-                  <Text type="supporting" color="secondary">
-                    {props.description as string}
-                  </Text>
-                )}
-              </VStack>
-              <Button label="View All" variant="secondary" size="sm" />
-            </HStack>
-            <Table
-              data={items}
-              columns={TRANSACTION_COLUMNS}
-              idKey="id"
-              hasHover
-            />
-          </VStack>
+          <HStack gap={3} vAlign="start" hAlign="between" paddingBlockEnd={4}>
+            <VStack gap={1}>
+              <Heading level={3}>
+                {(props.heading as string) || 'Features'}
+              </Heading>
+              {(props.description as string) && (
+                <Text type="supporting" color="secondary">
+                  {props.description as string}
+                </Text>
+              )}
+            </VStack>
+            <Button label="View All" variant="secondary" size="sm" />
+          </HStack>
+          <Table
+            data={items}
+            columns={TRANSACTION_COLUMNS}
+            idKey="id"
+            hasHover
+          />
         </Card>
       );
     }
@@ -618,6 +625,13 @@ export default function EditorPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('blocks');
   const [pageTitle, setPageTitle] = useState('Page Editor');
+  const showToast = useToast();
+  const publish = () =>
+    // Demo only: replace this toast with the call that publishes the page.
+    showToast({
+      body: `Demo: ${pageTitle} would be published here`,
+      uniqueID: 'publish',
+    });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [viewport, setViewport] = useState<ViewportSize>('desktop');
   // Mobile only: the customizations (tabs + Add Block/Layers) open in a
@@ -806,7 +820,7 @@ export default function EditorPage() {
     <LayoutPanel
       hasDivider={!isMobile}
       padding={0}
-      style={{width: isMobile ? '100%' : 320, flexShrink: 0}}>
+      width={isMobile ? '100%' : 320}>
       <VStack gap={4}>
         {/* Panel Header */}
         <Section variant="transparent" padding={4}>
@@ -823,7 +837,7 @@ export default function EditorPage() {
                   isIconOnly
                   onClick={() => setIsCustomizeOpen(true)}
                 />
-                <Button label="Publish" variant="primary" />
+                <Button label="Publish" variant="primary" onClick={publish} />
               </HStack>
             </HStack>
           ) : (
@@ -880,8 +894,19 @@ export default function EditorPage() {
                       icon={<Icon icon={EyeIcon} size="sm" />}
                       variant="ghost"
                       isIconOnly
+                      onClick={() =>
+                        // Demo only: replace this toast with the call that performs the action.
+                        showToast({
+                          body: 'Demo: a preview of the page would open here',
+                          uniqueID: 'preview',
+                        })
+                      }
                     />
-                    <Button label="Publish" variant="primary" />
+                    <Button
+                      label="Publish"
+                      variant="primary"
+                      onClick={publish}
+                    />
                   </HStack>
                 }
               />

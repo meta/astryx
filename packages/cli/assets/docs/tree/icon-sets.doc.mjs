@@ -32,7 +32,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Icon sets are experimental: the `astryx experimental icon` commands, the `experimental.iconSet` key in astryx.config, the `experimental.iconSets` key in an integration manifest, the data file, icon definitions, and the output and JSON of all of them can change, or go away, in any patch release without a deprecation period. A project that does not set `experimental.iconSet` sees no change in any stable command, apart from: the marked `experimental` group in help and in `astryx manifest` (its command, and its `responseTypes` and `jsonSupported` entries); the marked experimental entries in the CLI reference listings; and a search for \"experimental\", which also finds the stable `stability` field of the field reference. Templates, discover, and doctor answer as they do with no icon set installed. With a package that ships icon sets installed and no opt-in, the warnings an older CLI gives about the manifest key `experimental` (in `astryx doctor` and `astryx doctor integration validate <package>`, and the one-line nudge other commands print to stderr) are gone. `astryx search` never returns icons or these docs; to find an icon by meaning, use `astryx experimental icon <words>`.',
+          text: 'Icon sets are experimental: the `astryx experimental icon` commands, the `experimental.iconSet` key in astryx.config, the `experimental.iconSets` key in an integration manifest, the data file, icon definitions, and the output and JSON of all of them can change, or go away, in any patch release without a deprecation period. A project that installs no icon-set package and does not set `experimental.iconSet` sees no change in any stable command, apart from: the marked `experimental` group in help and in `astryx manifest` (its command, and its `responseTypes` and `jsonSupported` entries); the marked experimental entries in the CLI reference listings; and a search for \"experimental\", which also finds the stable `stability` field of the field reference. Installing a package that ships icon sets turns icon features on, with or without `experimental.iconSet`: discover, doctor, `astryx doctor integration validate <package>`, and the icons topic ({@link generic:icons}) read the installed sets. Copied templates follow a set only once `experimental.iconSet` names it. `astryx search` never returns icons or these docs; to find an icon by meaning, use `astryx experimental icon <words>`.',
         },
       ],
     },
@@ -129,17 +129,17 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'A library with a module per style supplies variants. Declare them when you create the set, then add a variant for every icon in one run:',
+          text: "A library with a module per style supplies variants. Declare them when you create the set, then add a variant for every icon in one run. Name each look by what it draws, `outline` or `filled`, not by the library's word for it (Heroicons calls its filled look `solid`): an app picks one look for all its icons by that name, and the name reaches every set in its list that uses it (see Draw every icon in one look).",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: `astryx experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,solid --default-variant outline --description 'Heroicons, outline and solid.'
-astryx experimental icon add --variant solid --from @heroicons/react/24/solid --all`,
+          code: `astryx experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,filled --default-variant outline --description 'Heroicons, outline and filled.'
+astryx experimental icon add --variant filled --from @heroicons/react/24/solid --all`,
         },
         {
           type: 'prose',
-          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (when omitted, the look a library that names its looks draws; otherwise the set's current default, else, on a set without icons, the first variant; a set with icons changes it only with `--from`, and only in a library that names its looks). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashSolidIcon`, the solid variant of `trash`), and the receipt lists the icons the module has no export for. A library may ship each look as its own package (Font Awesome's solid and regular packages): `--from` may then name the other package, and an icon gains the variant from the export of the same name there; the receipt lists the icons that package has no export for. Running it again changes nothing.",
+          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (when omitted, the look a library that names its looks draws; otherwise the set's current default, else, on a set without icons, the first variant; a set with icons changes it only with `--from`, and only in a library that names its looks). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashFilledIcon`, the filled variant of `trash`), and the receipt lists the icons the module has no export for. A library may ship each look as its own package (Font Awesome's solid and regular packages): `--from` may then name the other package, and an icon gains the variant from the export of the same name there; the receipt lists the icons that package has no export for. Running it again changes nothing.",
         },
         {
           type: 'prose',
@@ -278,6 +278,10 @@ import {themeIcons} from '@acme/icons';
 
 export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
         },
+        {
+          type: 'prose',
+          text: "`themeIcons` draws your default look. For each other variant that one of your icons draws, the module also exports a map named after it, `themeIcons<Variant>` (`themeIconsFilled` for `filled`): the same keys, each your icon's export for that variant, or its own export when it has none. An app whose icons draw that look sets `icons: themeIconsFilled` instead. `integration check` holds each of these maps to `map` as well; when an older module lacks one, it names the `experimental icon add --variant <variant> --from <module> --all` run that writes it.",
+        },
       ],
     },
     {
@@ -362,7 +366,8 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
 astryx experimental icon outline/bin         # one icon and every variant
 astryx experimental icon --list              # installed sets, their order, and definition coverage
 astryx experimental icon use outline         # make it the project's main icon set
-astryx experimental icon use outline --backup brand   # a main set, then a backup`,
+astryx experimental icon use outline --backup brand   # a main set, then a backup
+astryx experimental icon use brand --variant filled   # every icon in its filled look`,
         },
         {
           type: 'prose',
@@ -370,7 +375,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
         },
         {
           type: 'prose',
-          text: "Each `icons` key is the name the template imports from its module, not a local alias. When a template imports the same name from two modules, such as `TrashIcon` from a library's outline and solid modules, one key covers both: both draw the same definition. Each then becomes the chosen set's variant of the same name when its module belongs to an installed set that declares the variant (so solid stays solid). When the chosen set's icon has no such variant, it draws the set's default look, and the report names both looks as `variant: {asked, used}`. A missing look never moves an icon to a backup set.",
+          text: "Each `icons` key is the name the template imports from its module, not a local alias. When a template imports the same name from two modules, such as `TrashIcon` from a library's outline and solid modules, one key covers both: both draw the same definition. Each then becomes the chosen set's variant of the same name when its module belongs to an installed set that declares the variant (so solid stays solid). When the chosen set's icon has no such variant, it draws the set's default look, and the report names both looks as `variant: {asked, used}`. A missing look never moves an icon to a backup set. When the project picks a look (`experimental.iconVariant`), every icon asks for that look instead.",
         },
       ],
     },
@@ -406,11 +411,57 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
         },
         {
           type: 'prose',
-          text: "`astryx experimental icon --list` shows the order: the project's `order` (each set as `<package>/<set>`), and each set's `role` (`main`, `backup`, or not listed) and `rank`. Its coverage columns count the definitions each set maps: `builtIn` of the built-in names (a valid set maps them all, and `missing` lists any it lacks), and `definitions` of every Astryx definition. When two or more sets are installed and none is the main set, `--list` says so with the command to run, `astryx experimental icon use <main> --backup <set>`. The `use` receipt (`icon.use`) names the main set (`iconSet`, `set`) and each backup (`backups`), and lists installed sets the list leaves out (`unlisted`) with the command that adds them (`next`): `astryx doctor` fails a project that installs more than one set and leaves one out of the list.",
+          text: "`astryx experimental icon --list` shows the order: the project's `order` (each set as `<package>/<set>`), and each set's `role` (`main`, `backup`, or not listed) and `rank`. Its coverage columns count the definitions each set maps: `builtIn` of the built-in names (a valid set maps them all, and `missing` lists any it lacks), and `definitions` of every Astryx definition. When two or more sets are installed and none is the main set, `--list` says so with the command to run, `astryx experimental icon use <main> --backup <set>`. When no set is installed, `--list` and `experimental icon <words>` say so and how to get one, and the search names the icon definitions that match, built-in ones first: Core draws those by name with no set. The `use` receipt (`icon.use`) names the main set (`iconSet`, `set`) and each backup (`backups`), and lists installed sets the list leaves out (`unlisted`) with the command that adds them (`next`): `astryx doctor` fails a project that installs more than one set and leaves one out of the list.",
         },
         {
           type: 'prose',
           text: "Only the main set's theme map feeds `defineTheme({icons})`. Backups never change the theme. The copy report lists each set it used, with its license (`icons.sets`).",
+        },
+      ],
+    },
+    {
+      id: 'one-look',
+      title: 'Draw every icon in one look',
+      content: [
+        {
+          type: 'prose',
+          text: "A set may supply each icon in several looks, its variants: outline and filled, say. A project picks one look for all of its icons with `--variant`, which writes `experimental.iconVariant` next to `experimental.iconSet`. The look must be one of the main set's variants; `experimental icon --list` shows each set's `variants`.",
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: `astryx experimental icon use brand --backup lines --variant filled`,
+        },
+        {
+          type: 'code',
+          lang: 'js',
+          label: 'astryx.config.mjs',
+          code: `export default {
+  experimental: {
+    iconSet: ['brand', 'lines'],
+    iconVariant: 'filled',
+  },
+};`,
+        },
+        {
+          type: 'prose',
+          text: "Sets match the look by name. Each set in the list draws its variant called `filled`; a set without one draws its default look, and the receipt shows the look of every listed set (`looks`). A set that calls the same look something else, such as `solid` or `regular`, draws its default look until it renames that variant to `filled`. A copied template imports each icon's `filled` export where the icon has one (`TrashFilledIcon`). Where it has none, the copy keeps the set's default export and reports `variant: {asked, used}`; it never fetches that icon from a backup for its look. With a look picked, an icon taken from the main set's own library becomes the main set's icon in that look: the one `map` names for its meaning, or else the one that re-exports that same library export (reported `by: 'variant'`). An icon already imported from a listed set in another look moves to its `filled` export (also `by: 'variant'`). The copy report names the look as `icons.variant`. `experimental icon <words>` prints each match from a listed set in that look too; a match whose icon has no `filled` export keeps its default import and names both looks as `look: {asked, used}`.",
+        },
+        {
+          type: 'prose',
+          text: "Components take the built-in icons from the theme. Where an icon of the main set draws the look, the set's package exports a theme map for it, `themeIconsFilled`, and the receipt names that export and its module (`themeMap`):",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {themeIconsFilled} from '@acme/brand-icons';
+
+export const brand = defineTheme({name: 'brand', icons: themeIconsFilled});`,
+        },
+        {
+          type: 'prose',
+          text: "`use` writes the whole choice each time: run it with every set and the look you want, and without `--variant` to go back to each set's default look, which removes `experimental.iconVariant`. `astryx doctor` fails while the main set declares no variant of that name, naming its variants and the command that picks one. A CLI older than 0.7.16 refuses an astryx.config that sets `experimental.iconVariant`, so `use` warns when the project's `@astryxdesign/cli` range admits one.",
         },
       ],
     },
@@ -463,7 +514,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
       content: [
         {
           type: 'prose',
-          text: 'Every place the CLI reads or reports icon sets, all experimental. Outside `astryx experimental icon`, each appears only in a project that sets `experimental.iconSet`; `astryx search` never returns icons:',
+          text: 'Every place the CLI reads or reports icon sets, all experimental. Outside `astryx experimental icon`, each appears only in a project that installs an icon-set package or sets `experimental.iconSet`; `astryx search` never returns icons:',
         },
         {
           type: 'table',
@@ -471,7 +522,11 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
           rows: [
             [
               '`experimental.iconSet` in astryx.config',
-              "The project's main icon set, by set name or as `<package>/<set>`, or a list: the main set first, then backup sets in order. It is the opt-in: templates, discover, and doctor read icon sets only when it is set. `astryx experimental icon` ranks the main set's icons first, and without it treats the only installed set as the project's. `astryx experimental icon use <main> --backup <set>` writes it.",
+              "The project's main icon set, by set name or as `<package>/<set>`, or a list: the main set first, then backup sets in order. Templates follow icon sets only when it is set. Discover and doctor read them when it is set or when an icon-set package is installed. `astryx experimental icon` ranks the main set's icons first, and without it treats the only installed set as the project's. `astryx experimental icon use <main> --backup <set>` writes it.",
+            ],
+            [
+              '`experimental.iconVariant` in astryx.config',
+              "The look every icon of the project draws, one of the main set's variants; it needs `experimental.iconSet`. Copied templates import each icon in that look where its set has one, and `astryx experimental icon use <main> --variant <variant>` writes it.",
             ],
             [
               '`experimental.iconSets` in the integration manifest',
@@ -479,7 +534,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
             ],
             [
               "A template descriptor's `icons`",
-              "The icon definition each imported icon draws (`{TrashIcon: 'delete'}`): a named import by the name it imports, a default import by its local name. `astryx template`, shown or copied, then writes the icons from the first set in the list that has each meaning and reports `icons` (status, set, order, mapped, placeholder, kept, sets): every key is mapped, a placeholder when no set has its meaning, or kept with why (a namespace or type-only import, a re-export, an Astryx import or one from a set in the list, an import from the library a set in the list wraps, no import at all, or an icon that draws no definition and has no match). `integration check` notes a key the template's source never imports (`template_icon_not_imported`), never failing, and notes an imported icon the package's templates do not declare (`template_icon_undeclared`), which fails `--strict --next`.",
+              "The icon definition each imported icon draws (`{TrashIcon: 'delete'}`): a named import by the name it imports, a default import by its local name. `astryx template`, shown or copied, then writes the icons from the first set in the list that has each meaning and reports `icons` (status, set, order, variant, mapped, placeholder, kept, sets): every key is mapped, a placeholder when no set has its meaning, or kept with why (a namespace or type-only import, a re-export, an Astryx import or one from a set in the list, an import from the library a set in the list wraps, no import at all, or an icon that draws no definition and has no match). `integration check` notes a key the template's source never imports (`template_icon_not_imported`), never failing, and notes an imported icon the package's templates do not declare (`template_icon_undeclared`), which fails `--strict --next`.",
             ],
             [
               '`astryx discover`',
@@ -487,7 +542,7 @@ astryx experimental icon use outline --backup brand   # a main set, then a backu
             ],
             [
               '`astryx doctor`',
-              'In an app, the `icon-sets` check: fails when `experimental.iconSet` names a set, main or backup, that is not installed, was withdrawn (an invalid set, or one whose module does not resolve), or that two packages ship by that name, saying why; fails when more than one set is installed and the list leaves one out; and warns when another installed set was withdrawn. The `icon-placeholders` check warns while copied code uses the placeholder for a missing icon, naming each file and meaning. In your icon-set package, check with `astryx integration check` instead: plain `doctor` diagnoses an app.',
+              'In an app, the `icon-sets` check: fails when `experimental.iconSet` names a set, main or backup, that is not installed, was withdrawn (an invalid set, or one whose module does not resolve), or that two packages ship by that name, saying why; fails when more than one set is installed and the list leaves one out; fails when `experimental.iconVariant` names a variant the main set does not declare; and warns when another installed set was withdrawn. When a main set is decided (the one `experimental.iconSet` names, or the only installed set), the `icon-placeholders` check warns while copied code uses the placeholder for a missing icon, naming each file and meaning, and the `icon-imports` check names each file and import that does not match your list after you change it or uninstall a set, with the icon of your list that draws the same meaning: it warns for an icon from a set your list leaves out, or from a backup when an earlier set draws the same meaning; it fails for an icon import of a package that is not installed or declared, which breaks the build (an import that a `paths` or `baseUrl` entry in your tsconfig or jsconfig maps to your own code never counts). In your icon-set package, check with `astryx integration check` instead: plain `doctor` diagnoses an app.',
             ],
             [
               'JSON types',

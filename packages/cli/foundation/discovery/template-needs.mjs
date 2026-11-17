@@ -18,8 +18,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {parseTemplateSource, walk} from './template-source-tree.mjs';
+import {
+  parseTemplateSource,
+  TEMPLATE_COMPONENTS_FILE,
+  walk,
+} from './template-source-tree.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
+import {writtenString} from '../text/written-string.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {
   decidePackageManagerIn,
@@ -81,6 +87,45 @@ export function extractImportedPackages(source) {
  * @returns {string[]}
  */
 function moduleSpecifiers(source) {
+  // A template Astryx ships answers from what parsing it returned at publish.
+  const stored = readStore(TEMPLATE_COMPONENTS_FILE).get(
+    `imports:${storedKey(source)}`,
+  );
+  if (Array.isArray(stored)) return [...stored];
+  return parsedSpecifiers(source);
+}
+
+/**
+ * The files a source names with `/// <reference path="…" />` before its
+ * first statement, the only place TypeScript reads one. They bring in types
+ * for the type check, not code a build runs, so they are not imports.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function referencedPaths(source) {
+  let file;
+  try {
+    file = parseTemplateSource(source, {errorRecovery: true});
+  } catch {
+    return [];
+  }
+  const first = file.program.body[0]?.start ?? Infinity;
+  /** @type {string[]} */
+  const out = [];
+  for (const c of file.comments ?? []) {
+    if (c.type !== 'CommentLine' || c.start >= first) continue;
+    const ref = /^\/\s*<reference\s+path\s*=\s*(["'])(.+?)\1/.exec(c.value);
+    if (ref) out.push(ref[2]);
+  }
+  return out;
+}
+
+/**
+ * moduleSpecifiers, read from the source's syntax tree.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function parsedSpecifiers(source) {
   let file;
   try {
     file = parseTemplateSource(source, {errorRecovery: true});
@@ -91,7 +136,8 @@ function moduleSpecifiers(source) {
   const specs = [];
   /** @param {any} literal */
   const add = literal => {
-    if (literal?.type === 'StringLiteral') specs.push(literal.value);
+    const spec = writtenString(literal);
+    if (spec != null) specs.push(spec);
   };
   walk(file.program, (/** @type {any} */ node) => {
     if (
@@ -113,6 +159,12 @@ function moduleSpecifiers(source) {
       add(node.arguments?.[0]);
     } else if (node.type === 'ImportExpression') {
       add(node.source);
+    } else if (
+      node.type === 'TSImportEqualsDeclaration' &&
+      node.moduleReference?.type === 'TSExternalModuleReference'
+    ) {
+      // `import s = require('../shared')`
+      add(node.moduleReference.expression);
     } else if (node.type === 'TSImportType') {
       // `type O = import('chart-lib').Options`
       add(
@@ -227,6 +279,58 @@ function cliPackageRanges() {
 }
 
 /**
+ * The command that installs `packages` in the project at `cwd`, in its package
+ * manager and with the CLI workspace's version ranges. Null, with the reason,
+ * when several lockfiles leave the package manager undetermined; null with no
+ * reason when there is nothing to install.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{installCommand: string | null, noCommandReason: string | null}}
+ */
+export function installCommandFor(packages, cwd) {
+  if (packages.length === 0) {
+    return {installCommand: null, noCommandReason: null};
+  }
+  const resolved = resolveInstallVerb(cwd);
+  const ranges = cliPackageRanges();
+  // A `*` range pins nothing, so the bare name says the same in fewer bytes.
+  const specs = packages.map(p =>
+    ranges[p] && ranges[p] !== '*' ? `${p}@"${ranges[p]}"` : p,
+  );
+  if (resolved.verb !== null) {
+    return {
+      installCommand: `${resolved.verb} ${specs.join(' ')}`,
+      noCommandReason: null,
+    };
+  }
+  const where = path.relative(cwd, resolved.dir) || '.';
+  return {
+    installCommand: null,
+    noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+  };
+}
+
+/**
+ * The install step to print for `packages` in the project at `cwd`: its
+ * package manager's command, or `npm install` with a note naming the folder
+ * whose lockfiles disagree when the package manager cannot be decided.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{line: string, note: string | null}}
+ */
+export function installStepFor(packages, cwd) {
+  const {installCommand} = installCommandFor(packages, cwd);
+  if (installCommand) return {line: installCommand, note: null};
+  const resolved = resolveInstallVerb(cwd);
+  const where =
+    resolved.verb === null ? path.relative(cwd, resolved.dir) || '.' : '.';
+  return {
+    line: `npm install ${packages.join(' ')}`,
+    note: `the lockfiles in ${where === '.' ? 'this folder' : where} disagree; use the package manager this project uses`,
+  };
+}
+
+/**
  * Analyze what a template source needs that the target project lacks.
  *
  * Returns a `notes` array of human-readable setup notes, a structured
@@ -266,21 +370,7 @@ export function analyzeTemplateNeeds(source, cwd) {
 
   const missing = external.filter(p => !(p in projectDeps));
 
-  // Build the install command with version ranges from the CLI workspace.
-  let installCommand = null;
-  /** @type {string | null} */
-  let noCommandReason = null;
-  if (missing.length > 0) {
-    const resolved = resolveInstallVerb(cwd);
-    const ranges = cliPackageRanges();
-    const specs = missing.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
-    if (resolved.verb !== null) {
-      installCommand = `${resolved.verb} ${specs.join(' ')}`;
-    } else {
-      const where = path.relative(cwd, resolved.dir) || '.';
-      noCommandReason = `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`;
-    }
-  }
+  const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);
