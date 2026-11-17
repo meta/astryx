@@ -10,7 +10,7 @@
  * SYNC: When Icon.tsx changes, update tests to match new behavior
  */
 
-import {createRef} from 'react';
+import {createRef, forwardRef, memo, type SVGProps} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
@@ -1143,6 +1143,30 @@ describe('Icon given its glyph as name', () => {
     } as unknown as Parameters<typeof Icon>[0];
     render(<Icon {...props} />);
     expect(screen.getByTestId('component').tagName.toLowerCase()).toBe('svg');
+    warn.mockRestore();
+  });
+
+  it('renders memo and forwardRef icon components given as name', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const [id, component] of [
+      ['memo', memo(TestIcon)],
+      [
+        'memo-forward-ref',
+        memo(
+          forwardRef<SVGSVGElement, SVGProps<SVGSVGElement>>((props, ref) => (
+            <TestIcon ref={ref} {...props} />
+          )),
+        ),
+      ],
+    ] as const) {
+      const props = {
+        name: component,
+        'data-testid': id,
+      } as unknown as Parameters<typeof Icon>[0];
+      render(<Icon {...props} />);
+      expect(screen.getByTestId(id).tagName.toLowerCase()).toBe('svg');
+    }
+    expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 

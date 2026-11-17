@@ -382,12 +382,7 @@ export function Icon({
 
 Icon.displayName = 'Icon';
 
-/**
- * The glyph and the remaining props. Other icon libraries name the glyph
- * prop `name`, so a call without `icon` reads a `name` that is a glyph
- * source (a key or an icon component), and that `name` does not reach the
- * DOM.
- */
+/** Other icon libraries call the glyph prop `name`. */
 function readGlyph<Rest extends object>(
   icon: IconProps['icon'] | undefined,
   rest: Rest,
@@ -399,12 +394,23 @@ function readGlyph<Rest extends object>(
   return {icon: name, props: props as Rest};
 }
 
+/** React's component types that are objects: forwardRef, memo and lazy. */
+const objectComponentTypes = new Set<symbol>([
+  Symbol.for('react.forward_ref'),
+  Symbol.for('react.memo'),
+  Symbol.for('react.lazy'),
+]);
+
 /** Whether a value can be a glyph: a key string or an icon component. */
 function isGlyphSource(value: unknown): boolean {
   return (
     (typeof value === 'string' && value !== '') ||
     typeof value === 'function' ||
-    (typeof value === 'object' && value !== null && 'render' in value)
+    (typeof value === 'object' &&
+      value !== null &&
+      objectComponentTypes.has(
+        (value as {$$typeof?: symbol}).$$typeof as symbol,
+      ))
   );
 }
 
