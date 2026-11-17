@@ -295,6 +295,27 @@ describe('the merged record', () => {
     });
   });
 
+  it('gives a test that reads what another test made the inputs of the test that made it', () => {
+    // The first worker builds a bundled theme into the run's shared folder;
+    // the rest link that build.
+    const tests = mergeLeg(
+      [
+        line('step:base-themes', {writes: ['/tmp/base-themes']}),
+        line('packages/cli/a.test.mjs', {
+          reads: ['/repo/packages/core/src/Card/Card.tsx'],
+          writes: ['/tmp/base-themes/neutral'],
+        }),
+        line('packages/cli/b.test.mjs', {
+          reads: ['/tmp/base-themes/neutral/theme.css'],
+        }),
+      ],
+      {root, tracked, ignored},
+    );
+    expect(tests['packages/cli/b.test.mjs'].folders).toEqual([
+      'packages/core/src/Card',
+    ]);
+  });
+
   it("never lets a test's own write to a checkout file hide that it read it", () => {
     const tests = mergeLeg(
       [

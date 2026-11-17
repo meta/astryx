@@ -1488,8 +1488,7 @@ are more than half of it, and most changes touch none of their inputs. Main's
 full unit run (FR21) records what each Node test file touches: each file it
 reads, each folder it lists or checks, each path it looks for and finds
 missing, each path it writes, and the same for the steps of the test setup.
-It keeps that record as an artifact, of the commit the run tested. A test that
-reads a setup step's output depends on what the step read. A test that reads a
+It keeps that record as an artifact, of the commit the run tested. A test that reads what a setup step or another test made depends on what that step or test read. A test that reads a
 package's build output depends on the whole package. A pull request's Node
 legs run a file-reading test only when a changed path sits in a folder whose
 files it read, anywhere under a folder it listed, or inside a package whose

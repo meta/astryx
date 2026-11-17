@@ -71,7 +71,6 @@ function underAny(target, paths) {
  */
 export function mergeLeg(lines, {root, tracked, ignored}) {
   const owners = byOwner(lines);
-  const steps = [...owners].filter(([owner]) => owner.startsWith('step:'));
   // A package's folder: the deepest one with a tracked package.json.
   const packageRoots = [...tracked]
     .filter(file => file.endsWith('/package.json'))
@@ -104,25 +103,44 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
   }
   const built = ignored([...untracked]);
 
-  // What each step made: a write to the checkout itself (a tracked file or
-  // folder) or to the installed dependencies makes nothing a test reads.
-  const producedBy = new Map(
-    steps.map(([name, entry]) => [
-      name,
-      new Set(
-        [...entry.writes].filter(target => {
-          const rel = relative(target);
-          return (
-            !inCheckout(rel) && !(rel ?? '').split('/').includes('node_modules')
-          );
-        }),
-      ),
-    ]),
+  // Who made each path a test may read: a setup step, or another test (a
+  // shared build the first worker makes for the rest). A write to the
+  // checkout itself (a tracked file or folder) or to the installed
+  // dependencies makes nothing a test reads. Where two owners wrote one path,
+  // a step wins, then the first owner by name, so every leg decides alike.
+  const madeBy = new Map();
+  const ranked = [...owners.keys()].sort(
+    (a, b) =>
+      Number(b.startsWith('step:')) - Number(a.startsWith('step:')) ||
+      a.localeCompare(b),
   );
+  for (const name of ranked) {
+    for (const target of owners.get(name).writes) {
+      const rel = relative(target);
+      if (inCheckout(rel) || (rel ?? '').split('/').includes('node_modules'))
+        continue;
+      if (!madeBy.has(target)) madeBy.set(target, name);
+    }
+  }
+  // The nearest maker of `target` or a folder above it, other than `owner`
+  // and the owners whose inputs are being read. Passing over one of those
+  // (two owners that read what the other made) leaves `owner`'s inputs
+  // incomplete, so `cut` notes it and they are not kept for reuse.
+  const makerOf = (target, owner, visiting, cut) => {
+    for (let at = target; ; at = path.dirname(at)) {
+      const name = madeBy.get(at);
+      if (name != null && name !== owner) {
+        if (!visiting.has(name)) return name;
+        cut.value = true;
+      }
+      if (path.dirname(at) === at) return null;
+    }
+  };
   const memo = new Map();
-  const inputsOf = (owner, entry, visiting = new Set()) => {
+  const inputsOf = (owner, entry, visiting = new Set(), outer = null) => {
     if (memo.has(owner)) return memo.get(owner);
     visiting.add(owner);
+    const cut = {value: false};
     const folders = new Set();
     const listedFolders = new Set();
     const checked = new Set();
@@ -139,16 +157,9 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
       const pkg = rel != null && built.has(rel) ? packageOf(rel) : null;
       const made = !inCheckout(rel);
       if (made && underAny(target, entry.writes)) return;
-      const step = !made
-        ? null
-        : steps.find(
-            ([name]) =>
-              name !== owner &&
-              !visiting.has(name) &&
-              underAny(target, producedBy.get(name)),
-          );
-      if (step != null) {
-        const from = inputsOf(step[0], step[1], visiting);
+      const maker = made ? makerOf(target, owner, visiting, cut) : null;
+      if (maker != null) {
+        const from = inputsOf(maker, owners.get(maker), visiting, cut);
         for (const value of from.folders) folders.add(value);
         for (const value of from.listed) listedFolders.add(value);
         for (const value of from.checked) checked.add(value);
@@ -194,7 +205,11 @@ export function mergeLeg(lines, {root, tracked, ignored}) {
       trees: [...trees].sort(),
       unseen: [...unseen].sort(),
     };
-    memo.set(owner, result);
+    // An owner first read on its own is complete: every owner its reads
+    // reach was read in the same chain. One read inside a chain that passed
+    // over an owner of that chain is not, so it is read again later.
+    if (cut.value && outer != null) outer.value = true;
+    if (!cut.value || visiting.size === 0) memo.set(owner, result);
     return result;
   };
 
