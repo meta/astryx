@@ -34,8 +34,6 @@ const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 const lightDark = (light: string, dark: string): string =>
   `light-dark(${light}, ${dark})`;
 
-// The theme's own text and link colours, which a part that paints a fill
-// of its own sets again (OWN_FILL_RULES).
 /**
  * Secondary text on the accent tint (a selected row, a dropzone's hint, a
  * numbered citation): the nearest stop that reads on the tint over the page,
@@ -43,15 +41,20 @@ const lightDark = (light: string, dark: string): string =>
  * numbered citation take a dark stop like the rest of the card's ink.
  */
 const LIFTED_ON_PAGE = lightDark(neutral.light[40], neutral.dark[85]);
-const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[40]);
+const LIFTED_ON_COLOURED_CARD = lightDark(neutral.light[30], neutral.dark[45]);
 
+// The theme's own text and link colours, which a part that paints a fill
+// of its own sets again (OWN_FILL_RULES).
 const SURFACE_TEXT = {
   '--color-text-primary': lightDark(neutral.light[15], neutral.dark[90]),
   '--color-text-secondary': lightDark(neutral.light[45], neutral.dark[70]),
   '--color-text-accent': lightDark(accent.light[40], yellow.dark[90]),
 };
 
-/** Core's selector for a striped table's painted rows. */
+/**
+ * The selector Core's TableRow gives a striped table's painted rows (its
+ * even rows, not counting expansion panels); the striped-row rule repeats it.
+ */
 const STRIPED_ROW = ':nth-child(even of :not([data-expansion-panel]))';
 
 /**
