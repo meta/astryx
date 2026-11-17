@@ -1885,13 +1885,15 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
-      # join still runs: it requires the release bump's own validation.
+      # join still runs: it requires the release bump's own validation. So
+      # does a change only to the recorded Node test times: the Node leg
+      # plan's check, which fails test-node, is the check that gates it.
       - uses: actions/checkout@v7
         timeout-minutes: 8
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
 
       - name: Require expected test-owner outcomes
-        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
+        if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true' || steps.scope.outputs.times_only == 'true'
         env:
           RELEASE_BUMP: ${{ steps.scope.outputs.release_bump }}
           RELEASE_BUMP_RESULT: ${{ needs.release-bump.result }}

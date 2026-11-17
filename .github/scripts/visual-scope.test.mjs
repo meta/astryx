@@ -118,6 +118,20 @@ describe('classifyVisualScope', () => {
     ]);
   });
 
+  it('keeps the visual plan broad for the recorded Node test times beside a component, as test configuration', () => {
+    const result = classifyVisualScope(
+      [
+        'packages/core/src/Button/Button.tsx',
+        'scripts/vitest-node-durations.json',
+      ],
+      root,
+    );
+    expect(result).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: true,
+    });
+  });
+
   it('marks shared Core infrastructure as broad stable scope', () => {
     const result = classifyVisualScope(
       ['packages/core/src/theme/Theme.tsx'],

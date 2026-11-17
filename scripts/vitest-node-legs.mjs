@@ -217,6 +217,38 @@ export function overBudgetNotice(plan, {main = false} = {}) {
   };
 }
 
+/**
+ * Why a recorded-times file cannot be used, or null: it must parse, and its
+ * `seconds` must map each file to a finite, non-negative number. A plan read
+ * from an unusable record would plan every file as unrecorded and still fit.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function recordProblem(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return `${path.relative(ROOT, file)} cannot be read (${error.message})`;
+  }
+  const seconds = parsed?.seconds;
+  if (seconds == null || typeof seconds !== 'object' || Array.isArray(seconds))
+    return `${path.relative(ROOT, file)} has no map of seconds per file`;
+  const bad = Object.entries(seconds).find(
+    ([, value]) =>
+      typeof value !== 'number' || !Number.isFinite(value) || value < 0,
+  );
+  return bad
+    ? `${path.relative(ROOT, file)} records ${JSON.stringify(bad[1])} seconds for ${bad[0]}`
+    : null;
+}
+
+/** The recorded-times files: the Node legs' and the minimum Node's. */
+export const RECORDS = [
+  DURATIONS,
+  path.join(ROOT, 'scripts/vitest-node-durations.min-node.json'),
+];
+
 /** Recorded seconds per Node test file, or none when the record cannot be read. */
 export function readDurations(file = DURATIONS) {
   try {
@@ -285,9 +317,20 @@ if (
   const main = argv.includes('--main');
   const files = nodeLegFiles(ROOT, {swizzleProofOwnJob: !main});
   const seconds = readDurations();
-  const plan = main
+  const planned = main
     ? planMainNodeLegs(files, seconds)
     : planNodeLegs(files, seconds);
+  // A record that cannot be used fails the plan, as one past its budget
+  // does: a change only to the recorded times runs only this check and the
+  // tests that read them.
+  const problem = RECORDS.map(recordProblem).find(Boolean);
+  const plan = problem
+    ? {
+        ...planned,
+        fits: false,
+        reason: `The recorded Node test times cannot be used: ${problem}.`,
+      }
+    : planned;
   const outputs = stepOutputs(plan, at === -1 ? {} : JSON.parse(argv[at + 1]));
   const unrecorded = files.filter(file => !Object.hasOwn(seconds, file));
   console.log(
