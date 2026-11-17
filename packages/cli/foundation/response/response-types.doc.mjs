@@ -401,7 +401,7 @@ export const doc = {
     {
       value: 'theme.app',
       description:
-        'The app theme record after add, remove, or use. It includes every added theme and its built imports, the default slug, generated module path, and the command change. After add, the envelope package names the npm package that owns the added theme; a local theme has none.',
+        'The app theme record after add, remove, or use. It includes every added theme and its built imports, the default slug, generated module path, and the command change (with notImported when no source file of the app imports the module, so the default it records is not what the app shows yet). After add, the envelope package names the npm package that owns the added theme; a local theme has none.',
     },
     {
       value: 'theme.eject',

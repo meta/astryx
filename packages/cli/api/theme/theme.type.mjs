@@ -122,6 +122,9 @@
  * `change.wireModes` is present when the module lists a theme's one color
  * mode (`themeModes`) for the first time after the app was wired: the app's
  * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
+ * `change.notImported` is present on an add after the first, or a use, when
+ * no source file of the app imports the module at `modulePath`: the default
+ * it records is not what the app shows until the app root is wired.
  * `change.moduleRemoved` is present when `theme remove` removed the only
  * added theme and deleted the module at `modulePath`: `themes` is empty,
  * `default` is `''`, and the app root must drop the module's wiring.
@@ -143,7 +146,7 @@
  * how its wiring changes, with `line` the provider's opening JSX (passing
  * the mode when it takes one and an added theme has one color mode). No
  * receipt reads app source.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true, notImported?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 
 /**

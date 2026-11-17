@@ -64,6 +64,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
+import {projectImportsModule} from '../../foundation/fs/project-sources.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -1213,6 +1214,13 @@ async function writeThemeApp(
         slug,
         changed,
         firstAdd: action === 'add' && !state.configured,
+        // A default the app does not show: no source of the app imports the
+        // module yet (the first add prints the wiring anyway).
+        ...(action !== 'remove' &&
+        !(action === 'add' && !state.configured) &&
+        !projectImportsModule(state.projectDir, prepared.module.file).found
+          ? {notImported: true}
+          : {}),
         // The module lists one-mode themes' modes for the first time, after
         // the app was wired without them: the wiring takes the mode now.
         ...(state.configured &&

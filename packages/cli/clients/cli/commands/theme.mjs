@@ -840,6 +840,7 @@ function printThemeApp(result) {
           ...(change.wireModes ? {wireModes: true} : {}),
           ...(change.moduleRemoved ? {moduleRemoved: true} : {}),
           ...(change.themeModes ? {themeModes: true} : {}),
+          ...(change.notImported ? {notImported: true} : {}),
         },
       ],
       {
@@ -853,6 +854,7 @@ function printThemeApp(result) {
           'wireModes',
           'moduleRemoved',
           'themeModes',
+          'notImported',
         ],
         layout: 'stacked',
       },
@@ -892,6 +894,29 @@ function printThemeApp(result) {
         "import {Theme} from '@astryxdesign/core/theme';\n" +
           `import {themes, defaultThemeSlug${change.themeModes ? ', themeModes' : ''}} from './${stem}';\n\n` +
           `<Theme theme={themes[defaultThemeSlug]}${change.themeModes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
+      ),
+    );
+    return;
+  }
+  // A provider's wiring, or the themeModes step for a wired app, says how
+  // the app takes the theme instead.
+  if (
+    !change.firstAdd &&
+    change.notImported &&
+    !change.wireModes &&
+    !appProvider
+  ) {
+    // No source of the app imports the module: the default this command
+    // records is not what the app shows until it is wired.
+    const modes = result.data.themes.some(t => t.mode);
+    emit(
+      text(
+        `The app does not import ${modulePath} yet, so it does not show ${result.data.default}. Wire the generated module once in the app root:`,
+      ),
+      code(
+        "import {Theme} from '@astryxdesign/core/theme';\n" +
+          `import {themes, defaultThemeSlug${modes ? ', themeModes' : ''}} from './${stem}';\n\n` +
+          `<Theme theme={themes[defaultThemeSlug]}${modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
       ),
     );
     return;

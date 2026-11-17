@@ -28,6 +28,8 @@ import {
   isLocalThemeOwner,
   listDoctorThemePackages,
   listProjectSourceFiles,
+  projectImportsModule,
+  specifierTargets,
   planThemeAppWrite,
   readPackageJson,
   readTextFile,
@@ -36,7 +38,6 @@ import {
   resolveDoctorThemeImports,
   resolveRecordedTheme,
   resolveThemeModule,
-  SOURCE_EXTENSIONS,
   doctorStylesheetImportFile,
   fileMark,
   generatedSourceCommand,
@@ -243,42 +244,6 @@ export function moduleSpecifiers(source, options = {}) {
     }
   });
   return values;
-}
-
-/** @param {string} specifier @param {string} fromFile @param {string} target */
-function specifierTargets(specifier, fromFile, target) {
-  if (!specifier.startsWith('.')) return false;
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [
-    base,
-    ...[...SOURCE_EXTENSIONS].map(extension => `${base}${extension}`),
-    ...[...SOURCE_EXTENSIONS].map(extension =>
-      path.join(base, `index${extension}`),
-    ),
-  ];
-  return candidates.some(
-    candidate => path.resolve(candidate) === path.resolve(target),
-  );
-}
-
-/** @param {string} root @param {string} generatedModule */
-function sourceImportEvidence(root, generatedModule) {
-  let parseFailures = 0;
-  for (const file of listProjectSourceFiles(root, generatedModule)) {
-    try {
-      const source = readTextFile(file);
-      if (
-        [...moduleSpecifiers(source)].some(specifier =>
-          specifierTargets(specifier, file, generatedModule),
-        )
-      ) {
-        return {found: true, parseFailures};
-      }
-    } catch {
-      parseFailures += 1;
-    }
-  }
-  return {found: false, parseFailures};
 }
 
 /**
@@ -1569,7 +1534,7 @@ export async function checkAppThemes(cwd) {
     });
   }
 
-  const importEvidence = sourceImportEvidence(
+  const importEvidence = projectImportsModule(
     state.projectDir,
     state.module.file,
   );
