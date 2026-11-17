@@ -4,8 +4,7 @@
  * @file no-core-internal-import.js
  * @description Reports imports of Core's internal subpaths and of its
  * internal, gesture, motion and touch-support source. The repo config turns it on for
- * every linted file outside packages/core, packages/lab and
- * packages/richtext (the global
+ * every linted file outside packages/core and packages/lab (the global
  * ignores still leave some scripts unlinted), so only Core and Lab may import
  * them.
  *
@@ -39,12 +38,12 @@ const rule = {
     type: 'problem',
     docs: {
       description:
-        "Disallow importing Core's internal subpaths (@astryxdesign/core/internal/*) outside Core, Lab and RichText",
+        "Disallow importing Core's internal subpaths (@astryxdesign/core/internal/*) outside Core and Lab",
     },
     schema: [],
     messages: {
       internal:
-        "'{{source}}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core, Lab and RichText) and outside the compatibility promise. Use Core's public API instead.",
+        "'{{source}}' is one of Core's internal subpaths, reserved for Astryx's own packages (Core and Lab) and outside the compatibility promise. Use Core's public API instead.",
       deep: "'{{source}}' reaches into Core's internal, gesture, motion or touch-support source, which is for Core and Lab only (architecture:react-component-runtime INV13). Use Core's public API instead.",
     },
   },

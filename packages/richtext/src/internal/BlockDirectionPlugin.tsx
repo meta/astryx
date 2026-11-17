@@ -5,7 +5,7 @@
 /**
  * @file BlockDirectionPlugin.tsx
  * @input Uses @lexical/react (composer context) and the prose container
- *   classes, and classifies text with core's `firstStrongDirection`.
+ *   classes, and classifies text with `firstStrongDirection`.
  * @output Exports BlockDirectionPlugin, which gives each prose container an
  *   explicit `dir` taken from its own text, and registerBlockDirection for
  *   a caller driving a Lexical editor directly.
@@ -16,7 +16,7 @@
  */
 
 import {useEffect} from 'react';
-import {firstStrongDirection} from '@astryxdesign/core/internal/first-strong-direction';
+import {firstStrongDirection} from './firstStrongDirection';
 import {useDirection} from '@astryxdesign/core/i18n';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {DOCUMENT_DIRECTION_VAR} from '../editorTheme';
@@ -85,11 +85,11 @@ const CONTAINER_NODES: ReadonlyArray<Klass<ElementNode>> = [
 /**
  * Whether this node is a prose container that carries its own `dir`.
  *
- * A list item holding a nested list takes one too, from the text of
- * everything under it. The nesting step is an inline margin on the item, so
- * it resolves against that item's own direction: left at `auto` it puts the
- * step on the document's side while the items inside start on theirs, and
- * every level of an English list in a right-to-left document then begins at
+ * A list item holding a nested list takes one too, from the item it hangs
+ * from. The nesting step is an inline margin on the item, so it resolves
+ * against that item's own direction: left unwritten it puts the step on the
+ * document's side while the items inside start on theirs, and every level of
+ * an English list in a right-to-left document then begins at
  * the same edge, with only the marker shape showing the depth.
  */
 function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
@@ -194,8 +194,8 @@ function $writeOwnDirection(node: LexicalNode): void {
 /**
  * Every prose container at or above this node, nearest first.
  *
- * A nesting wrapper takes its direction from the text under it, so a
- * keystroke deep in a list changes its own item and every wrapper above it.
+ * A keystroke deep in a list changes its own item, and a wrapper above it
+ * follows the item it hangs from, so both are written here.
  * All of them have to be written inside the keystroke's own update: the
  * sweep that follows is tagged `history-merge`, which `OnChangePlugin`
  * does not report, so a wrapper left to the sweep would hold a stale

@@ -8,6 +8,11 @@
  * @position Shared classifier for components that give a block of prose the
  *   direction of its own text (Markdown blocks). Server-safe: it reads no
  *   context.
+ *
+ * SYNC: packages/richtext/src/internal/firstStrongDirection.ts holds a copy
+ * for the RichText surfaces, which cannot import Core's internal entry
+ * points. The two have to answer alike, so a change to either set belongs in
+ * both files and in both test files.
  */
 
 // Each expression with a Unicode property escape is built at runtime: a
@@ -22,10 +27,11 @@
  *
  * JavaScript has no `\p{Bidi_Class=...}` escape, so these sets approximate
  * that property from script and category, and name the characters where the
- * two disagree. Four `AL` characters have script `Common`: the semicolon,
- * the letter mark, the question mark, and tatweel. Tatweel is also a
+ * two disagree. Three `AL` characters have script `Common` and are written
+ * out here: the semicolon, the question mark, and tatweel. Tatweel is also a
  * modifier letter, so without it the scan reads an Arabic word that starts
- * with one as left-to-right.
+ * with one as left-to-right. The Arabic letter mark is beside them for the
+ * same reason.
  */
 const STRONG_RTL = new RegExp(
   String.raw`[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u061B\u061C\u061F\u0640\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]`,

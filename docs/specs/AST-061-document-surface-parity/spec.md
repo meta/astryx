@@ -24,6 +24,7 @@ affects_consumer_docs: [Markdown, RichTextEditor, RichTextView]
 {
   "paths": [
     "packages/core/src/i18n/firstStrongDirection.ts",
+    "packages/richtext/src/internal/firstStrongDirection.ts",
     "packages/core/src/Markdown/blockDirection.ts",
     "packages/richtext/src/internal/BlockDirectionPlugin.tsx",
     "packages/richtext/src/internal/BlockDirectionPlugin.test.tsx",
@@ -184,9 +185,11 @@ clause, for its own output, except where FR7 names
 a link title and FR7 names character references. `RichTextEditor` and
 `RichTextView` are governed by FR2–FR11 for the
 constructs they render; their default editor theme follows FR2 and FR3.
-Each surface reads a block's direction with the same classifier,
-`firstStrongDirection` in `@astryxdesign/core/i18n`, so one answer covers
-both and the sets that approximate Bidi_Class live in one place.
+Each surface reads a block's direction with a first-strong classifier that
+approximates Bidi_Class from script and category. `Markdown` uses the one in
+`packages/core/src/i18n`; the RichText surfaces keep their own copy, because
+Core's internal entry points are reserved for Core and Lab, and each copy
+carries a SYNC comment naming the other so a correction reaches both.
 
 The surfaces apply that answer differently, because their documents are
 different things. `Markdown` renders from an abstract syntax tree it owns
