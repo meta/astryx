@@ -13,39 +13,12 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TestIcon} from '../__tests__/TestIcon';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InternationalizationProvider} from '../i18n';
 import {FieldLabel} from './FieldLabel';
 import {Switch} from '../Switch/Switch';
 import {themeProps} from '../utils/themeProps';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
-
-/**
- * The CSS declarations StyleX injected for an element's own classes. StyleX
- * runs with runtime injection under vitest, so the rules are in
- * `document.styleSheets`.
- */
-function declarationsOf(el: Element): string[] {
-  const classes = new Set(el.className.split(/\s+/).filter(Boolean));
-  const declarations: string[] = [];
-  for (const sheet of Array.from(document.styleSheets)) {
-    for (const rule of Array.from(sheet.cssRules)) {
-      const text = rule.cssText;
-      const brace = text.indexOf('{');
-      const selector = text.slice(0, brace).replaceAll(':not(#\\#)', '').trim();
-      const match = /^\.([\w-]+)$/.exec(selector);
-      if (brace === -1 || !match || !classes.has(match[1])) {
-        continue;
-      }
-      declarations.push(
-        text
-          .slice(brace + 1, text.lastIndexOf('}'))
-          .trim()
-          .replace(/;$/, ''),
-      );
-    }
-  }
-  return declarations;
-}
 
 describe('FieldLabel', () => {
   it('sets the label in the semibold weight', () => {
@@ -53,8 +26,8 @@ describe('FieldLabel', () => {
     render(<FieldLabel label="Email" inputID="email-input" />);
     const label = screen.getByText('Email').closest('label');
     expect(label).not.toBeNull();
-    expect(declarationsOf(label as Element)).toContain(
-      'font-weight: var(--font-weight-semibold)',
+    expect(declaredValue(label as Element, 'font-weight')).toBe(
+      'var(--font-weight-semibold)',
     );
   });
 
