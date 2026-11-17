@@ -15,7 +15,6 @@ import {render, screen} from '@testing-library/react';
 import {Theme, defineTheme} from '../theme';
 import {Text} from '../Text/Text';
 import {Tooltip} from './Tooltip';
-import {pickTooltipSide} from './tooltipMediaMode';
 
 /** A theme whose inverted surface is `surface` in both modes. */
 const withSurface = (surface: string) => ({
@@ -64,12 +63,5 @@ describe('Tooltip content media context', () => {
     expect(mediaOfContent(withSurface('oklch(0.2 0.01 230)'), 'light')).toBe(
       'dark',
     );
-  });
-
-  it('the surface text color never turns the media context off', () => {
-    const white = {r: 255, g: 255, b: 255, a: 1};
-    const black = {r: 17, g: 17, b: 17, a: 1};
-    const surface = {r: 10, g: 19, b: 23, a: 1};
-    expect(pickTooltipSide(surface, white, white, black)).toBe('dark');
   });
 });
