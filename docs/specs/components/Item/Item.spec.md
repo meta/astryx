@@ -148,7 +148,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Omitted `align`                              | Identical to today's `center`.                                        | None.                                 |
 | Delegated row, keyboard focus on a Button    | One ring, on the Button; the row shows none.                          | Theme focus tokens.                   |
 | Delegated row, focus on a hidden control     | One ring, on the row.                                                 | Theme focus tokens.                   |
-| Disabled delegated row, focus on its Button  | The row's ring at full strength.                                      | Theme focus tokens.                   |
+| Disabled delegated row, focus on its Button  | Row ring at full strength, around the Button's own dimmed ring.       | Theme focus tokens.                   |
 
 ### Transformation and precedence order
 
