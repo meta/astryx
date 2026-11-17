@@ -214,10 +214,13 @@ function providerConflict(integration, claimant) {
   const reason = claimant.__local
     ? 'is the package being authored, so it is used'
     : 'loads first and is used';
-  const advice =
-    declaresProviderId(integration) && declaresProviderId(claimant)
-      ? `. Both manifests declare it, so they are one integration installed under two names: keep one of the two dependencies.`
-      : ' until one package changes its providerId.';
+  const bothDeclare =
+    declaresProviderId(integration) && declaresProviderId(claimant);
+  const advice = bothDeclare
+    ? '. Both manifests declare this provider ID. If they are one integration ' +
+      'installed under two names, keep one of the two dependencies; ' +
+      'otherwise one package must change its providerId.'
+    : ' until one package changes its providerId.';
   return {
     name: integration.name,
     providerId,
@@ -235,6 +238,7 @@ function providerConflict(integration, claimant) {
       message:
         `${setAside} and ${winner} both claim provider ID "${providerId}". ` +
         `${winner} ${reason}; ${setAside} contributes nothing${advice}`,
+      ...(bothDeclare ? {bothDeclare: true} : {}),
     },
   };
 }

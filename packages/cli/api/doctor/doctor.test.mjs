@@ -535,7 +535,44 @@ describe('checkProviderIdentity', () => {
     });
     expect(c.status).toBe('warn');
     expect(c.message).toBe(message);
-    expect(c.fix).toContain('providerId');
+    expect(c.fix).toBe(
+      'Give each integration its own `providerId` in astryx.integration.*. ' +
+        "A renamed package may keep its predecessor's ID only when the " +
+        'predecessor is no longer installed.',
+    );
+  });
+
+  it('offers keeping one dependency when both manifests declare the ID', () => {
+    const message =
+      '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim ' +
+      'provider ID "@acme/widgets". @acme/widgets@1.0.0 loads first and is ' +
+      'used; @acme/widgets-legacy@1.0.0 contributes nothing. Both manifests ' +
+      'declare this provider ID. If they are one integration installed ' +
+      'under two names, keep one of the two dependencies; otherwise one ' +
+      'package must change its providerId.';
+    const c = checkProviderIdentity({
+      integrations: [
+        loaded(),
+        loaded({
+          name: '@acme/widgets-legacy',
+          __spec: '@acme/widgets-legacy',
+          __providerConflict: {
+            providerId: '@acme/widgets',
+            claimedBy: '@acme/widgets',
+            message,
+            bothDeclare: true,
+          },
+        }),
+      ],
+    });
+    expect(c.status).toBe('warn');
+    expect(c.message).toBe(message);
+    expect(c.fix).toBe(
+      'Both manifests declare the same `providerId`. If they are one ' +
+        'integration installed under two names, keep one of the two ' +
+        'dependencies; if they are different integrations, give each its ' +
+        'own `providerId` in astryx.integration.*.',
+    );
   });
 
   it('is part of the report doctor returns', async () => {

@@ -20,9 +20,7 @@ import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(
-    path.join(REPO_ROOT, '.astryx-provider-resolution-'),
-  );
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-provider-resolution-'));
 });
 
 afterEach(() => {
@@ -317,14 +315,14 @@ describe('the message for a package set aside', () => {
   const messageOf = (first, second) =>
     markProviderConflicts([first, second])[1].__providerConflict.message;
 
-  it('says to keep one dependency when both manifests declare the ID', () => {
+  it('offers keeping one dependency when both manifests declare the ID', () => {
     expect(
       messageOf(pkg('@acme/widgets', true), pkg('@acme/widgets-legacy', true)),
     ).toBe(
       '@acme/widgets-legacy@1.0.0 and @acme/widgets@1.0.0 both claim provider ID "@acme/widgets". ' +
         '@acme/widgets@1.0.0 loads first and is used; @acme/widgets-legacy@1.0.0 contributes nothing. ' +
-        'Both manifests declare it, so they are one integration installed under two names: ' +
-        'keep one of the two dependencies.',
+        'Both manifests declare this provider ID. If they are one integration installed under two names, ' +
+        'keep one of the two dependencies; otherwise one package must change its providerId.',
     );
   });
 

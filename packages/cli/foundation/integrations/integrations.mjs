@@ -83,10 +83,11 @@ import {unknownCapabilityKeys} from '../bases/steps.mjs';
  * @property {string} __manifestFile
  * @property {string} [__loadError] set when the manifest failed to load/validate;
  *   such an integration contributes nothing and is surfaced via Project.issues()
- * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string}} [__providerConflict]
+ * @property {{providerId: import('../../authoring/identity/type').ProviderId, claimedBy: string, message: string, bothDeclare?: true}} [__providerConflict]
  *   set on a package whose provider ID an earlier-loaded package already
  *   claims; it contributes nothing and is reported as a `duplicate_provider`
- *   warning
+ *   warning. `bothDeclare` marks a conflict where both manifests write the
+ *   provider ID themselves
  * @property {string[]} [__declaredKeys] the keys the manifest object itself
  *   declares, before any is filled in (providerId from the package name)
  * @property {string[]} [__unknownKeys] manifest keys this CLI does not know —

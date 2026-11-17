@@ -1413,10 +1413,16 @@ export function checkProviderIdentity(ctx) {
       message: conflicts
         .map(integration => integration.__providerConflict?.message)
         .join(' '),
-      fix:
-        'Give each integration its own `providerId` in astryx.integration.*. ' +
-        "A renamed package may keep its predecessor's ID only when the " +
-        'predecessor is no longer installed.',
+      fix: conflicts.every(
+        integration => integration.__providerConflict?.bothDeclare,
+      )
+        ? 'Both manifests declare the same `providerId`. If they are one ' +
+          'integration installed under two names, keep one of the two ' +
+          'dependencies; if they are different integrations, give each its ' +
+          'own `providerId` in astryx.integration.*.'
+        : 'Give each integration its own `providerId` in astryx.integration.*. ' +
+          "A renamed package may keep its predecessor's ID only when the " +
+          'predecessor is no longer installed.',
     };
   }
 
