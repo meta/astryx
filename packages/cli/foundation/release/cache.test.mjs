@@ -157,6 +157,33 @@ describe('ensureRelease', () => {
     }
   });
 
+  it('remembers a failed install for its registry only, and names that registry', () => {
+    const cacheDir = tempDir('cache');
+    let registry = 'http://127.0.0.1:9/';
+    const offline = fakeNpm({outcome: 'offline'});
+    const online = fakeNpm();
+    /** @type {string[][]} */
+    const installs = [];
+    /** @type {import('./cache.mjs').runNpm} */
+    const run = (args, opts = {}) => {
+      if (args[0] === 'config') return {status: 0, stdout: `${registry}\n`, stderr: ''};
+      installs.push(args);
+      return (registry.startsWith('http://127.0.0.1') ? offline : online).run(args, opts);
+    };
+    const first = ensureRelease('0.6.8', {cacheDir, run});
+    expect('reason' in first && first.reason).toBe('the registry http://127.0.0.1:9/ could not be reached');
+    const again = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(1);
+    expect('reason' in again && again.reason).toMatch(
+      /^the registry http:\/\/127\.0\.0\.1:9\/ could not be reached; last tried 1 minute ago\. It is tried again after 2 minutes, or at once when npm's registry changes$/,
+    );
+    registry = 'https://registry.npmjs.org/';
+    const fixed = ensureRelease('0.6.8', {cacheDir, run});
+    expect(installs).toHaveLength(2);
+    expect('coreDir' in fixed && fixed.coreDir).toBeTruthy();
+    expect(fs.existsSync(path.join(releasesDir(cacheDir), '.failed-0.6.8.json'))).toBe(false);
+  });
+
   it("refuses a release this computer's Node cannot run", () => {
     const cacheDir = tempDir('cache');
     const result = ensureRelease('0.9.0', {

@@ -544,6 +544,24 @@ export function failedInstallWaitMs(failures) {
 }
 
 /**
+ * The registry npm installs releases from, as npm reads it in the folder
+ * releases install in; null when npm cannot say. A failed install is
+ * remembered for this registry only, so a run after the registry changes
+ * installs at once.
+ * @param {typeof runNpm} run
+ * @returns {string | null}
+ */
+function npmRegistry(run) {
+  try {
+    const result = run(['config', 'get', 'registry'], {timeoutMs: 15_000});
+    const url = result.status === 0 ? String(result.stdout ?? '').trim() : '';
+    return /^https?:\/\/\S+$/.test(url) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The record of a failed install of `version`: a file in the release cache,
  * shared by every copy of the CLI that uses this cache.
  * @param {string} version
@@ -560,7 +578,7 @@ function failedRecordPath(version, cacheDir) {
  * @param {string} version
  * @param {string} cacheDir
  * @param {number} [now]
- * @returns {{at: number, reason: string, failures: number, waitMs: number} | null}
+ * @returns {{at: number, reason: string, failures: number, registry: string | null, waitMs: number} | null}
  */
 export function recentFailedInstall(version, cacheDir, now = Date.now()) {
   const record = readFailedInstall(version, cacheDir);
@@ -574,7 +592,7 @@ export function recentFailedInstall(version, cacheDir, now = Date.now()) {
  * The record of failed installs of `version`, whatever its age, or null.
  * @param {string} version
  * @param {string} cacheDir
- * @returns {{at: number, reason: string, failures: number} | null}
+ * @returns {{at: number, reason: string, failures: number, registry: string | null} | null}
  */
 function readFailedInstall(version, cacheDir) {
   const record = readJson(failedRecordPath(version, cacheDir));
@@ -589,7 +607,8 @@ function readFailedInstall(version, cacheDir) {
     Number.isInteger(record.failures) && record.failures > 0
       ? record.failures
       : 1;
-  return {at: record.at, reason: record.reason, failures};
+  const registry = typeof record.registry === 'string' ? record.registry : null;
+  return {at: record.at, reason: record.reason, failures, registry};
 }
 
 /**
@@ -597,8 +616,9 @@ function readFailedInstall(version, cacheDir) {
  * @param {string} version
  * @param {string} cacheDir
  * @param {string | null} reason null forgets it
+ * @param {string | null} [registry] the registry the install failed with
  */
-function recordFailedInstall(version, cacheDir, reason) {
+function recordFailedInstall(version, cacheDir, reason, registry = null) {
   const file = failedRecordPath(version, cacheDir);
   try {
     if (reason === null) {
@@ -606,11 +626,12 @@ function recordFailedInstall(version, cacheDir, reason) {
       return;
     }
     fs.mkdirSync(path.dirname(file), {recursive: true});
-    const failures = (readFailedInstall(version, cacheDir)?.failures ?? 0) + 1;
+    const last = readFailedInstall(version, cacheDir);
+    const failures = (last && last.registry === registry ? last.failures : 0) + 1;
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(
       tmp,
-      `${JSON.stringify({at: Date.now(), reason, failures})}\n`,
+      `${JSON.stringify({at: Date.now(), reason, failures, ...(registry ? {registry} : {})})}\n`,
     );
     fs.renameSync(tmp, file);
   } catch {
@@ -1013,6 +1034,7 @@ function removeAside(dir) {
  * @property {string} version
  * @property {string} reason one plain sentence
  * @property {NodeJS.Signals} [signal] the install was stopped by this signal
+ * @property {string | null} [registry] the registry npm failed to install from
  */
 
 /**
@@ -1047,12 +1069,15 @@ export function ensureRelease(version, options = {}) {
   }
   // A recent failed install is not retried: offline, every run would start
   // npm again and wait for it (FR2).
+  // It is retried at once when npm's registry changed since: the caller
+  // fixed what failed.
   const failed = recentFailedInstall(version, cacheDir);
-  if (failed) {
+  const registry = failed ? npmRegistry(run) : null;
+  if (failed && !(failed.registry && registry && failed.registry !== registry)) {
     const minutes = Math.max(1, Math.round((Date.now() - failed.at) / 60_000));
     return {
       version,
-      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago, tried again after ${failed.waitMs / 60_000} minutes`,
+      reason: `${failed.reason}; last tried ${minutes} minute${minutes === 1 ? '' : 's'} ago. It is tried again after ${failed.waitMs / 60_000} minutes, or at once when npm's registry changes`,
     };
   }
   try {
@@ -1073,7 +1098,7 @@ export function ensureRelease(version, options = {}) {
       !('signal' in result && result.signal) &&
       result.reason !== 'another run is still installing it'
     ) {
-      recordFailedInstall(version, cacheDir, result.reason);
+      recordFailedInstall(version, cacheDir, result.reason, ('registry' in result ? result.registry : null) ?? registry);
     }
     return result;
   } catch (error) {
@@ -1223,7 +1248,8 @@ function installLocked(version, {cacheDir, run, nodeVersion}) {
       return {version, reason: 'the install was stopped', signal: stoppedBy};
     }
     if (install.status !== 0) {
-      return {version, reason: npmFailure(install)};
+      const registry = npmRegistry(run);
+      return {version, reason: npmFailure(install, registry), registry};
     }
     const cliDir = path.join(tmp, 'node_modules', '@astryxdesign', 'cli');
     const cliPkg = readJson(path.join(cliDir, 'package.json'));
@@ -1290,24 +1316,25 @@ function installLocked(version, {cacheDir, run, nodeVersion}) {
 }
 
 /**
- * One sentence on why npm failed.
+ * One sentence on why npm failed, naming the registry when npm said it.
  * @param {NpmResult} result
+ * @param {string | null} [registry]
  * @returns {string}
  */
-function npmFailure(result) {
+function npmFailure(result, registry = null) {
   if (result.error && /** @type {any} */ (result.error).code === 'ENOENT') {
     return 'npm, which installs releases, was not found';
   }
   const text = `${result.stderr}\n${result.stdout}`;
   if (/E404|404 Not Found|No matching version|ETARGET/i.test(text)) {
-    return 'the registry does not have it';
+    return registry ? `the registry ${registry} does not have it` : 'the registry does not have it';
   }
   if (
     /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|offline|network/i.test(
       text,
     )
   ) {
-    return 'the registry could not be reached';
+    return registry ? `the registry ${registry} could not be reached` : 'the registry could not be reached';
   }
   return 'the package manager could not install it';
 }

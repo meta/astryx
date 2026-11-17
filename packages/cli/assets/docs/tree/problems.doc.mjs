@@ -113,7 +113,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            "The registry could not be reached: you are offline, or a proxy blocks it. Astryx installs with npm, so set npm's `proxy`, `https-proxy`, or `registry` in your `.npmrc`, or add the CLI to the project and install its dependencies.",
+            "The registry could not be reached: you are offline, or a proxy blocks it. Astryx installs with npm, so set npm's `proxy`, `https-proxy`, or `registry` in your `.npmrc`, or add the CLI to the project and install its dependencies. A failed install waits 2 minutes before the next try, but the next run tries again at once when npm's registry changed.",
             "The registry does not have it: a private registry without the Astryx packages. Point npm's registry for `@astryxdesign` at one that has them.",
             'The cache cannot be written: a read-only home folder, as in some containers. Point `XDG_CACHE_HOME` at a writable folder: {@link generic:ci-and-containers}.',
           ],
