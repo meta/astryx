@@ -30,6 +30,7 @@ import {CodeNode} from '@lexical/code';
 import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {
   $getRoot,
+  $isRootNode,
   $isDecoratorNode,
   $isElementNode,
   HISTORY_MERGE_TAG,
@@ -177,6 +178,9 @@ function $wantedDirection(node: LexicalNode): 'ltr' | 'rtl' | null {
 
 /** Whether this node's `dir` is already what it should be. */
 function $isSettled(node: LexicalNode): boolean {
+  if ($isRootNode(node)) {
+    return node.getDirection() === null;
+  }
   if (!$isOwnDirectionBlock(node) && !$isContainer(node)) {
     return true;
   }
@@ -225,6 +229,12 @@ function $allProseContainers(): ElementNode[] {
       node.getChildren().forEach(visit);
     }
   };
+  // The root is a container too. Lexical writes a stored root direction onto
+  // the editable element, and every container under it inherits, so a value
+  // saved in one document direction would lay its tables and code frames out
+  // that way in the other. It carries no text of its own, so it always gives
+  // the direction up and the surface decides.
+  found.push($getRoot());
   $getRoot().getChildren().forEach(visit);
   return found;
 }

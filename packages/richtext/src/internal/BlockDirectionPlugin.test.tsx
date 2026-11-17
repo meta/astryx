@@ -198,11 +198,26 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     });
     const {container} = render(<RichTextView value={stored} />);
     await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
+    // `auto` is how Lexical spells "no direction of its own" on an element
+    // it has rendered; what matters is that the stored `rtl` is gone, so the
+    // list orders its markers and indent the way the surface reads.
     await waitFor(() =>
-      expect(container.querySelector('ul')?.getAttribute('dir')).toBeNull(),
+      expect(container.querySelector('ul')?.getAttribute('dir')).not.toBe(
+        'rtl',
+      ),
     );
     // The item reads its own text, which is English.
     expect(container.querySelector('li')?.getAttribute('dir')).toBe('ltr');
+    // The root gives its stored direction up too. Lexical writes a root
+    // direction onto the editable element, and every container under it
+    // inherits, so a value saved in a right-to-left document would lay its
+    // tables and code frames out that way in an English one.
+    // `auto` is Lexical's spelling for "no direction of its own", the same
+    // as on a block; what matters is that the stored `rtl` is gone, so the
+    // surface decides and the containers inherit from it.
+    const editable = container.querySelector('[data-lexical-editor]');
+    expect(editable).not.toBeNull();
+    await waitFor(() => expect(editable?.getAttribute('dir')).not.toBe('rtl'));
   });
 
   it('writes every prose ancestor inside the update that changed the text', async () => {

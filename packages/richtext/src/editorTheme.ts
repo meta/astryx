@@ -263,13 +263,8 @@ const editorTheme = stylex.create({
       ':last-child': spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
-    // The inset lives on the item, not here. An `outside` marker is drawn
-    // beyond its item's own start edge, which is the opposite edge from the
-    // list's when the two directions disagree; an inset held by the list
-    // would reserve room on the side the marker is not on and let it escape
-    // the field. Held by the item it is always on the marker's side, and it
-    // costs the same measure either way, so a list whose items all agree
-    // with it wraps exactly where core Markdown wraps.
+    // The inset is on each item (see `ul`), so an outside marker always
+    // has room on its item's own start side.
     paddingInline: spacingVars['--spacing-0'],
     listStylePosition: 'outside',
   },
