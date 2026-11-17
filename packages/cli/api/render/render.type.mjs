@@ -54,6 +54,7 @@
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
  * @property {number} data.scriptBytes - Size of the page's script, which `bytes` includes.
  * @property {number} data.scriptModules - How many modules the page's script holds (the page's own, its packages', React's).
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [data.remoteImages] - The https images the page names: each address the render fetched into the file, and each one it left as the page wrote it, with why (not https, no answer in time, not an image, too large, unreachable). Present when the page names a remote image.
  */
 
 /**

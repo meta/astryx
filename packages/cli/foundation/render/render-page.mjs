@@ -34,6 +34,7 @@ import {
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {LINK_OUT, ROOT_ID} from './client-bundle.mjs';
+import {remoteImages} from './remote-images.mjs';
 import {ESBUILD_MISSING, findEsbuild} from './esbuild-dependency.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {scanHtml} from './html-reader.mjs';
@@ -70,6 +71,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  * @property {number} [scriptBytes] - Bytes of the page's script; none in a markup-only render.
  * @property {number} [scriptModules] - The modules the page's script holds; none in a markup-only render.
+ * @property {{fetched: string[], failed: {url: string, reason: string}[]}} [remoteImages] - The https images the page names: each address fetched into the file, and each one left as the page wrote it, with why. Present when the page names a remote image and the render writes a file.
  */
 
 /** An error carrying a render error code. */
@@ -780,14 +782,16 @@ export function cssUrlRef(m) {
  * A reference is URL text: it names the file its percent-escapes decode to
  * (`a%20b.png` is "a b.png"), as a browser and the app's bundler read it.
  * A file that cannot be read (no permission) is `unreadable`.
- * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
+ * A remote file's `url` is the whole address the page wrote, its query too.
+ * @returns {null | {kind: 'remote', ref: string, url: string} | {kind: 'missing', ref: string} | {kind: 'not-file' | 'unreadable' | 'file', ref: string, file: string}}
  */
 export function assetRef(ref, at) {
   const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
   if (!clean) return null;
   if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
     return null;
-  if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean};
+  if (/^(https?:)?\/\//i.test(clean))
+    return {kind: 'remote', ref: clean, url: decodeAttr(ref).trim()};
   /** @type {string} */
   let named;
   try {
@@ -823,11 +827,12 @@ export function assetRef(ref, at) {
  * link (`href`) loads nothing, so it is left alone.
  * @param {string} text markup or CSS
  * @param {'html' | 'css'} kind
- * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>}} ctx
+ * @param {{dir: string, root: string, warnings: RenderWarning[], counted: Set<string>, localAssets: Set<string>, leaveLargeStyleAssets?: boolean, rewrites?: Map<string, string>, remote?: Map<string, import('./remote-images.mjs').RemoteImage>}} ctx
  *   `leaveLargeStyleAssets`: a stylesheet's file too large to inline is left
  *   as it is and named, as a missing one is, rather than refused;
  *   `rewrites`: each attribute value the markup's rewrite replaced, as the
- *   page wrote it, with what it became
+ *   page wrote it, with what it became; `remote`: the remote images fetched
+ *   for this render, by the address the page wrote
  */
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
@@ -836,12 +841,14 @@ function inlineAssets(text, kind, ctx) {
     if (!named) return null;
     const clean = named.ref;
     if (named.kind === 'remote') {
+      const fetched = ctx.remote?.get(named.url);
+      if (fetched && 'uri' in fetched) return fetched.uri;
       const key = `remote:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
         ctx.warnings.push({
           code: 'remote-asset',
-          message: `${clean} is loaded from the network, which a sandboxed page cannot reach; save it beside the page and import it instead.`,
+          message: `${clean} is loaded from the network, which a sandboxed page cannot reach${fetched ? ` (the render could not fetch it: ${fetched.reason})` : ''}; save it beside the page and import it instead.`,
         });
       }
       return null;
@@ -886,10 +893,24 @@ function inlineAssets(text, kind, ctx) {
     if (!clean.startsWith('/')) ctx.localAssets.add(found);
     return assetDataUri(found);
   };
+  return mapAssetRefs(text, kind, resolveRef, ctx.rewrites);
+}
+
+/**
+ * Each reference to a file in markup (`src`, `poster`, `srcset`, and `url()`
+ * in a `style` attribute) or in CSS (`url()`), replaced by what `resolve`
+ * gives for it, or kept when it gives null.
+ * @param {string} text markup or CSS
+ * @param {'html' | 'css'} kind
+ * @param {(ref: string) => string | null} resolve
+ * @param {Map<string, string>} [rewrites] gets each attribute value replaced,
+ *   as the page wrote it, with what it became
+ */
+function mapAssetRefs(text, kind, resolve, rewrites) {
   /** @param {string} value */
   const urls = value =>
     value.replace(new RegExp(CSS_URL.source, 'g'), (whole, ...rest) => {
-      const uri = resolveRef(
+      const uri = resolve(
         cssUrlRef(/** @type {any} */ ({groups: rest.at(-1)})),
       );
       return uri ? `url("${uri}")` : whole;
@@ -899,8 +920,8 @@ function inlineAssets(text, kind, ctx) {
     // React writes `srcSet` as it is spelled in JSX; HTML reads attribute
     // names in any case.
     .replace(/\s(src|poster)="([^"]*)"/gi, (whole, attr, ref) => {
-      const uri = resolveRef(ref);
-      if (uri) ctx.rewrites?.set(decodeAttr(ref), uri);
+      const uri = resolve(ref);
+      if (uri) rewrites?.set(decodeAttr(ref), uri);
       return uri ? ` ${attr}="${uri}"` : whole;
     })
     .replace(/\s(srcset)="([^"]*)"/gi, (whole, attr, set) => {
@@ -908,11 +929,11 @@ function inlineAssets(text, kind, ctx) {
         .split(',')
         .map(part => {
           const [ref, ...rest] = part.trim().split(/\s+/);
-          const uri = ref ? resolveRef(ref) : null;
+          const uri = ref ? resolve(ref) : null;
           return [uri ?? ref, ...rest].join(' ');
         });
       const rewritten = parts.join(', ');
-      if (rewritten !== decodeAttr(set)) ctx.rewrites?.set(decodeAttr(set), rewritten);
+      if (rewritten !== decodeAttr(set)) rewrites?.set(decodeAttr(set), rewritten);
       return ` ${attr}="${rewritten.replace(/"/g, '&quot;')}"`;
     })
     .replace(/\sstyle="([^"]*)"/g, (whole, style) => {
@@ -921,6 +942,49 @@ function inlineAssets(text, kind, ctx) {
       const css = urls(decodeAttr(style));
       return ` style="${css.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
     });
+}
+
+/** A remote file whose address names a type that is never an image. */
+const NOT_AN_IMAGE = /\.(woff2?|ttf|otf|eot|mp4|webm|mov|mp3|wav|ogg|css|[cm]?js|json|html?|pdf|txt|xml)$/i;
+
+/**
+ * The remote addresses markup or CSS names where an image goes, as the page
+ * wrote them: `src` and `srcset` of an image, `srcset` of a picture's
+ * source, `src` of an image button, a video's `poster`, and `url()` in a
+ * `style` attribute or a stylesheet, except an address that names a font,
+ * media or a document.
+ * @param {string} text
+ * @param {'html' | 'css'} kind
+ * @param {{dir: string, root: string}} at
+ * @returns {Set<string>}
+ */
+function remoteRefsIn(text, kind, at) {
+  /** @type {Set<string>} */
+  const found = new Set();
+  /** @param {string} ref */
+  const take = ref => {
+    const named = assetRef(ref, at);
+    if (named?.kind === 'remote' && !NOT_AN_IMAGE.test(named.ref)) found.add(named.url);
+    return null;
+  };
+  if (kind === 'css') {
+    mapAssetRefs(text, 'css', take);
+    return found;
+  }
+  for (const element of text.matchAll(/<([a-zA-Z][\w-]*)\b([^>]*)>/g)) {
+    const tag = element[1].toLowerCase();
+    const attrs = element[2];
+    for (const attr of attrs.matchAll(/\s(src|srcset|poster|style)="([^"]*)"/gi)) {
+      const name = attr[1].toLowerCase();
+      const image =
+        name === 'style' ||
+        (name === 'poster' && tag === 'video') ||
+        (name === 'srcset' && (tag === 'img' || tag === 'source')) ||
+        (name === 'src' && (tag === 'img' || (tag === 'input' && /\stype="image"/i.test(attrs))));
+      if (image) mapAssetRefs(` ${name}="${attr[2]}"`, 'html', take);
+    }
+  }
+  return found;
 }
 
 /**
@@ -955,7 +1019,7 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean, leaveLargeStyleAssets?: boolean, markupOnly?: boolean, esbuildFrom?: string, remoteImages?: Parameters<typeof remoteImages>[0]}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
@@ -974,7 +1038,10 @@ const SCHEME_CSS =
  *   dependency of the CLI, builds the script (`esbuildFrom`: the folder it
  *   resolves from); a page whose script cannot be built fails the render.
  *   `markupOnly` renders the markup and its styles without the script, for a
- *   caller that shows the markup itself (the theme editor); it writes no file.
+ *   caller that shows the markup itself (the theme editor); it writes no file
+ *   and reaches no network. The render fetches each https image the page
+ *   names, once, so the file carries it (remote-images.mjs; `remoteImages`:
+ *   the fetch and its time limits, for tests).
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -1068,6 +1135,9 @@ export async function renderPage(entry, options = {}) {
     });
   }
 
+  // The https images the page names, fetched once so the file carries them.
+  // A markup-only render reaches no network.
+  const remote = options.markupOnly ? null : remoteImages(options.remoteImages);
   const ctx = {
     dir,
     root,
@@ -1076,11 +1146,23 @@ export async function renderPage(entry, options = {}) {
     localAssets: /** @type {Set<string>} */ (new Set()),
     leaveLargeStyleAssets: options.leaveLargeStyleAssets === true,
     rewrites: /** @type {Map<string, string>} */ (new Map()),
+    remote: remote?.results,
+  };
+  /**
+   * Inline what `text` names, after fetching the remote images it names that
+   * no earlier text named.
+   * @param {string} text
+   * @param {'html' | 'css'} kind
+   * @param {typeof ctx} at
+   */
+  const inlineWithRemote = async (text, kind, at) => {
+    if (remote) await remote.get(remoteRefsIn(text, kind, at));
+    return inlineAssets(text, kind, at);
   };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
   try {
-    markup = inlineAssets(markup, 'html', ctx);
+    markup = await inlineWithRemote(markup, 'html', ctx);
     // React adds `<link rel="preload">` hints for images it renders; in one
     // static file they only fetch from the network, so they go.
     markup = markup.replace(/<link rel="preload"[^>]*\/?>/g, '');
@@ -1129,7 +1211,7 @@ export async function renderPage(entry, options = {}) {
     /** @type {string[]} */
     const packageSheets = [];
     /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
-    const sheet = (file, text) => {
+    const sheet = async (file, text) => {
       try {
         const own = expandImports(file, text, {
           warnings,
@@ -1138,7 +1220,7 @@ export async function renderPage(entry, options = {}) {
           packageSheets,
           served,
         });
-        return inlineAssets(cutCss(own, kept, {states}), 'css', {
+        return await inlineWithRemote(cutCss(own, kept, {states}), 'css', {
           ...ctx,
           dir: path.dirname(file),
         });
@@ -1153,20 +1235,21 @@ export async function renderPage(entry, options = {}) {
         );
       }
     };
-    sheetText.forEach((text, i) => {
-      css += sheet(sheetFiles[i], text);
-    });
+    for (const [i, text] of sheetText.entries()) {
+      css += await sheet(sheetFiles[i], text);
+    }
     for (const {
       file,
       css: text,
     } of /** @type {{file: string, css: string}[]} */ (
       message.importedCss ?? []
     )) {
-      css += sheet(file, text);
+      css += await sheet(file, text);
     }
     for (const spec of packageSheets)
       if (!sheets.includes(spec)) sheets.push(spec);
-    if (message.css) css += inlineAssets(message.css, 'css', ctx);
+    if (message.css) css += await inlineWithRemote(message.css, 'css', ctx);
+    remote?.done();
   } catch (e) {
     const err = /** @type {any} */ (e);
     if (err instanceof RenderAssetError)
@@ -1515,5 +1598,6 @@ export async function renderPage(entry, options = {}) {
     warnings,
     fromSet: message.fromSet ?? [],
     ...(drawn ? {scriptBytes: Buffer.byteLength(drawn), scriptModules: message.scriptModules ?? 0} : {}),
+    ...(remote && remote.results.size > 0 ? {remoteImages: remote.summary()} : {}),
   };
 }

@@ -89,6 +89,17 @@ export function registerExperimentalRender(group, program) {
             scriptBytes: kb(d.scriptBytes),
             scriptModules: d.scriptModules,
           }),
+          ...(d.remoteImages
+            ? [
+                section('Remote images'),
+                record({
+                  ...(d.remoteImages.fetched.length > 0 ? {fetched: d.remoteImages.fetched.join(', ')} : {}),
+                  ...(d.remoteImages.failed.length > 0
+                    ? {notFetched: d.remoteImages.failed.map(f => `${f.url} (${f.reason})`).join(', ')}
+                    : {}),
+                }),
+              ]
+            : []),
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),

@@ -1069,6 +1069,26 @@ render a page for an artifact name an absolute path, and retry after the
 refusal); accepting a relative path that climbs out (a path such as
 `../page.html` reads as a mistake more often than as a choice).
 
+### DEC-17 — A render fetches the remote images a page names
+
+**Decider:** `josephfarina`, `2026-11-17`
+
+A rendered page is one file that shows the page in any viewer, and a viewer
+that blocks the network cannot load an image the page names by its web
+address. So `astryx experimental render` fetches each image the page names by
+an `https` address, once, while the page renders, and the file carries it.
+That is the only request a render makes for the page itself. A fetch sends no
+cookies or credentials and takes only an image, by its content type and its
+bytes, up to the size a render carries of one file. Each image has a time
+limit, and all the images of one render have one more. Any failure leaves the
+address as the page wrote it, with the warning a remote image gets, and the
+result names every address fetched and every one that was not. The embedded
+source keeps the addresses, so `--reverse` gives back the page as written.
+
+Rejected: leaving remote images to the viewer (a sandboxed viewer shows them
+broken), and carrying a fetched image in the embedded source (the way back
+would no longer be the page as written).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
