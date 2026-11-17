@@ -266,6 +266,9 @@ export function computerAgentCommand() {
 function bodyLines(run, install) {
   return [
     'Astryx, a design system and UI library, is available on this computer.',
+    // A vague question inside a project otherwise loads this generic text and
+    // misses the project's own facts.
+    "Inside a project that has its own Astryx text (an `astryx-project` skill, or an Astryx block in AGENTS.md or CLAUDE.md), follow that text: it knows the project's version and setup.",
     'Use it when you build or change UI, pick components, or style or theme an app.',
     `Its docs, components, templates, and themes are all reachable through \`${run}\`. To make a page, run \`${run} build "<what the page is for>"\` first, as the WORKFLOW below says. Start with \`${run} search '<what you need>'\` for anything else.`,
     `Then read \`${run} component <Name>\` or \`${run} docs <topic>\`, not the package's files.`,
