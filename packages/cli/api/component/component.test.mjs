@@ -452,13 +452,11 @@ describe('component dispatcher — scoped --package routes all projections', () 
       );
       expect(scoped.status).toBe(0);
       expect(scoped.stdout).toContain(
-        `component Button --package ${CORE} --props\` prints them whole.`,
+        `component Button --package ${CORE} --props\``,
       );
 
       const bare = await runCli(['component', 'Button'], cwd);
-      expect(bare.stdout).toContain(
-        'component Button --props` prints them whole.',
-      );
+      expect(bare.stdout).toContain('component Button --props`');
     },
     SLOW,
   );
@@ -600,7 +598,10 @@ describe('component dispatcher — detail levels on single component (text only)
   it(
     '--detail compact returns less text than full',
     async () => {
-      const full = await runCli(['component', 'Button'], cwd);
+      const full = await runCli(
+        ['component', 'Button', '--detail', 'full'],
+        cwd,
+      );
       const compact = await runCli(
         ['component', 'Button', '--detail', 'compact'],
         cwd,

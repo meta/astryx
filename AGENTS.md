@@ -241,7 +241,7 @@ astryx template --list # available page templates
 ON DEMAND:
 astryx docs <topic> --index # section index: one line per section, with its key
 astryx docs <topic> <section> # one section, by key or title
-astryx component <Name> --dense # props, variants, usage, anatomy for one component
+astryx component <Name> --dense # import, usage and props for one component; --detail full adds anatomy and theming
 astryx template <name> # emit full page source
 astryx template <name> --skeleton # layout skeleton with spatial annotations
 astryx swizzle <Name> # eject component source for deep customization

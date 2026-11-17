@@ -544,7 +544,7 @@ describe('short answer (compact)', () => {
   });
 
   it('builds the usage from the required props when no short example exists', () => {
-    expect(shortUsage(docs, 'Widget')).toBe('<Widget label="…">…</Widget>');
+    expect(shortUsage(docs, 'Widget')).toBe('<Widget label="...">...</Widget>');
   });
 
   it('uses a short demo example as the usage', () => {
@@ -558,7 +558,7 @@ describe('short answer (compact)', () => {
   it('skips an example longer than the short answer allows', () => {
     const long = Array.from({length: 30}, (_, i) => `line ${i}`).join('\n');
     expect(shortUsage({...docs, examples: [{code: long}]}, 'Widget')).toBe(
-      '<Widget label="…">…</Widget>',
+      '<Widget label="...">...</Widget>',
     );
   });
 

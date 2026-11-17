@@ -570,7 +570,7 @@ const SHORT_EXAMPLE_MAX_LINES = 20;
 /**
  * The common-use code for the short answer: the doc's first example when it
  * runs on its own and is short, else one element built from the required
- * props. `…` marks each value the caller fills in.
+ * props. `...` marks each value the caller fills in.
  * @param {any} docs
  * @param {string} name - the component's export name
  * @returns {string | null}
@@ -596,12 +596,12 @@ export function shortUsage(docs, name) {
     }
     attrs.push(
       /^'|^string$/.test(String(p.type ?? '').trim())
-        ? `${p.name}="…"`
-        : `${p.name}={…}`,
+        ? `${p.name}="..."`
+        : `${p.name}={...}`,
     );
   }
   const open = [name, ...attrs].join(' ');
-  return hasChildren ? `<${open}>…</${name}>` : `<${open} />`;
+  return hasChildren ? `<${open}>...</${name}>` : `<${open} />`;
 }
 
 /**
@@ -694,21 +694,16 @@ export function formatCompact(docs, componentName, importHint, options = {}) {
     sections.push(formatComponentIconSlots(docs.theming.componentIcons));
   }
 
-  /** @type {string[]} */
-  const more = [];
   if (options.propsCommand && !plan.whole) {
-    more.push(
-      `- Each prop's whole description: \`${run} ${options.propsCommand}\``,
+    sections.push(
+      `Each prop's whole description: \`${run} ${options.propsCommand}\`\n`,
     );
   }
+  // The last line says how to get the full output.
   if (options.fullCommand) {
-    more.push(
-      `- Anatomy, best practices, examples, and theming (classes, data attributes, CSS variables): \`${run} ${options.fullCommand}\``,
+    sections.push(
+      `Full output, with anatomy, best practices, examples and theming (classes, data attributes, CSS variables): \`${run} ${options.fullCommand}\`\n`,
     );
-  }
-  if (more.length) {
-    sections.push('## More\n');
-    sections.push(more.join('\n') + '\n');
   }
 
   return sections.join('\n');
