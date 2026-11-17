@@ -279,7 +279,7 @@ Read from source, with no focused test yet:
 - FR1: the 300 px maximum width, the `tooltip` target, and the absence of an
   arrow.
 - FR4: `focusTrigger="always"` and `"never"`,
-  and not after a finger or pen pressed it when the last input was a pointer press, pointer focus on a text field
+  programmatic focus on a text-entry trigger not opening it after a finger or pen pressed that trigger when the last input was a pointer press, pointer focus on a text field
   opening the tooltip, programmatic focus before any input, or after a pointer press onto a trigger that is not a text field, other pointer focus not opening it, and focus leaving the trigger
   hiding it.
 - FR8: `hasHoverIndication`.

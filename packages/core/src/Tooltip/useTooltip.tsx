@@ -27,6 +27,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import {getInteractionModality} from '../utils/interactionModality';
+import {NON_TEXT_INPUT_TYPES} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -52,19 +53,6 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-
-const NON_TEXT_INPUT_TYPES = new Set([
-  'button',
-  'checkbox',
-  'color',
-  'file',
-  'hidden',
-  'image',
-  'radio',
-  'range',
-  'reset',
-  'submit',
-]);
 
 /**
  * Whether `element` is a text field in any state: a text-like `<input>`, a
