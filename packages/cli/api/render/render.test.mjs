@@ -2502,6 +2502,59 @@ describe('render(): a page outside a project', () => {
     expect(whole.json.data.files).toEqual(['page/page.tsx', 'lib/rows.ts']);
   }, 60_000);
 
+  it('carries a JSON file and a stylesheet from above the page folder, and names an image from there as not carried', () => {
+    const tree = path.join(away, 'above-folder');
+    fs.mkdirSync(path.join(tree, 'page'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'data'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'data/rows.json'), JSON.stringify(['North', 'South']));
+    fs.writeFileSync(path.join(tree, 'data/site.css'), '.rows { color: teal; }\n');
+    fs.writeFileSync(path.join(tree, 'data/dot.png'), PNG);
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nimport '../data/site.css';\nexport default function Page() {\n  return <p className=\"rows\">{rows.join(' ')}</p>;\n}\n",
+    );
+    const run = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page/page.tsx', 'data/rows.json', 'data/site.css']);
+    expect(run.json.data).not.toHaveProperty('notCarried');
+    expect(run.json.data.warnings).toEqual([]);
+    const html = fs.readFileSync(path.join(tree, 'page/page.html'), 'utf8');
+    expect(html.slice(0, html.indexOf('-->'))).not.toContain('Not carried');
+    const back = runBin(path.join(tree, 'page'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({exact: true, output: 'page-restored/page/page.tsx'});
+    expect(back.json.data).not.toHaveProperty('missing');
+
+    // An image the page shows from there is not carried (only the page's
+    // folder's images are), so it is named.
+    fs.writeFileSync(
+      path.join(tree, 'page/page.tsx'),
+      "import rows from '../data/rows.json';\nexport default function Page() {\n  return <p><img src=\"../data/dot.png\" alt=\"\" />{rows.join(' ')}</p>;\n}\n",
+    );
+    const shown = runBin(path.join(tree, 'page'), ['experimental', 'render', 'page.tsx', '--out', 'shown.html']);
+    expect(shown.status).toBe(0);
+    expect(shown.json.data.files).toEqual(['page/page.tsx', 'data/rows.json']);
+    expect(shown.json.data.notCarried).toEqual(['data/dot.png']);
+    expect(shown.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['not-embedded']);
+  }, 60_000);
+
+  it('names a Sass stylesheet the page imports as not carried', () => {
+    const tree = path.join(away, 'sass-import');
+    fs.mkdirSync(tree, {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site.scss'), '$c: teal;\np { color: $c; }\n');
+    fs.writeFileSync(path.join(tree, 'page.tsx'), "import './site.scss';\nexport default function Page() {\n  return <p>Sales</p>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.notCarried).toEqual(['site.scss']);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toEqual(['missing-asset']);
+    const html = fs.readFileSync(path.join(tree, 'page.html'), 'utf8');
+    const note = html.slice(0, html.indexOf('-->'));
+    expect(note).toContain('Not carried: site.scss (--reverse cannot give them back)');
+    expect(note).not.toContain('come back exactly');
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.json.data).toMatchObject({exact: false, missing: ['site.scss']});
+  }, 60_000);
+
   it('carries a config-named file once renamed as its warning says, and gives it back exactly', () => {
     const tree = path.join(away, 'config-renamed');
     fs.mkdirSync(tree, {recursive: true});

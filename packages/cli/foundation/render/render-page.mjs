@@ -1301,18 +1301,18 @@ export async function renderPage(entry, options = {}) {
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
   /**
-   * Files the page uses from outside the folder it carries from, which no
-   * reverse writes; a package's own files are not the page's.
+   * Local files the page uses that the file cannot carry: a module, a
+   * stylesheet or an image from outside the folder it carries from, which no
+   * reverse writes, and a Sass or Less stylesheet. A package's own files
+   * are not the page's.
    * @type {string[]}
    */
-  const outside = [
-    .../** @type {string[]} */ (message.outsideFiles ?? []),
-  ];
+  const uncarried = [...(/** @type {string[]} */ (message.uncarried ?? []))];
   for (const sheet of carriedCss) {
     if (path.relative(scope, sheet).split(path.sep).includes('node_modules'))
       continue;
     if (!isInside(sheet, scope)) {
-      if (!outside.includes(sheet)) outside.push(sheet);
+      if (!uncarried.includes(sheet)) uncarried.push(sheet);
       continue;
     }
     if (!files.includes(sheet)) files.push(sheet);
@@ -1327,11 +1327,12 @@ export async function renderPage(entry, options = {}) {
    * @param {string} how how the page uses it, for the warning
    */
   const carryAsset = (asset, how) => {
-    if (
-      !isInside(asset, scope) ||
-      path.relative(scope, asset).split(path.sep).includes('node_modules')
-    )
+    if (path.relative(scope, asset).split(path.sep).includes('node_modules'))
       return;
+    if (!isInside(asset, scope)) {
+      if (isFileAt(asset) && !uncarried.includes(asset)) uncarried.push(asset);
+      return;
+    }
     if (files.includes(asset) || notCarried.has(asset)) return;
     /** @param {string} why */
     const leaveOut = why => {
@@ -1456,9 +1457,15 @@ export async function renderPage(entry, options = {}) {
   for (const asset of notCarried) {
     leftOut.push(path.relative(base, asset).split(path.sep).join('/'));
   }
-  for (const f of outside) {
+  for (const f of uncarried) {
+    // A file the render carries (a JSON file, stylesheet or image from above
+    // the page's folder widens the folder it carries from) is not left out.
+    if (files.includes(f)) continue;
     const rel = path.relative(base, f).split(path.sep).join('/');
+    if (leftOut.includes(rel)) continue;
     leftOut.push(rel);
+    // A Sass or Less stylesheet already has its missing-asset warning.
+    if (/\.(scss|sass|less)$/i.test(f)) continue;
     warnings.push({
       code: 'not-embedded',
       message: `${rel} is not carried: it is outside the folder the render carries from, and --reverse writes nothing outside it. The page shows it, but --reverse cannot give it back. Render from a folder that holds it, or move it into the page's folder.`,

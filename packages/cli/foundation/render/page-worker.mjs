@@ -98,8 +98,9 @@ const localFiles = [];
 /** The page's own files that load as modules, not as text (`?raw`) or data. @type {Set<string>} */
 const moduleFiles = new Set();
 /**
- * Modules and JSON files the page reaches by a relative import that lie
- * outside the folder it carries from, so the file cannot carry them.
+ * Local files the page uses that the file cannot carry: a module or JSON
+ * file it reaches by a relative import from outside the folder it carries
+ * from, and a Sass or Less stylesheet, which a render does not compile.
  * @type {string[]}
  */
 const outsideFiles = [];
@@ -763,7 +764,13 @@ function pagePlugin(filename, browser = false) {
         }
         if (/\.(scss|sass|less)$/i.test(bare)) {
           // Sass and Less need their compiler: say so rather than drop them.
-          if (!browser) skippedCss.push(bare);
+          if (!browser) {
+            skippedCss.push(bare);
+            if (bare.startsWith('.') || path.isAbsolute(bare)) {
+              const file = path.resolve(dir, bare);
+              if (!outsideFiles.includes(file)) outsideFiles.push(file);
+            }
+          }
           p.remove();
           return;
         }
@@ -1875,7 +1882,7 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
-    outsideFiles,
+    uncarried: outsideFiles,
     aliasImports,
     texts,
     fnTexts,
