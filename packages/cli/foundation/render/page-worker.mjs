@@ -1476,14 +1476,56 @@ function reach(name) {
   parentPort?.postMessage({stage: name});
 }
 
+/** AST keys that never hold a value use of a name. */
+const SKIPPED_KEYS = new Set(['loc', 'start', 'end', 'extra', 'range', 'comments', 'leadingComments', 'trailingComments', 'innerComments']);
+
+/** AST keys whose subtree is a type, which a build drops. */
+const TYPE_KEYS = new Set(['typeAnnotation', 'returnType', 'typeParameters', 'typeArguments', 'superTypeParameters', 'implements']);
+
+/** Declarations that hold only types. */
+const TYPE_NODES = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration', 'TSDeclareFunction', 'TSImportType', 'TSTypeQuery', 'TSTypeReference']);
+
 /**
- * The first named import of a StyleX variables module (`.stylex`) in the
- * page's own files that the module does not export. StyleX compiles such a
- * value to a variable that nothing defines, so the page would show without
- * that style and no error; a bundler would refuse the import.
+ * The names among `names` that a module uses as values: in an expression or
+ * JSX, not only in a type, a property key or an import.
+ * @param {any} program the module's AST
+ * @param {Set<string>} names
+ */
+function valueUses(program, names) {
+  /** @type {Set<string>} */
+  const used = new Set();
+  /** @param {any} node @param {any} parent @param {string} key @param {boolean} inType */
+  const walk = (node, parent, key, inType) => {
+    if (!node || typeof node.type !== 'string') return;
+    if (node.type === 'ImportDeclaration') return;
+    const typed = inType || TYPE_KEYS.has(key) || TYPE_NODES.has(node.type);
+    if ((node.type === 'Identifier' || node.type === 'JSXIdentifier') && names.has(node.name) && !typed) {
+      const isKey =
+        ((parent?.type === 'MemberExpression' || parent?.type === 'OptionalMemberExpression' || parent?.type === 'JSXMemberExpression') && key === 'property' && !parent.computed) ||
+        ((parent?.type === 'ObjectProperty' || parent?.type === 'ObjectMethod' || parent?.type === 'ClassProperty' || parent?.type === 'ClassMethod') && key === 'key' && !parent.computed) ||
+        (parent?.type === 'JSXAttribute' && key === 'name');
+      if (!isKey) used.add(node.name);
+    }
+    for (const [childKey, child] of Object.entries(node)) {
+      if (SKIPPED_KEYS.has(childKey) || !child || typeof child !== 'object') continue;
+      if (Array.isArray(child)) for (const item of child) walk(item, node, childKey, typed);
+      else walk(child, node, childKey, typed);
+    }
+  };
+  for (const statement of program.body) walk(statement, program, 'body', false);
+  return used;
+}
+
+/**
+ * The first import in the page's own files of a name its module does not
+ * export (a named import), where the page uses that name as a value. The page's own modules,
+ * Astryx packages and StyleX variables modules (`.stylex`) are checked. A
+ * missing component renders as "Element type is invalid", and StyleX
+ * compiles a missing value to a variable that nothing defines; a bundler
+ * would refuse the import in both cases.
  * @returns {Promise<{file: string, line: number, module: string, names: string[]} | null>}
  */
-async function missingStylexExports() {
+async function missingNamedExports() {
   const parser = requireFromCli('@babel/parser');
   for (const file of localFiles) {
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -1498,26 +1540,43 @@ async function missingStylexExports() {
       // A file that does not parse is reported where it is compiled.
       continue;
     }
+    /** @type {Set<string> | undefined} */
+    let used;
     for (const node of ast.program.body) {
       if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
       const spec = String(node.source.value).split('?')[0];
-      if (!/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
-      const named = node.specifiers.filter(
-        (/** @type {any} */ s) => s.type === 'ImportSpecifier' && s.importKind !== 'type',
-      );
-      if (named.length === 0) continue;
       const target = importedFile(spec, file);
+      const local = Boolean(target && path.isAbsolute(target) && isLocal(target) && /\.[cm]?[jt]sx?$/.test(target));
+      if (!local && !spec.startsWith('@astryxdesign/') && !/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(spec)) continue;
+      const imported = node.specifiers.filter(
+        (/** @type {any} */ s) =>
+          s.type === 'ImportSpecifier' && s.importKind !== 'type',
+      );
+      if (imported.length === 0) continue;
+      used ??= valueUses(
+        ast.program,
+        new Set(
+          ast.program.body
+            .filter((/** @type {any} */ n) => n.type === 'ImportDeclaration')
+            .flatMap((/** @type {any} */ n) => n.specifiers.map((/** @type {any} */ s) => s.local.name)),
+        ),
+      );
+      const needed = imported.filter((/** @type {any} */ s) => used?.has(s.local.name));
+      if (needed.length === 0) continue;
       /** @type {any} */
       let exports;
       try {
-        exports = await jiti.import(target && path.isAbsolute(target) ? target : spec);
+        exports = await jiti.import(local ? /** @type {string} */ (target) : spec);
       } catch {
         // A module that does not load is reported where it is loaded.
         continue;
       }
-      const names = new Set(Object.keys(exports ?? {}));
-      const missing = named.filter(
-        (/** @type {any} */ s) => !names.has(s.imported.type === 'Identifier' ? s.imported.name : s.imported.value),
+      /** @param {any} s */
+      const nameOf = s => (s.imported.type === 'Identifier' ? s.imported.name : s.imported.value);
+      // jiti hands back a module with a default export as that export with the
+      // named ones on it (interopDefault), so a name is read, not listed.
+      const missing = needed.filter(
+        (/** @type {any} */ s) => exports == null || (exports[nameOf(s)] === undefined && !Object.hasOwn(exports, nameOf(s))),
       );
       if (missing.length > 0) {
         const fromRoot = path.relative(root, file);
@@ -1525,7 +1584,7 @@ async function missingStylexExports() {
           file: (fromRoot.startsWith('..') || path.isAbsolute(fromRoot) ? path.basename(file) : fromRoot).split(path.sep).join('/'),
           line: missing[0].loc.start.line,
           module: spec,
-          names: missing.map((/** @type {any} */ s) => (s.imported.type === 'Identifier' ? s.imported.name : s.imported.value)),
+          names: missing.map(nameOf),
         };
       }
     }
@@ -1556,7 +1615,7 @@ try {
     classify(e);
     throw null;
   }
-  const absent = await missingStylexExports();
+  const absent = await missingNamedExports();
   if (absent) {
     fail(
       'ERR_RENDER_COMPILE',

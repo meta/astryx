@@ -614,6 +614,20 @@ export default function Page() {
     expect(token?.message).toContain('line 2): @astryxdesign/core/theme/tokens.stylex has no export colors');
     expect(token?.message).not.toMatch(/\/home\/|\/tmp\//);
     expect(fs.existsSync(path.join(dir, 'no-token.html'))).toBe(false);
+    put(
+      'src/no-component.tsx',
+      "import {Button, Chart, type ButtonProps} from '@astryxdesign/core';\nimport {helper, type Shape} from './lib-y';\nconst props: ButtonProps = {label: 'Go'};\nconst shape: Shape = {n: helper()};\nexport default function Page() { return <main><Button {...props} /><Chart data={[shape]} /></main>; }\n",
+    );
+    put('src/lib-y.ts', 'export type Shape = {n: number};\nexport const helper = () => 1;\nexport default function Y() { return null; }\n');
+    const component = await errorOf(() => render('src/no-component.tsx', {cwd: dir, out: 'no-component.html'}));
+    expect(component?.code).toBe('ERR_RENDER_COMPILE');
+    expect(component?.message).toContain('line 1): @astryxdesign/core has no export Chart');
+    put(
+      'src/types-only.tsx',
+      "import {Button, ButtonProps} from '@astryxdesign/core/Button';\nimport Y, {helper} from './lib-y';\nconst props: ButtonProps = {label: String(helper())};\nexport default function Page() { return <main><Button {...props} /><Y /></main>; }\n",
+    );
+    await render('src/types-only.tsx', {cwd: dir, out: 'types-only.html'});
+    expect(fs.existsSync(path.join(dir, 'types-only.html'))).toBe(true);
   });
 
   it('refuses a page file the page loads lazily that does not compile, as a static import is refused', async () => {
