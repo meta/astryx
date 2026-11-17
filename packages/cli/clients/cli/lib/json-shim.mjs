@@ -1265,7 +1265,7 @@ async function answerBareMissingArgument(err, rejected, message, exitCode) {
  * @param {string} code
  * @param {string} message
  * @param {number} exitCode
- * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined | null} read
+ * @param {{message: string, suggestions: import('../../../foundation/response/base').Suggestion[]} | undefined | null} read
  * @param {string} [errorCode] the code the answer reports, when it is not
  *   the one Commander's code maps to
  * @returns {boolean}

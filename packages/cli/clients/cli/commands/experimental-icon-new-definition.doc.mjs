@@ -59,7 +59,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the definition is written or the dry run succeeds, or, typed alone, an icon matches its name: it answers that search (`icon.search`) and writes nothing',
+      when: 'the definition is written or the dry run succeeds, or, typed alone, an icon (or, with no icon set installed, an icon definition) matches its whole name: it answers that search (`icon.search`) and writes nothing',
     },
     {
       code: 1,

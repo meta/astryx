@@ -108,7 +108,7 @@ const BARE_SUBCOMMAND = Symbol.for('astryx.command.bareSubcommand');
  * to the subcommand's error.
  * @typedef {(subcommand: import('commander').Command) => Promise<
  *   | {result: import('../../../foundation/debug/command-result.mjs').CommandResult}
- *   | {suggestion: import('../../../foundation/response/base').Suggestion}
+ *   | {suggestion: {name: string, reason: string}}
  * >} BareSubcommandAnswer
  */
 
@@ -419,9 +419,9 @@ export function addDocHelp(cmd, doc) {
     const examples = (doc.examples ?? [])
       .filter(({cli}) => exampleShown(cmd, cli))
       .flatMap(({label, cli}) => [
-      ...(label ? [`  # ${label}`] : []),
-      `  ${formatCliCommand(cli)}`,
-    ]);
+        ...(label ? [`  # ${label}`] : []),
+        `  ${formatCliCommand(cli)}`,
+      ]);
     const more = `More: ${formatCliCommand(`docs cli/commands/${routeSegment(doc.name)}`)}`;
     const blocks =
       examples.length > 0
