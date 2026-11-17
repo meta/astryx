@@ -9,6 +9,7 @@
  *   Vitest routing over the same lanes is pinned in ci-test-routing.test.mjs.
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -351,6 +352,17 @@ describe("main validation's Node watchdog", () => {
     );
     // Name-only: the reporter warns and the job limit cancels the leg.
     expect(step.env.VITEST_SHARD_WATCHDOG_NAME_ONLY).toBe('1');
+    // The script holds only shell: an environment entry that slipped into it
+    // would run as a command after the tests and fail every leg.
+    const script = step.run.replace(/\$\{\{[^}]*\}\}/g, 'X');
+    expect(
+      script.split('\n').filter(line => /^\s*[A-Z_]+:\s/.test(line)),
+    ).toEqual([]);
+    const bash = spawnSync('bash', ['-n'], {input: script, encoding: 'utf8'});
+    expect(bash.status, bash.stderr).toBe(0);
+    expect(script.trim().split('\n').at(-1)).toMatch(
+      /^pnpm test:node --shard=/,
+    );
     expect(job['timeout-minutes']).toBe(15);
     // A cancelled unit run is incomplete to the scheduler, which dispatches
     // the next one and reports it (spec:AST-030 FR21).
