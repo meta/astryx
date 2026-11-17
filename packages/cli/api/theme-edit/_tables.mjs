@@ -9,7 +9,6 @@
  * @position api/theme-edit — data read by the engine and the help text
  */
 
-import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {
   SYSTEM_FONTS_BY_PLATFORM,
   appleFaceGeneric,
@@ -56,10 +55,51 @@ export const COLOR_PROP_PARTS = ['text', 'heading', 'link'];
 /** The lookup command: what a part reads, a setting, a question, a picture. */
 export const HOW = `${P} how`;
 
-/** The built-in themes a theme can build on (`new --like`, `set base`), neutral first. */
-export const LIKE = discoverBundledThemes()
-  .map(t => t.slug)
-  .sort((a, b) => Number(b === 'neutral') - Number(a === 'neutral'));
+/** The built-in themes, once the adapter has found them. @type {string[] | null} */
+let builtIn = null;
+
+/**
+ * The built-in themes a theme can build on (`new --like`, `set base`),
+ * neutral first. Finding them reads the installed packages, which is the
+ * adapter's to do: the adapter hands them in once, as it loads
+ * (knowBuiltInThemes), and this table stays pure. Read before then (code
+ * that runs the editor around its adapter), it says so rather than act as
+ * if no built-in theme were installed.
+ * @type {string[]}
+ */
+export const LIKE = /** @type {string[]} */ (
+  new Proxy([], {
+    get(_empty, key) {
+      if (!builtIn)
+        throw new Error(
+          'the built-in themes are not known yet: the theme editor runs through its adapter (api/theme-edit/_adapter.mjs), which finds them',
+        );
+      const v = Reflect.get(builtIn, key);
+      return typeof v === 'function' ? v.bind(builtIn) : v;
+    },
+  })
+);
+
+/**
+ * Hand the editor the built-in themes the adapter found; they are listed
+ * neutral first, and the base dial names them.
+ * @param {string[]} slugs
+ */
+export function knowBuiltInThemes(slugs) {
+  builtIn = [...slugs].sort(
+    (a, b) => Number(b === 'neutral') - Number(a === 'neutral'),
+  );
+  Object.assign(DIALS.base, baseDialWords());
+}
+
+/** What the base dial's help and values say: the built-in themes, or none. */
+function baseDialWords() {
+  const names = builtIn ?? [];
+  return {
+    help: `The built-in theme this theme builds on: ${names.join(', ')}, or none. Changing it keeps all your settings.`,
+    values: `${[...names, 'none'].join('|')}`,
+  };
+}
 
 /**
  * Groups of parts that should look alike. `--on <group>` styles every member.
@@ -616,8 +656,7 @@ export const DIALS = wordTable({
     words: 'text size font size small big large scale',
   },
   base: {
-    help: `The built-in theme this theme builds on: ${LIKE.join(', ')}, or none. Changing it keeps all your settings.`,
-    values: `${LIKE.join('|')}|none`,
+    ...baseDialWords(),
     examples: ['set my base neutral', 'set my base none'],
     words: 'base start starting built-in extends foundation',
   },
