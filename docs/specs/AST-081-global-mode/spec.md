@@ -471,7 +471,8 @@ works on is `spec:AST-040` FR9's.
     copies made longest ago first, and a copy larger than that share is used
     for the run but not kept, so no run reads the whole folder. Copies that
     earlier CLIs left in the old single folder (`astryx/jiti`) are never read
-    or listed; doctor names that folder and the command that removes it.
+    or listed; project doctor names that folder and the command that removes
+    it.
     Where the system has no user ids jiti keeps its own default, and a set
     `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or

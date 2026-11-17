@@ -361,18 +361,33 @@ describe.skipIf(!posix || process.platform === 'darwin')('jiti cache', () => {
     expect(fs.readdirSync(other)).toEqual([copyFile('4')]);
   });
 
-  it('reads only the subfolder it writes, never the whole folder', async () => {
-    const {keptTransform} = await load();
+  it('reads only the subfolder it writes, and none it makes, never the whole folder', async () => {
+    const {copyName, keptTransform} = await load();
     const dir = path.join(home, 'kept');
     const transform = keptTransform(dir);
-    transform(settings('export const a: number = 1;\n', '/a/a.ts'));
-    const listed = (
-      await fsCalls(['readdirSync'], () => {
-        transform(settings('export const b: number = 2;\n', '/a/b.ts'));
-      })
-    ).map(call => call.at);
-    expect(listed).toHaveLength(1);
-    expect(path.dirname(listed[0])).toBe(dir);
+    // Three sources whose copies share one subfolder, and one in another.
+    /** @type {string[]} */
+    const same = [];
+    let other = '';
+    for (let i = 0; same.length < 3 || !other; i++) {
+      const source = `export const v: number = ${i};\n`;
+      const sub = copyName(settings(source, '/a/v.ts'))?.slice(0, 2);
+      if (sub === 'cd' && same.length < 3) same.push(source);
+      else if (sub !== 'cd' && !other) other = source;
+    }
+    transform(settings(other, '/a/v.ts'));
+    const write = (/** @type {string} */ source) =>
+      fsCalls(['readdirSync'], () => {
+        transform(settings(source, '/a/v.ts'));
+      });
+    // The write that makes the subfolder reads nothing.
+    expect(await write(same[0])).toEqual([]);
+    for (const source of same.slice(1)) {
+      const listed = (await write(source)).map(call => call.at);
+      expect(listed.length).toBeGreaterThan(0);
+      expect(new Set(listed)).toEqual(new Set([path.join(dir, 'cd')]));
+    }
+    expect(copiesIn(dir)).toHaveLength(4);
   });
 
   it('removes only copies and old unfinished writes: never another file, a link or a folder', async () => {
@@ -386,8 +401,8 @@ describe.skipIf(!posix || process.platform === 'darwin')('jiti cache', () => {
     fs.symlinkSync(outside, path.join(folder, copyFile('6')));
     fs.mkdirSync(path.join(folder, copyFile('7')));
     writeAged(path.join(folder, 'notes.txt'), 500, 9000);
-    const oldWrite = `${copyFile('8')}.123.0a0b0c0d.tmp`;
-    const newWrite = `${copyFile('9')}.456.0a0b0c0d.tmp`;
+    const oldWrite = `${copyFile('8')}.123.7.tmp`;
+    const newWrite = `${copyFile('9')}.456.8.tmp`;
     writeAged(path.join(folder, oldWrite), 10, 3600);
     writeAged(path.join(folder, newWrite), 10, 5);
     trimSubfolder(folder, kept, 1);

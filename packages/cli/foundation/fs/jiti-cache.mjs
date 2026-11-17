@@ -19,7 +19,7 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
-import {CACHE_LIMIT_BYTES} from './cache-eviction.mjs';
+import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {withoutRecording} from './read-record.mjs';
 
 const requireFromHere = createRequire(import.meta.url);
@@ -42,8 +42,11 @@ const UNFINISHED_WRITE_MS = 10 * 60 * 1000;
 /** A copy: the last 62 hex digits of its name's hash, in the subfolder of the first two. */
 const COPY = /^[0-9a-f]{62}\.js$/;
 
-/** A copy while it is written, under the writing run's process id. */
-const UNFINISHED = /^[0-9a-f]{62}\.js\.\d+\.[0-9a-f]{8}\.tmp$/;
+/** A copy while it is written: the writing run's process id and write count. */
+const UNFINISHED = /^[0-9a-f]{62}\.js\.\d+\.\d+\.tmp$/;
+
+/** How many copies this process has written, for unfinished-write names. */
+let writes = 0;
 
 /**
  * The folder of the copies.
@@ -251,39 +254,70 @@ function readCopy(file, name) {
 /**
  * Keep a copy, then trim its subfolder. It is written whole under another
  * name and renamed into place, so a reader finds the whole copy or none. A
- * copy larger than a subfolder's share is used for the run but not kept.
+ * copy larger than a subfolder's share is used for the run but not kept. A
+ * subfolder this write makes holds only this copy, so it needs no trim.
  * @param {string} file
  * @param {string} name
  * @param {string} code
  * @param {number} limit
  */
 function keepCopy(file, name, code, limit) {
-  const text = code + ending(name);
-  if (Buffer.byteLength(text) > limit) return;
+  const bytes = Buffer.from(code + ending(name));
+  if (bytes.length > limit) return;
   const folder = path.dirname(file);
-  const unfinished = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  const unfinished = `${file}.${process.pid}.${++writes}.tmp`;
+  let made = false;
   try {
-    fs.mkdirSync(folder, {recursive: true, mode: 0o700});
-    fs.writeFileSync(unfinished, text, {flag: 'wx', mode: 0o600});
+    try {
+      fs.writeFileSync(unfinished, bytes, {flag: 'wx', mode: 0o600});
+    } catch (error) {
+      if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') {
+        throw error;
+      }
+      made = makeFolder(folder);
+      fs.writeFileSync(unfinished, bytes, {flag: 'wx', mode: 0o600});
+    }
     fs.renameSync(unfinished, file);
   } catch {
     removeFile(unfinished);
     return;
   }
-  trimSubfolder(folder, file, limit);
+  if (!made) trimSubfolder(folder, file, limit);
+}
+
+/**
+ * Make a subfolder of the copies; whether this call made it, and not
+ * another run first.
+ * @param {string} folder
+ * @returns {boolean}
+ */
+function makeFolder(folder) {
+  return fs.mkdirSync(folder, {recursive: true, mode: 0o700}) !== undefined;
 }
 
 /**
  * Keep one subfolder within `limit` bytes: the copies made longest ago go
- * first, never `kept`, the copy just written. Only this subfolder is read,
- * and only copies and unfinished writes count; a write left unfinished by a
- * run that stopped goes once it is old. A file another run removes first is
- * left to that run.
+ * first, never `kept`, the copy just written (cache-eviction.mjs). Only this
+ * subfolder is read. A write left unfinished by a run that stopped goes once
+ * it is old.
  * @param {string} folder
  * @param {string} kept
  * @param {number} [limit]
  */
 export function trimSubfolder(folder, kept, limit = SUBFOLDER_LIMIT_BYTES) {
+  try {
+    evictOldest(folder, name => COPY.test(name), {limit, keep: kept});
+  } catch {
+    // A subfolder that cannot be read is trimmed by a later write.
+  }
+  removeUnfinished(folder);
+}
+
+/**
+ * Remove the writes in a subfolder that runs which stopped left unfinished.
+ * @param {string} folder
+ */
+function removeUnfinished(folder) {
   let names;
   try {
     names = fs.readdirSync(folder);
@@ -291,34 +325,17 @@ export function trimSubfolder(folder, kept, limit = SUBFOLDER_LIMIT_BYTES) {
     return;
   }
   const now = Date.now();
-  /** @type {{entry: string, size: number, made: number}[]} */
-  const copies = [];
-  let total = 0;
   for (const name of names) {
-    const copy = COPY.test(name);
-    if (!copy && !UNFINISHED.test(name)) continue;
+    if (!UNFINISHED.test(name)) continue;
     const entry = path.join(folder, name);
-    let stat;
     try {
-      stat = fs.lstatSync(entry);
+      const stat = fs.lstatSync(entry);
+      if (stat.isFile() && now - stat.mtimeMs > UNFINISHED_WRITE_MS) {
+        removeFile(entry);
+      }
     } catch {
-      continue;
+      // Renamed into place, or removed by another run.
     }
-    if (!stat.isFile()) continue;
-    if (!copy) {
-      if (now - stat.mtimeMs > UNFINISHED_WRITE_MS) removeFile(entry);
-      continue;
-    }
-    total += stat.size;
-    if (entry !== kept) {
-      copies.push({entry, size: stat.size, made: stat.mtimeMs});
-    }
-  }
-  copies.sort((a, b) => a.made - b.made);
-  for (const {entry, size} of copies) {
-    if (total <= limit) break;
-    removeFile(entry);
-    total -= size;
   }
 }
 
