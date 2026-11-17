@@ -119,4 +119,22 @@ describe('shared-element parts', () => {
     expect(blue).toBeGreaterThan(red);
     expect(white).toBeGreaterThan(blue);
   });
+  it("lets a part's root entry beat its component's media-surface entry", () => {
+    const theme = defineTheme({
+      name: 'shared-element-stages',
+      tokens: {},
+      components: {'toggle-button': {base: {borderColor: 'red'}}},
+      onDark: {components: {button: {base: {borderColor: 'white'}}}},
+    });
+    const {component} = generateThemeCSS(theme);
+    const at = component.indexOf('@layer parts {');
+    // The component's dark-surface entry stays in the earlier sub-layer, so
+    // the part's root entry wins on a toggle button there too.
+    expect(component.slice(0, at)).toMatch(
+      /astryx-button[^{]*\{\s*border-color: white/,
+    );
+    expect(component.slice(at)).toMatch(
+      /\.astryx-toggle-button\s*\{\s*border-color: red/,
+    );
+  });
 });

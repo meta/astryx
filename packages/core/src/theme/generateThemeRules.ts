@@ -1213,6 +1213,17 @@ function adaptationStatusRoleDefaults(
 export function generateThemeRules(
   theme: ThemeRuleSource,
   warnings?: string[],
+): string[] {
+  return themeRulesOf(theme, warnings);
+}
+
+/**
+ * The rules of `generateThemeRules`, its component entries limited to one
+ * group when `group` is given (the layered outputs' two sub-layers).
+ */
+function themeRulesOf(
+  theme: ThemeRuleSource,
+  warnings: string[] | undefined,
   group?: ComponentGroup,
 ): string[] {
   const parts: string[] = [];
@@ -1868,7 +1879,7 @@ export function generateThemeRulesSplit(
   options?: ThemeLayerOptions,
 ): ThemeRulesSplit {
   const layered = options?.layered === true;
-  const allRules = generateThemeRules(
+  const allRules = themeRulesOf(
     theme,
     warnings,
     layered ? 'regular' : undefined,

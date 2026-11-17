@@ -27,6 +27,8 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'date-range-input-toggle-icon': 'icon',
   'date-time-input-clock-icon': 'icon',
   'date-time-input-toggle-icon': 'icon',
+  'dropdown-menu-indicator-icon': 'icon',
+  'dropdown-menu-item': 'item',
   'dialog-header-close-icon': 'icon',
   'drawer-header-close-icon': 'icon',
   'field-status-icon': 'icon',
@@ -44,6 +46,7 @@ export const SHARED_ELEMENT_PARTS: Readonly<Record<string, string>> = {
   'switch-label': 'field-label',
   timer: 'text',
   timestamp: 'text',
+  'timestamp-copy-button': 'button',
   'toggle-button': 'button',
 };
 

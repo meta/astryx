@@ -143,6 +143,7 @@ export const docs = {
       },
       {
         className: 'astryx-dropdown-menu-item',
+        sitsOn: 'item',
         visualProps: ['size', 'variant'],
       },
       {
@@ -152,7 +153,7 @@ export const docs = {
       },
       {className: 'astryx-dropdown-menu-section-heading'},
       {className: 'astryx-dropdown-menu-divider'},
-      {className: 'astryx-dropdown-menu-indicator-icon'},
+      {className: 'astryx-dropdown-menu-indicator-icon', sitsOn: 'icon'},
     ],
     vars: [
       {
