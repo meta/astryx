@@ -141,11 +141,13 @@ const tableStyles = stylex.create({
 });
 
 // The table's direct parent never scrolls: the wrapper is the one viewport.
-// Some page hosts give every table's parent `overflow-x: auto` in a rule
-// outside any cascade layer. Such a rule beats every class in Astryx's
-// layers, so only an inline style keeps the inner box from scrolling. If it
-// scrolled, the wrapper would lose its overflow state and its keyboard stop.
-const CONTENT_STYLE: CSSProperties = {overflowX: 'visible'};
+// Some page hosts give every table's parent `overflow-x: auto` (or the
+// `overflow` shorthand) in a rule outside any cascade layer. Such a rule
+// beats every class in Astryx's layers, so only an inline style keeps the
+// inner box from scrolling. Both axes stay visible: one visible axis beside
+// a scrolling one computes to `auto`. If the inner box scrolled, the wrapper
+// would lose its overflow state, its named region, and its focus ring.
+const CONTENT_STYLE: CSSProperties = {overflow: 'visible'};
 
 const scrollWrapperStyles = stylex.create({
   // A windowed table scrolls inside the height its parent gives it. Where a
