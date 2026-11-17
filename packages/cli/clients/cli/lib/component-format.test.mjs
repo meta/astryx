@@ -154,6 +154,37 @@ describe('formatFull sub-component rendering', () => {
   });
 });
 
+describe('a doc with returns (a hook)', () => {
+  const docs = {
+    name: 'useThing',
+    usage: {description: 'Reads a thing.'},
+    params: [],
+    returns: [{name: 'thing', type: 'Thing', description: 'The thing.'}],
+  };
+  const row = '| `thing` | `Thing` | The thing. |';
+
+  it('prints a Returns section in full output', () => {
+    expect(formatFull(docs)).toContain(
+      `## Returns\n\n| Field | Type | Description |\n|---|---|---|\n${row}`,
+    );
+  });
+
+  it('prints a Returns section in compact output', () => {
+    expect(formatCompact(docs, 'useThing')).toContain(row);
+  });
+
+  it('names the returns in the brief signature', () => {
+    expect(formatBrief(docs, 'useThing').split('\n')[0]).toBe(
+      'useThing(): { thing }',
+    );
+  });
+
+  it('prints no Returns section for a component', () => {
+    const out = formatFull({name: 'Box', description: 'A box.', props: []});
+    expect(out).not.toContain('## Returns');
+  });
+});
+
 describe('formatFull theming override keys', () => {
   // Regression guard: the `defineTheme` component-override key is the stable
   // class name with the `astryx-` prefix stripped — `generateThemeRules`
