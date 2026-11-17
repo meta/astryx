@@ -830,3 +830,121 @@ export function deriveStatusColors({
   }
   return {tokens, roles: state, why};
 }
+
+/**
+ * Code colors, `[family, light stop, dark stop]` by syntax role, as the
+ * official neutral theme maps them. The gray roles read the neutral.
+ */
+export const SYNTAX_STOPS = {
+  keyword: ['purple', 30, 80],
+  string: ['green', 30, 80],
+  comment: ['neutral', 35, 75],
+  number: ['orange', 30, 80],
+  function: ['blue', 30, 80],
+  type: ['purple', 30, 80],
+  variable: ['neutral', 5, 90],
+  operator: ['neutral', 35, 75],
+  constant: ['orange', 30, 80],
+  tag: ['red', 30, 80],
+  attribute: ['yellow', 30, 80],
+  property: ['teal', 30, 80],
+  punctuation: ['neutral', 35, 75],
+} as const;
+
+/** The code background and the overlay scrim, from the neutral. */
+const CODE_GROUND = {light: 100, dark: 5} as const;
+const SCRIM = {
+  light: {stop: 10, alpha: '80'},
+  dark: {stop: 5, alpha: 'cc'},
+} as const;
+
+/** What deriveCodeColors reads. */
+export interface DeriveCodeInput {
+  palette: Record<string, Record<Mode, Record<string | number, string>>>;
+  stops: ReadonlyArray<number>;
+  modes: ReadonlyArray<Mode>;
+  /** The page colors code sits on, opaque hex. */
+  grounds: (m: Mode) => string[];
+  wanted?: (token: string) => boolean;
+}
+
+/**
+ * The code colors and the overlay scrim a palette derives: each syntax role
+ * from its hue's family, the nearest stop that reads at 4.5:1 on the code
+ * background and on the page; the code background and the scrim from the
+ * neutral. A role that cannot read keeps the base theme's.
+ */
+export function deriveCodeColors({
+  palette,
+  stops,
+  modes,
+  grounds,
+  wanted = () => true,
+}: DeriveCodeInput): {
+  tokens: Record<string, DerivedToken>;
+  unreadable: string[];
+} {
+  const tokens: Record<string, DerivedToken> = {};
+  const unreadable: string[] = [];
+  const sorted = [...stops].sort((a, b) => a - b);
+  const near = (n: number) =>
+    sorted.reduce((x, y) => (Math.abs(y - n) < Math.abs(x - n) ? y : x));
+  const at = (id: string, m: Mode, stop: number): Stop => ({
+    stop,
+    color: palette[id][m][stop],
+  });
+  const ground: Partial<Record<Mode, Stop>> = {};
+  if (palette.neutral) {
+    const bg = {} as Record<Mode, Stop>;
+    for (const m of modes) {
+      bg[m] = at('neutral', m, near(CODE_GROUND[m]));
+      ground[m] = bg[m];
+    }
+    if (wanted('--color-syntax-background')) {
+      tokens['--color-syntax-background'] = {family: 'neutral', ...bg};
+    }
+    const scrim = {} as Record<Mode, Stop>;
+    for (const m of modes) {
+      const s = near(SCRIM[m].stop);
+      const c = palette.neutral[m][s];
+      scrim[m] = {
+        stop: s,
+        color: `${c}${SCRIM[m].alpha}`,
+        alpha: SCRIM[m].alpha,
+      };
+    }
+    if (wanted('--color-overlay')) {
+      tokens['--color-overlay'] = {family: 'neutral', ...scrim};
+    }
+  }
+  for (const [role, [id, light, dark]] of Object.entries(SYNTAX_STOPS)) {
+    const k = `--color-syntax-${role}`;
+    if (!palette[id] || !wanted(k)) {
+      continue;
+    }
+    const refs = {} as Record<Mode, Stop>;
+    let ok = true;
+    for (const m of modes) {
+      const on = [...(ground[m] ? [ground[m].color] : []), ...grounds(m)];
+      const s0 = near(m === 'light' ? light : dark);
+      const order = [...sorted].sort(
+        (a, b) =>
+          Math.abs(a - s0) - Math.abs(b - s0) ||
+          (m === 'light' ? a - b : b - a),
+      );
+      const s = order.find(x =>
+        on.every(bg => contrastRatio(palette[id][m][x], bg) >= TEXT),
+      );
+      if (s == null) {
+        ok = false;
+        unreadable.push(`${k} (${m})`);
+        break;
+      }
+      refs[m] = at(id, m, s);
+    }
+    if (ok) {
+      tokens[k] = {family: id, ...refs};
+    }
+  }
+  return {tokens, unreadable};
+}

@@ -12,14 +12,7 @@
  *   settings. `themePalette()` runs it, and the CLI theme editor runs its
  *   generated copy
  */
-import {
-  compositeOver,
-  contrastRatio,
-  hexToOklch,
-  normalizeColor,
-  ratioDown,
-} from './color.mjs';
-export {compositeOver};
+import {hexToOklch, luminance, normalizeColor} from './color.mjs';
 import {
   PALETTE_BLACK,
   PALETTE_WHITE,
@@ -28,6 +21,7 @@ import {
 } from './generator.mjs';
 import {
   CATEGORY_HUES,
+  deriveCodeColors,
   deriveLookColors,
   deriveStatusColors,
   lookSeeds,
@@ -99,7 +93,6 @@ import {
  * What the mapping reads around the palette.
  * @typedef {object} PaletteMappingContext
  * @property {PaletteBase} [base]
- * @property {boolean} [editor] * The theme editor's own rules, beyond `themePalette()`'s mapping: the colors a look grows (category, chart, status roles left unset, code colors), the slider track and the inverted error fill, tinted inks, coloured cards keeping their own secondary text, and a base theme's own pairs kept readable.
  * @property {(token: string) => boolean} has Whether a token exists, so the mapping sets it.
  * @property {Readonly<Record<string, unknown>>} [defaults] Core's default value of each token, as written: a token the official theme leaves to Core follows the family at Core's lightness.
  * @property {PaletteColorReader} reader
@@ -141,6 +134,7 @@ import {
  * @property {Record<string, Partial<Record<PaletteMode, string>>>} exact Main tokens set exactly, per mode: the color's fill gives way to them.
  * @property {Record<string, string>} unread Main tokens set exactly to a value that is not one readable color in some mode, as written.
  * @property {Record<string, Partial<Record<PaletteMode, StopRef>>> | null} lift Lifted secondary text per background token of LIFT_PARTS, per mode; null without one.
+ * @property {string[]} code The code colors that keep the base theme's because none of their family's stops reads on the code background and the page.
  * @property {{token: string; mode: PaletteMode; pair: BasePair; ratio: number}[]} kept The look's colors kept at the base theme's in a mode, because a text/fill pair the base theme draws with them would not read.
  * @property {{ roles: Record<string, 'derived' | 'unreadable' | 'alike'>; why: string[]; }} statuses The status roles the theme leaves unset, each derived from the look or kept at the base theme's, and why.
  * @property {{ badges: DerivedState; chart: DerivedState; merged: string[]; unreadable: string[]; }} categories Whether the category colors (Badge, Token, Card tints) and the chart colors follow the look, and the hues a refused mapping would draw alike.
@@ -544,10 +538,28 @@ export const hex =
  * @returns {number}
  */
 export function ratio(a, b) {
-  return contrastRatio(hex(a), hex(b));
+  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+/**
+ * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
+ * @param {ReadonlyArray<number>} over
+ * @param {number} alpha
+ * @param {ReadonlyArray<number>} under
+ * @returns {ColorTriple}
+ */
+export function compositeOver(over, alpha, under) {
+  return /** @type {ColorTriple} */ (
+    over.map((c, i) => c * alpha + under[i] * (1 - alpha))
+  );
 }
 /** A ratio cut down to two decimals, never rounded up past a need. */
-export const round = ratioDown;
+export const round =
+  /**
+   * @param {number} r
+   * @returns {number}
+   */
+  r => Math.floor(r * 100 + 1e-9) / 100;
 /** A stop as text: a layout may hold 16.666666666666668. */
 export const shade =
   /**
@@ -1135,54 +1147,6 @@ export const fillAt =
     ratio: 0,
   });
 /**
- * The families the theme editor grows beside the theme's own colors, in
- * order: the category and chart hues of the look (lookSeeds), then the
- * status roles the theme leaves unset, from the base theme's color for
- * each (statusSeeds). Empty without a color setting.
- * @param {ReadonlyArray<PaletteDial>} dials
- * @param {Pick<PaletteMappingContext, 'base' | 'reader'>} context
- * @returns {{id: string; name: string; seed: string}[]}
- */
-export function grownFamilies(dials, context) {
-  if (!dials.length) {
-    return [];
-  }
-  const named =
-    /**
-     * @param {string} id
-     * @param {string} seed
-     */
-    (id, seed) => ({
-      id,
-      name: id[0].toUpperCase() + id.slice(1),
-      seed,
-    });
-  const accent = dials.find(d => d.id === 'accent')?.seed;
-  const out = Object.entries(
-    lookSeeds(accent, dials.find(d => d.id === 'neutral')?.seed),
-  ).map(([id, seed]) => named(id, seed));
-  /**
-   * @type {Record<string, string>}
-   */
-  const baseColors = {};
-  for (const d of Object.keys(STATUS_TOKEN)) {
-    if (dials.some(f => f.id === d)) {
-      continue;
-    }
-    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
-    const rgb = v ? context.reader.rgb(v) : null;
-    if (rgb && context.reader.alpha(v) >= 1) {
-      baseColors[d] = hex(rgb);
-    }
-  }
-  for (const [id, seed] of Object.entries(statusSeeds(baseColors, accent))) {
-    if (!out.some(f => f.id === id)) {
-      out.push(named(id, seed));
-    }
-  }
-  return out;
-}
-/**
  * The generation request for color settings with no palette config of the
  * author's: one family per setting in setting order, each seed anchored
  * exactly, in dark too where it reads there. Null without a setting.
@@ -1222,11 +1186,55 @@ export function planPaletteRequest(dials, options, context) {
   if (Object.keys(fills).length) {
     config.families = anchorDarkFills(config, dials, fills, context);
   }
+  // The category and chart hues grow with the look, after the theme's own
+  // colors.
+  const derived = lookSeeds(
+    dials.find(d => d.id === 'accent')?.seed,
+    dials.find(d => d.id === 'neutral')?.seed,
+  );
+  for (const [id, seed] of Object.entries(derived)) {
+    if (!config.families.some(f => f?.id === id)) {
+      config.families.push({
+        id,
+        name: id[0].toUpperCase() + id.slice(1),
+        seed,
+      });
+    }
+  }
+  // So do the status roles the theme leaves unset, from the base theme's
+  // color for each (statusSeeds).
+  const unset = Object.keys(STATUS_TOKEN).filter(
+    d => !dials.some(f => f.id === d),
+  );
+  /**
+   * @type {Record<string, string>}
+   */
+  const baseColors = {};
+  for (const d of unset) {
+    const v = context.base?.light?.[`--color-${STATUS_TOKEN[d]}`];
+    const rgb = v ? context.reader.rgb(v) : null;
+    if (rgb && context.reader.alpha(String(v)) >= 1) {
+      baseColors[d] = hex(rgb);
+    }
+  }
+  const seeds = statusSeeds(
+    baseColors,
+    dials.find(d => d.id === 'accent')?.seed,
+  );
+  for (const [id, seed] of Object.entries(seeds)) {
+    if (!config.families.some(f => f?.id === id)) {
+      config.families.push({
+        id,
+        name: id[0].toUpperCase() + id.slice(1),
+        seed,
+      });
+    }
+  }
   return {config, fills};
 }
 /**
  * Whether a token is one the look derives: a category color (Badge, Token,
- * Card tint) or a chart color.
+ * Card tint), a chart color, a code color or the overlay scrim.
  */
 export const isLookToken =
   /**
@@ -1234,7 +1242,7 @@ export const isLookToken =
    * @returns {boolean}
    */
   token =>
-    /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+)$/.test(
+    /^--color-(?:(?:background|text|icon|border)-(?:red|orange|yellow|green|teal|cyan|blue|purple|pink|gray)|data-[a-z0-9-]+|syntax-(?:keyword|string|comment|number|function|type|variable|operator|constant|tag|attribute|property|punctuation|background)|overlay)$/.test(
       token,
     );
 /** The text a card tint carries, as the look gives it. */
@@ -1617,9 +1625,7 @@ export function mapPalette(candidate, dials, fills, context) {
     // The track of a slider, which the official theme leaves to Core's
     // blue gray: the neutral color's shade nearest it, so a warm or cool
     // gray reaches it as it reaches the surfaces.
-    if (context.editor) {
-      put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
-    }
+    put('--color-track', 'neutral', nearCore('--color-track', 'neutral'));
     for (const [token, pair] of Object.entries(NEUTRAL_STOPS)) {
       if (
         token === '--color-text-secondary' ||
@@ -1971,12 +1977,31 @@ export function mapPalette(candidate, dials, fills, context) {
       return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
     });
     put(names.text, f.id, text);
-    put(names.icon, f.id, text);
+    // Icons and status dots are graphics, which WCAG asks 3:1 of, not
+    // text's 4.5:1: they take the shade nearest the role's own fill that
+    // reads at 3:1 on what they sit on, so a warning dot stays amber where
+    // warning text must deepen to brown.
+    put(
+      names.icon,
+      f.id,
+      each(m => {
+        const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+        const from = /** @type {StopRef} */ (fill[m]);
+        const own = exactFill[m] ? solid(exactFill[m], m, f.id) : null;
+        if (
+          own &&
+          Math.min(...grounds.map(([, bg]) => contrast(own, bg))) >= NON_TEXT
+        ) {
+          return {...from, color: own};
+        }
+        return pick(names.icon, f.id, m, from.stop, grounds, NON_TEXT);
+      }),
+    );
     // The inverted error fill (an error toast's), which the official theme
     // leaves to Core: the danger color's shade nearest Core's own in each
     // mode, so the toast follows the danger color as Core draws it (its
     // text takes the readable side of Core's media surface).
-    if (context.editor && word === 'error') {
+    if (word === 'error') {
       put(
         '--color-background-error-inverted',
         f.id,
@@ -2245,16 +2270,9 @@ export function mapPalette(candidate, dials, fills, context) {
            */
           v => Boolean(v && parseColor(v) && alphaOf(v) >= 1),
         );
-  /**
-   * @type {PaletteMapping['categories']}
-   */
-  const categories = context.editor
-    ? mapCategories()
-    : {badges: 'none', chart: 'none', merged: [], unreadable: []};
-  /**
-   * @type {PaletteMapping['statuses']}
-   */
-  const statuses = context.editor ? mapStatuses() : {roles: {}, why: []};
+  const categories = mapCategories();
+  const statuses = mapStatuses();
+  const code = mapCode();
   /**
    * The status roles the theme leaves unset, from the palette's families of
    * them (deriveStatusColors), written as its shades; a token set by hand
@@ -2293,9 +2311,35 @@ export function mapPalette(candidate, dials, fills, context) {
     }
     return {roles: derived.roles, why: derived.why};
   }
-  const keptAtBase = context.editor
-    ? keepWhereBaseReads(tokens, base, modes, isLookOrStatus, context.reader)
-    : [];
+  /**
+   * The code colors and the overlay scrim, from the palette
+   * (deriveCodeColors); a token set by hand keeps its value. Returns the
+   * roles that keep the base theme's.
+   * @returns {string[]}
+   */
+  function mapCode() {
+    const derived = deriveCodeColors({
+      palette:
+        /** @type {Record< string, Record<PaletteMode, Record<string | number, string>> >} */ (
+          /** @type {unknown} */ (candidate.palette)
+        ),
+      stops,
+      modes,
+      grounds: m => lookColors(LOOK_GROUNDS, m),
+      wanted: k => has(k) && !setExactly(k),
+    });
+    for (const [k, v] of Object.entries(derived.tokens)) {
+      tokens[k] = {family: v.family, light: v.light, dark: v.dark};
+    }
+    return derived.unreadable;
+  }
+  const keptAtBase = keepWhereBaseReads(
+    tokens,
+    base,
+    modes,
+    isLookOrStatus,
+    context.reader,
+  );
   /**
    * The category colors (Badge, Token and Card tints) and the chart colors
    * the palette derives (deriveLookColors), written as its shades. A token
@@ -2338,6 +2382,7 @@ export function mapPalette(candidate, dials, fills, context) {
     lift,
     categories,
     statuses,
+    code,
     kept: keptAtBase,
   };
 }
